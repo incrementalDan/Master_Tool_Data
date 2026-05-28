@@ -4,5 +4,5 @@ import react from '@vitejs/plugin-react'
 // Change base to match your GitHub Pages repo name, e.g. '/my-repo-name/'
 export default defineConfig({
   plugins: [react()],
-  base: '/master_tool_data/',
+  base: '/Master_Tool_Data/',
 })
