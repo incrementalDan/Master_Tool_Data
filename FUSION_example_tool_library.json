@@ -1,0 +1,4363 @@
+{
+    "data": [
+        {
+            "BMC": "carbide",
+            "GRADE": "Mill Generic",
+            "description": "3/8 Bull Mill .125R",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-120'",
+                "tool_bodyLength": "1.3 in",
+                "tool_cornerRadius": ".125 in",
+                "tool_description": "'3/8 Bull Mill .125R '",
+                "tool_diameter": ".375 in",
+                "tool_fluteLength": ".625 in",
+                "tool_material": "'carbide'",
+                "tool_overallLength": "2.5 in",
+                "tool_productId": "'A-3'",
+                "tool_shaftDiameter": ".375 in",
+                "tool_shoulderLength": ".625 in",
+                "tool_vendor": "'MSC'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.375,
+                "HAND": true,
+                "LB": 1.3,
+                "LCF": 0.625,
+                "NOF": 4,
+                "NT": 1,
+                "OAL": 2.5,
+                "RE": 0.125,
+                "SFDM": 0.375,
+                "TA": 0,
+                "TP": 0,
+                "assemblyGaugeLength": 5.74878,
+                "shoulder-diameter": 0.375,
+                "shoulder-length": 0.625,
+                "thread-profile-angle": 60,
+                "tip-diameter": 0,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "2e526f19-51a0-4d28-b2f8-bd9d38a42215",
+            "holder": {
+                "description": "NBT30-SK13C-120",
+                "gaugeLength": 4.44878,
+                "guid": "{00000000-0000-0000-0000-00000000000a}",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 3.66142,
+                        "lower-diameter": 1.29921,
+                        "upper-diameter": 1.29921
+                    },
+                    {
+                        "height": 0.0393701,
+                        "lower-diameter": 1.73228,
+                        "upper-diameter": 1.81102
+                    },
+                    {
+                        "height": 0.133858,
+                        "lower-diameter": 1.81102,
+                        "upper-diameter": 1.81102
+                    },
+                    {
+                        "height": 0.0909055,
+                        "lower-diameter": 1.81102,
+                        "upper-diameter": 1.49606
+                    },
+                    {
+                        "height": 0.13311,
+                        "lower-diameter": 1.49606,
+                        "upper-diameter": 1.49606
+                    },
+                    {
+                        "height": 0.0909055,
+                        "lower-diameter": 1.49606,
+                        "upper-diameter": 1.81102
+                    },
+                    {
+                        "height": 0.259843,
+                        "lower-diameter": 1.81102,
+                        "upper-diameter": 1.81102
+                    },
+                    {
+                        "height": 0.0393701,
+                        "lower-diameter": 1.81102,
+                        "upper-diameter": 1.73228
+                    },
+                    {
+                        "height": 0.0787402,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777306748088,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 3,
+                "length-offset": 3,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 3,
+                "turret": 0
+            },
+            "product-id": "A-3",
+            "product-link": "",
+            "reference_guid": "ef37f50f-1fd4-4194-a6c2-46dbab524fb6",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "f_n": 0.0026666666666666666,
+                        "f_z": 0.002,
+                        "guid": "8b3913f5-9d49-4340-9e87-72f2607ff60c",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5000,
+                        "n_ramp": 5000,
+                        "name": "Default preset",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 490.8738521234052,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 13.333333333333334,
+                        "v_f_ramp": 13.333333333333334,
+                        "v_f_transition": 40
+                    }
+                ]
+            },
+            "type": "bull nose end mill",
+            "unit": "inches",
+            "vendor": "MSC"
+        },
+        {
+            "BMC": "carbide",
+            "GRADE": "Mill Generic",
+            "description": "3/16 EM 7FL .57LOC FINISH",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-90'",
+                "tool_bodyLength": ".61 in",
+                "tool_description": "'3/16 EM 7FL .57LOC FINISH'",
+                "tool_diameter": ".1875 in",
+                "tool_fluteLength": ".57000000000 in",
+                "tool_lengthOffset": "tool_number",
+                "tool_material": "'carbide'",
+                "tool_number": "4",
+                "tool_numberOfFlutes": "7",
+                "tool_overallLength": "2.0 in",
+                "tool_productId": "'A-35'",
+                "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-35$'",
+                "tool_shoulderLength": ".57 in",
+                "tool_vendor": "'LC-52'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.1875,
+                "HAND": true,
+                "LB": 0.61,
+                "LCF": 0.57,
+                "NOF": 7,
+                "NT": 1,
+                "OAL": 2,
+                "RE": 0,
+                "SFDM": 0.1875,
+                "TA": 0,
+                "TP": 0,
+                "assemblyGaugeLength": 3.956417,
+                "shoulder-diameter": 0.1875,
+                "shoulder-length": 0.57,
+                "thread-profile-angle": 60,
+                "tip-diameter": 0,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "7ce3814a-20bf-4ed5-bc19-f74c0762482f",
+            "holder": {
+                "description": "NBT30-SK13C-90",
+                "gaugeLength": 3.346417,
+                "guid": "82b79d9b-5c50-43f9-b35b-354ae2df7bbf",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 2.5590551181102,
+                        "lower-diameter": 1.2992125984252,
+                        "upper-diameter": 1.2992125984252
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.7322834645669,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.13385826771654,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.13311023622047,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.25984251968504,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.078740157480315,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777306756055,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 4,
+                "length-offset": 4,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 4,
+                "turret": 0
+            },
+            "product-id": "A-35",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-35$",
+            "reference_guid": "59ca59d2-5e6c-46fb-bc10-80aff574e867",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedPerTooth": ".0009 in",
+                            "tool_feedPlunge": "20 inpm",
+                            "tool_feedRamp": "22 inpm",
+                            "tool_feedTransition": "150 inpm",
+                            "tool_stepover": ".018 in",
+                            "tool_surfaceSpeed": "275 fpm"
+                        },
+                        "f_n": 0.003569991651806583,
+                        "f_z": 0.0009000000000000002,
+                        "guid": "df96530b-c1ad-4245-819b-59b03dd0388a",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5602.253996834716,
+                        "n_ramp": 5602.253996834716,
+                        "name": "SS",
+                        "ramp-angle": 2,
+                        "stepover": 0.018,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": true,
+                        "v_c": 275,
+                        "v_f": 35.294200180058716,
+                        "v_f_leadIn": 35.294200180058716,
+                        "v_f_leadOut": 35.294200180058716,
+                        "v_f_plunge": 20,
+                        "v_f_ramp": 21.999999999999993,
+                        "v_f_transition": 150
+                    }
+                ]
+            },
+            "type": "flat end mill",
+            "unit": "inches",
+            "vendor": "LC-52"
+        },
+        {
+            "BMC": "carbide",
+            "GRADE": "generic",
+            "description": "PS D-53 5/16 Carbide drill 1.693 LOC",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-120'",
+                "tool_bodyLength": "2 in",
+                "tool_description": "'PS D-53 5/16 Carbide drill 1.693 LOC'",
+                "tool_diameter": ".3125 in",
+                "tool_fluteLength": "1.693 in",
+                "tool_lengthOffset": "tool_number",
+                "tool_material": "'carbide'",
+                "tool_number": "4",
+                "tool_overallLength": "3.584 in",
+                "tool_productId": "'D-53'",
+                "tool_shaftDiameter": ".3125 in",
+                "tool_shoulderLength": "1.694 in",
+                "tool_tipAngle": "140 degrees",
+                "tool_vendor": "'Haas'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.3125,
+                "HAND": true,
+                "LB": 2,
+                "LCF": 1.693,
+                "NOF": 2,
+                "OAL": 3.584,
+                "SFDM": 0.3125,
+                "SIG": 140,
+                "assemblyGaugeLength": 6.52752,
+                "shoulder-length": 1.694
+            },
+            "guid": "32dab63a-93d5-4fc7-87da-f8595c3eacc8",
+            "holder": {
+                "description": "NBT30-SK13C-120",
+                "gaugeLength": 4.52752,
+                "guid": "8f0b0e81-b5eb-4cbd-b3ea-d880f03c1d4e",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 3.740157480315,
+                        "lower-diameter": 1.2992125984252,
+                        "upper-diameter": 1.2992125984252
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.7322834645669,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.13385826771654,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.13311023622047,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.25984251968504,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.078740157480315,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777306760575,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 4,
+                "length-offset": 4,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 4,
+                "turret": 0
+            },
+            "product-id": "D-53",
+            "product-link": "",
+            "reference_guid": "dbf4843a-7973-46d1-b1b6-e69369402611",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedPerRevolution": ".005 in",
+                            "tool_surfaceSpeed": "198 fpm"
+                        },
+                        "guid": "ac5b518c-f99b-463f-8d45-e7929c4f3c48",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 2420.1737266325977,
+                        "name": "Default preset",
+                        "tool-coolant": "flood",
+                        "use-feed-per-revolution": false,
+                        "v_c": 198,
+                        "v_f_plunge": 12.100868633162989,
+                        "v_f_retract": 40
+                    }
+                ]
+            },
+            "type": "drill",
+            "unit": "inches",
+            "vendor": "Haas"
+        },
+        {
+            "BMC": "carbide",
+            "GRADE": "Mill Generic",
+            "description": "2.5 FACE MILL HAAS 45DEG AL",
+            "expressions": {
+                "holder_description": "'NBT30 Holder for hass 2.5\" shell mill '",
+                "tool_bodyLength": "1.74 in",
+                "tool_comment": "'RTA-22'",
+                "tool_description": "'2.5 FACE MILL HAAS 45DEG AL'",
+                "tool_diameter": "2.5 in",
+                "tool_fluteLength": ".236 in",
+                "tool_material": "'carbide'",
+                "tool_number": "4",
+                "tool_numberOfFlutes": "5",
+                "tool_productId": "'I-167/ G-168'",
+                "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/rtas/2026/22$'",
+                "tool_shaftDiameter": "1.78 in",
+                "tool_shoulderLength": ".236 in",
+                "tool_taperAngle": "45 degrees",
+                "tool_vendor": "'LC-24'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 2.5,
+                "DCX": 3.472,
+                "HAND": true,
+                "LB": 1.74,
+                "LCF": 0.236,
+                "NOF": 5,
+                "OAL": 4,
+                "RE": 0,
+                "SFDM": 1.78,
+                "TA": 45,
+                "assemblyGaugeLength": 2.9391022047244117,
+                "shoulder-diameter": 3.472,
+                "shoulder-length": 0.236,
+                "upper-radius": 0
+            },
+            "guid": "2c698bb1-ff97-4f83-81a0-a9a9cb7f4e2f",
+            "holder": {
+                "description": "NBT30 Holder for hass 2.5\" shell mill ",
+                "expressions": {
+                    "tool_description": "'NBT30 Holder for hass 2.5\" shell mill '",
+                    "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+                },
+                "gaugeLength": 1.199102204724412,
+                "guid": "4f62c999-f24d-403d-9a0e-b52595aaed98",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 0.41174,
+                        "lower-diameter": 1.7322834645669,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.7322834645669,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.13385826771654,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.13311023622047,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.25984251968504,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.078740157480315,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777306762965,
+            "post-process": {
+                "break-control": false,
+                "comment": "RTA-22",
+                "diameter-offset": 4,
+                "length-offset": 4,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 4,
+                "turret": 0
+            },
+            "product-id": "I-167/ G-168",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/rtas/2026/22$",
+            "reference_guid": "5972bae6-e0a5-4838-bbf5-bc0c7033b12f",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedCutting": "90 inpm",
+                            "tool_feedPlunge": "50 inpm",
+                            "tool_feedRamp": "25 inpm",
+                            "tool_spindleSpeed": "4000 rpm"
+                        },
+                        "f_n": 0.012499999999999995,
+                        "f_z": 0.0045,
+                        "guid": "e06b0f8c-a0d2-46df-94e0-09ca31d5667d",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 4000,
+                        "n_ramp": 4000,
+                        "name": "AL A-13",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 2617.993877991494,
+                        "v_f": 90,
+                        "v_f_leadIn": 90,
+                        "v_f_leadOut": 90,
+                        "v_f_plunge": 50,
+                        "v_f_ramp": 25,
+                        "v_f_transition": 90
+                    },
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedPerTooth": ".005 in",
+                            "tool_feedPlunge": "100 inpm",
+                            "tool_feedRamp": "25 inpm",
+                            "tool_surfaceSpeed": "804 fpm"
+                        },
+                        "f_n": 0.0814052822758549,
+                        "f_z": 0.005,
+                        "guid": "295eae16-76f8-4703-9e19-15e013e613d7",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 1228.421512760485,
+                        "n_ramp": 1228.421512760485,
+                        "name": "Steel A-28",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 804,
+                        "v_f": 30.710537819012128,
+                        "v_f_leadIn": 30.710537819012128,
+                        "v_f_leadOut": 30.710537819012128,
+                        "v_f_plunge": 100,
+                        "v_f_ramp": 25,
+                        "v_f_transition": 30.710537819012128
+                    }
+                ]
+            },
+            "type": "face mill",
+            "unit": "inches",
+            "vendor": "LC-24"
+        },
+        {
+            "BMC": "carbide",
+            "GRADE": "generic",
+            "description": "1/2 100DEG Spot Drill",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-120'",
+                "tool_bodyLength": "1.7 in",
+                "tool_description": "'1/2 100DEG Spot Drill'",
+                "tool_diameter": ".5 in",
+                "tool_fluteLength": "1. in",
+                "tool_material": "'carbide'",
+                "tool_number": "5",
+                "tool_overallLength": "2.5 in",
+                "tool_productId": "'O-133'",
+                "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/O/O-133$'",
+                "tool_shoulderLength": "1 in",
+                "tool_tipAngle": "100 degrees",
+                "tool_tipDiameter": ".045 in",
+                "tool_vendor": "'LC-136'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.5,
+                "HAND": true,
+                "LB": 1.7,
+                "LCF": 1,
+                "NOF": 2,
+                "NT": 1,
+                "OAL": 2.5,
+                "RE": 0,
+                "SFDM": 0.5,
+                "SIG": 100,
+                "TP": 0,
+                "assemblyGaugeLength": 6.22752,
+                "shoulder-length": 1,
+                "thread-profile-angle": 60,
+                "tip-diameter": 0.045,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "4cebf98a-8072-4e99-8f55-6403dfe7248f",
+            "holder": {
+                "description": "NBT30-SK13C-120",
+                "gaugeLength": 4.52752,
+                "guid": "8f0b0e81-b5eb-4cbd-b3ea-d880f03c1d4e",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 3.740157480315,
+                        "lower-diameter": 1.2992125984252,
+                        "upper-diameter": 1.2992125984252
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.7322834645669,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.13385826771654,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.13311023622047,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.25984251968504,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.078740157480315,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777306769602,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 5,
+                "length-offset": 5,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 5,
+                "turret": 0
+            },
+            "product-id": "O-133",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/O/O-133$",
+            "reference_guid": "7f09e3a8-3cec-4b24-bff2-00c319aa6fd0",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedPerTooth": ".0025 in",
+                            "tool_feedPlunge": "10.875inpm",
+                            "tool_feedRamp": "20 inpm",
+                            "tool_feedRetract": "tool_feedPlunge",
+                            "tool_surfaceSpeed": "285 fpm"
+                        },
+                        "f_z": 0.0025,
+                        "guid": "a832eb21-bfa9-4ffc-a6fd-b243b0be0458",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 2177.2396214971286,
+                        "name": "AL",
+                        "tool-coolant": "flood",
+                        "use-feed-per-revolution": false,
+                        "v_c": 285,
+                        "v_f": 10.886198107485642,
+                        "v_f_leadIn": 10.886198107485642,
+                        "v_f_leadOut": 10.886198107485642,
+                        "v_f_plunge": 10.875,
+                        "v_f_ramp": 20,
+                        "v_f_retract": 10.875,
+                        "v_f_transition": 10.886198107485642
+                    }
+                ]
+            },
+            "type": "spot drill",
+            "unit": "inches",
+            "vendor": "LC-136"
+        },
+        {
+            "BMC": "hss",
+            "GRADE": "generic",
+            "description": "M5X.8 Form tap 4H Class",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-120'",
+                "tool_bodyLength": "1.1 in",
+                "tool_description": "'M5X.8 Form tap 4H Class'",
+                "tool_diameter": ".1968 in",
+                "tool_fluteLength": ".874 in",
+                "tool_overallLength": "2.36 in",
+                "tool_productId": "'R-98'",
+                "tool_shoulderLength": "1.09 in",
+                "tool_threadPitch": "(.8/25.4) in"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.1968,
+                "LB": 1.1,
+                "LCF": 0.874,
+                "NOF": 3,
+                "OAL": 2.36,
+                "SFDM": 0.1968,
+                "TP": 0.031496062992126,
+                "assemblyGaugeLength": 5.62751968503937,
+                "shoulder-length": 1.09
+            },
+            "guid": "1f27e3eb-10e5-4644-9f1e-c69cc32c6aa8",
+            "holder": {
+                "description": "NBT30-SK13C-120",
+                "expressions": {
+                    "tool_description": "'NBT30-SK13C-120'",
+                    "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+                },
+                "gaugeLength": 114.999,
+                "guid": "8f0b0e81-b5eb-4cbd-b3ea-d880f03c1d4e",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 95,
+                        "lower-diameter": 33,
+                        "upper-diameter": 33
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 44,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 3.4,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 46,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 3.381,
+                        "lower-diameter": 38,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 38,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 6.6,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 46,
+                        "upper-diameter": 44
+                    },
+                    {
+                        "height": 2,
+                        "lower-diameter": 31.75,
+                        "upper-diameter": 31.75
+                    }
+                ],
+                "type": "holder",
+                "unit": "millimeters",
+                "vendor": ""
+            },
+            "last_modified": 1777306775627,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 4,
+                "length-offset": 4,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 4,
+                "turret": 0
+            },
+            "product-id": "R-98",
+            "product-link": "",
+            "reference_guid": "667d9062-ecdc-4935-b0fd-d67e954da8fc",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "guid": "c915699d-ea64-433d-87fa-f14c3fa74b99",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 500,
+                        "name": "Default preset",
+                        "tool-coolant": "flood",
+                        "v_c": 25.761059759436307
+                    }
+                ]
+            },
+            "type": "tap right hand",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "hss",
+            "GRADE": "Mill Generic",
+            "description": "2in Face Mill KENN. ST",
+            "expressions": {
+                "holder_description": "' FACE MILL BT30 DC'",
+                "holder_productId": "'BT30-FMA.750-2.5D'",
+                "holder_productLink": "'https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Shell-Mill-Holders/c23_33_444_506/p25604/BT30-.750-DUAL-CONTACT-FACE-MILL-TOOL-HOLDER-.750-2.5/product_info.html'",
+                "holder_vendor": "'Maritool'",
+                "tool_bodyLength": "1.575in",
+                "tool_comment": "'RTA-20'",
+                "tool_cornerRadius": ".031 in",
+                "tool_description": "'2in Face Mill KENN. ST'",
+                "tool_fluteLength": ".56 in",
+                "tool_number": "5",
+                "tool_productId": "'G-125/I-126'",
+                "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/rtas/2025/20$hour=12&page=DE3407D9-3918-8CBE-EFB6-F064B5CA2A8D&token=71D927ED-E053-6020-E9E6-49EC3736B6D3'",
+                "tool_shaftDiameter": "2. in",
+                "tool_shoulderLength": ".6 in",
+                "tool_vendor": "'LC-132'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 2,
+                "DCX": 2,
+                "HAND": true,
+                "LB": 1.575,
+                "LCF": 0.56,
+                "NOF": 6,
+                "OAL": 4,
+                "RE": 0.031,
+                "SFDM": 2,
+                "TA": 0,
+                "assemblyGaugeLength": 4.075002,
+                "shoulder-diameter": 2,
+                "shoulder-length": 0.6,
+                "upper-radius": 0
+            },
+            "guid": "760bf898-8904-42e6-acbb-586568b3804f",
+            "holder": {
+                "description": " FACE MILL BT30 DC",
+                "gaugeLength": 2.500002,
+                "guid": "92771d54-2424-4578-ad69-b2fd19fafb93",
+                "product-id": "BT30-FMA.750-2.5D",
+                "product-link": "https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Shell-Mill-Holders/c23_33_444_506/p25604/BT30-.750-DUAL-CONTACT-FACE-MILL-TOOL-HOLDER-.750-2.5/product_info.html",
+                "segments": [
+                    {
+                        "height": 1.71264,
+                        "lower-diameter": 1.73,
+                        "upper-diameter": 1.73
+                    },
+                    {
+                        "height": 0.03937007874015748,
+                        "lower-diameter": 1.7322834645669292,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.13385826771653542,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.09090551181102365,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.4960629921259845
+                    },
+                    {
+                        "height": 0.13311023622047244,
+                        "lower-diameter": 1.4960629921259845,
+                        "upper-diameter": 1.4960629921259845
+                    },
+                    {
+                        "height": 0.09090551181102365,
+                        "lower-diameter": 1.4960629921259845,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.25984251968503946,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.03937007874015748,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.7322834645669292
+                    },
+                    {
+                        "height": 0.07874015748031496,
+                        "lower-diameter": 1.2500000000000009,
+                        "upper-diameter": 1.2500000000000009
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": "Maritool"
+            },
+            "last_modified": 1777306786749,
+            "post-process": {
+                "break-control": false,
+                "comment": "RTA-20",
+                "diameter-offset": 5,
+                "length-offset": 5,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 5,
+                "turret": 0
+            },
+            "product-id": "G-125/I-126",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/rtas/2025/20$hour=12&page=DE3407D9-3918-8CBE-EFB6-F064B5CA2A8D&token=71D927ED-E053-6020-E9E6-49EC3736B6D3",
+            "reference_guid": "b8a31242-b55b-4a3f-a021-7afbe23c35bf",
+            "shaft": {
+                "segments": [
+                    {
+                        "height": 0.6,
+                        "lower-diameter": 2,
+                        "upper-diameter": 1.75
+                    }
+                ],
+                "type": "shaft"
+            },
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedCutting": "12. inpm",
+                            "tool_feedPlunge": "20 inpm",
+                            "tool_feedRamp": "12 inpm",
+                            "tool_surfaceSpeed": "442 fpm"
+                        },
+                        "f_n": 0.02369225228951578,
+                        "f_z": 0.0023692252289515777,
+                        "guid": "5814b7ce-eeb5-4332-8481-9259daed2143",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 844.157818159413,
+                        "n_ramp": 844.157818159413,
+                        "name": "ST",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 442,
+                        "v_f": 12,
+                        "v_f_leadIn": 12,
+                        "v_f_leadOut": 12,
+                        "v_f_plunge": 20,
+                        "v_f_ramp": 12,
+                        "v_f_transition": 12
+                    }
+                ]
+            },
+            "type": "face mill",
+            "unit": "inches",
+            "vendor": "LC-132"
+        },
+        {
+            "BMC": "hss",
+            "GRADE": "generic",
+            "description": ".194 HSS Reamer",
+            "expressions": {
+                "holder_description": "'DRILL CHUCK - BT30'",
+                "holder_productId": "'BT30-APU13D'",
+                "holder_productLink": "'https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Drill-Chucks/c23_33_444_533/p17945/BT30-DUAL-CONTACT-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html'",
+                "holder_vendor": "'Maritool'",
+                "tool_bodyLength": "2.5 in",
+                "tool_description": "'.194 HSS Reamer'",
+                "tool_diameter": ".194 in",
+                "tool_fluteLength": "1.25 in",
+                "tool_number": "6",
+                "tool_numberOfFlutes": "6",
+                "tool_overallLength": "5 in",
+                "tool_productId": "'F-136'",
+                "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/F/F-136$'",
+                "tool_shaftDiameter": ".1855 in",
+                "tool_shoulderLength": "1.65 in",
+                "tool_vendor": "'LC-139'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.194,
+                "HAND": true,
+                "LB": 2.5,
+                "LCF": 1.25,
+                "NOF": 6,
+                "NT": 1,
+                "OAL": 5,
+                "RE": 0,
+                "SFDM": 0.1855,
+                "SIG": 0,
+                "TP": 0,
+                "assemblyGaugeLength": 6.765004,
+                "shoulder-length": 1.65,
+                "thread-profile-angle": 60,
+                "tip-diameter": 0,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "87ac2b05-7fe1-493a-9a65-9654b1e7e37c",
+            "holder": {
+                "description": "DRILL CHUCK - BT30",
+                "gaugeLength": 4.265004,
+                "guid": "420a54c7-ed6a-429f-92aa-281028199826",
+                "product-id": "BT30-APU13D",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 0.23,
+                        "lower-diameter": 0.685,
+                        "upper-diameter": 0.9
+                    },
+                    {
+                        "height": 0.8,
+                        "lower-diameter": 1.5,
+                        "upper-diameter": 1.943
+                    },
+                    {
+                        "height": 0.1,
+                        "lower-diameter": 1.95,
+                        "upper-diameter": 1.95
+                    },
+                    {
+                        "height": 1.82087,
+                        "lower-diameter": 1.99,
+                        "upper-diameter": 1.99
+                    },
+                    {
+                        "height": 0.7,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.13311023622047,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.25984251968504,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.078740157480315,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": "Maritool"
+            },
+            "last_modified": 1777306791210,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 6,
+                "length-offset": 6,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 6,
+                "turret": 0
+            },
+            "product-id": "F-136",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/F/F-136$",
+            "reference_guid": "891644ed-44ef-40b4-97bc-32a3792c4de9",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedPerRevolution": ".0014 in",
+                            "tool_surfaceSpeed": "600 fpm"
+                        },
+                        "f_z": 0,
+                        "guid": "6132d6df-6722-41c3-aeb7-ea7a2d62d42f",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 11813.56278620254,
+                        "name": "Default preset",
+                        "tool-coolant": "flood",
+                        "use-feed-per-revolution": false,
+                        "v_c": 600,
+                        "v_f": 0,
+                        "v_f_leadIn": 0,
+                        "v_f_leadOut": 0,
+                        "v_f_plunge": 16.53898790068356,
+                        "v_f_ramp": 0,
+                        "v_f_retract": 40,
+                        "v_f_transition": 0
+                    }
+                ]
+            },
+            "type": "reamer",
+            "unit": "inches",
+            "vendor": "LC-139"
+        },
+        {
+            "BMC": "carbide",
+            "description": "1/4 Ball 1\"LOC 3fl 30 deg",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-60'",
+                "tool_bodyLength": "1.2 in",
+                "tool_description": "'1/4 Ball 1\"LOC 3fl 30 deg'",
+                "tool_fluteLength": "1.0 in",
+                "tool_material": "'carbide'",
+                "tool_productId": "'B-200'",
+                "tool_shoulderLength": "1.0 in"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.25,
+                "HAND": true,
+                "LB": 1.2,
+                "LCF": 1,
+                "NOF": 3,
+                "OAL": 1.5,
+                "SFDM": 0.25,
+                "assemblyGaugeLength": 3.365314960629922,
+                "shoulder-diameter": 0.25,
+                "shoulder-length": 1
+            },
+            "guid": "cd5c576f-5271-4f34-9d17-ae267e8602f4",
+            "holder": {
+                "description": "NBT30-SK13C-60",
+                "expressions": {
+                    "tool_description": "'NBT30-SK13C-60'",
+                    "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+                },
+                "gaugeLength": 54.999,
+                "guid": "370a29ef-f349-4ecf-84e2-2a719139b58b",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 35,
+                        "lower-diameter": 33,
+                        "upper-diameter": 33
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 44,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 3.4,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 46,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 3.381,
+                        "lower-diameter": 38,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 38,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 6.6,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 46,
+                        "upper-diameter": 44
+                    },
+                    {
+                        "height": 2,
+                        "lower-diameter": 31.75,
+                        "upper-diameter": 31.75
+                    }
+                ],
+                "type": "holder",
+                "unit": "millimeters",
+                "vendor": ""
+            },
+            "last_modified": 1777306843343,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 62,
+                "length-offset": 62,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 62,
+                "turret": 0
+            },
+            "product-id": "B-200",
+            "product-link": "",
+            "reference_guid": "2077b061-7a43-4c3d-8661-f15f3d819c3c",
+            "start-values": {
+                "presets": [
+                    {
+                        "expressions": {
+                            "tool_feedPlunge": "100 inpm",
+                            "tool_spindleSpeed": "9000 rpm"
+                        },
+                        "f_n": 0.01111111111111111,
+                        "f_z": 0.0014814814814814814,
+                        "guid": "574c162f-c6d3-45a8-8631-096b67d1af00",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 9000,
+                        "n_ramp": 9000,
+                        "name": "Default preset",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 589.0486225480862,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 100,
+                        "v_f_ramp": 13.333333333333334,
+                        "v_f_transition": 40
+                    }
+                ]
+            },
+            "type": "ball end mill",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "carbide",
+            "GRADE": "Mill Generic",
+            "description": "1/2\" 3FL EM 2.LOC AL",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-120'",
+                "tool_bodyLength": "2.3 in",
+                "tool_description": "'1/2\" 3FL EM 2.LOC AL'",
+                "tool_number": "17",
+                "tool_productId": "'A-171'",
+                "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-171$'",
+                "tool_vendor": "'LC-164'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.5,
+                "HAND": true,
+                "LB": 2.3,
+                "LCF": 2,
+                "NOF": 3,
+                "NT": 1,
+                "OAL": 4,
+                "RE": 0,
+                "SFDM": 0.5,
+                "TA": 0,
+                "TP": 0,
+                "assemblyGaugeLength": 6.827519999999998,
+                "shoulder-diameter": 0.5,
+                "shoulder-length": 2,
+                "thread-profile-angle": 60,
+                "tip-diameter": 0.5,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "bfbc289f-8f6b-416a-9326-79d868ebcb44",
+            "holder": {
+                "description": "NBT30-SK13C-120",
+                "gaugeLength": 4.52752,
+                "guid": "0330cb19-c7eb-4668-8ba8-ecdccfde500b",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 3.740157480315,
+                        "lower-diameter": 1.2992125984252,
+                        "upper-diameter": 1.2992125984252
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.7322834645669,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.13385826771654,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.13311023622047,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.25984251968504,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.078740157480315,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777306863592,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 17,
+                "length-offset": 17,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 17,
+                "turret": 0
+            },
+            "product-id": "A-171",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-171$",
+            "reference_guid": "9a6d24cb-9a41-4ead-9642-782c8808c39b",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedPerTooth": ".003 in",
+                            "tool_feedPlunge": "50 inpm",
+                            "tool_feedRamp": "50 inpm",
+                            "tool_surfaceSpeed": "950 fpm"
+                        },
+                        "f_n": 0.006889457573661826,
+                        "f_z": 0.003,
+                        "guid": "57e81cf6-46da-4729-ba44-442ff53dc5b2",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 7257.465404990428,
+                        "n_ramp": 7257.465404990428,
+                        "name": "AL",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 950,
+                        "v_f": 65.31718864491386,
+                        "v_f_leadIn": 65.31718864491386,
+                        "v_f_leadOut": 65.31718864491386,
+                        "v_f_plunge": 50,
+                        "v_f_ramp": 50,
+                        "v_f_transition": 65.31718864491386
+                    },
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_coolant": "'flood tool'",
+                            "tool_feedCutting": "1.5 inpm",
+                            "tool_feedPlunge": "50 inpm",
+                            "tool_feedRamp": "2.inpm",
+                            "tool_spindleSpeed": "10000 rpm"
+                        },
+                        "f_n": 0.005,
+                        "f_z": 5e-05,
+                        "guid": "e2756758-3d4d-44d0-93b5-bbc62915350e",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 10000,
+                        "n_ramp": 10000,
+                        "name": "AL SM BORE",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood tool",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 1308.9969389957469,
+                        "v_f": 1.5,
+                        "v_f_leadIn": 1.5,
+                        "v_f_leadOut": 1.5,
+                        "v_f_plunge": 50,
+                        "v_f_ramp": 2,
+                        "v_f_transition": 1.5
+                    },
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedCutting": "60 inpm",
+                            "tool_feedPlunge": "50 inpm",
+                            "tool_feedRamp": "50 inpm",
+                            "tool_spindleSpeed": "7000 rpm"
+                        },
+                        "f_n": 0.007142857142857143,
+                        "f_z": 0.002857142857142857,
+                        "guid": "a301a758-2ffb-4a21-beb5-7b61e569d962",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 7000,
+                        "n_ramp": 7000,
+                        "name": "AL FIN",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 916.2978572970228,
+                        "v_f": 60,
+                        "v_f_leadIn": 60,
+                        "v_f_leadOut": 60,
+                        "v_f_plunge": 50,
+                        "v_f_ramp": 50,
+                        "v_f_transition": 60
+                    }
+                ]
+            },
+            "type": "flat end mill",
+            "unit": "inches",
+            "vendor": "LC-164"
+        },
+        {
+            "BMC": "hss",
+            "GRADE": "Mill Generic",
+            "description": "5/16 corner rounder .125R .063 Pilot",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-120'",
+                "tool_bodyLength": ".5 in",
+                "tool_cornerRadius": ".125 in",
+                "tool_description": "'5/16 corner rounder .125R .063 Pilot'",
+                "tool_diameter": ".063 in",
+                "tool_fluteLength": ".15 in",
+                "tool_lengthOffset": "tool_number",
+                "tool_number": "19",
+                "tool_productId": "'K-16101176890'",
+                "tool_shaftDiameter": ".3125 in",
+                "tool_shoulderLength": ".15 in",
+                "tool_vendor": "'MSC '"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.063,
+                "HAND": true,
+                "LB": 0.5,
+                "LCF": 0.15,
+                "NOF": 4,
+                "OAL": 3,
+                "RE": 0.125,
+                "SFDM": 0.3125,
+                "assemblyGaugeLength": 4.94878,
+                "shoulder-diameter": 0.313,
+                "shoulder-length": 0.15,
+                "tip-length": 0
+            },
+            "guid": "1f1e4d17-7a32-4996-8087-06325d4bb000",
+            "holder": {
+                "description": "NBT30-SK13C-120",
+                "gaugeLength": 4.44878,
+                "guid": "{00000000-0000-0000-0000-00000000000a}",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 3.66142,
+                        "lower-diameter": 1.29921,
+                        "upper-diameter": 1.29921
+                    },
+                    {
+                        "height": 0.0393701,
+                        "lower-diameter": 1.73228,
+                        "upper-diameter": 1.81102
+                    },
+                    {
+                        "height": 0.133858,
+                        "lower-diameter": 1.81102,
+                        "upper-diameter": 1.81102
+                    },
+                    {
+                        "height": 0.0909055,
+                        "lower-diameter": 1.81102,
+                        "upper-diameter": 1.49606
+                    },
+                    {
+                        "height": 0.13311,
+                        "lower-diameter": 1.49606,
+                        "upper-diameter": 1.49606
+                    },
+                    {
+                        "height": 0.0909055,
+                        "lower-diameter": 1.49606,
+                        "upper-diameter": 1.81102
+                    },
+                    {
+                        "height": 0.259843,
+                        "lower-diameter": 1.81102,
+                        "upper-diameter": 1.81102
+                    },
+                    {
+                        "height": 0.0393701,
+                        "lower-diameter": 1.81102,
+                        "upper-diameter": 1.73228
+                    },
+                    {
+                        "height": 0.0787402,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777306876096,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 19,
+                "length-offset": 19,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 19,
+                "turret": 0
+            },
+            "product-id": "K-16101176890",
+            "product-link": "",
+            "reference_guid": "ec5895ee-648a-427e-8642-686ae60874ee",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_spindleSpeed": "7000rpm"
+                        },
+                        "f_n": 0.0019047619047619043,
+                        "f_z": 0.0014285714285714284,
+                        "guid": "7ada1942-dfbd-4e81-bb4f-23f5ec7e2e25",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 7000,
+                        "n_ramp": 7000,
+                        "name": "Default preset",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 115.45353001942487,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 13.333333333333334,
+                        "v_f_ramp": 13.333333333333334,
+                        "v_f_transition": 40
+                    }
+                ]
+            },
+            "type": "radius mill",
+            "unit": "inches",
+            "vendor": "MSC "
+        },
+        {
+            "BMC": "carbide",
+            "GRADE": "Mill Generic",
+            "description": ".375 90DEG CHAMFER",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-90 (85mm)'",
+                "tool_bodyLength": "1.1 in",
+                "tool_description": "'.375 90DEG CHAMFER'",
+                "tool_diameter": ".375 in",
+                "tool_material": "'carbide'",
+                "tool_number": "14",
+                "tool_numberOfFlutes": "5",
+                "tool_overallLength": "4.0 in",
+                "tool_productId": "'L-74'",
+                "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/L/L-74$'",
+                "tool_shaftDiameter": ".375 in",
+                "tool_shoulderLength": ".875 in",
+                "tool_tipDiameter": ".07 in",
+                "tool_vendor": "'LC83'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.375,
+                "HAND": true,
+                "LB": 1.1,
+                "LCF": 0.75,
+                "NOF": 5,
+                "NT": 1,
+                "OAL": 4,
+                "RE": 0,
+                "SFDM": 0.375,
+                "TA": 45,
+                "TP": 0,
+                "assemblyGaugeLength": 4.446417,
+                "shoulder-diameter": 0.375,
+                "shoulder-length": 0.875,
+                "thread-profile-angle": 60,
+                "tip-diameter": 0.07,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "adf17f22-5805-4f73-900b-b3d1b00e80f4",
+            "holder": {
+                "description": "NBT30-SK13C-90 (85mm)",
+                "gaugeLength": 3.346417,
+                "guid": "82b79d9b-5c50-43f9-b35b-354ae2df7bbf",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 2.5590551181102,
+                        "lower-diameter": 1.2992125984252,
+                        "upper-diameter": 1.2992125984252
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.7322834645669,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.13385826771654,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.13311023622047,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.25984251968504,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.078740157480315,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777306888062,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 14,
+                "length-offset": 14,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 14,
+                "turret": 0
+            },
+            "product-id": "L-74",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/L/L-74$",
+            "reference_guid": "683b9174-243d-4de0-b4bc-f6aac9407b6d",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedPerTooth": "0.0012 in",
+                            "tool_feedPlunge": "50 inpm",
+                            "tool_feedRamp": "50 inpm",
+                            "tool_spindleSpeed": "11000 rpm"
+                        },
+                        "f_n": 0.004545454545454545,
+                        "f_z": 0.0012,
+                        "guid": "74a1bd54-a503-4aa9-8724-8449afa72b45",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 11000,
+                        "n_ramp": 11000,
+                        "name": "AL",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 1079.9224746714915,
+                        "v_f": 66,
+                        "v_f_leadIn": 66,
+                        "v_f_leadOut": 66,
+                        "v_f_plunge": 50,
+                        "v_f_ramp": 50,
+                        "v_f_transition": 66
+                    },
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedPerTooth": ".0027  in",
+                            "tool_feedPlunge": "50 inpm",
+                            "tool_feedRamp": "50 inpm",
+                            "tool_surfaceSpeed": "525 fpm"
+                        },
+                        "f_n": 0.009349978135683903,
+                        "f_z": 0.002700000000000001,
+                        "guid": "77cd4d49-710d-41a8-98f8-ad965c5ac85e",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5347.606087887685,
+                        "n_ramp": 5347.606087887685,
+                        "name": "ST",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 525,
+                        "v_f": 72.19268218648376,
+                        "v_f_leadIn": 72.19268218648376,
+                        "v_f_leadOut": 72.19268218648376,
+                        "v_f_plunge": 50,
+                        "v_f_ramp": 50,
+                        "v_f_transition": 72.19268218648376
+                    }
+                ]
+            },
+            "type": "chamfer mill",
+            "unit": "inches",
+            "vendor": "LC83"
+        },
+        {
+            "BMC": "carbide",
+            "GRADE": "Mill Generic",
+            "description": "3/8\" 45° Dovetail Cutter",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-90 (85mm)'",
+                "tool_bodyLength": "1.2 in",
+                "tool_cornerRadius": ".01 in",
+                "tool_description": "'3/8\" 45° Dovetail Cutter'",
+                "tool_diameter": ".375 in",
+                "tool_fluteLength": ".125 in",
+                "tool_material": "'carbide'",
+                "tool_number": "6",
+                "tool_numberOfFlutes": "3",
+                "tool_overallLength": "2.5 in",
+                "tool_productId": "'M-151'",
+                "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/M/M-151$hour=09&page=5BDDD6E0-38F6-3CCB-236A-9A3A263ADE4E&token=C01657F1-D661-864F-EA24-234F27F3A368'",
+                "tool_shoulderLength": ".125 in",
+                "tool_taperAngle": "45 degrees"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.375,
+                "HAND": true,
+                "LB": 1.2,
+                "LCF": 0.125,
+                "NOF": 3,
+                "NT": 1,
+                "OAL": 2.5,
+                "RE": 0.01,
+                "SFDM": 0.375,
+                "TA": 45,
+                "TP": 0,
+                "assemblyGaugeLength": 4.546417,
+                "shoulder-diameter": 0.1532843,
+                "shoulder-length": 0.125,
+                "thread-profile-angle": 60,
+                "tip-diameter": 0,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "4c244ebd-58f1-46ff-8433-c8a4dee9c7a6",
+            "holder": {
+                "description": "NBT30-SK13C-90 (85mm)",
+                "gaugeLength": 3.3464173228346,
+                "guid": "82b79d9b-5c50-43f9-b35b-354ae2df7bbf",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 2.5590551181102,
+                        "lower-diameter": 1.2992125984252,
+                        "upper-diameter": 1.2992125984252
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.7322834645669,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.13385826771654,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.13311023622047,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.25984251968504,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.078740157480315,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777306894115,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 6,
+                "length-offset": 6,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 6,
+                "turret": 0
+            },
+            "product-id": "M-151",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/M/M-151$hour=09&page=5BDDD6E0-38F6-3CCB-236A-9A3A263ADE4E&token=C01657F1-D661-864F-EA24-234F27F3A368",
+            "reference_guid": "9d131aff-bb8e-4952-a89b-1b8f74f27f13",
+            "shaft": {
+                "segments": [
+                    {
+                        "height": 0.155,
+                        "lower-diameter": 0.153,
+                        "upper-diameter": 0.375
+                    }
+                ],
+                "type": "shaft"
+            },
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedCutting": "20 inpm",
+                            "tool_feedPlunge": "20 inpm",
+                            "tool_feedRamp": "20 inpm",
+                            "tool_surfaceSpeed": "600 fpm"
+                        },
+                        "f_n": 0.003272492347489367,
+                        "f_z": 0.0010908307824964558,
+                        "guid": "3ad00b48-947d-4195-8076-4d1c295595a0",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 6111.549814728783,
+                        "n_ramp": 6111.549814728783,
+                        "name": "AL",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 600,
+                        "v_f": 20,
+                        "v_f_leadIn": 20,
+                        "v_f_leadOut": 20,
+                        "v_f_plunge": 20,
+                        "v_f_ramp": 20,
+                        "v_f_transition": 20
+                    }
+                ]
+            },
+            "type": "dovetail mill",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "carbide",
+            "GRADE": "Mill Generic",
+            "description": "3/16 Lollipop",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-150'",
+                "holder_vendor": "'Lindex nikken'",
+                "tool_bodyLength": "1.4 in",
+                "tool_description": "'3/16 Lollipop'",
+                "tool_diameter": ".1875 in",
+                "tool_fluteLength": ".16 in",
+                "tool_material": "'carbide'",
+                "tool_numberOfFlutes": "4",
+                "tool_overallLength": "2.5 in",
+                "tool_productId": "'M-132'",
+                "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/M/M-132$'",
+                "tool_shaftDiameter": ".115 in",
+                "tool_shoulderLength": "1.16 in",
+                "tool_vendor": "'LC-135'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.1875,
+                "HAND": true,
+                "LB": 1.4,
+                "LCF": 0.16,
+                "NOF": 4,
+                "NT": 1,
+                "OAL": 2.5,
+                "RE": 0.09375,
+                "SFDM": 0.115,
+                "TA": 0,
+                "TP": 0,
+                "assemblyGaugeLength": 7.029882,
+                "shoulder-diameter": 0.115,
+                "shoulder-length": 1.16,
+                "thread-profile-angle": 60,
+                "tip-diameter": 0,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "4ae0faa6-b813-4cce-b4e0-07cef35c7824",
+            "holder": {
+                "description": "NBT30-SK13C-150",
+                "gaugeLength": 5.629882,
+                "guid": "0bb67e22-1d3e-4ae4-b729-30d71c7f880d",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 4.8425196850394,
+                        "lower-diameter": 1.2992125984252,
+                        "upper-diameter": 1.2992125984252
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.7322834645669,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.13385826771654,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.13311023622047,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.25984251968504,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.078740157480315,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": "Lindex nikken"
+            },
+            "last_modified": 1777306902674,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 9,
+                "length-offset": 9,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 9,
+                "turret": 0
+            },
+            "product-id": "M-132",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/M/M-132$",
+            "reference_guid": "7055b661-f9fd-4c9f-96ec-07cae7536191",
+            "shaft": {
+                "segments": [
+                    {
+                        "height": 0.075,
+                        "lower-diameter": 0.115,
+                        "upper-diameter": 0.1875
+                    }
+                ],
+                "type": "shaft"
+            },
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedCutting": "14 inpm",
+                            "tool_feedPlunge": "20 inpm",
+                            "tool_feedRamp": "10 inpm",
+                            "tool_surfaceSpeed": "700 fpm"
+                        },
+                        "f_n": 0.001402496720352586,
+                        "f_z": 0.0002454369260617025,
+                        "guid": "65061abe-8c6e-4ae9-8090-72751abd79b3",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 14260.282901033825,
+                        "n_ramp": 14260.282901033825,
+                        "name": "AL",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 700,
+                        "v_f": 13.999999999999996,
+                        "v_f_leadIn": 13.999999999999996,
+                        "v_f_leadOut": 13.999999999999996,
+                        "v_f_plunge": 20,
+                        "v_f_ramp": 10,
+                        "v_f_transition": 13.999999999999996
+                    }
+                ]
+            },
+            "type": "lollipop mill",
+            "unit": "inches",
+            "vendor": "LC-135"
+        },
+        {
+            "BMC": "hss",
+            "description": "1\"Ø Keycutter 1/16 Kerf .5 Shank",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-90'",
+                "tool_bodyLength": ".8 in",
+                "tool_description": "'1\"Ø Keycutter 1/16 Kerf .5 Shank'",
+                "tool_diameter": "1.015 in",
+                "tool_fluteLength": ".0625 in",
+                "tool_numberOfFlutes": "16",
+                "tool_overallLength": "2.057 in",
+                "tool_productId": "'H-187'",
+                "tool_shaftDiameter": ".5 in",
+                "tool_shoulderLength": ".25 in"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 1.015,
+                "HAND": true,
+                "LB": 0.8,
+                "LCF": 0.0625,
+                "NOF": 16,
+                "OAL": 2.057,
+                "RE": 0,
+                "SFDM": 0.5,
+                "assemblyGaugeLength": 4.146417322834646,
+                "shoulder-diameter": 0.5,
+                "shoulder-length": 0.25
+            },
+            "guid": "082dfdb2-c084-4fca-baec-9e5f9ea8bb41",
+            "holder": {
+                "description": "NBT30-SK13C-90",
+                "expressions": {
+                    "tool_description": "'NBT30-SK13C-90'",
+                    "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+                },
+                "gaugeLength": 84.999,
+                "guid": "579caa9b-0956-4d86-aa80-22007311a7e7",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 65,
+                        "lower-diameter": 33,
+                        "upper-diameter": 33
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 44,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 3.4,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 46,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 3.381,
+                        "lower-diameter": 38,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 38,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 6.6,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 46,
+                        "upper-diameter": 44
+                    },
+                    {
+                        "height": 2,
+                        "lower-diameter": 31.75,
+                        "upper-diameter": 31.75
+                    }
+                ],
+                "type": "holder",
+                "unit": "millimeters",
+                "vendor": ""
+            },
+            "last_modified": 1777306916632,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 59,
+                "length-offset": 59,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 59,
+                "turret": 0
+            },
+            "product-id": "H-187",
+            "product-link": "",
+            "reference_guid": "2a094156-fe82-433e-9219-eb317a9f2aa7",
+            "start-values": {
+                "presets": [
+                    {
+                        "f_n": 0.0026666666666666666,
+                        "f_z": 5e-04,
+                        "guid": "00d3e688-6114-44f2-9c8f-25e8a33c61f2",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5000,
+                        "n_ramp": 5000,
+                        "name": "Default preset",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 1328.6318930806829,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 13.333333333333334,
+                        "v_f_ramp": 13.333333333333334,
+                        "v_f_transition": 40
+                    }
+                ]
+            },
+            "type": "slot mill",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "carbide",
+            "GRADE": "Mill Generic",
+            "description": ".488 11-32 THREAD MILL",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-60'",
+                "tool_bodyLength": "1.25 in",
+                "tool_description": "'.488 11-32 THREAD MILL'",
+                "tool_diameter": ".488 in",
+                "tool_fluteLength": ".1 in",
+                "tool_material": "'carbide'",
+                "tool_number": "19",
+                "tool_numberOfFlutes": "5",
+                "tool_numberOfTeeth": "1",
+                "tool_overallLength": "3.5 in",
+                "tool_productId": "'N-78'",
+                "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/N/N-78$'",
+                "tool_shaftDiameter": ".5 in",
+                "tool_shoulderLength": ".95 in",
+                "tool_threadPitch": ".085 in",
+                "tool_vendor": "'LC87'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.488,
+                "HAND": true,
+                "LB": 1.25,
+                "LCF": 0.1,
+                "NOF": 5,
+                "NT": 1,
+                "OAL": 3.5,
+                "RE": 0,
+                "SFDM": 0.5,
+                "TA": 0,
+                "TP": 0.085,
+                "TPN": 0.03937008,
+                "TPX": 0.085,
+                "assemblyGaugeLength": 3.415315,
+                "shoulder-diameter": 0.3407757,
+                "shoulder-length": 0.95,
+                "thread-profile-angle": 60,
+                "thread-tip-type": "point",
+                "tip-diameter": 0.488,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "64a3493f-fce3-457e-b7f8-8863a397ff7b",
+            "holder": {
+                "description": "NBT30-SK13C-60",
+                "gaugeLength": 2.165315,
+                "guid": "5f52f738-7099-4cdc-8bf7-a93859237490",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 1.3779527559055,
+                        "lower-diameter": 1.2992125984252,
+                        "upper-diameter": 1.2992125984252
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.7322834645669,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.13385826771654,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.13311023622047,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.25984251968504,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.078740157480315,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777306928718,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 19,
+                "length-offset": 19,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 19,
+                "turret": 0
+            },
+            "product-id": "N-78",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/N/N-78$",
+            "reference_guid": "e45722a7-58eb-423a-afe6-267620ef6b97",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedCutting": "20 inpm",
+                            "tool_feedPlunge": "30 inpm",
+                            "tool_feedRamp": "20 inpm",
+                            "tool_spindleSpeed": "2600 rpm"
+                        },
+                        "f_n": 0.01153846153846154,
+                        "f_z": 0.0015384615384615385,
+                        "guid": "503804fe-efa0-46c1-9e88-9153eb212a79",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 2600,
+                        "n_ramp": 2600,
+                        "name": "AL",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 332.17106323956085,
+                        "v_f": 20,
+                        "v_f_leadIn": 20,
+                        "v_f_leadOut": 20,
+                        "v_f_plunge": 30,
+                        "v_f_ramp": 20,
+                        "v_f_transition": 20
+                    }
+                ]
+            },
+            "type": "thread mill",
+            "unit": "inches",
+            "vendor": "LC87"
+        },
+        {
+            "BMC": "unspecified",
+            "GRADE": "Mill Generic",
+            "description": "3/16Ø High Feed mill .562LOC",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-120'",
+                "tool_bodyLength": ".86 in",
+                "tool_description": "'3/16Ø High Feed mill .562LOC'",
+                "tool_diameter": ".1875 in",
+                "tool_fluteLength": ".5625 in",
+                "tool_lengthOffset": "tool_number",
+                "tool_number": "51",
+                "tool_numberOfFlutes": "4",
+                "tool_productId": "'A-180'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.1875,
+                "HAND": true,
+                "LB": 0.86,
+                "LCF": 0.5625,
+                "NOF": 4,
+                "OAL": 2,
+                "assemblyGaugeLength": 5.38751968503937,
+                "profile": [
+                    {
+                        "end": [
+                            -5.463695987312625e-18,
+                            0.002360256099768295
+                        ]
+                    },
+                    {
+                        "arc": true,
+                        "ccw": true,
+                        "center": [
+                            0.02812499999328139,
+                            0.16874999995905746
+                        ],
+                        "end": [
+                            0.0836890243903592,
+                            0.009410106401345864
+                        ]
+                    },
+                    {
+                        "arc": true,
+                        "ccw": true,
+                        "center": [
+                            0.07875000000011356,
+                            0.02357365249943017
+                        ],
+                        "end": [
+                            0.09371457863481854,
+                            0.02460388853342033
+                        ]
+                    },
+                    {
+                        "end": [
+                            0.08250000000010417,
+                            0.18749999999943057
+                        ]
+                    },
+                    {
+                        "end": [
+                            0.0825000000000826,
+                            0.5624999999994305
+                        ]
+                    },
+                    {
+                        "end": [
+                            0.12500000000007347,
+                            0.721112159299433
+                        ]
+                    },
+                    {
+                        "end": [
+                            0.12500000000000056,
+                            1.989999999999433
+                        ]
+                    },
+                    {
+                        "end": [
+                            0.115,
+                            1.999999999999432
+                        ]
+                    },
+                    {
+                        "end": [
+                            0,
+                            1.9999999999994256
+                        ]
+                    }
+                ],
+                "tip-offset": 0
+            },
+            "guid": "19d00a3d-8bac-4095-b4a1-b95f0f9185cd",
+            "holder": {
+                "description": "NBT30-SK13C-120",
+                "gaugeLength": 4.52751968503937,
+                "guid": "8f0b0e81-b5eb-4cbd-b3ea-d880f03c1d4e",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 3.74015748031496,
+                        "lower-diameter": 1.2992125984251968,
+                        "upper-diameter": 1.2992125984251968
+                    },
+                    {
+                        "height": 0.03937007874015748,
+                        "lower-diameter": 1.7322834645669292,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.13385826771653542,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.09090551181102365,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.4960629921259845
+                    },
+                    {
+                        "height": 0.13311023622047244,
+                        "lower-diameter": 1.4960629921259845,
+                        "upper-diameter": 1.4960629921259845
+                    },
+                    {
+                        "height": 0.09090551181102365,
+                        "lower-diameter": 1.4960629921259845,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.25984251968503935,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.03937007874015748,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.7322834645669292
+                    },
+                    {
+                        "height": 0.07874015748031496,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777306950309,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 51,
+                "length-offset": 51,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 51,
+                "turret": 0
+            },
+            "product-id": "A-180",
+            "product-link": "",
+            "reference_guid": "302f2d98-ca6d-4113-aced-d09d2bf7d5f9",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_coolant": "'flood'",
+                            "tool_feedPerTooth": ".003 in",
+                            "tool_feedPlunge": "200 inpm",
+                            "tool_feedRamp": "30 inpm",
+                            "tool_surfaceSpeed": "350 fpm"
+                        },
+                        "f_n": 0.028049934407051717,
+                        "f_z": 0.003,
+                        "guid": "97ab34fe-4632-0149-4523-0cb4d082f7ff",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 7130.141450516912,
+                        "n_ramp": 7130.141450516912,
+                        "name": "Default Preset",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 350,
+                        "v_f": 85.56169740620295,
+                        "v_f_leadIn": 85.56169740620295,
+                        "v_f_leadOut": 85.56169740620295,
+                        "v_f_plunge": 200,
+                        "v_f_ramp": 30,
+                        "v_f_transition": 85.56169740620295
+                    }
+                ]
+            },
+            "type": "form mill",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "unspecified",
+            "GRADE": "Mill Generic",
+            "description": ".135 Back Chamf",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-90'",
+                "tool_bodyLength": ".72 in",
+                "tool_description": "'.135 Back Chamf'",
+                "tool_diameter": ".135 in",
+                "tool_fluteLength": ".625 in",
+                "tool_lengthOffset": "tool_number",
+                "tool_number": "4",
+                "tool_numberOfFlutes": "6",
+                "tool_productId": "'L-108'",
+                "tool_vendor": "'115'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.135,
+                "HAND": true,
+                "LB": 0.72,
+                "LCF": 0.625,
+                "NOF": 6,
+                "OAL": 1.9999999999999991,
+                "assemblyGaugeLength": 4.066417322834646,
+                "profile": [
+                    {
+                        "end": [
+                            0,
+                            0
+                        ]
+                    },
+                    {
+                        "end": [
+                            0.0675,
+                            0
+                        ]
+                    },
+                    {
+                        "end": [
+                            0.0435,
+                            0.024000000000000014
+                        ]
+                    },
+                    {
+                        "end": [
+                            0.043428932188134525,
+                            0.024071067811865673
+                        ]
+                    },
+                    {
+                        "arc": true,
+                        "ccw": false,
+                        "center": [
+                            0.0505,
+                            0.031142135623730964
+                        ],
+                        "end": [
+                            0.0405,
+                            0.031142135623730964
+                        ]
+                    },
+                    {
+                        "end": [
+                            0.0405,
+                            0.6561421356237312
+                        ]
+                    },
+                    {
+                        "end": [
+                            0.09375,
+                            0.709392135623731
+                        ]
+                    },
+                    {
+                        "end": [
+                            0.09375,
+                            1.9999999999999991
+                        ]
+                    },
+                    {
+                        "end": [
+                            0,
+                            1.9999999999999991
+                        ]
+                    }
+                ],
+                "tip-offset": 0
+            },
+            "guid": "7fb40c47-c155-43c1-9559-46a566c4adbb",
+            "holder": {
+                "description": "NBT30-SK13C-90",
+                "expressions": {
+                    "tool_description": "'NBT30-SK13C-90'",
+                    "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+                },
+                "gaugeLength": 84.999,
+                "guid": "579caa9b-0956-4d86-aa80-22007311a7e7",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 65,
+                        "lower-diameter": 33,
+                        "upper-diameter": 33
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 44,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 3.4,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 46,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 3.381,
+                        "lower-diameter": 38,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 38,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 6.6,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 46,
+                        "upper-diameter": 44
+                    },
+                    {
+                        "height": 2,
+                        "lower-diameter": 31.75,
+                        "upper-diameter": 31.75
+                    }
+                ],
+                "type": "holder",
+                "unit": "millimeters",
+                "vendor": ""
+            },
+            "last_modified": 1777306961191,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 4,
+                "length-offset": 4,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 4,
+                "turret": 0
+            },
+            "product-id": "L-108",
+            "product-link": "",
+            "reference_guid": "04897abe-88b2-420b-855f-d616de65c8ef",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedPerTooth": ".0003 in",
+                            "tool_feedPlunge": "50 inpm",
+                            "tool_feedRamp": "1 inpm",
+                            "tool_surfaceSpeed": "200 fpm"
+                        },
+                        "f_n": 0.00883572933822129,
+                        "f_z": 3e-04,
+                        "guid": "bba66b19-496b-42ac-f416-aab2e3888611",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5658.842421045168,
+                        "n_ramp": 5658.842421045168,
+                        "name": "Default Preset",
+                        "ramp-angle": 2,
+                        "tool-coolant": "disabled",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 200,
+                        "v_f": 10.1859163578813,
+                        "v_f_leadIn": 10.1859163578813,
+                        "v_f_leadOut": 10.1859163578813,
+                        "v_f_plunge": 50,
+                        "v_f_ramp": 1,
+                        "v_f_transition": 10.1859163578813
+                    }
+                ]
+            },
+            "type": "form mill",
+            "unit": "inches",
+            "vendor": "115"
+        },
+        {
+            "BMC": "carbide",
+            "GRADE": "generic",
+            "description": "1/4 Spot drill ",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-60'",
+                "tool_bodyLength": ".9 in",
+                "tool_description": "'1/4 Spot drill '",
+                "tool_fluteLength": ".75 in",
+                "tool_lengthOffset": "tool_number",
+                "tool_material": "'carbide'",
+                "tool_number": "19",
+                "tool_overallLength": "2.5 in",
+                "tool_productId": "'D-33'",
+                "tool_shoulderLength": ".75 in",
+                "tool_tipAngle": "140 degrees",
+                "tool_tipDiameter": "0.005 in",
+                "tool_vendor": "'MSC'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.25,
+                "HAND": true,
+                "LB": 0.9,
+                "LCF": 0.75,
+                "NOF": 2,
+                "OAL": 2.5,
+                "SFDM": 0.25,
+                "SIG": 140,
+                "assemblyGaugeLength": 3.06531,
+                "shoulder-length": 0.75,
+                "tip-diameter": 0.005
+            },
+            "guid": "8d67fc4f-5088-4d35-836c-793cdac48eba",
+            "holder": {
+                "description": "NBT30-SK13C-60",
+                "gaugeLength": 2.16531,
+                "guid": "370a29ef-f349-4ecf-84e2-2a719139b58b",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 1.37795,
+                        "lower-diameter": 1.29921,
+                        "upper-diameter": 1.29921
+                    },
+                    {
+                        "height": 0.0393701,
+                        "lower-diameter": 1.73228,
+                        "upper-diameter": 1.81102
+                    },
+                    {
+                        "height": 0.133858,
+                        "lower-diameter": 1.81102,
+                        "upper-diameter": 1.81102
+                    },
+                    {
+                        "height": 0.0909055,
+                        "lower-diameter": 1.81102,
+                        "upper-diameter": 1.49606
+                    },
+                    {
+                        "height": 0.13311,
+                        "lower-diameter": 1.49606,
+                        "upper-diameter": 1.49606
+                    },
+                    {
+                        "height": 0.0909055,
+                        "lower-diameter": 1.49606,
+                        "upper-diameter": 1.81102
+                    },
+                    {
+                        "height": 0.259843,
+                        "lower-diameter": 1.81102,
+                        "upper-diameter": 1.81102
+                    },
+                    {
+                        "height": 0.0393701,
+                        "lower-diameter": 1.81102,
+                        "upper-diameter": 1.73228
+                    },
+                    {
+                        "height": 0.0787402,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777307000039,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 19,
+                "length-offset": 19,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 19,
+                "turret": 0
+            },
+            "product-id": "D-33",
+            "product-link": "",
+            "reference_guid": "4b4b3578-db2e-46a4-ad3e-6a5000f57ab7",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedCutting": "10 inpm",
+                            "tool_feedPlunge": "10 inpm",
+                            "tool_feedRamp": "10 inpm",
+                            "tool_feedRetract": "30 inpm",
+                            "tool_surfaceSpeed": "200 ft/min"
+                        },
+                        "f_z": 0.0016362461737446836,
+                        "guid": "906d4806-40ed-4274-b8b3-31f88cb00580",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 3055.774907364391,
+                        "name": "SS",
+                        "tool-coolant": "flood",
+                        "use-feed-per-revolution": false,
+                        "v_c": 200,
+                        "v_f": 10,
+                        "v_f_leadIn": 10,
+                        "v_f_leadOut": 10,
+                        "v_f_plunge": 10,
+                        "v_f_ramp": 10,
+                        "v_f_retract": 30,
+                        "v_f_transition": 10
+                    }
+                ]
+            },
+            "type": "spot drill",
+            "unit": "inches",
+            "vendor": "MSC"
+        },
+        {
+            "BMC": "hss",
+            "GRADE": "generic",
+            "description": "25/64 (.3906) HSS Drill",
+            "expressions": {
+                "holder_description": "'DRILL CHUCK - BT30'",
+                "holder_productId": "'BT30-APU13D'",
+                "holder_productLink": "'https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Drill-Chucks/c23_33_444_533/p17945/BT30-DUAL-CONTACT-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html'",
+                "holder_vendor": "'Maritool'",
+                "tool_description": "'25/64 (.3906) HSS Drill'",
+                "tool_diameter": ".3906 in",
+                "tool_fluteLength": "3.4 in",
+                "tool_number": "18",
+                "tool_productId": "'D-190'",
+                "tool_shoulderLength": "4.0 in",
+                "tool_tipAngle": "135 degrees",
+                "tool_vendor": "''"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.3906,
+                "HAND": true,
+                "LB": 4,
+                "LCF": 3.4,
+                "NOF": 2,
+                "NT": 1,
+                "OAL": 5.2,
+                "RE": 0,
+                "SFDM": 0.3906,
+                "SIG": 135,
+                "TP": 0,
+                "assemblyGaugeLength": 8.265004,
+                "shoulder-length": 4,
+                "thread-profile-angle": 60,
+                "tip-diameter": 0,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "8ebd8d4b-0fc8-45e3-8841-9c548a9890e5",
+            "holder": {
+                "description": "DRILL CHUCK - BT30",
+                "gaugeLength": 4.265004,
+                "guid": "420a54c7-ed6a-429f-92aa-281028199826",
+                "product-id": "BT30-APU13D",
+                "product-link": "https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Drill-Chucks/c23_33_444_533/p17945/BT30-DUAL-CONTACT-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html",
+                "segments": [
+                    {
+                        "height": 0.23,
+                        "lower-diameter": 0.685,
+                        "upper-diameter": 0.9
+                    },
+                    {
+                        "height": 0.8,
+                        "lower-diameter": 1.5,
+                        "upper-diameter": 1.943
+                    },
+                    {
+                        "height": 0.1,
+                        "lower-diameter": 1.95,
+                        "upper-diameter": 1.95
+                    },
+                    {
+                        "height": 1.82087,
+                        "lower-diameter": 1.99,
+                        "upper-diameter": 1.99
+                    },
+                    {
+                        "height": 0.7,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.13311023622047,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.25984251968504,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.078740157480315,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": "Maritool"
+            },
+            "last_modified": 1777307021286,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 18,
+                "length-offset": 18,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 18,
+                "turret": 0
+            },
+            "product-id": "D-190",
+            "product-link": "",
+            "reference_guid": "5bc00272-1d9d-4a9d-806d-e05b789b94d7",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedPerRevolution": ".007 in",
+                            "tool_surfaceSpeed": "100 fpm"
+                        },
+                        "f_z": 0,
+                        "guid": "2d917a5b-54a6-4877-86cb-0bf3a461a5f7",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 977.9105566322294,
+                        "name": "ST",
+                        "tool-coolant": "flood",
+                        "use-feed-per-revolution": false,
+                        "v_c": 100,
+                        "v_f": 0,
+                        "v_f_leadIn": 0,
+                        "v_f_leadOut": 0,
+                        "v_f_plunge": 6.845373896425606,
+                        "v_f_ramp": 0,
+                        "v_f_retract": 40,
+                        "v_f_transition": 0
+                    },
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedPerRevolution": ".0065 in",
+                            "tool_surfaceSpeed": "200 fpm"
+                        },
+                        "f_z": 0,
+                        "guid": "03f924e1-f834-40f9-9623-87e67dbd62ac",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 1955.8211132644587,
+                        "name": "AL",
+                        "tool-coolant": "flood",
+                        "use-feed-per-revolution": false,
+                        "v_c": 200,
+                        "v_f": 0,
+                        "v_f_leadIn": 0,
+                        "v_f_leadOut": 0,
+                        "v_f_plunge": 12.712837236218984,
+                        "v_f_ramp": 0,
+                        "v_f_retract": 40,
+                        "v_f_transition": 0
+                    }
+                ]
+            },
+            "type": "drill",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "carbide",
+            "GRADE": "generic",
+            "description": ".159 #21 CARB Drill 140deg",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-120'",
+                "tool_bodyLength": "1.55 in",
+                "tool_description": "'.159 #21 CARB Drill 140deg'",
+                "tool_diameter": ".159 in",
+                "tool_fluteLength": "1.4173 in",
+                "tool_lengthOffset": "tool_number",
+                "tool_material": "'carbide'",
+                "tool_number": "21",
+                "tool_overallLength": "2.9134 in",
+                "tool_productId": "'D-87'",
+                "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/D/D-87$'",
+                "tool_shaftDiameter": ".2326 in",
+                "tool_shoulderLength": "1.5 in",
+                "tool_tipAngle": "140 degrees",
+                "tool_vendor": "'LC-94'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.159,
+                "HAND": true,
+                "LB": 1.55,
+                "LCF": 1.4173,
+                "NOF": 2,
+                "NT": 1,
+                "OAL": 2.9134,
+                "RE": 0,
+                "SFDM": 0.2326,
+                "SIG": 140,
+                "TP": 0,
+                "assemblyGaugeLength": 6.07752,
+                "shoulder-length": 1.5,
+                "thread-profile-angle": 60,
+                "tip-diameter": 0,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "fe84d688-8693-4f56-ad8c-3d15ff9c801d",
+            "holder": {
+                "description": "NBT30-SK13C-120",
+                "gaugeLength": 4.52752,
+                "guid": "0330cb19-c7eb-4668-8ba8-ecdccfde500b",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 3.740157480315,
+                        "lower-diameter": 1.2992125984252,
+                        "upper-diameter": 1.2992125984252
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.7322834645669,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.13385826771654,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.13311023622047,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.25984251968504,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.078740157480315,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777307026226,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 21,
+                "length-offset": 21,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 21,
+                "turret": 0
+            },
+            "product-id": "D-87",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/D/D-87$",
+            "reference_guid": "44c2d4c6-066f-4559-ba1b-3d726d9e013e",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_coolant": "'flood tool'",
+                            "tool_feedPlunge": "15 inpm",
+                            "tool_spindleSpeed": "6200 rpm"
+                        },
+                        "f_z": 0,
+                        "guid": "eaa6781f-c04b-b0e8-fa5d-febef29fa1b5",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 6200,
+                        "name": "SS",
+                        "tool-coolant": "flood tool",
+                        "use-feed-per-revolution": false,
+                        "v_c": 258.0818364924015,
+                        "v_f": 0,
+                        "v_f_leadIn": 0,
+                        "v_f_leadOut": 0,
+                        "v_f_plunge": 15,
+                        "v_f_ramp": 0,
+                        "v_f_retract": 40,
+                        "v_f_transition": 0
+                    }
+                ]
+            },
+            "type": "drill",
+            "unit": "inches",
+            "vendor": "LC-94"
+        },
+        {
+            "BMC": "carbide",
+            "GRADE": "generic",
+            "description": "1/2 100DEG Spot Drill",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-120'",
+                "tool_bodyLength": "1.7 in",
+                "tool_description": "'1/2 100DEG Spot Drill'",
+                "tool_diameter": ".5 in",
+                "tool_fluteLength": "1. in",
+                "tool_material": "'carbide'",
+                "tool_number": "5",
+                "tool_overallLength": "2.5 in",
+                "tool_productId": "'O-133'",
+                "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/O/O-133$'",
+                "tool_shoulderLength": "1 in",
+                "tool_tipAngle": "100 degrees",
+                "tool_tipDiameter": ".045 in",
+                "tool_vendor": "'LC-136'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.5,
+                "HAND": true,
+                "LB": 1.7,
+                "LCF": 1,
+                "NOF": 2,
+                "NT": 1,
+                "OAL": 2.5,
+                "RE": 0,
+                "SFDM": 0.5,
+                "SIG": 100,
+                "TP": 0,
+                "assemblyGaugeLength": 6.22752,
+                "shoulder-length": 1,
+                "thread-profile-angle": 60,
+                "tip-diameter": 0.045,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "fd3b1084-9026-4b91-9a95-d87d1e5f5a72",
+            "holder": {
+                "description": "NBT30-SK13C-120",
+                "gaugeLength": 4.52752,
+                "guid": "8f0b0e81-b5eb-4cbd-b3ea-d880f03c1d4e",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 3.740157480315,
+                        "lower-diameter": 1.2992125984252,
+                        "upper-diameter": 1.2992125984252
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.7322834645669,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.13385826771654,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.13311023622047,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.25984251968504,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.078740157480315,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777307036948,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 5,
+                "length-offset": 5,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 5,
+                "turret": 0
+            },
+            "product-id": "O-133",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/O/O-133$",
+            "reference_guid": "7f09e3a8-3cec-4b24-bff2-00c319aa6fd0",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedPerTooth": ".0025 in",
+                            "tool_feedPlunge": "10.875inpm",
+                            "tool_feedRamp": "20 inpm",
+                            "tool_feedRetract": "tool_feedPlunge",
+                            "tool_surfaceSpeed": "285 fpm"
+                        },
+                        "f_z": 0.0025,
+                        "guid": "a832eb21-bfa9-4ffc-a6fd-b243b0be0458",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 2177.2396214971286,
+                        "name": "AL",
+                        "tool-coolant": "flood",
+                        "use-feed-per-revolution": false,
+                        "v_c": 285,
+                        "v_f": 10.886198107485642,
+                        "v_f_leadIn": 10.886198107485642,
+                        "v_f_leadOut": 10.886198107485642,
+                        "v_f_plunge": 10.875,
+                        "v_f_ramp": 20,
+                        "v_f_retract": 10.875,
+                        "v_f_transition": 10.886198107485642
+                    }
+                ]
+            },
+            "type": "spot drill",
+            "unit": "inches",
+            "vendor": "LC-136"
+        },
+        {
+            "BMC": "hss",
+            "GRADE": "generic",
+            "description": "5/16-24 FORM TAP H5",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-90'",
+                "tool_bodyLength": "1.4 in",
+                "tool_description": "'5/16-24 FORM TAP H5'",
+                "tool_diameter": ".3125 in",
+                "tool_fluteLength": ".6653 in",
+                "tool_number": "18",
+                "tool_overallLength": "2.719 in",
+                "tool_productId": "'R-137'",
+                "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/R/R-137$'",
+                "tool_shaftDiameter": ".318 in",
+                "tool_shoulderLength": "1.2 in",
+                "tool_threadPitch": ".0416666667 in",
+                "tool_vendor": "'LC-140'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.3125,
+                "LB": 1.4,
+                "LCF": 0.6653,
+                "NOF": 3,
+                "OAL": 2.719,
+                "SFDM": 0.318,
+                "TP": 0.0416666667,
+                "assemblyGaugeLength": 4.746417,
+                "shoulder-length": 1.2
+            },
+            "guid": "053c344a-0190-434b-bfc4-8251db68373e",
+            "holder": {
+                "description": "NBT30-SK13C-90",
+                "gaugeLength": 3.346417,
+                "guid": "579caa9b-0956-4d86-aa80-22007311a7e7",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 2.5590551181102,
+                        "lower-diameter": 1.2992125984252,
+                        "upper-diameter": 1.2992125984252
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.7322834645669,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.13385826771654,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.13311023622047,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.496062992126
+                    },
+                    {
+                        "height": 0.090905511811024,
+                        "lower-diameter": 1.496062992126,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.25984251968504,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.8110236220472
+                    },
+                    {
+                        "height": 0.039370078740157,
+                        "lower-diameter": 1.8110236220472,
+                        "upper-diameter": 1.7322834645669
+                    },
+                    {
+                        "height": 0.078740157480315,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1777307053719,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 18,
+                "length-offset": 18,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 18,
+                "turret": 0
+            },
+            "product-id": "R-137",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/R/R-137$",
+            "reference_guid": "1830a410-11a3-46fb-b402-6e8911ff4b0c",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "guid": "b3fe87fe-7c7c-4500-a54b-8bb34794cb06",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 500,
+                        "name": "Default preset",
+                        "tool-coolant": "flood",
+                        "v_c": 40.9061543436171
+                    }
+                ]
+            },
+            "type": "tap right hand",
+            "unit": "inches",
+            "vendor": "LC-140"
+        },
+        {
+            "BMC": "hss",
+            "GRADE": "generic",
+            "description": "6-32 FORM TAP MB - SS",
+            "expressions": {
+                "holder_description": "'NBT30-SK20C-60 w/ER16 EXT 2.385OOH '",
+                "holder_vendor": "'Nikken '",
+                "tool_bodyLength": "1. in",
+                "tool_description": "'6-32 FORM TAP MB - SS'",
+                "tool_diameter": ".138 in",
+                "tool_fluteLength": ".37 in",
+                "tool_number": "41",
+                "tool_numberOfFlutes": "2",
+                "tool_productId": "'R-208'",
+                "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/R/R-208$'",
+                "tool_shaftDiameter": ".141 in",
+                "tool_shoulderLength": ".685 in",
+                "tool_threadPitch": ".03125 in",
+                "tool_vendor": "'LC-199'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.138,
+                "HAND": true,
+                "LB": 1,
+                "LCF": 0.37,
+                "NOF": 2,
+                "NT": 1,
+                "OAL": 2,
+                "RE": 0,
+                "SFDM": 0.141,
+                "SIG": 0,
+                "TP": 0.03125,
+                "assemblyGaugeLength": 4.56,
+                "shoulder-length": 0.6849999999999998,
+                "thread-profile-angle": 60,
+                "tip-diameter": 0,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "1bced330-59c5-4bdf-a995-659bbbbe1083",
+            "holder": {
+                "description": "NBT30-SK20C-60 w/ER16 EXT 2.385OOH ",
+                "gaugeLength": 3.56,
+                "guid": "5814e15c-be41-4900-b0b9-56aea48331c4",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 0.7,
+                        "lower-diameter": 0.875,
+                        "upper-diameter": 0.875
+                    },
+                    {
+                        "height": 1.685,
+                        "lower-diameter": 0.75,
+                        "upper-diameter": 0.75
+                    },
+                    {
+                        "height": 0.38763779527559056,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.03937007874015748,
+                        "lower-diameter": 1.7322834645669292,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.13385826771653542,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.09090551181102365,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.4960629921259845
+                    },
+                    {
+                        "height": 0.13311023622047244,
+                        "lower-diameter": 1.4960629921259845,
+                        "upper-diameter": 1.4960629921259845
+                    },
+                    {
+                        "height": 0.09090551181102365,
+                        "lower-diameter": 1.4960629921259845,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.2598425196850394,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.03937007874015748,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.7322834645669292
+                    },
+                    {
+                        "height": 0.07874015748031496,
+                        "lower-diameter": 1.2500000000000009,
+                        "upper-diameter": 1.2500000000000009
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": "Nikken "
+            },
+            "last_modified": 1777307058653,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 41,
+                "length-offset": 41,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 41,
+                "turret": 0
+            },
+            "product-id": "R-208",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/R/R-208$",
+            "reference_guid": "a237996e-6e0f-46ec-b9d7-06fcc30866fa",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "f_z": 0,
+                        "guid": "96932dcb-f724-4ed2-b214-85506c69889a",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 500,
+                        "name": "Default preset",
+                        "tool-coolant": "flood",
+                        "use-feed-per-revolution": false,
+                        "v_c": 18.06415775814131,
+                        "v_f": 0,
+                        "v_f_leadIn": 0,
+                        "v_f_leadOut": 0,
+                        "v_f_plunge": 0,
+                        "v_f_ramp": 0,
+                        "v_f_retract": 0,
+                        "v_f_transition": 0
+                    }
+                ]
+            },
+            "type": "tap right hand",
+            "unit": "inches",
+            "vendor": "LC-199"
+        },
+        {
+            "BMC": "carbide",
+            "description": "55° Turning Tool",
+            "expressions": {
+                "tool_crossSection": "'G'",
+                "tool_productId": "'TO-195 / TF-194'",
+                "tool_reliefAngle": "0 degrees",
+                "tool_shaftAxisAngle": "180 degrees",
+                "tool_thickness": "0.1875 in",
+                "tool_tolerance": "'M'",
+                "tool_vendor": "''"
+            },
+            "geometry": {
+                "EPSR": 0,
+                "INSD": 0.5,
+                "LH": 0,
+                "OAL": 1.1811023622047,
+                "RA": 0,
+                "RE": 0.015625,
+                "S": 0.1875,
+                "SC": "D",
+                "SCTY": "G",
+                "SIZE_SPECIFICATION_MODE": "IC",
+                "TC": "M",
+                "tool_grooveWidth": 0,
+                "tool_insertWidth": 0,
+                "tool_internalThread": false
+            },
+            "guid": "3b672dc6-50f4-4e95-ac59-8010a00198c9",
+            "holder": {
+                "CW": 1,
+                "H": 0.75,
+                "HAND": "R",
+                "LH": 1.25,
+                "MTP": "D",
+                "OAL": 4.5,
+                "THSC": "J",
+                "W": 0.75,
+                "tool_endCutting": false,
+                "tool_leadingAngle": 0,
+                "tool_roundShank": false,
+                "tool_sideCutting": true,
+                "tool_trailingAngle": 0
+            },
+            "last_modified": 1777307077291,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "compensation-offset": 9,
+                "manual-tool-change": false,
+                "number": 9,
+                "turret": 202
+            },
+            "product-id": "TO-195 / TF-194",
+            "product-link": "",
+            "reference_guid": "7b823a62-228f-4f14-b023-d1cc22d8861a",
+            "setup": {
+                "HAND": false,
+                "angle": 90,
+                "compensation": "tip tangent",
+                "tool_grooveCompOppositeEdge": false,
+                "tool_shaftAxisAngle": 180
+            },
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_coolant": "'flood tool'",
+                            "tool_feedCuttingRel": ".006 in",
+                            "tool_surfaceSpeed": "400 fpm"
+                        },
+                        "f_n": 0.006,
+                        "f_n_leadIn": 0.006,
+                        "f_n_leadOut": 0.006,
+                        "guid": "50e1bc56-b9ee-4005-8462-af5a45da4f47",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 0,
+                        "name": "STEEL",
+                        "tool-coolant": "flood tool",
+                        "use-constant-surface-speed": true,
+                        "use-depth-of-cut": false,
+                        "use-feed-per-revolution": true,
+                        "v_c": 400
+                    }
+                ]
+            },
+            "type": "turning general",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "carbide",
+            "description": "Taper EM REF",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-60'",
+                "tool_description": "'Taper EM REF'",
+                "tool_material": "'carbide'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.47244094488189,
+                "HAND": true,
+                "LB": 2.834645669291339,
+                "LCF": 0.94488188976378,
+                "NOF": 4,
+                "OAL": 5.669291338582678,
+                "RE": 0.1,
+                "SFDM": 0.805657286378202,
+                "TA": 10,
+                "assemblyGaugeLength": 4.999960629921262,
+                "shoulder-diameter": 0.805657286378202,
+                "shoulder-length": 0.94488188976378
+            },
+            "guid": "0c4ffb48-adaa-4c57-a758-e039c1de3c15",
+            "holder": {
+                "description": "NBT30-SK13C-60",
+                "expressions": {
+                    "tool_description": "'NBT30-SK13C-60'",
+                    "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+                },
+                "gaugeLength": 54.999,
+                "guid": "5f52f738-7099-4cdc-8bf7-a93859237490",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 35,
+                        "lower-diameter": 33,
+                        "upper-diameter": 33
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 44,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 3.4,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 46,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 3.381,
+                        "lower-diameter": 38,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 38,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 6.6,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 46,
+                        "upper-diameter": 44
+                    },
+                    {
+                        "height": 2,
+                        "lower-diameter": 31.75,
+                        "upper-diameter": 31.75
+                    }
+                ],
+                "type": "holder",
+                "unit": "millimeters",
+                "vendor": ""
+            },
+            "last_modified": 1777307137660,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 1,
+                "length-offset": 1,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 1,
+                "turret": 0
+            },
+            "product-id": "",
+            "product-link": "",
+            "reference_guid": "<NEW TOOL GUID>",
+            "start-values": {
+                "presets": [
+                    {
+                        "f_n": 0.0026666666666666666,
+                        "f_z": 0.002,
+                        "guid": "5905ee12-74b9-48e1-b559-2f274c4f4401",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5000,
+                        "n_ramp": 5000,
+                        "name": "Default preset",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 618.4237507066524,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 13.333333333333334,
+                        "v_f_ramp": 13.333333333333334,
+                        "v_f_transition": 40
+                    }
+                ]
+            },
+            "tapered-type": "tapered_bull_nose",
+            "type": "tapered mill",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "carbide",
+            "description": "High Feed Mill - Default",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-120'",
+                "tool_description": "'High Feed Mill - Default'",
+                "tool_material": "'carbide'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.4,
+                "HAND": true,
+                "LB": 1.6,
+                "LCF": 0.8,
+                "NOF": 3,
+                "OAL": 1.6,
+                "RE": 0.04,
+                "assemblyGaugeLength": 6.127519685039371,
+                "lower-radius": 0.4,
+                "shoulder-diameter": 0.3937007874015748,
+                "shoulder-length": 1.574803149606299
+            },
+            "guid": "be55641b-4cc9-4994-a869-51a31995428b",
+            "holder": {
+                "description": "NBT30-SK13C-120",
+                "expressions": {
+                    "tool_description": "'NBT30-SK13C-120'",
+                    "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+                },
+                "gaugeLength": 114.999,
+                "guid": "0330cb19-c7eb-4668-8ba8-ecdccfde500b",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 95,
+                        "lower-diameter": 33,
+                        "upper-diameter": 33
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 44,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 3.4,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 46,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 3.381,
+                        "lower-diameter": 38,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 38,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 6.6,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 46,
+                        "upper-diameter": 44
+                    },
+                    {
+                        "height": 2,
+                        "lower-diameter": 31.75,
+                        "upper-diameter": 31.75
+                    }
+                ],
+                "type": "holder",
+                "unit": "millimeters",
+                "vendor": ""
+            },
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 2,
+                "length-offset": 2,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 2,
+                "turret": 0
+            },
+            "product-id": "",
+            "product-link": "",
+            "start-values": {
+                "presets": [
+                    {
+                        "f_n": 0.0026666666666666666,
+                        "f_z": 0.0026666666666666666,
+                        "guid": "569caf19-1da6-42fa-9074-5b3d9b6ef50f",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5000,
+                        "n_ramp": 5000,
+                        "name": "Default preset",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 523.598775598299,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 13.333333333333334,
+                        "v_f_ramp": 13.333333333333334,
+                        "v_f_transition": 40
+                    }
+                ]
+            },
+            "type": "circle segment lens",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "hss",
+            "description": "REF Circle segrment taper",
+            "expressions": {
+                "tool_description": "'REF Circle segrment taper'",
+                "tool_fluteLength": "0.637588824609867 in"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.65,
+                "HAND": true,
+                "LB": 2.6,
+                "LCF": 0.6375888246098665,
+                "NOF": 3,
+                "OAL": 2.6,
+                "TA": 20,
+                "assemblyGaugeLength": 2.6,
+                "lower-radius": 0.1625,
+                "profile-radius": 20.3125,
+                "shoulder-diameter": 0.62992125984252,
+                "shoulder-length": 1.181102362204724,
+                "tip-diameter": 0,
+                "upper-radius": 0.325
+            },
+            "guid": "f4b91c9b-c9db-43e9-8d76-4489ca9c3bc3",
+            "last_modified": 1777387897932,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 7,
+                "length-offset": 7,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 7,
+                "turret": 0
+            },
+            "product-id": "",
+            "product-link": "",
+            "reference_guid": "<NEW TOOL GUID>",
+            "start-values": {
+                "presets": [
+                    {
+                        "f_n": 0.0026666666666666666,
+                        "f_z": 0.0026666666666666666,
+                        "guid": "65b1ebb3-28f7-44ca-822e-833439615745",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5000,
+                        "n_ramp": 5000,
+                        "name": "Default preset",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 850.8480103472355,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 13.333333333333334,
+                        "v_f_ramp": 13.333333333333334,
+                        "v_f_transition": 40
+                    }
+                ]
+            },
+            "type": "circle segment taper",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "hss",
+            "description": "ref Circle Segment oval",
+            "expressions": {
+                "tool_description": "'ref Circle Segment oval'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.25,
+                "HAND": true,
+                "LB": 2.5,
+                "LCF": 0.82340262663724,
+                "NOF": 3,
+                "OAL": 2.5,
+                "assemblyGaugeLength": 2.5,
+                "lower-radius": 0.041666666666667,
+                "profile-radius": 3.75,
+                "shoulder-length": 1.181102362204724
+            },
+            "guid": "9b7e509f-c5eb-40ac-a975-9eaca90b483b",
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 8,
+                "length-offset": 8,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 8,
+                "turret": 0
+            },
+            "product-id": "",
+            "product-link": "",
+            "start-values": {
+                "presets": [
+                    {
+                        "f_n": 0.0026666666666666666,
+                        "f_z": 0.0026666666666666666,
+                        "guid": "b272b934-60fa-4564-9bc6-d3e58018d177",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5000,
+                        "n_ramp": 5000,
+                        "name": "Default preset",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 327.2492347489367,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 13.333333333333334,
+                        "v_f_ramp": 13.333333333333334,
+                        "v_f_transition": 40
+                    }
+                ]
+            },
+            "type": "circle segment oval",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "hss",
+            "description": "REF Circle Segment barrel",
+            "expressions": {
+                "tool_description": "'REF Circle Segment barrel'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.5,
+                "HAND": true,
+                "LB": 3,
+                "LCF": 1,
+                "NOF": 3,
+                "OAL": 3,
+                "SFDM": 0.25,
+                "assemblyGaugeLength": 3,
+                "axial-distance": 0.5,
+                "lower-radius": 0.041666666666667,
+                "profile-radius": 2,
+                "shoulder-diameter": 0.2362204724409449,
+                "shoulder-length": 2.362204724409449,
+                "upper-radius": 0.041666666666667
+            },
+            "guid": "c9ac41f3-47a8-460c-b9cb-600a0cc042ed",
+            "last_modified": 1777387938023,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 10,
+                "length-offset": 10,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 10,
+                "turret": 0
+            },
+            "product-id": "",
+            "product-link": "",
+            "reference_guid": "<NEW TOOL GUID>",
+            "start-values": {
+                "presets": [
+                    {
+                        "f_n": 0.0026666666666666666,
+                        "f_z": 0.0026666666666666666,
+                        "guid": "3fb75d44-ba64-4bda-bfc1-2363ebd380a7",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5000,
+                        "n_ramp": 5000,
+                        "name": "Default preset",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 654.4984694978734,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 13.333333333333334,
+                        "v_f_ramp": 13.333333333333334,
+                        "v_f_transition": 40
+                    }
+                ]
+            },
+            "type": "circle segment barrel",
+            "unit": "inches",
+            "vendor": ""
+        }
+    ],
+    "version": 36
+}
