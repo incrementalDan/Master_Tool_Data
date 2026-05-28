@@ -459,7 +459,16 @@ const base={width:"100%",padding:"5px 7px",fontSize:12,color:T.text,background:T
 const inp=(hi)=>({...base,border:`1px solid ${hi?T.green:T.border}`,borderRadius:"0 0 4px 4px"});
 const sel=(hi,warn)=>({...base,border:`1px solid ${warn?T.amber:hi?T.green:T.border}`,borderRadius:"0 0 4px 4px"});
 
-export default function App(){
+export {
+  TT, TL, BLANK, FIELD_VISIBILITY, _FV_KEYS,
+  MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST,
+  PS_GROUPS, AUTO_GROUP, PS_MAIN_COLS,
+  COOLANT_OPTS, THROUGH_COOLANT_VALUES, ROUND_SHANK_TYPES,
+  buildFusionRow, buildProShopCSV, buildDesc, buildBrandRows, buildAdionUrl,
+  getVisibleFields, downloadCSV, smartDiam,
+};
+
+export default function App({ onExtract } = {}){
   const[inputMode,setInputMode]=useState("file");
   const[fileType,setFileType]=useState(null);
   const[imgB64,setImgB64]=useState(null);
@@ -952,6 +961,9 @@ export default function App(){
               <Icon.download/> {psLbl}
             </button>
           </div>
+          {onExtract&&<button onClick={()=>onExtract({...F})} style={{width:"100%",marginTop:8,padding:"9px 0",background:"#45b36b",color:"#fff",border:"none",borderRadius:5,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+            ＋ Add to Library
+          </button>}
         </div>
       </div>
       <textarea ref={taRef} readOnly defaultValue="" style={{position:"fixed",left:"-9999px",top:0,opacity:0,height:1}}/>
