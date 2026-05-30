@@ -909,6 +909,281 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .match-warn { color: var(--amber); }
 .match-none { color: var(--text-sub); font-style: italic; }
 
+/* ─── Merge Flow ─────────────────────────────────────────────────────────── */
+.import-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.merge-import-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-width: 480px;
+}
+
+.merge-or-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-sub);
+  font-size: 11px;
+  margin: 10px 0;
+}
+.merge-or-divider::before,
+.merge-or-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Imported tool summary box */
+.merge-imported-summary {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+/* Candidate cards (used in both ImportStep picker and MatchStep) */
+.merge-candidate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.merge-candidate-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color var(--ease), background var(--ease);
+  text-align: left;
+  width: 100%;
+}
+.merge-candidate-card:hover { border-color: var(--blue); background: var(--blue-tint); }
+
+.merge-candidate-icon {
+  flex-shrink: 0;
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--blue);
+}
+
+.merge-candidate-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.match-score-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Diff view */
+.diff-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.diff-col-labels {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-sub);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+.diff-col-labels span { min-width: 100px; text-align: right; }
+
+.diff-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.diff-section-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-label);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.diff-section-select {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.diff-section-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-sub);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.diff-advisory {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 14px;
+  background: rgba(212, 146, 42, 0.08);
+  border-bottom: 1px solid rgba(212, 146, 42, 0.2);
+  font-size: 12px;
+  color: var(--amber);
+  line-height: 1.5;
+}
+
+.diff-rows { padding: 4px 0; }
+
+.diff-row {
+  display: grid;
+  grid-template-columns: 24px 1fr 120px 20px 120px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+  transition: background var(--ease);
+  font-size: 13px;
+}
+.diff-row:last-child { border-bottom: none; }
+.diff-row:hover { background: var(--surface-2); }
+.diff-row.selected { background: rgba(74, 143, 255, 0.04); }
+
+.diff-checkbox { cursor: pointer; flex-shrink: 0; }
+
+.diff-field-label {
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.diff-val {
+  font-size: 12px;
+  font-family: monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
+}
+.diff-val-master { color: var(--text-sub); }
+.diff-val-job { color: var(--green); font-weight: 600; }
+
+.diff-arrow {
+  font-size: 12px;
+  color: var(--text-sub);
+  text-align: center;
+}
+
+.diff-summary-bar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  margin-top: 16px;
+  background: rgba(26, 26, 26, 0.95);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border);
+  gap: 12px;
+}
+
+/* Commit step */
+.commit-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.commit-field-row {
+  display: grid;
+  grid-template-columns: 1fr 120px 20px 120px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border);
+}
+.commit-field-row:last-child { border-bottom: none; }
+.commit-field-name { color: var(--text-sub); }
+.commit-field-old { color: var(--text-sub); font-family: monospace; text-align: right; }
+.commit-field-new { color: var(--green); font-family: monospace; font-weight: 600; text-align: right; }
+
+/* Merge success screen */
+.merge-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 48px 20px;
+}
+
+/* Change history in ToolDetail */
+.merge-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.merge-history-entry {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.merge-history-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.merge-history-note {
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.merge-history-fields {
+  margin-top: 2px;
+}
+
 /* ─── Misc ───────────────────────────────────────────────────────────────── */
 .flex { display: flex; }
 .flex-1 { flex: 1; }
@@ -923,6 +1198,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .mt-8 { margin-top: 8px; }
 .mt-12 { margin-top: 12px; }
 .mt-16 { margin-top: 16px; }
+.mt-20 { margin-top: 20px; }
+.gap-10 { gap: 10px; }
 .text-sub { color: var(--text-sub); }
 .text-sm { font-size: 12px; }
 .text-xs { font-size: 11px; }

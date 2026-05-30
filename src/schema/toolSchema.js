@@ -438,6 +438,7 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     tags: meta.tags || [],
     updated_by: meta.updated_by || '',
     revision_notes: meta.revision_notes || '',
+    merge_history: meta.merge_history || [],
     created_at: meta.created_at || fusionInternal.created_at,
     updated_at: meta.updated_at || fusionInternal.updated_at,
   };
@@ -485,6 +486,7 @@ export function splitToFusionAndMetadata(tool) {
     tags: tool.tags || [],
     updated_by: tool.updated_by || '',
     revision_notes: tool.revision_notes || '',
+    merge_history: tool.merge_history || [],
     created_at: tool.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
