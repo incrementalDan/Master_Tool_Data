@@ -218,11 +218,12 @@ export function AppProvider({ children }) {
     try {
       const fusionList = await downloadFusionList();
 
-      // Assign a machine tool number at the moment of save (not when the form
-      // opened) so concurrent adds don't collide. The freshly-downloaded library
-      // is the authority — it reflects tools a teammate may have added since our
-      // last load. We union the persisted post-process numbers with any held in
-      // memory to be safe.
+      // Always assign the next available machine tool number at the moment of
+      // save (not when the form opened) so concurrent adds don't collide. The
+      // number is *always* app-managed — any value carried in on the incoming
+      // tool (e.g. a number copied from a job file in the Sync flow) is stale
+      // and must be ignored. The freshly-downloaded library is the authority for
+      // which numbers are taken; we union it with the in-memory list to be safe.
       const usedNumbers = new Set();
       for (const f of fusionList) {
         const n = f['post-process']?.number;
@@ -232,18 +233,7 @@ export function AppProvider({ children }) {
         const n = t.machine_tool_number;
         if (n !== null && n !== undefined && n !== '') usedNumbers.add(Number(n));
       }
-
-      const provided = created.machine_tool_number;
-      const hasProvided = provided !== null && provided !== undefined && provided !== '';
-      if (hasProvided) {
-        // Caller supplied a number — never silently overwrite an existing one.
-        if (usedNumbers.has(Number(provided))) {
-          throw new Error(`Machine tool number ${provided} is already in use.`);
-        }
-        created.machine_tool_number = Number(provided);
-      } else {
-        created.machine_tool_number = getNextMachineNumber([...usedNumbers]);
-      }
+      created.machine_tool_number = getNextMachineNumber([...usedNumbers]);
 
       const { fusionTool, metadataTool } = splitToFusionAndMetadata(created);
       const idx = fusionList.findIndex(t => t.guid === created.id);

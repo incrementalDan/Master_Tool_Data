@@ -105,7 +105,7 @@ export default function MergeFlow() {
 
   const advance = useCallback((updatedQueue) => {
     const q = updatedQueue;
-    const active = q[0]; // start from beginning to find first incomplete
+    // Find the next incomplete item after the current one…
     const nextIdx = q.findIndex(
       (e, i) => i > activeIdx && e.status !== 'committed' && e.status !== 'skipped'
     );

@@ -476,8 +476,6 @@ function matchProShopToTools(psRows, tools) {
     }
   }
 
-  const unmatchedRows = psRows.filter((_, i) => !matched.find(m => m.psRow === psRows[i]) && !matched.some(m => m.psRow === psRows[i]));
-  // Rebuild properly
   const matchedPsRows = new Set(matched.map(m => m.psRow));
   const unmatched = psRows
     .filter(r => !matchedPsRows.has(r))

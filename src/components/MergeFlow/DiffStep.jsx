@@ -76,7 +76,7 @@ function valuesEqual(a, b) {
 export default function DiffStep({
   importedTool, masterTool, onConfirm, onBack, onSkip,
   masterUpdated = false, isFetchingLive = false,
-  isLastItem = false, queuePosition = null,
+  queuePosition = null,
 }) {
   const diffs = useMemo(() => {
     const result = {};
@@ -223,7 +223,7 @@ export default function DiffStep({
           disabled={selected.size === 0}
           onClick={() => onConfirm(selected)}
         >
-          {isLastItem ? 'Review & Commit →' : 'Review & Commit →'}
+          Review &amp; Commit →
         </button>
       </div>
     </div>
