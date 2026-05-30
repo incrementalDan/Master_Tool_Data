@@ -1,7 +1,12 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import {
+  ArrowLeft, Pencil, Download, FileDown, Copy, Trash2,
+  Tag, Ruler, Gauge, Settings2, StickyNote, Clock, ExternalLink,
+} from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { TOOL_TYPE_LABELS, TOOL_TYPE_ICONS, FIELD_LABELS } from '../schema/toolSchema.js';
+import { TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
+import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 import ToolForm from './ToolForm.jsx';
 import { exportSingleTool as exportFusion } from '../utils/fusionExport.js';
 import { exportSingleTool as exportProShop } from '../utils/proShopExport.js';
@@ -9,8 +14,9 @@ import { exportSingleTool as exportProShop } from '../utils/proShopExport.js';
 export default function ToolDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { tools, saveTool, deleteTool, isSaving } = useApp();
-  const [editing, setEditing] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { tools, saveTool, deleteTool, cloneTool, isSaving, notify } = useApp();
+  const [editing, setEditing] = useState(searchParams.get('edit') === '1');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteError, setDeleteError] = useState('');
 
@@ -25,9 +31,17 @@ export default function ToolDetail() {
     );
   }
 
+  const clearEditParam = () => {
+    if (searchParams.get('edit')) {
+      searchParams.delete('edit');
+      setSearchParams(searchParams, { replace: true });
+    }
+  };
+
   const handleSave = async (updated) => {
     await saveTool(updated);
     setEditing(false);
+    clearEditParam();
   };
 
   const handleDelete = async () => {
@@ -40,17 +54,28 @@ export default function ToolDetail() {
     }
   };
 
+  const handleClone = async () => {
+    try {
+      const created = await cloneTool(id);
+      navigate(`/tool/${created.id}?edit=1`);
+    } catch { /* toast handled in context */ }
+  };
+
+  const typeLabel = TOOL_TYPE_LABELS[tool.tool_type] || tool.tool_type;
+
   if (editing) {
     return (
       <div>
         <div className="flex items-center gap-8 mb-16">
-          <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}>← Back</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => { setEditing(false); clearEditParam(); }}>
+            <ArrowLeft size={14} /> Back
+          </button>
           <h2 style={{ fontSize: 16, fontWeight: 600 }}>Edit Tool</h2>
         </div>
         <ToolForm
           tool={tool}
           onSave={handleSave}
-          onCancel={() => setEditing(false)}
+          onCancel={() => { setEditing(false); clearEditParam(); }}
           isSaving={isSaving}
           isNew={false}
         />
@@ -58,35 +83,38 @@ export default function ToolDetail() {
     );
   }
 
-  const icon = TOOL_TYPE_ICONS[tool.tool_type] || '🔧';
-  const typeLabel = TOOL_TYPE_LABELS[tool.tool_type] || tool.tool_type;
-
   return (
     <div>
       {/* Header */}
-      <div className="action-bar">
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)}>← Back</button>
+      <div className="detail-header">
+        <button className="btn btn-ghost btn-sm" onClick={() => navigate(-1)}>
+          <ArrowLeft size={14} /> Back
+        </button>
+        <span className="detail-header-icon"><ToolTypeIcon type={tool.tool_type} size={26} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-sub)', marginBottom: 2 }}>
-            {icon} {typeLabel}
-          </div>
-          <h1 style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.3 }} className="truncate">
-            {tool.description || '—'}
-          </h1>
+          <div className="detail-header-type">{typeLabel}</div>
+          <h1 className="detail-header-title truncate">{tool.description || '—'}</h1>
         </div>
       </div>
 
       {/* Actions */}
-      <div className="flex gap-8 mb-16" style={{ flexWrap: 'wrap' }}>
-        <button className="btn btn-primary" onClick={() => setEditing(true)}>Edit</button>
-        <button className="btn btn-secondary btn-sm" onClick={() => exportFusion(tool)}>↓ Fusion JSON</button>
-        <button className="btn btn-secondary btn-sm" style={{ color: 'var(--orange)' }} onClick={() => exportProShop(tool)}>↓ ProShop CSV</button>
-        <button className="btn btn-danger btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setShowDeleteModal(true)}>Delete</button>
+      <div className="action-bar">
+        <button className="btn btn-primary" onClick={() => setEditing(true)}><Pencil size={15} /> Edit</button>
+        <button className="btn btn-secondary btn-sm" onClick={handleClone}><Copy size={14} /> Duplicate</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => { exportFusion(tool); notify('Exported Fusion JSON', 'success'); }}>
+          <Download size={14} /> Fusion JSON
+        </button>
+        <button className="btn btn-secondary btn-sm" style={{ color: 'var(--orange)' }} onClick={() => { exportProShop(tool); notify('Exported ProShop CSV', 'success'); }}>
+          <FileDown size={14} /> ProShop CSV
+        </button>
+        <button className="btn btn-danger btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setShowDeleteModal(true)}>
+          <Trash2 size={14} /> Delete
+        </button>
       </div>
 
       <div className="detail-layout">
         <div>
-          <Section title="Identity">
+          <Section title="Identity" icon={Tag}>
             <div className="detail-fields">
               <Field label="Description" value={tool.description} />
               <Field label="Type" value={typeLabel} />
@@ -99,15 +127,15 @@ export default function ToolDetail() {
               {tool.product_link && (
                 <div className="detail-field">
                   <div className="detail-field-label">Product Link</div>
-                  <a href={tool.product_link} target="_blank" rel="noopener noreferrer" className="text-sm" style={{ color: 'var(--blue)' }}>
-                    Open ↗
+                  <a href={tool.product_link} target="_blank" rel="noopener noreferrer" className="text-sm inline-link">
+                    Open <ExternalLink size={12} />
                   </a>
                 </div>
               )}
             </div>
           </Section>
 
-          <Section title="Geometry">
+          <Section title="Geometry" icon={Ruler}>
             <div className="detail-fields">
               <Field label="Diameter" value={tool.diameter} unit="in" />
               <Field label="Flute Length" value={tool.flute_length} unit="in" />
@@ -126,23 +154,23 @@ export default function ToolDetail() {
             </div>
           </Section>
 
-          <Section title="Speeds & Feeds">
+          <Section title="Speeds & Feeds" icon={Gauge}>
             <div className="detail-fields">
-              <Field label="Spindle Speed" value={tool.spindle_speed} unit="RPM" />
-              <Field label="Cutting Feedrate" value={tool.cutting_feedrate} unit="in/min" />
-              <Field label="Feed per Tooth" value={tool.feed_per_tooth} unit="in" />
-              <Field label="Feed per Rev" value={tool.feed_per_rev} unit="in" />
-              <Field label="Plunge Feedrate" value={tool.plunge_feedrate} unit="in/min" />
-              <Field label="Ramp Feedrate" value={tool.ramp_feedrate} unit="in/min" />
-              <Field label="Lead-In Feedrate" value={tool.lead_in_feedrate} unit="in/min" />
-              <Field label="Lead-Out Feedrate" value={tool.lead_out_feedrate} unit="in/min" />
-              <Field label="Surface Speed" value={tool.cutting_speed} unit="SFM" />
-              <Field label="Depth of Cut" value={tool.depth_of_cut} unit="in" />
-              <Field label="Width of Cut" value={tool.width_of_cut} unit="in" />
+              <Field label="Spindle Speed" value={round4(tool.spindle_speed)} unit="RPM" />
+              <Field label="Cutting Feedrate" value={round4(tool.cutting_feedrate)} unit="in/min" />
+              <Field label="Feed per Tooth" value={round4(tool.feed_per_tooth)} unit="in" />
+              <Field label="Feed per Rev" value={round4(tool.feed_per_rev)} unit="in" />
+              <Field label="Plunge Feedrate" value={round4(tool.plunge_feedrate)} unit="in/min" />
+              <Field label="Ramp Feedrate" value={round4(tool.ramp_feedrate)} unit="in/min" />
+              <Field label="Lead-In Feedrate" value={round4(tool.lead_in_feedrate)} unit="in/min" />
+              <Field label="Lead-Out Feedrate" value={round4(tool.lead_out_feedrate)} unit="in/min" />
+              <Field label="Surface Speed" value={round4(tool.cutting_speed)} unit="SFM" />
+              <Field label="Depth of Cut" value={round4(tool.depth_of_cut)} unit="in" />
+              <Field label="Width of Cut" value={round4(tool.width_of_cut)} unit="in" />
             </div>
           </Section>
 
-          <Section title="Setup">
+          <Section title="Setup" icon={Settings2}>
             <div className="detail-fields">
               <Field label="Tool Material" value={tool.material} />
               <Field label="Coating" value={tool.coating} />
@@ -159,9 +187,9 @@ export default function ToolDetail() {
               {tool.point_type && <Field label="Point Type" value={tool.point_type} />}
             </div>
             {(tool.material_suitability || []).length > 0 && (
-              <div style={{ marginTop: 12 }}>
+              <div style={{ marginTop: 14 }}>
                 <div className="detail-field-label">Material Suitability</div>
-                <div className="tag-list" style={{ marginTop: 4 }}>
+                <div className="tag-list" style={{ marginTop: 6 }}>
                   {tool.material_suitability.map(m => <span key={m} className="tag">{m}</span>)}
                 </div>
               </div>
@@ -171,7 +199,7 @@ export default function ToolDetail() {
 
         {/* Sidebar */}
         <div>
-          <Section title="Notes & Tags">
+          <Section title="Notes & Tags" icon={StickyNote}>
             {tool.notes && (
               <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, marginBottom: 10 }}>{tool.notes}</p>
             )}
@@ -182,9 +210,12 @@ export default function ToolDetail() {
             )}
             {tool.last_used_job && <Field label="Last Used Job" value={tool.last_used_job} />}
             {tool.revision_notes && <Field label="Revision Notes" value={tool.revision_notes} />}
+            {!tool.notes && !(tool.tags || []).length && !tool.last_used_job && !tool.revision_notes && (
+              <span className="detail-field-empty text-sm">No notes yet.</span>
+            )}
           </Section>
 
-          <Section title="History">
+          <Section title="History" icon={Clock}>
             <div className="detail-fields">
               <Field label="Created" value={tool.created_at ? new Date(tool.created_at).toLocaleString() : null} />
               <Field label="Updated" value={tool.updated_at ? new Date(tool.updated_at).toLocaleString() : null} />
@@ -216,17 +247,27 @@ export default function ToolDetail() {
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, icon: Icon, children }) {
   const [open, setOpen] = useState(true);
   return (
-    <div className="collapsible mb-16">
-      <button className="collapsible-toggle" onClick={() => setOpen(o => !o)}>
-        <span>{open ? '▾' : '▸'}</span>
-        {title}
+    <div className={`panel ${open ? 'open' : ''}`}>
+      <button className="panel-header" onClick={() => setOpen(o => !o)}>
+        {Icon && <Icon size={15} className="panel-header-icon" />}
+        <span className="panel-header-title">{title}</span>
+        <span className="panel-chevron">{open ? '▾' : '▸'}</span>
       </button>
-      {open && <div className="collapsible-body">{children}</div>}
+      {open && <div className="panel-body">{children}</div>}
     </div>
   );
+}
+
+// Round a numeric value to at most 4 decimal places (trailing zeros dropped).
+// Non-numeric / empty values pass through unchanged.
+function round4(v) {
+  if (v === null || v === undefined || v === '') return v;
+  const n = Number(v);
+  if (isNaN(n)) return v;
+  return Math.round(n * 10000) / 10000;
 }
 
 function Field({ label, value, unit, mono }) {

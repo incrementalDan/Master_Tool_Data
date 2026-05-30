@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useGoogleLogin } from '@react-oauth/google';
+import { HardDrive } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { setAccessToken, fetchUserInfo } from '../services/driveService.js';
 
@@ -31,7 +32,7 @@ export default function MetadataConnect() {
   return (
     <div className="login-screen">
       <div className="login-card">
-        <div style={{ fontSize: 40, marginBottom: 12 }}>🗂️</div>
+        <div className="login-logo"><HardDrive size={26} strokeWidth={2.2} /></div>
         <h1 className="login-title">Connect Google Drive</h1>
         <p className="login-subtitle">
           Extra fields Fusion doesn't support (tags, notes, ProShop IDs, material suitability) are stored in

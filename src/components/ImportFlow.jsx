@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { UploadCloud } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool } from '../schema/toolSchema.js';
 import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
@@ -330,7 +331,7 @@ function DropZone({ label, accept, fileRef, onFile }) {
         style={{ display: 'none' }}
         onChange={e => handleFile(e.target.files[0])}
       />
-      <div style={{ fontSize: 28, marginBottom: 8 }}>📂</div>
+      <UploadCloud size={28} style={{ color: filename ? 'var(--green)' : 'var(--text-sub)', marginBottom: 8 }} />
       <div style={{ fontSize: 13, color: filename ? 'var(--green)' : 'var(--text-sub)' }}>
         {filename || label}
       </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Home, Folder, FileJson, ChevronRight } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import * as aps from '../services/apsService.js';
 
@@ -160,10 +161,10 @@ export default function LibrarySetup() {
         <div className="card">
           {/* Breadcrumb */}
           <div className="flex items-center gap-8 mb-12" style={{ flexWrap: 'wrap', fontSize: 13 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => navigateToCrumb(-1)}>📁 Root</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => navigateToCrumb(-1)}><Home size={13} /> Root</button>
             {stack.map((c, i) => (
               <span key={c.id} className="flex items-center gap-8">
-                <span className="text-sub">/</span>
+                <ChevronRight size={13} className="text-sub" />
                 <button className="btn btn-ghost btn-sm" onClick={() => navigateToCrumb(i)}>{c.name}</button>
               </span>
             ))}
@@ -185,9 +186,9 @@ export default function LibrarySetup() {
                   style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
                   onClick={() => openFolder(f)}
                 >
-                  <span>📁</span>
+                  <Folder size={16} style={{ color: 'var(--blue)' }} />
                   <span style={{ flex: 1 }}>{displayName(f)}</span>
-                  <span className="text-sub text-xs">open →</span>
+                  <span className="text-sub text-xs flex items-center gap-8">open <ChevronRight size={12} /></span>
                 </div>
               ))}
               {jsonItems.map(item => (
@@ -196,7 +197,7 @@ export default function LibrarySetup() {
                   className="flex items-center gap-8"
                   style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)' }}
                 >
-                  <span>📄</span>
+                  <FileJson size={16} style={{ color: 'var(--green)' }} />
                   <span style={{ flex: 1 }} className="font-mono text-sm">{displayName(item)}</span>
                   <button className="btn btn-primary btn-sm" onClick={() => selectFile(item)}>
                     Use this file

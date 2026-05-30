@@ -1,52 +1,85 @@
 import { useNavigate } from 'react-router-dom';
-import { TOOL_TYPE_ICONS, TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
+import { Pencil, Copy, FileDown } from 'lucide-react';
+import { TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
+import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
+import { useApp } from '../context/AppContext.jsx';
+import { exportSingleTool as exportProShop } from '../utils/proShopExport.js';
 
-export default function ToolCard({ tool }) {
+function formatDim(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n.toFixed(4).replace(/\.?0+$/, '');
+}
+
+export default function ToolCard({ tool, variant = 'grid' }) {
   const navigate = useNavigate();
-
-  const icon = TOOL_TYPE_ICONS[tool.tool_type] || '🔧';
+  const { cloneTool, notify } = useApp();
   const label = TOOL_TYPE_LABELS[tool.tool_type] || tool.tool_type;
 
-  const formatDim = (v) => {
-    if (v === null || v === undefined || v === '') return null;
-    const n = parseFloat(v);
-    return isNaN(n) ? null : n.toFixed(4).replace(/\.?0+$/, '');
+  const open = () => navigate(`/tool/${tool.id}`);
+  const stop = (e, fn) => { e.stopPropagation(); fn(); };
+
+  const handleClone = async () => {
+    try {
+      const created = await cloneTool(tool.id);
+      navigate(`/tool/${created.id}`);
+    } catch { /* error toast handled in context */ }
   };
 
+  const actions = (
+    <div className="card-actions" onClick={e => e.stopPropagation()}>
+      <button className="icon-btn" title="Edit" onClick={e => stop(e, () => navigate(`/tool/${tool.id}?edit=1`))}>
+        <Pencil size={14} />
+      </button>
+      <button className="icon-btn" title="Duplicate" onClick={e => stop(e, handleClone)}>
+        <Copy size={14} />
+      </button>
+      <button className="icon-btn" title="Export ProShop CSV" onClick={e => stop(e, () => { exportProShop(tool); notify('Exported ProShop CSV', 'success'); })}>
+        <FileDown size={14} />
+      </button>
+    </div>
+  );
+
+  const badges = (
+    <div className="tool-card-meta">
+      {formatDim(tool.diameter) && <span className="meta-badge">⌀ {formatDim(tool.diameter)}"</span>}
+      {tool.number_of_flutes && <span className="meta-badge">{tool.number_of_flutes}FL</span>}
+      {tool.vendor && <span className="meta-badge truncate" style={{ maxWidth: 120 }}>{tool.vendor}</span>}
+      {tool.coating && <span className="meta-badge">{tool.coating}</span>}
+      {tool.preferred_machine && (
+        <span className="meta-badge meta-badge-blue">{tool.preferred_machine}</span>
+      )}
+      {tool.proshot_id && (
+        <span className="meta-badge meta-badge-orange font-mono">{tool.proshot_id}</span>
+      )}
+    </div>
+  );
+
+  if (variant === 'list') {
+    return (
+      <div className="tool-row" onClick={open}>
+        <span className="tool-row-icon"><ToolTypeIcon type={tool.tool_type} size={20} /></span>
+        <div className="tool-row-main">
+          <span className="tool-row-title truncate">{tool.description || '—'}</span>
+          <span className="tool-card-type">{label}</span>
+        </div>
+        {badges}
+        {actions}
+      </div>
+    );
+  }
+
   return (
-    <div className="tool-card" onClick={() => navigate(`/tool/${tool.id}`)}>
+    <div className="tool-card" onClick={open}>
       <div className="tool-card-header">
-        <span className="tool-card-icon">{icon}</span>
+        <span className="tool-card-icon"><ToolTypeIcon type={tool.tool_type} size={22} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="tool-card-type">{label}</div>
           <div className="tool-card-title truncate">{tool.description || '—'}</div>
         </div>
+        {actions}
       </div>
-
-      <div className="tool-card-meta">
-        {formatDim(tool.diameter) && (
-          <span className="meta-badge">⌀ {formatDim(tool.diameter)}"</span>
-        )}
-        {tool.number_of_flutes && (
-          <span className="meta-badge">{tool.number_of_flutes}FL</span>
-        )}
-        {tool.vendor && (
-          <span className="meta-badge truncate" style={{ maxWidth: 120 }}>{tool.vendor}</span>
-        )}
-        {tool.coating && (
-          <span className="meta-badge">{tool.coating}</span>
-        )}
-        {tool.preferred_machine && (
-          <span className="meta-badge" style={{ color: 'var(--blue)', borderColor: 'var(--blue)' }}>
-            {tool.preferred_machine}
-          </span>
-        )}
-        {tool.proshot_id && (
-          <span className="meta-badge" style={{ color: 'var(--orange)', borderColor: 'var(--orange)', fontFamily: 'monospace', fontSize: 10 }}>
-            {tool.proshot_id}
-          </span>
-        )}
-      </div>
+      {badges}
     </div>
   );
 }

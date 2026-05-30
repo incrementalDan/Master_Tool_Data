@@ -28,6 +28,7 @@ const initialState = {
   isLoading: false,
   isSaving: false,
   error: null,
+  toasts: [],                 // [{ id, type, message }]
 };
 
 function reducer(state, action) {
@@ -58,6 +59,8 @@ function reducer(state, action) {
       return { ...state, tools: state.tools.filter(t => t.id !== action.id) };
     case 'SET_TOOLS': return { ...state, tools: action.tools };
     case 'CLEAR_ERROR': return { ...state, error: null };
+    case 'ADD_TOAST': return { ...state, toasts: [...state.toasts, action.toast] };
+    case 'DISMISS_TOAST': return { ...state, toasts: state.toasts.filter(t => t.id !== action.id) };
     default: return state;
   }
 }
@@ -90,6 +93,16 @@ export function AppProvider({ children }) {
         .then(() => dispatch({ type: 'APS_AUTHED' }))
         .catch(err => dispatch({ type: 'AUTH_ERROR', error: err.message }));
     }
+  }, []);
+
+  // ─── Toasts ───────────────────────────────────────────────────────────────
+  const dismissToast = useCallback((id) => dispatch({ type: 'DISMISS_TOAST', id }), []);
+
+  const notify = useCallback((message, type = 'info', timeout = 4000) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    dispatch({ type: 'ADD_TOAST', toast: { id, type, message } });
+    if (timeout) setTimeout(() => dispatch({ type: 'DISMISS_TOAST', id }), timeout);
+    return id;
   }, []);
 
   // ─── Drive-backed Fusion list helpers ─────────────────────────────────────
@@ -167,12 +180,14 @@ export function AppProvider({ children }) {
 
       dispatch({ type: 'UPDATE_TOOL', tool: updated });
       dispatch({ type: 'SAVE_SUCCESS' });
+      notify('Saved to Fusion library', 'success');
       return updated;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Save failed: ${err.message}`, 'error', 7000);
       throw err;
     }
-  }, [downloadFusionList, uploadFusionList]);
+  }, [downloadFusionList, uploadFusionList, notify]);
 
   const addTool = useCallback(async (tool) => {
     const { valid, errors } = validateTool(tool);
@@ -199,12 +214,30 @@ export function AppProvider({ children }) {
 
       dispatch({ type: 'ADD_TOOL', tool: created });
       dispatch({ type: 'SAVE_SUCCESS' });
+      notify('Tool added to library', 'success');
       return created;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Add failed: ${err.message}`, 'error', 7000);
       throw err;
     }
-  }, [downloadFusionList, uploadFusionList]);
+  }, [downloadFusionList, uploadFusionList, notify]);
+
+  // Duplicate an existing tool as a starting point for a new one.
+  const cloneTool = useCallback(async (id) => {
+    const source = state.tools.find(t => t.id === id);
+    if (!source) throw new Error('Tool not found');
+    const now = new Date().toISOString();
+    const copy = {
+      ...source,
+      id: generateId(),
+      description: `${source.description || 'Tool'} (copy)`,
+      _fusionRaw: undefined,
+      created_at: now,
+      updated_at: now,
+    };
+    return addTool(copy);
+  }, [state.tools, addTool]);
 
   const deleteTool = useCallback(async (id) => {
     dispatch({ type: 'SAVE_START' });
@@ -214,11 +247,13 @@ export function AppProvider({ children }) {
       if (googleRef.current) await driveService.deleteMetadata(id);
       dispatch({ type: 'DELETE_TOOL', id });
       dispatch({ type: 'SAVE_SUCCESS' });
+      notify('Tool deleted', 'success');
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Delete failed: ${err.message}`, 'error', 7000);
       throw err;
     }
-  }, [downloadFusionList, uploadFusionList]);
+  }, [downloadFusionList, uploadFusionList, notify]);
 
   const saveFullLibrary = useCallback(async (tools) => {
     dispatch({ type: 'SAVE_START' });
@@ -234,11 +269,13 @@ export function AppProvider({ children }) {
       if (googleRef.current) await driveService.saveAllMetadata(metaList);
       dispatch({ type: 'SET_TOOLS', tools });
       dispatch({ type: 'SAVE_SUCCESS' });
+      notify(`Saved ${tools.length} tools to library`, 'success');
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Save failed: ${err.message}`, 'error', 7000);
       throw err;
     }
-  }, [uploadFusionList]);
+  }, [uploadFusionList, notify]);
 
   const clearError = useCallback(() => dispatch({ type: 'CLEAR_ERROR' }), []);
 
@@ -253,9 +290,12 @@ export function AppProvider({ children }) {
       loadTools,
       saveTool,
       addTool,
+      cloneTool,
       deleteTool,
       saveFullLibrary,
       clearError,
+      notify,
+      dismissToast,
     }}>
       {children}
     </AppContext.Provider>

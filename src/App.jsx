@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import { Wrench, FolderOpen, LogOut, Library, Upload, Settings } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
+import ToastStack from './components/Toast.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
 import LibrarySetup from './components/LibrarySetup.jsx';
 import MetadataConnect from './components/MetadataConnect.jsx';
@@ -34,6 +36,7 @@ function AppShell() {
   const {
     apsAuthenticated, libraryLocation, googleAuthenticated, metadataSkipped,
     processingAuth, user, loadTools, signOutAll, clearLibraryLocation,
+    toasts, dismissToast,
   } = useApp();
 
   const ready = apsAuthenticated && libraryLocation && (googleAuthenticated || metadataSkipped);
@@ -48,58 +51,74 @@ function AppShell() {
   }, [ready, loadTools]);
 
   // ─── Onboarding gates ──────────────────────────────────────────────────────
+  let content;
   if (processingAuth) {
-    return (
+    content = (
       <div className="loading-screen" style={{ minHeight: '100vh' }}>
         <div className="spinner" />
         <span>Completing Autodesk sign-in…</span>
       </div>
     );
+  } else if (!apsAuthenticated) {
+    content = <LoginScreen />;
+  } else if (!libraryLocation) {
+    content = <LibrarySetup />;
+  } else if (!googleAuthenticated && !metadataSkipped) {
+    content = <MetadataConnect />;
+  } else {
+    content = (
+      <div className="app-shell">
+        <TopBar user={user} googleAuthenticated={googleAuthenticated} onSignOut={signOutAll} onChangeLibrary={clearLibraryLocation} />
+        <main className="page-content">
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/tool/new" element={<AddToolFlow />} />
+            <Route path="/tool/:id" element={<ToolDetail />} />
+            <Route path="/import" element={<ImportFlow />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
+      </div>
+    );
   }
-  if (!apsAuthenticated) return <LoginScreen />;
-  if (!libraryLocation) return <LibrarySetup />;
-  if (!googleAuthenticated && !metadataSkipped) return <MetadataConnect />;
 
-  // ─── Authenticated app ──────────────────────────────────────────────────────
   return (
-    <div className="app-shell">
-      <TopBar user={user} googleAuthenticated={googleAuthenticated} onSignOut={signOutAll} onChangeLibrary={clearLibraryLocation} />
-      <main className="page-content">
-        <Routes>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/tool/new" element={<AddToolFlow />} />
-          <Route path="/tool/:id" element={<ToolDetail />} />
-          <Route path="/import" element={<ImportFlow />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </main>
-    </div>
+    <>
+      {content}
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+    </>
   );
 }
 
 function TopBar({ user, googleAuthenticated, onSignOut, onChangeLibrary }) {
   const location = useLocation();
+  const onLanding = location.pathname === '/';
   return (
     <header className="topbar">
-      <span className="topbar-brand">🔧 Tool Library</span>
+      <span className="topbar-brand">
+        <Wrench size={17} strokeWidth={2.2} />
+        Tool Library
+      </span>
       <span className="topbar-spacer" />
       <a
         href="#/"
-        style={{ fontSize: 12, color: 'var(--text-sub)', textDecoration: 'none' }}
-        onClick={e => { if (location.pathname === '/') e.preventDefault(); }}
+        className={`topbar-link ${onLanding ? 'active' : ''}`}
+        onClick={e => { if (onLanding) e.preventDefault(); }}
       >
-        Library
+        <Library size={14} /> Library
       </a>
-      <a href="#/import" style={{ fontSize: 12, color: 'var(--text-sub)', textDecoration: 'none' }}>
-        Import
+      <a href="#/import" className={`topbar-link ${location.pathname === '/import' ? 'active' : ''}`}>
+        <Upload size={14} /> Import
       </a>
       <button className="btn btn-ghost btn-sm" onClick={onChangeLibrary} title="Pick a different tool library file">
-        Change library
+        <FolderOpen size={14} /> Change library
       </button>
       <span className="topbar-user">
         {googleAuthenticated ? (user?.email || user?.name || '') : 'Autodesk · metadata off'}
       </span>
-      <button className="btn btn-ghost btn-sm" onClick={onSignOut}>Sign out</button>
+      <button className="btn btn-ghost btn-sm" onClick={onSignOut}>
+        <LogOut size={14} /> Sign out
+      </button>
     </header>
   );
 }
@@ -108,7 +127,7 @@ function ConfigError() {
   return (
     <div style={{ minHeight: '100vh', background: '#1a1a1a', color: '#e0e0e0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif' }}>
       <div style={{ maxWidth: 480, padding: 32, background: '#242424', border: '1px solid #383838', borderRadius: 8, textAlign: 'center' }}>
-        <div style={{ fontSize: 36, marginBottom: 12 }}>⚙️</div>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12, color: '#4a8fff' }}><Settings size={36} /></div>
         <h2 style={{ marginBottom: 8, color: '#4a8fff' }}>Configuration Required</h2>
         <p style={{ color: '#999', marginBottom: 16, lineHeight: 1.6 }}>
           <code>VITE_APS_CLIENT_ID</code> and <code>VITE_APS_CALLBACK_URL</code> must be set. Create a

@@ -8,34 +8,8 @@ import {
 export { TT, TL, MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST, PS_GROUPS, AUTO_GROUP, COOLANT_OPTS };
 
 // ─── Icons ─────────────────────────────────────────────────────────────────
-export const TOOL_TYPE_ICONS = {
-  'flat end mill': '⬛',
-  'ball end mill': '⚫',
-  'bull nose end mill': '🔵',
-  'tapered mill': '📐',
-  'radius mill': '🔘',
-  'form mill': '🔷',
-  'lollipop mill': '🍭',
-  'slot/key cutter': '🗝️',
-  'dovetail': '◣',
-  'thread mill': '🌀',
-  'face mill': '💿',
-  'chamfer mill': '◧',
-  'circle segment barrel': '🛢️',
-  'circle segment lens': '👁️',
-  'circle segment oval': '🥚',
-  'circle segment taper': '🔺',
-  'drill': '🔩',
-  'center drill': '🎯',
-  'spot drill': '📌',
-  'reamer': '🪛',
-  'counter bore': '⬡',
-  'counter sink': '▽',
-  'tap form': '🔧',
-  'tap cut': '🔨',
-  'boring head': '🕳️',
-  'turning general': '🔄',
-};
+// Tool-type icons are rendered by the <ToolTypeIcon> component
+// (src/components/icons/ToolTypeIcon.jsx) as hand-crafted SVG silhouettes.
 
 export const TOOL_TYPES = TT;
 export const TOOL_TYPE_LABELS = TL;
