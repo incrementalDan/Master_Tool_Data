@@ -1,5 +1,7 @@
-import { useState } from 'react';
-import { TOOL_TYPES, TOOL_TYPE_LABELS, TOOL_TYPE_ICONS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, COOLANT_OPTS, validateTool, getVisibleFields } from '../schema/toolSchema.js';
+import { useState, useEffect, useMemo } from 'react';
+import { Tag, Ruler, Layers, Gauge, Settings2, Save, X } from 'lucide-react';
+import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, COOLANT_OPTS, validateTool, getVisibleFields } from '../schema/toolSchema.js';
+import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 
 const NUMERIC_FIELDS = new Set(['diameter', 'flute_length', 'overall_length', 'shank_diameter', 'corner_radius', 'tip_angle', 'taper_angle', 'tip_diameter', 'lower_radius', 'upper_radius', 'profile_radius', 'axial_distance', 'shoulder_length', 'ooh', 'helix_angle', 'number_of_flutes', 'spindle_speed', 'cutting_feedrate', 'plunge_feedrate', 'ramp_feedrate', 'lead_in_feedrate', 'lead_out_feedrate', 'feed_per_tooth', 'feed_per_rev', 'cutting_speed', 'depth_of_cut', 'width_of_cut', 'min_thread_pitch', 'max_thread_pitch']);
 
@@ -42,6 +44,8 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
 
   const setField = (field, value) => setData(d => ({ ...d, [field]: value }));
 
+  const dirty = useMemo(() => JSON.stringify(data) !== JSON.stringify(tool), [data, tool]);
+
   const getVisibleAppFields = () => {
     const extFields = getVisibleFields(data.tool_type);
     return extFields
@@ -51,7 +55,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
 
   const handleSave = async () => {
     const { valid, errors: errs } = validateTool(data);
-    if (!valid) { setErrors(errs); return; }
+    if (!valid) { setErrors(errs); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     setErrors([]);
     try {
       await onSave(data);
@@ -60,39 +64,65 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
     }
   };
 
+  const handleCancel = () => {
+    if (dirty && !window.confirm('Discard unsaved changes?')) return;
+    onCancel();
+  };
+
+  // Keyboard: Ctrl/Cmd+S saves, Esc cancels
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (!isSaving) handleSave();
+      } else if (e.key === 'Escape') {
+        handleCancel();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  // Warn on browser/tab close while dirty
+  useEffect(() => {
+    const onBeforeUnload = (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [dirty]);
+
   const visibleFields = new Set(getVisibleAppFields().map(f => f.field));
-  const optionalFields = new Set(getVisibleAppFields().filter(f => f.optional).map(f => f.field));
 
   return (
-    <div>
+    <div className="tool-form">
       {errors.length > 0 && (
         <div className="error-banner mb-16">
           {errors.map((e, i) => <div key={i}>{e}</div>)}
         </div>
       )}
 
-      {/* Tool type selector (new tool only or always allow change) */}
-      <div className="mb-20">
-        <div className="section-header">Tool Type *</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {TOOL_TYPES.map(type => (
-            <button
-              key={type}
-              onClick={() => setField('tool_type', type)}
-              className="chip"
-              style={{
-                borderColor: data.tool_type === type ? 'var(--blue)' : undefined,
-                background: data.tool_type === type ? '#1a2a3a' : undefined,
-                color: data.tool_type === type ? 'var(--blue)' : undefined,
-              }}
-            >
-              {TOOL_TYPE_ICONS[type]} {TOOL_TYPE_LABELS[type]}
-            </button>
-          ))}
+      {/* Tool type selector */}
+      <div className="panel open mb-16">
+        <div className="panel-header static">
+          <Layers size={15} className="panel-header-icon" />
+          <span className="panel-header-title">Tool Type *</span>
+        </div>
+        <div className="panel-body">
+          <div className="type-chip-row">
+            {TOOL_TYPES.map(type => (
+              <button
+                key={type}
+                onClick={() => setField('tool_type', type)}
+                className={`type-chip ${data.tool_type === type ? 'active' : ''}`}
+              >
+                <ToolTypeIcon type={type} size={16} />
+                {TOOL_TYPE_LABELS[type]}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <Section title="Identity">
+      <Section title="Identity" icon={Tag}>
         <div className="form-grid">
           <div className="field-group form-grid-wide">
             <label className="field-label">Description <span className="required">*</span></label>
@@ -108,7 +138,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
         </div>
       </Section>
 
-      <Section title="Geometry">
+      <Section title="Geometry" icon={Ruler}>
         <div className="form-grid">
           <NumField field="diameter" data={data} setField={setField} required />
           {visibleFields.has('number_of_flutes') && <NumField field="number_of_flutes" data={data} setField={setField} />}
@@ -127,7 +157,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
         </div>
       </Section>
 
-      <Section title="Material & Coating">
+      <Section title="Material & Coating" icon={Layers}>
         <div className="form-grid">
           <div className="field-group">
             <label className="field-label">Tool Material</label>
@@ -210,13 +240,13 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
         )}
       </Section>
 
-      <Section title="Speeds & Feeds">
+      <Section title="Speeds & Feeds" icon={Gauge}>
         <div className="form-grid">
           {SPEEDS_FIELDS.map(f => <NumField key={f} field={f} data={data} setField={setField} />)}
         </div>
       </Section>
 
-      <Section title="Setup & Notes">
+      <Section title="Setup & Notes" icon={Settings2}>
         <div className="form-grid">
           <FieldInput field="preferred_machine" label="Preferred Machine" data={data} setField={setField} placeholder="M300, R650, etc." />
           <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
@@ -249,8 +279,8 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
           </div>
           <div className="tag-list">
             {(data.tags || []).map(tag => (
-              <span key={tag} className="tag" style={{ cursor: 'pointer' }} onClick={() => setField('tags', (data.tags || []).filter(t => t !== tag))}>
-                {tag} ×
+              <span key={tag} className="tag removable" onClick={() => setField('tags', (data.tags || []).filter(t => t !== tag))}>
+                {tag} <X size={11} />
               </span>
             ))}
           </div>
@@ -266,27 +296,33 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
         </div>
       </Section>
 
-      <div className="flex gap-8 mt-16">
+      {/* Sticky save bar */}
+      <div className="form-actions-bar">
+        <span className={`form-dirty ${dirty ? 'show' : ''}`}>{dirty ? 'Unsaved changes' : 'No changes'}</span>
+        <span className="form-hint text-xs text-sub">⌘/Ctrl+S to save · Esc to cancel</span>
+        <button className="btn btn-secondary" onClick={handleCancel} disabled={isSaving}>Cancel</button>
         <button className="btn btn-primary" onClick={handleSave} disabled={isSaving}>
-          {isSaving ? 'Saving…' : isNew ? 'Add to Library' : 'Save Changes'}
-        </button>
-        <button className="btn btn-secondary" onClick={onCancel} disabled={isSaving}>
-          Cancel
+          {isSaving ? (
+            <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Saving…</>
+          ) : (
+            <><Save size={15} /> {isNew ? 'Add to Library' : 'Save Changes'}</>
+          )}
         </button>
       </div>
     </div>
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, icon: Icon, children }) {
   const [open, setOpen] = useState(true);
   return (
-    <div className="collapsible mb-16">
-      <button className="collapsible-toggle" onClick={() => setOpen(o => !o)}>
-        <span>{open ? '▾' : '▸'}</span>
-        {title}
+    <div className={`panel ${open ? 'open' : ''} mb-16`}>
+      <button className="panel-header" onClick={() => setOpen(o => !o)}>
+        {Icon && <Icon size={15} className="panel-header-icon" />}
+        <span className="panel-header-title">{title}</span>
+        <span className="panel-chevron">{open ? '▾' : '▸'}</span>
       </button>
-      {open && <div className="collapsible-body">{children}</div>}
+      {open && <div className="panel-body">{children}</div>}
     </div>
   );
 }

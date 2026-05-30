@@ -1,4 +1,5 @@
-import { TOOL_TYPES, TOOL_TYPE_LABELS, TOOL_TYPE_ICONS } from '../schema/toolSchema.js';
+import { TOOL_TYPES, TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
+import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 
 export default function ToolTypeGrid({ selected, onSelect }) {
   return (
@@ -10,7 +11,7 @@ export default function ToolTypeGrid({ selected, onSelect }) {
           onClick={() => onSelect(selected === type ? null : type)}
           title={TOOL_TYPE_LABELS[type] || type}
         >
-          <span className="type-tile-icon">{TOOL_TYPE_ICONS[type] || '🔧'}</span>
+          <span className="type-tile-icon"><ToolTypeIcon type={type} size={26} /></span>
           <span className="type-tile-label">{TOOL_TYPE_LABELS[type] || type}</span>
         </button>
       ))}

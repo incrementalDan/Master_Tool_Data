@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Wrench } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import * as aps from '../services/apsService.js';
 
@@ -18,7 +19,7 @@ export default function LoginScreen() {
   return (
     <div className="login-screen">
       <div className="login-card">
-        <div style={{ fontSize: 48, marginBottom: 12 }}>🔧</div>
+        <div className="login-logo"><Wrench size={28} strokeWidth={2.2} /></div>
         <h1 className="login-title">Fusion Tool Library</h1>
         <p className="login-subtitle">
           Sign in with your Autodesk account to read and write the Fusion 360 cloud tool library directly.
