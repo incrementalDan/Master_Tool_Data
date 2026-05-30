@@ -76,6 +76,8 @@ VITE_GOOGLE_CLIENT_ID=        # Google OAuth client ID (optional — for metadat
 VITE_METADATA_FILE_ID=        # Google Drive file ID for tool_metadata.json (optional)
 ```
 
+**⛔ Never modify, recreate, or delete the `.env` file.** It contains real API keys that are already configured. If a new environment variable is needed, tell the user exactly what to add and let them add it manually.
+
 APS setup: create a "Single Page App" at https://aps.autodesk.com — **not** Web App. PKCE requires SPA type. Register the callback URL (GitHub Pages URL for deploy, `http://localhost:5173/Master_Tool_Data/` for dev).
 
 Google setup: authorized JavaScript origins must include `https://incrementaldan.github.io` (no path, no trailing slash).
