@@ -37,13 +37,16 @@ async function driveGet(fileId) {
 }
 
 // Create tool_metadata.json from scratch and cache the new file ID.
-async function driveCreate(content) {
+async function driveCreate(content, folderId = null) {
+  const meta = { name: 'tool_metadata.json', mimeType: 'application/json' };
+  if (folderId) meta.parents = [folderId];
+
   const boundary = 'drive_meta_boundary_314159';
   const body = [
     `--${boundary}`,
     'Content-Type: application/json',
     '',
-    JSON.stringify({ name: 'tool_metadata.json', mimeType: 'application/json' }),
+    JSON.stringify(meta),
     `--${boundary}`,
     'Content-Type: application/json',
     '',
@@ -130,4 +133,45 @@ export async function deleteMetadata(id) {
 // Replace the entire metadata file (used by the import flow)
 export async function saveAllMetadata(metaList) {
   await driveUpdate(getMetaFileId(), metaList);
+}
+
+// ─── Folder picker helpers ────────────────────────────────────────────────────
+
+// Returns true if the configured metadata file actually exists.
+export async function checkMetadataFile() {
+  const id = getMetaFileId();
+  if (!id) return false;
+  const data = await driveGet(id);
+  return data !== null;
+}
+
+// List folders inside a Drive parent ('root' = My Drive root, or a folder ID).
+export async function listFolders(parentId = 'root') {
+  const q = `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=name&fields=files(id,name)&pageSize=100`,
+    { headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Failed to list folders (${res.status}): ${txt.slice(0, 100)}`);
+  }
+  const data = await res.json();
+  return data.files || [];
+}
+
+// List shared drives accessible to the user (some accounts may have none).
+export async function listSharedDrives() {
+  const res = await fetch(
+    'https://www.googleapis.com/drive/v3/drives?pageSize=20&fields=drives(id,name)',
+    { headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  return data.drives || [];
+}
+
+// Create an empty tool_metadata.json in the specified folder and cache its ID.
+export async function createMetadataInFolder(folderId) {
+  return driveCreate([], folderId);
 }
