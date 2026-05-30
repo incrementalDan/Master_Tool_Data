@@ -12,6 +12,7 @@ import ToolDetail from './components/ToolDetail.jsx';
 import AddToolFlow from './components/AddToolFlow.jsx';
 import ImportFlow from './components/ImportFlow.jsx';
 import MergeFlow from './components/MergeFlow/index.jsx';
+import SettingsPage from './components/Settings.jsx';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 const APS_CLIENT_ID = import.meta.env.VITE_APS_CLIENT_ID || '';
@@ -78,6 +79,7 @@ function AppShell() {
             <Route path="/import" element={<ImportFlow />} />
             <Route path="/merge" element={<MergeFlow />} />
             <Route path="/merge/:id" element={<MergeFlow />} />
+            <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
@@ -115,6 +117,9 @@ function TopBar({ user, googleAuthenticated, onSignOut, onChangeLibrary }) {
       </a>
       <a href="#/merge" className={`topbar-link ${location.pathname.startsWith('/merge') ? 'active' : ''}`}>
         <GitMerge size={14} /> Sync Job
+      </a>
+      <a href="#/settings" className={`topbar-link ${location.pathname === '/settings' ? 'active' : ''}`}>
+        <Settings size={14} /> Settings
       </a>
       <button className="btn btn-ghost btn-sm" onClick={onChangeLibrary} title="Pick a different tool library file">
         <FolderOpen size={14} /> Change library

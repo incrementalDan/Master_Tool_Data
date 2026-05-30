@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
-  Tag, Ruler, Gauge, Settings2, StickyNote, Clock, ExternalLink,
+  Tag, Ruler, Gauge, Settings2, StickyNote, Clock, ExternalLink, Hash,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
@@ -129,6 +129,10 @@ export default function ToolDetail() {
           <Trash2 size={14} /> Delete
         </button>
       </div>
+
+      {/* Machine tool number — read-only everywhere. All three values (T/H/D)
+          are locked to the same number and managed only by the app. */}
+      <MachineNumberBlock value={tool.machine_tool_number} />
 
       <div className="detail-layout">
         <div>
@@ -283,6 +287,32 @@ export default function ToolDetail() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// Read-only display of the machine tool number. Shows T/H/D together to make
+// clear they are locked to the same value. Never editable in the normal UI.
+function MachineNumberBlock({ value }) {
+  const has = value !== null && value !== undefined && value !== '';
+  return (
+    <div
+      style={{
+        display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+        padding: '12px 16px', marginBottom: 16,
+        background: 'var(--surface-2)', border: '1px solid var(--border)',
+        borderLeft: '3px solid var(--orange)', borderRadius: 'var(--radius-sm)',
+      }}
+    >
+      <Hash size={16} style={{ color: 'var(--orange)' }} />
+      <span className="text-sub text-sm" style={{ fontWeight: 600 }}>Machine Tool #</span>
+      {has ? (
+        <span className="font-mono" style={{ fontSize: 17, fontWeight: 700, letterSpacing: 0.5 }}>
+          T{value} · H{value} · D{value}
+        </span>
+      ) : (
+        <span className="detail-field-empty">Not assigned</span>
       )}
     </div>
   );
