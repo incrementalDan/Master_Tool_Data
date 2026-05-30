@@ -219,20 +219,30 @@ export function AppProvider({ children }) {
       const fusionList = await downloadFusionList();
 
       // Assign a machine tool number at the moment of save (not when the form
-      // opened) so concurrent adds don't collide. Numbers already in use come
-      // from the in-memory library, which is the merged source of truth.
-      if (created.machine_tool_number === null || created.machine_tool_number === undefined || created.machine_tool_number === '') {
-        const existingNumbers = toolsRef.current
-          .map(t => t.machine_tool_number)
-          .filter(n => n !== null && n !== undefined && n !== '')
-          .map(Number);
-        const next = getNextMachineNumber(existingNumbers);
-        // Collision guard — getNextMachineNumber should never return a used
-        // number, but surface it as an error rather than silently overwrite.
-        if (existingNumbers.includes(next)) {
-          throw new Error(`Machine tool number collision detected at #${next}. Resolve in Settings → Renumber.`);
+      // opened) so concurrent adds don't collide. The freshly-downloaded library
+      // is the authority — it reflects tools a teammate may have added since our
+      // last load. We union the persisted post-process numbers with any held in
+      // memory to be safe.
+      const usedNumbers = new Set();
+      for (const f of fusionList) {
+        const n = f['post-process']?.number;
+        if (n !== null && n !== undefined && n !== '') usedNumbers.add(Number(n));
+      }
+      for (const t of toolsRef.current) {
+        const n = t.machine_tool_number;
+        if (n !== null && n !== undefined && n !== '') usedNumbers.add(Number(n));
+      }
+
+      const provided = created.machine_tool_number;
+      const hasProvided = provided !== null && provided !== undefined && provided !== '';
+      if (hasProvided) {
+        // Caller supplied a number — never silently overwrite an existing one.
+        if (usedNumbers.has(Number(provided))) {
+          throw new Error(`Machine tool number ${provided} is already in use.`);
         }
-        created.machine_tool_number = next;
+        created.machine_tool_number = Number(provided);
+      } else {
+        created.machine_tool_number = getNextMachineNumber([...usedNumbers]);
       }
 
       const { fusionTool, metadataTool } = splitToFusionAndMetadata(created);

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
@@ -6,26 +6,38 @@ import { generateMachineNumbers } from '../schema/toolSchema.js';
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { tools, renumberLibrary, isSaving } = useApp();
+  const { tools, fetchRawLibrary, renumberLibrary, isSaving } = useApp();
 
   // 'idle' → warning, 'preview' → table + confirm input, 'done' → success
   const [stage, setStage] = useState('idle');
+  const [previewRows, setPreviewRows] = useState([]);
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [error, setError] = useState('');
   const [resultCount, setResultCount] = useState(0);
 
-  // Preview the new numbers in current library (array) order. The actual commit
-  // re-reads fresh from APS, but this gives an accurate before/after picture.
-  const preview = useMemo(() => {
-    const numbers = generateMachineNumbers(tools.length);
-    return tools.map((t, i) => ({
-      id: t.id,
-      description: t.description || '—',
-      tool_type: t.tool_type,
-      current: t.machine_tool_number,
-      next: numbers[i],
-    }));
-  }, [tools]);
+  // Build the before/after preview from a FRESH read of the library, in the
+  // exact array order the commit will use, so what's shown matches what's done.
+  const startPreview = async () => {
+    setError('');
+    setLoadingPreview(true);
+    try {
+      const list = await fetchRawLibrary();
+      const numbers = generateMachineNumbers(list.length);
+      setPreviewRows(list.map((f, i) => ({
+        id: f.guid,
+        description: f.description || '—',
+        tool_type: f.type || '—',
+        current: f['post-process']?.number ?? null,
+        next: numbers[i],
+      })));
+      setStage('preview');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
 
   const handleRenumber = async () => {
     setError('');
@@ -36,6 +48,12 @@ export default function Settings() {
     } catch (err) {
       setError(err.message);
     }
+  };
+
+  const cancelPreview = () => {
+    setStage('idle');
+    setConfirmText('');
+    setError('');
   };
 
   return (
@@ -54,7 +72,7 @@ export default function Settings() {
         <div
           style={{
             padding: 16, borderRadius: 'var(--radius-sm)',
-            border: '1px solid var(--border)', borderLeft: '3px solid var(--red, #e5484d)',
+            border: '1px solid var(--border)', borderLeft: '3px solid var(--red)',
             background: 'var(--surface-2)',
           }}
         >
@@ -74,8 +92,9 @@ export default function Settings() {
                   initial setup.
                 </span>
               </div>
-              <button className="btn btn-danger" onClick={() => setStage('preview')} disabled={tools.length === 0}>
-                Renumber {tools.length} Tools…
+              {error && <div className="error-banner mb-12">{error}</div>}
+              <button className="btn btn-danger" onClick={startPreview} disabled={tools.length === 0 || loadingPreview}>
+                {loadingPreview ? 'Loading library…' : `Renumber ${tools.length} Tools…`}
               </button>
             </>
           )}
@@ -83,7 +102,8 @@ export default function Settings() {
           {stage === 'preview' && (
             <>
               <p className="text-sub text-sm mb-12">
-                Review the change below. Numbers <strong>98, 99, and 100</strong> are skipped (reserved).
+                Review the change below ({previewRows.length} tools, fresh from the library). Numbers
+                <strong> 98, 99, and 100</strong> are skipped (reserved).
               </p>
               <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', marginBottom: 14 }}>
                 <table className="match-table">
@@ -97,8 +117,8 @@ export default function Settings() {
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.map((row, i) => (
-                      <tr key={row.id}>
+                    {previewRows.map((row, i) => (
+                      <tr key={`${row.id}-${i}`}>
                         <td className="text-sub text-xs">{i + 1}</td>
                         <td className="truncate" style={{ maxWidth: 240 }}>{row.description}</td>
                         <td className="text-xs text-sub">{row.tool_type}</td>
@@ -131,7 +151,7 @@ export default function Settings() {
                 >
                   {isSaving ? 'Renumbering…' : 'Renumber Library'}
                 </button>
-                <button className="btn btn-secondary" onClick={() => { setStage('idle'); setConfirmText(''); setError(''); }} disabled={isSaving}>
+                <button className="btn btn-secondary" onClick={cancelPreview} disabled={isSaving}>
                   Cancel
                 </button>
               </div>

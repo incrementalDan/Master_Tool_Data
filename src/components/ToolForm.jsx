@@ -294,7 +294,6 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
         <div className="form-grid">
           <FieldInput field="preferred_machine" label="Preferred Machine" data={data} setField={setField} placeholder="M300, R650, etc." />
           <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
-          <FieldInput field="tool_number" label="Tool Number" data={data} setField={setField} />
           <FieldInput field="last_used_job" label="Last Used Job" data={data} setField={setField} />
           <FieldInput field="updated_by" label="Updated By" data={data} setField={setField} />
         </div>

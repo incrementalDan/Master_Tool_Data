@@ -203,7 +203,6 @@ export default function ToolDetail() {
               <Field label="Center Cutting" value={tool.center_cutting != null ? (tool.center_cutting ? 'Yes' : 'No') : null} />
               <Field label="Preferred Machine" value={tool.preferred_machine} />
               <Field label="Location" value={tool.location} mono />
-              <Field label="Tool Number" value={tool.tool_number} />
               {tool.pitch && <Field label="Thread Pitch" value={tool.pitch} />}
               {tool.tap_class && <Field label="Tap Class" value={tool.tap_class} />}
               {tool.point_type && <Field label="Point Type" value={tool.point_type} />}
