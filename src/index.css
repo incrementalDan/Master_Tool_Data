@@ -916,6 +916,191 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   margin-bottom: 6px;
 }
 
+/* Queue + main content two-column layout */
+.merge-queue-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 800px) {
+  .merge-queue-layout { grid-template-columns: 1fr; }
+}
+
+.merge-queue-main { min-width: 0; }
+
+/* Active tool title above review steps */
+.merge-active-tool {
+  padding: 10px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+/* Queue panel sidebar */
+.queue-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  position: sticky;
+  top: 64px;
+}
+
+.queue-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.queue-progress-bar {
+  height: 3px;
+  background: var(--surface-3);
+}
+.queue-progress-fill {
+  height: 100%;
+  background: var(--blue);
+  transition: width 0.4s ease;
+}
+
+.queue-items {
+  display: flex;
+  flex-direction: column;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.queue-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  border-radius: 0;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--ease);
+  width: 100%;
+  min-width: 0;
+}
+.queue-item:last-child { border-bottom: none; }
+.queue-item:hover { background: var(--surface-2); }
+.queue-item.active { background: var(--blue-tint); border-left: 2px solid var(--blue); padding-left: 10px; }
+.queue-item.done { opacity: 0.65; }
+
+.queue-item-icon {
+  flex-shrink: 0;
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--blue);
+}
+
+.queue-item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.queue-item-desc {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.queue-status-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.queue-footer {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-sub);
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+/* Paste zone (primary input in ImportStep) */
+.merge-paste-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 24px;
+  border: 2px solid var(--blue);
+  border-radius: var(--radius);
+  background: var(--blue-tint);
+  text-align: center;
+  cursor: pointer;
+  transition: background var(--ease);
+  outline: none;
+}
+.merge-paste-zone:hover { background: var(--blue-tint-2); }
+.merge-paste-zone:focus-visible { box-shadow: 0 0 0 3px rgba(74,143,255,0.3); }
+
+/* Master-updated notice */
+.diff-updated-notice {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(74, 143, 255, 0.08);
+  border: 1px solid rgba(74, 143, 255, 0.25);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  color: var(--blue);
+}
+
+/* New tool banner */
+.new-tool-banner {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  background: rgba(167, 139, 250, 0.08);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-radius: var(--radius);
+  color: #a78bfa;
+}
+
+/* Summary step */
+.summary-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+}
+.summary-row.border-bottom { border-bottom: 1px solid var(--border); }
+.summary-row-icon {
+  flex-shrink: 0;
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--blue);
+}
+.summary-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.summary-row-desc { font-size: 13px; font-weight: 600; }
+
+
 .merge-import-options {
   display: flex;
   flex-direction: column;

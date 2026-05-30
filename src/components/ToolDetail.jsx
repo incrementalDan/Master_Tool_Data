@@ -8,7 +8,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 import ToolForm from './ToolForm.jsx';
-import { exportSingleTool as exportFusion } from '../utils/fusionExport.js';
+import { exportSingleTool as exportFusion, copyToolToClipboard } from '../utils/fusionExport.js';
 import { exportSingleTool as exportProShop } from '../utils/proShopExport.js';
 
 export default function ToolDetail() {
@@ -19,6 +19,7 @@ export default function ToolDetail() {
   const [editing, setEditing] = useState(searchParams.get('edit') === '1');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [copyLabel, setCopyLabel] = useState('Copy to Clipboard');
 
   const tool = tools.find(t => t.id === id);
 
@@ -104,8 +105,22 @@ export default function ToolDetail() {
         <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/merge/${tool.id}`)} title="Sync proven values from a job file back to master">
           <GitMerge size={14} /> Sync from Job
         </button>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={async () => {
+            try {
+              await copyToolToClipboard(tool);
+              setCopyLabel('Copied!');
+              setTimeout(() => setCopyLabel('Copy to Clipboard'), 2000);
+            } catch {
+              notify('Clipboard not available — use Download JSON instead', 'error');
+            }
+          }}
+        >
+          <Copy size={14} /> {copyLabel}
+        </button>
         <button className="btn btn-secondary btn-sm" onClick={() => { exportFusion(tool); notify('Exported Fusion JSON', 'success'); }}>
-          <Download size={14} /> Fusion JSON
+          <Download size={14} /> Download JSON
         </button>
         <button className="btn btn-secondary btn-sm" style={{ color: 'var(--orange)' }} onClick={() => { exportProShop(tool); notify('Exported ProShop CSV', 'success'); }}>
           <FileDown size={14} /> ProShop CSV

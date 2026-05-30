@@ -1,5 +1,11 @@
 import { internalToFusionTool } from '../schema/toolSchema.js';
 
+function toFusionFormat(tool) {
+  const f = internalToFusionTool(tool);
+  delete f._fusionRaw;
+  return f;
+}
+
 function downloadJSON(content, filename) {
   const blob = new Blob([JSON.stringify(content, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -13,17 +19,19 @@ function downloadJSON(content, filename) {
 }
 
 export function exportSingleTool(tool) {
-  const fusionTool = internalToFusionTool(tool);
-  const safe = { ...fusionTool };
-  delete safe._fusionRaw;
-  downloadJSON({ data: [safe] }, `fusion_tool_${tool.proshot_id || tool.id}.json`);
+  downloadJSON({ data: [toFusionFormat(tool)] }, `fusion_tool_${tool.proshot_id || tool.id}.json`);
 }
 
 export function exportFullLibrary(tools) {
-  const fusionTools = tools.map(tool => {
-    const f = internalToFusionTool(tool);
-    delete f._fusionRaw;
-    return f;
-  });
-  downloadJSON({ data: fusionTools }, 'fusion_tool_library.json');
+  downloadJSON({ data: tools.map(toFusionFormat) }, 'fusion_tool_library.json');
+}
+
+export async function copyToolToClipboard(tool) {
+  const json = JSON.stringify(toFusionFormat(tool), null, 2);
+  await navigator.clipboard.writeText(json);
+}
+
+export async function copyToolsToClipboard(tools) {
+  const json = JSON.stringify(tools.map(toFusionFormat), null, 2);
+  await navigator.clipboard.writeText(json);
 }

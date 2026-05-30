@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, CheckCircle2, GitMerge } from 'lucide-react';
+import { ArrowLeft, GitMerge } from 'lucide-react';
 import { useApp } from '../../context/AppContext.jsx';
 import { FIELD_LABELS, TOOL_TYPE_LABELS } from '../../schema/toolSchema.js';
 import ToolTypeIcon from '../icons/ToolTypeIcon.jsx';
@@ -13,11 +13,14 @@ function formatValue(v) {
   return String(v);
 }
 
-export default function CommitStep({ importedTool, masterTool, selectedFields, onDone, onBack }) {
+export default function CommitStep({
+  importedTool, masterTool, selectedFields,
+  onCommitted, onBack,
+  isLastItem = false,
+}) {
   const { mergeTool, isSaving, user } = useApp();
   const [revisionNote, setRevisionNote] = useState('');
   const [mergedBy, setMergedBy] = useState(user?.email || user?.name || '');
-  const [done, setDone] = useState(false);
   const [commitError, setCommitError] = useState('');
 
   const fieldList = [...selectedFields];
@@ -29,27 +32,11 @@ export default function CommitStep({ importedTool, masterTool, selectedFields, o
     for (const f of fieldList) mergedFields[f] = importedTool[f];
     try {
       await mergeTool(masterTool, mergedFields, revisionNote.trim(), mergedBy.trim());
-      setDone(true);
+      onCommitted();
     } catch (err) {
       setCommitError(err.message);
     }
   };
-
-  if (done) {
-    return (
-      <div className="merge-success">
-        <CheckCircle2 size={48} style={{ color: 'var(--green)', marginBottom: 16 }} />
-        <h3 style={{ marginBottom: 8 }}>Merge Complete</h3>
-        <p className="text-sub text-sm mb-8">
-          {fieldList.length} field{fieldList.length !== 1 ? 's' : ''} committed to master.
-        </p>
-        <p className="text-sub text-sm mb-20">
-          <strong style={{ color: 'var(--text)' }}>{masterTool.description}</strong> has been updated.
-        </p>
-        <button className="btn btn-primary" onClick={onDone}>Return to Library</button>
-      </div>
-    );
-  }
 
   return (
     <div>
@@ -101,14 +88,11 @@ export default function CommitStep({ importedTool, masterTool, selectedFields, o
         <textarea
           className="field-input"
           rows={3}
-          placeholder="e.g. Job 1042 proved these speeds work great for 316L. Increased feedrate to match observed tool life."
+          placeholder="e.g. Job 1042 — these speeds proved great on 316L. Increased feed to match observed tool life."
           value={revisionNote}
           onChange={e => setRevisionNote(e.target.value)}
           autoFocus
         />
-        <span className="field-error" style={{ opacity: revisionNote.trim() ? 0 : 1 }}>
-          Required — describe why this change is being committed.
-        </span>
       </div>
 
       <div className="field-group mb-20">
@@ -133,7 +117,7 @@ export default function CommitStep({ importedTool, masterTool, selectedFields, o
           onClick={handleCommit}
           disabled={!revisionNote.trim() || isSaving}
         >
-          {isSaving ? 'Saving…' : 'Commit to Master'}
+          {isSaving ? 'Saving…' : isLastItem ? 'Commit & Finish' : 'Commit & Next →'}
         </button>
       </div>
     </div>

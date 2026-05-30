@@ -120,6 +120,11 @@ export function AppProvider({ children }) {
     await aps.saveToolLibrary(loc.projectId, loc.folderId, loc.itemId, loc.fileName, { data: list });
   }, []);
 
+  // Expose raw Fusion list download for the merge flow live-fetch feature.
+  const fetchRawLibrary = useCallback(async () => {
+    return await downloadFusionList();
+  }, [downloadFusionList]);
+
   // ─── Auth / setup actions ─────────────────────────────────────────────────
   const setGoogleUser = useCallback((user) => {
     driveService.setUserInfo(user);
@@ -336,6 +341,7 @@ export function AppProvider({ children }) {
       clearLibraryLocation,
       signOutAll,
       loadTools,
+      fetchRawLibrary,
       saveTool,
       addTool,
       cloneTool,
