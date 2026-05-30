@@ -304,10 +304,11 @@ Merge history is appended to `merge_history[]` in `tool_metadata.json`.
 ## Key Constraints
 
 - **Tool IDs are permanent** — they are the Fusion `guid`, link the two JSON files, and are referenced in merge history. Never reassign them.
-- **APS token in memory only** — `window._apsToken`, never localStorage.
+- **APS token in memory only** — `window._apsToken`, never localStorage. The refresh token is stored in `sessionStorage` (`aps_refresh_token`) so the session survives page refreshes within the same browser tab.
 - **Always re-download before write** — call `downloadFusionList()` immediately before any `uploadFusionList()`.
 - **No extra fields in Fusion JSON** — Fusion validates strictly. Only Fusion-native fields go in the library file; everything else goes in `tool_metadata.json`.
 - **`proshot_id` is the primary match key** — it is Fusion's `product-id` field (the ProShop-assigned number). Do not confuse with `product_id` (manufacturer EDP number, metadata-only).
 - **GitHub Pages = HashRouter** — never switch to BrowserRouter.
 - **ProShop export is permanent** — never remove `proShopExport.js` or the export buttons.
 - **Speeds & feeds display**: round to 4 decimal places for display using `round4()` — values are stored at full precision.
+- **Deploy after every change** — run `npm run deploy` after each set of committed changes so the live GitHub Pages site (`gh-pages` branch) stays in sync with the development branch. Do this automatically without being asked.
