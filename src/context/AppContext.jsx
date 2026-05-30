@@ -71,8 +71,10 @@ export function AppProvider({ children }) {
   // Keep latest values accessible inside async callbacks without stale closures
   const locationRef = useRef(state.libraryLocation);
   const googleRef = useRef(state.googleAuthenticated);
+  const toolsRef = useRef(state.tools);
   useEffect(() => { locationRef.current = state.libraryLocation; }, [state.libraryLocation]);
   useEffect(() => { googleRef.current = state.googleAuthenticated; }, [state.googleAuthenticated]);
+  useEffect(() => { toolsRef.current = state.tools; }, [state.tools]);
 
   // ─── Handle APS OAuth callback on mount ───────────────────────────────────
   useEffect(() => {
@@ -225,7 +227,7 @@ export function AppProvider({ children }) {
 
   // Duplicate an existing tool as a starting point for a new one.
   const cloneTool = useCallback(async (id) => {
-    const source = state.tools.find(t => t.id === id);
+    const source = toolsRef.current.find(t => t.id === id);
     if (!source) throw new Error('Tool not found');
     const now = new Date().toISOString();
     const copy = {
@@ -233,11 +235,57 @@ export function AppProvider({ children }) {
       id: generateId(),
       description: `${source.description || 'Tool'} (copy)`,
       _fusionRaw: undefined,
+      merge_history: [],
       created_at: now,
       updated_at: now,
     };
     return addTool(copy);
-  }, [state.tools, addTool]);
+  }, [addTool]);
+
+  // Merge selected job-tool fields back into a master tool with history tracking.
+  const mergeTool = useCallback(async (masterTool, mergedFields, revisionNote, mergedBy) => {
+    dispatch({ type: 'SAVE_START' });
+    try {
+      const previousValues = {};
+      for (const field of Object.keys(mergedFields)) {
+        previousValues[field] = masterTool[field];
+      }
+      const entry = {
+        merged_at: new Date().toISOString(),
+        merged_by: mergedBy || 'unknown',
+        fields_changed: Object.keys(mergedFields),
+        revision_note: revisionNote,
+        previous_values: previousValues,
+      };
+      const updated = {
+        ...masterTool,
+        ...mergedFields,
+        updated_at: new Date().toISOString(),
+        updated_by: mergedBy || '',
+        revision_notes: revisionNote,
+        merge_history: [...(masterTool.merge_history || []), entry],
+      };
+
+      const fusionList = await downloadFusionList();
+      const idx = fusionList.findIndex(t => t.guid === masterTool.id);
+      if (idx >= 0) updated._fusionRaw = fusionList[idx];
+      const { fusionTool, metadataTool } = splitToFusionAndMetadata(updated);
+      if (idx >= 0) fusionList[idx] = fusionTool;
+      else fusionList.push(fusionTool);
+
+      await uploadFusionList(fusionList);
+      if (googleRef.current) await driveService.upsertMetadata(metadataTool);
+
+      dispatch({ type: 'UPDATE_TOOL', tool: updated });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify('Merged job values to master library', 'success');
+      return updated;
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Merge failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  }, [downloadFusionList, uploadFusionList, notify]);
 
   const deleteTool = useCallback(async (id) => {
     dispatch({ type: 'SAVE_START' });
@@ -291,6 +339,7 @@ export function AppProvider({ children }) {
       saveTool,
       addTool,
       cloneTool,
+      mergeTool,
       deleteTool,
       saveFullLibrary,
       clearError,

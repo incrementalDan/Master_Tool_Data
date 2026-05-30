@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
-import { Wrench, FolderOpen, LogOut, Library, Upload, Settings } from 'lucide-react';
+import { Wrench, FolderOpen, LogOut, Library, Upload, Settings, GitMerge } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import ToastStack from './components/Toast.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
@@ -11,6 +11,7 @@ import LandingPage from './components/LandingPage.jsx';
 import ToolDetail from './components/ToolDetail.jsx';
 import AddToolFlow from './components/AddToolFlow.jsx';
 import ImportFlow from './components/ImportFlow.jsx';
+import MergeFlow from './components/MergeFlow/index.jsx';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 const APS_CLIENT_ID = import.meta.env.VITE_APS_CLIENT_ID || '';
@@ -75,6 +76,8 @@ function AppShell() {
             <Route path="/tool/new" element={<AddToolFlow />} />
             <Route path="/tool/:id" element={<ToolDetail />} />
             <Route path="/import" element={<ImportFlow />} />
+            <Route path="/merge" element={<MergeFlow />} />
+            <Route path="/merge/:id" element={<MergeFlow />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
@@ -109,6 +112,9 @@ function TopBar({ user, googleAuthenticated, onSignOut, onChangeLibrary }) {
       </a>
       <a href="#/import" className={`topbar-link ${location.pathname === '/import' ? 'active' : ''}`}>
         <Upload size={14} /> Import
+      </a>
+      <a href="#/merge" className={`topbar-link ${location.pathname.startsWith('/merge') ? 'active' : ''}`}>
+        <GitMerge size={14} /> Sync Job
       </a>
       <button className="btn btn-ghost btn-sm" onClick={onChangeLibrary} title="Pick a different tool library file">
         <FolderOpen size={14} /> Change library

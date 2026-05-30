@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft, Pencil, Download, FileDown, Copy, Trash2,
+  ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
   Tag, Ruler, Gauge, Settings2, StickyNote, Clock, ExternalLink,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
@@ -101,6 +101,9 @@ export default function ToolDetail() {
       <div className="action-bar">
         <button className="btn btn-primary" onClick={() => setEditing(true)}><Pencil size={15} /> Edit</button>
         <button className="btn btn-secondary btn-sm" onClick={handleClone}><Copy size={14} /> Duplicate</button>
+        <button className="btn btn-secondary btn-sm" onClick={() => navigate(`/merge/${tool.id}`)} title="Sync proven values from a job file back to master">
+          <GitMerge size={14} /> Sync from Job
+        </button>
         <button className="btn btn-secondary btn-sm" onClick={() => { exportFusion(tool); notify('Exported Fusion JSON', 'success'); }}>
           <Download size={14} /> Fusion JSON
         </button>
@@ -222,6 +225,29 @@ export default function ToolDetail() {
               <Field label="Updated By" value={tool.updated_by} />
             </div>
           </Section>
+
+          {(tool.merge_history || []).length > 0 && (
+            <Section title="Merge History" icon={GitMerge}>
+              <div className="merge-history-list">
+                {[...(tool.merge_history)].reverse().map((entry, i) => (
+                  <div key={i} className="merge-history-entry">
+                    <div className="merge-history-meta">
+                      <span style={{ fontWeight: 600 }}>{entry.merged_by || 'Unknown'}</span>
+                      <span className="text-sub text-xs">
+                        {entry.merged_at ? new Date(entry.merged_at).toLocaleDateString() : ''}
+                      </span>
+                    </div>
+                    {entry.revision_note && (
+                      <div className="merge-history-note">{entry.revision_note}</div>
+                    )}
+                    <div className="merge-history-fields text-xs text-sub">
+                      Changed: {(entry.fields_changed || []).join(', ')}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
         </div>
       </div>
 
