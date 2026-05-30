@@ -156,17 +156,17 @@ export default function ToolDetail() {
 
           <Section title="Speeds & Feeds" icon={Gauge}>
             <div className="detail-fields">
-              <Field label="Spindle Speed" value={tool.spindle_speed} unit="RPM" />
-              <Field label="Cutting Feedrate" value={tool.cutting_feedrate} unit="in/min" />
-              <Field label="Feed per Tooth" value={tool.feed_per_tooth} unit="in" />
-              <Field label="Feed per Rev" value={tool.feed_per_rev} unit="in" />
-              <Field label="Plunge Feedrate" value={tool.plunge_feedrate} unit="in/min" />
-              <Field label="Ramp Feedrate" value={tool.ramp_feedrate} unit="in/min" />
-              <Field label="Lead-In Feedrate" value={tool.lead_in_feedrate} unit="in/min" />
-              <Field label="Lead-Out Feedrate" value={tool.lead_out_feedrate} unit="in/min" />
-              <Field label="Surface Speed" value={tool.cutting_speed} unit="SFM" />
-              <Field label="Depth of Cut" value={tool.depth_of_cut} unit="in" />
-              <Field label="Width of Cut" value={tool.width_of_cut} unit="in" />
+              <Field label="Spindle Speed" value={round4(tool.spindle_speed)} unit="RPM" />
+              <Field label="Cutting Feedrate" value={round4(tool.cutting_feedrate)} unit="in/min" />
+              <Field label="Feed per Tooth" value={round4(tool.feed_per_tooth)} unit="in" />
+              <Field label="Feed per Rev" value={round4(tool.feed_per_rev)} unit="in" />
+              <Field label="Plunge Feedrate" value={round4(tool.plunge_feedrate)} unit="in/min" />
+              <Field label="Ramp Feedrate" value={round4(tool.ramp_feedrate)} unit="in/min" />
+              <Field label="Lead-In Feedrate" value={round4(tool.lead_in_feedrate)} unit="in/min" />
+              <Field label="Lead-Out Feedrate" value={round4(tool.lead_out_feedrate)} unit="in/min" />
+              <Field label="Surface Speed" value={round4(tool.cutting_speed)} unit="SFM" />
+              <Field label="Depth of Cut" value={round4(tool.depth_of_cut)} unit="in" />
+              <Field label="Width of Cut" value={round4(tool.width_of_cut)} unit="in" />
             </div>
           </Section>
 
@@ -259,6 +259,15 @@ function Section({ title, icon: Icon, children }) {
       {open && <div className="panel-body">{children}</div>}
     </div>
   );
+}
+
+// Round a numeric value to at most 4 decimal places (trailing zeros dropped).
+// Non-numeric / empty values pass through unchanged.
+function round4(v) {
+  if (v === null || v === undefined || v === '') return v;
+  const n = Number(v);
+  if (isNaN(n)) return v;
+  return Math.round(n * 10000) / 10000;
 }
 
 function Field({ label, value, unit, mono }) {
