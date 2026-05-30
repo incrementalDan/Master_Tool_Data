@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Tag, Ruler, Layers, Gauge, Settings2, Save, X } from 'lucide-react';
-import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, COOLANT_OPTS, validateTool, getVisibleFields } from '../schema/toolSchema.js';
+import { Tag, Ruler, Layers, Gauge, Settings2, Save, X, Hash } from 'lucide-react';
+import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, COOLANT_OPTS, validateTool, getVisibleFields, getNextMachineNumber } from '../schema/toolSchema.js';
+import { useApp } from '../context/AppContext.jsx';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 
 const NUMERIC_FIELDS = new Set(['diameter', 'flute_length', 'overall_length', 'shank_diameter', 'corner_radius', 'tip_angle', 'taper_angle', 'tip_diameter', 'lower_radius', 'upper_radius', 'profile_radius', 'axial_distance', 'shoulder_length', 'ooh', 'helix_angle', 'number_of_flutes', 'spindle_speed', 'cutting_feedrate', 'plunge_feedrate', 'ramp_feedrate', 'lead_in_feedrate', 'lead_out_feedrate', 'feed_per_tooth', 'feed_per_rev', 'cutting_speed', 'depth_of_cut', 'width_of_cut', 'min_thread_pitch', 'max_thread_pitch']);
@@ -38,9 +39,23 @@ const SPEEDS_FIELDS = ['spindle_speed', 'cutting_feedrate', 'feed_per_tooth', 'f
 const META_FIELDS = ['notes', 'tags', 'preferred_machine', 'last_used_job', 'revision_notes', 'distributor', 'distributor_stock_num', 'cost', 'location'];
 
 export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
+  const { tools } = useApp();
   const [data, setData] = useState({ ...tool });
   const [errors, setErrors] = useState([]);
   const [tagInput, setTagInput] = useState('');
+
+  // Machine tool number is read-only here. For a new tool, preview the number
+  // that will be assigned at save time (the real assignment happens on save —
+  // another user could add a tool in between). For an existing tool, show the
+  // number it already holds.
+  const previewMachineNumber = useMemo(() => {
+    if (!isNew) return null;
+    const existing = tools
+      .map(t => t.machine_tool_number)
+      .filter(n => n !== null && n !== undefined && n !== '')
+      .map(Number);
+    return getNextMachineNumber(existing);
+  }, [isNew, tools]);
 
   const setField = (field, value) => setData(d => ({ ...d, [field]: value }));
 
@@ -99,6 +114,35 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
           {errors.map((e, i) => <div key={i}>{e}</div>)}
         </div>
       )}
+
+      {/* Machine tool number — read-only. Managed entirely by the app. */}
+      <div
+        className="mb-16"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          padding: '10px 14px', background: 'var(--surface-2)',
+          border: '1px solid var(--border)', borderLeft: '3px solid var(--orange)',
+          borderRadius: 'var(--radius-sm)',
+        }}
+      >
+        <Hash size={15} style={{ color: 'var(--orange)' }} />
+        {isNew ? (
+          <span className="text-sm">
+            This tool will be assigned machine tool number{' '}
+            <strong className="font-mono" style={{ color: 'var(--orange)' }}>{previewMachineNumber}</strong>.
+          </span>
+        ) : (data.machine_tool_number !== null && data.machine_tool_number !== undefined && data.machine_tool_number !== '') ? (
+          <span className="text-sm">
+            Machine Tool #{' '}
+            <strong className="font-mono" style={{ color: 'var(--orange)' }}>
+              T{data.machine_tool_number} · H{data.machine_tool_number} · D{data.machine_tool_number}
+            </strong>{' '}
+            <span className="text-sub text-xs">— read-only, managed by the app</span>
+          </span>
+        ) : (
+          <span className="text-sm text-sub">No machine tool number assigned.</span>
+        )}
+      </div>
 
       {/* Tool type selector */}
       <div className="panel open mb-16">
@@ -250,7 +294,6 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
         <div className="form-grid">
           <FieldInput field="preferred_machine" label="Preferred Machine" data={data} setField={setField} placeholder="M300, R650, etc." />
           <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
-          <FieldInput field="tool_number" label="Tool Number" data={data} setField={setField} />
           <FieldInput field="last_used_job" label="Last Used Job" data={data} setField={setField} />
           <FieldInput field="updated_by" label="Updated By" data={data} setField={setField} />
         </div>

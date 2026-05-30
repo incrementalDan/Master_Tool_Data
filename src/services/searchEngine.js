@@ -9,6 +9,12 @@ export function textSearch(tools, query) {
     for (const field of TEXT_FIELDS) {
       if (String(tool[field] || '').toLowerCase().includes(q)) return true;
     }
+    // Machine tool number — match the bare number ("31") or the "T31" form.
+    const mtn = tool.machine_tool_number;
+    if (mtn !== null && mtn !== undefined && mtn !== '') {
+      const s = String(mtn).toLowerCase();
+      if (s.includes(q) || `t${s}`.includes(q)) return true;
+    }
     if (Array.isArray(tool.tags) && tool.tags.some(t => t.toLowerCase().includes(q))) return true;
     if (Array.isArray(tool.material_suitability) && tool.material_suitability.some(m => m.toLowerCase().includes(q))) return true;
     return false;

@@ -192,6 +192,57 @@ export function generateId() {
   return `${hex()}${hex()}-${hex()}-4${hex().slice(1)}-${(Math.floor(Math.random() * 4) + 8).toString(16)}${hex().slice(1)}-${hex()}${hex()}${hex()}`;
 }
 
+// ─── Machine tool numbers ─────────────────────────────────────────────────
+// The machine tool number is what the CNC machine reads to call a tool
+// (`post-process.number` in the Fusion JSON). It is completely separate from
+// the internal `id` and the ProShop `product-id`. Numbers start at 30 and skip
+// the reserved set below, which is held back for machine-specific use.
+export const RESERVED_MACHINE_NUMBERS = [98, 99, 100];
+const RESERVED_SET = new Set(RESERVED_MACHINE_NUMBERS);
+
+// Generate a full sequence of machine tool numbers for a renumber/import.
+// Starts at 30, increments by 1, skips the reserved numbers entirely.
+// e.g. 250 tools → [30, 31, ..., 97, 101, 102, ...]
+export function generateMachineNumbers(toolCount) {
+  const numbers = [];
+  let next = 30;
+  while (numbers.length < toolCount) {
+    if (!RESERVED_SET.has(next)) numbers.push(next);
+    next++;
+  }
+  return numbers;
+}
+
+// Find the next available machine tool number given the numbers already in use.
+// Skips both used numbers and the reserved set.
+export function getNextMachineNumber(existingNumbers) {
+  const used = new Set((existingNumbers || []).map(Number).filter(n => !isNaN(n)));
+  let next = 30;
+  while (used.has(next) || RESERVED_SET.has(next)) next++;
+  return next;
+}
+
+// Write a machine tool number into a raw Fusion tool object. Always writes all
+// three post-process fields (number / length-offset / diameter-offset) to the
+// same value, and always writes the linked expression so Fusion's UI keeps the
+// length offset tied to the tool number. Mutates and returns the object.
+export function applyMachineNumberToFusion(fTool, number) {
+  const n = parseInt(number);
+  if (isNaN(n)) return fTool;
+  fTool['post-process'] = {
+    ...(fTool['post-process'] || {}),
+    number: n,
+    'length-offset': n,
+    'diameter-offset': n,
+  };
+  fTool.expressions = {
+    ...(fTool.expressions || {}),
+    tool_number: String(n),
+    tool_lengthOffset: 'tool_number',
+  };
+  return fTool;
+}
+
 // ─── Fusion JSON ↔ internal model ─────────────────────────────────────────
 const FUSION_TYPE_MAP = {
   'flat end mill': 'flat end mill',
@@ -260,6 +311,11 @@ export function fusionToolToInternal(fTool) {
     feed_per_rev: preset.f_n || null,
     cutting_speed: preset.v_c || null,
     tool_number: fTool['post-process']?.number ? String(fTool['post-process'].number) : '',
+    // Machine tool number — output mirror of post-process.number. The metadata
+    // file is the source of truth; this is only a fallback when metadata is missing.
+    machine_tool_number: (fTool['post-process']?.number ?? null) === null
+      ? null
+      : Number(fTool['post-process'].number),
     // Metadata fields default empty — filled from metadata file
     vendor: '',
     product_id: '',
@@ -318,6 +374,14 @@ export function internalToFusionTool(tool) {
   const fusionType = FT_MAP[tool.tool_type] || tool.tool_type;
   const preset = existing['start-values']?.presets?.[0] || {};
 
+  // Machine tool number drives the post-process fields. When present, all three
+  // (number / length-offset / diameter-offset) must be written to the same value,
+  // and the expression link must be kept intact. Falls back to the legacy
+  // freeform `tool_number` field only when no machine number is assigned.
+  const mtn = tool.machine_tool_number;
+  const hasMtn = mtn !== null && mtn !== undefined && mtn !== '' && !isNaN(parseInt(mtn));
+  const mtnInt = hasMtn ? parseInt(mtn) : null;
+
   return {
     ...existing,
     BMC: tool.material || existing.BMC || 'carbide',
@@ -342,7 +406,9 @@ export function internalToFusionTool(tool) {
       tool_shoulderLength: `${tool.shoulder_length || tool.flute_length || 0} in`,
       tool_vendor: `'${tool.location || ''}'`,
       ...(tool.corner_radius ? { tool_cornerRadius: `${tool.corner_radius} in` } : {}),
-      ...(tool.tool_number ? { tool_number: tool.tool_number } : {}),
+      ...(hasMtn
+        ? { tool_number: String(mtnInt), tool_lengthOffset: 'tool_number' }
+        : (tool.tool_number ? { tool_number: tool.tool_number } : {})),
     },
     geometry: {
       ...(existing.geometry || {}),
@@ -391,7 +457,9 @@ export function internalToFusionTool(tool) {
     holder: existing.holder || null,
     'post-process': {
       ...(existing['post-process'] || {}),
-      ...(tool.tool_number ? { number: parseInt(tool.tool_number) || 0 } : {}),
+      ...(hasMtn
+        ? { number: mtnInt, 'length-offset': mtnInt, 'diameter-offset': mtnInt }
+        : (tool.tool_number ? { number: parseInt(tool.tool_number) || 0 } : {})),
     },
   };
 }
@@ -431,6 +499,11 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     preset_name: meta.preset_name || '',
     ooh: meta.ooh ?? null,
     // Metadata-only fields
+    // Machine tool number: metadata is the source of truth — it wins over the
+    // value mirrored from the Fusion JSON on any conflict.
+    machine_tool_number: (meta.machine_tool_number ?? fusionInternal.machine_tool_number ?? null) === null
+      ? null
+      : Number(meta.machine_tool_number ?? fusionInternal.machine_tool_number),
     notes: meta.notes || '',
     last_used_job: meta.last_used_job || '',
     preferred_machine: meta.preferred_machine || '',
@@ -479,6 +552,9 @@ export function splitToFusionAndMetadata(tool) {
     backside_capable: tool.backside_capable || false,
     grouping: tool.grouping || '',
     preset_name: tool.preset_name || '',
+    // Machine tool number — persisted here as the source of truth, independent
+    // of what gets written to the Fusion JSON.
+    machine_tool_number: (tool.machine_tool_number ?? null) === null ? null : Number(tool.machine_tool_number),
     notes: tool.notes || '',
     last_used_job: tool.last_used_job || '',
     preferred_machine: tool.preferred_machine || '',
@@ -543,6 +619,7 @@ export function newTool(toolType = 'flat end mill') {
     grouping: '',
     proshot_id: '',
     location: '',
+    machine_tool_number: null,
     spindle_speed: null,
     cutting_feedrate: null,
     plunge_feedrate: null,
@@ -644,5 +721,6 @@ export const FIELD_LABELS = {
   axial_distance: 'Axial Distance (in)',
   grouping: 'ProShop Group',
   tool_number: 'Tool Number',
+  machine_tool_number: 'Machine Tool #',
   preset_name: 'Preset Name',
 };

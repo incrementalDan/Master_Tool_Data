@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UploadCloud } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool } from '../schema/toolSchema.js';
+import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers } from '../schema/toolSchema.js';
 import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
 import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
 
@@ -93,11 +93,16 @@ export default function ImportFlow() {
 
   const skipProShop = () => setStep(3);
 
-  // ── Step 3: Review & Export ───────────────────────────────────────────
+  // ── Step 4: Assign machine numbers, then save ─────────────────────────
+  // Numbers are assigned in current import (array) order, starting at #30 and
+  // skipping the reserved numbers. The metadata file is the source of truth.
+  const machineNumbers = generateMachineNumbers(fusionTools.length);
+
   const handleSaveToDrive = async () => {
     setSaving(true);
     try {
-      await saveFullLibrary(fusionTools);
+      const numbered = fusionTools.map((t, i) => ({ ...t, machine_tool_number: machineNumbers[i] }));
+      await saveFullLibrary(numbered);
       navigate('/');
     } catch (err) {
       setParseError(err.message);
@@ -115,10 +120,10 @@ export default function ImportFlow() {
 
       {/* Step indicators */}
       <div className="import-steps mb-20">
-        {[1, 2, 3].map(n => (
+        {[1, 2, 3, 4].map(n => (
           <div key={n} className={`import-step ${step === n ? 'active' : step > n ? 'done' : ''}`}>
             <div className="import-step-num">{step > n ? '✓' : n}</div>
-            <span>{n === 1 ? 'Import Fusion' : n === 2 ? 'Merge ProShop' : 'Review & Save'}</span>
+            <span>{n === 1 ? 'Import Fusion' : n === 2 ? 'Merge ProShop' : n === 3 ? 'Review' : 'Machine Numbers'}</span>
           </div>
         ))}
       </div>
@@ -294,11 +299,59 @@ export default function ImportFlow() {
           </div>
 
           <div className="flex gap-8 mt-16">
-            <button className="btn btn-primary btn-lg" onClick={handleSaveToDrive} disabled={saving || isSaving}>
-              {saving || isSaving ? 'Saving to Drive…' : `Save ${fusionTools.length} Tools to Drive →`}
+            <button className="btn btn-primary btn-lg" onClick={() => setStep(4)}>
+              Continue → Assign Machine Numbers
             </button>
             <button className="btn btn-secondary" onClick={() => navigate('/')}>
               Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Step 4 ──────────────────────────────────────────────────────── */}
+      {step === 4 && (
+        <div className="card">
+          <h3 style={{ marginBottom: 8 }}>Assign Machine Tool Numbers</h3>
+          <p className="text-sub text-sm mb-16">
+            This will number all {fusionTools.length} tools starting at <strong>#30</strong> in import order,
+            skipping <strong>98, 99, and 100</strong> (reserved for machine-specific use). The same value is
+            written to the tool number, length offset, and diameter offset so the machine reads them as locked.
+          </p>
+
+          <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
+            <table className="match-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Description</th>
+                  <th>Type</th>
+                  <th>Current</th>
+                  <th>New Machine #</th>
+                </tr>
+              </thead>
+              <tbody>
+                {fusionTools.map((t, i) => (
+                  <tr key={t.id}>
+                    <td className="text-sub text-xs">{i + 1}</td>
+                    <td className="truncate" style={{ maxWidth: 220 }}>{t.description || '—'}</td>
+                    <td className="text-xs text-sub">{t.tool_type}</td>
+                    <td className="text-xs text-sub">
+                      {(t.machine_tool_number ?? null) === null ? '—' : `T${t.machine_tool_number}`}
+                    </td>
+                    <td className="font-mono" style={{ color: 'var(--green)' }}>T{machineNumbers[i]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex gap-8 mt-16">
+            <button className="btn btn-primary btn-lg" onClick={handleSaveToDrive} disabled={saving || isSaving}>
+              {saving || isSaving ? 'Saving to Drive…' : `Assign & Save ${fusionTools.length} Tools →`}
+            </button>
+            <button className="btn btn-secondary" onClick={() => setStep(3)} disabled={saving || isSaving}>
+              Back
             </button>
           </div>
         </div>
@@ -423,8 +476,6 @@ function matchProShopToTools(psRows, tools) {
     }
   }
 
-  const unmatchedRows = psRows.filter((_, i) => !matched.find(m => m.psRow === psRows[i]) && !matched.some(m => m.psRow === psRows[i]));
-  // Rebuild properly
   const matchedPsRows = new Set(matched.map(m => m.psRow));
   const unmatched = psRows
     .filter(r => !matchedPsRows.has(r))

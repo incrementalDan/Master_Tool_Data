@@ -4,6 +4,7 @@ import * as aps from '../services/apsService.js';
 import {
   validateTool, generateId,
   fusionToolToInternal, mergeFusionAndMetadata, splitToFusionAndMetadata,
+  getNextMachineNumber, generateMachineNumbers, applyMachineNumberToFusion,
 } from '../schema/toolSchema.js';
 
 const AppContext = createContext(null);
@@ -216,6 +217,24 @@ export function AppProvider({ children }) {
     dispatch({ type: 'SAVE_START' });
     try {
       const fusionList = await downloadFusionList();
+
+      // Always assign the next available machine tool number at the moment of
+      // save (not when the form opened) so concurrent adds don't collide. The
+      // number is *always* app-managed — any value carried in on the incoming
+      // tool (e.g. a number copied from a job file in the Sync flow) is stale
+      // and must be ignored. The freshly-downloaded library is the authority for
+      // which numbers are taken; we union it with the in-memory list to be safe.
+      const usedNumbers = new Set();
+      for (const f of fusionList) {
+        const n = f['post-process']?.number;
+        if (n !== null && n !== undefined && n !== '') usedNumbers.add(Number(n));
+      }
+      for (const t of toolsRef.current) {
+        const n = t.machine_tool_number;
+        if (n !== null && n !== undefined && n !== '') usedNumbers.add(Number(n));
+      }
+      created.machine_tool_number = getNextMachineNumber([...usedNumbers]);
+
       const { fusionTool, metadataTool } = splitToFusionAndMetadata(created);
       const idx = fusionList.findIndex(t => t.guid === created.id);
       if (idx >= 0) fusionList[idx] = fusionTool;
@@ -245,6 +264,7 @@ export function AppProvider({ children }) {
       id: generateId(),
       description: `${source.description || 'Tool'} (copy)`,
       _fusionRaw: undefined,
+      machine_tool_number: null, // assign a fresh number on save — never reuse the source's
       merge_history: [],
       created_at: now,
       updated_at: now,
@@ -335,6 +355,45 @@ export function AppProvider({ children }) {
     }
   }, [uploadFusionList, notify]);
 
+  // Reassign machine tool numbers to every tool starting at #30, in current
+  // library (array) order, skipping the reserved numbers. Destructive — used
+  // only by the Renumber Library action and the initial-import flow. Always
+  // re-reads from APS immediately before writing.
+  const renumberLibrary = useCallback(async () => {
+    dispatch({ type: 'SAVE_START' });
+    try {
+      const fusionList = await downloadFusionList();
+      const metaList = googleRef.current ? await driveService.loadMetadata() : [];
+      const metaById = new Map(metaList.map(m => [m.id, m]));
+      const numbers = generateMachineNumbers(fusionList.length);
+
+      fusionList.forEach((fTool, i) => {
+        const num = numbers[i];
+        applyMachineNumberToFusion(fTool, num);
+        const id = fTool.guid;
+        const meta = metaById.get(id) || { id };
+        metaById.set(id, { ...meta, machine_tool_number: num });
+      });
+
+      await uploadFusionList(fusionList);
+      if (googleRef.current) await driveService.saveAllMetadata([...metaById.values()]);
+
+      // Rebuild the in-memory library so the UI reflects the new numbers.
+      const tools = fusionList.map(fTool => {
+        const internal = fusionToolToInternal(fTool);
+        return mergeFusionAndMetadata(internal, metaById.get(internal.id) || null);
+      });
+      dispatch({ type: 'SET_TOOLS', tools });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify(`Renumbered ${fusionList.length} tools starting at #30`, 'success');
+      return fusionList.length;
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Renumber failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  }, [downloadFusionList, uploadFusionList, notify]);
+
   const clearError = useCallback(() => dispatch({ type: 'CLEAR_ERROR' }), []);
 
   return (
@@ -353,6 +412,7 @@ export function AppProvider({ children }) {
       mergeTool,
       deleteTool,
       saveFullLibrary,
+      renumberLibrary,
       clearError,
       notify,
       dismissToast,

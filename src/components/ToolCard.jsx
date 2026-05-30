@@ -40,8 +40,15 @@ export default function ToolCard({ tool, variant = 'grid' }) {
     </div>
   );
 
+  const hasMachineNum = tool.machine_tool_number !== null && tool.machine_tool_number !== undefined && tool.machine_tool_number !== '';
+
   const badges = (
     <div className="tool-card-meta">
+      {hasMachineNum && (
+        <span className="meta-badge font-mono" title="Machine Tool #" style={{ borderColor: 'var(--orange)', color: 'var(--orange)' }}>
+          T{tool.machine_tool_number}
+        </span>
+      )}
       {formatDim(tool.diameter) && <span className="meta-badge">⌀ {formatDim(tool.diameter)}"</span>}
       {tool.number_of_flutes && <span className="meta-badge">{tool.number_of_flutes}FL</span>}
       {tool.vendor && <span className="meta-badge truncate" style={{ maxWidth: 120 }}>{tool.vendor}</span>}
