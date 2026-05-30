@@ -1,12 +1,17 @@
 // Weighted similarity scoring for fuzzy-matching a job tool against the library.
 // Scores are 0–100. Thresholds: ≥80 = likely match, 50–79 = possible match.
+//
+// Matching priority (highest to lowest confidence):
+//   1. proshot_id exact match (Fusion's "product-id" field — stable ProShop number)
+//   2. GUID exact match
+//   3. Geometry fuzzy match (type + diameter + flutes + OAL + vendor + description)
 
 const WEIGHTS = {
   tool_type: 30,
   diameter: 20,
   number_of_flutes: 10,
   overall_length: 8,
-  product_id: 12,
+  proshot_id: 12,   // secondary fuzzy signal (primary is exact match above)
   vendor: 10,
   description: 10,
 };
@@ -42,7 +47,7 @@ export function scoreSimilarity(a, b) {
     a.number_of_flutes != null && a.number_of_flutes === b.number_of_flutes ? 1 : 0
   );
   score += WEIGHTS.overall_length * numericSim(a.overall_length, b.overall_length, 0.01);
-  score += WEIGHTS.product_id * stringSim(a.product_id, b.product_id);
+  score += WEIGHTS.proshot_id * stringSim(a.proshot_id, b.proshot_id);
   score += WEIGHTS.vendor * stringSim(a.vendor, b.vendor);
   score += WEIGHTS.description * stringSim(a.description, b.description);
   return Math.min(100, Math.round(score));
@@ -54,6 +59,39 @@ export function findTopMatches(importedTool, libraryTools, maxResults = 3) {
     .filter(s => s.score >= 30)
     .sort((a, b) => b.score - a.score)
     .slice(0, maxResults);
+}
+
+// Primary API: tries all match methods in priority order.
+// Returns { tool, confidence, method, candidates }
+// confidence: 'exact' | 'fuzzy' | 'none'
+// method: 'product-id' | 'guid' | 'fuzzy' | 'none'
+export function matchTool(incomingTool, libraryTools) {
+  // 1. proshot_id (Fusion product-id) exact match
+  if (incomingTool.proshot_id) {
+    const match = libraryTools.find(
+      m => m.proshot_id && m.proshot_id === incomingTool.proshot_id
+    );
+    if (match) return { tool: match, confidence: 'exact', method: 'product-id', candidates: [] };
+  }
+
+  // 2. GUID exact match
+  if (incomingTool.id) {
+    const match = libraryTools.find(m => m.id === incomingTool.id);
+    if (match) return { tool: match, confidence: 'exact', method: 'guid', candidates: [] };
+  }
+
+  // 3. Geometry fuzzy match
+  const candidates = findTopMatches(incomingTool, libraryTools, 5);
+  if (candidates.length > 0) {
+    return {
+      tool: candidates[0].tool,
+      confidence: 'fuzzy',
+      method: 'fuzzy',
+      candidates,
+    };
+  }
+
+  return { tool: null, confidence: 'none', method: 'none', candidates: [] };
 }
 
 export const MATCH_THRESHOLD_LIKELY = 80;

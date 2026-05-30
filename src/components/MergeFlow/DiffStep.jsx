@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle, RefreshCw } from 'lucide-react';
 import { FIELD_LABELS } from '../../schema/toolSchema.js';
 
 const DIFF_SECTIONS = [
@@ -49,7 +49,6 @@ const DIFF_SECTIONS = [
   },
 ];
 
-// Fields to never show in the diff (structural / managed internally)
 const EXCLUDED = new Set([
   'id', 'tool_type', 'created_at', 'updated_at', 'updated_by', 'revision_notes',
   'merge_history', '_fusionRaw', 'location',
@@ -60,9 +59,7 @@ function formatValue(v) {
   if (Array.isArray(v)) return v.length ? v.join(', ') : '—';
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
   const n = Number(v);
-  if (!isNaN(n) && v !== '') {
-    return Math.round(n * 10000) / 10000;
-  }
+  if (!isNaN(n) && v !== '') return Math.round(n * 10000) / 10000;
   return String(v);
 }
 
@@ -76,7 +73,11 @@ function valuesEqual(a, b) {
   return false;
 }
 
-export default function DiffStep({ importedTool, masterTool, onConfirm, onBack }) {
+export default function DiffStep({
+  importedTool, masterTool, onConfirm, onBack, onSkip,
+  masterUpdated = false, isFetchingLive = false,
+  isLastItem = false, queuePosition = null,
+}) {
   const diffs = useMemo(() => {
     const result = {};
     for (const section of DIFF_SECTIONS) {
@@ -102,7 +103,7 @@ export default function DiffStep({ importedTool, masterTool, onConfirm, onBack }
     return next;
   });
 
-  const toggleSection = (sectionKey, fields) => {
+  const toggleSection = (sectionKey) => {
     const sectionFields = diffs[sectionKey] || [];
     const allOn = sectionFields.every(f => selected.has(f));
     setSelected(prev => {
@@ -113,25 +114,46 @@ export default function DiffStep({ importedTool, masterTool, onConfirm, onBack }
     });
   };
 
+  if (isFetchingLive) {
+    return (
+      <div className="loading-screen" style={{ minHeight: 160 }}>
+        <div className="spinner" />
+        <span className="text-sub text-sm">Fetching live master from APS…</span>
+      </div>
+    );
+  }
+
   if (totalChanged === 0) {
     return (
       <div>
-        <h3 className="import-section-title">No Differences Found</h3>
+        <h3 className="import-section-title">No Differences</h3>
         <p className="text-sub text-sm mb-20">
-          The imported tool's values match the master library. There is nothing to merge.
+          The imported tool's values already match the master. Nothing to merge.
         </p>
-        <button className="btn btn-ghost btn-sm" onClick={onBack}><ArrowLeft size={14} /> Back</button>
+        <div className="flex gap-8">
+          <button className="btn btn-ghost btn-sm" onClick={onBack}><ArrowLeft size={14} /> Back</button>
+          {onSkip && (
+            <button className="btn btn-ghost btn-sm" onClick={onSkip}>Skip →</button>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
     <div>
+      {masterUpdated && (
+        <div className="diff-updated-notice mb-12">
+          <RefreshCw size={13} /> Master was updated since your session started — showing latest version.
+        </div>
+      )}
+
       <div className="diff-header mb-16">
         <div>
           <h3 className="import-section-title" style={{ marginBottom: 4 }}>Review Changes</h3>
           <p className="text-sub text-sm">
-            {totalChanged} field{totalChanged !== 1 ? 's' : ''} differ. Select which ones to apply to master.
+            {totalChanged} field{totalChanged !== 1 ? 's' : ''} differ.
+            {queuePosition && <span style={{ marginLeft: 6 }}>({queuePosition})</span>}
           </p>
         </div>
         <div className="diff-col-labels">
@@ -154,7 +176,7 @@ export default function DiffStep({ importedTool, masterTool, onConfirm, onBack }
                   type="checkbox"
                   checked={allOn}
                   ref={el => { if (el) el.indeterminate = !allOn && someOn; }}
-                  onChange={() => toggleSection(section.key, changed)}
+                  onChange={() => toggleSection(section.key)}
                 />
               </label>
               <Icon size={14} className="panel-header-icon" />
@@ -164,7 +186,7 @@ export default function DiffStep({ importedTool, masterTool, onConfirm, onBack }
             {section.advisory && (
               <div className="diff-advisory">
                 <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-                Speeds & feeds are job-specific. Verify these values are appropriate for all uses of this tool before committing.
+                Speeds & feeds are job-specific. Verify these values work for all uses of this tool before committing.
               </div>
             )}
             <div className="diff-rows">
@@ -191,16 +213,17 @@ export default function DiffStep({ importedTool, masterTool, onConfirm, onBack }
       <div className="diff-summary-bar">
         <div className="flex items-center gap-8">
           <button className="btn btn-ghost btn-sm" onClick={onBack}><ArrowLeft size={14} /> Back</button>
-          <span className="text-sub text-sm">
-            {selected.size} of {totalChanged} changes selected
-          </span>
+          {onSkip && (
+            <button className="btn btn-ghost btn-sm" onClick={onSkip}>Skip</button>
+          )}
+          <span className="text-sub text-sm">{selected.size} of {totalChanged} changes selected</span>
         </div>
         <button
           className="btn btn-primary"
           disabled={selected.size === 0}
           onClick={() => onConfirm(selected)}
         >
-          Continue to Commit →
+          {isLastItem ? 'Review & Commit →' : 'Review & Commit →'}
         </button>
       </div>
     </div>
