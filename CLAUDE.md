@@ -4,7 +4,7 @@
 
 A web application for managing a CNC cutting tool library. It replaces a fragmented, manual workflow where tools are pulled from a master Fusion library, modified per-job, and rarely synced back — causing duplicates and data loss.
 
-The app reads and writes directly to JSON files stored on Google Drive, which Fusion 360 can also read. A separate metadata JSON on the same Drive stores additional fields beyond what Fusion supports. The app acts as the single source of truth, keeping everything in sync across the team.
+The Fusion tool library JSON lives in Autodesk cloud (BIM 360 / ACC) and is accessed via the Autodesk Platform Services (APS) Data Management API. Tool metadata that Fusion doesn't support (notes, tags, ProShop ID, preferred machine, etc.) is stored in a separate `tool_metadata.json` on Google Drive. The app acts as the single source of truth across both files.
 
 This module is also the foundation of a future in-house ERP system. ProShop will continue to be used for inventory and purchasing in the interim, so ProShop import/export must always be maintained.
 
@@ -14,47 +14,83 @@ This module is also the foundation of a future in-house ERP system. ProShop will
 
 Current workflow:
 
-1. Open master tool library in Fusion 360 (stored on cloud)
+1. Open master tool library in Fusion 360 (stored in Autodesk cloud)
 1. Copy a tool into a job file
 1. Edit speeds, feeds, and other details for that job
 1. Forget (or avoid) syncing changes back to master
 1. Result: outdated master, lost edits, duplicates everywhere
 
-This app fixes that by being the authoritative place to manage tools, with a proper merge/compare workflow for committing changes back to the master.
+This app fixes that by being the authoritative place to manage tools, with a proper compare/merge workflow (Phase 2) for committing proven job values back to master.
 
 -----
 
 ## Security Model
 
-The app is hosted on GitHub Pages (static, client-side only). Access to tool data requires signing in with a Google account that has been granted access to the shared Google Drive folder. Unauthorized visitors get a login screen — nothing else. No API keys are exposed in the code. This is sufficient security for an internal shop tool.
+The app is hosted on GitHub Pages (static, client-side only). Access requires signing in with an Autodesk account that has access to the team's hub/project. Unauthorized visitors get a login screen — nothing else. No API keys or tokens are ever persisted to localStorage or cookies. Google OAuth is optional (metadata only) and does not gate library access.
 
 -----
 
 ## Architecture
 
 ```
+Autodesk cloud (BIM 360 / ACC)
+└── fusion_tool_library.json     ← Fusion 360 reads this; app reads/writes via APS Data Management API
+
 Google Drive (shared team folder)
-├── fusion_tool_library.json     ← Fusion 360 reads this directly
-└── tool_metadata.json           ← Extra fields Fusion doesn't support
+└── tool_metadata.json           ← Extra fields Fusion doesn't support (optional, can be skipped)
 
 Web App (GitHub Pages, client-side only)
-├── Google OAuth login (must have Drive folder access)
-├── Loads both JSON files into memory on login
-├── All search/filter runs in memory — no Drive calls during search
-├── Writes changes back to Drive on save
-└── Phase 2: Compare/merge interface for syncing job edits to master
+├── APS PKCE OAuth login (required — gates all library access)
+├── Google OAuth login (optional — only needed for metadata)
+├── Loads both files into memory on login
+├── All search/filter runs in memory — no API calls during search
+├── Writes changes back to their respective services on save
+└── Phase 2: Queue-based compare/merge for syncing job edits to master ✅
 ```
 
-The full tool list (~250 tools) is loaded into memory once on login. All search and filtering is client-side and instant. Drive is only called on load and on save.
+The full tool list (~250 tools) is loaded once on login. All search and filtering is client-side and instant.
 
 -----
 
 ## Tech Stack
 
-- **Frontend**: React (hosted on GitHub Pages, use HashRouter)
-- **Storage**: Google Drive API (two JSON files)
-- **Auth**: Google OAuth — user signs in with Google account that has Drive folder access
+- **Frontend**: React + Vite (hosted on GitHub Pages — use HashRouter, not BrowserRouter)
+- **Fusion library storage**: Autodesk Platform Services (APS) Data Management API
+- **Metadata storage**: Google Drive API v3 (single file, optional)
+- **Auth**: Two separate flows:
+  - APS PKCE OAuth (`Single Page App` type — no client secret) — required
+  - Google OAuth implicit flow via `@react-oauth/google` — optional
+- **Icons**: `lucide-react` for UI icons; custom SVG silhouettes for 26 tool types in `ToolTypeIcon.jsx`
 - **No backend server** — everything runs client-side
+
+-----
+
+## Environment Variables
+
+Required in `.env` (never commit this file — use `.env.example` as template):
+
+```
+VITE_APS_CLIENT_ID=           # APS app client ID (Single Page App type)
+VITE_APS_CALLBACK_URL=        # Must match APS app callback exactly, incl. trailing slash
+VITE_GOOGLE_CLIENT_ID=        # Google OAuth client ID (optional — for metadata)
+VITE_METADATA_FILE_ID=        # Google Drive file ID for tool_metadata.json (optional)
+```
+
+APS setup: create a "Single Page App" at https://aps.autodesk.com — **not** Web App. PKCE requires SPA type. Register the callback URL (GitHub Pages URL for deploy, `http://localhost:5173/Master_Tool_Data/` for dev).
+
+Google setup: authorized JavaScript origins must include `https://incrementaldan.github.io` (no path, no trailing slash).
+
+-----
+
+## Token & Storage Security Rules
+
+**These are non-negotiable — do not change without understanding the implications:**
+
+- APS token lives in `window._apsToken` (memory only). Never write it to localStorage, sessionStorage, or cookies.
+- The `aps_code_verifier` and `aps_nonce` use sessionStorage only during the OAuth redirect — they are deleted immediately after the callback is processed.
+- The library location (`{ hubId, projectId, folderId, itemId, fileName }`) is safe to store in localStorage (`aps_library_location`) — it is not sensitive.
+- **Always re-download the Fusion library from APS immediately before uploading a new version.** Never write from the in-memory copy alone — a teammate may have saved changes since your last load.
+- Never add extra fields to the Fusion JSON. Fusion 360 validates its JSON strictly and will flag tools as errors if unrecognized fields are present. All extra fields go in `tool_metadata.json` on Google Drive only.
 
 -----
 
@@ -62,213 +98,216 @@ The full tool list (~250 tools) is loaded into memory once on login. All search 
 
 ### Tool Types
 
-Each tool has a `type` field that determines which fields are required and which search facets are shown. Tool types match what Fusion 360 and ProShop support:
+26 types, all lowercase with spaces (not underscores). Grouped by family:
 
-- `flat_end_mill`
-- `ball_end_mill`
-- `bull_nose_end_mill`
-- `face_mill`
-- `drill`
-- `spot_drill`
-- `chamfer_mill`
-- `tap`
-- `boring_bar`
-- `turning_insert`
+**End mills**: `flat end mill`, `ball end mill`, `bull nose end mill`, `radius mill`, `tapered mill`, `chamfer mill`, `lollipop mill`, `dovetail`, `slot/key cutter`, `form mill`, `thread mill`
 
-### Core Fields (all tool types)
+**Circle-segment**: `circle segment barrel`, `circle segment lens`, `circle segment oval`, `circle segment taper`
+
+**Drills / hole tools**: `drill`, `center drill`, `spot drill`, `reamer`, `counter bore`, `counter sink`
+
+**Taps**: `tap form`, `tap cut`
+
+**Other**: `boring head`, `turning general`, `face mill`
+
+The full list is in `TOOL_TYPES` exported from `src/schema/toolSchema.js` (which re-exports from `tool-extractor.tsx`).
+
+### Internal Tool Object (merged Fusion + metadata)
+
+Key fields — see `src/schema/toolSchema.js` for the complete list:
 
 ```json
 {
-  "id": "unique string ID — never changes after creation",
-  "type": "flat_end_mill",
+  "id": "UUID — permanent, links Fusion JSON and metadata JSON",
+  "tool_type": "flat end mill",
   "description": "tool description",
-  "vendor": "manufacturer name",
-  "product_id": "part number",
+  "vendor": "manufacturer name (metadata)",
+  "product_id": "manufacturer EDP/part number (metadata)",
+  "proshot_id": "ProShop ID = Fusion's product-id field (metadata + Fusion)",
   "diameter": 0.5,
-  "overall_length": 3.0,
   "flute_length": 1.0,
+  "overall_length": 3.0,
   "number_of_flutes": 4,
   "material": "carbide",
   "coating": "AlTiN",
+  "spindle_speed": 8000,
+  "cutting_feedrate": 50.0,
+  "feed_per_tooth": 0.003,
+  "plunge_feedrate": 10.0,
+  "notes": "freeform notes (metadata only)",
+  "tags": ["roughing", "stainless"],
+  "preferred_machine": "M300",
+  "material_suitability": ["316L", "6061"],
+  "last_used_job": "1042",
+  "updated_by": "username",
+  "revision_notes": "what changed and why",
+  "merge_history": [],
   "created_at": "ISO timestamp",
   "updated_at": "ISO timestamp"
 }
 ```
 
-### Speeds & Feeds Fields
+### Fusion JSON ↔ Internal Model ↔ ProShop
+
+The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/schema/toolSchema.js` handle all conversion. Key field mappings:
+
+| Internal Field   | Fusion JSON Field       | ProShop Field     | Notes                                  |
+|------------------|-------------------------|-------------------|----------------------------------------|
+| `id`             | `guid`                  | —                 | Permanent, never changes               |
+| `tool_type`      | `type`                  | —                 | Mapped via `FUSION_TYPE_MAP`           |
+| `description`    | `description`           | `Tool Description`|                                        |
+| `diameter`       | `geometry.DC`           | `Diameter`        |                                        |
+| `flute_length`   | `geometry.LCF`          | `Flute Length`    |                                        |
+| `overall_length` | `geometry.OAL`          | `Overall Length`  |                                        |
+| `number_of_flutes`| `geometry.NOF`         | `# Flutes`        |                                        |
+| `spindle_speed`  | `start-values.presets[0].n` | `RPM`        |                                        |
+| `cutting_feedrate`| `start-values.presets[0].v_f` | `Feed Rate` |                                       |
+| `vendor`         | — (metadata only)       | `Manufacturer`    |                                        |
+| `product_id`     | — (metadata only)       | `Part Number`     | Manufacturer EDP number                |
+| `proshot_id`     | `product-id`            | ProShop ID        | **Primary match key for Phase 2**      |
+
+**Important**: `proshot_id` (our field) = Fusion's `product-id` field (shown as "Vendor Number" in Fusion UI). This is the ProShop-assigned ID and is the primary key for Phase 2 tool matching. It is stored in both the Fusion JSON and in metadata.
+
+### Metadata Schema (`tool_metadata.json`)
+
+Stored in a single file on Google Drive. The file contains an array of metadata objects — one per tool. The `id` field matches the tool's `guid` in the Fusion library.
 
 ```json
 {
-  "cutting_speed": 0,
-  "spindle_speed": 0,
-  "feed_per_tooth": 0,
-  "feed_per_rev": 0,
-  "cutting_feedrate": 0,
-  "lead_in_feedrate": 0,
-  "lead_out_feedrate": 0,
-  "ramp_feedrate": 0,
-  "plunge_feedrate": 0,
-  "depth_of_cut": 0,
-  "width_of_cut": 0
+  "id": "matches tool guid in Fusion library",
+  "vendor": "",
+  "product_id": "",
+  "proshot_id": "",
+  "coating": "",
+  "notes": "",
+  "last_used_job": "",
+  "preferred_machine": "",
+  "material_suitability": [],
+  "tags": [],
+  "updated_by": "",
+  "revision_notes": "",
+  "merge_history": [
+    {
+      "merged_at": "ISO timestamp",
+      "merged_by": "user email or name",
+      "fields_changed": ["spindle_speed", "cutting_feedrate"],
+      "revision_note": "Job 1042 — proven at these speeds",
+      "previous_values": { "spindle_speed": 8000 }
+    }
+  ]
 }
 ```
 
-### Fusion 360 ↔ ProShop Field Mapping
+-----
 
-This mapping is already defined in the tool extractor JSX — import and use it here.
+## Source Layout
 
-|App Field         |Fusion 360 Field|ProShop Field     |
-|------------------|----------------|------------------|
-|`description`     |`description`   |`Tool Description`|
-|`diameter`        |`diameter`      |`Diameter`        |
-|`flute_length`    |`fluteLength`   |`Flute Length`    |
-|`overall_length`  |`overallLength` |`Overall Length`  |
-|`number_of_flutes`|`numberOfFlutes`|`# Flutes`        |
-|`spindle_speed`   |`spindleSpeed`  |`RPM`             |
-|`cutting_feedrate`|`feedrate`      |`Feed Rate`       |
-|`vendor`          |`vendor`        |`Manufacturer`    |
-|`product_id`      |`productId`     |`Part Number`     |
+```
+src/
+  App.jsx                         # Root: auth gates, routing, topbar, ToastStack
+  main.jsx
+  index.css                       # All styles — single file, CSS custom properties, dark theme
 
-### Metadata Fields (stored in `tool_metadata.json`, not in Fusion JSON)
+  context/
+    AppContext.jsx                 # Global state + all async actions (saveTool, mergeTool, etc.)
 
-```json
-{
-  "id": "matches tool ID in fusion_tool_library.json",
-  "notes": "freeform notes",
-  "last_used_job": "job number or program name",
-  "preferred_machine": "M300 / R650 / etc",
-  "material_suitability": ["316L", "6061", "4140"],
-  "proshot_id": "ProShop internal ID if applicable",
-  "tags": ["roughing", "finishing", "stainless"],
-  "updated_by": "username",
-  "revision_notes": "what changed and why"
-}
+  schema/
+    toolSchema.js                 # Tool types, field labels, fusionToolToInternal,
+                                  # internalToFusionTool, splitToFusionAndMetadata,
+                                  # mergeFusionAndMetadata, validateTool, generateId
+
+  services/
+    apsService.js                 # APS PKCE OAuth + Data Management API read/write
+    driveService.js               # Google Drive API (metadata only)
+    searchEngine.js               # In-memory faceted search + filter logic
+    duplicateDetector.js          # Weighted similarity scoring for Phase 2 matching
+    mergeQueue.js                 # Phase 2 queue state: parseIncoming, buildQueue
+
+  utils/
+    fusionExport.js               # exportSingleTool, exportFullLibrary,
+                                  # copyToolToClipboard, copyToolsToClipboard
+    proShopExport.js              # ProShop CSV export (always maintain this)
+
+  components/
+    LandingPage.jsx               # Search + facets + sort + grid/list toggle
+    ToolDetail.jsx                # Detail view + edit trigger + merge history
+    ToolForm.jsx                  # Edit form with sticky action bar + dirty guard
+    ToolCard.jsx                  # Grid and list card variants with hover actions
+    ToolTypeGrid.jsx              # Tool type selector tiles
+    FacetFilters.jsx              # Cascading facet filter UI
+    AddToolFlow.jsx               # New tool flow (extractor or manual)
+    ImportFlow.jsx                # Bulk Fusion JSON / ProShop CSV import
+    Toast.jsx                     # Fixed bottom-right toast stack
+
+    icons/
+      ToolTypeIcon.jsx            # 26 hand-crafted SVG tool silhouettes
+
+    MergeFlow/                    # Phase 2: sync job values to master
+      index.jsx                   # Queue orchestration, live APS fetch, step routing
+      ImportStep.jsx              # Clipboard paste (Ctrl+V) + file upload
+      MatchStep.jsx               # Match confirmation (fuzzy matches only)
+      DiffStep.jsx                # Side-by-side diff with per-field checkboxes
+      CommitStep.jsx              # Revision note + "Commit & Next / Finish"
+      NewToolStep.jsx             # No-match detected: add to library or skip
+      QueuePanel.jsx              # Batch queue sidebar with status badges
+      SummaryStep.jsx             # End-of-batch summary + bulk clipboard copy
+
+tool-extractor.tsx                # Source of truth for tool types, field visibility,
+                                  # Fusion↔ProShop mapping, and image extraction UI
 ```
 
 -----
 
 ## Search & Filter System
 
-This is a core feature — not an afterthought. The landing page IS the search page.
+The landing page IS the search page. All filtering runs in memory — no API calls during search.
 
-### How It Works
+**Cascading faceted search**: each filter narrows the available options for all subsequent filters based on the current result set. Select "Flat End Mill" → type "0.5" diameter → flute count filter shows only counts that exist among 0.5" flat end mills in the library.
 
-**Cascading faceted search.** Each filter selection narrows the available options in all subsequent filters based on what’s currently in the filtered result set. If you select “Flat End Mill” and type “0.5” for diameter, the flute count filter only shows flute counts that actually exist among 0.5” flat end mills in the library. Add 3 flutes, and the length filter only shows lengths available for 0.5” 3-flute flat end mills.
+Filters: tool type (tile grid) → diameter → flutes → flute length → overall length → material → coating → vendor → preferred machine → material suitability → tags.
 
-**All filtering runs in memory.** The full tool list is loaded on login. No Drive API calls during search.
-
-### Landing Page Layout
-
-1. **Global search bar at top** — searches across all fields (vendor part numbers, descriptions, any text field). This is for when you know a specific thing but not the geometry.
-1. **Tool type icons** — large clickable icons for each tool type. Selecting one is the first filter step and determines which facets appear below.
-1. **Contextual facet filters** — appear after tool type is selected, ordered by most commonly used first. Each facet shows only values that exist in the current filtered set:
-- Diameter (numeric input with autocomplete from available values)
-- Number of flutes (pills/chips showing only available counts)
-- Flute length / cutting length
-- Overall length
-- Material (carbide, HSS, etc.)
-- Coating
-- Vendor
-- Preferred machine (M300, R650)
-- Material suitability (what it cuts)
-- Tags
-1. **Live results** — tool cards update instantly as each filter is applied. Show count of matching tools.
-1. **Autocomplete behavior** — when a filter field has only a small number of remaining options (e.g., 5 or fewer), it switches from a text input to showing all options as selectable chips.
-1. **Clear filters** — easy way to reset individual filters or all at once.
-1. **Add New Tool button** — prominent on landing page. Opens the tool extractor flow.
-
-### Search Index
-
-Build a client-side search index on load:
-
-- For each field that is filterable, collect all unique values present in the library
-- For cascading behavior: when filters are applied, recompute available options for all remaining facets from the current filtered subset
-- Numeric fields (diameter, flute count, length) support both exact match and typed entry with autocomplete
+Sort options: recently updated, diameter ↑/↓, vendor A–Z, description A–Z. View modes: grid, list. Both persist in localStorage.
 
 -----
 
-## ProShop Integration (Ongoing)
+## ProShop Integration
 
-ProShop is not being replaced — it continues managing inventory and purchasing. This app owns tool data and specifications. The relationship:
+ProShop manages inventory and purchasing. This app owns tool specifications. Relationship:
 
-- **Import**: One-time bulk import of current ProShop tool library to populate this app initially
-- **Export single tool**: Downloads a ProShop-compatible CSV row
-- **Export full library**: Downloads a complete ProShop CSV for bulk re-import (used after initial merge to normalize both systems)
-- **Ongoing**: New tools created in this app get exported to ProShop manually as needed
+- **Export single tool**: ProShop-compatible CSV row (always maintain this)
+- **Export full library**: Complete ProShop CSV for bulk re-import
+- **Import**: One-time Fusion JSON or ProShop CSV import to populate initial library
 
-ProShop export must always be maintained even as this app evolves toward a future ERP.
-
------
-
-## Initial Data Population (One-Time, ~250 Tools)
-
-This is part of Phase 1. The process:
-
-1. **Import Fusion library** — upload `fusion_tool_library.json` directly; app parses and loads all tools
-1. **Merge ProShop library** — upload a ProShop CSV export; app matches tools by geometry/description and fills in missing fields (especially ProShop IDs and any fields ProShop has that Fusion doesn’t)
-1. **Review & clean up** — use the app’s search and edit features to review merged results, fill gaps, correct errors
-1. **Export full library to ProShop** — generate a complete ProShop CSV to re-import and normalize ProShop to match
-1. **Export to Fusion** — write the cleaned library back to `fusion_tool_library.json` on Drive; Fusion picks it up automatically
-
-The import/merge UI is a one-time setup flow, but the import logic (parse Fusion JSON, parse ProShop CSV) stays in the codebase for future use.
+ProShop export must never be removed even as the app evolves toward a future ERP.
 
 -----
 
-## Phases
+## Phase 2 — Compare & Merge ✅ Implemented
 
-### Phase 1 — Foundation ✅ Build This First
+When a programmer proves better speeds/feeds in a job, they can sync those values back to master:
 
-- Google OAuth login
-- Load both JSON files from Drive into memory
-- **Landing page = cascading faceted search** (as described above)
-- Tool detail view — all fields merged, organized into sections
-- Edit tool inline — save back to Drive
-- Add new tool — tool extractor flow + manual form
-- Delete tool with confirmation
-- Validation (required fields, numeric ranges)
-- Export single tool: Fusion JSON, ProShop CSV
-- Export full library: ProShop CSV bulk export
-- **One-time import flow**: Fusion JSON import, ProShop CSV import with merge
+1. Copy tool(s) from Fusion 360 (Ctrl+V copies to clipboard as JSON)
+2. Go to "Sync Job" in the app → paste (Ctrl+V anywhere on the import screen)
+3. App builds a batch queue — auto-matches each tool by priority:
+   - **`proshot_id` exact match** — primary (Fusion's `product-id` field)
+   - **GUID exact match** — secondary
+   - **Geometry fuzzy match** — fallback, requires user confirmation
+   - **No match** → route to "Add to Library" flow
+4. For each matched tool: side-by-side diff → select which fields to commit → enter revision note
+5. Live re-fetch from APS before each diff (60-second cache) — detects if a teammate updated master during the session
+6. Summary screen shows results; "Copy All Committed Tools to Clipboard" pastes back into Fusion
 
-### Phase 2 — Compare & Merge
-
-- Import a modified tool JSON from a job file
-- Diff against current master
-- Side-by-side comparison, user selects what to commit
-- Write back to both JSON files
-- Duplicate detection
-
-### Phase 3 — Program Indexing (future)
-
-- Read program CSVs from Drive folder
-- Parse tool IDs, link to tools
-- Show “Used in programs: 1042, 1087” on tool detail
-- Background refresh
-
-### Phase 4 — Speeds & Feeds Intelligence (future)
-
-- Material-based recommendations, TBD
+Merge history is appended to `merge_history[]` in `tool_metadata.json`.
 
 -----
 
 ## Key Constraints
 
-- Tool IDs are permanent — they link the two JSON files and future features
-- Always read before write — prevents teammates overwriting each other
-- Never put extra fields in the Fusion JSON — only Fusion-native fields go there
-- GitHub Pages = HashRouter, not BrowserRouter
-- Keep `.env` out of git — use `.env.example`
-- ProShop export is a permanent feature, never remove it
-
------
-
-## Existing Code to Incorporate
-
-The `tool-extractor.jsx` file contains:
-
-- Full tool type definitions
-- All required fields per tool type
-- Fusion 360 ↔ ProShop field mapping table
-- Image → tool data extraction UI (keep this as a feature, launched from Add New Tool)
-
-Start from this file as the data schema foundation.
+- **Tool IDs are permanent** — they are the Fusion `guid`, link the two JSON files, and are referenced in merge history. Never reassign them.
+- **APS token in memory only** — `window._apsToken`, never localStorage.
+- **Always re-download before write** — call `downloadFusionList()` immediately before any `uploadFusionList()`.
+- **No extra fields in Fusion JSON** — Fusion validates strictly. Only Fusion-native fields go in the library file; everything else goes in `tool_metadata.json`.
+- **`proshot_id` is the primary match key** — it is Fusion's `product-id` field (the ProShop-assigned number). Do not confuse with `product_id` (manufacturer EDP number, metadata-only).
+- **GitHub Pages = HashRouter** — never switch to BrowserRouter.
+- **ProShop export is permanent** — never remove `proShopExport.js` or the export buttons.
+- **Speeds & feeds display**: round to 4 decimal places for display using `round4()` — values are stored at full precision.
