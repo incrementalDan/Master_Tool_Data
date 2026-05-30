@@ -70,6 +70,7 @@ export async function handleCallback(code) {
   const token = await res.json();
   token.expires_at = Date.now() + token.expires_in * 1000;
   window._apsToken = token;
+  if (token.refresh_token) sessionStorage.setItem('aps_refresh_token', token.refresh_token);
   return token;
 }
 
@@ -89,7 +90,27 @@ export async function refreshAccessToken() {
   const newToken = await res.json();
   newToken.expires_at = Date.now() + newToken.expires_in * 1000;
   window._apsToken = newToken;
+  if (newToken.refresh_token) {
+    sessionStorage.setItem('aps_refresh_token', newToken.refresh_token);
+  }
   return newToken;
+}
+
+// Silently restore a session after a page refresh using the stored refresh token.
+// Returns true if the session was restored, false if a full sign-in is needed.
+export async function tryRestoreSession() {
+  if (window._apsToken) return true;
+  const storedRefresh = sessionStorage.getItem('aps_refresh_token');
+  if (!storedRefresh) return false;
+  window._apsToken = { refresh_token: storedRefresh, expires_at: 0 };
+  try {
+    await refreshAccessToken();
+    return true;
+  } catch {
+    window._apsToken = null;
+    sessionStorage.removeItem('aps_refresh_token');
+    return false;
+  }
 }
 
 export async function getValidToken() {
@@ -103,6 +124,7 @@ export async function getValidToken() {
 
 export function signOut() {
   window._apsToken = null;
+  sessionStorage.removeItem('aps_refresh_token');
 }
 
 export function isAuthenticated() {

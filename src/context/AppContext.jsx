@@ -94,7 +94,12 @@ export function AppProvider({ children }) {
       aps.handleCallback(code)
         .then(() => dispatch({ type: 'APS_AUTHED' }))
         .catch(err => dispatch({ type: 'AUTH_ERROR', error: err.message }));
+      return;
     }
+    // No callback code — try to silently restore from a stored refresh token
+    aps.tryRestoreSession().then(restored => {
+      if (restored) dispatch({ type: 'APS_AUTHED' });
+    });
   }, []);
 
   // ─── Toasts ───────────────────────────────────────────────────────────────
