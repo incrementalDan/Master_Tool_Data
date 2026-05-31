@@ -84,6 +84,17 @@ Google setup: authorized JavaScript origins must include `https://incrementaldan
 
 -----
 
+## API Keys & Secrets
+
+The real API keys are stored in GitHub Actions Secrets — not in the repo.
+A `.env` file exists locally for development only. Do not modify, recreate, or delete it.
+If a new API key or environment variable is needed:
+- Tell me the variable name needed
+- I will add it to both the local `.env` and GitHub Secrets manually
+- Do not attempt to add secrets yourself
+
+-----
+
 ## Token & Storage Security Rules
 
 **These are non-negotiable — do not change without understanding the implications:**
