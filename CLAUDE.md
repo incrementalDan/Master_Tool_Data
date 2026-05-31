@@ -95,6 +95,20 @@ If a new API key or environment variable is needed:
 
 -----
 
+## Deployment
+
+Deployment is **fully automated via GitHub Actions** — see `.github/workflows/deploy.yml`.
+
+- **Trigger**: every push to `main` (and manual "Run workflow" from the Actions tab) builds the site and publishes it to GitHub Pages.
+- **Secrets**: the workflow injects `VITE_APS_CLIENT_ID`, `VITE_APS_CALLBACK_URL`, `VITE_GOOGLE_CLIENT_ID`, and `VITE_METADATA_FILE_ID` from **GitHub Actions Secrets** at build time. These live in the repo Settings, not in the code.
+- **Pages source**: repo Settings → Pages → Source is set to **GitHub Actions** (not "Deploy from a branch"). The old `gh-pages` branch is no longer the publish source.
+
+**To get changes live**: merge to `main`. That's it — Actions builds and deploys automatically.
+
+**⛔ Do NOT run `npm run deploy` from an agent, cloud, or CI session.** That command bakes env vars from a local `.env`, which does not exist in those environments — it will publish a credential-less build and break the live site (shows "Configuration Required"). `npm run deploy` is only valid as a manual fallback on a developer machine that has a complete local `.env`. The normal, preferred path is always GitHub Actions.
+
+-----
+
 ## Token & Storage Security Rules
 
 **These are non-negotiable — do not change without understanding the implications:**
@@ -324,4 +338,4 @@ Merge history is appended to `merge_history[]` in `tool_metadata.json`.
 - **GitHub Pages = HashRouter** — never switch to BrowserRouter.
 - **ProShop export is permanent** — never remove `proShopExport.js` or the export buttons.
 - **Speeds & feeds display**: round to 4 decimal places for display using `round4()` — values are stored at full precision.
-- **Deploy after every change** — run `npm run deploy` after each set of committed changes so the live GitHub Pages site (`gh-pages` branch) stays in sync with the development branch. Do this automatically without being asked.
+- **Deployment is automated via GitHub Actions** — do NOT run `npm run deploy` from agent/cloud/CI sessions. See the Deployment section below.
