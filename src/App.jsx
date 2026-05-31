@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
-import { Wrench, FolderOpen, LogOut, Library, Upload, Settings, GitMerge } from 'lucide-react';
+import { Wrench, FolderOpen, LogOut, Library, Upload, Settings, GitMerge, RefreshCw } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import ToastStack from './components/Toast.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
@@ -97,6 +97,7 @@ function AppShell() {
 
 function TopBar({ user, googleAuthenticated, onSignOut, onChangeLibrary }) {
   const location = useLocation();
+  const { loadTools, isLoading } = useApp();
   const onLanding = location.pathname === '/';
   return (
     <header className="topbar">
@@ -121,6 +122,15 @@ function TopBar({ user, googleAuthenticated, onSignOut, onChangeLibrary }) {
       <a href="#/settings" className={`topbar-link ${location.pathname === '/settings' ? 'active' : ''}`}>
         <Settings size={14} /> Settings
       </a>
+      <button
+        className="btn btn-ghost btn-sm"
+        onClick={() => loadTools()}
+        disabled={isLoading}
+        title="Re-download the library from Autodesk to pick up changes made in Fusion 360"
+      >
+        <RefreshCw size={14} style={isLoading ? { animation: 'spin 1s linear infinite' } : {}} />
+        {isLoading ? 'Refreshing…' : 'Refresh'}
+      </button>
       <button className="btn btn-ghost btn-sm" onClick={onChangeLibrary} title="Pick a different tool library file">
         <FolderOpen size={14} /> Change library
       </button>
