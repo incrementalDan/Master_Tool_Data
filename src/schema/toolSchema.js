@@ -286,6 +286,7 @@ export function fusionToolToInternal(fTool) {
 
   return {
     id: fTool.guid,
+    unit: fTool.unit || 'inches',
     tool_type: toolType,
     description: fTool.description || '',
     diameter: geo.DC || null,
@@ -574,6 +575,7 @@ export function newTool(toolType = 'flat end mill') {
   const now = new Date().toISOString();
   return {
     id: generateId(),
+    unit: 'inches',
     tool_type: toolType,
     description: '',
     diameter: null,

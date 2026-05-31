@@ -38,6 +38,46 @@ const ALWAYS_FIELDS = ['description', 'vendor', 'product_id', 'proshot_id', 'coa
 const SPEEDS_FIELDS = ['spindle_speed', 'cutting_feedrate', 'feed_per_tooth', 'feed_per_rev', 'plunge_feedrate', 'ramp_feedrate', 'lead_in_feedrate', 'lead_out_feedrate', 'cutting_speed', 'depth_of_cut', 'width_of_cut'];
 const META_FIELDS = ['notes', 'tags', 'preferred_machine', 'last_used_job', 'revision_notes', 'distributor', 'distributor_stock_num', 'cost', 'location'];
 
+// Unit suffix for each numeric field (inch mode)
+const FIELD_UNIT_IN = {
+  diameter: 'in', flute_length: 'in', overall_length: 'in', shank_diameter: 'in',
+  corner_radius: 'in', shoulder_length: 'in', tip_diameter: 'in', lower_radius: 'in',
+  upper_radius: 'in', profile_radius: 'in', axial_distance: 'in', ooh: 'in',
+  depth_of_cut: 'in', width_of_cut: 'in', min_thread_pitch: 'in', max_thread_pitch: 'in',
+  cutting_feedrate: 'in/min', plunge_feedrate: 'in/min', ramp_feedrate: 'in/min',
+  lead_in_feedrate: 'in/min', lead_out_feedrate: 'in/min',
+  feed_per_tooth: 'in', feed_per_rev: 'in',
+  tip_angle: '°', taper_angle: '°', helix_angle: '°',
+  spindle_speed: 'RPM', cutting_speed: 'SFM',
+};
+const FIELD_UNIT_MM_OVERRIDES = {
+  diameter: 'mm', flute_length: 'mm', overall_length: 'mm', shank_diameter: 'mm',
+  corner_radius: 'mm', shoulder_length: 'mm', tip_diameter: 'mm', lower_radius: 'mm',
+  upper_radius: 'mm', profile_radius: 'mm', axial_distance: 'mm', ooh: 'mm',
+  depth_of_cut: 'mm', width_of_cut: 'mm', min_thread_pitch: 'mm', max_thread_pitch: 'mm',
+  cutting_feedrate: 'mm/min', plunge_feedrate: 'mm/min', ramp_feedrate: 'mm/min',
+  lead_in_feedrate: 'mm/min', lead_out_feedrate: 'mm/min',
+  feed_per_tooth: 'mm', feed_per_rev: 'mm',
+  cutting_speed: 'm/min',
+};
+
+// Strip the trailing " (unit)" from a field label so we can show unit separately
+function baseLabel(field) {
+  return (FIELD_LABELS[field] || field).replace(/ \([^)]+\)$/, '');
+}
+
+function fieldUnit(field, isMetric) {
+  return isMetric
+    ? (FIELD_UNIT_MM_OVERRIDES[field] ?? FIELD_UNIT_IN[field] ?? '')
+    : (FIELD_UNIT_IN[field] ?? '');
+}
+
+function round4display(v) {
+  if (v === null || v === undefined || v === '') return '';
+  const n = Number(v);
+  return isNaN(n) ? v : parseFloat(n.toFixed(4));
+}
+
 export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
   const { tools } = useApp();
   const [data, setData] = useState({ ...tool });
@@ -371,20 +411,32 @@ function Section({ title, icon: Icon, children }) {
 }
 
 function NumField({ field, data, setField, required }) {
+  const [focused, setFocused] = useState(false);
+  const isMetric = data.unit === 'millimeters';
+  const unit = fieldUnit(field, isMetric);
+  const raw = data[field];
+  const displayValue = focused ? (raw ?? '') : round4display(raw);
+
   return (
     <div className="field-group">
       <label className="field-label">
-        {FIELD_LABELS[field] || field}
+        {baseLabel(field)}
         {required && <span className="required"> *</span>}
       </label>
-      <input
-        className="field-input"
-        type="number"
-        step={FIELD_STEP[field] || '0.001'}
-        value={data[field] ?? ''}
-        onChange={e => setField(field, e.target.value === '' ? null : parseFloat(e.target.value))}
-        placeholder="—"
-      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <input
+          className="field-input"
+          style={{ flex: 1 }}
+          type="number"
+          step={FIELD_STEP[field] || '0.001'}
+          value={displayValue}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onChange={e => setField(field, e.target.value === '' ? null : parseFloat(e.target.value))}
+          placeholder="—"
+        />
+        {unit && <span className="text-xs text-sub" style={{ whiteSpace: 'nowrap' }}>{unit}</span>}
+      </div>
     </div>
   );
 }
