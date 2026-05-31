@@ -22,6 +22,11 @@ export default function ToolDetail() {
   const [copyLabel, setCopyLabel] = useState('Copy to Clipboard');
 
   const tool = tools.find(t => t.id === id);
+  const isMetric = tool?.unit === 'millimeters';
+  const lenUnit = isMetric ? 'mm' : 'in';
+  const feedUnit = isMetric ? 'mm/min' : 'in/min';
+  const feedPerUnit = isMetric ? 'mm' : 'in';
+  const speedUnit = isMetric ? 'm/min' : 'SFM';
 
   if (!tool) {
     return (
@@ -159,36 +164,36 @@ export default function ToolDetail() {
 
           <Section title="Geometry" icon={Ruler}>
             <div className="detail-fields">
-              <Field label="Diameter" value={tool.diameter} unit="in" />
-              <Field label="Flute Length" value={tool.flute_length} unit="in" />
-              <Field label="Overall Length" value={tool.overall_length} unit="in" />
+              <Field label="Diameter" value={round4(tool.diameter)} unit={lenUnit} />
+              <Field label="Flute Length" value={round4(tool.flute_length)} unit={lenUnit} />
+              <Field label="Overall Length" value={round4(tool.overall_length)} unit={lenUnit} />
               <Field label="# Flutes" value={tool.number_of_flutes} />
-              <Field label="Shank Ø" value={tool.shank_diameter} unit="in" />
-              {(tool.corner_radius !== null && tool.corner_radius !== undefined) && <Field label="Corner Radius" value={tool.corner_radius} unit="in" />}
-              {tool.shoulder_length && <Field label="Shoulder Length" value={tool.shoulder_length} unit="in" />}
-              {tool.tip_angle && <Field label="Tip Angle" value={tool.tip_angle} unit="°" />}
-              {tool.taper_angle && <Field label="Taper Angle" value={tool.taper_angle} unit="°" />}
-              {tool.tip_diameter && <Field label="Tip Diameter" value={tool.tip_diameter} unit="in" />}
-              {tool.lower_radius && <Field label="Lower Radius" value={tool.lower_radius} unit="in" />}
-              {tool.upper_radius && <Field label="Upper Radius" value={tool.upper_radius} unit="in" />}
-              {tool.profile_radius && <Field label="Profile Radius" value={tool.profile_radius} unit="in" />}
-              {tool.axial_distance && <Field label="Axial Distance" value={tool.axial_distance} unit="in" />}
+              <Field label="Shank Ø" value={round4(tool.shank_diameter)} unit={lenUnit} />
+              {(tool.corner_radius !== null && tool.corner_radius !== undefined) && <Field label="Corner Radius" value={round4(tool.corner_radius)} unit={lenUnit} />}
+              {tool.shoulder_length && <Field label="Shoulder Length" value={round4(tool.shoulder_length)} unit={lenUnit} />}
+              {tool.tip_angle && <Field label="Tip Angle" value={round4(tool.tip_angle)} unit="°" />}
+              {tool.taper_angle && <Field label="Taper Angle" value={round4(tool.taper_angle)} unit="°" />}
+              {tool.tip_diameter && <Field label="Tip Diameter" value={round4(tool.tip_diameter)} unit={lenUnit} />}
+              {tool.lower_radius && <Field label="Lower Radius" value={round4(tool.lower_radius)} unit={lenUnit} />}
+              {tool.upper_radius && <Field label="Upper Radius" value={round4(tool.upper_radius)} unit={lenUnit} />}
+              {tool.profile_radius && <Field label="Profile Radius" value={round4(tool.profile_radius)} unit={lenUnit} />}
+              {tool.axial_distance && <Field label="Axial Distance" value={round4(tool.axial_distance)} unit={lenUnit} />}
             </div>
           </Section>
 
           <Section title="Speeds & Feeds" icon={Gauge}>
             <div className="detail-fields">
               <Field label="Spindle Speed" value={round4(tool.spindle_speed)} unit="RPM" />
-              <Field label="Cutting Feedrate" value={round4(tool.cutting_feedrate)} unit="in/min" />
-              <Field label="Feed per Tooth" value={round4(tool.feed_per_tooth)} unit="in" />
-              <Field label="Feed per Rev" value={round4(tool.feed_per_rev)} unit="in" />
-              <Field label="Plunge Feedrate" value={round4(tool.plunge_feedrate)} unit="in/min" />
-              <Field label="Ramp Feedrate" value={round4(tool.ramp_feedrate)} unit="in/min" />
-              <Field label="Lead-In Feedrate" value={round4(tool.lead_in_feedrate)} unit="in/min" />
-              <Field label="Lead-Out Feedrate" value={round4(tool.lead_out_feedrate)} unit="in/min" />
-              <Field label="Surface Speed" value={round4(tool.cutting_speed)} unit="SFM" />
-              <Field label="Depth of Cut" value={round4(tool.depth_of_cut)} unit="in" />
-              <Field label="Width of Cut" value={round4(tool.width_of_cut)} unit="in" />
+              <Field label="Cutting Feedrate" value={round4(tool.cutting_feedrate)} unit={feedUnit} />
+              <Field label="Feed per Tooth" value={round4(tool.feed_per_tooth)} unit={feedPerUnit} />
+              <Field label="Feed per Rev" value={round4(tool.feed_per_rev)} unit={feedPerUnit} />
+              <Field label="Plunge Feedrate" value={round4(tool.plunge_feedrate)} unit={feedUnit} />
+              <Field label="Ramp Feedrate" value={round4(tool.ramp_feedrate)} unit={feedUnit} />
+              <Field label="Lead-In Feedrate" value={round4(tool.lead_in_feedrate)} unit={feedUnit} />
+              <Field label="Lead-Out Feedrate" value={round4(tool.lead_out_feedrate)} unit={feedUnit} />
+              <Field label="Surface Speed" value={round4(tool.cutting_speed)} unit={speedUnit} />
+              <Field label="Depth of Cut" value={round4(tool.depth_of_cut)} unit={lenUnit} />
+              <Field label="Width of Cut" value={round4(tool.width_of_cut)} unit={lenUnit} />
             </div>
           </Section>
 
@@ -197,7 +202,7 @@ export default function ToolDetail() {
               <Field label="Tool Material" value={tool.material} />
               <Field label="Coating" value={tool.coating} />
               <Field label="Coolant" value={tool.coolant} />
-              <Field label="Helix Angle" value={tool.helix_angle} unit="°" />
+              <Field label="Helix Angle" value={round4(tool.helix_angle)} unit="°" />
               <Field label="Flute Type" value={tool.flute_type} />
               <Field label="Cutting Direction" value={tool.cutting_direction} />
               <Field label="Center Cutting" value={tool.center_cutting != null ? (tool.center_cutting ? 'Yes' : 'No') : null} />
