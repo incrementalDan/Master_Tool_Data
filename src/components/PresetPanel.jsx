@@ -489,7 +489,7 @@ function NField({ label, value, unit, onChange }) {
           value={displayed}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          onChange={e => onChange(e.target.value === '' ? 0 : parseFloat(e.target.value))}
+          onChange={e => onChange(e.target.value === '' ? null : parseFloat(e.target.value))}
           placeholder="0"
         />
         {unit && <span className="text-xs text-sub" style={{ whiteSpace: 'nowrap' }}>{unit}</span>}
