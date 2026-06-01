@@ -13,7 +13,7 @@ function formatDim(v) {
 
 export default function ToolCard({ tool, variant = 'grid' }) {
   const navigate = useNavigate();
-  const { cloneTool, notify } = useApp();
+  const { cloneTool, notify, holders } = useApp();
   const label = TOOL_TYPE_LABELS[tool.tool_type] || tool.tool_type;
 
   const open = () => navigate(`/tool/${tool.id}`);
@@ -42,6 +42,10 @@ export default function ToolCard({ tool, variant = 'grid' }) {
 
   const hasMachineNum = tool.machine_tool_number !== null && tool.machine_tool_number !== undefined && tool.machine_tool_number !== '';
 
+  const selectedHolder = tool.selected_holder_guid
+    ? holders.find(h => h.guid === tool.selected_holder_guid)
+    : null;
+
   const badges = (
     <div className="tool-card-meta">
       {hasMachineNum && (
@@ -58,6 +62,11 @@ export default function ToolCard({ tool, variant = 'grid' }) {
       )}
       {tool.proshot_id && (
         <span className="meta-badge meta-badge-orange font-mono">{tool.proshot_id}</span>
+      )}
+      {selectedHolder && (
+        <span className="meta-badge truncate" style={{ maxWidth: 160 }} title={`Holder: ${selectedHolder.description}`}>
+          {selectedHolder.description}
+        </span>
       )}
     </div>
   );

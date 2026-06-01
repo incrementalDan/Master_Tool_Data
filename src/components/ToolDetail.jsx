@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
-  Tag, Ruler, Settings2, StickyNote, Clock, ExternalLink, Hash,
+  Tag, Ruler, Settings2, StickyNote, Clock, ExternalLink, Hash, Package,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
+import HolderPicker from './HolderPicker.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
@@ -16,7 +17,7 @@ export default function ToolDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { tools, saveTool, deleteTool, cloneTool, isSaving, notify } = useApp();
+  const { tools, saveTool, deleteTool, cloneTool, isSaving, notify, holders, holderLibraryLocation } = useApp();
   const [editing, setEditing] = useState(searchParams.get('edit') === '1');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -136,7 +137,7 @@ export default function ToolDetail() {
           className="btn btn-secondary btn-sm"
           onClick={async () => {
             try {
-              await copyToolToClipboard(tool);
+              await copyToolToClipboard(tool, holders);
               setCopyLabel('Copied!');
               setTimeout(() => setCopyLabel('Copy to Clipboard'), 2000);
             } catch {
@@ -146,7 +147,7 @@ export default function ToolDetail() {
         >
           <Copy size={14} /> {copyLabel}
         </button>
-        <button className="btn btn-secondary btn-sm" onClick={() => { exportFusion(tool); notify('Exported Fusion JSON', 'success'); }}>
+        <button className="btn btn-secondary btn-sm" onClick={() => { exportFusion(tool, holders); notify('Exported Fusion JSON', 'success'); }}>
           <Download size={14} /> Download JSON
         </button>
         <button className="btn btn-secondary btn-sm" style={{ color: 'var(--orange)' }} onClick={() => { exportProShop(tool); notify('Exported ProShop CSV', 'success'); }}>
@@ -202,6 +203,18 @@ export default function ToolDetail() {
               {tool.axial_distance && <Field label="Axial Distance" value={round4(tool.axial_distance)} unit={lenUnit} />}
             </div>
           </Section>
+
+          <HolderSection
+            tool={tool}
+            holders={holders}
+            holderLibrarySetupComplete={!!holderLibraryLocation}
+            onSelectHolder={async (guid) => {
+              try {
+                await saveTool({ ...tool, selected_holder_guid: guid });
+                notify('Holder updated', 'success');
+              } catch { /* toast handled in context */ }
+            }}
+          />
 
           <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving} />
 
@@ -301,6 +314,70 @@ export default function ToolDetail() {
         </div>
       )}
     </div>
+  );
+}
+
+function gaugeToInches(gaugeLength, unit) {
+  return unit === 'millimeters' ? gaugeLength / 25.4 : gaugeLength;
+}
+
+function HolderSection({ tool, holders, holderLibrarySetupComplete, onSelectHolder }) {
+  const navigate = useNavigate();
+  const [showPicker, setShowPicker] = useState(false);
+
+  const selectedHolder = tool.selected_holder_guid
+    ? holders.find(h => h.guid === tool.selected_holder_guid)
+    : null;
+
+  if (!holderLibrarySetupComplete) {
+    return (
+      <Section title="Holder" icon={Package}>
+        <span className="text-sub text-sm">
+          Holder library not configured —{' '}
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ padding: 0, textDecoration: 'underline', fontWeight: 400, fontSize: 13 }}
+            onClick={() => navigate('/settings')}
+          >
+            set up in Settings
+          </button>
+        </span>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title="Holder" icon={Package}>
+      {selectedHolder ? (
+        <div style={{ marginBottom: 10 }}>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
+            {selectedHolder.description}
+          </div>
+          <div className="text-sub text-sm">
+            Gauge Length: {gaugeToInches(selectedHolder.gaugeLength ?? 0, selectedHolder.unit).toFixed(3)} in
+            {selectedHolder.vendor ? ` · ${selectedHolder.vendor}` : ''}
+          </div>
+        </div>
+      ) : (
+        <div className="detail-field-empty text-sm" style={{ marginBottom: 10 }}>
+          No holder selected
+        </div>
+      )}
+      <button className="btn btn-secondary btn-sm" onClick={() => setShowPicker(true)}>
+        {selectedHolder ? 'Change Holder' : 'Select Holder'}
+      </button>
+
+      {showPicker && (
+        <HolderPicker
+          currentGuid={tool.selected_holder_guid || null}
+          onSelect={async (guid) => {
+            setShowPicker(false);
+            await onSelectHolder(guid);
+          }}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
+    </Section>
   );
 }
 

@@ -321,6 +321,9 @@ export function fusionToolToInternal(fTool) {
     machine_tool_number: (fTool['post-process']?.number ?? null) === null
       ? null
       : Number(fTool['post-process'].number),
+    // Holder link — read from Fusion JSON holder.guid as initial default;
+    // overridden by metadata.selected_holder_guid when present.
+    selected_holder_guid: fTool.holder?.guid || '',
     // Metadata fields default empty — filled from metadata file
     vendor: '',
     product_id: '',
@@ -527,6 +530,12 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     tags: meta.tags || [],
     updated_by: meta.updated_by || '',
     revision_notes: meta.revision_notes || '',
+    // selected_holder_guid: metadata wins; fall back to what fusionToolToInternal
+    // seeded from holder.guid in the Fusion JSON. An explicit '' in metadata
+    // means the user cleared the holder (distinct from key being absent).
+    selected_holder_guid: meta.selected_holder_guid !== undefined
+      ? meta.selected_holder_guid
+      : fusionInternal.selected_holder_guid,
     merge_history: meta.merge_history || [],
     created_at: meta.created_at || fusionInternal.created_at,
     updated_at: meta.updated_at || fusionInternal.updated_at,
@@ -571,6 +580,8 @@ export function splitToFusionAndMetadata(tool) {
     // Machine tool number — persisted here as the source of truth, independent
     // of what gets written to the Fusion JSON.
     machine_tool_number: (tool.machine_tool_number ?? null) === null ? null : Number(tool.machine_tool_number),
+    // Holder selection — metadata only; '' means explicitly cleared.
+    selected_holder_guid: tool.selected_holder_guid ?? '',
     notes: tool.notes || '',
     last_used_job: tool.last_used_job || '',
     preferred_machine: tool.preferred_machine || '',

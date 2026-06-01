@@ -268,6 +268,13 @@ export async function saveToolLibrary(projectId, folderId, itemId, fileName, too
   });
 }
 
+// ─── Load holder library JSON (same format as tool library, holder entries only) ─
+export async function loadHolderLibrary(projectId, itemId) {
+  const json = await loadToolLibrary(projectId, itemId);
+  const data = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
+  return data.filter(e => e.type === 'holder');
+}
+
 // ─── Optional: current user profile (for display) ────────────────────────────
 export async function getUserProfile() {
   try {
