@@ -456,6 +456,7 @@ export function internalToFusionTool(tool) {
           'use-stepover': preset0base['use-stepover'] ?? false,
           n: tool.spindle_speed ?? preset0base.n ?? 0,
           n_ramp: tool.spindle_speed ?? preset0base.n_ramp ?? 0,
+          'ramp-spindle-speed': 'n',
           v_f: tool.cutting_feedrate ?? preset0base.v_f ?? 0,
           v_f_leadIn: tool.lead_in_feedrate ?? preset0base.v_f_leadIn ?? 0,
           v_f_leadOut: tool.lead_out_feedrate ?? preset0base.v_f_leadOut ?? 0,

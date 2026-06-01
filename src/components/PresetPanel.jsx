@@ -46,7 +46,7 @@ function blankPreset() {
     v_f_transition: 0, v_f_ramp: 0, 'ramp-angle': 2,
     v_f_plunge: 0, f_n: 0, 'v_f_retract': 0,
     'tool-coolant': 'flood', 'use-stepdown': false, 'use-stepover': false,
-    'ramp-spindle-speed': 0,
+    'ramp-spindle-speed': 'n',
   };
 }
 
