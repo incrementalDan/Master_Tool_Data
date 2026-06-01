@@ -51,8 +51,8 @@ export default function ImportStep({ onImported, onCancel }) {
     <div style={{ maxWidth: 520 }}>
       <h3 className="import-section-title">Import Tools from Job</h3>
       <p className="text-sub text-sm mb-20" style={{ lineHeight: 1.7 }}>
-        In Fusion 360, select one or more tools → right-click → <em>Copy</em>. Then paste here.
-        You can also upload a Fusion library JSON file.
+        In Fusion 360, select one or more tools in the tool library → right-click → <em>Copy</em>,
+        then paste here. Accepts Fusion CSV (right-click copy) or Fusion library JSON.
       </p>
 
       {/* Primary: paste zone */}
@@ -73,7 +73,7 @@ export default function ImportStep({ onImported, onCancel }) {
             ref={pasteRef}
             className="field-input"
             style={{ minHeight: 120, fontFamily: 'monospace', fontSize: 11 }}
-            placeholder='Paste Fusion JSON here…'
+            placeholder='Paste Fusion tool data here (CSV from right-click copy, or JSON)…'
             value={pasteText}
             onChange={e => setPasteText(e.target.value)}
             autoFocus
@@ -87,7 +87,7 @@ export default function ImportStep({ onImported, onCancel }) {
               disabled={!pasteText.trim()}
               onClick={() => processRaw(pasteText)}
             >
-              Parse JSON
+              Parse
             </button>
           </div>
         </div>
@@ -107,12 +107,12 @@ export default function ImportStep({ onImported, onCancel }) {
         <input
           ref={fileRef}
           type="file"
-          accept=".json"
+          accept=".json,.csv,.tsv,.txt"
           style={{ display: 'none' }}
           onChange={e => handleFile(e.target.files[0])}
         />
         <UploadCloud size={22} style={{ color: 'var(--text-sub)', marginBottom: 6 }} />
-        <div className="text-sub text-sm">Drop JSON file here or click to browse</div>
+        <div className="text-sub text-sm">Drop Fusion CSV or JSON file here or click to browse</div>
       </div>
 
       {error && (
