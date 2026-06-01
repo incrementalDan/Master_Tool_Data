@@ -1633,3 +1633,53 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   user-select: none;
   color: var(--text);
 }
+
+/* ── fx badge ── */
+.fx-badge {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--blue);
+  border: 1px solid var(--blue);
+  border-radius: 3px;
+  padding: 1px 3px;
+  line-height: 1;
+  flex-shrink: 0;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.fx-badge--hidden {
+  visibility: hidden;
+}
+
+/* ── spindle-speed warning ── */
+.fx-warning {
+  font-size: 10px;
+  color: var(--amber);
+  margin-top: 3px;
+}
+
+/* ── shift+hover formula tooltip ── */
+.formula-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  font-size: 11px;
+  color: var(--text);
+  white-space: nowrap;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  box-shadow: var(--shadow);
+}
+
+.formula-tooltip-key {
+  color: var(--text-sub);
+  margin-right: 6px;
+}
