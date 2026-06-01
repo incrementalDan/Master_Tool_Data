@@ -24,13 +24,16 @@ const COOLANT_OPTS = ['flood', 'mist', 'air', 'none'];
 // Default formula states when opening any preset for editing.
 // 'manual' = user owns this value; 'formula' = calculated from partner.
 const DEFAULT_FX = {
-  n:          'manual',
-  v_c:        'formula',
-  n_ramp:     'formula',
-  v_f:        'formula',
-  f_z:        'manual',
-  v_f_plunge: 'formula',
-  f_n:        'manual',
+  n:              'manual',
+  v_c:            'formula',
+  n_ramp:         'formula',
+  v_f:            'formula',
+  f_z:            'manual',
+  v_f_plunge:     'formula',
+  f_n:            'manual',
+  v_f_leadIn:     'formula',
+  v_f_leadOut:    'formula',
+  v_f_transition: 'formula',
 };
 
 function r4(v) {
@@ -356,14 +359,54 @@ function StatRow({ label, value, unit }) {
   );
 }
 
+// Recomputes all formula-driven fields in a draft given current geometry.
+// Safe to call on mount and whenever diameter / numberOfFlutes change.
+function computeFormulaDraft(draft, fx, diameter, numberOfFlutes) {
+  const d = { ...draft };
+  const n = d.n ?? 0;
+
+  if (fx.v_c    === 'formula') d.v_c    = roundForField('v_c',    rpmToSFM(n, diameter));
+  if (fx.n_ramp === 'formula') d.n_ramp = roundForField('n_ramp', n);
+
+  if (fx.v_f === 'formula')
+    d.v_f = roundForField('v_f', fptToIPM(d.f_z ?? 0, n, numberOfFlutes));
+  else if (fx.f_z === 'formula')
+    d.f_z = roundForField('f_z', ipmToFPT(d.v_f ?? 0, n, numberOfFlutes));
+
+  if (fx.v_f_plunge === 'formula')
+    d.v_f_plunge = roundForField('v_f_plunge', iprToIPM(d.f_n ?? 0, n));
+  else if (fx.f_n === 'formula')
+    d.f_n = roundForField('f_n', ipmToIPR(d.v_f_plunge ?? 0, n));
+
+  const vf = d.v_f ?? 0;
+  if (fx.v_f_leadIn     === 'formula') d.v_f_leadIn     = roundForField('v_f_leadIn',     vf);
+  if (fx.v_f_leadOut    === 'formula') d.v_f_leadOut    = roundForField('v_f_leadOut',    vf);
+  if (fx.v_f_transition === 'formula') d.v_f_transition = roundForField('v_f_transition', vf);
+
+  return d;
+}
+
 // ── Edit card ────────────────────────────────────────────────────────────────
 function EditCard({
   preset, lenUnit, feedUnit, speedUnit,
   diameter, numberOfFlutes,
   onSave, onCancel, isSaving,
 }) {
-  const [draft, setDraft] = useState(() => ({ ...preset }));
   const [fx, setFx] = useState(DEFAULT_FX);
+  const [draft, setDraft] = useState(() =>
+    computeFormulaDraft({ ...preset }, DEFAULT_FX, diameter, numberOfFlutes)
+  );
+
+  // Recalculate formula fields whenever geometry changes (e.g. user edits
+  // number of flutes or diameter in the tool form while a preset is open).
+  const fxRef = useRef(fx);
+  useEffect(() => { fxRef.current = fx; }, [fx]);
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) { isFirstRender.current = false; return; }
+    setDraft(d => computeFormulaDraft(d, fxRef.current, diameter, numberOfFlutes));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diameter, numberOfFlutes]);
 
   // Plain setter for non-formula fields (name, material, checkboxes, coolant,
   // and the independent feedrate fields that have no formula linkage).
@@ -438,6 +481,15 @@ function EditCard({
         newFx.f_n    = 'formula';
       }
     }
+
+    // ── Lead-in / lead-out / transition linkage ─────────────────────────────
+    // One-directional: v_f drives them; they never drive v_f back.
+    // When the user types directly into one (field === that key), newFx already
+    // set it to 'manual' above, so the check below will skip it correctly.
+    const vf = newDraft.v_f ?? draft.v_f ?? 0;
+    if (newFx.v_f_leadIn     !== 'manual') newDraft.v_f_leadIn     = roundForField('v_f_leadIn',     vf);
+    if (newFx.v_f_leadOut    !== 'manual') newDraft.v_f_leadOut    = roundForField('v_f_leadOut',    vf);
+    if (newFx.v_f_transition !== 'manual') newDraft.v_f_transition = roundForField('v_f_transition', vf);
 
     setDraft(newDraft);
     setFx(newFx);
@@ -532,9 +584,21 @@ function EditCard({
             warning={noSpeed ? 'Set spindle speed first' : undefined}
             onChange={v => handleNumChange('f_z', v)}
           />
-          <NField label="Lead-in feedrate"    value={draft.v_f_leadIn}    unit={feedUnit} onChange={v => set('v_f_leadIn', v)} />
-          <NField label="Lead-out feedrate"   value={draft.v_f_leadOut}   unit={feedUnit} onChange={v => set('v_f_leadOut', v)} />
-          <NField label="Transition feedrate" value={draft.v_f_transition} unit={feedUnit} onChange={v => set('v_f_transition', v)} />
+          <NField
+            label="Lead-in feedrate" value={draft.v_f_leadIn} unit={feedUnit}
+            formulaField="v_f_leadIn" formulaState={fx.v_f_leadIn}
+            onChange={v => handleNumChange('v_f_leadIn', v)}
+          />
+          <NField
+            label="Lead-out feedrate" value={draft.v_f_leadOut} unit={feedUnit}
+            formulaField="v_f_leadOut" formulaState={fx.v_f_leadOut}
+            onChange={v => handleNumChange('v_f_leadOut', v)}
+          />
+          <NField
+            label="Transition feedrate" value={draft.v_f_transition} unit={feedUnit}
+            formulaField="v_f_transition" formulaState={fx.v_f_transition}
+            onChange={v => handleNumChange('v_f_transition', v)}
+          />
           <NField label="Ramp feedrate"       value={draft.v_f_ramp}      unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
           <NField label="Ramp angle"          value={draft['ramp-angle']} unit="°"        onChange={v => set('ramp-angle', v)} />
         </div>
