@@ -1,6 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, X, Check, GripVertical, Trash2 } from 'lucide-react';
 import { generateId } from '../schema/toolSchema.js';
+import {
+  rpmToSFM, sfmToRPM,
+  fptToIPM, ipmToFPT,
+  iprToIPM, ipmToIPR,
+  FORMULAS, FIELD_PRECISION, roundForField,
+} from '../utils/speedsAndFeedsCalc.js';
 
 const MATERIALS = [
   'Aluminum', 'Stainless Steel', 'Alloy Steel', 'Mild Steel',
@@ -14,6 +20,18 @@ const MATERIAL_QUERY_MAP = {
 };
 
 const COOLANT_OPTS = ['flood', 'mist', 'air', 'none'];
+
+// Default formula states when opening any preset for editing.
+// 'manual' = user owns this value; 'formula' = calculated from partner.
+const DEFAULT_FX = {
+  n:          'manual',
+  v_c:        'formula',
+  n_ramp:     'formula',
+  v_f:        'formula',
+  f_z:        'manual',
+  v_f_plunge: 'formula',
+  f_n:        'manual',
+};
 
 function r4(v) {
   if (v === null || v === undefined || v === '') return v;
@@ -46,7 +64,7 @@ function blankPreset() {
     v_f_transition: 0, v_f_ramp: 0, 'ramp-angle': 2,
     v_f_plunge: 0, f_n: 0, 'v_f_retract': 0,
     'tool-coolant': 'flood', 'use-stepdown': false, 'use-stepover': false,
-    'ramp-spindle-speed': 0,
+    'ramp-spindle-speed': 'n',
   };
 }
 
@@ -55,6 +73,9 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
   const lenUnit = isMetric ? 'mm' : 'in';
   const feedUnit = isMetric ? 'mm/min' : 'in/min';
   const speedUnit = isMetric ? 'm/min' : 'SFM';
+
+  const diameter = tool.diameter;
+  const numberOfFlutes = tool.number_of_flutes;
 
   // Prefer managed presets array; fall back to raw Fusion JSON for tools loaded
   // before this feature was deployed.
@@ -130,7 +151,6 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
 
   const handleAddClick = () => {
     if (editingId) {
-      // Duplicate the preset currently open in edit mode
       const src = presets.find(p => p.guid === editingId) || blankPreset();
       const np = { ...src, guid: generateId(), name: `${src.name || 'Preset'} (copy)` };
       const next = [...presets, np];
@@ -189,7 +209,7 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
         </div>
       )}
 
-      {/* Inline add prompt (shown when no preset is in edit mode) */}
+      {/* Inline add prompt */}
       {addPromptOpen && (
         <div className="preset-inline-prompt">
           <span className="text-sm text-sub">Copy from:</span>
@@ -234,6 +254,8 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
                     lenUnit={lenUnit}
                     feedUnit={feedUnit}
                     speedUnit={speedUnit}
+                    diameter={diameter}
+                    numberOfFlutes={numberOfFlutes}
                     onSave={handlePresetSave}
                     onCancel={() => setEditingId(null)}
                     isSaving={isSaving}
@@ -335,16 +357,97 @@ function StatRow({ label, value, unit }) {
 }
 
 // ── Edit card ────────────────────────────────────────────────────────────────
-function EditCard({ preset, lenUnit, feedUnit, speedUnit, onSave, onCancel, isSaving }) {
-  const [draft, setDraft] = useState({ ...preset });
+function EditCard({
+  preset, lenUnit, feedUnit, speedUnit,
+  diameter, numberOfFlutes,
+  onSave, onCancel, isSaving,
+}) {
+  const [draft, setDraft] = useState(() => ({ ...preset }));
+  const [fx, setFx] = useState(DEFAULT_FX);
+
+  // Plain setter for non-formula fields (name, material, checkboxes, coolant,
+  // and the independent feedrate fields that have no formula linkage).
   const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
   const setMat = (k, v) => setDraft(d => ({ ...d, material: { ...(d.material || {}), [k]: v } }));
 
   const selectedMat = matchMaterial(draft.material?.query);
 
+  // ── Bidirectional calculation ──────────────────────────────────────────────
+  // Called for every formula-linked field on each keystroke.
+  // The typed field becomes 'manual'; its partner becomes 'formula' and is
+  // immediately recomputed. When n/v_c change, the cutting and plunge feed
+  // groups cascade too.
+  const handleNumChange = (field, value) => {
+    const newDraft = { ...draft, [field]: value };
+    const newFx   = { ...fx,    [field]: 'manual' };
+
+    // Effective spindle speed after this change (used for feed cascades).
+    let n = draft.n ?? 0;
+
+    // ── Speed group ──────────────────────────────────────────────────────────
+    if (field === 'n') {
+      n = value ?? 0;
+      newDraft.v_c   = roundForField('v_c',   rpmToSFM(n, diameter));
+      newFx.v_c      = 'formula';
+      if (fx.n_ramp !== 'manual') {
+        newDraft.n_ramp = roundForField('n_ramp', n);
+        newFx.n_ramp    = 'formula';
+      }
+    } else if (field === 'v_c') {
+      n = roundForField('n', sfmToRPM(value ?? 0, diameter));
+      newDraft.n   = n;
+      newFx.n      = 'formula';
+      if (fx.n_ramp !== 'manual') {
+        newDraft.n_ramp = n;
+        newFx.n_ramp    = 'formula';
+      }
+    }
+    // n_ramp typed directly: just goes manual, no cascade.
+
+    // ── Cutting feed group ───────────────────────────────────────────────────
+    if (field === 'f_z') {
+      newDraft.v_f = roundForField('v_f', fptToIPM(value ?? 0, n, numberOfFlutes));
+      newFx.v_f    = 'formula';
+    } else if (field === 'v_f') {
+      newDraft.f_z = roundForField('f_z', ipmToFPT(value ?? 0, n, numberOfFlutes));
+      newFx.f_z    = 'formula';
+    } else if (field === 'n' || field === 'v_c') {
+      // n changed — cascade whichever side is manual
+      if (fx.f_z === 'manual') {
+        newDraft.v_f = roundForField('v_f', fptToIPM(draft.f_z ?? 0, n, numberOfFlutes));
+        newFx.v_f    = 'formula';
+      } else {
+        newDraft.f_z = roundForField('f_z', ipmToFPT(draft.v_f ?? 0, n, numberOfFlutes));
+        newFx.f_z    = 'formula';
+      }
+    }
+
+    // ── Plunge feed group ────────────────────────────────────────────────────
+    if (field === 'f_n') {
+      newDraft.v_f_plunge = roundForField('v_f_plunge', iprToIPM(value ?? 0, n));
+      newFx.v_f_plunge    = 'formula';
+    } else if (field === 'v_f_plunge') {
+      newDraft.f_n = roundForField('f_n', ipmToIPR(value ?? 0, n));
+      newFx.f_n    = 'formula';
+    } else if (field === 'n' || field === 'v_c') {
+      if (fx.f_n === 'manual') {
+        newDraft.v_f_plunge = roundForField('v_f_plunge', iprToIPM(draft.f_n ?? 0, n));
+        newFx.v_f_plunge    = 'formula';
+      } else {
+        newDraft.f_n = roundForField('f_n', ipmToIPR(draft.v_f_plunge ?? 0, n));
+        newFx.f_n    = 'formula';
+      }
+    }
+
+    setDraft(newDraft);
+    setFx(newFx);
+  };
+
+  const noSpeed = !(draft.n);
+
   return (
     <div className="preset-card preset-card--edit">
-      {/* Header: name input + Save / Cancel */}
+      {/* Header */}
       <div className="preset-edit-header">
         <input
           className="field-input preset-name-input"
@@ -395,9 +498,21 @@ function EditCard({ preset, lenUnit, feedUnit, speedUnit, onSave, onCancel, isSa
       <div className="preset-edit-section">
         <div className="preset-edit-section-label">SPEED</div>
         <div className="preset-edit-grid">
-          <NField label="Spindle speed" value={draft.n} unit="RPM" onChange={v => set('n', v)} />
-          <NField label="Surface speed" value={draft.v_c} unit={speedUnit} onChange={v => set('v_c', v)} />
-          <NField label="Ramp spindle speed" value={draft.n_ramp} unit="RPM" onChange={v => set('n_ramp', v)} />
+          <NField
+            label="Spindle speed" value={draft.n} unit="RPM"
+            formulaField="n" formulaState={fx.n}
+            onChange={v => handleNumChange('n', v)}
+          />
+          <NField
+            label="Surface speed" value={draft.v_c} unit={speedUnit}
+            formulaField="v_c" formulaState={fx.v_c}
+            onChange={v => handleNumChange('v_c', v)}
+          />
+          <NField
+            label="Ramp spindle speed" value={draft.n_ramp} unit="RPM"
+            formulaField="n_ramp" formulaState={fx.n_ramp}
+            onChange={v => handleNumChange('n_ramp', v)}
+          />
         </div>
       </div>
 
@@ -405,13 +520,23 @@ function EditCard({ preset, lenUnit, feedUnit, speedUnit, onSave, onCancel, isSa
       <div className="preset-edit-section">
         <div className="preset-edit-section-label">FEEDRATES</div>
         <div className="preset-edit-grid">
-          <NField label="Cutting feedrate" value={draft.v_f} unit={feedUnit} onChange={v => set('v_f', v)} />
-          <NField label="Feed per tooth" value={draft.f_z} unit={lenUnit} onChange={v => set('f_z', v)} />
-          <NField label="Lead-in feedrate" value={draft.v_f_leadIn} unit={feedUnit} onChange={v => set('v_f_leadIn', v)} />
-          <NField label="Lead-out feedrate" value={draft.v_f_leadOut} unit={feedUnit} onChange={v => set('v_f_leadOut', v)} />
+          <NField
+            label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
+            formulaField="v_f" formulaState={fx.v_f}
+            warning={noSpeed ? 'Set spindle speed first' : undefined}
+            onChange={v => handleNumChange('v_f', v)}
+          />
+          <NField
+            label="Feed per tooth" value={draft.f_z} unit={lenUnit}
+            formulaField="f_z" formulaState={fx.f_z}
+            warning={noSpeed ? 'Set spindle speed first' : undefined}
+            onChange={v => handleNumChange('f_z', v)}
+          />
+          <NField label="Lead-in feedrate"    value={draft.v_f_leadIn}    unit={feedUnit} onChange={v => set('v_f_leadIn', v)} />
+          <NField label="Lead-out feedrate"   value={draft.v_f_leadOut}   unit={feedUnit} onChange={v => set('v_f_leadOut', v)} />
           <NField label="Transition feedrate" value={draft.v_f_transition} unit={feedUnit} onChange={v => set('v_f_transition', v)} />
-          <NField label="Ramp feedrate" value={draft.v_f_ramp} unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
-          <NField label="Ramp angle" value={draft['ramp-angle']} unit="°" onChange={v => set('ramp-angle', v)} />
+          <NField label="Ramp feedrate"       value={draft.v_f_ramp}      unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
+          <NField label="Ramp angle"          value={draft['ramp-angle']} unit="°"        onChange={v => set('ramp-angle', v)} />
         </div>
       </div>
 
@@ -419,8 +544,16 @@ function EditCard({ preset, lenUnit, feedUnit, speedUnit, onSave, onCancel, isSa
       <div className="preset-edit-section">
         <div className="preset-edit-section-label">VERTICAL FEEDRATES</div>
         <div className="preset-edit-grid">
-          <NField label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit} onChange={v => set('v_f_plunge', v)} />
-          <NField label="Plunge feed per rev" value={draft.f_n} unit={`${lenUnit}/rev`} onChange={v => set('f_n', v)} />
+          <NField
+            label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
+            formulaField="v_f_plunge" formulaState={fx.v_f_plunge}
+            onChange={v => handleNumChange('v_f_plunge', v)}
+          />
+          <NField
+            label="Plunge feed per rev" value={draft.f_n} unit={`${lenUnit}/rev`}
+            formulaField="f_n" formulaState={fx.f_n}
+            onChange={v => handleNumChange('f_n', v)}
+          />
         </div>
       </div>
 
@@ -429,19 +562,11 @@ function EditCard({ preset, lenUnit, feedUnit, speedUnit, onSave, onCancel, isSa
         <div className="preset-edit-section-label">PASSES &amp; LINKING</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <label className="preset-check-label">
-            <input
-              type="checkbox"
-              checked={!!draft['use-stepdown']}
-              onChange={e => set('use-stepdown', e.target.checked)}
-            />
+            <input type="checkbox" checked={!!draft['use-stepdown']} onChange={e => set('use-stepdown', e.target.checked)} />
             Use stepdown
           </label>
           <label className="preset-check-label">
-            <input
-              type="checkbox"
-              checked={!!draft['use-stepover']}
-              onChange={e => set('use-stepover', e.target.checked)}
-            />
+            <input type="checkbox" checked={!!draft['use-stepover']} onChange={e => set('use-stepover', e.target.checked)} />
             Use stepover
           </label>
         </div>
@@ -474,11 +599,33 @@ function FGroup({ label, children }) {
   );
 }
 
-function NField({ label, value, unit, onChange }) {
+// NField — numeric input with optional formula badge and shift+hover tooltip.
+// formulaField: key in FORMULAS (enables badge + tooltip + field-specific precision)
+// formulaState: 'formula' | 'manual' — 'formula' shows the fx badge
+// warning: string shown below the input when present (e.g. "Set spindle speed first")
+function NField({ label, value, unit, onChange, formulaField, formulaState, warning }) {
   const [focused, setFocused] = useState(false);
-  const displayed = focused ? (value ?? '') : (r4(value) ?? '');
+  const [shiftHover, setShiftHover] = useState(false);
+
+  const formulaInfo = formulaField ? FORMULAS[formulaField] : null;
+  const prec = formulaField ? (FIELD_PRECISION[formulaField] ?? 4) : 4;
+  const isFormula = formulaState === 'formula';
+
+  // Focused: full precision so the user can see/edit the stored value exactly.
+  // Blurred: field-specific display precision.
+  const displayed = focused
+    ? (value ?? '')
+    : (value !== null && value !== undefined && value !== ''
+        ? parseFloat(Number(value).toFixed(prec))
+        : '');
+
   return (
-    <div className="field-group">
+    <div
+      className="field-group"
+      style={{ position: 'relative' }}
+      onMouseMove={e => { if (formulaInfo) setShiftHover(e.shiftKey); }}
+      onMouseLeave={() => setShiftHover(false)}
+    >
       <label className="field-label">{label}</label>
       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
         <input
@@ -489,11 +636,28 @@ function NField({ label, value, unit, onChange }) {
           value={displayed}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
-          onChange={e => onChange(e.target.value === '' ? 0 : parseFloat(e.target.value))}
+          onChange={e => onChange(e.target.value === '' ? null : parseFloat(e.target.value))}
           placeholder="0"
         />
         {unit && <span className="text-xs text-sub" style={{ whiteSpace: 'nowrap' }}>{unit}</span>}
+        {/* Reserve space for badge whether shown or not, to keep grid aligned */}
+        {formulaInfo && (
+          <span className={`fx-badge${isFormula ? '' : ' fx-badge--hidden'}`}>fx</span>
+        )}
       </div>
+      {warning && <div className="fx-warning">{warning}</div>}
+      {shiftHover && formulaInfo && (
+        <div className="formula-tooltip">
+          <div><span className="formula-tooltip-key">Variable</span> {formulaField}</div>
+          <div><span className="formula-tooltip-key">State</span> {isFormula ? 'Calculated' : 'Manual'}</div>
+          <div>
+            <span className="formula-tooltip-key">
+              {isFormula ? 'Formula' : 'Formula available'}
+            </span>
+            {formulaInfo.expr}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
