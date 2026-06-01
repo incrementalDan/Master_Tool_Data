@@ -1683,3 +1683,25 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--text-sub);
   margin-right: 6px;
 }
+
+/* ─── Preset diff blocks (MergeFlow DiffStep) ────────────────────────────── */
+.preset-diff-block {
+  border-top: 1px solid var(--border);
+}
+.preset-diff-block:last-child {
+  border-bottom: none;
+}
+.preset-diff-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  background: var(--surface-2);
+  font-size: 12px;
+}
+.preset-diff-name {
+  font-weight: 600;
+  font-size: 12px;
+  flex: 1;
+  min-width: 0;
+}
