@@ -1391,3 +1391,245 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .font-bold { font-weight: 700; }
 .font-mono { font-family: monospace; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ─── Preset Panel ───────────────────────────────────────────────────────── */
+.preset-panel { margin-bottom: 20px; }
+
+.preset-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.preset-panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-label);
+}
+
+.preset-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.preset-inline-prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  flex-wrap: wrap;
+}
+
+.preset-scroll {
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.preset-scroll::-webkit-scrollbar { height: 5px; }
+.preset-scroll::-webkit-scrollbar-track { background: transparent; }
+.preset-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.preset-scroll::-webkit-scrollbar-thumb:hover { background: #555; }
+
+.preset-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: max-content;
+  padding: 2px 1px 4px;
+}
+
+/* ── Preset card (collapsed) ── */
+.preset-card {
+  width: 195px;
+  flex-shrink: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: border-color var(--ease);
+}
+
+.preset-card:hover { border-color: #555; }
+
+.preset-card--drop {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(74,143,255,0.18);
+}
+
+.preset-card--edit { width: 300px; }
+
+.preset-card-grip {
+  position: absolute;
+  top: 7px;
+  left: 5px;
+  color: var(--text-sub);
+  opacity: 0.4;
+  cursor: grab;
+  line-height: 0;
+}
+
+.preset-card-grip:hover { opacity: 1; }
+.preset-card-grip:active { cursor: grabbing; }
+
+.preset-card-body {
+  padding: 9px 10px 9px 20px;
+  flex: 1;
+}
+
+.preset-card-name {
+  font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 1px;
+}
+
+.preset-card-mat {
+  font-size: 10px;
+  color: var(--text-sub);
+  margin-bottom: 8px;
+}
+
+.preset-card-stats { display: flex; flex-direction: column; gap: 3px; }
+
+.preset-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.preset-stat-label { color: var(--text-sub); flex-shrink: 0; }
+
+.preset-stat-value {
+  font-family: monospace;
+  font-size: 11px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.preset-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.preset-card-del { margin-left: auto; color: var(--text-sub); }
+.preset-card-del:hover { color: var(--red); }
+
+/* ── Add preset card ── */
+.preset-add-card {
+  width: 110px;
+  min-height: 175px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: transparent;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-sub);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color var(--ease), background var(--ease), color var(--ease);
+  font-family: inherit;
+}
+
+.preset-add-card:hover {
+  border-color: var(--text-sub);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* ── Material group separator (vertical divider with rotated label) ── */
+.preset-group-sep {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 18px;
+  flex-shrink: 0;
+}
+
+.preset-group-sep > span {
+  font-size: 9px;
+  color: var(--text-sub);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  padding: 4px 0;
+  line-height: 1;
+}
+
+.preset-group-sep::before,
+.preset-group-sep::after {
+  content: '';
+  flex: 1;
+  width: 1px;
+  background: var(--border);
+}
+
+.preset-empty {
+  font-size: 12px;
+  color: var(--text-sub);
+  padding: 24px 16px;
+  align-self: center;
+}
+
+/* ── Edit card sections ── */
+.preset-edit-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.preset-name-input { flex: 1; font-weight: 600; font-size: 12px; }
+
+.preset-edit-section {
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.preset-edit-section:last-child { border-bottom: none; }
+
+.preset-edit-section-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  color: var(--text-sub);
+  margin-bottom: 8px;
+}
+
+.preset-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 10px;
+}
+
+.preset-check-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text);
+}
