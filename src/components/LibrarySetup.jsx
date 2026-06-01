@@ -3,21 +3,19 @@ import { Home, Folder, FileJson, ChevronRight } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import * as aps from '../services/apsService.js';
 
-// Lets the user navigate hub → project → folders → pick the tool library .json file.
-// On selection, saves { hubId, projectId, folderId, itemId, fileName } via context.
-export default function LibrarySetup() {
-  const { setLibraryLocation, signOutAll } = useApp();
-
+// Reusable hub → project → folder → file picker.
+// Calls onSelect({ hubId, projectId, folderId, itemId, fileName }) when a JSON file is chosen.
+// onCancel is optional — shown as a "Skip" link when provided.
+export function FilePicker({ onSelect, onCancel, cancelLabel = 'Skip for now' }) {
   const [hubs, setHubs] = useState([]);
   const [hubId, setHubId] = useState(null);
   const [projects, setProjects] = useState([]);
   const [projectId, setProjectId] = useState(null);
-  const [stack, setStack] = useState([]);        // [{ id, name }] folder breadcrumb
-  const [contents, setContents] = useState([]);  // current folder contents
+  const [stack, setStack] = useState([]);
+  const [contents, setContents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Load hubs on mount
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -81,7 +79,6 @@ export default function LibrarySetup() {
   };
 
   const navigateToCrumb = async (index) => {
-    // index -1 == project root
     setLoading(true);
     setError('');
     try {
@@ -108,7 +105,7 @@ export default function LibrarySetup() {
       setError('Please open a folder before selecting a file.');
       return;
     }
-    setLibraryLocation({
+    onSelect({
       hubId,
       projectId,
       folderId: currentFolderId,
@@ -121,20 +118,9 @@ export default function LibrarySetup() {
   const jsonItems = contents.filter(c => c.type === 'items' && /\.json$/i.test(displayName(c)));
 
   return (
-    <div className="page-content" style={{ maxWidth: 760 }}>
-      <div className="flex items-center gap-8 mb-16">
-        <h2 style={{ fontSize: 18, fontWeight: 700 }}>Select Your Tool Library File</h2>
-        <span className="topbar-spacer" style={{ flex: 1 }} />
-        <button className="btn btn-ghost btn-sm" onClick={signOutAll}>Sign out</button>
-      </div>
-      <p className="text-sub text-sm mb-16">
-        Navigate to the Fusion 360 cloud folder containing your tool library and pick the <code>.json</code> file.
-        This is saved locally so you won't have to repeat it.
-      </p>
+    <div>
+      {error && <div className="error-banner mb-12">{error}</div>}
 
-      {error && <div className="error-banner mb-16">{error}</div>}
-
-      {/* Hub selector */}
       {hubs.length > 1 && (
         <div className="field-group mb-12">
           <label className="field-label">Hub</label>
@@ -145,7 +131,6 @@ export default function LibrarySetup() {
         </div>
       )}
 
-      {/* Project selector */}
       {hubId && (
         <div className="field-group mb-16">
           <label className="field-label">Project</label>
@@ -156,10 +141,8 @@ export default function LibrarySetup() {
         </div>
       )}
 
-      {/* Folder browser */}
       {projectId && (
         <div className="card">
-          {/* Breadcrumb */}
           <div className="flex items-center gap-8 mb-12" style={{ flexWrap: 'wrap', fontSize: 13 }}>
             <button className="btn btn-ghost btn-sm" onClick={() => navigateToCrumb(-1)}><Home size={13} /> Root</button>
             {stack.map((c, i) => (
@@ -208,6 +191,64 @@ export default function LibrarySetup() {
           )}
         </div>
       )}
+
+      {onCancel && (
+        <div style={{ marginTop: 16 }}>
+          <button className="btn btn-ghost btn-sm" onClick={onCancel}>{cancelLabel}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Lets the user navigate hub → project → folders → pick the tool library .json file.
+// On selection, saves { hubId, projectId, folderId, itemId, fileName } via context.
+// Step 2: optionally pick the Master-Holder library before the app loads.
+export default function LibrarySetup() {
+  const { setLibraryLocation, setHolderLibraryLocation, signOutAll } = useApp();
+  const [phase, setPhase] = useState('tool'); // 'tool' | 'holder'
+  const [pendingToolLocation, setPendingToolLocation] = useState(null);
+
+  if (phase === 'holder') {
+    return (
+      <div className="page-content" style={{ maxWidth: 760 }}>
+        <div className="flex items-center gap-8 mb-16">
+          <h2 style={{ fontSize: 18, fontWeight: 700 }}>Select Your Master-Holder Library (Optional)</h2>
+        </div>
+        <p className="text-sub text-sm mb-16">
+          Navigate to the folder containing the <code>Master-Holder</code> library <code>.json</code> file and select it.
+          This enables holder browsing and selection on each tool. You can also configure this later in{' '}
+          <strong>Settings</strong>.
+        </p>
+        <FilePicker
+          onSelect={async (loc) => {
+            await setHolderLibraryLocation(loc);
+            setLibraryLocation(pendingToolLocation);
+          }}
+          onCancel={() => setLibraryLocation(pendingToolLocation)}
+          cancelLabel="Skip — set up later in Settings"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="page-content" style={{ maxWidth: 760 }}>
+      <div className="flex items-center gap-8 mb-16">
+        <h2 style={{ fontSize: 18, fontWeight: 700 }}>Select Your Tool Library File</h2>
+        <span className="topbar-spacer" style={{ flex: 1 }} />
+        <button className="btn btn-ghost btn-sm" onClick={signOutAll}>Sign out</button>
+      </div>
+      <p className="text-sub text-sm mb-16">
+        Navigate to the Fusion 360 cloud folder containing your tool library and pick the <code>.json</code> file.
+        This is saved locally so you won't have to repeat it.
+      </p>
+      <FilePicker
+        onSelect={(loc) => {
+          setPendingToolLocation(loc);
+          setPhase('holder');
+        }}
+      />
     </div>
   );
 }

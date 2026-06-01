@@ -10,10 +10,18 @@ import {
 const AppContext = createContext(null);
 
 const LOCATION_KEY = 'aps_library_location';
+const HOLDER_LOCATION_KEY = 'aps_holder_library_location';
 
 function loadStoredLocation() {
   try {
     const raw = localStorage.getItem(LOCATION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function loadStoredHolderLocation() {
+  try {
+    const raw = localStorage.getItem(HOLDER_LOCATION_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch { return null; }
 }
@@ -24,8 +32,10 @@ const initialState = {
   googleAuthenticated: false, // Google signed in (metadata)
   metadataSkipped: false,     // user chose to proceed without Drive metadata
   libraryLocation: loadStoredLocation(), // { hubId, projectId, folderId, itemId, fileName }
+  holderLibraryLocation: loadStoredHolderLocation(), // same shape, optional
   processingAuth: false,      // exchanging APS callback code
   tools: [],
+  holders: [],                // loaded from Master-Holder library
   isLoading: false,
   isSaving: false,
   error: null,
@@ -42,10 +52,14 @@ function reducer(state, action) {
     case 'SKIP_METADATA': return { ...state, metadataSkipped: true };
     case 'SET_LIBRARY_LOCATION': return { ...state, libraryLocation: action.location };
     case 'CLEAR_LIBRARY_LOCATION': return { ...state, libraryLocation: null, tools: [] };
+    case 'SET_HOLDER_LOCATION': return { ...state, holderLibraryLocation: action.location };
+    case 'CLEAR_HOLDER_LOCATION': return { ...state, holderLibraryLocation: null, holders: [] };
+    case 'SET_HOLDERS': return { ...state, holders: action.holders };
     case 'SIGN_OUT':
       return {
         ...initialState,
         libraryLocation: state.libraryLocation, // keep saved location across sign-out
+        holderLibraryLocation: state.holderLibraryLocation,
       };
     case 'LOAD_START': return { ...state, isLoading: true, error: null };
     case 'LOAD_SUCCESS': return { ...state, isLoading: false, tools: action.tools };
@@ -71,9 +85,11 @@ export function AppProvider({ children }) {
 
   // Keep latest values accessible inside async callbacks without stale closures
   const locationRef = useRef(state.libraryLocation);
+  const holderLocationRef = useRef(state.holderLibraryLocation);
   const googleRef = useRef(state.googleAuthenticated);
   const toolsRef = useRef(state.tools);
   useEffect(() => { locationRef.current = state.libraryLocation; }, [state.libraryLocation]);
+  useEffect(() => { holderLocationRef.current = state.holderLibraryLocation; }, [state.holderLibraryLocation]);
   useEffect(() => { googleRef.current = state.googleAuthenticated; }, [state.googleAuthenticated]);
   useEffect(() => { toolsRef.current = state.tools; }, [state.tools]);
 
@@ -111,6 +127,29 @@ export function AppProvider({ children }) {
     dispatch({ type: 'ADD_TOAST', toast: { id, type, message } });
     if (timeout) setTimeout(() => dispatch({ type: 'DISMISS_TOAST', id }), timeout);
     return id;
+  }, []);
+
+  // ─── Holder library ───────────────────────────────────────────────────────
+  const loadHolders = useCallback(async (location) => {
+    const loc = location || holderLocationRef.current;
+    if (!loc) return;
+    try {
+      const holders = await aps.loadHolderLibrary(loc.projectId, loc.itemId);
+      dispatch({ type: 'SET_HOLDERS', holders });
+    } catch (err) {
+      notify(`Holder library load failed: ${err.message}`, 'error');
+    }
+  }, [notify]);
+
+  const setHolderLibraryLocation = useCallback(async (location) => {
+    localStorage.setItem(HOLDER_LOCATION_KEY, JSON.stringify(location));
+    dispatch({ type: 'SET_HOLDER_LOCATION', location });
+    await loadHolders(location);
+  }, [loadHolders]);
+
+  const clearHolderLibraryLocation = useCallback(() => {
+    localStorage.removeItem(HOLDER_LOCATION_KEY);
+    dispatch({ type: 'CLEAR_HOLDER_LOCATION' });
   }, []);
 
   // ─── Drive-backed Fusion list helpers ─────────────────────────────────────
@@ -167,6 +206,16 @@ export function AppProvider({ children }) {
         return mergeFusionAndMetadata(internal, metaById.get(internal.id) || null);
       });
       dispatch({ type: 'LOAD_SUCCESS', tools });
+      // Load holder library alongside tools (non-critical — failure won't block)
+      if (holderLocationRef.current) {
+        try {
+          const holders = await aps.loadHolderLibrary(
+            holderLocationRef.current.projectId,
+            holderLocationRef.current.itemId,
+          );
+          dispatch({ type: 'SET_HOLDERS', holders });
+        } catch { /* non-critical */ }
+      }
     } catch (err) {
       dispatch({ type: 'LOAD_ERROR', error: err.message });
     }
@@ -437,10 +486,14 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider value={{
       ...state,
+      holderLibrarySetupComplete: !!state.holderLibraryLocation,
       setGoogleUser,
       skipMetadata,
       setLibraryLocation,
       clearLibraryLocation,
+      setHolderLibraryLocation,
+      clearHolderLibraryLocation,
+      loadHolders,
       signOutAll,
       loadTools,
       fetchRawLibrary,

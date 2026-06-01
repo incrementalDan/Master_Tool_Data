@@ -1,8 +1,28 @@
 import { internalToFusionTool } from '../schema/toolSchema.js';
 
-function toFusionFormat(tool) {
+function buildHolderObject(holderEntry) {
+  if (!holderEntry) return null;
+  return {
+    description: holderEntry.description,
+    guid: holderEntry.guid,
+    'product-id': holderEntry['product-id'] || '',
+    'product-link': holderEntry['product-link'] || '',
+    vendor: holderEntry.vendor || '',
+    gaugeLength: holderEntry.gaugeLength,
+    unit: holderEntry.unit,
+    segments: holderEntry.segments,
+  };
+}
+
+function toFusionFormat(tool, holders = []) {
   const f = internalToFusionTool(tool);
   delete f._fusionRaw;
+
+  if (tool.selected_holder_guid && holders.length > 0) {
+    const holder = holders.find(h => h.guid === tool.selected_holder_guid);
+    if (holder) f.holder = buildHolderObject(holder);
+  }
+
   return f;
 }
 
@@ -18,20 +38,20 @@ function downloadJSON(content, filename) {
   URL.revokeObjectURL(url);
 }
 
-export function exportSingleTool(tool) {
-  downloadJSON({ data: [toFusionFormat(tool)] }, `fusion_tool_${tool.proshot_id || tool.id}.json`);
+export function exportSingleTool(tool, holders = []) {
+  downloadJSON({ data: [toFusionFormat(tool, holders)] }, `fusion_tool_${tool.proshot_id || tool.id}.json`);
 }
 
-export function exportFullLibrary(tools) {
-  downloadJSON({ data: tools.map(toFusionFormat) }, 'fusion_tool_library.json');
+export function exportFullLibrary(tools, holders = []) {
+  downloadJSON({ data: tools.map(t => toFusionFormat(t, holders)) }, 'fusion_tool_library.json');
 }
 
-export async function copyToolToClipboard(tool) {
-  const json = JSON.stringify(toFusionFormat(tool), null, 2);
+export async function copyToolToClipboard(tool, holders = []) {
+  const json = JSON.stringify(toFusionFormat(tool, holders), null, 2);
   await navigator.clipboard.writeText(json);
 }
 
-export async function copyToolsToClipboard(tools) {
-  const json = JSON.stringify(tools.map(toFusionFormat), null, 2);
+export async function copyToolsToClipboard(tools, holders = []) {
+  const json = JSON.stringify(tools.map(t => toFusionFormat(t, holders)), null, 2);
   await navigator.clipboard.writeText(json);
 }

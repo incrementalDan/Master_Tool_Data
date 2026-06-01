@@ -1,12 +1,19 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { generateMachineNumbers } from '../schema/toolSchema.js';
+import { FilePicker } from './LibrarySetup.jsx';
 
 export default function Settings() {
   const navigate = useNavigate();
-  const { tools, fetchRawLibrary, renumberLibrary, isSaving } = useApp();
+  const {
+    tools, fetchRawLibrary, renumberLibrary, isSaving,
+    holderLibraryLocation, holderLibrarySetupComplete,
+    setHolderLibraryLocation, clearHolderLibraryLocation, notify,
+  } = useApp();
+
+  const [showHolderPicker, setShowHolderPicker] = useState(false);
 
   // 'idle' → warning, 'preview' → table + confirm input, 'done' → success
   const [stage, setStage] = useState('idle');
@@ -63,6 +70,57 @@ export default function Settings() {
         <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
           <SettingsIcon size={16} /> Settings
         </h2>
+      </div>
+
+      {/* Holder library setup */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Package size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Master-Holder Library</h3>
+        </div>
+        <p className="text-sub text-sm mb-16">
+          Link the Fusion 360 holder library so you can browse and assign holders to tools.
+        </p>
+
+        {holderLibrarySetupComplete ? (
+          <div>
+            <div className="flex items-center gap-8 mb-12">
+              <span className="text-sm" style={{ color: 'var(--green)' }}>✓ Configured</span>
+              <span className="text-sub text-xs font-mono">{holderLibraryLocation?.fileName}</span>
+            </div>
+            <div className="flex gap-8">
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowHolderPicker(p => !p)}>
+                {showHolderPicker ? 'Cancel' : 'Change Holder Library'}
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ color: 'var(--red)' }}
+                onClick={() => { clearHolderLibraryLocation(); setShowHolderPicker(false); notify('Holder library removed', 'info'); }}
+              >
+                <Trash2 size={13} /> Remove
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div className="text-sub text-sm mb-12">No holder library configured.</div>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowHolderPicker(p => !p)}>
+              {showHolderPicker ? 'Cancel' : 'Set Up Holder Library'}
+            </button>
+          </div>
+        )}
+
+        {showHolderPicker && (
+          <div style={{ marginTop: 16 }}>
+            <FilePicker
+              onSelect={async (loc) => {
+                await setHolderLibraryLocation(loc);
+                setShowHolderPicker(false);
+                notify(`Holder library set to ${loc.fileName}`, 'success');
+              }}
+            />
+          </div>
+        )}
       </div>
 
       <div className="card" style={{ maxWidth: 760 }}>
