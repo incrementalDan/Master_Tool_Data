@@ -273,28 +273,66 @@ export function AppProvider({ children }) {
   }, [addTool]);
 
   // Merge selected job-tool fields back into a master tool with history tracking.
-  const mergeTool = useCallback(async (masterTool, mergedFields, revisionNote, mergedBy) => {
+  // presetChanges: Array<{ masterPresetGuid, incomingPreset, selectedFields: Set }>
+  // presetsToAdd:  Array<presetObject> — new presets to append
+  const mergeTool = useCallback(async (masterTool, mergedFields, revisionNote, mergedBy, presetChanges = [], presetsToAdd = []) => {
     dispatch({ type: 'SAVE_START' });
     try {
       const previousValues = {};
       for (const field of Object.keys(mergedFields)) {
         previousValues[field] = masterTool[field];
       }
-      const entry = {
+      const historyEntry = {
         merged_at: new Date().toISOString(),
         merged_by: mergedBy || 'unknown',
         fields_changed: Object.keys(mergedFields),
         revision_note: revisionNote,
         previous_values: previousValues,
+        ...(presetChanges.length > 0 ? {
+          presets_changed: presetChanges.map(c => ({
+            preset_name: c.incomingPreset?.name || '?',
+            fields: [...c.selectedFields],
+          })),
+        } : {}),
+        ...(presetsToAdd.length > 0 ? {
+          presets_added: presetsToAdd.map(p => p.name || 'Unnamed'),
+        } : {}),
       };
-      const updated = {
+      let updated = {
         ...masterTool,
         ...mergedFields,
         updated_at: new Date().toISOString(),
         updated_by: mergedBy || '',
         revision_notes: revisionNote,
-        merge_history: [...(masterTool.merge_history || []), entry],
+        merge_history: [...(masterTool.merge_history || []), historyEntry],
       };
+
+      // Apply preset field patches and append new presets
+      if (presetChanges.length > 0 || presetsToAdd.length > 0) {
+        const updatedPresets = (updated.presets || []).map(p => {
+          const change = presetChanges.find(c => c.masterPresetGuid === p.guid);
+          if (!change || change.selectedFields.size === 0) return p;
+          const patch = {};
+          for (const f of change.selectedFields) patch[f] = change.incomingPreset[f];
+          return { ...p, ...patch };
+        });
+        for (const preset of presetsToAdd) {
+          updatedPresets.push({ ...preset, guid: generateId() });
+        }
+        updated.presets = updatedPresets;
+        // Keep flat speed/feed fields in sync with first preset
+        if (updatedPresets.length > 0) {
+          const p0 = updatedPresets[0];
+          updated.spindle_speed  = p0.n     ?? updated.spindle_speed;
+          updated.cutting_feedrate = p0.v_f ?? updated.cutting_feedrate;
+          updated.feed_per_tooth = p0.f_z   ?? updated.feed_per_tooth;
+          updated.plunge_feedrate = p0.v_f_plunge ?? updated.plunge_feedrate;
+          updated.lead_in_feedrate = p0.v_f_leadIn ?? updated.lead_in_feedrate;
+          updated.lead_out_feedrate = p0.v_f_leadOut ?? updated.lead_out_feedrate;
+          updated.feed_per_rev = p0.f_n     ?? updated.feed_per_rev;
+          updated.cutting_speed = p0.v_c    ?? updated.cutting_speed;
+        }
+      }
 
       const fusionList = await downloadFusionList();
       const idx = fusionList.findIndex(t => t.guid === masterTool.id);

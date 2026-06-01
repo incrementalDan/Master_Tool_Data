@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, GitMerge } from 'lucide-react';
+import { ArrowLeft, GitMerge, Plus } from 'lucide-react';
 import { useApp } from '../../context/AppContext.jsx';
 import { FIELD_LABELS, TOOL_TYPE_LABELS } from '../../schema/toolSchema.js';
 import ToolTypeIcon from '../icons/ToolTypeIcon.jsx';
@@ -13,8 +13,20 @@ function formatValue(v) {
   return String(v);
 }
 
+const PRESET_FIELD_LABELS = {
+  n: 'Spindle Speed (RPM)', v_c: 'Surface Speed', n_ramp: 'Ramp Spindle Speed',
+  v_f: 'Cutting Feedrate', f_z: 'Feed per Tooth',
+  v_f_plunge: 'Plunge Feedrate', f_n: 'Feed per Rev',
+  v_f_leadIn: 'Lead-In Feedrate', v_f_leadOut: 'Lead-Out Feedrate',
+  v_f_transition: 'Transition Feedrate', v_f_ramp: 'Ramp Feedrate',
+  'ramp-angle': 'Ramp Angle (°)', 'tool-coolant': 'Coolant',
+  'use-stepdown': 'Use Stepdown', 'use-stepover': 'Use Stepover',
+};
+
 export default function CommitStep({
   importedTool, masterTool, selectedFields,
+  presetSelections,   // Map<masterPresetGuid, { name, incoming, selectedFields: Set }>
+  presetsToAdd,       // presetObject[]
   onCommitted, onBack,
   isLastItem = false,
 }) {
@@ -23,20 +35,35 @@ export default function CommitStep({
   const [mergedBy, setMergedBy] = useState(user?.email || user?.name || '');
   const [commitError, setCommitError] = useState('');
 
-  const fieldList = [...selectedFields];
+  const fieldList = [...(selectedFields || [])];
+  const presetChangeList = [...(presetSelections || new Map()).entries()];
+  const newPresetList = presetsToAdd || [];
 
   const handleCommit = async () => {
     if (!revisionNote.trim()) return;
     setCommitError('');
+
     const mergedFields = {};
     for (const f of fieldList) mergedFields[f] = importedTool[f];
+
+    // Build presetChanges array for mergeTool
+    const presetChanges = presetChangeList.map(([masterPresetGuid, { incoming, selectedFields: fields }]) => ({
+      masterPresetGuid,
+      incomingPreset: incoming,
+      selectedFields: fields,
+    }));
+
     try {
-      await mergeTool(masterTool, mergedFields, revisionNote.trim(), mergedBy.trim());
+      await mergeTool(masterTool, mergedFields, revisionNote.trim(), mergedBy.trim(), presetChanges, newPresetList);
       onCommitted();
     } catch (err) {
       setCommitError(err.message);
     }
   };
+
+  const totalChanges = fieldList.length
+    + presetChangeList.reduce((s, [, { selectedFields: f }]) => s + f.size, 0)
+    + newPresetList.length;
 
   return (
     <div>
@@ -63,20 +90,65 @@ export default function CommitStep({
         <div className="panel-header static">
           <GitMerge size={14} className="panel-header-icon" />
           <span className="panel-header-title">
-            {fieldList.length} field{fieldList.length !== 1 ? 's' : ''} to commit
+            {totalChanges} change{totalChanges !== 1 ? 's' : ''} to commit
           </span>
         </div>
         <div className="panel-body">
-          <div className="commit-field-list">
-            {fieldList.map(f => (
-              <div key={f} className="commit-field-row">
-                <span className="commit-field-name">{FIELD_LABELS[f] || f}</span>
-                <span className="commit-field-old">{formatValue(masterTool[f])}</span>
-                <span className="diff-arrow">→</span>
-                <span className="commit-field-new">{formatValue(importedTool[f])}</span>
+          {/* Flat tool fields */}
+          {fieldList.length > 0 && (
+            <div className="commit-field-list">
+              {fieldList.map(f => (
+                <div key={f} className="commit-field-row">
+                  <span className="commit-field-name">{FIELD_LABELS[f] || f}</span>
+                  <span className="commit-field-old">{formatValue(masterTool[f])}</span>
+                  <span className="diff-arrow">→</span>
+                  <span className="commit-field-new">{formatValue(importedTool[f])}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Preset field changes */}
+          {presetChangeList.map(([guid, { name, incoming, selectedFields: fields }]) => (
+            <div key={guid} style={{ marginTop: fieldList.length > 0 ? 12 : 0 }}>
+              <div className="text-xs text-sub" style={{ padding: '4px 0', fontWeight: 600 }}>
+                Preset: {name || 'Unnamed'} — {fields.size} field{fields.size !== 1 ? 's' : ''}
               </div>
-            ))}
-          </div>
+              <div className="commit-field-list">
+                {[...fields].map(f => {
+                  const master = masterTool.presets?.find(p => p.guid === guid);
+                  return (
+                    <div key={f} className="commit-field-row">
+                      <span className="commit-field-name">{PRESET_FIELD_LABELS[f] || f}</span>
+                      <span className="commit-field-old">{formatValue(master?.[f])}</span>
+                      <span className="diff-arrow">→</span>
+                      <span className="commit-field-new">{formatValue(incoming[f])}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {/* New presets being added */}
+          {newPresetList.length > 0 && (
+            <div style={{ marginTop: (fieldList.length > 0 || presetChangeList.length > 0) ? 12 : 0 }}>
+              <div className="text-xs text-sub" style={{ padding: '4px 0', fontWeight: 600 }}>
+                <Plus size={11} style={{ display: 'inline', marginRight: 4 }} />
+                Adding {newPresetList.length} new preset{newPresetList.length !== 1 ? 's' : ''}
+              </div>
+              <div className="commit-field-list">
+                {newPresetList.map(p => (
+                  <div key={p.guid} className="commit-field-row">
+                    <span className="commit-field-name">{p.name || 'Unnamed'}</span>
+                    <span className="commit-field-old" style={{ fontStyle: 'italic' }}>— not in master —</span>
+                    <span className="diff-arrow">+</span>
+                    <span className="commit-field-new" style={{ color: '#a78bfa' }}>New preset</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

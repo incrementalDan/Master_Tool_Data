@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { CheckCircle2, SkipForward, Package, Copy, Home } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { CheckCircle2, SkipForward, Package, Copy, Home, ExternalLink } from 'lucide-react';
 import { useApp } from '../../context/AppContext.jsx';
 import { copyToolsToClipboard } from '../../utils/fusionExport.js';
 import { queueProgress } from '../../services/mergeQueue.js';
@@ -14,6 +15,7 @@ function StatusIcon({ status }) {
 
 export default function SummaryStep({ queue, onDone }) {
   const { tools, notify } = useApp();
+  const navigate = useNavigate();
   const { total, committed, skipped } = queueProgress(queue);
   const [copying, setCopying] = useState(false);
 
@@ -60,11 +62,19 @@ export default function SummaryStep({ queue, onDone }) {
               </span>
               <div className="summary-row-main">
                 <span className="summary-row-desc">{entry.incomingTool.description || '—'}</span>
-                {entry.matchedMasterTool && entry.status === 'committed' && (
-                  <span className="text-xs text-sub">
-                    {[...entry.selectedFields].length} field{[...entry.selectedFields].length !== 1 ? 's' : ''} merged
-                  </span>
-                )}
+                {entry.matchedMasterTool && entry.status === 'committed' && (() => {
+                  const flatCount = [...(entry.selectedFields || [])].length;
+                  const presetFieldCount = [...(entry.presetSelections || new Map()).values()]
+                    .reduce((s, { selectedFields: f }) => s + f.size, 0);
+                  const newPresetCount = (entry.presetsToAdd || []).length;
+                  const total = flatCount + presetFieldCount + newPresetCount;
+                  return (
+                    <span className="text-xs text-sub">
+                      {total} change{total !== 1 ? 's' : ''} committed
+                      {newPresetCount > 0 ? `, ${newPresetCount} preset${newPresetCount !== 1 ? 's' : ''} added` : ''}
+                    </span>
+                  );
+                })()}
                 {entry.isNewTool && entry.status === 'committed' && (
                   <span className="text-xs" style={{ color: '#a78bfa' }}>Added to library</span>
                 )}
@@ -72,6 +82,16 @@ export default function SummaryStep({ queue, onDone }) {
                   <span className="text-xs text-sub">Skipped</span>
                 )}
               </div>
+              {entry.matchedMasterTool && entry.status === 'committed' && (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  style={{ padding: '2px 8px', fontSize: 11 }}
+                  onClick={() => navigate(`/tool/${entry.matchedMasterTool.id}`)}
+                  title="Open tool detail"
+                >
+                  <ExternalLink size={11} />
+                </button>
+              )}
             </div>
           ))}
         </div>
