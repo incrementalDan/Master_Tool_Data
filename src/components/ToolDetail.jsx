@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
-  Tag, Ruler, Gauge, Settings2, StickyNote, Clock, ExternalLink, Hash,
+  Tag, Ruler, Settings2, StickyNote, Clock, ExternalLink, Hash,
 } from 'lucide-react';
+import PresetPanel from './PresetPanel.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
@@ -24,9 +25,6 @@ export default function ToolDetail() {
   const tool = tools.find(t => t.id === id);
   const isMetric = tool?.unit === 'millimeters';
   const lenUnit = isMetric ? 'mm' : 'in';
-  const feedUnit = isMetric ? 'mm/min' : 'in/min';
-  const feedPerUnit = isMetric ? 'mm' : 'in';
-  const speedUnit = isMetric ? 'm/min' : 'SFM';
 
   if (!tool) {
     return (
@@ -64,6 +62,30 @@ export default function ToolDetail() {
     try {
       const created = await cloneTool(id);
       navigate(`/tool/${created.id}?edit=1`);
+    } catch { /* toast handled in context */ }
+  };
+
+  // Called by PresetPanel when any preset is saved, deleted, or reordered.
+  // Syncs flat speed/feed fields from preset[0] so ToolForm stays consistent.
+  const handlePresetsChange = async (newPresets) => {
+    const p0 = newPresets[0] ?? null;
+    try {
+      await saveTool({
+        ...tool,
+        presets: newPresets,
+        ...(p0 && {
+          spindle_speed: p0.n ?? tool.spindle_speed ?? null,
+          cutting_feedrate: p0.v_f ?? tool.cutting_feedrate ?? null,
+          plunge_feedrate: p0.v_f_plunge ?? tool.plunge_feedrate ?? null,
+          ramp_feedrate: p0.v_f_ramp ?? tool.ramp_feedrate ?? null,
+          lead_in_feedrate: p0.v_f_leadIn ?? tool.lead_in_feedrate ?? null,
+          lead_out_feedrate: p0.v_f_leadOut ?? tool.lead_out_feedrate ?? null,
+          feed_per_tooth: p0.f_z ?? tool.feed_per_tooth ?? null,
+          feed_per_rev: p0.f_n ?? tool.feed_per_rev ?? null,
+          cutting_speed: p0.v_c ?? tool.cutting_speed ?? null,
+          coolant: p0['tool-coolant'] ?? tool.coolant ?? 'flood',
+        }),
+      });
     } catch { /* toast handled in context */ }
   };
 
@@ -181,21 +203,7 @@ export default function ToolDetail() {
             </div>
           </Section>
 
-          <Section title="Speeds & Feeds" icon={Gauge}>
-            <div className="detail-fields">
-              <Field label="Spindle Speed" value={round4(tool.spindle_speed)} unit="RPM" />
-              <Field label="Cutting Feedrate" value={round4(tool.cutting_feedrate)} unit={feedUnit} />
-              <Field label="Feed per Tooth" value={round4(tool.feed_per_tooth)} unit={feedPerUnit} />
-              <Field label="Feed per Rev" value={round4(tool.feed_per_rev)} unit={feedPerUnit} />
-              <Field label="Plunge Feedrate" value={round4(tool.plunge_feedrate)} unit={feedUnit} />
-              <Field label="Ramp Feedrate" value={round4(tool.ramp_feedrate)} unit={feedUnit} />
-              <Field label="Lead-In Feedrate" value={round4(tool.lead_in_feedrate)} unit={feedUnit} />
-              <Field label="Lead-Out Feedrate" value={round4(tool.lead_out_feedrate)} unit={feedUnit} />
-              <Field label="Surface Speed" value={round4(tool.cutting_speed)} unit={speedUnit} />
-              <Field label="Depth of Cut" value={round4(tool.depth_of_cut)} unit={lenUnit} />
-              <Field label="Width of Cut" value={round4(tool.width_of_cut)} unit={lenUnit} />
-            </div>
-          </Section>
+          <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving} />
 
           <Section title="Setup" icon={Settings2}>
             <div className="detail-fields">

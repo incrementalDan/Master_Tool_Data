@@ -311,6 +311,10 @@ export function fusionToolToInternal(fTool) {
     feed_per_tooth: preset.f_z || null,
     feed_per_rev: preset.f_n || null,
     cutting_speed: preset.v_c || null,
+    // Full presets array preserved so the preset panel can manage all presets.
+    // The flat speed/feed fields above are still read from presets[0] for
+    // backwards compat with ToolForm and search facets.
+    presets: fTool['start-values']?.presets || [],
     tool_number: fTool['post-process']?.number ? String(fTool['post-process'].number) : '',
     // Machine tool number — output mirror of post-process.number. The metadata
     // file is the source of truth; this is only a fallback when metadata is missing.
@@ -373,7 +377,14 @@ export function internalToFusionTool(tool) {
   };
 
   const fusionType = FT_MAP[tool.tool_type] || tool.tool_type;
-  const preset = existing['start-values']?.presets?.[0] || {};
+  // When tool.presets is populated (managed by PresetPanel), use presets[0] as
+  // the base for the first preset so its name/material/guid are preserved.
+  // Flat speed/feed fields always override the numeric values in preset[0] so
+  // both ToolForm (flat-field edits) and PresetPanel edits stay in sync.
+  const existingPreset0 = existing['start-values']?.presets?.[0] || {};
+  const managedPresets = tool.presets?.length > 0 ? tool.presets : null;
+  const preset0base = managedPresets ? (managedPresets[0] || {}) : existingPreset0;
+  const additionalPresets = managedPresets ? managedPresets.slice(1) : [];
 
   // Machine tool number drives the post-process fields. When present, all three
   // (number / length-offset / diameter-offset) must be written to the same value,
@@ -432,28 +443,31 @@ export function internalToFusionTool(tool) {
       'tip-offset': 0,
     },
     'start-values': {
-      presets: [{
-        ...preset,
-        guid: preset.guid || generateId(),
-        description: preset.description || '',
-        name: preset.name || 'Default preset',
-        material: preset.material || { category: 'all', query: '', 'use-hardness': false },
-        'ramp-angle': preset['ramp-angle'] || 2,
-        'tool-coolant': tool.coolant || 'flood',
-        'use-stepdown': false,
-        'use-stepover': false,
-        n: tool.spindle_speed || preset.n || 0,
-        n_ramp: tool.spindle_speed || preset.n_ramp || 0,
-        v_f: tool.cutting_feedrate || preset.v_f || 0,
-        v_f_leadIn: tool.lead_in_feedrate || preset.v_f_leadIn || 0,
-        v_f_leadOut: tool.lead_out_feedrate || preset.v_f_leadOut || 0,
-        v_f_plunge: tool.plunge_feedrate || preset.v_f_plunge || 0,
-        v_f_ramp: tool.ramp_feedrate || preset.v_f_ramp || 0,
-        v_f_transition: tool.cutting_feedrate || preset.v_f_transition || 0,
-        f_z: tool.feed_per_tooth || preset.f_z || 0,
-        f_n: tool.feed_per_rev || preset.f_n || 0,
-        v_c: tool.cutting_speed || preset.v_c || 0,
-      }],
+      presets: [
+        {
+          ...preset0base,
+          guid: preset0base.guid || generateId(),
+          description: preset0base.description || '',
+          name: preset0base.name || 'Default preset',
+          material: preset0base.material || { category: 'all', query: '', 'use-hardness': false },
+          'ramp-angle': preset0base['ramp-angle'] ?? 2,
+          'tool-coolant': tool.coolant || preset0base['tool-coolant'] || 'flood',
+          'use-stepdown': preset0base['use-stepdown'] ?? false,
+          'use-stepover': preset0base['use-stepover'] ?? false,
+          n: tool.spindle_speed ?? preset0base.n ?? 0,
+          n_ramp: tool.spindle_speed ?? preset0base.n_ramp ?? 0,
+          v_f: tool.cutting_feedrate ?? preset0base.v_f ?? 0,
+          v_f_leadIn: tool.lead_in_feedrate ?? preset0base.v_f_leadIn ?? 0,
+          v_f_leadOut: tool.lead_out_feedrate ?? preset0base.v_f_leadOut ?? 0,
+          v_f_plunge: tool.plunge_feedrate ?? preset0base.v_f_plunge ?? 0,
+          v_f_ramp: tool.ramp_feedrate ?? preset0base.v_f_ramp ?? 0,
+          v_f_transition: tool.cutting_feedrate ?? preset0base.v_f_transition ?? 0,
+          f_z: tool.feed_per_tooth ?? preset0base.f_z ?? 0,
+          f_n: tool.feed_per_rev ?? preset0base.f_n ?? 0,
+          v_c: tool.cutting_speed ?? preset0base.v_c ?? 0,
+        },
+        ...additionalPresets,
+      ],
     },
     holder: existing.holder || null,
     'post-process': {
