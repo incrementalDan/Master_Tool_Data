@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, X, Check, GripVertical, Trash2 } from 'lucide-react';
 import { generateId } from '../schema/toolSchema.js';
+import { useApp } from '../context/AppContext.jsx';
 import {
   rpmToSFM, sfmToRPM,
   fptToIPM, ipmToFPT,
@@ -72,6 +73,7 @@ function blankPreset() {
 }
 
 export default function PresetPanel({ tool, onSave, isSaving }) {
+  const { holders } = useApp();
   const isMetric = tool.unit === 'millimeters';
   const lenUnit = isMetric ? 'mm' : 'in';
   const feedUnit = isMetric ? 'mm/min' : 'in/min';
@@ -271,6 +273,10 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
                     speedUnit={speedUnit}
                     isDragOver={dragOverIdx === globalIdx}
                     dragEnabled={materialFilter === 'All'}
+                    linkedAssemblies={(tool.assemblies || []).filter(a =>
+                      (a.linked_preset_guids || []).includes(preset.guid)
+                    )}
+                    holders={holders}
                     onEdit={() => setEditingId(preset.guid)}
                     onDelete={() => setDeleteConfirmId(preset.guid)}
                     onDragStart={e => handleDragStart(e, globalIdx)}
@@ -301,6 +307,7 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
 function CollapsedCard({
   preset, lenUnit, feedUnit, speedUnit,
   isDragOver, dragEnabled,
+  linkedAssemblies, holders,
   onEdit, onDelete,
   onDragStart, onDragOver, onDrop, onDragEnd,
 }) {
@@ -310,6 +317,15 @@ function CollapsedCard({
     ? coolantRaw.charAt(0).toUpperCase() + coolantRaw.slice(1)
     : '—';
   const sfcLabel = lenUnit === 'mm' ? speedUnit : 'ft/min';
+
+  let assemblyLine = null;
+  if (linkedAssemblies?.length === 1) {
+    const a = linkedAssemblies[0];
+    const desc = a.holder_description || holders?.find(h => h.guid === a.holder_guid)?.description || 'Assembly';
+    assemblyLine = `${desc} · OOH: ${a.ooh != null ? a.ooh.toFixed(3) + '"' : '—'}`;
+  } else if (linkedAssemblies?.length > 1) {
+    assemblyLine = `${linkedAssemblies.length} assemblies`;
+  }
 
   return (
     <div
@@ -336,6 +352,11 @@ function CollapsedCard({
           <StatRow label="Plunge" value={r4(preset.v_f_plunge)} unit={feedUnit} />
           <StatRow label="Coolant" value={coolantLabel} />
         </div>
+        {assemblyLine && (
+          <div className="text-xs text-sub" style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+            {assemblyLine}
+          </div>
+        )}
       </div>
       <div className="preset-card-footer">
         <button className="btn btn-secondary btn-sm" onClick={onEdit}>Edit</button>

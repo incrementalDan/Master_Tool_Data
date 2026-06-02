@@ -196,9 +196,14 @@ function parseFusionCsv(raw) {
       updated_by: '',
       revision_notes: '',
       merge_history: [],
+      assemblies: [],
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       _fusionRaw: null,
+      // Transient: assembly context from the job file (used by CommitStep)
+      incoming_holder_guid: '',
+      incoming_ooh: csvNum(r.tool_assemblyGaugeLength),
+      _incomingHolderDesc: csvStr(r.holder_description),
     };
     tools.push(tool);
   }

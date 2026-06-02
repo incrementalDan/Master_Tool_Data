@@ -324,7 +324,7 @@ export function AppProvider({ children }) {
   // Merge selected job-tool fields back into a master tool with history tracking.
   // presetChanges: Array<{ masterPresetGuid, incomingPreset, selectedFields: Set }>
   // presetsToAdd:  Array<presetObject> — new presets to append
-  const mergeTool = useCallback(async (masterTool, mergedFields, revisionNote, mergedBy, presetChanges = [], presetsToAdd = []) => {
+  const mergeTool = useCallback(async (masterTool, mergedFields, revisionNote, mergedBy, presetChanges = [], presetsToAdd = [], assemblyUpdate = null) => {
     dispatch({ type: 'SAVE_START' });
     try {
       const previousValues = {};
@@ -366,7 +366,7 @@ export function AppProvider({ children }) {
           return { ...p, ...patch };
         });
         for (const preset of presetsToAdd) {
-          updatedPresets.push({ ...preset, guid: generateId() });
+          updatedPresets.push({ ...preset }); // preserve incoming guid (used for assembly linking)
         }
         updated.presets = updatedPresets;
         // Keep flat speed/feed fields in sync with first preset
@@ -381,6 +381,18 @@ export function AppProvider({ children }) {
           updated.feed_per_rev = p0.f_n     ?? updated.feed_per_rev;
           updated.cutting_speed = p0.v_c    ?? updated.cutting_speed;
         }
+      }
+
+      // Apply assembly create/link update (metadata only — included in the same write)
+      if (assemblyUpdate) {
+        const assemblies = [...(updated.assemblies || [])];
+        if (assemblyUpdate.type === 'create') {
+          assemblies.push(assemblyUpdate.assembly);
+        } else if (assemblyUpdate.type === 'link') {
+          const i = assemblies.findIndex(a => a.assembly_id === assemblyUpdate.assembly.assembly_id);
+          if (i >= 0) assemblies[i] = assemblyUpdate.assembly;
+        }
+        updated.assemblies = assemblies;
       }
 
       const fusionList = await downloadFusionList();

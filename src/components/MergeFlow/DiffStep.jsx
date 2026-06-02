@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
-import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle, RefreshCw, Plus } from 'lucide-react';
-import { FIELD_LABELS } from '../../schema/toolSchema.js';
+import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle, RefreshCw, Plus, CheckCircle } from 'lucide-react';
+import { FIELD_LABELS, generateId } from '../../schema/toolSchema.js';
+import { useApp } from '../../context/AppContext.jsx';
 
 const DIFF_SECTIONS = [
   {
@@ -94,36 +95,75 @@ function valuesEqual(a, b) {
   return false;
 }
 
-// Match incoming presets to master presets by name (case-insensitive trim).
-function matchPresets(incomingPresets, masterPresets) {
+// Returns true when the incoming OOH + holder combo doesn't match any existing
+// assembly that already links to this master preset — meaning these speeds were
+// proven in a different physical setup.
+function checkDifferentAssembly(presetGuid, incomingOoh, incomingHolderGuid, masterAssemblies) {
+  if (incomingOoh == null || incomingOoh <= 0) return false;
+  const linked = (masterAssemblies || []).filter(a =>
+    (a.linked_preset_guids || []).includes(presetGuid)
+  );
+  // Preset has no assembly recorded yet but incoming has OOH → new context
+  if (linked.length === 0) return true;
+  const OOH_TOLERANCE = 0.0005;
+  return !linked.some(a =>
+    a.ooh != null && Math.abs(a.ooh - incomingOoh) < OOH_TOLERANCE &&
+    (!incomingHolderGuid || a.holder_guid === incomingHolderGuid)
+  );
+}
+
+// Categorize incoming presets against master by name (case-insensitive):
+//   unchanged  — name matches, values identical
+//   blocked    — name matches, values differ, same assembly context → no update
+//   conflicts  — name matches, values differ, different assembly → ask user
+//   newPresets — no name match in master → add
+//   masterOnly — in master but not in the job (informational)
+function matchPresets(incomingPresets, masterPresets, incomingOoh, incomingHolderGuid, masterAssemblies) {
   const masterByName = new Map(
     (masterPresets || []).map(p => [p.name?.toLowerCase().trim(), p])
   );
   const matchedMasterGuids = new Set();
-  const matched = [];
+  const unchanged = [];
+  const blocked = [];
+  const conflicts = [];
   const newPresets = [];
 
   for (const incoming of (incomingPresets || [])) {
     const key = incoming.name?.toLowerCase().trim();
     const master = masterByName.get(key);
     if (master) {
-      matched.push({ incoming, master });
       matchedMasterGuids.add(master.guid);
+      const changedFields = PRESET_DIFF_FIELDS.filter(f => !valuesEqual(incoming[f], master[f]));
+      if (changedFields.length === 0) {
+        unchanged.push({ incoming, master });
+      } else if (checkDifferentAssembly(master.guid, incomingOoh, incomingHolderGuid, masterAssemblies)) {
+        conflicts.push({ incoming, master, changedFields });
+      } else {
+        blocked.push({ incoming, master, changedFields });
+      }
     } else {
       newPresets.push(incoming);
     }
   }
 
   const masterOnly = (masterPresets || []).filter(p => !matchedMasterGuids.has(p.guid));
-  return { matched, newPresets, masterOnly };
+  return { unchanged, blocked, conflicts, newPresets, masterOnly };
 }
 
 // ─── Preset diff sub-component ────────────────────────────────────────────────
 function PresetsDiff({
-  presetMatch, presetFieldSelections, addedPresets,
-  onTogglePresetField, onTogglePresetAllFields, onToggleAddedPreset,
+  presetMatch, incomingOoh, incomingHolderDesc,
+  addedPresets, conflictResolutions,
+  onToggleAddedPreset, onSetConflictResolution,
 }) {
-  const { matched, newPresets, masterOnly } = presetMatch;
+  const { unchanged, blocked, conflicts, newPresets, masterOnly } = presetMatch;
+  const totalNew = newPresets.length;
+  const totalConflicts = conflicts.length;
+
+  const countParts = [];
+  if (unchanged.length > 0) countParts.push(`${unchanged.length} matched`);
+  if (totalConflicts > 0) countParts.push(`${totalConflicts} conflict${totalConflicts !== 1 ? 's' : ''}`);
+  if (totalNew > 0) countParts.push(`${totalNew} new`);
 
   return (
     <div className="diff-section">
@@ -131,63 +171,76 @@ function PresetsDiff({
         <span style={{ width: 20 }} />
         <Gauge size={14} className="panel-header-icon" />
         <span className="panel-header-title">Speeds &amp; Feeds Presets</span>
-        <span className="diff-section-count">
-          {matched.length} matched{newPresets.length > 0 ? `, ${newPresets.length} new` : ''}
-        </span>
+        <span className="diff-section-count">{countParts.join(', ') || 'none'}</span>
       </div>
 
       <div className="diff-advisory">
         <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-        Speeds &amp; feeds are job-specific. Verify these values work for all uses of this tool before committing.
+        Existing preset values are never overwritten. New presets from the job can be added; conflicting values in a different assembly context can become a new preset.
       </div>
 
-      {/* Matched preset pairs */}
-      {matched.map(({ master, incoming }) => {
-        const changedFields = PRESET_DIFF_FIELDS.filter(f => !valuesEqual(incoming[f], master[f]));
-        const selections = presetFieldSelections.get(master.guid) || new Set();
-        const allOn = changedFields.length > 0 && changedFields.every(f => selections.has(f));
-        const someOn = changedFields.some(f => selections.has(f));
-
+      {/* Conflicts: same name, different values, different assembly context */}
+      {conflicts.map(({ master, incoming, changedFields }) => {
+        const resolution = conflictResolutions.get(master.guid) || 'ignore';
         return (
-          <div key={master.guid} className="preset-diff-block">
-            <div className="preset-diff-header">
-              <label className="diff-section-select">
-                <input
-                  type="checkbox"
-                  checked={allOn}
-                  disabled={changedFields.length === 0}
-                  ref={el => { if (el) el.indeterminate = !allOn && someOn; }}
-                  onChange={() => onTogglePresetAllFields(master.guid, changedFields)}
-                />
-              </label>
-              <span className="preset-diff-name">{master.name || 'Unnamed'}</span>
+          <div key={master.guid} className="preset-diff-block" style={{ borderLeft: '2px solid var(--orange)' }}>
+            <div className="preset-diff-header" style={{ background: 'rgba(251,146,60,0.06)' }}>
+              <span style={{ width: 20 }} />
+              <AlertTriangle size={13} style={{ color: 'var(--orange)', flexShrink: 0 }} />
+              <span className="preset-diff-name" style={{ color: 'var(--orange)' }}>
+                {master.name || 'Unnamed'} — different assembly context
+              </span>
               <span className="text-xs text-sub">
-                {changedFields.length === 0 ? 'No changes' : `${changedFields.length} field${changedFields.length !== 1 ? 's' : ''} differ`}
+                {changedFields.length} value{changedFields.length !== 1 ? 's' : ''} differ
               </span>
             </div>
-            {changedFields.length > 0 && (
-              <div className="diff-rows">
-                {changedFields.map(field => (
-                  <label key={field} className={`diff-row ${selections.has(field) ? 'selected' : ''}`}>
-                    <input
-                      type="checkbox"
-                      className="diff-checkbox"
-                      checked={selections.has(field)}
-                      onChange={() => onTogglePresetField(master.guid, field)}
-                    />
-                    <span className="diff-field-label">{PRESET_FIELD_LABELS[field] || field}</span>
-                    <span className="diff-val diff-val-master">{formatValue(master[field])}</span>
-                    <span className="diff-arrow">→</span>
-                    <span className="diff-val diff-val-job">{formatValue(incoming[field])}</span>
-                  </label>
-                ))}
-              </div>
-            )}
+
+            {/* Show what changed (read-only) */}
+            <div className="diff-rows">
+              {changedFields.map(field => (
+                <div key={field} className="diff-row" style={{ cursor: 'default' }}>
+                  <span style={{ width: 20 }} />
+                  <span className="diff-field-label">{PRESET_FIELD_LABELS[field] || field}</span>
+                  <span className="diff-val diff-val-master">{formatValue(master[field])}</span>
+                  <span className="diff-arrow">→</span>
+                  <span className="diff-val diff-val-job">{formatValue(incoming[field])}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Resolution choice */}
+            <div style={{ padding: '10px 16px', display: 'flex', gap: 20, alignItems: 'center', fontSize: 13, borderTop: '1px solid var(--border)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name={`conflict-${master.guid}`}
+                  checked={resolution === 'create'}
+                  onChange={() => onSetConflictResolution(master.guid, 'create')}
+                />
+                <span>
+                  Create new preset
+                  {incomingOoh != null && (
+                    <span className="text-sub text-xs" style={{ marginLeft: 5 }}>
+                      (OOH: {incomingOoh.toFixed(3)}")
+                    </span>
+                  )}
+                </span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name={`conflict-${master.guid}`}
+                  checked={resolution === 'ignore'}
+                  onChange={() => onSetConflictResolution(master.guid, 'ignore')}
+                />
+                Ignore
+              </label>
+            </div>
           </div>
         );
       })}
 
-      {/* New presets (in job but not in master) */}
+      {/* New presets: not in master — show with assembly context */}
       {newPresets.length > 0 && (
         <div className="preset-diff-block">
           <div className="preset-diff-header" style={{ background: 'rgba(167,139,250,0.06)' }}>
@@ -196,6 +249,15 @@ function PresetsDiff({
             <span className="preset-diff-name" style={{ color: '#a78bfa' }}>New Presets — not in master</span>
             <span className="text-xs text-sub">{newPresets.length} preset{newPresets.length !== 1 ? 's' : ''}</span>
           </div>
+
+          {/* Assembly context annotation */}
+          {(incomingOoh != null || incomingHolderDesc) && (
+            <div style={{ padding: '5px 16px 3px', fontSize: 11, color: 'var(--text-sub)', borderBottom: '1px solid var(--border)' }}>
+              Proven at:{incomingHolderDesc ? <> <strong>{incomingHolderDesc}</strong></> : ''}
+              {incomingOoh != null ? <> · OOH <strong>{incomingOoh.toFixed(3)}"</strong></> : ''}
+            </div>
+          )}
+
           {newPresets.map(preset => (
             <label key={preset.guid} className={`diff-row ${addedPresets.has(preset.guid) ? 'selected' : ''}`}>
               <input
@@ -210,6 +272,33 @@ function PresetsDiff({
               <span className="diff-val diff-val-job" style={{ color: '#a78bfa' }}>Add to master</span>
             </label>
           ))}
+        </div>
+      )}
+
+      {/* Blocked: same name, values differ, same assembly context → no-op */}
+      {blocked.length > 0 && (
+        <div className="preset-diff-block" style={{ opacity: 0.6 }}>
+          <div className="preset-diff-header">
+            <span style={{ width: 20 }} />
+            <span className="preset-diff-name" style={{ color: 'var(--text-sub)', fontSize: 12 }}>
+              Not updating — same assembly, different values (keep master):
+            </span>
+            <span className="text-xs text-sub">{blocked.map(b => b.master.name || 'Unnamed').join(', ')}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Unchanged: identical values */}
+      {unchanged.length > 0 && (
+        <div className="preset-diff-block" style={{ opacity: 0.5 }}>
+          <div className="preset-diff-header">
+            <span style={{ width: 20 }} />
+            <CheckCircle size={12} style={{ color: 'var(--text-sub)', flexShrink: 0 }} />
+            <span className="preset-diff-name" style={{ color: 'var(--text-sub)', fontSize: 12 }}>
+              Identical — no changes:
+            </span>
+            <span className="text-xs text-sub">{unchanged.map(u => u.master.name || 'Unnamed').join(', ')}</span>
+          </div>
         </div>
       )}
 
@@ -235,11 +324,23 @@ export default function DiffStep({
   masterUpdated = false, isFetchingLive = false,
   queuePosition = null,
 }) {
+  const { holders } = useApp();
+
+  const incomingOoh = importedTool.incoming_ooh ?? null;
+  const incomingHolderGuid = importedTool.incoming_holder_guid || '';
+  const incomingHolderDesc = importedTool._incomingHolderDesc
+    || holders?.find(h => h.guid === incomingHolderGuid)?.description
+    || '';
+
   const hasPresets = (importedTool.presets?.length > 0) || (masterTool.presets?.length > 0);
 
   const presetMatch = useMemo(
-    () => matchPresets(importedTool.presets, masterTool.presets),
-    [importedTool.presets, masterTool.presets]
+    () => matchPresets(
+      importedTool.presets, masterTool.presets,
+      incomingOoh, incomingHolderGuid, masterTool.assemblies
+    ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [importedTool.presets, masterTool.presets, incomingOoh, incomingHolderGuid, masterTool.assemblies]
   );
 
   // Flat tool-level diffs
@@ -261,20 +362,18 @@ export default function DiffStep({
     return s;
   });
 
-  // Preset field selections: Map<masterPresetGuid, Set<fieldName>>
-  const [presetFieldSelections, setPresetFieldSelections] = useState(() => {
-    const m = new Map();
-    for (const { master, incoming } of presetMatch.matched) {
-      const changed = PRESET_DIFF_FIELDS.filter(f => !valuesEqual(incoming[f], master[f]));
-      m.set(master.guid, new Set(changed)); // all changed fields selected by default
-    }
-    return m;
-  });
-
   // New presets selected for addition — all selected by default
   const [addedPresets, setAddedPresets] = useState(
     () => new Set(presetMatch.newPresets.map(p => p.guid))
   );
+
+  // Conflict resolutions: Map<masterPresetGuid, 'create' | 'ignore'>
+  // Default to 'ignore' (safe — don't pollute master without explicit intent)
+  const [conflictResolutions, setConflictResolutions] = useState(() => {
+    const m = new Map();
+    for (const { master } of presetMatch.conflicts) m.set(master.guid, 'ignore');
+    return m;
+  });
 
   const toggleFlat = (field) => setSelected(prev => {
     const next = new Set(prev);
@@ -293,29 +392,6 @@ export default function DiffStep({
     });
   };
 
-  const togglePresetField = (masterGuid, field) => {
-    setPresetFieldSelections(prev => {
-      const next = new Map(prev);
-      const fields = new Set(next.get(masterGuid) || []);
-      if (fields.has(field)) fields.delete(field); else fields.add(field);
-      next.set(masterGuid, fields);
-      return next;
-    });
-  };
-
-  const togglePresetAllFields = (masterGuid, changedFields) => {
-    setPresetFieldSelections(prev => {
-      const next = new Map(prev);
-      const current = next.get(masterGuid) || new Set();
-      const allOn = changedFields.every(f => current.has(f));
-      const newSet = new Set(current);
-      if (allOn) changedFields.forEach(f => newSet.delete(f));
-      else changedFields.forEach(f => newSet.add(f));
-      next.set(masterGuid, newSet);
-      return next;
-    });
-  };
-
   const toggleAddedPreset = (guid) => {
     setAddedPresets(prev => {
       const next = new Set(prev);
@@ -324,25 +400,41 @@ export default function DiffStep({
     });
   };
 
-  const hasAnyChange = Object.values(diffs).some(arr => arr.length > 0)
-    || presetMatch.matched.some(({ master, incoming }) =>
-        PRESET_DIFF_FIELDS.some(f => !valuesEqual(incoming[f], master[f])))
-    || presetMatch.newPresets.length > 0;
+  const setConflictResolution = (masterGuid, resolution) => {
+    setConflictResolutions(prev => new Map(prev).set(masterGuid, resolution));
+  };
 
-  const presetFieldChangeCount = [...presetFieldSelections.values()].reduce((s, set) => s + set.size, 0);
-  const totalSelected = selected.size + presetFieldChangeCount + addedPresets.size;
+  const conflictCreates = [...conflictResolutions.values()].filter(v => v === 'create').length;
+  const totalSelected = selected.size + addedPresets.size + conflictCreates;
+
+  // Show the diff screen whenever there is anything to review, including
+  // blocked presets (values differ but won't be updated — still informational).
+  const hasAnyChange = Object.values(diffs).some(arr => arr.length > 0)
+    || presetMatch.conflicts.length > 0
+    || presetMatch.newPresets.length > 0
+    || presetMatch.blocked.length > 0;
 
   const handleConfirm = () => {
-    // Build presetSelections with full data needed by CommitStep / mergeTool
-    const presetSelections = new Map();
-    for (const { master, incoming } of presetMatch.matched) {
-      const fields = presetFieldSelections.get(master.guid) || new Set();
-      if (fields.size > 0) {
-        presetSelections.set(master.guid, { name: master.name, incoming, selectedFields: fields });
-      }
-    }
-    const presetsToAdd = presetMatch.newPresets.filter(p => addedPresets.has(p.guid));
-    onConfirm({ selectedFields: selected, presetSelections, presetsToAdd });
+    // Conflict presets chosen as 'create' become new presets with a fresh GUID
+    // (the incoming preset's GUID matches the master preset's GUID, so we must
+    // generate a new one) and an OOH suffix appended to the name.
+    const conflictPresetsToAdd = presetMatch.conflicts
+      .filter(({ master }) => (conflictResolutions.get(master.guid) || 'ignore') === 'create')
+      .map(({ incoming }) => ({
+        ...incoming,
+        guid: generateId(),
+        name: incomingOoh != null
+          ? `${incoming.name} (OOH: ${incomingOoh.toFixed(3)}")`
+          : incoming.name,
+      }));
+
+    const presetsToAdd = [
+      ...presetMatch.newPresets.filter(p => addedPresets.has(p.guid)),
+      ...conflictPresetsToAdd,
+    ];
+
+    // Existing preset values are never updated, so presetSelections is always empty.
+    onConfirm({ selectedFields: selected, presetSelections: new Map(), presetsToAdd });
   };
 
   if (isFetchingLive) {
@@ -370,6 +462,10 @@ export default function DiffStep({
   }
 
   const totalFlatChanged = Object.values(diffs).reduce((s, a) => s + a.length, 0);
+  const presetSummaryParts = [];
+  if (presetMatch.unchanged.length > 0) presetSummaryParts.push(`${presetMatch.unchanged.length} matched`);
+  if (presetMatch.conflicts.length > 0) presetSummaryParts.push(`${presetMatch.conflicts.length} conflict${presetMatch.conflicts.length !== 1 ? 's' : ''}`);
+  if (presetMatch.newPresets.length > 0) presetSummaryParts.push(`${presetMatch.newPresets.length} new`);
 
   return (
     <div>
@@ -385,9 +481,8 @@ export default function DiffStep({
           <p className="text-sub text-sm">
             {queuePosition && <span style={{ marginRight: 6 }}>({queuePosition})</span>}
             {totalFlatChanged > 0 && `${totalFlatChanged} tool field${totalFlatChanged !== 1 ? 's' : ''}`}
-            {totalFlatChanged > 0 && hasPresets && ', '}
-            {hasPresets && `${presetMatch.matched.length} preset${presetMatch.matched.length !== 1 ? 's' : ''} matched`}
-            {presetMatch.newPresets.length > 0 && `, ${presetMatch.newPresets.length} new`}
+            {totalFlatChanged > 0 && presetSummaryParts.length > 0 && ', '}
+            {presetSummaryParts.length > 0 && `presets: ${presetSummaryParts.join(', ')}`}
           </p>
         </div>
         <div className="diff-col-labels">
@@ -442,11 +537,12 @@ export default function DiffStep({
       {hasPresets && (
         <PresetsDiff
           presetMatch={presetMatch}
-          presetFieldSelections={presetFieldSelections}
+          incomingOoh={incomingOoh}
+          incomingHolderDesc={incomingHolderDesc}
           addedPresets={addedPresets}
-          onTogglePresetField={togglePresetField}
-          onTogglePresetAllFields={togglePresetAllFields}
+          conflictResolutions={conflictResolutions}
           onToggleAddedPreset={toggleAddedPreset}
+          onSetConflictResolution={setConflictResolution}
         />
       )}
 
