@@ -30,7 +30,7 @@ export default function ToolDetail() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [copied, setCopied] = useState(false);
-  const [selectedExportAssemblyId, setSelectedExportAssemblyId] = useState('');
+  const [showExportPicker, setShowExportPicker] = useState(null); // null | 'copy' | 'download'
 
   const tool = tools.find(t => t.id === id);
   const isMetric = tool?.unit === 'millimeters';
@@ -101,9 +101,6 @@ export default function ToolDetail() {
 
   const typeLabel = TOOL_TYPE_LABELS[tool.tool_type] || tool.tool_type;
   const assemblies = tool.assemblies || [];
-  const selectedExportAssembly = selectedExportAssemblyId
-    ? assemblies.find(a => a.assembly_id === selectedExportAssemblyId) || null
-    : null;
 
   if (editing) {
     return (
@@ -137,24 +134,16 @@ export default function ToolDetail() {
         <div className="tool-sidebar-divider" />
         <SidebarBtn
           icon={Copy}
-          label={copied ? 'Copied!' : 'Copy JSON'}
-          tip="Copy Fusion JSON to clipboard"
+          label={copied ? 'Copied!' : 'Copy to Fusion'}
+          tip="Copy Fusion JSON to clipboard (Ctrl+V into Fusion library)"
           className={copied ? 'copied' : ''}
-          onClick={async () => {
-            try {
-              await copyToolToClipboard(tool, holders, selectedExportAssembly);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 2000);
-            } catch {
-              notify('Clipboard not available — use Download JSON instead', 'error');
-            }
-          }}
+          onClick={() => setShowExportPicker('copy')}
         />
         <SidebarBtn
           icon={Download}
           label="Download"
-          tip="Download Fusion JSON"
-          onClick={() => { exportFusion(tool, holders, selectedExportAssembly); notify('Exported Fusion JSON', 'success'); }}
+          tip="Download Fusion JSON file"
+          onClick={() => setShowExportPicker('download')}
         />
         <SidebarBtn
           icon={FileDown}
@@ -210,26 +199,6 @@ export default function ToolDetail() {
             </div>
           </div>
         </div>
-
-        {/* Assembly selector for Fusion JSON export — shown only when assemblies exist */}
-        {assemblies.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 12 }}>
-            <span className="text-sub" style={{ whiteSpace: 'nowrap' }}>Export assembly:</span>
-            <select
-              className="field-input"
-              style={{ fontSize: 12, height: 28, maxWidth: 300 }}
-              value={selectedExportAssemblyId}
-              onChange={e => setSelectedExportAssemblyId(e.target.value)}
-            >
-              <option value="">None</option>
-              {assemblies.map(a => (
-                <option key={a.assembly_id} value={a.assembly_id}>
-                  {a.holder_description || 'Assembly'} — OOH: {a.ooh?.toFixed(3)}"
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
 
         <div className="detail-layout">
           <div>
@@ -383,6 +352,31 @@ export default function ToolDetail() {
             </Section>
           </div>
         </div>
+
+        {/* Fusion export picker modal */}
+        {showExportPicker && (
+          <AssemblyExportPicker
+            tool={tool}
+            holders={holders}
+            onConfirm={async (assembly) => {
+              setShowExportPicker(null);
+              if (showExportPicker === 'copy') {
+                try {
+                  await copyToolToClipboard(tool, holders, assembly);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                  notify('Copied to clipboard', 'success', 2000);
+                } catch {
+                  notify('Clipboard not available — use Download instead', 'error');
+                }
+              } else {
+                exportFusion(tool, holders, assembly);
+                notify('Fusion JSON downloaded', 'success');
+              }
+            }}
+            onCancel={() => setShowExportPicker(null)}
+          />
+        )}
 
         {/* Delete confirmation modal */}
         {showDeleteModal && (
@@ -565,6 +559,120 @@ function round4(v) {
   const n = Number(v);
   if (isNaN(n)) return v;
   return Math.round(n * 10000) / 10000;
+}
+
+function AssemblyExportPicker({ tool, holders, onConfirm, onCancel }) {
+  const assemblies = tool.assemblies || [];
+  const [selected, setSelected] = useState('none'); // 'none' | assembly_id | 'new'
+  const [newHolderGuid, setNewHolderGuid] = useState('');
+  const [newOoh, setNewOoh] = useState('');
+
+  const canConfirm = selected !== 'new' || (newHolderGuid && newOoh && parseFloat(newOoh) > 0);
+
+  const handleConfirm = () => {
+    if (selected === 'none') { onConfirm(null); return; }
+    if (selected === 'new') {
+      const holder = holders.find(h => h.guid === newHolderGuid);
+      onConfirm({
+        assembly_id: 'temp',
+        holder_guid: newHolderGuid,
+        holder_description: holder?.description || '',
+        ooh: parseFloat(newOoh),
+        linked_preset_guids: [],
+        notes: '',
+      });
+      return;
+    }
+    onConfirm(assemblies.find(a => a.assembly_id === selected) || null);
+  };
+
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
+        <h3 className="modal-title">Select Assembly for Export</h3>
+        <p style={{ fontSize: 13, color: 'var(--text-sub)', marginBottom: 14 }}>
+          Embed a holder and OOH (out-of-holder length) in the Fusion JSON. One-time assemblies are not saved.
+        </p>
+
+        <div
+          className={`assembly-picker-option${selected === 'none' ? ' selected' : ''}`}
+          onClick={() => setSelected('none')}
+        >
+          <span style={{ fontWeight: 600 }}>No assembly</span>
+          <span className="text-sub" style={{ fontSize: 12 }}> — geometry only</span>
+        </div>
+
+        {assemblies.length > 0 && (
+          <>
+            <div className="text-sub" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '12px 0 6px' }}>Saved assemblies</div>
+            {assemblies.map(a => {
+              const c = holderColor(a.holder_description || null);
+              const isSel = selected === a.assembly_id;
+              return (
+                <div
+                  key={a.assembly_id}
+                  className={`assembly-picker-option${isSel ? ' selected' : ''}`}
+                  style={isSel ? { borderColor: c.border, background: c.bg } : {}}
+                  onClick={() => setSelected(a.assembly_id)}
+                >
+                  <span className="holder-pill" style={{ background: c.bg, borderColor: c.border, color: c.text }}>
+                    {a.holder_description || '—'}
+                  </span>
+                  <span style={{ fontSize: 13 }}>OOH: {a.ooh?.toFixed(3)}"</span>
+                  {(a.linked_preset_guids?.length > 0) && (
+                    <span className="text-sub" style={{ fontSize: 11, marginLeft: 'auto' }}>
+                      {a.linked_preset_guids.length} preset{a.linked_preset_guids.length !== 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </>
+        )}
+
+        <div className="text-sub" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '12px 0 6px' }}>One-time (not saved)</div>
+        <div
+          className={`assembly-picker-option${selected === 'new' ? ' selected' : ''}`}
+          onClick={() => setSelected('new')}
+        >
+          <span style={{ fontWeight: 600 }}>Custom assembly</span>
+          <span className="text-sub" style={{ fontSize: 12 }}> — specify holder + OOH</span>
+        </div>
+
+        {selected === 'new' && (
+          <div style={{ padding: '12px', background: 'var(--surface-2)', borderRadius: 'var(--radius-sm)', marginBottom: 6 }}>
+            <div style={{ marginBottom: 10 }}>
+              <label className="field-label">Holder</label>
+              <select className="field-input" value={newHolderGuid} onChange={e => setNewHolderGuid(e.target.value)}>
+                <option value="">— select holder —</option>
+                {holders.map(h => <option key={h.guid} value={h.guid}>{h.description}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="field-label">OOH (inches)</label>
+              <input
+                className="field-input"
+                type="number"
+                step="0.001"
+                min="0"
+                placeholder="e.g. 2.300"
+                value={newOoh}
+                onChange={e => setNewOoh(e.target.value)}
+                style={{ maxWidth: 130 }}
+              />
+            </div>
+          </div>
+        )}
+
+        <div className="modal-actions" style={{ marginTop: 16 }}>
+          <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-secondary" disabled={!canConfirm} style={canConfirm ? { background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' } : {}} onClick={handleConfirm}>
+            Confirm &amp; Export
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function Field({ label, value, unit, mono, href }) {

@@ -477,6 +477,7 @@ export function internalToFusionTool(tool) {
           v_f_leadOut: tool.lead_out_feedrate ?? preset0base.v_f_leadOut ?? 0,
           v_f_plunge: tool.plunge_feedrate ?? preset0base.v_f_plunge ?? 0,
           v_f_ramp: tool.ramp_feedrate ?? preset0base.v_f_ramp ?? 0,
+          v_f_retract: preset0base.v_f_retract ?? 0,
           v_f_transition: tool.cutting_feedrate ?? preset0base.v_f_transition ?? 0,
           f_z: tool.feed_per_tooth ?? preset0base.f_z ?? 0,
           f_n: tool.feed_per_rev ?? preset0base.f_n ?? 0,
@@ -487,6 +488,15 @@ export function internalToFusionTool(tool) {
     },
     holder: existing.holder || null,
     'post-process': {
+      'break-control': false,
+      comment: '',
+      hand: false,
+      live: false,
+      'manually-entered': false,
+      number: 0,
+      'length-offset': 0,
+      'diameter-offset': 0,
+      'tool-select-number': 0,
       ...(existing['post-process'] || {}),
       ...(hasMtn
         ? { number: mtnInt, 'length-offset': mtnInt, 'diameter-offset': mtnInt }

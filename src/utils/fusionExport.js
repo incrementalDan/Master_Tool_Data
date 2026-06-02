@@ -56,11 +56,11 @@ export function exportFullLibrary(tools, holders = []) {
 }
 
 export async function copyToolToClipboard(tool, holders = [], assembly = null) {
-  const json = JSON.stringify(toFusionFormat(tool, holders, assembly), null, 2);
+  const json = JSON.stringify({ data: [toFusionFormat(tool, holders, assembly)] }, null, 2);
   await navigator.clipboard.writeText(json);
 }
 
 export async function copyToolsToClipboard(tools, holders = []) {
-  const json = JSON.stringify(tools.map(t => toFusionFormat(t, holders)), null, 2);
+  const json = JSON.stringify({ data: tools.map(t => toFusionFormat(t, holders)) }, null, 2);
   await navigator.clipboard.writeText(json);
 }
