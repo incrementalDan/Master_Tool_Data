@@ -14,7 +14,7 @@ function StatusIcon({ status }) {
 }
 
 export default function SummaryStep({ queue, onDone }) {
-  const { tools, notify } = useApp();
+  const { tools, holders, notify } = useApp();
   const navigate = useNavigate();
   const { total, committed, skipped } = queueProgress(queue);
   const [copying, setCopying] = useState(false);
@@ -27,7 +27,7 @@ export default function SummaryStep({ queue, onDone }) {
         .filter(e => e.status === 'committed' && e.matchedMasterTool)
         .map(e => e.matchedMasterTool.id);
       const committedTools = tools.filter(t => committedMasterIds.includes(t.id));
-      await copyToolsToClipboard(committedTools);
+      await copyToolsToClipboard(committedTools, holders);
       notify(`Copied ${committedTools.length} tool${committedTools.length !== 1 ? 's' : ''} to clipboard`, 'success');
     } catch (err) {
       notify('Clipboard copy failed: ' + err.message, 'error');
