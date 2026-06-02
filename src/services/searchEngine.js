@@ -51,6 +51,9 @@ function matchesFacet(tool, field, value) {
   if (field === 'material_suitability') {
     return Array.isArray(tool.material_suitability) && tool.material_suitability.includes(value);
   }
+  if (field === 'tsc_capable') {
+    return value === 'Yes' ? !!tool.tsc_capable : !tool.tsc_capable;
+  }
   // Numeric exact or close match
   if (['diameter', 'flute_length', 'overall_length', 'number_of_flutes', 'corner_radius'].includes(field)) {
     const tv = parseFloat(tool[field]);
@@ -80,6 +83,8 @@ export function getAvailableOptions(tools, activeFilters, targetField) {
       (tool.tags || []).forEach(v => v && values.add(v));
     } else if (targetField === 'material_suitability') {
       (tool.material_suitability || []).forEach(v => v && values.add(v));
+    } else if (targetField === 'tsc_capable') {
+      values.add(tool.tsc_capable ? 'Yes' : 'No');
     } else {
       const v = tool[targetField];
       if (v !== null && v !== undefined && v !== '') values.add(v);
@@ -93,13 +98,13 @@ export function getAvailableOptions(tools, activeFilters, targetField) {
 
   return {
     options: sorted,
-    showAsChips: sorted.length <= 5,
+    showAsChips: targetField === 'tsc_capable' || sorted.length <= 5,
   };
 }
 
 export function buildIndex(tools) {
   const fieldValues = new Map();
-  const allFacetFields = ['tool_type', 'diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'preferred_machine', 'material_suitability', 'tags', 'corner_radius'];
+  const allFacetFields = ['tool_type', 'diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'material_suitability', 'tags', 'corner_radius'];
 
   for (const field of allFacetFields) {
     const values = new Set();
@@ -108,6 +113,8 @@ export function buildIndex(tools) {
         (tool.tags || []).forEach(v => v && values.add(v));
       } else if (field === 'material_suitability') {
         (tool.material_suitability || []).forEach(v => v && values.add(v));
+      } else if (field === 'tsc_capable') {
+        values.add(tool.tsc_capable ? 'Yes' : 'No');
       } else {
         const v = tool[field];
         if (v !== null && v !== undefined && v !== '') values.add(v);

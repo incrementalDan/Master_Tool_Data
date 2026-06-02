@@ -146,7 +146,7 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
     'ramp-angle': 2,
     v_f_plunge: tool.plunge_feedrate || 0,
     f_n: tool.feed_per_rev || 0,
-    'tool-coolant': tool.coolant || 'flood',
+    'tool-coolant': tool.tsc_capable ? 'flood and through tool' : 'flood',
     'use-stepdown': false,
     'use-stepover': false,
   }];
@@ -178,7 +178,7 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
       S(97, tsvNum(toolNum));
     }
 
-    S(42, tsvStr(preset['tool-coolant'] || tool.coolant || 'flood'));
+    S(42, tsvStr(preset['tool-coolant'] || (tool.tsc_capable ? 'flood and through tool' : 'flood')));
     S(43, tsvStr('no'));  // coolant support
 
     if (tool.corner_radius)  S(44, tsvNum(tool.corner_radius));
