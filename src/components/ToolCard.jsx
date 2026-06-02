@@ -61,7 +61,7 @@ export default function ToolCard({ tool, variant = 'grid' }) {
         <span className="meta-badge meta-badge-blue">{tool.preferred_machine}</span>
       )}
       {tool.proshot_id && (
-        <span className="meta-badge meta-badge-orange font-mono">{tool.proshot_id}</span>
+        <span className="proshot-pill font-mono">{tool.proshot_id}</span>
       )}
       {selectedHolder && (
         <span className="meta-badge truncate" style={{ maxWidth: 160 }} title={`Holder: ${selectedHolder.description}`}>
@@ -74,9 +74,9 @@ export default function ToolCard({ tool, variant = 'grid' }) {
   if (variant === 'list') {
     return (
       <div className="tool-row" onClick={open}>
-        <span className="tool-row-icon"><ToolTypeIcon type={tool.tool_type} size={20} /></span>
+        <span className="tool-row-icon"><ToolTypeIcon type={tool.tool_type} size={24} /></span>
         <div className="tool-row-main">
-          <span className="tool-row-title truncate">{tool.description || '—'}</span>
+          <span className="tool-row-title description-badge truncate" style={{ display: 'inline-block', fontSize: 13 }}>{tool.description || '—'}</span>
           <span className="tool-card-type">{label}</span>
         </div>
         {badges}
@@ -88,10 +88,10 @@ export default function ToolCard({ tool, variant = 'grid' }) {
   return (
     <div className="tool-card" onClick={open}>
       <div className="tool-card-header">
-        <span className="tool-card-icon"><ToolTypeIcon type={tool.tool_type} size={22} /></span>
+        <span className="tool-card-icon"><ToolTypeIcon type={tool.tool_type} size={26} /></span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="tool-card-type">{label}</div>
-          <div className="tool-card-title truncate">{tool.description || '—'}</div>
+          <div className="tool-card-title description-badge truncate" style={{ display: 'block', fontSize: 13, marginTop: 2 }}>{tool.description || '—'}</div>
         </div>
         {actions}
       </div>
