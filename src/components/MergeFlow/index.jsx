@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { GitMerge } from 'lucide-react';
 import { useApp } from '../../context/AppContext.jsx';
 import { buildQueue, queueProgress } from '../../services/mergeQueue.js';
-import { fusionToolToInternal } from '../../schema/toolSchema.js';
+import { fusionToolToInternal, mergeFusionAndMetadata } from '../../schema/toolSchema.js';
 import ImportStep from './ImportStep.jsx';
 import MatchStep from './MatchStep.jsx';
 import DiffStep from './DiffStep.jsx';
@@ -65,8 +65,11 @@ export default function MergeFlow() {
       const masterMod = masterTool._fusionRaw?.last_modified || 0;
       const freshMod = rawFresh.last_modified || 0;
       if (freshMod <= masterMod) return { tool: masterTool, updated: false };
-      // Master changed — merge fresh Fusion data with existing metadata
-      const fresh = { ...masterTool, ...fusionToolToInternal(rawFresh), _fusionRaw: rawFresh };
+      // Master changed — merge fresh Fusion data with existing metadata.
+      // mergeFusionAndMetadata preserves all metadata-only fields from masterTool
+      // (assemblies, notes, tags, vendor, merge_history, etc.) that fusionToolToInternal
+      // would otherwise wipe by returning empty defaults.
+      const fresh = { ...mergeFusionAndMetadata(fusionToolToInternal(rawFresh), masterTool), _fusionRaw: rawFresh };
       return { tool: fresh, updated: true };
     } catch {
       return { tool: masterTool, updated: false };
