@@ -139,7 +139,7 @@ export default function CommitStep({
               <div className="commit-field-list">
                 {newPresetList.map(p => (
                   <div key={p.guid} className="commit-field-row">
-                    <span className="commit-field-name">{p.name || 'Unnamed'}</span>
+                    <span className="preset-tag">{p.name || 'Unnamed'}</span>
                     <span className="commit-field-old" style={{ fontStyle: 'italic' }}>— not in master —</span>
                     <span className="diff-arrow">+</span>
                     <span className="commit-field-new" style={{ color: '#a78bfa' }}>New preset</span>

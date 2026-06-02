@@ -266,7 +266,7 @@ function PresetsDiff({
                 checked={addedPresets.has(preset.guid)}
                 onChange={() => onToggleAddedPreset(preset.guid)}
               />
-              <span className="diff-field-label">{preset.name || 'Unnamed'}</span>
+              <span className="preset-tag">{preset.name || 'Unnamed'}</span>
               <span className="diff-val diff-val-master" style={{ fontStyle: 'italic' }}>— not in master —</span>
               <span className="diff-arrow">+</span>
               <span className="diff-val diff-val-job" style={{ color: '#a78bfa' }}>Add to master</span>

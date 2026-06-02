@@ -123,12 +123,10 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
 
       {/* ── Linked presets (outside tag, inside card) ── */}
       {linkedPresets.length > 0 && (
-        <div className="assembly-presets">
-          <span style={{ fontWeight: 600, color: 'var(--text-label)', marginRight: 6 }}>Presets:</span>
-          {linkedPresets.map((p, i) => (
-            <span key={p.guid}>
-              {p.name}{i < linkedPresets.length - 1 ? ', ' : ''}
-            </span>
+        <div className="assembly-presets" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontWeight: 600, color: 'var(--text-label)', marginRight: 2, flexShrink: 0 }}>Presets:</span>
+          {linkedPresets.map((p) => (
+            <span key={p.guid} className="preset-tag">{p.name || 'Unnamed'}</span>
           ))}
         </div>
       )}

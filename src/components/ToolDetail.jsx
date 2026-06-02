@@ -206,10 +206,16 @@ export default function ToolDetail() {
               {/* Machine tool number inside Identity */}
               {(tool.machine_tool_number !== null && tool.machine_tool_number !== undefined && tool.machine_tool_number !== '') && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
-                  <Hash size={14} style={{ color: 'var(--orange)', flexShrink: 0 }} />
+                  <Hash size={14} style={{ color: 'var(--text-sub)', flexShrink: 0 }} />
                   <span className="text-sub" style={{ fontSize: 12 }}>Machine Tool #</span>
-                  <span className="font-mono" style={{ fontSize: 15, fontWeight: 700 }}>
-                    T{tool.machine_tool_number} · H{tool.machine_tool_number} · D{tool.machine_tool_number}
+                  <span className="machine-num-badge" style={{ fontSize: 14 }}>
+                    T{tool.machine_tool_number}
+                  </span>
+                  <span className="machine-num-badge" style={{ fontSize: 14 }}>
+                    H{tool.machine_tool_number}
+                  </span>
+                  <span className="machine-num-badge" style={{ fontSize: 14 }}>
+                    D{tool.machine_tool_number}
                   </span>
                 </div>
               )}

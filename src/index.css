@@ -1716,8 +1716,23 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   min-width: 0;
 }
 
-/* ─── Description badge + ProShop ID pill ───────────────────────────────── */
-/* Description gets a violet-tinted rectangle, ProShop ID gets an amber pill */
+/* ─── Data-field visual tokens ──────────────────────────────────────────── */
+/*                                                                            */
+/* Each named data type has exactly ONE token class.                          */
+/* Use the matching class everywhere that type is shown as a standalone       */
+/* chip/badge (cards, sticky headers, inline lists).                          */
+/* In a label:value detail grid the plain value is fine; the class is for     */
+/* when the data stands alone without a label next to it.                     */
+/*                                                                            */
+/*  .description-badge  — Tool Description  — violet rounded-rect            */
+/*  .proshot-pill       — ProShop ID        — amber pill (monospace)          */
+/*  .holder-pill        — Holder            — teal pill  (override inline)    */
+/*  .machine-num-badge  — Machine Tool #    — gray rect  (monospace, square)  */
+/*  .location-tag       — Location/Cabinet  — indigo pill (monospace)         */
+/*  .preset-tag         — Preset Name       — emerald pill                    */
+/*                                                                            */
+/* When changing any class, update ALL usages across the codebase.            */
+
 .description-badge {
   background: rgba(124, 58, 237, 0.10);
   border: 1px solid rgba(124, 58, 237, 0.28);
@@ -1746,6 +1761,46 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   cursor: pointer;
 }
 .proshot-pill:hover { filter: brightness(1.2); text-decoration: none; }
+
+.machine-num-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 5px;
+  border: 1px solid rgba(148, 163, 184, 0.40);
+  background: rgba(148, 163, 184, 0.10);
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: monospace;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+}
+
+.location-tag {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(99, 102, 241, 0.40);
+  background: rgba(99, 102, 241, 0.10);
+  color: #818cf8;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: monospace;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+}
+
+.preset-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.10);
+  color: #34d399;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 /* ─── Tool detail page — frozen left sidebar + sticky header ─────────────── */
 .tool-detail-wrap {
@@ -1894,12 +1949,14 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .assembly-picker-option:hover { border-color: var(--text-sub); }
 .assembly-picker-option.selected { border-color: var(--accent); background: rgba(99,102,241,0.08); }
 
-/* ─── Holder pill — colored by holder identity ──────────────────────────── */
+/* ─── Holder pill — teal by default; AssemblyCard overrides per-holder ─────── */
 .holder-pill {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid;
+  border: 1px solid rgba(20, 184, 166, 0.40);
+  background: rgba(20, 184, 166, 0.15);
+  color: #2dd4bf;
   font-size: 11px;
   font-weight: 600;
   white-space: normal;

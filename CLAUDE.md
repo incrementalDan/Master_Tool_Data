@@ -338,7 +338,8 @@ src/
                                   # Right sidebar: Notes & Tags only
     ToolForm.jsx                  # Edit form with sticky action bar + dirty guard
     ToolCard.jsx                  # Grid and list card variants with hover actions
-                                  # Description uses .description-badge; ProShop ID uses .proshot-pill
+                                  # Uses data-field tokens: .description-badge, .proshot-pill,
+                                  # .holder-pill, .machine-num-badge, .location-tag
     ToolTypeGrid.jsx              # Tool type selector tiles (icons size 36)
     FacetFilters.jsx              # Cascading facet filter UI
     AddToolFlow.jsx               # New tool flow (extractor or manual)
@@ -485,11 +486,32 @@ The ToolDetail view uses a three-zone layout:
 
 Machine tool number is shown inside the Identity section (not as a standalone block). History and Merge History are at the bottom of the left column.
 
-### CSS classes for identity highlights
-- `.description-badge` — violet tint background (`rgba(124,58,237,0.10)`), matching border, rounded corners
-- `.proshot-pill` — amber text (`#f59e0b`), amber tint background (`rgba(245,158,11,0.14)`), pill shape
+### Data-field visual token system
 
-Both classes are used on ToolCard as well (grid and list variants).
+**Universal rule**: every named data type has exactly one CSS token class. Use it everywhere that type appears as a **standalone chip or badge** (cards, sticky headers, inline lists). In a label:value detail grid the plain value is correct; the class is for when the data appears without a label next to it.
+
+**When changing any token's style, update ALL usages across the codebase** — not just the CSS definition.
+
+| Data Type | Class | Shape | Color |
+|---|---|---|---|
+| Tool Description | `.description-badge` | Rounded rect (r=7px) | Violet — `rgba(124,58,237,…)` |
+| ProShop ID | `.proshot-pill` | Pill | Amber — `#f59e0b` |
+| Holder | `.holder-pill` | Pill | Teal default — `#2dd4bf`; AssemblyCard overrides per-holder via inline style |
+| Machine Tool # | `.machine-num-badge` | Slightly rounded rect (r=5px) | Cool gray — `#94a3b8`, monospace |
+| Location/Cabinet | `.location-tag` | Pill | Indigo — `#818cf8`, monospace |
+| Preset Name | `.preset-tag` | Pill | Emerald — `#34d399` |
+
+All six classes are defined in `src/index.css` in the "Data-field visual tokens" block.
+
+**Current usages:**
+- `.description-badge` — `ToolCard` (grid + list), `ToolDetail` sticky header
+- `.proshot-pill` — `ToolCard`, `ToolDetail` sticky header, `AssemblyCard` operator tag (as `.tag-proshot-oval` — physical tag format exception)
+- `.holder-pill` — `ToolCard` badge, `ToolDetail` HolderSection, `ToolDetail` export picker
+- `.machine-num-badge` — `ToolCard` badge, `ToolDetail` Identity section (T/H/D)
+- `.location-tag` — `ToolCard` badge (when location is set)
+- `.preset-tag` — `AssemblyCard` linked presets list, `DiffStep` new-preset rows, `CommitStep` new-preset rows
+
+**Exception**: `AssemblyCard` uses its own `.operator-tag` / `.tag-box` / `.tag-proshot-oval` layout to match the physical shop tag format. That internal layout is intentional and is not subject to this rule.
 
 -----
 

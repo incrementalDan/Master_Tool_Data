@@ -55,7 +55,7 @@ export default function ToolCard({ tool, variant = 'grid' }) {
   const badges = (
     <div className="tool-card-meta">
       {hasMachineNum && (
-        <span className="meta-badge font-mono" title="Machine Tool #" style={{ borderColor: 'var(--orange)', color: 'var(--orange)' }}>
+        <span className="machine-num-badge" title="Machine Tool #">
           T{tool.machine_tool_number}
         </span>
       )}
@@ -65,6 +65,9 @@ export default function ToolCard({ tool, variant = 'grid' }) {
       {tool.coating && <span className="meta-badge">{tool.coating}</span>}
       {tool.preferred_machine && (
         <span className="meta-badge meta-badge-blue">{tool.preferred_machine}</span>
+      )}
+      {tool.location && (
+        <span className="location-tag" title="Location">{tool.location}</span>
       )}
       {tool.proshot_id && (
         <a
@@ -76,7 +79,7 @@ export default function ToolCard({ tool, variant = 'grid' }) {
         >{tool.proshot_id}</a>
       )}
       {selectedHolder && (
-        <span className="meta-badge truncate" style={{ maxWidth: 160 }} title={`Holder: ${selectedHolder.description}`}>
+        <span className="holder-pill truncate" style={{ maxWidth: 160 }} title={`Holder: ${selectedHolder.description}`}>
           {selectedHolder.description}
         </span>
       )}
