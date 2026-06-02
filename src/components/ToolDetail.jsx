@@ -249,6 +249,7 @@ export default function ToolDetail() {
                 {tool.upper_radius && <Field label="Upper Radius" value={round4(tool.upper_radius)} unit={lenUnit} />}
                 {tool.profile_radius && <Field label="Profile Radius" value={round4(tool.profile_radius)} unit={lenUnit} />}
                 {tool.axial_distance && <Field label="Axial Distance" value={round4(tool.axial_distance)} unit={lenUnit} />}
+                {tool.min_ooh != null && <Field label="Length Below Holder - MIN OOH:" value={round4(tool.min_ooh)} unit={lenUnit} />}
               </div>
             </Section>
 

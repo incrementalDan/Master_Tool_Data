@@ -24,10 +24,16 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
     });
   };
 
+  const minOoh = tool.min_ooh ?? null;
+
   const handleSave = () => {
     const oohNum = parseFloat(ooh);
     if (!holderGuid) { setError('Please select a holder.'); return; }
     if (!ooh || isNaN(oohNum) || oohNum <= 0) { setError('OOH must be a positive number.'); return; }
+    if (minOoh != null && oohNum < minOoh) {
+      setError(`OOH cannot be less than the MIN OOH for this tool (${minOoh.toFixed(3)}")`);
+      return;
+    }
 
     const updatedAssembly = {
       assembly_id: assembly?.assembly_id || generateAssemblyId(),
@@ -86,12 +92,27 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
               <Info size={12} />
             </span>
           </label>
+          {minOoh != null && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span className="text-sub text-xs">
+                Length Below Holder - MIN OOH: <strong>{minOoh.toFixed(3)}"</strong>
+              </span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                style={{ fontSize: 11, padding: '2px 8px' }}
+                onClick={() => setOoh(String(minOoh))}
+              >
+                Use
+              </button>
+            </div>
+          )}
           <input
             className="field-input"
             style={{ maxWidth: 160 }}
             type="number"
             step="0.001"
-            min="0"
+            min={minOoh != null ? minOoh : 0}
             placeholder="e.g. 1.375"
             value={ooh}
             onChange={e => setOoh(e.target.value)}

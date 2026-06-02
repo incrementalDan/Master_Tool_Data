@@ -4,12 +4,12 @@ import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LI
 import { useApp } from '../context/AppContext.jsx';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 
-const NUMERIC_FIELDS = new Set(['diameter', 'flute_length', 'overall_length', 'shank_diameter', 'corner_radius', 'tip_angle', 'taper_angle', 'tip_diameter', 'lower_radius', 'upper_radius', 'profile_radius', 'axial_distance', 'shoulder_length', 'ooh', 'helix_angle', 'number_of_flutes', 'spindle_speed', 'cutting_feedrate', 'plunge_feedrate', 'ramp_feedrate', 'lead_in_feedrate', 'lead_out_feedrate', 'feed_per_tooth', 'feed_per_rev', 'cutting_speed', 'depth_of_cut', 'width_of_cut', 'min_thread_pitch', 'max_thread_pitch']);
+const NUMERIC_FIELDS = new Set(['diameter', 'flute_length', 'overall_length', 'shank_diameter', 'corner_radius', 'tip_angle', 'taper_angle', 'tip_diameter', 'lower_radius', 'upper_radius', 'profile_radius', 'axial_distance', 'shoulder_length', 'ooh', 'min_ooh', 'helix_angle', 'number_of_flutes', 'spindle_speed', 'cutting_feedrate', 'plunge_feedrate', 'ramp_feedrate', 'lead_in_feedrate', 'lead_out_feedrate', 'feed_per_tooth', 'feed_per_rev', 'cutting_speed', 'depth_of_cut', 'width_of_cut', 'min_thread_pitch', 'max_thread_pitch']);
 
 const FIELD_STEP = {
   diameter: '0.0001', flute_length: '0.001', overall_length: '0.001', shank_diameter: '0.0001',
   corner_radius: '0.0001', tip_diameter: '0.0001', lower_radius: '0.0001', upper_radius: '0.0001',
-  profile_radius: '0.0001', axial_distance: '0.001', shoulder_length: '0.001', ooh: '0.001',
+  profile_radius: '0.0001', axial_distance: '0.001', shoulder_length: '0.001', ooh: '0.001', min_ooh: '0.001',
   number_of_flutes: '1', spindle_speed: '1', cutting_feedrate: '0.1', plunge_feedrate: '0.1',
   ramp_feedrate: '0.1', lead_in_feedrate: '0.1', lead_out_feedrate: '0.1',
   feed_per_tooth: '0.0001', feed_per_rev: '0.0001', cutting_speed: '1',
@@ -42,7 +42,7 @@ const META_FIELDS = ['notes', 'tags', 'preferred_machine', 'last_used_job', 'rev
 const FIELD_UNIT_IN = {
   diameter: 'in', flute_length: 'in', overall_length: 'in', shank_diameter: 'in',
   corner_radius: 'in', shoulder_length: 'in', tip_diameter: 'in', lower_radius: 'in',
-  upper_radius: 'in', profile_radius: 'in', axial_distance: 'in', ooh: 'in',
+  upper_radius: 'in', profile_radius: 'in', axial_distance: 'in', ooh: 'in', min_ooh: 'in',
   depth_of_cut: 'in', width_of_cut: 'in', min_thread_pitch: 'in', max_thread_pitch: 'in',
   cutting_feedrate: 'in/min', plunge_feedrate: 'in/min', ramp_feedrate: 'in/min',
   lead_in_feedrate: 'in/min', lead_out_feedrate: 'in/min',
@@ -53,7 +53,7 @@ const FIELD_UNIT_IN = {
 const FIELD_UNIT_MM_OVERRIDES = {
   diameter: 'mm', flute_length: 'mm', overall_length: 'mm', shank_diameter: 'mm',
   corner_radius: 'mm', shoulder_length: 'mm', tip_diameter: 'mm', lower_radius: 'mm',
-  upper_radius: 'mm', profile_radius: 'mm', axial_distance: 'mm', ooh: 'mm',
+  upper_radius: 'mm', profile_radius: 'mm', axial_distance: 'mm', ooh: 'mm', min_ooh: 'mm',
   depth_of_cut: 'mm', width_of_cut: 'mm', min_thread_pitch: 'mm', max_thread_pitch: 'mm',
   cutting_feedrate: 'mm/min', plunge_feedrate: 'mm/min', ramp_feedrate: 'mm/min',
   lead_in_feedrate: 'mm/min', lead_out_feedrate: 'mm/min',
@@ -238,6 +238,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
           {visibleFields.has('upper_radius') && <NumField field="upper_radius" data={data} setField={setField} />}
           {visibleFields.has('profile_radius') && <NumField field="profile_radius" data={data} setField={setField} />}
           {visibleFields.has('axial_distance') && <NumField field="axial_distance" data={data} setField={setField} />}
+          <NumField field="min_ooh" data={data} setField={setField} />
         </div>
       </Section>
 
