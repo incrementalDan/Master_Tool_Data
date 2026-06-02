@@ -328,9 +328,12 @@ export function fusionToolToInternal(fTool) {
     // overridden by metadata.selected_holder_guid when present.
     selected_holder_guid: fTool.holder?.guid || '',
     // Transient — only populated for merge-flow incoming tools (not saved to metadata).
-    // Used by CommitStep to detect the assembly context of an imported job tool.
+    // OOH comes from geometry.LB (Body Length / Length below Holder). assembly-gauge-length
+    // is what we write on export; LB is what Fusion stores as the actual stick-out geometry.
     incoming_holder_guid: fTool.holder?.guid || '',
-    incoming_ooh: fTool['assembly-gauge-length'] || null,
+    incoming_ooh: geo.LB
+      ? (fTool.unit === 'millimeters' ? geo.LB / 25.4 : geo.LB)
+      : null,
     // Assemblies — metadata only, default empty
     assemblies: [],
     // Metadata fields default empty — filled from metadata file

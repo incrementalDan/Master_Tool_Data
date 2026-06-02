@@ -269,10 +269,10 @@ Key holder object fields:
 An **Assembly** records a specific tool + holder + OOH (Out of Holder length) combination that has been proven in a job. Assemblies are stored per-tool in `tool_metadata.json` under `assemblies[]`.
 
 ### OOH (Out of Holder)
-- OOH = how much of the tool sticks out of the holder during cutting (aka gauge length / stick-out)
+- OOH = how much of the tool sticks out of the holder during cutting (aka gauge length / stick-out / "Length below Holder")
 - **Always stored in inches internally**, regardless of the tool's unit
-- When reading `assembly-gauge-length` from an imported Fusion JSON: if the tool's unit is `millimeters`, divide by 25.4 to convert to inches before storing
-- When exporting: if the tool is metric, multiply OOH × 25.4 back to mm for the `assembly-gauge-length` field
+- **Source field**: `geometry.LB` (Body Length) in Fusion JSON — this is "Length below Holder" in the Fusion UI, and `tool_bodyLength` in the Fusion CSV export. Do NOT use `assembly-gauge-length` as the source; that field is what we WRITE on export, not the geometric source of truth.
+- Unit conversion: if the tool's unit is `millimeters`, divide `geometry.LB` by 25.4 when reading; multiply OOH × 25.4 when writing back to `assembly-gauge-length` for metric tools
 
 ### Assembly lifecycle
 1. **Manual creation**: User clicks "+ Add Assembly" in ToolDetail → fills in holder (via HolderPicker), OOH, linked presets, notes

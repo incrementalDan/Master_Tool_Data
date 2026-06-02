@@ -202,7 +202,11 @@ function parseFusionCsv(raw) {
       _fusionRaw: null,
       // Transient: assembly context from the job file (used by CommitStep)
       incoming_holder_guid: '',
-      incoming_ooh: csvNum(r.tool_assemblyGaugeLength),
+      incoming_ooh: (() => {
+        const lb = csvNum(r.tool_bodyLength);
+        if (!lb) return null;
+        return csvStr(r.tool_unit) === 'millimeters' ? lb / 25.4 : lb;
+      })(),
       _incomingHolderDesc: csvStr(r.holder_description),
     };
     tools.push(tool);
