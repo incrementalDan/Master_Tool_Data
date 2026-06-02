@@ -1878,6 +1878,27 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   .tool-sticky-header { margin: -12px -12px 14px; top: auto; position: static; }
 }
 
+/* ─── Holder pill — colored by holder identity ──────────────────────────── */
+.holder-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+/* ─── Assemblies grid — multiple cards per row ───────────────────────────── */
+.assemblies-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
 /* ─── Operator tag — matches physical tool tag format ────────────────────── */
 .operator-tag {
   position: relative;
