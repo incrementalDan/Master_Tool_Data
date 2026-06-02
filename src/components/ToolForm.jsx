@@ -36,7 +36,7 @@ const EXTRACTOR_TO_APP_FIELD = {
 // Always-visible core fields (regardless of tool type visibility)
 const ALWAYS_FIELDS = ['description', 'vendor', 'product_id', 'proshot_id', 'coating'];
 const SPEEDS_FIELDS = ['spindle_speed', 'cutting_feedrate', 'feed_per_tooth', 'feed_per_rev', 'plunge_feedrate', 'ramp_feedrate', 'lead_in_feedrate', 'lead_out_feedrate', 'cutting_speed', 'depth_of_cut', 'width_of_cut'];
-const META_FIELDS = ['notes', 'tags', 'preferred_machine', 'last_used_job', 'revision_notes', 'distributor', 'distributor_stock_num', 'cost', 'location'];
+const META_FIELDS = ['notes', 'tags', 'last_used_job', 'revision_notes', 'distributor', 'distributor_stock_num', 'cost', 'location'];
 
 export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
   const { tools } = useApp();
@@ -185,6 +185,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
           <FieldInput field="distributor_stock_num" label="Distributor Stock #" data={data} setField={setField} />
           <FieldInput field="cost" label="Cost ($)" data={data} setField={setField} type="number" step="0.01" />
           <FieldInput field="product_link" label="Product Link" data={data} setField={setField} type="url" />
+          <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
         </div>
       </Section>
 
@@ -309,8 +310,6 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
 
       <Section title="Setup & Notes" icon={Settings2}>
         <div className="form-grid">
-          <FieldInput field="preferred_machine" label="Preferred Machine" data={data} setField={setField} placeholder="M300, R650, etc." />
-          <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
           <FieldInput field="last_used_job" label="Last Used Job" data={data} setField={setField} />
           <FieldInput field="updated_by" label="Updated By" data={data} setField={setField} />
         </div>
