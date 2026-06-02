@@ -1,19 +1,19 @@
 :root {
-  --bg: #1a1a1a;
-  --surface: #242424;
-  --surface-2: #2c2c2c;
-  --surface-3: #303030;
-  --border: #383838;
+  --bg: #202020;
+  --surface: #2a2a2a;
+  --surface-2: #333333;
+  --surface-3: #3c3c3c;
+  --border: #484848;
   --border-focus: #4a8fff;
-  --text: #e0e0e0;
-  --text-sub: #999;
-  --text-label: #ccc;
+  --text: #ebebeb;
+  --text-sub: #adadad;
+  --text-label: #d0d0d0;
   --blue: #4a8fff;
   --orange: #d97830;
   --green: #45b36b;
   --red: #d94f4f;
   --amber: #d4922a;
-  --input-bg: #181818;
+  --input-bg: #1e1e1e;
   --blue-tint: #16263b;
   --blue-tint-2: #1a2a3a;
   --radius: 8px;
@@ -407,6 +407,16 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--text-sub);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.tool-card-desc {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .tool-card-meta {
@@ -1732,7 +1742,10 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   white-space: nowrap;
   flex-shrink: 0;
   letter-spacing: 0.02em;
+  text-decoration: none;
+  cursor: pointer;
 }
+.proshot-pill:hover { filter: brightness(1.2); text-decoration: none; }
 
 /* ─── Tool detail page — frozen left sidebar + sticky header ─────────────── */
 .tool-detail-wrap {
@@ -1801,7 +1814,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   position: sticky;
   top: 57px;
   z-index: 20;
-  background: rgba(26, 26, 26, 0.94);
+  background: rgba(32, 32, 32, 0.96);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
