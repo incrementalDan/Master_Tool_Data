@@ -1728,7 +1728,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /*  .proshot-pill       — ProShop ID        — amber pill (monospace)          */
 /*  .holder-pill        — Holder            — teal pill  (override inline)    */
 /*  .machine-num-badge  — Machine Tool #    — gray rect  (monospace, square)  */
-/*  .location-tag       — Location/Cabinet  — indigo pill (monospace)         */
+/*  .location-tag       — Location/Cabinet  — indigo rounded-rect (monospace)  */
 /*  .preset-tag         — Preset Name       — emerald pill                    */
 /*                                                                            */
 /* When changing any class, update ALL usages across the codebase.            */
@@ -1779,7 +1779,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .location-tag {
   display: inline-block;
   padding: 2px 9px;
-  border-radius: 999px;
+  border-radius: 7px;
   border: 1px solid rgba(99, 102, 241, 0.40);
   background: rgba(99, 102, 241, 0.10);
   color: #818cf8;
