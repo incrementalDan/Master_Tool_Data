@@ -240,7 +240,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 14px 8px;
+  padding: 16px 8px 12px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -253,7 +253,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .type-tile:hover { border-color: #4a4a4a; background: var(--surface-3); color: var(--text); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
 .type-tile.selected { border-color: var(--blue); background: var(--blue-tint); color: var(--blue); box-shadow: 0 0 0 1px var(--blue) inset; }
 
-.type-tile-icon { display: flex; align-items: center; justify-content: center; height: 28px; }
+.type-tile-icon { display: flex; align-items: center; justify-content: center; height: 42px; }
 .type-tile-label { font-size: 11px; line-height: 1.3; }
 .type-tile.selected .type-tile-label { color: var(--blue); }
 
@@ -383,8 +383,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 .tool-card-icon {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -486,7 +486,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /* ─── Tool detail ─────────────────────────────────────────────────────────── */
 .detail-layout {
   display: grid;
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 1fr minmax(200px, 280px);
   gap: 20px;
 }
 @media (max-width: 900px) {
@@ -535,12 +535,12 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 .detail-fields {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
   gap: 12px;
 }
 
 .detail-field { display: flex; flex-direction: column; gap: 2px; }
-.detail-field-label { font-size: 10px; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.05em; }
+.detail-field-label { font-size: 11px; color: var(--text-label); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
 .detail-field-value { font-size: 13px; color: var(--text); }
 .detail-field-empty { color: var(--border); font-style: italic; }
 
@@ -1704,4 +1704,163 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   font-size: 12px;
   flex: 1;
   min-width: 0;
+}
+
+/* ─── Description badge + ProShop ID pill ───────────────────────────────── */
+/* Description gets a violet-tinted rectangle, ProShop ID gets an amber pill */
+.description-badge {
+  background: rgba(124, 58, 237, 0.10);
+  border: 1px solid rgba(124, 58, 237, 0.28);
+  border-radius: 7px;
+  padding: 3px 10px 4px;
+  color: var(--text);
+  font-weight: 700;
+  display: inline-block;
+}
+
+.proshot-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 13px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: monospace;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.42);
+  color: #f59e0b;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+/* ─── Tool detail page — frozen left sidebar + sticky header ─────────────── */
+.tool-detail-wrap {
+  display: flex;
+  align-items: flex-start;
+  margin: -20px;  /* escape page-content padding so sidebar is edge-to-edge */
+}
+
+.tool-action-sidebar {
+  position: sticky;
+  top: 57px;
+  height: calc(100vh - 57px);
+  width: 72px;
+  flex-shrink: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 5px;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.tool-sidebar-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  padding: 9px 4px 7px;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-sub);
+  cursor: pointer;
+  font-size: 9.5px;
+  width: 100%;
+  transition: background var(--ease), color var(--ease);
+  text-align: center;
+  font-family: inherit;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.tool-sidebar-btn:hover { background: var(--surface-2); color: var(--text); }
+.tool-sidebar-btn.danger:hover { background: rgba(217, 79, 79, 0.1); color: var(--red); }
+.tool-sidebar-btn.copied { color: var(--green); }
+
+.tool-sidebar-divider {
+  width: 36px;
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+  flex-shrink: 0;
+}
+
+.tool-detail-main {
+  flex: 1;
+  min-width: 0;
+  padding: 20px;
+}
+
+/* Sticky header: shows tool type + description + ProShop ID while scrolling */
+.tool-sticky-header {
+  position: sticky;
+  top: 57px;
+  z-index: 20;
+  background: rgba(26, 26, 26, 0.94);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 20px 12px;
+  margin: -20px -20px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.tool-sticky-header-back {
+  flex-shrink: 0;
+}
+
+.tool-sticky-header-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  background: var(--blue-tint);
+  border: 1px solid var(--blue);
+  color: var(--blue);
+}
+
+.tool-sticky-header-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Narrow screens: stack sidebar above content */
+@media (max-width: 768px) {
+  .tool-detail-wrap { flex-direction: column; }
+  .tool-action-sidebar {
+    position: static;
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 6px 8px;
+    overflow: visible;
+    top: auto;
+  }
+  .tool-sidebar-btn {
+    width: auto;
+    flex-direction: row;
+    gap: 5px;
+    font-size: 11px;
+    padding: 6px 10px;
+  }
+  .tool-detail-main { padding: 12px; }
+  .tool-sticky-header { margin: -12px -12px 14px; top: auto; position: static; }
 }

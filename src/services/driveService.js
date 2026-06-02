@@ -22,7 +22,7 @@ function getMetaFileId() {
 async function driveGet(fileId) {
   if (!fileId) return null;
   const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`,
     { headers: { Authorization: `Bearer ${_accessToken}` } }
   );
   if (res.status === 404) return null;
@@ -55,7 +55,7 @@ async function driveCreate(content, folderId = null) {
   ].join('\r\n');
 
   const res = await fetch(
-    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true',
     {
       method: 'POST',
       headers: {
@@ -77,7 +77,7 @@ async function driveCreate(content, folderId = null) {
 async function driveUpdate(fileId, content) {
   if (!fileId) return driveCreate(content);
   const res = await fetch(
-    `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+    `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&supportsAllDrives=true`,
     {
       method: 'PATCH',
       headers: {
@@ -149,7 +149,7 @@ export async function checkMetadataFile() {
 export async function listFolders(parentId = 'root') {
   const q = `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
   const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=name&fields=files(id,name)&pageSize=100`,
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=name&fields=files(id,name)&pageSize=100&supportsAllDrives=true&includeItemsFromAllDrives=true`,
     { headers: { Authorization: `Bearer ${_accessToken}` } }
   );
   if (!res.ok) {

@@ -25,7 +25,7 @@ export default function MetadataConnect() {
   const [pendingUser, setPendingUser] = useState(null);
 
   const login = useGoogleLogin({
-    scope: 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+    scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
     onSuccess: async (tokenResponse) => {
       setError('');
       setView('checking');
@@ -214,7 +214,9 @@ export default function MetadataConnect() {
       )}
 
       {/* Folder browser */}
-      <div className="section-header mb-8">My Drive</div>
+      <div className="section-header mb-8">
+        {pickerRoot === 'myDrive' ? 'My Drive' : (sharedDrives.find(d => d.id === pickerRoot)?.name || 'Shared Drive')}
+      </div>
       <div className="card" style={{ padding: 0 }}>
         {/* Breadcrumb */}
         <div className="flex items-center gap-6 flex-wrap" style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', fontSize: 13 }}>

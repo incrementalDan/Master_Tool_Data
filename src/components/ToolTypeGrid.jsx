@@ -11,7 +11,7 @@ export default function ToolTypeGrid({ selected, onSelect }) {
           onClick={() => onSelect(selected === type ? null : type)}
           title={TOOL_TYPE_LABELS[type] || type}
         >
-          <span className="type-tile-icon"><ToolTypeIcon type={type} size={26} /></span>
+          <span className="type-tile-icon"><ToolTypeIcon type={type} size={36} /></span>
           <span className="type-tile-label">{TOOL_TYPE_LABELS[type] || type}</span>
         </button>
       ))}
