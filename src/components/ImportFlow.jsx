@@ -433,6 +433,7 @@ function psRowToTool(row) {
     product_id: row['Part Number'] || row['EDP#'] || '',
     coating: row.coating || '',
     material: row.toolMaterial || row.material || 'carbide',
+    min_ooh: parseFloat(row.lengthBelowShankDiameter || '') || null,
   };
 }
 
@@ -472,6 +473,9 @@ function matchProShopToTools(psRows, tools) {
       if (!tool.vendor && (psRow.Manufacturer || psRow.approvedBrand)) additions.vendor = psRow.Manufacturer || psRow.approvedBrand;
       if (!tool.product_id && partNum) additions.product_id = partNum;
       if (!tool.coating && psRow.coating) additions.coating = psRow.coating;
+      // min_ooh: ProShop is authoritative — always overwrite with ProShop value when present
+      const psMinOoh = parseFloat(psRow.lengthBelowShankDiameter || '') || null;
+      if (psMinOoh != null) additions.min_ooh = psMinOoh;
       matched.push({ toolIdx, psRow, additions });
     }
   }

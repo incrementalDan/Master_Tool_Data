@@ -163,7 +163,13 @@ export default function CommitStep({
               This tool came in with holder/OOH data:
               {incomingHolderDesc && <strong> {incomingHolderDesc}</strong>}
               {incomingOoh != null && <> · OOH: <strong>{incomingOoh.toFixed(3)}"</strong></>}
+              {masterTool.min_ooh != null && <> · MIN OOH: <strong>{masterTool.min_ooh.toFixed(3)}"</strong></>}
             </div>
+            {masterTool.min_ooh != null && incomingOoh != null && incomingOoh < masterTool.min_ooh && (
+              <div className="error-banner mb-12" style={{ fontSize: 12 }}>
+                Warning: this job OOH ({incomingOoh.toFixed(3)}") is below the tool's MIN OOH ({masterTool.min_ooh.toFixed(3)}"). Verify before committing.
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
                 <input

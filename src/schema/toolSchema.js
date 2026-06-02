@@ -167,7 +167,7 @@ export function toolToExtractor(tool) {
     tapClass: tool.tap_class || '',
     pointType: tool.point_type || '',
     shoulderLen: String(tool.shoulder_length ?? ''),
-    ooh: String(tool.ooh ?? ''),
+    ooh: String(tool.min_ooh ?? tool.ooh ?? ''),
     taperAngle: String(tool.taper_angle ?? ''),
     minThreadPitch: String(tool.min_thread_pitch ?? ''),
     maxThreadPitch: String(tool.max_thread_pitch ?? ''),
@@ -327,6 +327,12 @@ export function fusionToolToInternal(fTool) {
     // Holder link — read from Fusion JSON holder.guid as initial default;
     // overridden by metadata.selected_holder_guid when present.
     selected_holder_guid: fTool.holder?.guid || '',
+    // Default minimum OOH — persistent, saved to metadata. ProShop import overrides this
+    // value; Fusion's geometry.LB serves only as the initial fallback when no ProShop
+    // value has been imported yet (see mergeFusionAndMetadata for priority logic).
+    min_ooh: geo.LB
+      ? (fTool.unit === 'millimeters' ? geo.LB / 25.4 : geo.LB)
+      : null,
     // Transient — only populated for merge-flow incoming tools (not saved to metadata).
     // OOH comes from geometry.LB (Body Length / Length below Holder). assembly-gauge-length
     // is what we write on export; LB is what Fusion stores as the actual stick-out geometry.
@@ -540,6 +546,10 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     grouping: meta.grouping || '',
     preset_name: meta.preset_name || '',
     ooh: meta.ooh ?? null,
+    // ProShop is the authoritative source for min_ooh (lengthBelowShankDiameter).
+    // meta.min_ooh wins unconditionally; Fusion's geometry.LB is only a fallback
+    // for tools that have never been through a ProShop import.
+    min_ooh: meta.min_ooh != null ? meta.min_ooh : (fusionInternal.min_ooh ?? null),
     // Metadata-only fields
     // Machine tool number: metadata is the source of truth — it wins over the
     // value mirrored from the Fusion JSON on any conflict.
@@ -591,6 +601,7 @@ export function splitToFusionAndMetadata(tool) {
     axial_distance: tool.axial_distance ?? null,
     shoulder_length: tool.shoulder_length ?? null,
     ooh: tool.ooh ?? null,
+    min_ooh: tool.min_ooh ?? null,
     pitch: tool.pitch || '',
     tap_class: tool.tap_class || '',
     min_thread_pitch: tool.min_thread_pitch ?? null,
@@ -647,6 +658,7 @@ export function newTool(toolType = 'flat end mill') {
     axial_distance: null,
     shoulder_length: null,
     ooh: null,
+    min_ooh: null,
     material: 'carbide',
     coating: '',
     material_suitability: [],
@@ -779,4 +791,5 @@ export const FIELD_LABELS = {
   tool_number: 'Tool Number',
   machine_tool_number: 'Machine Tool #',
   preset_name: 'Preset Name',
+  min_ooh: 'Length Below Holder - MIN OOH:',
 };
