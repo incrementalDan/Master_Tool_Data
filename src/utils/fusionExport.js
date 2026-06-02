@@ -112,13 +112,14 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
 
   const holderGuid = assembly?.holder_guid || tool.selected_holder_guid;
   let holderDesc = '', holderPid = '', holderPlink = '', holderVendor = '';
+  let holderObj = null;
   if (holderGuid && holders.length > 0) {
-    const h = holders.find(hh => hh.guid === holderGuid);
-    if (h) {
-      holderDesc = h.description || '';
-      holderPid = h['product-id'] || '';
-      holderPlink = h['product-link'] || '';
-      holderVendor = h.vendor || '';
+    holderObj = holders.find(hh => hh.guid === holderGuid) || null;
+    if (holderObj) {
+      holderDesc = holderObj.description || '';
+      holderPid = holderObj['product-id'] || '';
+      holderPlink = holderObj['product-link'] || '';
+      holderVendor = holderObj.vendor || '';
     }
   }
 
@@ -244,6 +245,19 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
 
     S(168, tsvBool(preset['use-stepdown'] || false));
     S(169, tsvBool(preset['use-stepover'] || false));
+
+    // Col 170: shaft (shank) segments — needed for Fusion to show the shank profile
+    const shaftRaw = tool._fusionRaw?.shaft;
+    if (shaftRaw) {
+      const shaftSegs = Array.isArray(shaftRaw) ? shaftRaw : (shaftRaw.segments ?? shaftRaw);
+      S(170, tsvStr(JSON.stringify(shaftSegs)));
+    }
+
+    // Col 171: holder segments — needed for Fusion to reconstruct the holder association
+    if (holderObj) {
+      const holderSegs = holderObj.segments ?? holderObj;
+      S(171, tsvStr(JSON.stringify(holderSegs)));
+    }
 
     S(172, tsvNum(36));  // tool_library_version
 
