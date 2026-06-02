@@ -15,7 +15,7 @@ export const TOOL_TYPES = TT;
 export const TOOL_TYPE_LABELS = TL;
 
 // ─── Facet fields per tool type (search filter order) ─────────────────────
-const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'material_suitability', 'tags'];
+const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'flute_design', 'material_suitability', 'tags'];
 
 export function getFacetFields(toolType) {
   if (!toolType) return COMMON_FACETS;
@@ -111,6 +111,7 @@ export function extractorToTool(f) {
     helix_angle: parseFloat(f.helixAngle) || null,
     center_cutting: f.centerCutting || false,
     flute_type: f.fluteType || '',
+    flute_design: '',
     tsc_capable: THROUGH_COOLANT_VALUES.has(f.coolant || '') || false,
     cutting_direction: f.cuttingDirection || 'Right Hand',
     pitch: f.pitch || '',
@@ -325,6 +326,7 @@ export function fusionToolToInternal(fTool) {
     cost: '',
     tsc_capable: false,
     center_cutting: false,
+    flute_design: '',
     cutting_direction: 'Right Hand',
     material_suitability: [],
     tags: [],
@@ -483,6 +485,7 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     cutting_direction: meta.cutting_direction || fusionInternal.cutting_direction || 'Right Hand',
     helix_angle: meta.helix_angle ?? fusionInternal.helix_angle ?? null,
     flute_type: meta.flute_type || '',
+    flute_design: meta.flute_design || '',
     tip_angle: meta.tip_angle ?? fusionInternal.tip_angle ?? null,
     tip_diameter: meta.tip_diameter ?? fusionInternal.tip_diameter ?? null,
     lower_radius: meta.lower_radius ?? null,
@@ -536,6 +539,7 @@ export function splitToFusionAndMetadata(tool) {
     cutting_direction: tool.cutting_direction || 'Right Hand',
     helix_angle: tool.helix_angle ?? null,
     flute_type: tool.flute_type || '',
+    flute_design: tool.flute_design || '',
     tip_angle: tool.tip_angle ?? null,
     tip_diameter: tool.tip_diameter ?? null,
     lower_radius: tool.lower_radius ?? null,
@@ -600,6 +604,7 @@ export function newTool(toolType = 'flat end mill') {
     helix_angle: null,
     center_cutting: false,
     flute_type: '',
+    flute_design: '',
     tsc_capable: false,
     cutting_direction: 'Right Hand',
     pitch: '',
@@ -738,6 +743,7 @@ export const FIELD_LABELS = {
   coating: 'Coating',
   material_suitability: 'Material Suitability',
   tsc_capable: 'TSC Capable',
+  flute_design: 'Flute Design',
   helix_angle: 'Helix Angle (°)',
   flute_type: 'Flute Type',
   center_cutting: 'Center Cutting',

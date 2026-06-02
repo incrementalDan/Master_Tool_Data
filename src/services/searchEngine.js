@@ -104,7 +104,7 @@ export function getAvailableOptions(tools, activeFilters, targetField) {
 
 export function buildIndex(tools) {
   const fieldValues = new Map();
-  const allFacetFields = ['tool_type', 'diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'material_suitability', 'tags', 'corner_radius'];
+  const allFacetFields = ['tool_type', 'diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'flute_design', 'material_suitability', 'tags', 'corner_radius'];
 
   for (const field of allFacetFields) {
     const values = new Set();

@@ -34,6 +34,8 @@ const EXTRACTOR_TO_APP_FIELD = {
 };
 
 // Always-visible core fields (regardless of tool type visibility)
+const FLUTE_DESIGN_OPTS = ['Variable Index', 'Variable Flute', 'Variable Helix', 'Variable Pitch'];
+
 const ALWAYS_FIELDS = ['description', 'vendor', 'product_id', 'proshot_id', 'coating'];
 const SPEEDS_FIELDS = ['spindle_speed', 'cutting_feedrate', 'feed_per_tooth', 'feed_per_rev', 'plunge_feedrate', 'ramp_feedrate', 'lead_in_feedrate', 'lead_out_feedrate', 'cutting_speed', 'depth_of_cut', 'width_of_cut'];
 const META_FIELDS = ['notes', 'tags', 'last_used_job', 'revision_notes', 'distributor', 'distributor_stock_num', 'cost', 'location'];
@@ -268,6 +270,19 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
               </select>
             </div>
           )}
+          <div className="field-group">
+            <label className="field-label">Flute Design</label>
+            <input
+              className="field-input"
+              list="flute-design-list"
+              value={data.flute_design || ''}
+              onChange={e => setField('flute_design', e.target.value)}
+              placeholder="None"
+            />
+            <datalist id="flute-design-list">
+              {FLUTE_DESIGN_OPTS.map(v => <option key={v} value={v} />)}
+            </datalist>
+          </div>
         </div>
         {visibleFields.has('pitch') && (
           <div className="form-grid" style={{ marginTop: 14 }}>

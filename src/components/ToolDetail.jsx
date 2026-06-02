@@ -271,6 +271,7 @@ export default function ToolDetail() {
                 <Field label="TSC Capable" value={tool.tsc_capable ? 'Yes' : 'No'} />
                 <Field label="Helix Angle" value={round4(tool.helix_angle)} unit="°" />
                 <Field label="Flute Type" value={tool.flute_type} />
+                <Field label="Flute Design" value={tool.flute_design || null} />
                 <Field label="Cutting Direction" value={tool.cutting_direction} />
                 <Field label="Center Cutting" value={tool.center_cutting != null ? (tool.center_cutting ? 'Yes' : 'No') : null} />
                 {tool.pitch && <Field label="Thread Pitch" value={tool.pitch} />}
