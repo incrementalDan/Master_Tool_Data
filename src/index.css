@@ -495,12 +495,9 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 /* ─── Tool detail ─────────────────────────────────────────────────────────── */
 .detail-layout {
-  display: grid;
-  grid-template-columns: 1fr minmax(200px, 280px);
-  gap: 20px;
-}
-@media (max-width: 900px) {
-  .detail-layout { grid-template-columns: 1fr; }
+  display: flex;
+  flex-direction: column;
+  max-width: 920px;
 }
 
 /* ─── Panel cards (detail + form sections) ──────────────────────────────── */
@@ -738,6 +735,18 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--red);
   font-size: 13px;
   margin-bottom: 12px;
+}
+
+.warn-banner {
+  background: rgba(217, 120, 48, 0.10);
+  border: 1px solid rgba(217, 120, 48, 0.40);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  color: var(--orange);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* ─── Autocomplete dropdown ──────────────────────────────────────────────── */
@@ -1873,11 +1882,11 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
-  padding: 10px 20px 12px;
-  margin: -20px -20px 16px;
+  padding: 14px 20px 16px;
+  margin: -20px -20px 18px;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
 }
 
@@ -1887,8 +1896,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 .tool-sticky-header-icon {
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  width: 50px;
+  height: 50px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1967,7 +1976,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /* ─── Assemblies grid — multiple cards per row ───────────────────────────── */
 .assemblies-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px;
   margin-bottom: 6px;
 }

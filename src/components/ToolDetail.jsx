@@ -1,15 +1,15 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
-  Tag, Ruler, Settings2, StickyNote, Clock, ExternalLink, Hash, Package, Wrench,
+  Tag, Ruler, Settings2, StickyNote, Clock, ExternalLink, Hash, Package, Wrench, AlertTriangle,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
 import HolderPicker from './HolderPicker.jsx';
 import AssemblyCard, { holderColor } from './AssemblyCard.jsx';
 import AssemblyForm from './AssemblyForm.jsx';
 import { useApp } from '../context/AppContext.jsx';
-import { TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
+import { TOOL_TYPE_LABELS, validateGeometry } from '../schema/toolSchema.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 import ToolForm from './ToolForm.jsx';
 import { exportSingleTool as exportFusion, copyToolToClipboard } from '../utils/fusionExport.js';
@@ -35,6 +35,11 @@ export default function ToolDetail() {
   const tool = tools.find(t => t.id === id);
   const isMetric = tool?.unit === 'millimeters';
   const lenUnit = isMetric ? 'mm' : 'in';
+  const geoIssues = useMemo(
+    () => tool ? validateGeometry(tool) : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tool?.tool_type, tool?.diameter, tool?.flute_length, tool?.shoulder_length, tool?.min_ooh, tool?.overall_length, tool?.corner_radius]
+  );
 
   if (!tool) {
     return (
@@ -167,11 +172,11 @@ export default function ToolDetail() {
         {/* Sticky header — shows type icon, ProShop ID (left), description (right) */}
         <div className="tool-sticky-header">
           <span className="tool-sticky-header-icon">
-            <ToolTypeIcon type={tool.tool_type} size={24} />
+            <ToolTypeIcon type={tool.tool_type} size={30} />
           </span>
           <div className="tool-sticky-header-body">
-            <div className="detail-header-type">{typeLabel}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <div className="detail-header-type" style={{ fontSize: 12 }}>{typeLabel}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
               {tool.proshot_id && (
                 <a
                   className="proshot-pill"
@@ -180,13 +185,15 @@ export default function ToolDetail() {
                   rel="noopener noreferrer"
                   title="Open in ProShop"
                   onClick={e => e.stopPropagation()}
+                  style={{ fontSize: 13, padding: '5px 14px' }}
                 >{tool.proshot_id}</a>
               )}
               <h1
                 className="detail-header-title description-badge"
                 style={{
-                  fontSize: 'clamp(12px, 1.5vw, 16px)',
-                  maxWidth: '50ch',
+                  fontSize: 'clamp(15px, 2vw, 20px)',
+                  padding: '4px 12px 5px',
+                  maxWidth: '60ch',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
@@ -201,9 +208,8 @@ export default function ToolDetail() {
         </div>
 
         <div className="detail-layout">
-          <div>
             <Section title="Identity" icon={Tag}>
-              {/* Machine tool number inside Identity */}
+              {/* Machine tool number */}
               {(tool.machine_tool_number !== null && tool.machine_tool_number !== undefined && tool.machine_tool_number !== '') && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
                   <Hash size={14} style={{ color: 'var(--text-sub)', flexShrink: 0 }} />
@@ -217,6 +223,13 @@ export default function ToolDetail() {
                   <span className="machine-num-badge" style={{ fontSize: 14 }}>
                     D{tool.machine_tool_number}
                   </span>
+                </div>
+              )}
+              {/* Location chip */}
+              {tool.location && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
+                  <span className="text-sub" style={{ fontSize: 12 }}>Cabinet / Location</span>
+                  <span className="location-tag">{tool.location}</span>
                 </div>
               )}
               <div className="detail-fields">
@@ -257,6 +270,39 @@ export default function ToolDetail() {
                 {tool.axial_distance && <Field label="Axial Distance" value={round4(tool.axial_distance)} unit={lenUnit} />}
                 {tool.min_ooh != null && <Field label="Length Below Holder - MIN OOH:" value={round4(tool.min_ooh)} unit={lenUnit} />}
               </div>
+              {geoIssues.length > 0 && (
+                <div className="warn-banner" style={{ marginTop: 10 }}>
+                  {geoIssues.map((issue, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+                      {issue.message}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Section>
+
+            <Section title="Setup" icon={Settings2}>
+              <div className="detail-fields">
+                <Field label="Tool Material" value={tool.material} />
+                <Field label="Coating" value={tool.coating} />
+                <Field label="Coolant" value={tool.coolant} />
+                <Field label="Helix Angle" value={round4(tool.helix_angle)} unit="°" />
+                <Field label="Flute Type" value={tool.flute_type} />
+                <Field label="Cutting Direction" value={tool.cutting_direction} />
+                <Field label="Center Cutting" value={tool.center_cutting != null ? (tool.center_cutting ? 'Yes' : 'No') : null} />
+                {tool.pitch && <Field label="Thread Pitch" value={tool.pitch} />}
+                {tool.tap_class && <Field label="Tap Class" value={tool.tap_class} />}
+                {tool.point_type && <Field label="Point Type" value={tool.point_type} />}
+              </div>
+              {(tool.material_suitability || []).length > 0 && (
+                <div style={{ marginTop: 14 }}>
+                  <div className="detail-field-label">Material Suitability</div>
+                  <div className="tag-list" style={{ marginTop: 6 }}>
+                    {tool.material_suitability.map(m => <span key={m} className="tag">{m}</span>)}
+                  </div>
+                </div>
+              )}
             </Section>
 
             <HolderSection
@@ -283,65 +329,42 @@ export default function ToolDetail() {
 
             <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving} />
 
-            <Section title="Setup" icon={Settings2}>
-              <div className="detail-fields">
-                <Field label="Tool Material" value={tool.material} />
-                <Field label="Coating" value={tool.coating} />
-                <Field label="Coolant" value={tool.coolant} />
-                <Field label="Helix Angle" value={round4(tool.helix_angle)} unit="°" />
-                <Field label="Flute Type" value={tool.flute_type} />
-                <Field label="Cutting Direction" value={tool.cutting_direction} />
-                <Field label="Center Cutting" value={tool.center_cutting != null ? (tool.center_cutting ? 'Yes' : 'No') : null} />
-                <Field label="Preferred Machine" value={tool.preferred_machine} />
-                <Field label="Location" value={tool.location} mono />
-                {tool.pitch && <Field label="Thread Pitch" value={tool.pitch} />}
-                {tool.tap_class && <Field label="Tap Class" value={tool.tap_class} />}
-                {tool.point_type && <Field label="Point Type" value={tool.point_type} />}
-              </div>
-              {(tool.material_suitability || []).length > 0 && (
-                <div style={{ marginTop: 14 }}>
-                  <div className="detail-field-label">Material Suitability</div>
-                  <div className="tag-list" style={{ marginTop: 6 }}>
-                    {tool.material_suitability.map(m => <span key={m} className="tag">{m}</span>)}
-                  </div>
-                </div>
-              )}
-            </Section>
-
-            <Section title="History" icon={Clock}>
-              <div className="detail-fields">
+            <Section title="History" icon={Clock} defaultOpen={false}>
+              <div className="detail-fields" style={{ marginBottom: (tool.merge_history || []).length > 0 ? 16 : 0 }}>
                 <Field label="Created" value={tool.created_at ? new Date(tool.created_at).toLocaleString() : null} />
                 <Field label="Updated" value={tool.updated_at ? new Date(tool.updated_at).toLocaleString() : null} />
                 <Field label="Updated By" value={tool.updated_by} />
               </div>
+              {(tool.merge_history || []).length > 0 && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+                    <GitMerge size={12} style={{ color: 'var(--text-sub)' }} />
+                    <span className="text-xs text-sub" style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      Merge History
+                    </span>
+                  </div>
+                  <div className="merge-history-list">
+                    {[...(tool.merge_history)].reverse().map((entry, i) => (
+                      <div key={i} className="merge-history-entry">
+                        <div className="merge-history-meta">
+                          <span style={{ fontWeight: 600 }}>{entry.merged_by || 'Unknown'}</span>
+                          <span className="text-sub text-xs">
+                            {entry.merged_at ? new Date(entry.merged_at).toLocaleDateString() : ''}
+                          </span>
+                        </div>
+                        {entry.revision_note && (
+                          <div className="merge-history-note">{entry.revision_note}</div>
+                        )}
+                        <div className="merge-history-fields text-xs text-sub">
+                          Changed: {(entry.fields_changed || []).join(', ')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
             </Section>
 
-            {(tool.merge_history || []).length > 0 && (
-              <Section title="Merge History" icon={GitMerge}>
-                <div className="merge-history-list">
-                  {[...(tool.merge_history)].reverse().map((entry, i) => (
-                    <div key={i} className="merge-history-entry">
-                      <div className="merge-history-meta">
-                        <span style={{ fontWeight: 600 }}>{entry.merged_by || 'Unknown'}</span>
-                        <span className="text-sub text-xs">
-                          {entry.merged_at ? new Date(entry.merged_at).toLocaleDateString() : ''}
-                        </span>
-                      </div>
-                      {entry.revision_note && (
-                        <div className="merge-history-note">{entry.revision_note}</div>
-                      )}
-                      <div className="merge-history-fields text-xs text-sub">
-                        Changed: {(entry.fields_changed || []).join(', ')}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Section>
-            )}
-          </div>
-
-          {/* Right sidebar — Notes & Tags only */}
-          <div>
             <Section title="Notes & Tags" icon={StickyNote}>
               {tool.notes && (
                 <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, marginBottom: 10 }}>{tool.notes}</p>
@@ -357,7 +380,6 @@ export default function ToolDetail() {
                 <span className="detail-field-empty text-sm">No notes yet.</span>
               )}
             </Section>
-          </div>
         </div>
 
         {/* Fusion export picker modal */}
@@ -493,11 +515,19 @@ function AssembliesSection({ tool, holders, onSave }) {
   const [editingAssembly, setEditingAssembly] = useState(null);
   const assemblies = tool.assemblies || [];
 
-  const handleEdit = (assembly) => {
-    setEditingAssembly(assembly);
-    setShowForm(true);
-  };
+  // Group by holder description, sort each group short → long OOH
+  const groups = useMemo(() => {
+    const map = new Map();
+    for (const a of assemblies) {
+      const key = a.holder_description || '—';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(a);
+    }
+    for (const [, g] of map) g.sort((a, b) => (a.ooh ?? 0) - (b.ooh ?? 0));
+    return [...map.entries()];
+  }, [assemblies]);
 
+  const handleEdit = (assembly) => { setEditingAssembly(assembly); setShowForm(true); };
   const handleDelete = async (assemblyId) => {
     await onSave({ ...tool, assemblies: assemblies.filter(a => a.assembly_id !== assemblyId) });
   };
@@ -509,18 +539,30 @@ function AssembliesSection({ tool, holders, onSave }) {
           No assemblies recorded yet.
         </div>
       )}
-      <div className="assemblies-grid">
-        {assemblies.map(a => (
-          <AssemblyCard
-            key={a.assembly_id}
-            assembly={a}
-            tool={tool}
-            holders={holders}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
-        ))}
-      </div>
+      {groups.map(([holderDesc, group]) => {
+        const c = holderColor(holderDesc === '—' ? null : holderDesc);
+        return (
+          <div key={holderDesc} style={{ marginBottom: 14 }}>
+            <div style={{ marginBottom: 6 }}>
+              <span className="holder-pill" style={{ background: c.bg, borderColor: c.border, color: c.text }}>
+                {holderDesc}
+              </span>
+            </div>
+            <div className="assemblies-grid">
+              {group.map(a => (
+                <AssemblyCard
+                  key={a.assembly_id}
+                  assembly={a}
+                  tool={tool}
+                  holders={holders}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
       <button
         className="btn btn-secondary btn-sm"
         style={{ marginTop: assemblies.length > 0 ? 4 : 0 }}
@@ -545,8 +587,8 @@ function AssembliesSection({ tool, holders, onSave }) {
   );
 }
 
-function Section({ title, icon: Icon, children }) {
-  const [open, setOpen] = useState(true);
+function Section({ title, icon: Icon, children, defaultOpen = true }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className={`panel ${open ? 'open' : ''}`}>
       <button className="panel-header" onClick={() => setOpen(o => !o)}>

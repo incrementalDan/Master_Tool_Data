@@ -115,7 +115,7 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
           <span className="tag-box" style={{ fontSize: 12, borderColor: color.text, color: color.text }}>
             {hasNum ? `T${machineNum}` : '—'}
           </span>
-          <span style={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 11.5, flex: 1, minWidth: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
             {tool.description || '—'}
           </span>
         </div>

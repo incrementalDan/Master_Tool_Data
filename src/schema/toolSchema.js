@@ -15,7 +15,7 @@ export const TOOL_TYPES = TT;
 export const TOOL_TYPE_LABELS = TL;
 
 // ─── Facet fields per tool type (search filter order) ─────────────────────
-const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'preferred_machine', 'material_suitability', 'tags'];
+const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'material_suitability', 'tags'];
 
 export function getFacetFields(toolType) {
   if (!toolType) return COMMON_FACETS;
@@ -167,7 +167,7 @@ export function toolToExtractor(tool) {
     tapClass: tool.tap_class || '',
     pointType: tool.point_type || '',
     shoulderLen: String(tool.shoulder_length ?? ''),
-    ooh: String(tool.min_ooh ?? tool.ooh ?? ''),
+    ooh: String(tool.ooh ?? ''),
     taperAngle: String(tool.taper_angle ?? ''),
     minThreadPitch: String(tool.min_thread_pitch ?? ''),
     maxThreadPitch: String(tool.max_thread_pitch ?? ''),
@@ -191,9 +191,6 @@ export function generateId() {
   const hex = () => Math.floor(Math.random() * 0x10000).toString(16).padStart(4, '0');
   return `${hex()}${hex()}-${hex()}-4${hex().slice(1)}-${(Math.floor(Math.random() * 4) + 8).toString(16)}${hex().slice(1)}-${hex()}${hex()}${hex()}`;
 }
-
-// Alias for semantic clarity when creating assembly IDs.
-export const generateAssemblyId = generateId;
 
 // ─── Machine tool numbers ─────────────────────────────────────────────────
 // The machine tool number is what the CNC machine reads to call a tool
@@ -289,7 +286,6 @@ export function fusionToolToInternal(fTool) {
 
   return {
     id: fTool.guid,
-    unit: fTool.unit || 'inches',
     tool_type: toolType,
     description: fTool.description || '',
     diameter: geo.DC || null,
@@ -314,34 +310,12 @@ export function fusionToolToInternal(fTool) {
     feed_per_tooth: preset.f_z || null,
     feed_per_rev: preset.f_n || null,
     cutting_speed: preset.v_c || null,
-    // Full presets array preserved so the preset panel can manage all presets.
-    // The flat speed/feed fields above are still read from presets[0] for
-    // backwards compat with ToolForm and search facets.
-    presets: fTool['start-values']?.presets || [],
     tool_number: fTool['post-process']?.number ? String(fTool['post-process'].number) : '',
     // Machine tool number — output mirror of post-process.number. The metadata
     // file is the source of truth; this is only a fallback when metadata is missing.
     machine_tool_number: (fTool['post-process']?.number ?? null) === null
       ? null
       : Number(fTool['post-process'].number),
-    // Holder link — read from Fusion JSON holder.guid as initial default;
-    // overridden by metadata.selected_holder_guid when present.
-    selected_holder_guid: fTool.holder?.guid || '',
-    // Default minimum OOH — persistent, saved to metadata. ProShop import overrides this
-    // value; Fusion's geometry.LB serves only as the initial fallback when no ProShop
-    // value has been imported yet (see mergeFusionAndMetadata for priority logic).
-    min_ooh: geo.LB
-      ? (fTool.unit === 'millimeters' ? geo.LB / 25.4 : geo.LB)
-      : null,
-    // Transient — only populated for merge-flow incoming tools (not saved to metadata).
-    // OOH comes from geometry.LB (Body Length / Length below Holder). assembly-gauge-length
-    // is what we write on export; LB is what Fusion stores as the actual stick-out geometry.
-    incoming_holder_guid: fTool.holder?.guid || '',
-    incoming_ooh: geo.LB
-      ? (fTool.unit === 'millimeters' ? geo.LB / 25.4 : geo.LB)
-      : null,
-    // Assemblies — metadata only, default empty
-    assemblies: [],
     // Metadata fields default empty — filled from metadata file
     vendor: '',
     product_id: '',
@@ -398,14 +372,7 @@ export function internalToFusionTool(tool) {
   };
 
   const fusionType = FT_MAP[tool.tool_type] || tool.tool_type;
-  // When tool.presets is populated (managed by PresetPanel), use presets[0] as
-  // the base for the first preset so its name/material/guid are preserved.
-  // Flat speed/feed fields always override the numeric values in preset[0] so
-  // both ToolForm (flat-field edits) and PresetPanel edits stay in sync.
-  const existingPreset0 = existing['start-values']?.presets?.[0] || {};
-  const managedPresets = tool.presets?.length > 0 ? tool.presets : null;
-  const preset0base = managedPresets ? (managedPresets[0] || {}) : existingPreset0;
-  const additionalPresets = managedPresets ? managedPresets.slice(1) : [];
+  const preset = existing['start-values']?.presets?.[0] || {};
 
   // Machine tool number drives the post-process fields. When present, all three
   // (number / length-offset / diameter-offset) must be written to the same value,
@@ -464,45 +431,31 @@ export function internalToFusionTool(tool) {
       'tip-offset': 0,
     },
     'start-values': {
-      presets: [
-        {
-          ...preset0base,
-          guid: preset0base.guid || generateId(),
-          description: preset0base.description || '',
-          name: preset0base.name || 'Default preset',
-          material: preset0base.material || { category: 'all', query: '', 'use-hardness': false },
-          'ramp-angle': preset0base['ramp-angle'] ?? 2,
-          'tool-coolant': tool.coolant || preset0base['tool-coolant'] || 'flood',
-          'use-stepdown': preset0base['use-stepdown'] ?? false,
-          'use-stepover': preset0base['use-stepover'] ?? false,
-          n: tool.spindle_speed ?? preset0base.n ?? 0,
-          n_ramp: tool.spindle_speed ?? preset0base.n_ramp ?? 0,
-          'ramp-spindle-speed': 'n',
-          v_f: tool.cutting_feedrate ?? preset0base.v_f ?? 0,
-          v_f_leadIn: tool.lead_in_feedrate ?? preset0base.v_f_leadIn ?? 0,
-          v_f_leadOut: tool.lead_out_feedrate ?? preset0base.v_f_leadOut ?? 0,
-          v_f_plunge: tool.plunge_feedrate ?? preset0base.v_f_plunge ?? 0,
-          v_f_ramp: tool.ramp_feedrate ?? preset0base.v_f_ramp ?? 0,
-          v_f_retract: preset0base.v_f_retract ?? 0,
-          v_f_transition: tool.cutting_feedrate ?? preset0base.v_f_transition ?? 0,
-          f_z: tool.feed_per_tooth ?? preset0base.f_z ?? 0,
-          f_n: tool.feed_per_rev ?? preset0base.f_n ?? 0,
-          v_c: tool.cutting_speed ?? preset0base.v_c ?? 0,
-        },
-        ...additionalPresets,
-      ],
+      presets: [{
+        ...preset,
+        guid: preset.guid || generateId(),
+        description: preset.description || '',
+        name: preset.name || 'Default preset',
+        material: preset.material || { category: 'all', query: '', 'use-hardness': false },
+        'ramp-angle': preset['ramp-angle'] || 2,
+        'tool-coolant': tool.coolant || 'flood',
+        'use-stepdown': false,
+        'use-stepover': false,
+        n: tool.spindle_speed || preset.n || 0,
+        n_ramp: tool.spindle_speed || preset.n_ramp || 0,
+        v_f: tool.cutting_feedrate || preset.v_f || 0,
+        v_f_leadIn: tool.lead_in_feedrate || preset.v_f_leadIn || 0,
+        v_f_leadOut: tool.lead_out_feedrate || preset.v_f_leadOut || 0,
+        v_f_plunge: tool.plunge_feedrate || preset.v_f_plunge || 0,
+        v_f_ramp: tool.ramp_feedrate || preset.v_f_ramp || 0,
+        v_f_transition: tool.cutting_feedrate || preset.v_f_transition || 0,
+        f_z: tool.feed_per_tooth || preset.f_z || 0,
+        f_n: tool.feed_per_rev || preset.f_n || 0,
+        v_c: tool.cutting_speed || preset.v_c || 0,
+      }],
     },
     holder: existing.holder || null,
     'post-process': {
-      'break-control': false,
-      comment: '',
-      hand: false,
-      live: false,
-      'manually-entered': false,
-      number: 0,
-      'length-offset': 0,
-      'diameter-offset': 0,
-      'tool-select-number': 0,
       ...(existing['post-process'] || {}),
       ...(hasMtn
         ? { number: mtnInt, 'length-offset': mtnInt, 'diameter-offset': mtnInt }
@@ -519,7 +472,6 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     vendor: meta.vendor || fusionInternal.vendor || '',
     product_id: meta.product_id || fusionInternal.product_id || '',
     coating: meta.coating || fusionInternal.coating || '',
-    location: meta.location || fusionInternal.location || '',
     distributor: meta.distributor || '',
     distributor_stock_num: meta.distributor_stock_num || '',
     cost: meta.cost || '',
@@ -546,10 +498,6 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     grouping: meta.grouping || '',
     preset_name: meta.preset_name || '',
     ooh: meta.ooh ?? null,
-    // ProShop is the authoritative source for min_ooh (lengthBelowShankDiameter).
-    // meta.min_ooh wins unconditionally; Fusion's geometry.LB is only a fallback
-    // for tools that have never been through a ProShop import.
-    min_ooh: meta.min_ooh != null ? meta.min_ooh : (fusionInternal.min_ooh ?? null),
     // Metadata-only fields
     // Machine tool number: metadata is the source of truth — it wins over the
     // value mirrored from the Fusion JSON on any conflict.
@@ -563,13 +511,6 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     tags: meta.tags || [],
     updated_by: meta.updated_by || '',
     revision_notes: meta.revision_notes || '',
-    // selected_holder_guid: metadata wins; fall back to what fusionToolToInternal
-    // seeded from holder.guid in the Fusion JSON. An explicit '' in metadata
-    // means the user cleared the holder (distinct from key being absent).
-    selected_holder_guid: meta.selected_holder_guid !== undefined
-      ? meta.selected_holder_guid
-      : fusionInternal.selected_holder_guid,
-    assemblies: meta.assemblies || [],
     merge_history: meta.merge_history || [],
     created_at: meta.created_at || fusionInternal.created_at,
     updated_at: meta.updated_at || fusionInternal.updated_at,
@@ -584,7 +525,6 @@ export function splitToFusionAndMetadata(tool) {
     vendor: tool.vendor || '',
     product_id: tool.product_id || '',
     coating: tool.coating || '',
-    location: tool.location || '',
     distributor: tool.distributor || '',
     distributor_stock_num: tool.distributor_stock_num || '',
     cost: tool.cost || '',
@@ -601,7 +541,6 @@ export function splitToFusionAndMetadata(tool) {
     axial_distance: tool.axial_distance ?? null,
     shoulder_length: tool.shoulder_length ?? null,
     ooh: tool.ooh ?? null,
-    min_ooh: tool.min_ooh ?? null,
     pitch: tool.pitch || '',
     tap_class: tool.tap_class || '',
     min_thread_pitch: tool.min_thread_pitch ?? null,
@@ -616,11 +555,6 @@ export function splitToFusionAndMetadata(tool) {
     // Machine tool number — persisted here as the source of truth, independent
     // of what gets written to the Fusion JSON.
     machine_tool_number: (tool.machine_tool_number ?? null) === null ? null : Number(tool.machine_tool_number),
-    // Holder selection — metadata only; '' means explicitly cleared.
-    selected_holder_guid: tool.selected_holder_guid ?? '',
-    // Assemblies — metadata only. incoming_holder_guid and incoming_ooh are transient
-    // (merge-flow only) and are never written to metadata.
-    assemblies: tool.assemblies || [],
     notes: tool.notes || '',
     last_used_job: tool.last_used_job || '',
     preferred_machine: tool.preferred_machine || '',
@@ -640,7 +574,6 @@ export function newTool(toolType = 'flat end mill') {
   const now = new Date().toISOString();
   return {
     id: generateId(),
-    unit: 'inches',
     tool_type: toolType,
     description: '',
     diameter: null,
@@ -658,7 +591,6 @@ export function newTool(toolType = 'flat end mill') {
     axial_distance: null,
     shoulder_length: null,
     ooh: null,
-    min_ooh: null,
     material: 'carbide',
     coating: '',
     material_suitability: [],
@@ -720,6 +652,61 @@ export function validateTool(tool) {
   }
   if (!tool.description?.trim()) errors.push('Description is required');
   return { valid: errors.length === 0, errors };
+}
+
+export function validateGeometry(tool) {
+  const warnings = [];
+
+  function isValid(v) {
+    return v !== null && v !== undefined && typeof v === 'number' && !isNaN(v) && v > 0;
+  }
+
+  function fmt(n) {
+    return n.toFixed(4).replace(/\.?0+$/, '') + '"';
+  }
+
+  const { flute_length, shoulder_length, min_ooh, overall_length, corner_radius, diameter, tool_type } = tool;
+
+  if (isValid(flute_length) && isValid(shoulder_length) && flute_length >= shoulder_length) {
+    warnings.push({
+      fields: ['flute_length', 'shoulder_length'],
+      message: `Flute Length (${fmt(flute_length)}) must be less than Shoulder Length (${fmt(shoulder_length)})`,
+    });
+  }
+
+  if (isValid(shoulder_length) && isValid(min_ooh) && shoulder_length >= min_ooh) {
+    warnings.push({
+      fields: ['shoulder_length', 'min_ooh'],
+      message: `Shoulder Length (${fmt(shoulder_length)}) must be less than MIN OOH (${fmt(min_ooh)})`,
+    });
+  }
+
+  if (isValid(min_ooh) && isValid(overall_length) && min_ooh >= overall_length) {
+    warnings.push({
+      fields: ['min_ooh', 'overall_length'],
+      message: `MIN OOH (${fmt(min_ooh)}) must be less than Overall Length (${fmt(overall_length)})`,
+    });
+  }
+
+  if (tool_type === 'ball end mill' && isValid(corner_radius) && isValid(diameter)) {
+    if (Math.abs(corner_radius - diameter / 2) > 0.00005) {
+      warnings.push({
+        fields: ['corner_radius'],
+        message: `Ball End Mill corner radius must equal cut diameter ÷ 2 (${fmt(diameter / 2)}) — stored: ${fmt(corner_radius)}`,
+      });
+    }
+  }
+
+  if (tool_type === 'bull nose end mill' && isValid(corner_radius) && isValid(diameter)) {
+    if (corner_radius >= diameter / 2) {
+      warnings.push({
+        fields: ['corner_radius'],
+        message: `Bull Nose corner radius (${fmt(corner_radius)}) must be less than cut diameter ÷ 2 (${fmt(diameter / 2)})`,
+      });
+    }
+  }
+
+  return warnings;
 }
 
 // ─── Re-export getVisibleFields for components ────────────────────────────
@@ -791,5 +778,4 @@ export const FIELD_LABELS = {
   tool_number: 'Tool Number',
   machine_tool_number: 'Machine Tool #',
   preset_name: 'Preset Name',
-  min_ooh: 'Length Below Holder - MIN OOH:',
 };

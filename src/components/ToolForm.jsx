@@ -1,15 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Tag, Ruler, Layers, Gauge, Settings2, Save, X, Hash } from 'lucide-react';
-import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, COOLANT_OPTS, validateTool, getVisibleFields, getNextMachineNumber } from '../schema/toolSchema.js';
+import { Tag, Ruler, Layers, Gauge, Settings2, Save, X, Hash, AlertTriangle } from 'lucide-react';
+import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, COOLANT_OPTS, validateTool, validateGeometry, getVisibleFields, getNextMachineNumber } from '../schema/toolSchema.js';
 import { useApp } from '../context/AppContext.jsx';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 
-const NUMERIC_FIELDS = new Set(['diameter', 'flute_length', 'overall_length', 'shank_diameter', 'corner_radius', 'tip_angle', 'taper_angle', 'tip_diameter', 'lower_radius', 'upper_radius', 'profile_radius', 'axial_distance', 'shoulder_length', 'ooh', 'min_ooh', 'helix_angle', 'number_of_flutes', 'spindle_speed', 'cutting_feedrate', 'plunge_feedrate', 'ramp_feedrate', 'lead_in_feedrate', 'lead_out_feedrate', 'feed_per_tooth', 'feed_per_rev', 'cutting_speed', 'depth_of_cut', 'width_of_cut', 'min_thread_pitch', 'max_thread_pitch']);
+const NUMERIC_FIELDS = new Set(['diameter', 'flute_length', 'overall_length', 'shank_diameter', 'corner_radius', 'tip_angle', 'taper_angle', 'tip_diameter', 'lower_radius', 'upper_radius', 'profile_radius', 'axial_distance', 'shoulder_length', 'ooh', 'helix_angle', 'number_of_flutes', 'spindle_speed', 'cutting_feedrate', 'plunge_feedrate', 'ramp_feedrate', 'lead_in_feedrate', 'lead_out_feedrate', 'feed_per_tooth', 'feed_per_rev', 'cutting_speed', 'depth_of_cut', 'width_of_cut', 'min_thread_pitch', 'max_thread_pitch']);
 
 const FIELD_STEP = {
   diameter: '0.0001', flute_length: '0.001', overall_length: '0.001', shank_diameter: '0.0001',
   corner_radius: '0.0001', tip_diameter: '0.0001', lower_radius: '0.0001', upper_radius: '0.0001',
-  profile_radius: '0.0001', axial_distance: '0.001', shoulder_length: '0.001', ooh: '0.001', min_ooh: '0.001',
+  profile_radius: '0.0001', axial_distance: '0.001', shoulder_length: '0.001', ooh: '0.001',
   number_of_flutes: '1', spindle_speed: '1', cutting_feedrate: '0.1', plunge_feedrate: '0.1',
   ramp_feedrate: '0.1', lead_in_feedrate: '0.1', lead_out_feedrate: '0.1',
   feed_per_tooth: '0.0001', feed_per_rev: '0.0001', cutting_speed: '1',
@@ -36,47 +36,7 @@ const EXTRACTOR_TO_APP_FIELD = {
 // Always-visible core fields (regardless of tool type visibility)
 const ALWAYS_FIELDS = ['description', 'vendor', 'product_id', 'proshot_id', 'coating'];
 const SPEEDS_FIELDS = ['spindle_speed', 'cutting_feedrate', 'feed_per_tooth', 'feed_per_rev', 'plunge_feedrate', 'ramp_feedrate', 'lead_in_feedrate', 'lead_out_feedrate', 'cutting_speed', 'depth_of_cut', 'width_of_cut'];
-const META_FIELDS = ['notes', 'tags', 'preferred_machine', 'last_used_job', 'revision_notes', 'distributor', 'distributor_stock_num', 'cost', 'location'];
-
-// Unit suffix for each numeric field (inch mode)
-const FIELD_UNIT_IN = {
-  diameter: 'in', flute_length: 'in', overall_length: 'in', shank_diameter: 'in',
-  corner_radius: 'in', shoulder_length: 'in', tip_diameter: 'in', lower_radius: 'in',
-  upper_radius: 'in', profile_radius: 'in', axial_distance: 'in', ooh: 'in', min_ooh: 'in',
-  depth_of_cut: 'in', width_of_cut: 'in', min_thread_pitch: 'in', max_thread_pitch: 'in',
-  cutting_feedrate: 'in/min', plunge_feedrate: 'in/min', ramp_feedrate: 'in/min',
-  lead_in_feedrate: 'in/min', lead_out_feedrate: 'in/min',
-  feed_per_tooth: 'in', feed_per_rev: 'in',
-  tip_angle: '°', taper_angle: '°', helix_angle: '°',
-  spindle_speed: 'RPM', cutting_speed: 'SFM',
-};
-const FIELD_UNIT_MM_OVERRIDES = {
-  diameter: 'mm', flute_length: 'mm', overall_length: 'mm', shank_diameter: 'mm',
-  corner_radius: 'mm', shoulder_length: 'mm', tip_diameter: 'mm', lower_radius: 'mm',
-  upper_radius: 'mm', profile_radius: 'mm', axial_distance: 'mm', ooh: 'mm', min_ooh: 'mm',
-  depth_of_cut: 'mm', width_of_cut: 'mm', min_thread_pitch: 'mm', max_thread_pitch: 'mm',
-  cutting_feedrate: 'mm/min', plunge_feedrate: 'mm/min', ramp_feedrate: 'mm/min',
-  lead_in_feedrate: 'mm/min', lead_out_feedrate: 'mm/min',
-  feed_per_tooth: 'mm', feed_per_rev: 'mm',
-  cutting_speed: 'm/min',
-};
-
-// Strip the trailing " (unit)" from a field label so we can show unit separately
-function baseLabel(field) {
-  return (FIELD_LABELS[field] || field).replace(/ \([^)]+\)$/, '');
-}
-
-function fieldUnit(field, isMetric) {
-  return isMetric
-    ? (FIELD_UNIT_MM_OVERRIDES[field] ?? FIELD_UNIT_IN[field] ?? '')
-    : (FIELD_UNIT_IN[field] ?? '');
-}
-
-function round4display(v) {
-  if (v === null || v === undefined || v === '') return '';
-  const n = Number(v);
-  return isNaN(n) ? v : parseFloat(n.toFixed(4));
-}
+const META_FIELDS = ['notes', 'tags', 'last_used_job', 'revision_notes', 'distributor', 'distributor_stock_num', 'cost', 'location'];
 
 export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
   const { tools } = useApp();
@@ -146,6 +106,12 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
   }, [dirty]);
 
   const visibleFields = new Set(getVisibleAppFields().map(f => f.field));
+
+  const geoIssues = useMemo(
+    () => validateGeometry(data),
+    [data.tool_type, data.diameter, data.flute_length, data.shoulder_length, data.min_ooh, data.overall_length, data.corner_radius]
+  );
+  const geoIssueFields = useMemo(() => new Set(geoIssues.flatMap(i => i.fields)), [geoIssues]);
 
   return (
     <div className="tool-form">
@@ -219,18 +185,19 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
           <FieldInput field="distributor_stock_num" label="Distributor Stock #" data={data} setField={setField} />
           <FieldInput field="cost" label="Cost ($)" data={data} setField={setField} type="number" step="0.01" />
           <FieldInput field="product_link" label="Product Link" data={data} setField={setField} type="url" />
+          <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
         </div>
       </Section>
 
       <Section title="Geometry" icon={Ruler}>
         <div className="form-grid">
-          <NumField field="diameter" data={data} setField={setField} required />
+          <NumField field="diameter" data={data} setField={setField} required warn={geoIssueFields.has('diameter')} />
           {visibleFields.has('number_of_flutes') && <NumField field="number_of_flutes" data={data} setField={setField} />}
-          {visibleFields.has('flute_length') && <NumField field="flute_length" data={data} setField={setField} />}
-          {visibleFields.has('overall_length') && <NumField field="overall_length" data={data} setField={setField} />}
+          {visibleFields.has('flute_length') && <NumField field="flute_length" data={data} setField={setField} warn={geoIssueFields.has('flute_length')} />}
+          {visibleFields.has('overall_length') && <NumField field="overall_length" data={data} setField={setField} warn={geoIssueFields.has('overall_length')} />}
           {visibleFields.has('shank_diameter') && <NumField field="shank_diameter" data={data} setField={setField} />}
-          {visibleFields.has('corner_radius') && <NumField field="corner_radius" data={data} setField={setField} />}
-          {visibleFields.has('shoulder_length') && <NumField field="shoulder_length" data={data} setField={setField} />}
+          {visibleFields.has('corner_radius') && <NumField field="corner_radius" data={data} setField={setField} warn={geoIssueFields.has('corner_radius')} />}
+          {visibleFields.has('shoulder_length') && <NumField field="shoulder_length" data={data} setField={setField} warn={geoIssueFields.has('shoulder_length')} />}
           {visibleFields.has('tip_angle') && <NumField field="tip_angle" data={data} setField={setField} />}
           {visibleFields.has('taper_angle') && <NumField field="taper_angle" data={data} setField={setField} />}
           {visibleFields.has('tip_diameter') && <NumField field="tip_diameter" data={data} setField={setField} />}
@@ -238,8 +205,18 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
           {visibleFields.has('upper_radius') && <NumField field="upper_radius" data={data} setField={setField} />}
           {visibleFields.has('profile_radius') && <NumField field="profile_radius" data={data} setField={setField} />}
           {visibleFields.has('axial_distance') && <NumField field="axial_distance" data={data} setField={setField} />}
-          <NumField field="min_ooh" data={data} setField={setField} />
+          <NumField field="min_ooh" data={data} setField={setField} warn={geoIssueFields.has('min_ooh')} />
         </div>
+        {geoIssues.length > 0 && (
+          <div className="warn-banner" style={{ marginTop: 12 }}>
+            {geoIssues.map((issue, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+                {issue.message}
+              </div>
+            ))}
+          </div>
+        )}
       </Section>
 
       <Section title="Material & Coating" icon={Layers}>
@@ -333,8 +310,6 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
 
       <Section title="Setup & Notes" icon={Settings2}>
         <div className="form-grid">
-          <FieldInput field="preferred_machine" label="Preferred Machine" data={data} setField={setField} placeholder="M300, R650, etc." />
-          <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
           <FieldInput field="last_used_job" label="Last Used Job" data={data} setField={setField} />
           <FieldInput field="updated_by" label="Updated By" data={data} setField={setField} />
         </div>
@@ -412,32 +387,20 @@ function Section({ title, icon: Icon, children }) {
 }
 
 function NumField({ field, data, setField, required }) {
-  const [focused, setFocused] = useState(false);
-  const isMetric = data.unit === 'millimeters';
-  const unit = fieldUnit(field, isMetric);
-  const raw = data[field];
-  const displayValue = focused ? (raw ?? '') : round4display(raw);
-
   return (
     <div className="field-group">
       <label className="field-label">
-        {baseLabel(field)}
+        {FIELD_LABELS[field] || field}
         {required && <span className="required"> *</span>}
       </label>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <input
-          className="field-input"
-          style={{ flex: 1 }}
-          type="number"
-          step={FIELD_STEP[field] || '0.001'}
-          value={displayValue}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          onChange={e => setField(field, e.target.value === '' ? null : parseFloat(e.target.value))}
-          placeholder="—"
-        />
-        {unit && <span className="text-xs text-sub" style={{ whiteSpace: 'nowrap' }}>{unit}</span>}
-      </div>
+      <input
+        className="field-input"
+        type="number"
+        step={FIELD_STEP[field] || '0.001'}
+        value={data[field] ?? ''}
+        onChange={e => setField(field, e.target.value === '' ? null : parseFloat(e.target.value))}
+        placeholder="—"
+      />
     </div>
   );
 }
