@@ -192,6 +192,9 @@ export function generateId() {
   return `${hex()}${hex()}-${hex()}-4${hex().slice(1)}-${(Math.floor(Math.random() * 4) + 8).toString(16)}${hex().slice(1)}-${hex()}${hex()}${hex()}`;
 }
 
+// Alias for semantic clarity when creating assembly IDs.
+export const generateAssemblyId = generateId;
+
 // ─── Machine tool numbers ─────────────────────────────────────────────────
 // The machine tool number is what the CNC machine reads to call a tool
 // (`post-process.number` in the Fusion JSON). It is completely separate from
@@ -324,6 +327,12 @@ export function fusionToolToInternal(fTool) {
     // Holder link — read from Fusion JSON holder.guid as initial default;
     // overridden by metadata.selected_holder_guid when present.
     selected_holder_guid: fTool.holder?.guid || '',
+    // Transient — only populated for merge-flow incoming tools (not saved to metadata).
+    // Used by CommitStep to detect the assembly context of an imported job tool.
+    incoming_holder_guid: fTool.holder?.guid || '',
+    incoming_ooh: fTool['assembly-gauge-length'] || null,
+    // Assemblies — metadata only, default empty
+    assemblies: [],
     // Metadata fields default empty — filled from metadata file
     vendor: '',
     product_id: '',
@@ -536,6 +545,7 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     selected_holder_guid: meta.selected_holder_guid !== undefined
       ? meta.selected_holder_guid
       : fusionInternal.selected_holder_guid,
+    assemblies: meta.assemblies || [],
     merge_history: meta.merge_history || [],
     created_at: meta.created_at || fusionInternal.created_at,
     updated_at: meta.updated_at || fusionInternal.updated_at,
@@ -582,6 +592,9 @@ export function splitToFusionAndMetadata(tool) {
     machine_tool_number: (tool.machine_tool_number ?? null) === null ? null : Number(tool.machine_tool_number),
     // Holder selection — metadata only; '' means explicitly cleared.
     selected_holder_guid: tool.selected_holder_guid ?? '',
+    // Assemblies — metadata only. incoming_holder_guid and incoming_ooh are transient
+    // (merge-flow only) and are never written to metadata.
+    assemblies: tool.assemblies || [],
     notes: tool.notes || '',
     last_used_job: tool.last_used_job || '',
     preferred_machine: tool.preferred_machine || '',

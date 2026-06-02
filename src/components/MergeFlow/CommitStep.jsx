@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { ArrowLeft, GitMerge, Plus } from 'lucide-react';
+import { ArrowLeft, GitMerge, Plus, Wrench } from 'lucide-react';
 import { useApp } from '../../context/AppContext.jsx';
-import { FIELD_LABELS, TOOL_TYPE_LABELS } from '../../schema/toolSchema.js';
+import { FIELD_LABELS, TOOL_TYPE_LABELS, generateAssemblyId } from '../../schema/toolSchema.js';
 import ToolTypeIcon from '../icons/ToolTypeIcon.jsx';
 
 function formatValue(v) {
@@ -30,10 +30,19 @@ export default function CommitStep({
   onCommitted, onBack,
   isLastItem = false,
 }) {
-  const { mergeTool, isSaving, user } = useApp();
+  const { mergeTool, isSaving, user, holders } = useApp();
   const [revisionNote, setRevisionNote] = useState('');
   const [mergedBy, setMergedBy] = useState(user?.email || user?.name || '');
   const [commitError, setCommitError] = useState('');
+  const [assemblyAction, setAssemblyAction] = useState('create'); // 'create' | 'link' | 'skip'
+  const [linkTargetId, setLinkTargetId] = useState('');
+
+  const incomingOoh = importedTool?.incoming_ooh;
+  const incomingHolderGuid = importedTool?.incoming_holder_guid || '';
+  const incomingHolderDesc = importedTool?._incomingHolderDesc
+    || holders?.find(h => h.guid === incomingHolderGuid)?.description
+    || '';
+  const hasIncomingAssembly = incomingOoh != null && incomingOoh > 0 && newPresetList.length > 0;
 
   const fieldList = [...(selectedFields || [])];
   const presetChangeList = [...(presetSelections || new Map()).entries()];
@@ -53,8 +62,40 @@ export default function CommitStep({
       selectedFields: fields,
     }));
 
+    let assemblyUpdate = null;
+    if (hasIncomingAssembly && assemblyAction !== 'skip') {
+      if (assemblyAction === 'create') {
+        assemblyUpdate = {
+          type: 'create',
+          assembly: {
+            assembly_id: generateAssemblyId(),
+            holder_guid: incomingHolderGuid,
+            holder_description: incomingHolderDesc,
+            ooh: incomingOoh,
+            linked_preset_guids: newPresetList.map(p => p.guid),
+            notes: '',
+            created_at: new Date().toISOString(),
+            source: 'merge',
+          },
+        };
+      } else if (assemblyAction === 'link' && linkTargetId) {
+        const existing = (masterTool.assemblies || []).find(a => a.assembly_id === linkTargetId);
+        if (existing) {
+          assemblyUpdate = {
+            type: 'link',
+            assembly: {
+              ...existing,
+              linked_preset_guids: [
+                ...new Set([...(existing.linked_preset_guids || []), ...newPresetList.map(p => p.guid)]),
+              ],
+            },
+          };
+        }
+      }
+    }
+
     try {
-      await mergeTool(masterTool, mergedFields, revisionNote.trim(), mergedBy.trim(), presetChanges, newPresetList);
+      await mergeTool(masterTool, mergedFields, revisionNote.trim(), mergedBy.trim(), presetChanges, newPresetList, assemblyUpdate);
       onCommitted();
     } catch (err) {
       setCommitError(err.message);
@@ -151,6 +192,75 @@ export default function CommitStep({
           )}
         </div>
       </div>
+
+      {/* Assembly detection — shown only when new presets are being added and incoming tool has OOH */}
+      {hasIncomingAssembly && (
+        <div className="panel mb-20">
+          <div className="panel-header static">
+            <Wrench size={14} className="panel-header-icon" />
+            <span className="panel-header-title">Assembly Detected</span>
+          </div>
+          <div className="panel-body">
+            <div className="text-sm text-sub mb-12">
+              This tool came in with holder/OOH data:
+              {incomingHolderDesc && <strong> {incomingHolderDesc}</strong>}
+              {incomingOoh != null && <> · OOH: <strong>{incomingOoh.toFixed(3)}"</strong></>}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                <input
+                  type="radio"
+                  name="assemblyAction"
+                  value="create"
+                  checked={assemblyAction === 'create'}
+                  onChange={() => setAssemblyAction('create')}
+                />
+                Create new assembly (holder + OOH + linked presets)
+              </label>
+              {(masterTool.assemblies || []).length > 0 && (
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                  <input
+                    type="radio"
+                    name="assemblyAction"
+                    value="link"
+                    checked={assemblyAction === 'link'}
+                    onChange={() => setAssemblyAction('link')}
+                    style={{ marginTop: 2 }}
+                  />
+                  <span>
+                    Link new presets to existing assembly
+                    {assemblyAction === 'link' && (
+                      <select
+                        className="field-input"
+                        style={{ display: 'block', marginTop: 6, maxWidth: 300, fontSize: 12 }}
+                        value={linkTargetId}
+                        onChange={e => setLinkTargetId(e.target.value)}
+                      >
+                        <option value="">— select assembly —</option>
+                        {(masterTool.assemblies || []).map(a => (
+                          <option key={a.assembly_id} value={a.assembly_id}>
+                            {a.holder_description || 'Assembly'} · OOH: {a.ooh?.toFixed(3)}"
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </span>
+                </label>
+              )}
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                <input
+                  type="radio"
+                  name="assemblyAction"
+                  value="skip"
+                  checked={assemblyAction === 'skip'}
+                  onChange={() => setAssemblyAction('skip')}
+                />
+                Skip — don't record an assembly
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Revision note */}
       <div className="field-group mb-16">

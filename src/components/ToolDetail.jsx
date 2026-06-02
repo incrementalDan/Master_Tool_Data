@@ -2,10 +2,12 @@ import { useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
-  Tag, Ruler, Settings2, StickyNote, Clock, ExternalLink, Hash, Package,
+  Tag, Ruler, Settings2, StickyNote, Clock, ExternalLink, Hash, Package, Wrench,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
 import HolderPicker from './HolderPicker.jsx';
+import AssemblyCard from './AssemblyCard.jsx';
+import AssemblyForm from './AssemblyForm.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
@@ -22,6 +24,7 @@ export default function ToolDetail() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [copyLabel, setCopyLabel] = useState('Copy to Clipboard');
+  const [selectedExportAssemblyId, setSelectedExportAssemblyId] = useState('');
 
   const tool = tools.find(t => t.id === id);
   const isMetric = tool?.unit === 'millimeters';
@@ -91,6 +94,10 @@ export default function ToolDetail() {
   };
 
   const typeLabel = TOOL_TYPE_LABELS[tool.tool_type] || tool.tool_type;
+  const assemblies = tool.assemblies || [];
+  const selectedExportAssembly = selectedExportAssemblyId
+    ? assemblies.find(a => a.assembly_id === selectedExportAssemblyId) || null
+    : null;
 
   if (editing) {
     return (
@@ -137,7 +144,7 @@ export default function ToolDetail() {
           className="btn btn-secondary btn-sm"
           onClick={async () => {
             try {
-              await copyToolToClipboard(tool, holders);
+              await copyToolToClipboard(tool, holders, selectedExportAssembly);
               setCopyLabel('Copied!');
               setTimeout(() => setCopyLabel('Copy to Clipboard'), 2000);
             } catch {
@@ -147,7 +154,7 @@ export default function ToolDetail() {
         >
           <Copy size={14} /> {copyLabel}
         </button>
-        <button className="btn btn-secondary btn-sm" onClick={() => { exportFusion(tool, holders); notify('Exported Fusion JSON', 'success'); }}>
+        <button className="btn btn-secondary btn-sm" onClick={() => { exportFusion(tool, holders, selectedExportAssembly); notify('Exported Fusion JSON', 'success'); }}>
           <Download size={14} /> Download JSON
         </button>
         <button className="btn btn-secondary btn-sm" style={{ color: 'var(--orange)' }} onClick={() => { exportProShop(tool); notify('Exported ProShop CSV', 'success'); }}>
@@ -157,6 +164,26 @@ export default function ToolDetail() {
           <Trash2 size={14} /> Delete
         </button>
       </div>
+
+      {/* Assembly selector for Fusion JSON export — shown only when assemblies exist */}
+      {assemblies.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 12 }}>
+          <span className="text-sub" style={{ whiteSpace: 'nowrap' }}>Export assembly:</span>
+          <select
+            className="field-input"
+            style={{ fontSize: 12, height: 28, maxWidth: 300 }}
+            value={selectedExportAssemblyId}
+            onChange={e => setSelectedExportAssemblyId(e.target.value)}
+          >
+            <option value="">None</option>
+            {assemblies.map(a => (
+              <option key={a.assembly_id} value={a.assembly_id}>
+                {a.holder_description || 'Assembly'} — OOH: {a.ooh?.toFixed(3)}"
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Machine tool number — read-only everywhere. All three values (T/H/D)
           are locked to the same number and managed only by the app. */}
@@ -212,6 +239,16 @@ export default function ToolDetail() {
               try {
                 await saveTool({ ...tool, selected_holder_guid: guid });
                 notify('Holder updated', 'success');
+              } catch { /* toast handled in context */ }
+            }}
+          />
+
+          <AssembliesSection
+            tool={tool}
+            holders={holders}
+            onSave={async (updatedTool) => {
+              try {
+                await saveTool(updatedTool);
               } catch { /* toast handled in context */ }
             }}
           />
@@ -375,6 +412,61 @@ function HolderSection({ tool, holders, holderLibrarySetupComplete, onSelectHold
             await onSelectHolder(guid);
           }}
           onClose={() => setShowPicker(false)}
+        />
+      )}
+    </Section>
+  );
+}
+
+function AssembliesSection({ tool, holders, onSave }) {
+  const [showForm, setShowForm] = useState(false);
+  const [editingAssembly, setEditingAssembly] = useState(null);
+  const assemblies = tool.assemblies || [];
+
+  const handleEdit = (assembly) => {
+    setEditingAssembly(assembly);
+    setShowForm(true);
+  };
+
+  const handleDelete = async (assemblyId) => {
+    await onSave({ ...tool, assemblies: assemblies.filter(a => a.assembly_id !== assemblyId) });
+  };
+
+  return (
+    <Section title="Assemblies" icon={Wrench}>
+      {assemblies.length === 0 && (
+        <div className="detail-field-empty text-sm" style={{ marginBottom: 10 }}>
+          No assemblies recorded yet.
+        </div>
+      )}
+      {assemblies.map(a => (
+        <AssemblyCard
+          key={a.assembly_id}
+          assembly={a}
+          tool={tool}
+          holders={holders}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+        />
+      ))}
+      <button
+        className="btn btn-secondary btn-sm"
+        style={{ marginTop: assemblies.length > 0 ? 4 : 0 }}
+        onClick={() => { setEditingAssembly(null); setShowForm(true); }}
+      >
+        + Add Assembly
+      </button>
+      {showForm && (
+        <AssemblyForm
+          tool={tool}
+          holders={holders}
+          assembly={editingAssembly}
+          onSave={async (updatedTool) => {
+            setShowForm(false);
+            setEditingAssembly(null);
+            await onSave(updatedTool);
+          }}
+          onClose={() => { setShowForm(false); setEditingAssembly(null); }}
         />
       )}
     </Section>
