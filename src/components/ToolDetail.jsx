@@ -15,6 +15,12 @@ import ToolForm from './ToolForm.jsx';
 import { exportSingleTool as exportFusion, copyToolToClipboard } from '../utils/fusionExport.js';
 import { exportSingleTool as exportProShop } from '../utils/proShopExport.js';
 
+function proshotUrl(id) {
+  if (!id) return null;
+  const prefix = id.split('-')[0];
+  return `https://americanprecisionworks.adionsystems.com/procnc/tools/${prefix}/${id}$`;
+}
+
 export default function ToolDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -123,6 +129,8 @@ export default function ToolDetail() {
     <div className="tool-detail-wrap">
       {/* Frozen left action sidebar */}
       <aside className="tool-action-sidebar">
+        <SidebarBtn icon={ArrowLeft} label="Back" tip="Go back" onClick={() => navigate(-1)} />
+        <div className="tool-sidebar-divider" />
         <SidebarBtn icon={Pencil} label="Edit" tip="Edit this tool" onClick={() => setEditing(true)} />
         <SidebarBtn icon={Copy} label="Duplicate" tip="Duplicate tool" onClick={handleClone} />
         <SidebarBtn icon={GitMerge} label="Sync Job" tip="Sync proven values from a job file" onClick={() => navigate(`/merge/${tool.id}`)} />
@@ -167,23 +175,40 @@ export default function ToolDetail() {
 
       {/* Main content */}
       <div className="tool-detail-main">
-        {/* Sticky header — shows type, description, ProShop ID while scrolling */}
+        {/* Sticky header — shows type icon, ProShop ID (left), description (right) */}
         <div className="tool-sticky-header">
-          <button className="btn btn-ghost btn-sm tool-sticky-header-back" onClick={() => navigate(-1)}>
-            <ArrowLeft size={14} /> Back
-          </button>
           <span className="tool-sticky-header-icon">
             <ToolTypeIcon type={tool.tool_type} size={24} />
           </span>
           <div className="tool-sticky-header-body">
             <div className="detail-header-type">{typeLabel}</div>
-            <h1 className="detail-header-title description-badge truncate" style={{ fontSize: 16 }}>
-              {tool.description || '—'}
-            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+              {tool.proshot_id && (
+                <a
+                  className="proshot-pill"
+                  href={proshotUrl(tool.proshot_id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Open in ProShop"
+                  onClick={e => e.stopPropagation()}
+                >{tool.proshot_id}</a>
+              )}
+              <h1
+                className="detail-header-title description-badge"
+                style={{
+                  fontSize: 'clamp(12px, 1.5vw, 16px)',
+                  maxWidth: '50ch',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 1,
+                  minWidth: 0,
+                }}
+              >
+                {tool.description || '—'}
+              </h1>
+            </div>
           </div>
-          {tool.proshot_id && (
-            <span className="proshot-pill" title="ProShop ID">{tool.proshot_id}</span>
-          )}
         </div>
 
         {/* Assembly selector for Fusion JSON export — shown only when assemblies exist */}
@@ -224,7 +249,7 @@ export default function ToolDetail() {
                 <Field label="Type" value={typeLabel} />
                 <Field label="Manufacturer" value={tool.vendor} />
                 <Field label="Mfr Part # (EDP)" value={tool.product_id} mono />
-                <Field label="ProShop ID" value={tool.proshot_id} mono />
+                <Field label="ProShop ID" value={tool.proshot_id} mono href={proshotUrl(tool.proshot_id)} />
                 <Field label="Distributor" value={tool.distributor} />
                 <Field label="Dist Stock #" value={tool.distributor_stock_num} mono />
                 <Field label="Cost" value={tool.cost ? `$${tool.cost}` : null} />
@@ -538,14 +563,24 @@ function round4(v) {
   return Math.round(n * 10000) / 10000;
 }
 
-function Field({ label, value, unit, mono }) {
+function Field({ label, value, unit, mono, href }) {
   const isEmpty = value === null || value === undefined || value === '';
+  const display = isEmpty ? '—' : (unit ? `${value} ${unit}` : String(value));
   return (
     <div className="detail-field">
       <div className="detail-field-label">{label}</div>
-      <div className={`detail-field-value ${isEmpty ? 'detail-field-empty' : ''} ${mono ? 'font-mono' : ''}`}>
-        {isEmpty ? '—' : (unit ? `${value} ${unit}` : String(value))}
-      </div>
+      {href && !isEmpty ? (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`detail-field-value inline-link ${mono ? 'font-mono' : ''}`}
+        >{display}</a>
+      ) : (
+        <div className={`detail-field-value ${isEmpty ? 'detail-field-empty' : ''} ${mono ? 'font-mono' : ''}`}>
+          {display}
+        </div>
+      )}
     </div>
   );
 }
