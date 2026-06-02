@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Tag, Ruler, Layers, Gauge, Settings2, Save, X, AlertTriangle } from 'lucide-react';
-import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, COOLANT_OPTS, validateTool, validateGeometry, getVisibleFields, getNextMachineNumber } from '../schema/toolSchema.js';
+import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getVisibleFields, getNextMachineNumber } from '../schema/toolSchema.js';
 import { useApp } from '../context/AppContext.jsx';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 
@@ -235,10 +235,11 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
             </div>
           </div>
           <div className="field-group">
-            <label className="field-label">Coolant</label>
-            <select className="field-input" value={data.coolant || 'flood'} onChange={e => setField('coolant', e.target.value)}>
-              {COOLANT_OPTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
+            <label className="field-label">TSC Capable</label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6, cursor: 'pointer' }}>
+              <input type="checkbox" checked={!!data.tsc_capable} onChange={e => setField('tsc_capable', e.target.checked)} />
+              <span className="text-sub text-sm">Through Spindle Coolant supported</span>
+            </label>
           </div>
           {visibleFields.has('helix_angle') && <NumField field="helix_angle" data={data} setField={setField} />}
           {visibleFields.has('cutting_direction') && (

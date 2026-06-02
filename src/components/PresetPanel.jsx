@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Plus, X, Check, GripVertical, Trash2 } from 'lucide-react';
-import { generateId } from '../schema/toolSchema.js';
+import { generateId, COOLANT_OPTS } from '../schema/toolSchema.js';
 import { useApp } from '../context/AppContext.jsx';
 import { holderColor } from './AssemblyCard.jsx';
 import {
@@ -20,8 +20,6 @@ const MATERIAL_QUERY_MAP = {
   'Mild Steel': 'MILD', Bronze: 'BRONZE', Brass: 'BRASS',
   Titanium: 'TI', 'Cast Iron': 'CI', Plastic: 'PLASTIC', Other: '',
 };
-
-const COOLANT_OPTS = ['flood', 'mist', 'air', 'none'];
 
 // Default formula states when opening any preset for editing.
 // 'manual' = user owns this value; 'formula' = calculated from partner.
@@ -315,7 +313,7 @@ function CollapsedCard({
   const mat = matchMaterial(preset.material?.query);
   const coolantRaw = preset['tool-coolant'];
   const coolantLabel = coolantRaw
-    ? coolantRaw.charAt(0).toUpperCase() + coolantRaw.slice(1)
+    ? (COOLANT_OPTS.find(([v]) => v === coolantRaw)?.[1] ?? (coolantRaw.charAt(0).toUpperCase() + coolantRaw.slice(1)))
     : '—';
   const sfcLabel = lenUnit === 'mm' ? speedUnit : 'ft/min';
 
@@ -677,8 +675,8 @@ function EditCard({
           value={draft['tool-coolant'] || 'flood'}
           onChange={e => set('tool-coolant', e.target.value)}
         >
-          {COOLANT_OPTS.map(c => (
-            <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+          {COOLANT_OPTS.map(([v, l]) => (
+            <option key={v} value={v}>{l}</option>
           ))}
         </select>
       </div>

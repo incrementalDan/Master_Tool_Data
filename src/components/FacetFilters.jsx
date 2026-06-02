@@ -10,6 +10,7 @@ const FACET_LABEL = {
   material: 'Material',
   coating: 'Coating',
   vendor: 'Manufacturer',
+  tsc_capable: 'TSC',
   material_suitability: 'Cuts',
   tags: 'Tags',
   corner_radius: 'Corner Radius',

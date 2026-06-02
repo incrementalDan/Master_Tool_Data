@@ -98,7 +98,6 @@ export default function ToolDetail() {
           feed_per_tooth: p0.f_z ?? tool.feed_per_tooth ?? null,
           feed_per_rev: p0.f_n ?? tool.feed_per_rev ?? null,
           cutting_speed: p0.v_c ?? tool.cutting_speed ?? null,
-          coolant: p0['tool-coolant'] ?? tool.coolant ?? 'flood',
         }),
       });
     } catch { /* toast handled in context */ }
@@ -269,7 +268,7 @@ export default function ToolDetail() {
               <div className="detail-fields">
                 <Field label="Tool Material" value={tool.material} />
                 <Field label="Coating" value={tool.coating} />
-                <Field label="Coolant" value={tool.coolant} />
+                <Field label="TSC Capable" value={tool.tsc_capable ? 'Yes' : 'No'} />
                 <Field label="Helix Angle" value={round4(tool.helix_angle)} unit="°" />
                 <Field label="Flute Type" value={tool.flute_type} />
                 <Field label="Cutting Direction" value={tool.cutting_direction} />

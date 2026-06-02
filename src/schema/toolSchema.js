@@ -1,7 +1,7 @@
 import {
   TT, TL, BLANK, FIELD_VISIBILITY, _FV_KEYS,
   MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST,
-  PS_GROUPS, AUTO_GROUP, COOLANT_OPTS,
+  PS_GROUPS, AUTO_GROUP, COOLANT_OPTS, THROUGH_COOLANT_VALUES,
   getVisibleFields,
 } from '../../tool-extractor.tsx';
 
@@ -15,7 +15,7 @@ export const TOOL_TYPES = TT;
 export const TOOL_TYPE_LABELS = TL;
 
 // ─── Facet fields per tool type (search filter order) ─────────────────────
-const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'material_suitability', 'tags'];
+const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'material_suitability', 'tags'];
 
 export function getFacetFields(toolType) {
   if (!toolType) return COMMON_FACETS;
@@ -111,7 +111,7 @@ export function extractorToTool(f) {
     helix_angle: parseFloat(f.helixAngle) || null,
     center_cutting: f.centerCutting || false,
     flute_type: f.fluteType || '',
-    coolant: f.coolant || 'flood',
+    tsc_capable: THROUGH_COOLANT_VALUES.has(f.coolant || '') || false,
     cutting_direction: f.cuttingDirection || 'Right Hand',
     pitch: f.pitch || '',
     tap_class: f.tapClass || '',
@@ -155,7 +155,7 @@ export function toolToExtractor(tool) {
     productLink: tool.product_link || '',
     presetName: tool.preset_name || '',
     toolNumber: tool.tool_number || '',
-    coolant: tool.coolant || 'flood',
+    coolant: tool.tsc_capable ? 'flood and through tool' : 'flood',
     helixAngle: String(tool.helix_angle ?? ''),
     centerCutting: tool.center_cutting || false,
     fluteType: tool.flute_type || '',
@@ -323,7 +323,7 @@ export function fusionToolToInternal(fTool) {
     distributor: '',
     distributor_stock_num: '',
     cost: '',
-    coolant: 'flood',
+    tsc_capable: false,
     center_cutting: false,
     cutting_direction: 'Right Hand',
     material_suitability: [],
@@ -438,7 +438,7 @@ export function internalToFusionTool(tool) {
         name: preset.name || 'Default preset',
         material: preset.material || { category: 'all', query: '', 'use-hardness': false },
         'ramp-angle': preset['ramp-angle'] || 2,
-        'tool-coolant': tool.coolant || 'flood',
+        'tool-coolant': tool.tsc_capable ? 'flood and through tool' : 'flood',
         'use-stepdown': false,
         'use-stepover': false,
         n: tool.spindle_speed || preset.n || 0,
@@ -475,7 +475,10 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     distributor: meta.distributor || '',
     distributor_stock_num: meta.distributor_stock_num || '',
     cost: meta.cost || '',
-    coolant: meta.coolant || fusionInternal.coolant || 'flood',
+    // Backward compat: old metadata may have a 'coolant' string instead of tsc_capable boolean
+    tsc_capable: meta.tsc_capable !== undefined
+      ? Boolean(meta.tsc_capable)
+      : (THROUGH_COOLANT_VALUES.has(meta.coolant || '') || THROUGH_COOLANT_VALUES.has(fusionInternal.coolant || '') || false),
     center_cutting: meta.center_cutting ?? fusionInternal.center_cutting ?? false,
     cutting_direction: meta.cutting_direction || fusionInternal.cutting_direction || 'Right Hand',
     helix_angle: meta.helix_angle ?? fusionInternal.helix_angle ?? null,
@@ -528,7 +531,7 @@ export function splitToFusionAndMetadata(tool) {
     distributor: tool.distributor || '',
     distributor_stock_num: tool.distributor_stock_num || '',
     cost: tool.cost || '',
-    coolant: tool.coolant || 'flood',
+    tsc_capable: tool.tsc_capable ?? false,
     center_cutting: tool.center_cutting || false,
     cutting_direction: tool.cutting_direction || 'Right Hand',
     helix_angle: tool.helix_angle ?? null,
@@ -597,7 +600,7 @@ export function newTool(toolType = 'flat end mill') {
     helix_angle: null,
     center_cutting: false,
     flute_type: '',
-    coolant: 'flood',
+    tsc_capable: false,
     cutting_direction: 'Right Hand',
     pitch: '',
     tap_class: '',
@@ -734,7 +737,7 @@ export const FIELD_LABELS = {
   material: 'Tool Material',
   coating: 'Coating',
   material_suitability: 'Material Suitability',
-  coolant: 'Coolant',
+  tsc_capable: 'TSC Capable',
   helix_angle: 'Helix Angle (°)',
   flute_type: 'Flute Type',
   center_cutting: 'Center Cutting',
