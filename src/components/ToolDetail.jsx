@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
 import HolderPicker from './HolderPicker.jsx';
-import AssemblyCard from './AssemblyCard.jsx';
+import AssemblyCard, { holderColor } from './AssemblyCard.jsx';
 import AssemblyForm from './AssemblyForm.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
@@ -450,14 +450,16 @@ function HolderSection({ tool, holders, holderLibrarySetupComplete, onSelectHold
     );
   }
 
+  const hColor = selectedHolder ? holderColor(selectedHolder.description) : null;
+
   return (
     <Section title="Holder" icon={Package}>
       {selectedHolder ? (
         <div style={{ marginBottom: 10 }}>
-          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>
+          <span className="holder-pill" style={hColor ? { background: hColor.bg, borderColor: hColor.border, color: hColor.text } : {}}>
             {selectedHolder.description}
-          </div>
-          <div className="text-sub text-sm">
+          </span>
+          <div className="text-sub text-sm" style={{ marginTop: 6 }}>
             Gauge Length: {gaugeToInches(selectedHolder.gaugeLength ?? 0, selectedHolder.unit).toFixed(3)} in
             {selectedHolder.vendor ? ` · ${selectedHolder.vendor}` : ''}
           </div>
@@ -506,16 +508,18 @@ function AssembliesSection({ tool, holders, onSave }) {
           No assemblies recorded yet.
         </div>
       )}
-      {assemblies.map(a => (
-        <AssemblyCard
-          key={a.assembly_id}
-          assembly={a}
-          tool={tool}
-          holders={holders}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-        />
-      ))}
+      <div className="assemblies-grid">
+        {assemblies.map(a => (
+          <AssemblyCard
+            key={a.assembly_id}
+            assembly={a}
+            tool={tool}
+            holders={holders}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+          />
+        ))}
+      </div>
       <button
         className="btn btn-secondary btn-sm"
         style={{ marginTop: assemblies.length > 0 ? 4 : 0 }}
