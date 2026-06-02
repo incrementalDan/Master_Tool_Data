@@ -740,6 +740,18 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   margin-bottom: 12px;
 }
 
+.warn-banner {
+  background: rgba(217, 120, 48, 0.10);
+  border: 1px solid rgba(217, 120, 48, 0.40);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  color: var(--orange);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 /* ─── Autocomplete dropdown ──────────────────────────────────────────────── */
 .autocomplete-wrap { position: relative; }
 
@@ -1967,7 +1979,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /* ─── Assemblies grid — multiple cards per row ───────────────────────────── */
 .assemblies-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 10px;
   margin-bottom: 6px;
 }

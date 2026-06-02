@@ -1,15 +1,15 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
-  Tag, Ruler, Settings2, StickyNote, Clock, ExternalLink, Hash, Package, Wrench,
+  Tag, Ruler, Settings2, StickyNote, Clock, ExternalLink, Hash, Package, Wrench, AlertTriangle,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
 import HolderPicker from './HolderPicker.jsx';
 import AssemblyCard, { holderColor } from './AssemblyCard.jsx';
 import AssemblyForm from './AssemblyForm.jsx';
 import { useApp } from '../context/AppContext.jsx';
-import { TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
+import { TOOL_TYPE_LABELS, validateGeometry } from '../schema/toolSchema.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 import ToolForm from './ToolForm.jsx';
 import { exportSingleTool as exportFusion, copyToolToClipboard } from '../utils/fusionExport.js';
@@ -35,6 +35,11 @@ export default function ToolDetail() {
   const tool = tools.find(t => t.id === id);
   const isMetric = tool?.unit === 'millimeters';
   const lenUnit = isMetric ? 'mm' : 'in';
+  const geoIssues = useMemo(
+    () => tool ? validateGeometry(tool) : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tool?.tool_type, tool?.diameter, tool?.flute_length, tool?.shoulder_length, tool?.min_ooh, tool?.overall_length, tool?.corner_radius]
+  );
 
   if (!tool) {
     return (
@@ -257,6 +262,16 @@ export default function ToolDetail() {
                 {tool.axial_distance && <Field label="Axial Distance" value={round4(tool.axial_distance)} unit={lenUnit} />}
                 {tool.min_ooh != null && <Field label="Length Below Holder - MIN OOH:" value={round4(tool.min_ooh)} unit={lenUnit} />}
               </div>
+              {geoIssues.length > 0 && (
+                <div className="warn-banner" style={{ marginTop: 10 }}>
+                  {geoIssues.map((issue, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+                      {issue.message}
+                    </div>
+                  ))}
+                </div>
+              )}
             </Section>
 
             <HolderSection
@@ -493,11 +508,19 @@ function AssembliesSection({ tool, holders, onSave }) {
   const [editingAssembly, setEditingAssembly] = useState(null);
   const assemblies = tool.assemblies || [];
 
-  const handleEdit = (assembly) => {
-    setEditingAssembly(assembly);
-    setShowForm(true);
-  };
+  // Group by holder description, sort each group short → long OOH
+  const groups = useMemo(() => {
+    const map = new Map();
+    for (const a of assemblies) {
+      const key = a.holder_description || '—';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(a);
+    }
+    for (const [, g] of map) g.sort((a, b) => (a.ooh ?? 0) - (b.ooh ?? 0));
+    return [...map.entries()];
+  }, [assemblies]);
 
+  const handleEdit = (assembly) => { setEditingAssembly(assembly); setShowForm(true); };
   const handleDelete = async (assemblyId) => {
     await onSave({ ...tool, assemblies: assemblies.filter(a => a.assembly_id !== assemblyId) });
   };
@@ -509,18 +532,30 @@ function AssembliesSection({ tool, holders, onSave }) {
           No assemblies recorded yet.
         </div>
       )}
-      <div className="assemblies-grid">
-        {assemblies.map(a => (
-          <AssemblyCard
-            key={a.assembly_id}
-            assembly={a}
-            tool={tool}
-            holders={holders}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
-        ))}
-      </div>
+      {groups.map(([holderDesc, group]) => {
+        const c = holderColor(holderDesc === '—' ? null : holderDesc);
+        return (
+          <div key={holderDesc} style={{ marginBottom: 14 }}>
+            <div style={{ marginBottom: 6 }}>
+              <span className="holder-pill" style={{ background: c.bg, borderColor: c.border, color: c.text }}>
+                {holderDesc}
+              </span>
+            </div>
+            <div className="assemblies-grid">
+              {group.map(a => (
+                <AssemblyCard
+                  key={a.assembly_id}
+                  assembly={a}
+                  tool={tool}
+                  holders={holders}
+                  onEdit={handleEdit}
+                  onDelete={handleDelete}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })}
       <button
         className="btn btn-secondary btn-sm"
         style={{ marginTop: assemblies.length > 0 ? 4 : 0 }}
