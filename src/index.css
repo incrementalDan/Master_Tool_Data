@@ -1505,12 +1505,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 
 .preset-card-name {
-  font-weight: 600;
-  font-size: 12px;
-  white-space: nowrap;
+  margin-bottom: 4px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  margin-bottom: 1px;
 }
 
 .preset-card-mat {
@@ -1736,7 +1732,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /*  .description-badge  — Tool Description  — violet rounded-rect            */
 /*  .proshot-pill       — ProShop ID        — amber pill (monospace)          */
 /*  .holder-pill        — Holder            — teal pill  (override inline)    */
-/*  .machine-num-badge  — Machine Tool #    — gray rect  (monospace, square)  */
+/*  .machine-num-badge  — Machine Tool #    — green rect (monospace, square)  */
 /*  .location-tag       — Location/Cabinet  — indigo rounded-rect (monospace)  */
 /*  .preset-tag         — Preset Name       — emerald pill                    */
 /*                                                                            */
@@ -1775,10 +1771,10 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   display: inline-block;
   padding: 2px 7px;
   border-radius: 5px;
-  border: 1px solid rgba(148, 163, 184, 0.40);
-  background: rgba(148, 163, 184, 0.10);
-  color: #94a3b8;
-  font-size: 12px;
+  border: 1px solid rgba(74, 222, 128, 0.40);
+  background: rgba(74, 222, 128, 0.10);
+  color: #4ade80;
+  font-size: 11px;
   font-weight: 700;
   font-family: monospace;
   white-space: nowrap;
@@ -1822,7 +1818,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   position: sticky;
   top: 57px;
   height: calc(100vh - 57px);
-  width: 72px;
+  width: 90px;
   flex-shrink: 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
@@ -1830,7 +1826,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 10px 5px;
+  padding: 10px 6px;
   overflow-y: auto;
   z-index: 10;
 }
@@ -1847,13 +1843,13 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   background: transparent;
   color: var(--text-sub);
   cursor: pointer;
-  font-size: 9.5px;
+  font-size: 10px;
   width: 100%;
   transition: background var(--ease), color var(--ease);
   text-align: center;
   font-family: inherit;
-  line-height: 1.2;
-  white-space: nowrap;
+  line-height: 1.3;
+  white-space: normal;
 }
 .tool-sidebar-btn:hover { background: var(--surface-2); color: var(--text); }
 .tool-sidebar-btn.danger:hover { background: rgba(217, 79, 79, 0.1); color: var(--red); }

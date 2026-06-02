@@ -56,7 +56,7 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
     .filter(Boolean);
 
   return (
-    <div style={{ border: `1px solid ${color.border}`, borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: color.bg }}>
+    <div style={{ border: '1px solid rgba(100, 116, 139, 0.30)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: 'var(--surface-2)' }}>
 
       {/* ── Operator tag ── */}
       <div className="operator-tag" style={{ background: 'transparent', border: 'none' }}>
@@ -79,7 +79,6 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
               target="_blank"
               rel="noopener noreferrer"
               title="Open in ProShop"
-              style={{ borderColor: color.text, color: color.text }}
             >{proshotId}</a>
           ) : (
             <span className="tag-proshot-oval empty">—</span>
@@ -88,7 +87,7 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
           <span className="tag-rta-blank">___________</span>
         </div>
 
-        {/* Holder — as colored pill */}
+        {/* Holder — as colored pill (holder color still applies here) */}
         <div className="tag-row">
           <span className="tag-label">Holder</span>
           <span className="holder-pill" style={{ background: color.bg, borderColor: color.border, color: color.text }}>
@@ -99,20 +98,20 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
         {/* OOH + LC */}
         <div className="tag-row">
           <span className="tag-label">OOH</span>
-          <span style={{ fontWeight: 700, flex: 'none', marginRight: 16, color: color.text }}>
+          <span style={{ fontWeight: 700, flex: 'none', marginRight: 16 }}>
             {assembly.ooh != null ? `${assembly.ooh.toFixed(3)}"` : '—'}
           </span>
           <span className="tag-label">LC</span>
-          <span className="tag-box" style={{ borderColor: color.text, color: color.text }}>
+          <span className="tag-box">
             {hasLocation ? location : '—'}
           </span>
         </div>
 
-        <div className="tag-divider" style={{ background: color.border, opacity: 0.4 }} />
+        <div className="tag-divider" />
 
         {/* T## + tool description */}
         <div className="tag-row">
-          <span className="tag-box" style={{ fontSize: 12, borderColor: color.text, color: color.text }}>
+          <span className="tag-box" style={{ fontSize: 12 }}>
             {hasNum ? `T${machineNum}` : '—'}
           </span>
           <span style={{ fontSize: 11.5, flex: 1, minWidth: 0, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
@@ -138,7 +137,7 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
 
       {/* ── Delete confirm ── */}
       {confirmDelete && (
-        <div style={{ padding: '10px 12px', background: 'var(--surface)', borderTop: `1px solid ${color.border}` }}>
+        <div style={{ padding: '10px 12px', background: 'var(--surface)', borderTop: '1px solid var(--border)' }}>
           <div className="text-sm" style={{ marginBottom: 8 }}>Remove this assembly? Linked presets will not be deleted.</div>
           <div className="flex gap-8">
             <button className="btn btn-danger btn-sm" onClick={() => { setConfirmDelete(false); onDelete(assembly.assembly_id); }}>Remove</button>

@@ -497,7 +497,7 @@ Machine tool number is shown inside the Identity section (not as a standalone bl
 | Tool Description | `.description-badge` | Rounded rect (r=7px) | Violet — `rgba(124,58,237,…)` |
 | ProShop ID | `.proshot-pill` | Pill | Amber — `#f59e0b` |
 | Holder | `.holder-pill` | Pill | Teal default — `#2dd4bf`; AssemblyCard overrides per-holder via inline style |
-| Machine Tool # | `.machine-num-badge` | Slightly rounded rect (r=5px) | Cool gray — `#94a3b8`, monospace |
+| Machine Tool # | `.machine-num-badge` | Slightly rounded rect (r=5px) | Green — `#4ade80`, monospace |
 | Location/Cabinet | `.location-tag` | Rounded rect (r=7px) | Indigo — `#818cf8`, monospace |
 | Preset Name | `.preset-tag` | Pill | Emerald — `#34d399` |
 

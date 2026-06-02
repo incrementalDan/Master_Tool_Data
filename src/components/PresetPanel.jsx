@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Plus, X, Check, GripVertical, Trash2 } from 'lucide-react';
 import { generateId } from '../schema/toolSchema.js';
 import { useApp } from '../context/AppContext.jsx';
+import { holderColor } from './AssemblyCard.jsx';
 import {
   rpmToSFM, sfmToRPM,
   fptToIPM, ipmToFPT,
@@ -318,14 +319,11 @@ function CollapsedCard({
     : '—';
   const sfcLabel = lenUnit === 'mm' ? speedUnit : 'ft/min';
 
-  let assemblyLine = null;
-  if (linkedAssemblies?.length === 1) {
-    const a = linkedAssemblies[0];
-    const desc = a.holder_description || holders?.find(h => h.guid === a.holder_guid)?.description || 'Assembly';
-    assemblyLine = `${desc} · OOH: ${a.ooh != null ? a.ooh.toFixed(3) + '"' : '—'}`;
-  } else if (linkedAssemblies?.length > 1) {
-    assemblyLine = `${linkedAssemblies.length} assemblies`;
-  }
+  const singleAssembly = linkedAssemblies?.length === 1 ? linkedAssemblies[0] : null;
+  const assemblyHolderDesc = singleAssembly
+    ? (singleAssembly.holder_description || holders?.find(h => h.guid === singleAssembly.holder_guid)?.description || '')
+    : null;
+  const assemblyHolderColor = assemblyHolderDesc ? holderColor(assemblyHolderDesc) : null;
 
   return (
     <div
@@ -342,7 +340,9 @@ function CollapsedCard({
         </div>
       )}
       <div className="preset-card-body">
-        <div className="preset-card-name" title={preset.name}>{preset.name || 'Unnamed'}</div>
+        <div className="preset-card-name">
+          <span className="preset-tag" title={preset.name}>{preset.name || 'Unnamed'}</span>
+        </div>
         <div className="preset-card-mat">{mat}</div>
         <div className="preset-card-stats">
           <StatRow label="Spindle" value={r4(preset.n)} unit="rpm" />
@@ -352,9 +352,21 @@ function CollapsedCard({
           <StatRow label="Plunge" value={r4(preset.v_f_plunge)} unit={feedUnit} />
           <StatRow label="Coolant" value={coolantLabel} />
         </div>
-        {assemblyLine && (
-          <div className="text-xs text-sub" style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
-            {assemblyLine}
+        {linkedAssemblies?.length > 0 && (
+          <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+            {singleAssembly ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                {assemblyHolderDesc && (
+                  <span
+                    className="holder-pill"
+                    style={assemblyHolderColor ? { background: assemblyHolderColor.bg, borderColor: assemblyHolderColor.border, color: assemblyHolderColor.text } : {}}
+                  >{assemblyHolderDesc}</span>
+                )}
+                <span className="text-xs text-sub">OOH: {singleAssembly.ooh != null ? singleAssembly.ooh.toFixed(3) + '"' : '—'}</span>
+              </div>
+            ) : (
+              <span className="text-xs text-sub">{linkedAssemblies.length} assemblies</span>
+            )}
           </div>
         )}
       </div>

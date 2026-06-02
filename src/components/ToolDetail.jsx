@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
-  Tag, Ruler, Settings2, StickyNote, Clock, ExternalLink, Hash, Package, Wrench, AlertTriangle,
+  Tag, Ruler, Settings2, StickyNote, Clock, Package, Wrench, AlertTriangle,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
 import HolderPicker from './HolderPicker.jsx';
@@ -209,22 +209,6 @@ export default function ToolDetail() {
 
         <div className="detail-layout">
             <Section title="Identity" icon={Tag}>
-              {/* Machine tool number */}
-              {(tool.machine_tool_number !== null && tool.machine_tool_number !== undefined && tool.machine_tool_number !== '') && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
-                  <Hash size={14} style={{ color: 'var(--text-sub)', flexShrink: 0 }} />
-                  <span className="text-sub" style={{ fontSize: 12 }}>Machine Tool #</span>
-                  <span className="machine-num-badge" style={{ fontSize: 14 }}>
-                    T{tool.machine_tool_number}
-                  </span>
-                  <span className="machine-num-badge" style={{ fontSize: 14 }}>
-                    H{tool.machine_tool_number}
-                  </span>
-                  <span className="machine-num-badge" style={{ fontSize: 14 }}>
-                    D{tool.machine_tool_number}
-                  </span>
-                </div>
-              )}
               {/* Location chip */}
               {tool.location && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
@@ -233,22 +217,21 @@ export default function ToolDetail() {
                 </div>
               )}
               <div className="detail-fields">
+                {(tool.machine_tool_number !== null && tool.machine_tool_number !== undefined && tool.machine_tool_number !== '') && (
+                  <div className="detail-field">
+                    <div className="detail-field-label">Machine #</div>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                      <span className="machine-num-badge">T{tool.machine_tool_number}</span>
+                      <span className="machine-num-badge">H{tool.machine_tool_number}</span>
+                      <span className="machine-num-badge">D{tool.machine_tool_number}</span>
+                    </div>
+                  </div>
+                )}
                 <Field label="Description" value={tool.description} />
                 <Field label="Type" value={typeLabel} />
                 <Field label="Manufacturer" value={tool.vendor} />
                 <Field label="Mfr Part # (EDP)" value={tool.product_id} mono />
                 <Field label="ProShop ID" value={tool.proshot_id} mono href={proshotUrl(tool.proshot_id)} />
-                <Field label="Distributor" value={tool.distributor} />
-                <Field label="Dist Stock #" value={tool.distributor_stock_num} mono />
-                <Field label="Cost" value={tool.cost ? `$${tool.cost}` : null} />
-                {tool.product_link && (
-                  <div className="detail-field">
-                    <div className="detail-field-label">Product Link</div>
-                    <a href={tool.product_link} target="_blank" rel="noopener noreferrer" className="text-sm inline-link">
-                      Open <ExternalLink size={12} />
-                    </a>
-                  </div>
-                )}
               </div>
             </Section>
 

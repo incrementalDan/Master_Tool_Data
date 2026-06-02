@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Tag, Ruler, Layers, Gauge, Settings2, Save, X, Hash, AlertTriangle } from 'lucide-react';
+import { Tag, Ruler, Layers, Gauge, Settings2, Save, X, AlertTriangle } from 'lucide-react';
 import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, COOLANT_OPTS, validateTool, validateGeometry, getVisibleFields, getNextMachineNumber } from '../schema/toolSchema.js';
 import { useApp } from '../context/AppContext.jsx';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
@@ -121,35 +121,6 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
         </div>
       )}
 
-      {/* Machine tool number — read-only. Managed entirely by the app. */}
-      <div
-        className="mb-16"
-        style={{
-          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-          padding: '10px 14px', background: 'var(--surface-2)',
-          border: '1px solid var(--border)', borderLeft: '3px solid var(--orange)',
-          borderRadius: 'var(--radius-sm)',
-        }}
-      >
-        <Hash size={15} style={{ color: 'var(--orange)' }} />
-        {isNew ? (
-          <span className="text-sm">
-            This tool will be assigned machine tool number{' '}
-            <strong className="font-mono" style={{ color: 'var(--orange)' }}>{previewMachineNumber}</strong>.
-          </span>
-        ) : (data.machine_tool_number !== null && data.machine_tool_number !== undefined && data.machine_tool_number !== '') ? (
-          <span className="text-sm">
-            Machine Tool #{' '}
-            <strong className="font-mono" style={{ color: 'var(--orange)' }}>
-              T{data.machine_tool_number} · H{data.machine_tool_number} · D{data.machine_tool_number}
-            </strong>{' '}
-            <span className="text-sub text-xs">— read-only, managed by the app</span>
-          </span>
-        ) : (
-          <span className="text-sm text-sub">No machine tool number assigned.</span>
-        )}
-      </div>
-
       {/* Tool type selector */}
       <div className="panel open mb-16">
         <div className="panel-header static">
@@ -173,6 +144,23 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
       </div>
 
       <Section title="Identity" icon={Tag}>
+        {/* Machine tool number — read-only, managed by the app */}
+        {isNew ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+            <span className="text-xs text-sub">Will be assigned:</span>
+            <span className="machine-num-badge">T{previewMachineNumber}</span>
+            <span className="machine-num-badge">H{previewMachineNumber}</span>
+            <span className="machine-num-badge">D{previewMachineNumber}</span>
+          </div>
+        ) : (data.machine_tool_number !== null && data.machine_tool_number !== undefined && data.machine_tool_number !== '') ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+            <span className="text-xs text-sub">Machine #</span>
+            <span className="machine-num-badge">T{data.machine_tool_number}</span>
+            <span className="machine-num-badge">H{data.machine_tool_number}</span>
+            <span className="machine-num-badge">D{data.machine_tool_number}</span>
+            <span className="text-xs text-sub">— read-only</span>
+          </div>
+        ) : null}
         <div className="form-grid">
           <div className="field-group form-grid-wide">
             <label className="field-label">Description <span className="required">*</span></label>
@@ -181,10 +169,6 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
           <FieldInput field="vendor" label="Manufacturer" data={data} setField={setField} list={MANUFACTURER_LIST} />
           <FieldInput field="product_id" label="Mfr Part # (EDP)" data={data} setField={setField} />
           <FieldInput field="proshot_id" label="ProShop ID" data={data} setField={setField} placeholder="e.g. A-3" />
-          <FieldInput field="distributor" label="Distributor" data={data} setField={setField} />
-          <FieldInput field="distributor_stock_num" label="Distributor Stock #" data={data} setField={setField} />
-          <FieldInput field="cost" label="Cost ($)" data={data} setField={setField} type="number" step="0.01" />
-          <FieldInput field="product_link" label="Product Link" data={data} setField={setField} type="url" />
           <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
         </div>
       </Section>
