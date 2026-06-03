@@ -1721,6 +1721,116 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   min-width: 0;
 }
 
+/* ─── Preset sub-sections (always-3 layout inside presets diff block) ──────── */
+.preset-subsection {
+  border-top: 1px solid var(--border);
+}
+.preset-subsection:first-of-type {
+  border-top: none;
+}
+.preset-subsection-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  background: var(--surface-2);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-label);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-top: 1px solid var(--border);
+}
+.preset-subsection-empty {
+  padding: 8px 14px;
+  font-size: 12px;
+  color: var(--text-sub);
+  font-style: italic;
+}
+.preset-subsection-names {
+  padding: 7px 14px 9px;
+  font-size: 12px;
+  color: var(--text-sub);
+  line-height: 1.6;
+}
+
+/* Assembly detection inline within preset section */
+.preset-assembly-detect {
+  padding: 11px 14px 13px;
+  border-top: 1px solid var(--border);
+  background: rgba(59, 130, 246, 0.05);
+}
+.preset-assembly-detect-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-label);
+  margin-bottom: 6px;
+}
+.preset-assembly-context-line {
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-bottom: 8px;
+  padding-left: 2px;
+}
+.preset-assembly-options {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text);
+}
+.preset-assembly-options label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+/* ─── Info tooltip (HelpCircle + CSS :hover reveal) ────────────────────────── */
+.info-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: help;
+  color: var(--text-sub);
+  margin-left: 2px;
+}
+.info-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface-3);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.55;
+  white-space: normal;
+  width: 230px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 200;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.info-tip:hover::after {
+  opacity: 1;
+}
+/* Align tooltip to the right edge when near right margin */
+.info-tip.tip-right::after {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
 /* ─── Data-field visual tokens ──────────────────────────────────────────── */
 /*                                                                            */
 /* Each named data type has exactly ONE token class.                          */

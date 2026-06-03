@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle, RefreshCw, Plus, CheckCircle } from 'lucide-react';
-import { FIELD_LABELS, generateId } from '../../schema/toolSchema.js';
+import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle, RefreshCw, Plus, CheckCircle, HelpCircle, Wrench } from 'lucide-react';
+import { FIELD_LABELS, generateId, generateAssemblyId } from '../../schema/toolSchema.js';
 import { composePresetName, parsePresetName, presetMatchesAssembly } from '../../utils/presetNaming.js';
 import { useApp } from '../../context/AppContext.jsx';
 
@@ -40,7 +40,6 @@ const DIFF_SECTIONS = [
   },
 ];
 
-// Preset speed/feed fields eligible for diffing
 const PRESET_DIFF_FIELDS = [
   'n', 'v_c', 'n_ramp',
   'v_f', 'f_z',
@@ -79,7 +78,6 @@ const PRESET_FIELD_LABELS = {
 const EXCLUDED = new Set([
   'id', 'tool_type', 'created_at', 'updated_at', 'updated_by', 'revision_notes',
   'merge_history', '_fusionRaw', 'location', 'presets',
-  // Flat speed/feed fields — handled by the Presets section
   'spindle_speed', 'cutting_feedrate', 'feed_per_tooth', 'feed_per_rev',
   'plunge_feedrate', 'ramp_feedrate', 'lead_in_feedrate', 'lead_out_feedrate',
   'cutting_speed', 'depth_of_cut', 'width_of_cut',
@@ -112,14 +110,9 @@ function valuesEqual(a, b) {
   return false;
 }
 
-// Returns true when the incoming OOH + holder combo doesn't match any existing
-// assembly that the master preset's name encodes — meaning these speeds were
-// proven in a different physical setup. The assembly↔preset link now lives in
-// the preset naming convention (presetMatchesAssembly), not linked_preset_guids.
 function checkDifferentAssembly(masterPreset, incomingOoh, incomingHolderGuid, masterAssemblies) {
   if (incomingOoh == null || incomingOoh <= 0) return false;
   const linked = (masterAssemblies || []).filter(a => presetMatchesAssembly(masterPreset, a));
-  // Preset name doesn't encode any known assembly but incoming has OOH → new context
   if (linked.length === 0) return true;
   const OOH_TOLERANCE = 0.0005;
   return !linked.some(a =>
@@ -128,12 +121,6 @@ function checkDifferentAssembly(masterPreset, incomingOoh, incomingHolderGuid, m
   );
 }
 
-// Categorize incoming presets against master by name (case-insensitive):
-//   unchanged  — name matches, values identical
-//   blocked    — name matches, values differ, same assembly context → no update
-//   conflicts  — name matches, values differ, different assembly → ask user
-//   newPresets — no name match in master → add
-//   masterOnly — in master but not in the job (informational)
 function matchPresets(incomingPresets, masterPresets, incomingOoh, incomingHolderGuid, masterAssemblies) {
   const masterByName = new Map(
     (masterPresets || []).map(p => [p.name?.toLowerCase().trim(), p])
@@ -172,20 +159,38 @@ function matchPresets(incomingPresets, masterPresets, incomingOoh, incomingHolde
   return { unchanged, blocked, conflicts, newPresets, masterOnly };
 }
 
+// ─── Tooltip helper ───────────────────────────────────────────────────────────
+function InfoTip({ text, alignRight = false }) {
+  return (
+    <span className={`info-tip${alignRight ? ' tip-right' : ''}`} data-tip={text}>
+      <HelpCircle size={11} />
+    </span>
+  );
+}
+
 // ─── Preset diff sub-component ────────────────────────────────────────────────
 function PresetsDiff({
   presetMatch, incomingOoh, incomingHolderDesc,
   addedPresets, conflictResolutions,
   onToggleAddedPreset, onSetConflictResolution,
+  masterAssemblies,
+  assemblyAction, onSetAssemblyAction,
+  linkTargetId, onSetLinkTargetId,
 }) {
   const { unchanged, blocked, conflicts, newPresets, masterOnly } = presetMatch;
-  const totalNew = newPresets.length;
-  const totalConflicts = conflicts.length;
 
-  const countParts = [];
-  if (unchanged.length > 0) countParts.push(`${unchanged.length} matched`);
-  if (totalConflicts > 0) countParts.push(`${totalConflicts} conflict${totalConflicts !== 1 ? 's' : ''}`);
-  if (totalNew > 0) countParts.push(`${totalNew} new`);
+  const selectedNewCount = newPresets.filter(p => addedPresets.has(p.guid)).length;
+  const conflictCreateCount = [...conflictResolutions.values()].filter(v => v === 'create').length;
+  const willAddPresets = selectedNewCount + conflictCreateCount > 0;
+  const showAssemblyPrompt = (incomingOoh != null && incomingOoh > 0) && willAddPresets;
+
+  const totalChanged = blocked.length + conflicts.length;
+  const totalUnchanged = unchanged.length + masterOnly.length;
+
+  const summaryParts = [];
+  if (newPresets.length > 0) summaryParts.push(`${newPresets.length} new`);
+  if (conflicts.length > 0) summaryParts.push(`${conflicts.length} conflict${conflicts.length !== 1 ? 's' : ''}`);
+  if (totalUnchanged > 0) summaryParts.push(`${totalUnchanged} matched`);
 
   return (
     <div className="diff-section">
@@ -193,149 +198,221 @@ function PresetsDiff({
         <span style={{ width: 20 }} />
         <Gauge size={14} className="panel-header-icon" />
         <span className="panel-header-title">Speeds &amp; Feeds Presets</span>
-        <span className="diff-section-count">{countParts.join(', ') || 'none'}</span>
+        <InfoTip
+          alignRight
+          text="Presets are speed/feed settings for each machining operation. Existing preset values in master are never overwritten — you can only add new ones or create variants for different setups."
+        />
+        <span className="diff-section-count">{summaryParts.join(', ') || 'none'}</span>
       </div>
 
-      <div className="diff-advisory">
-        <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 1 }} />
-        Existing preset values are never overwritten. New presets from the job can be added; conflicting values in a different assembly context can become a new preset.
-      </div>
+      {/* ── Sub-section 1: New Presets ── */}
+      <div className="preset-subsection">
+        <div className="preset-subsection-header">
+          <Plus size={12} style={{ color: '#a78bfa' }} />
+          <span style={{ color: '#a78bfa' }}>New Presets</span>
+          <InfoTip text="These presets are in the job but not yet in master. Check the ones you want to add." />
+          <span className="diff-section-count">
+            {newPresets.length > 0
+              ? `${newPresets.length} preset${newPresets.length !== 1 ? 's' : ''}`
+              : 'none'}
+          </span>
+        </div>
 
-      {/* Conflicts: same name, different values, different assembly context */}
-      {conflicts.map(({ master, incoming, changedFields }) => {
-        const resolution = conflictResolutions.get(master.guid) || 'ignore';
-        return (
-          <div key={master.guid} className="preset-diff-block" style={{ borderLeft: '2px solid var(--orange)' }}>
-            <div className="preset-diff-header" style={{ background: 'rgba(251,146,60,0.06)' }}>
-              <span style={{ width: 20 }} />
-              <AlertTriangle size={13} style={{ color: 'var(--orange)', flexShrink: 0 }} />
-              <span className="preset-diff-name" style={{ color: 'var(--orange)' }}>
-                {master.name || 'Unnamed'} — different assembly context
-              </span>
-              <span className="text-xs text-sub">
-                {changedFields.length} value{changedFields.length !== 1 ? 's' : ''} differ
-              </span>
-            </div>
-
-            {/* Show what changed (read-only) */}
-            <div className="diff-rows">
-              {changedFields.map(field => (
-                <div key={field} className="diff-row" style={{ cursor: 'default' }}>
-                  <span style={{ width: 20 }} />
-                  <span className="diff-field-label">{PRESET_FIELD_LABELS[field] || field}</span>
-                  <span className="diff-val diff-val-master">{formatValue(master[field])}</span>
-                  <span className="diff-arrow">→</span>
-                  <span className="diff-val diff-val-job">{formatValue(incoming[field])}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* Resolution choice */}
-            <div style={{ padding: '10px 16px', display: 'flex', gap: 20, alignItems: 'center', fontSize: 13, borderTop: '1px solid var(--border)' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>
+        {newPresets.length === 0 ? (
+          <div className="preset-subsection-empty">No new presets — all job presets already exist in master</div>
+        ) : (
+          <div className="diff-rows">
+            {newPresets.map(preset => (
+              <label
+                key={preset.guid}
+                className={`diff-row ${addedPresets.has(preset.guid) ? 'selected' : ''}`}
+                style={{ gridTemplateColumns: '24px 1fr' }}
+              >
                 <input
-                  type="radio"
-                  name={`conflict-${master.guid}`}
-                  checked={resolution === 'create'}
-                  onChange={() => onSetConflictResolution(master.guid, 'create')}
+                  type="checkbox"
+                  className="diff-checkbox"
+                  checked={addedPresets.has(preset.guid)}
+                  onChange={() => onToggleAddedPreset(preset.guid)}
                 />
-                <span>
-                  Create new preset
-                  {incomingOoh != null && (
-                    <span className="text-sub text-xs" style={{ marginLeft: 5 }}>
-                      (OOH: {incomingOoh.toFixed(3)}")
-                    </span>
-                  )}
-                </span>
+                <span className="preset-tag">{preset.name || 'Unnamed'}</span>
               </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  name={`conflict-${master.guid}`}
-                  checked={resolution === 'ignore'}
-                  onChange={() => onSetConflictResolution(master.guid, 'ignore')}
-                />
-                Ignore
-              </label>
+            ))}
+          </div>
+        )}
+
+        {/* Assembly detection — inline with new presets since they are related */}
+        {showAssemblyPrompt && (
+          <div className="preset-assembly-detect">
+            <div className="preset-assembly-detect-label">
+              <Wrench size={12} />
+              Record the setup for these presets?
+              <InfoTip text="An assembly tracks which holder and stick-out length (OOH) these presets were proven at. Recommended — it lets future users know the exact physical setup that produced these speeds and feeds." />
             </div>
-          </div>
-        );
-      })}
-
-      {/* New presets: not in master — show with assembly context */}
-      {newPresets.length > 0 && (
-        <div className="preset-diff-block">
-          <div className="preset-diff-header" style={{ background: 'rgba(167,139,250,0.06)' }}>
-            <span style={{ width: 20 }} />
-            <Plus size={13} style={{ color: '#a78bfa', flexShrink: 0 }} />
-            <span className="preset-diff-name" style={{ color: '#a78bfa' }}>New Presets — not in master</span>
-            <span className="text-xs text-sub">{newPresets.length} preset{newPresets.length !== 1 ? 's' : ''}</span>
-          </div>
-
-          {/* Assembly context annotation */}
-          {(incomingOoh != null || incomingHolderDesc) && (
-            <div style={{ padding: '5px 16px 3px', fontSize: 11, color: 'var(--text-sub)', borderBottom: '1px solid var(--border)' }}>
-              Proven at:{incomingHolderDesc ? <> <strong>{incomingHolderDesc}</strong></> : ''}
+            <div className="preset-assembly-context-line">
+              Proven at:
+              {incomingHolderDesc ? <strong> {incomingHolderDesc}</strong> : ''}
               {incomingOoh != null ? <> · OOH <strong>{incomingOoh.toFixed(3)}"</strong></> : ''}
             </div>
-          )}
-
-          {newPresets.map(preset => (
-            <label key={preset.guid} className={`diff-row ${addedPresets.has(preset.guid) ? 'selected' : ''}`}>
-              <input
-                type="checkbox"
-                className="diff-checkbox"
-                checked={addedPresets.has(preset.guid)}
-                onChange={() => onToggleAddedPreset(preset.guid)}
-              />
-              <span className="preset-tag">{preset.name || 'Unnamed'}</span>
-              <span className="diff-val diff-val-master" style={{ fontStyle: 'italic' }}>— not in master —</span>
-              <span className="diff-arrow">+</span>
-              <span className="diff-val diff-val-job" style={{ color: '#a78bfa' }}>Add to master</span>
-            </label>
-          ))}
-        </div>
-      )}
-
-      {/* Blocked: same name, values differ, same assembly context → no-op */}
-      {blocked.length > 0 && (
-        <div className="preset-diff-block" style={{ opacity: 0.6 }}>
-          <div className="preset-diff-header">
-            <span style={{ width: 20 }} />
-            <span className="preset-diff-name" style={{ color: 'var(--text-sub)', fontSize: 12 }}>
-              Not updating — same assembly, different values (keep master):
-            </span>
-            <span className="text-xs text-sub">{blocked.map(b => b.master.name || 'Unnamed').join(', ')}</span>
+            <div className="preset-assembly-options">
+              <label>
+                <input
+                  type="radio"
+                  name="assemblyAction"
+                  value="create"
+                  checked={assemblyAction === 'create'}
+                  onChange={() => onSetAssemblyAction('create')}
+                />
+                Create a new assembly record (recommended)
+              </label>
+              {(masterAssemblies || []).length > 0 && (
+                <>
+                  <label>
+                    <input
+                      type="radio"
+                      name="assemblyAction"
+                      value="link"
+                      checked={assemblyAction === 'link'}
+                      onChange={() => onSetAssemblyAction('link')}
+                    />
+                    Add to an existing assembly
+                  </label>
+                  {assemblyAction === 'link' && (
+                    <select
+                      className="field-input"
+                      style={{ marginLeft: 22, maxWidth: 300, fontSize: 12, marginTop: 4 }}
+                      value={linkTargetId}
+                      onChange={e => onSetLinkTargetId(e.target.value)}
+                    >
+                      <option value="">— select assembly —</option>
+                      {(masterAssemblies || []).map(a => (
+                        <option key={a.assembly_id} value={a.assembly_id}>
+                          {a.holder_description || 'Assembly'} · OOH: {a.ooh?.toFixed(3)}"
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </>
+              )}
+              <label>
+                <input
+                  type="radio"
+                  name="assemblyAction"
+                  value="skip"
+                  checked={assemblyAction === 'skip'}
+                  onChange={() => onSetAssemblyAction('skip')}
+                />
+                Skip — don't record setup info
+              </label>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Unchanged: identical values */}
-      {unchanged.length > 0 && (
-        <div className="preset-diff-block" style={{ opacity: 0.5 }}>
-          <div className="preset-diff-header">
-            <span style={{ width: 20 }} />
-            <CheckCircle size={12} style={{ color: 'var(--text-sub)', flexShrink: 0 }} />
-            <span className="preset-diff-name" style={{ color: 'var(--text-sub)', fontSize: 12 }}>
-              Identical — no changes:
-            </span>
-            <span className="text-xs text-sub">{unchanged.map(u => u.master.name || 'Unnamed').join(', ')}</span>
-          </div>
+      {/* ── Sub-section 2: Existing — Identical ── */}
+      <div className="preset-subsection">
+        <div className="preset-subsection-header">
+          <CheckCircle size={12} style={{ color: 'var(--text-sub)' }} />
+          <span>Existing — Identical</span>
+          <InfoTip text="These presets exist in both master and this job with the same values. No action needed." />
+          <span className="diff-section-count">
+            {totalUnchanged > 0
+              ? `${totalUnchanged} preset${totalUnchanged !== 1 ? 's' : ''}`
+              : 'none'}
+          </span>
         </div>
-      )}
+        {totalUnchanged === 0 ? (
+          <div className="preset-subsection-empty">None</div>
+        ) : (
+          <div className="preset-subsection-names">
+            {[
+              ...unchanged.map(u => u.master.name || 'Unnamed'),
+              ...masterOnly.map(p => p.name || 'Unnamed'),
+            ].join(', ')}
+          </div>
+        )}
+      </div>
 
-      {/* Master-only presets (informational) */}
-      {masterOnly.length > 0 && (
-        <div className="preset-diff-block" style={{ opacity: 0.55 }}>
-          <div className="preset-diff-header">
-            <span style={{ width: 20 }} />
-            <span className="preset-diff-name" style={{ color: 'var(--text-sub)' }}>
-              Master-only — not in this job:
-            </span>
-            <span className="text-xs text-sub">{masterOnly.map(p => p.name || 'Unnamed').join(', ')}</span>
-          </div>
+      {/* ── Sub-section 3: Existing — Changed ── */}
+      <div className="preset-subsection">
+        <div className="preset-subsection-header">
+          <AlertTriangle size={12} style={{ color: totalChanged > 0 ? 'var(--amber)' : 'var(--text-sub)' }} />
+          <span style={{ color: totalChanged > 0 ? 'var(--amber)' : undefined }}>Existing — Changed</span>
+          <InfoTip text="Same preset name, different values from this job. Master values are never overwritten. If the job used a different holder/OOH setup, the job values can be saved as a new preset variant." />
+          <span className="diff-section-count">
+            {totalChanged > 0
+              ? `${totalChanged} preset${totalChanged !== 1 ? 's' : ''}`
+              : 'none'}
+          </span>
         </div>
-      )}
+
+        {/* Conflicts: different assembly context — user can create a new variant */}
+        {conflicts.map(({ master, incoming, changedFields }) => {
+          const resolution = conflictResolutions.get(master.guid) || 'ignore';
+          return (
+            <div key={master.guid} style={{ borderTop: '1px solid var(--border)' }}>
+              <div className="preset-diff-header" style={{ background: 'rgba(251,146,60,0.06)' }}>
+                <AlertTriangle size={13} style={{ color: 'var(--orange)', flexShrink: 0, marginLeft: 14 }} />
+                <span className="preset-diff-name" style={{ color: 'var(--orange)', marginLeft: 6 }}>
+                  {master.name || 'Unnamed'}
+                </span>
+                <span className="text-xs text-sub" style={{ marginLeft: 'auto', marginRight: 14 }}>
+                  Different setup · {changedFields.length} value{changedFields.length !== 1 ? 's' : ''} differ
+                </span>
+              </div>
+              <div className="diff-rows">
+                {changedFields.map(field => (
+                  <div key={field} className="diff-row" style={{ cursor: 'default' }}>
+                    <span style={{ width: 20 }} />
+                    <span className="diff-field-label">{PRESET_FIELD_LABELS[field] || field}</span>
+                    <span className="diff-val diff-val-master">{formatValue(master[field])}</span>
+                    <span className="diff-arrow">→</span>
+                    <span className="diff-val diff-val-job">{formatValue(incoming[field])}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ padding: '10px 16px', display: 'flex', gap: 20, alignItems: 'center', fontSize: 13, borderTop: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name={`conflict-${master.guid}`}
+                    checked={resolution === 'create'}
+                    onChange={() => onSetConflictResolution(master.guid, 'create')}
+                  />
+                  Save as new preset variant
+                  {incomingOoh != null && (
+                    <span className="text-sub text-xs" style={{ marginLeft: 5 }}>
+                      (at OOH {incomingOoh.toFixed(3)}")
+                    </span>
+                  )}
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name={`conflict-${master.guid}`}
+                    checked={resolution === 'ignore'}
+                    onChange={() => onSetConflictResolution(master.guid, 'ignore')}
+                  />
+                  Ignore
+                </label>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Blocked: same assembly — master values kept, no user action available */}
+        {blocked.length > 0 && (
+          <div className="preset-subsection-names" style={{ borderTop: conflicts.length > 0 ? '1px solid var(--border)' : 'none' }}>
+            <span style={{ color: 'var(--text-sub)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: 4 }}>
+              Same setup — master values kept:
+            </span>
+            {blocked.map(b => b.master.name || 'Unnamed').join(', ')}
+          </div>
+        )}
+
+        {totalChanged === 0 && (
+          <div className="preset-subsection-empty">None</div>
+        )}
+      </div>
     </div>
   );
 }
@@ -365,7 +442,6 @@ export default function DiffStep({
     [importedTool.presets, masterTool.presets, incomingOoh, incomingHolderGuid, masterTool.assemblies]
   );
 
-  // Flat tool-level diffs
   const diffs = useMemo(() => {
     const result = {};
     for (const section of DIFF_SECTIONS) {
@@ -377,25 +453,25 @@ export default function DiffStep({
     return result;
   }, [importedTool, masterTool]);
 
-  // Flat field selections
   const [selected, setSelected] = useState(() => {
     const s = new Set();
     for (const fields of Object.values(diffs)) fields.forEach(f => s.add(f));
     return s;
   });
 
-  // New presets selected for addition — all selected by default
   const [addedPresets, setAddedPresets] = useState(
     () => new Set(presetMatch.newPresets.map(p => p.guid))
   );
 
-  // Conflict resolutions: Map<masterPresetGuid, 'create' | 'ignore'>
-  // Default to 'ignore' (safe — don't pollute master without explicit intent)
   const [conflictResolutions, setConflictResolutions] = useState(() => {
     const m = new Map();
     for (const { master } of presetMatch.conflicts) m.set(master.guid, 'ignore');
     return m;
   });
+
+  // Assembly state — lives here so the decision is made alongside the presets
+  const [assemblyAction, setAssemblyAction] = useState('create');
+  const [linkTargetId, setLinkTargetId] = useState('');
 
   const toggleFlat = (field) => setSelected(prev => {
     const next = new Set(prev);
@@ -429,17 +505,12 @@ export default function DiffStep({
   const conflictCreates = [...conflictResolutions.values()].filter(v => v === 'create').length;
   const totalSelected = selected.size + addedPresets.size + conflictCreates;
 
-  // Show the diff screen whenever there is anything to review, including
-  // blocked presets (values differ but won't be updated — still informational).
   const hasAnyChange = Object.values(diffs).some(arr => arr.length > 0)
     || presetMatch.conflicts.length > 0
     || presetMatch.newPresets.length > 0
     || presetMatch.blocked.length > 0;
 
   const handleConfirm = () => {
-    // Conflict presets chosen as 'create' become new presets with a fresh GUID
-    // (the incoming preset's GUID matches the master preset's GUID, so we must
-    // generate a new one) and a convention name encoding the incoming assembly.
     const conflictPresetsToAdd = presetMatch.conflicts
       .filter(({ master }) => (conflictResolutions.get(master.guid) || 'ignore') === 'create')
       .map(({ incoming }) => {
@@ -457,7 +528,6 @@ export default function DiffStep({
         };
       });
 
-    // New presets keep their incoming GUID; ensure each carries operation_type.
     const newPresetsToAdd = presetMatch.newPresets
       .filter(p => addedPresets.has(p.guid))
       .map(p => ({
@@ -465,13 +535,43 @@ export default function DiffStep({
         operation_type: p.operation_type ?? parsePresetName(p.name)?.opType ?? null,
       }));
 
-    const presetsToAdd = [
-      ...newPresetsToAdd,
-      ...conflictPresetsToAdd,
-    ];
+    const presetsToAdd = [...newPresetsToAdd, ...conflictPresetsToAdd];
 
-    // Existing preset values are never updated, so presetSelections is always empty.
-    onConfirm({ selectedFields: selected, presetSelections: new Map(), presetsToAdd });
+    // Build assemblyUpdate here so CommitStep just confirms and writes
+    const hasIncomingAssembly = incomingOoh != null && incomingOoh > 0 && presetsToAdd.length > 0;
+    let assemblyUpdate = null;
+    if (hasIncomingAssembly && assemblyAction !== 'skip') {
+      if (assemblyAction === 'create') {
+        assemblyUpdate = {
+          type: 'create',
+          assembly: {
+            assembly_id: generateAssemblyId(),
+            holder_guid: incomingHolderGuid,
+            holder_description: incomingHolderDesc,
+            ooh: incomingOoh,
+            linked_preset_guids: presetsToAdd.map(p => p.guid),
+            notes: '',
+            created_at: new Date().toISOString(),
+            source: 'merge',
+          },
+        };
+      } else if (assemblyAction === 'link' && linkTargetId) {
+        const existing = (masterTool.assemblies || []).find(a => a.assembly_id === linkTargetId);
+        if (existing) {
+          assemblyUpdate = {
+            type: 'link',
+            assembly: {
+              ...existing,
+              linked_preset_guids: [
+                ...new Set([...(existing.linked_preset_guids || []), ...presetsToAdd.map(p => p.guid)]),
+              ],
+            },
+          };
+        }
+      }
+    }
+
+    onConfirm({ selectedFields: selected, presetSelections: new Map(), presetsToAdd, assemblyUpdate });
   };
 
   if (isFetchingLive) {
@@ -570,7 +670,7 @@ export default function DiffStep({
         );
       })}
 
-      {/* Preset-level diff */}
+      {/* Preset-level diff — always shown if either side has presets */}
       {hasPresets && (
         <PresetsDiff
           presetMatch={presetMatch}
@@ -580,6 +680,11 @@ export default function DiffStep({
           conflictResolutions={conflictResolutions}
           onToggleAddedPreset={toggleAddedPreset}
           onSetConflictResolution={setConflictResolution}
+          masterAssemblies={masterTool.assemblies}
+          assemblyAction={assemblyAction}
+          onSetAssemblyAction={setAssemblyAction}
+          linkTargetId={linkTargetId}
+          onSetLinkTargetId={setLinkTargetId}
         />
       )}
 
