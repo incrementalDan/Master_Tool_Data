@@ -46,7 +46,9 @@ const PRESET_DIFF_FIELDS = [
   'v_f_plunge', 'f_n',
   'v_f_leadIn', 'v_f_leadOut', 'v_f_transition',
   'v_f_ramp', 'ramp-angle',
-  'tool-coolant', 'use-stepdown', 'use-stepover',
+  'use-stepdown', 'stepdown',
+  'use-stepover', 'stepover',
+  'tool-coolant',
 ];
 
 const NUMERIC_PRESET_FIELDS = new Set([
@@ -55,6 +57,7 @@ const NUMERIC_PRESET_FIELDS = new Set([
   'v_f_plunge', 'f_n',
   'v_f_leadIn', 'v_f_leadOut', 'v_f_transition',
   'v_f_ramp', 'ramp-angle',
+  'stepdown', 'stepover',
 ]);
 
 const PRESET_FIELD_LABELS = {
@@ -72,7 +75,9 @@ const PRESET_FIELD_LABELS = {
   'ramp-angle': 'Ramp Angle (°)',
   'tool-coolant': 'Coolant',
   'use-stepdown': 'Use Stepdown',
+  'stepdown': 'Stepdown',
   'use-stepover': 'Use Stepover',
+  'stepover': 'Stepover',
 };
 
 const EXCLUDED = new Set([

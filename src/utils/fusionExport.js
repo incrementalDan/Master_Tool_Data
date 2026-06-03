@@ -244,6 +244,8 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
 
     if (tool.location) S(165, tsvStr(tool.location));
 
+    if (preset['use-stepdown'] && preset.stepdown) S(144, tsvNum(preset.stepdown));
+    if (preset['use-stepover'] && preset.stepover) S(145, tsvNum(preset.stepover));
     S(168, tsvBool(preset['use-stepdown'] || false));
     S(169, tsvBool(preset['use-stepover'] || false));
 

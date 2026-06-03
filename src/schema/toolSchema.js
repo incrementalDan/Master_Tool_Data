@@ -475,6 +475,8 @@ function normalizePreset(p, tscCapable = false) {
     'tool-coolant': p['tool-coolant'] || (tscCapable ? 'flood and through tool' : 'flood'),
     'use-stepdown': p['use-stepdown'] ?? false,
     'use-stepover': p['use-stepover'] ?? false,
+    stepdown: p.stepdown ?? null,
+    stepover: p.stepover ?? null,
     n: p.n ?? 0,
     n_ramp: p.n_ramp ?? 0,
     v_f: p.v_f ?? 0,

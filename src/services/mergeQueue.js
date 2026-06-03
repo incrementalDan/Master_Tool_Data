@@ -113,6 +113,8 @@ function csvRowToPreset(r) {
     'tool-coolant': csvStr(r.tool_coolant) || 'flood',
     'use-stepdown': csvBool(r.use_tool_stepdown),
     'use-stepover': csvBool(r.use_tool_stepover),
+    stepdown: csvNum(r.tool_stepdown) ?? null,
+    stepover: csvNum(r.tool_stepover) ?? null,
   };
 }
 
