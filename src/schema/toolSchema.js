@@ -267,15 +267,30 @@ export function groupByTrackingId(fusionList) {
 // Build a Fusion holder object from a holder-library entry.
 export function buildHolderObject(holderEntry) {
   if (!holderEntry) return null;
+  const segments = holderEntry.segments;
+  let gaugeLength = holderEntry.gaugeLength;
+
+  // A holder's gauge length can never physically exceed the total height of its
+  // sections. Some holder-library entries store a gauge length rounded a hair
+  // larger than the true section sum (e.g. 4.60626 vs 4.606259842519727), which
+  // makes Fusion flag "Gauge length exceeds the total height of sections" once
+  // the assembly is recomputed. Clamp to the exact section total — this fixes
+  // the rounding artifact without touching gauge lengths that are legitimately
+  // shorter than the holder (the common case), since min() keeps the smaller.
+  if (Array.isArray(segments) && segments.length > 0 && typeof gaugeLength === 'number') {
+    const totalHeight = segments.reduce((sum, seg) => sum + (Number(seg?.height) || 0), 0);
+    if (totalHeight > 0 && gaugeLength > totalHeight) gaugeLength = totalHeight;
+  }
+
   return {
     description: holderEntry.description,
     guid: holderEntry.guid,
     'product-id': holderEntry['product-id'] || '',
     'product-link': holderEntry['product-link'] || '',
     vendor: holderEntry.vendor || '',
-    gaugeLength: holderEntry.gaugeLength,
+    gaugeLength,
     unit: holderEntry.unit,
-    segments: holderEntry.segments,
+    segments,
   };
 }
 
