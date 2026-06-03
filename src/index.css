@@ -1649,6 +1649,89 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--text);
 }
 
+/* ── StepField (stepdown / stepover factor-based editing) ── */
+.step-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step-field-display-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px 5px 26px;
+  border-radius: 5px;
+  cursor: default;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  user-select: none;
+}
+.step-field-display-row:hover {
+  border-color: #5a5a5a;
+}
+
+.step-abs-val {
+  font-family: monospace;
+  font-weight: 600;
+  color: var(--text);
+  min-width: 52px;
+}
+
+.step-factor-badge {
+  font-size: 11px;
+  color: var(--blue);
+  background: var(--blue-tint);
+  border: 1px solid rgba(74,143,255,0.25);
+  border-radius: 4px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+
+.step-edit-hint {
+  font-size: 10px;
+  color: var(--text-sub);
+  margin-left: auto;
+  font-style: italic;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.step-field-display-row:hover .step-edit-hint {
+  opacity: 1;
+}
+
+.step-field-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 26px;
+  background: var(--blue-tint-2);
+  border: 1px solid var(--blue);
+  border-radius: 5px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.step-factor-input {
+  width: 72px !important;
+  padding: 3px 6px !important;
+  font-family: monospace;
+  font-size: 12px !important;
+}
+
+.step-factor-ref {
+  color: var(--text-sub);
+  white-space: nowrap;
+}
+
+.step-factor-result {
+  font-family: monospace;
+  color: var(--green);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* ── fx badge ── */
 .fx-badge {
   font-size: 9px;

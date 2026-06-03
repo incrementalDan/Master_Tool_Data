@@ -71,6 +71,7 @@ function blankPreset() {
     v_f_transition: 0, v_f_ramp: 0, 'ramp-angle': 2,
     v_f_plunge: 0, f_n: 0, 'v_f_retract': 0,
     'tool-coolant': 'flood', 'use-stepdown': false, 'use-stepover': false,
+    stepdown: null, stepover: null,
     'ramp-spindle-speed': 'n',
   };
 }
@@ -734,15 +735,39 @@ function EditCard({
       {/* Passes & Linking */}
       <div className="preset-edit-section">
         <div className="preset-edit-section-label">PASSES &amp; LINKING</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <label className="preset-check-label">
-            <input type="checkbox" checked={!!draft['use-stepdown']} onChange={e => set('use-stepdown', e.target.checked)} />
-            Use stepdown
-          </label>
-          <label className="preset-check-label">
-            <input type="checkbox" checked={!!draft['use-stepover']} onChange={e => set('use-stepover', e.target.checked)} />
-            Use stepover
-          </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <StepField
+            label="Use stepdown"
+            value={draft.stepdown}
+            enabled={!!draft['use-stepdown']}
+            onToggle={checked => {
+              if (checked && (!draft.stepdown || draft.stepdown === 0)) {
+                set('stepdown', parseFloat(((tool.flute_length || 0) * 0.4).toFixed(6)));
+              }
+              set('use-stepdown', checked);
+            }}
+            onChange={v => set('stepdown', v)}
+            refDim={tool.flute_length}
+            refLabel="flute length"
+            lenUnit={lenUnit}
+            defaultFactor={0.4}
+          />
+          <StepField
+            label="Use stepover"
+            value={draft.stepover}
+            enabled={!!draft['use-stepover']}
+            onToggle={checked => {
+              if (checked && (!draft.stepover || draft.stepover === 0)) {
+                set('stepover', parseFloat(((tool.diameter || 0) * 0.3).toFixed(6)));
+              }
+              set('use-stepover', checked);
+            }}
+            onChange={v => set('stepover', v)}
+            refDim={tool.diameter}
+            refLabel="diameter"
+            lenUnit={lenUnit}
+            defaultFactor={0.3}
+          />
         </div>
       </div>
 
@@ -759,6 +784,86 @@ function EditCard({
           ))}
         </select>
       </div>
+    </div>
+  );
+}
+
+// ── StepField — stepdown/stepover toggle + factor-based editing ───────────────
+// Displays the absolute value with a computed factor badge.
+// Double-click enters factor-edit mode; on commit, saves the new absolute value.
+function StepField({ label, value, onChange, refDim, refLabel, lenUnit, enabled, onToggle, defaultFactor }) {
+  const [editing, setEditing] = useState(false);
+  const [draftFactor, setDraftFactor] = useState('');
+  const inputRef = useRef(null);
+
+  const factor = (refDim && refDim > 0 && value != null && value > 0)
+    ? parseFloat((value / refDim).toFixed(4))
+    : null;
+
+  const computedAbs = () => {
+    const f = parseFloat(draftFactor);
+    if (isNaN(f) || f <= 0 || !refDim || refDim <= 0) return null;
+    return parseFloat((f * refDim).toFixed(6));
+  };
+
+  const startEditing = () => {
+    if (!enabled) return;
+    setDraftFactor(String(factor ?? defaultFactor));
+    setEditing(true);
+  };
+
+  const commitEdit = () => {
+    const abs = computedAbs();
+    if (abs !== null) onChange(abs);
+    setEditing(false);
+  };
+
+  useEffect(() => {
+    if (editing && inputRef.current) inputRef.current.focus();
+  }, [editing]);
+
+  return (
+    <div className="step-field">
+      <label className="preset-check-label">
+        <input type="checkbox" checked={enabled} onChange={e => onToggle(e.target.checked)} />
+        {label}
+      </label>
+      {enabled && (
+        editing ? (
+          <div className="step-field-edit-row">
+            <input
+              ref={inputRef}
+              type="number"
+              className="step-factor-input field-input"
+              value={draftFactor}
+              onChange={e => setDraftFactor(e.target.value)}
+              onBlur={commitEdit}
+              onKeyDown={e => {
+                if (e.key === 'Enter') commitEdit();
+                if (e.key === 'Escape') setEditing(false);
+              }}
+              step="0.05"
+              min="0.01"
+            />
+            <span className="step-factor-ref">
+              × {refDim?.toFixed(3)}{lenUnit} {refLabel}
+            </span>
+            <span className="step-factor-result">
+              = {computedAbs() != null ? `${computedAbs().toFixed(4)}${lenUnit}` : '—'}
+            </span>
+          </div>
+        ) : (
+          <div className="step-field-display-row" onDoubleClick={startEditing} title="Double-click to edit factor">
+            <span className="step-abs-val">
+              {value != null && value > 0 ? `${parseFloat(value.toFixed(4))}${lenUnit}` : <span style={{ color: 'var(--text-sub)', fontStyle: 'italic' }}>no value set</span>}
+            </span>
+            {factor != null && (
+              <span className="step-factor-badge">×{factor.toFixed(3)} {refLabel}</span>
+            )}
+            <span className="step-edit-hint">double-click to edit</span>
+          </div>
+        )
+      )}
     </div>
   );
 }
