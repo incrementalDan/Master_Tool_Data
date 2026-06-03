@@ -1,10 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Tag, Ruler, Layers, Gauge, Settings2, Save, X, AlertTriangle } from 'lucide-react';
+import { Tag, Ruler, Layers, Settings2, Save, X, AlertTriangle } from 'lucide-react';
 import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getVisibleFields, getNextMachineNumber } from '../schema/toolSchema.js';
 import { useApp } from '../context/AppContext.jsx';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
-
-const NUMERIC_FIELDS = new Set(['diameter', 'flute_length', 'overall_length', 'shank_diameter', 'corner_radius', 'tip_angle', 'taper_angle', 'tip_diameter', 'lower_radius', 'upper_radius', 'profile_radius', 'axial_distance', 'shoulder_length', 'ooh', 'helix_angle', 'number_of_flutes', 'spindle_speed', 'cutting_feedrate', 'plunge_feedrate', 'ramp_feedrate', 'lead_in_feedrate', 'lead_out_feedrate', 'feed_per_tooth', 'feed_per_rev', 'cutting_speed', 'depth_of_cut', 'width_of_cut', 'min_thread_pitch', 'max_thread_pitch']);
 
 const FIELD_STEP = {
   diameter: '0.0001', flute_length: '0.001', overall_length: '0.001', shank_diameter: '0.0001',
@@ -33,12 +31,7 @@ const EXTRACTOR_TO_APP_FIELD = {
   psToolId: 'proshot_id', workpieceMats: 'material_suitability', shoulderLen: 'shoulder_length',
 };
 
-// Always-visible core fields (regardless of tool type visibility)
 const FLUTE_DESIGN_OPTS = ['Variable Index', 'Variable Flute', 'Variable Helix', 'Variable Pitch'];
-
-const ALWAYS_FIELDS = ['description', 'vendor', 'product_id', 'proshot_id', 'coating'];
-const SPEEDS_FIELDS = ['spindle_speed', 'cutting_feedrate', 'feed_per_tooth', 'feed_per_rev', 'plunge_feedrate', 'ramp_feedrate', 'lead_in_feedrate', 'lead_out_feedrate', 'cutting_speed', 'depth_of_cut', 'width_of_cut'];
-const META_FIELDS = ['notes', 'tags', 'last_used_job', 'revision_notes', 'distributor', 'distributor_stock_num', 'cost', 'location'];
 
 export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
   const { tools } = useApp();
@@ -302,11 +295,10 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
         )}
       </Section>
 
-      <Section title="Speeds & Feeds" icon={Gauge}>
-        <div className="form-grid">
-          {SPEEDS_FIELDS.map(f => <NumField key={f} field={f} data={data} setField={setField} />)}
-        </div>
-      </Section>
+      <div className="warn-banner" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <AlertTriangle size={13} style={{ flexShrink: 0 }} />
+        Speeds &amp; feeds are managed per preset. {isNew ? 'Add presets from the tool page after saving.' : 'Edit them in the Speeds & Feeds section on the tool page.'}
+      </div>
 
       <Section title="Setup & Notes" icon={Settings2}>
         <div className="form-grid">
