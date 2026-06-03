@@ -49,6 +49,14 @@ const PRESET_DIFF_FIELDS = [
   'tool-coolant', 'use-stepdown', 'use-stepover',
 ];
 
+const NUMERIC_PRESET_FIELDS = new Set([
+  'n', 'v_c', 'n_ramp',
+  'v_f', 'f_z',
+  'v_f_plunge', 'f_n',
+  'v_f_leadIn', 'v_f_leadOut', 'v_f_transition',
+  'v_f_ramp', 'ramp-angle',
+]);
+
 const PRESET_FIELD_LABELS = {
   n: 'Spindle Speed (RPM)',
   v_c: 'Surface Speed',
@@ -83,6 +91,14 @@ function formatValue(v) {
   const n = Number(v);
   if (!isNaN(n) && v !== '') return Math.round(n * 10000) / 10000;
   return String(v);
+}
+
+function presetTolerance(a, b) {
+  const v = Math.max(Math.abs(Number(a)), Math.abs(Number(b)));
+  if (v < 1)    return 0.0001;
+  if (v < 10)   return 0.5;
+  if (v < 1000) return 10;
+  return 25;
 }
 
 function valuesEqual(a, b) {
@@ -133,7 +149,13 @@ function matchPresets(incomingPresets, masterPresets, incomingOoh, incomingHolde
     const master = masterByName.get(key);
     if (master) {
       matchedMasterGuids.add(master.guid);
-      const changedFields = PRESET_DIFF_FIELDS.filter(f => !valuesEqual(incoming[f], master[f]));
+      const changedFields = PRESET_DIFF_FIELDS.filter(f => {
+        if (NUMERIC_PRESET_FIELDS.has(f)) {
+          const na = Number(incoming[f]), nb = Number(master[f]);
+          if (!isNaN(na) && !isNaN(nb)) return Math.abs(na - nb) > presetTolerance(na, nb);
+        }
+        return !valuesEqual(incoming[f], master[f]);
+      });
       if (changedFields.length === 0) {
         unchanged.push({ incoming, master });
       } else if (checkDifferentAssembly(master.guid, incomingOoh, incomingHolderGuid, masterAssemblies)) {
