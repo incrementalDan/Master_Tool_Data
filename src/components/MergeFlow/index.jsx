@@ -179,8 +179,8 @@ export default function MergeFlow() {
     setIsFetchingLive(false);
   };
 
-  const handleDiffConfirmed = ({ selectedFields, presetSelections, presetsToAdd }) => {
-    updateEntry(activeIdx, { selectedFields, presetSelections, presetsToAdd });
+  const handleDiffConfirmed = ({ selectedFields, presetSelections, presetsToAdd, assemblyUpdate }) => {
+    updateEntry(activeIdx, { selectedFields, presetSelections, presetsToAdd, assemblyUpdate });
     setSubStep('commit');
   };
 
@@ -289,6 +289,7 @@ export default function MergeFlow() {
                 selectedFields={activeEntry.selectedFields}
                 presetSelections={activeEntry.presetSelections}
                 presetsToAdd={activeEntry.presetsToAdd}
+                assemblyUpdate={activeEntry.assemblyUpdate}
                 onCommitted={handleCommitted}
                 onBack={() => setSubStep('diff')}
                 isLastItem={isLastItem}
