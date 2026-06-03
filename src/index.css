@@ -505,7 +505,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  margin-bottom: 14px;
+  margin-bottom: 8px;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
   transition: border-color var(--ease);
@@ -521,7 +521,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   background: var(--surface-2);
   border: none;
   border-bottom: 1px solid transparent;
-  padding: 11px 16px;
+  padding: 8px 14px;
   font-size: 12px;
   font-weight: 700;
   color: var(--text-label);
@@ -538,12 +538,12 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .panel-header-title { flex: 1; }
 .panel-chevron { color: var(--text-sub); font-size: 11px; }
 
-.panel-body { padding: 16px; }
+.panel-body { padding: 12px; }
 
 .detail-fields {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 12px;
+  gap: 8px;
 }
 
 .detail-field { display: flex; flex-direction: column; gap: 2px; }
@@ -1358,17 +1358,17 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .merge-history-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .merge-history-entry {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 10px 12px;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
 }
 
 .merge-history-meta {
@@ -1826,7 +1826,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: 10px 6px;
+  padding: 8px 6px;
   overflow-y: auto;
   z-index: 10;
 }
@@ -1836,8 +1836,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 4px;
-  padding: 9px 4px 7px;
+  gap: 3px;
+  padding: 7px 4px 5px;
   border-radius: var(--radius-sm);
   border: none;
   background: transparent;
@@ -1866,7 +1866,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .tool-detail-main {
   flex: 1;
   min-width: 0;
-  padding: 20px;
+  padding: 14px 16px;
 }
 
 /* Sticky header: shows tool type + description + ProShop ID while scrolling */
@@ -1878,11 +1878,11 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
-  padding: 14px 20px 16px;
-  margin: -20px -20px 18px;
+  padding: 10px 16px 12px;
+  margin: -14px -16px 14px;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -1892,8 +1892,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 .tool-sticky-header-icon {
   flex-shrink: 0;
-  width: 50px;
-  height: 50px;
+  width: 42px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1934,8 +1934,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
     font-size: 11px;
     padding: 6px 10px;
   }
-  .tool-detail-main { padding: 12px; }
-  .tool-sticky-header { margin: -12px -12px 14px; top: auto; position: static; }
+  .tool-detail-main { padding: 10px 12px; }
+  .tool-sticky-header { margin: -10px -12px 12px; top: auto; position: static; }
 }
 
 /* ─── Assembly export picker ─────────────────────────────────────────────── */
@@ -1973,8 +1973,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .assemblies-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 10px;
-  margin-bottom: 6px;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
 /* ─── Operator tag — matches physical tool tag format ────────────────────── */

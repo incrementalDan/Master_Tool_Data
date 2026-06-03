@@ -184,7 +184,7 @@ export default function ToolDetail() {
                   rel="noopener noreferrer"
                   title="Open in ProShop"
                   onClick={e => e.stopPropagation()}
-                  style={{ fontSize: 13, padding: '5px 14px' }}
+                  style={{ fontSize: 12, padding: '3px 11px' }}
                 >{tool.proshot_id}</a>
               )}
               <h1
@@ -210,7 +210,7 @@ export default function ToolDetail() {
             <Section title="Identity" icon={Tag}>
               {/* Location chip */}
               {tool.location && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0', marginBottom: 8, borderBottom: '1px solid var(--border)' }}>
                   <span className="text-sub" style={{ fontSize: 12 }}>Cabinet / Location</span>
                   <span className="location-tag">{tool.location}</span>
                 </div>
@@ -253,7 +253,7 @@ export default function ToolDetail() {
                 {tool.min_ooh != null && <Field label="Length Below Holder - MIN OOH:" value={round4(tool.min_ooh)} unit={lenUnit} />}
               </div>
               {geoIssues.length > 0 && (
-                <div className="warn-banner" style={{ marginTop: 10 }}>
+                <div className="warn-banner" style={{ marginTop: 8 }}>
                   {geoIssues.map((issue, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <AlertTriangle size={12} style={{ flexShrink: 0 }} />
@@ -279,9 +279,9 @@ export default function ToolDetail() {
                 {tool.point_type && <Field label="Point Type" value={tool.point_type} />}
               </div>
               {(tool.material_suitability || []).length > 0 && (
-                <div style={{ marginTop: 14 }}>
+                <div style={{ marginTop: 10 }}>
                   <div className="detail-field-label">Material Suitability</div>
-                  <div className="tag-list" style={{ marginTop: 6 }}>
+                  <div className="tag-list" style={{ marginTop: 4 }}>
                     {tool.material_suitability.map(m => <span key={m} className="tag">{m}</span>)}
                   </div>
                 </div>
@@ -313,14 +313,14 @@ export default function ToolDetail() {
             <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving} />
 
             <Section title="History" icon={Clock} defaultOpen={false}>
-              <div className="detail-fields" style={{ marginBottom: (tool.merge_history || []).length > 0 ? 16 : 0 }}>
+              <div className="detail-fields" style={{ marginBottom: (tool.merge_history || []).length > 0 ? 12 : 0 }}>
                 <Field label="Created" value={tool.created_at ? new Date(tool.created_at).toLocaleString() : null} />
                 <Field label="Updated" value={tool.updated_at ? new Date(tool.updated_at).toLocaleString() : null} />
                 <Field label="Updated By" value={tool.updated_by} />
               </div>
               {(tool.merge_history || []).length > 0 && (
                 <>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
                     <GitMerge size={12} style={{ color: 'var(--text-sub)' }} />
                     <span className="text-xs text-sub" style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                       Merge History
@@ -461,17 +461,17 @@ function HolderSection({ tool, holders, holderLibrarySetupComplete, onSelectHold
   return (
     <Section title="Holder" icon={Package}>
       {selectedHolder ? (
-        <div style={{ marginBottom: 10 }}>
+        <div style={{ marginBottom: 8 }}>
           <span className="holder-pill" style={hColor ? { background: hColor.bg, borderColor: hColor.border, color: hColor.text } : {}}>
             {selectedHolder.description}
           </span>
-          <div className="text-sub text-sm" style={{ marginTop: 6 }}>
+          <div className="text-sub text-sm" style={{ marginTop: 4 }}>
             Gauge Length: {gaugeToInches(selectedHolder.gaugeLength ?? 0, selectedHolder.unit).toFixed(3)} in
             {selectedHolder.vendor ? ` · ${selectedHolder.vendor}` : ''}
           </div>
         </div>
       ) : (
-        <div className="detail-field-empty text-sm" style={{ marginBottom: 10 }}>
+        <div className="detail-field-empty text-sm" style={{ marginBottom: 8 }}>
           No holder selected
         </div>
       )}
@@ -525,8 +525,8 @@ function AssembliesSection({ tool, holders, onSave }) {
       {groups.map(([holderDesc, group]) => {
         const c = holderColor(holderDesc === '—' ? null : holderDesc);
         return (
-          <div key={holderDesc} style={{ marginBottom: 14 }}>
-            <div style={{ marginBottom: 6 }}>
+          <div key={holderDesc} style={{ marginBottom: 10 }}>
+            <div style={{ marginBottom: 4 }}>
               <span className="holder-pill" style={{ background: c.bg, borderColor: c.border, color: c.text }}>
                 {holderDesc}
               </span>
