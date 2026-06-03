@@ -4,7 +4,7 @@ import {
   PS_GROUPS, AUTO_GROUP, COOLANT_OPTS, THROUGH_COOLANT_VALUES,
   getVisibleFields,
 } from '../../tool-extractor.tsx';
-import { parsePresetName } from '../utils/presetNaming.js';
+import { parsePresetName, materialCategory } from '../utils/presetNaming.js';
 
 export { TT, TL, MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST, PS_GROUPS, AUTO_GROUP, COOLANT_OPTS };
 
@@ -267,15 +267,30 @@ export function groupByTrackingId(fusionList) {
 // Build a Fusion holder object from a holder-library entry.
 export function buildHolderObject(holderEntry) {
   if (!holderEntry) return null;
+  const segments = holderEntry.segments;
+  let gaugeLength = holderEntry.gaugeLength;
+
+  // A holder's gauge length can never physically exceed the total height of its
+  // sections. Some holder-library entries store a gauge length rounded a hair
+  // larger than the true section sum (e.g. 4.60626 vs 4.606259842519727), which
+  // makes Fusion flag "Gauge length exceeds the total height of sections" once
+  // the assembly is recomputed. Clamp to the exact section total — this fixes
+  // the rounding artifact without touching gauge lengths that are legitimately
+  // shorter than the holder (the common case), since min() keeps the smaller.
+  if (Array.isArray(segments) && segments.length > 0 && typeof gaugeLength === 'number') {
+    const totalHeight = segments.reduce((sum, seg) => sum + (Number(seg?.height) || 0), 0);
+    if (totalHeight > 0 && gaugeLength > totalHeight) gaugeLength = totalHeight;
+  }
+
   return {
     description: holderEntry.description,
     guid: holderEntry.guid,
     'product-id': holderEntry['product-id'] || '',
     'product-link': holderEntry['product-link'] || '',
     vendor: holderEntry.vendor || '',
-    gaugeLength: holderEntry.gaugeLength,
+    gaugeLength,
     unit: holderEntry.unit,
-    segments: holderEntry.segments,
+    segments,
   };
 }
 
@@ -443,12 +458,19 @@ function normalizePreset(p, tscCapable = false) {
   // operation_type is an app-only field encoded in the preset name + metadata.
   // It must never be written into the Fusion JSON (Fusion validates strictly).
   const { operation_type, ...rest } = p;
+  // Fusion's "Filter by Type" (material.category) must never be blank and only
+  // accepts all/metal/plastic. Heal blanks and the app's old invalid values
+  // (milling/turning/drilling) by deriving from the material query.
+  const mat = p.material || {};
+  const category = ['all', 'metal', 'plastic'].includes(mat.category)
+    ? mat.category
+    : materialCategory(mat.query);
   return {
     ...rest,
     guid: p.guid || generateId(),
     description: p.description || '',
     name: p.name || 'Default preset',
-    material: p.material || { category: 'all', query: '', 'use-hardness': false },
+    material: { category, query: mat.query || '', 'use-hardness': mat['use-hardness'] || false },
     'ramp-angle': p['ramp-angle'] ?? 2,
     'tool-coolant': p['tool-coolant'] || (tscCapable ? 'flood and through tool' : 'flood'),
     'use-stepdown': p['use-stepdown'] ?? false,
@@ -945,24 +967,24 @@ export function validateGeometry(tool) {
 
   const { flute_length, shoulder_length, min_ooh, overall_length, corner_radius, diameter, tool_type } = tool;
 
-  if (isValid(flute_length) && isValid(shoulder_length) && flute_length >= shoulder_length) {
+  if (isValid(flute_length) && isValid(shoulder_length) && flute_length > shoulder_length) {
     warnings.push({
       fields: ['flute_length', 'shoulder_length'],
-      message: `Flute Length (${fmt(flute_length)}) must be less than Shoulder Length (${fmt(shoulder_length)})`,
+      message: `Flute Length (${fmt(flute_length)}) must be less than or equal to Shoulder Length (${fmt(shoulder_length)})`,
     });
   }
 
-  if (isValid(shoulder_length) && isValid(min_ooh) && shoulder_length >= min_ooh) {
+  if (isValid(shoulder_length) && isValid(min_ooh) && shoulder_length > min_ooh) {
     warnings.push({
       fields: ['shoulder_length', 'min_ooh'],
-      message: `Shoulder Length (${fmt(shoulder_length)}) must be less than MIN OOH (${fmt(min_ooh)})`,
+      message: `Shoulder Length (${fmt(shoulder_length)}) must be less than or equal to MIN OOH (${fmt(min_ooh)})`,
     });
   }
 
-  if (isValid(min_ooh) && isValid(overall_length) && min_ooh >= overall_length) {
+  if (isValid(min_ooh) && isValid(overall_length) && min_ooh > overall_length) {
     warnings.push({
       fields: ['min_ooh', 'overall_length'],
-      message: `MIN OOH (${fmt(min_ooh)}) must be less than Overall Length (${fmt(overall_length)})`,
+      message: `MIN OOH (${fmt(min_ooh)}) must be less than or equal to Overall Length (${fmt(overall_length)})`,
     });
   }
 

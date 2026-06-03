@@ -4,8 +4,14 @@
 // It exits non-zero on the first failed assertion.
 
 import assert from 'node:assert';
-import { composePresetName, parsePresetName, presetMatchesAssembly, matchOpType, formatOoh } from '../presetNaming.js';
+import { composePresetName, parsePresetName, presetMatchesAssembly, matchOpType, formatOoh, materialCategory } from '../presetNaming.js';
 import { holderShortName } from '../holderNaming.js';
+
+// Preset material category ("Filter by Type") — never blank
+assert.equal(materialCategory(''), 'all');
+assert.equal(materialCategory('SS'), 'metal');
+assert.equal(materialCategory('ST'), 'metal');
+assert.equal(materialCategory('PLASTIC'), 'plastic');
 
 // Holder short name derivation
 assert.equal(holderShortName('NBT30-SK13C-60'), '30-SK13-60');

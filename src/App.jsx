@@ -13,6 +13,7 @@ import AddToolFlow from './components/AddToolFlow.jsx';
 import ImportFlow from './components/ImportFlow.jsx';
 import MergeFlow from './components/MergeFlow/index.jsx';
 import SettingsPage from './components/Settings.jsx';
+import NormalizeModal from './components/NormalizeModal.jsx';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 const APS_CLIENT_ID = import.meta.env.VITE_APS_CLIENT_ID || '';
@@ -100,8 +101,8 @@ function AppShell() {
 // (no tracking ID). Runs the one-time normalization: assigns tracking IDs, fans
 // tools out into per-assembly instances, and renames presets to the convention.
 function NormalizeBanner() {
-  const { needsNormalize, normalizeLibrary, isSaving } = useApp();
-  const [confirming, setConfirming] = useState(false);
+  const { needsNormalize } = useApp();
+  const [showModal, setShowModal] = useState(false);
   if (!needsNormalize) return null;
   return (
     <div className="normalize-banner" role="alert" style={{
@@ -113,19 +114,10 @@ function NormalizeBanner() {
       <span style={{ flex: 1, minWidth: 220 }}>
         Some tools haven't been migrated to the multi-instance model yet. Normalizing
         assigns tracking IDs, splits each tool into per-assembly instances, and renames
-        presets to the standard convention. Back up your library + metadata first.
+        presets to the standard convention.
       </span>
-      {confirming ? (
-        <>
-          <button className="btn btn-primary btn-sm" disabled={isSaving}
-            onClick={async () => { try { await normalizeLibrary(); } finally { setConfirming(false); } }}>
-            {isSaving ? 'Normalizing…' : 'Confirm — normalize now'}
-          </button>
-          <button className="btn btn-ghost btn-sm" disabled={isSaving} onClick={() => setConfirming(false)}>Cancel</button>
-        </>
-      ) : (
-        <button className="btn btn-secondary btn-sm" onClick={() => setConfirming(true)}>Normalize library</button>
-      )}
+      <button className="btn btn-secondary btn-sm" onClick={() => setShowModal(true)}>Review &amp; normalize</button>
+      {showModal && <NormalizeModal onClose={() => setShowModal(false)} />}
     </div>
   );
 }
