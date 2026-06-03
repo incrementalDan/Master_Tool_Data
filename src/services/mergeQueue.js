@@ -167,7 +167,6 @@ function parseFusionCsv(raw) {
       proshot_id: csvStr(r.tool_productId) || '',
       product_link: csvStr(r.tool_productLink) || '',
       location: csvStr(r.tool_vendor) || '',
-      // Flat speed/feed fields from first preset (for backwards compat)
       spindle_speed: p0.n || null,
       cutting_feedrate: p0.v_f || null,
       plunge_feedrate: p0.v_f_plunge || null,

@@ -525,6 +525,12 @@ The Google Drive metadata folder picker supports shared drives (team drives). Ke
 
 -----
 
+## Data Migration / Backwards Compatibility
+
+**Do not write backwards-compatibility code.** The tool library data has not been fully migrated to this app yet, so there is no live data to protect. When a field changes shape or a new field is added, update the code for the new shape only — do not add migration shims, `|| ''` fallbacks for renamed fields, or dual-read logic for old vs. new formats. If existing stored data needs updating, that will be handled as a deliberate one-off migration step, not silently in the app code.
+
+-----
+
 ## Key Constraints
 
 - **Tool IDs are permanent** — they are the Fusion `guid`, link the two JSON files, and are referenced in merge history. Never reassign them.

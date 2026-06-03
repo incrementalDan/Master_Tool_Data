@@ -479,10 +479,7 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     distributor: meta.distributor || '',
     distributor_stock_num: meta.distributor_stock_num || '',
     cost: meta.cost || '',
-    // Backward compat: old metadata may have a 'coolant' string instead of tsc_capable boolean
-    tsc_capable: meta.tsc_capable !== undefined
-      ? Boolean(meta.tsc_capable)
-      : (THROUGH_COOLANT_VALUES.has(meta.coolant || '') || THROUGH_COOLANT_VALUES.has(fusionInternal.coolant || '') || false),
+    tsc_capable: Boolean(meta.tsc_capable),
     center_cutting: meta.center_cutting ?? fusionInternal.center_cutting ?? false,
     cutting_direction: meta.cutting_direction || fusionInternal.cutting_direction || 'Right Hand',
     helix_angle: meta.helix_angle ?? fusionInternal.helix_angle ?? null,
