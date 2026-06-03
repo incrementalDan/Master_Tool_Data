@@ -264,6 +264,7 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
                     feedUnit={feedUnit}
                     speedUnit={speedUnit}
                     diameter={diameter}
+                    fluteLength={tool.flute_length || 0}
                     numberOfFlutes={numberOfFlutes}
                     assemblies={tool.assemblies || []}
                     holders={holders}
@@ -427,7 +428,7 @@ function computeFormulaDraft(draft, fx, diameter, numberOfFlutes) {
 // ── Edit card ────────────────────────────────────────────────────────────────
 function EditCard({
   preset, lenUnit, feedUnit, speedUnit,
-  diameter, numberOfFlutes,
+  diameter, fluteLength, numberOfFlutes,
   assemblies = [], holders = [],
   onSave, onCancel, isSaving,
 }) {
@@ -742,12 +743,12 @@ function EditCard({
             enabled={!!draft['use-stepdown']}
             onToggle={checked => {
               if (checked && (!draft.stepdown || draft.stepdown === 0)) {
-                set('stepdown', parseFloat(((tool.flute_length || 0) * 0.4).toFixed(6)));
+                set('stepdown', parseFloat((fluteLength * 0.4).toFixed(6)));
               }
               set('use-stepdown', checked);
             }}
             onChange={v => set('stepdown', v)}
-            refDim={tool.flute_length}
+            refDim={fluteLength}
             refLabel="flute length"
             lenUnit={lenUnit}
             defaultFactor={0.4}
@@ -758,12 +759,12 @@ function EditCard({
             enabled={!!draft['use-stepover']}
             onToggle={checked => {
               if (checked && (!draft.stepover || draft.stepover === 0)) {
-                set('stepover', parseFloat(((tool.diameter || 0) * 0.3).toFixed(6)));
+                set('stepover', parseFloat((diameter * 0.3).toFixed(6)));
               }
               set('use-stepover', checked);
             }}
             onChange={v => set('stepover', v)}
-            refDim={tool.diameter}
+            refDim={diameter}
             refLabel="diameter"
             lenUnit={lenUnit}
             defaultFactor={0.3}
