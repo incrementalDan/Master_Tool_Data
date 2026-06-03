@@ -1048,6 +1048,14 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   white-space: nowrap;
 }
 
+.queue-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  cursor: help;
+}
+
 .queue-footer {
   padding: 8px 12px;
   font-size: 11px;

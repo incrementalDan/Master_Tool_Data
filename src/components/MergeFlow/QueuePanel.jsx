@@ -2,17 +2,27 @@ import ToolTypeIcon from '../icons/ToolTypeIcon.jsx';
 import { queueProgress } from '../../services/mergeQueue.js';
 
 const STATUS_BADGE = {
-  pending:   { label: '~Match', color: 'var(--amber)', bg: 'rgba(212,146,42,0.12)' },
-  matched:   { label: 'Ready',  color: 'var(--blue)',  bg: 'rgba(74,143,255,0.1)' },
-  new:       { label: 'New',    color: '#a78bfa',      bg: 'rgba(167,139,250,0.12)' },
-  committed: { label: '✓',      color: 'var(--green)', bg: 'rgba(69,179,107,0.12)' },
-  skipped:   { label: 'Skip',   color: 'var(--text-sub)', bg: 'var(--surface-2)' },
+  pending:   { label: '~Match', color: 'var(--amber)', bg: 'rgba(212,146,42,0.12)', tip: 'Needs match confirmation' },
+  matched:   { label: null,     color: '#f59e0b',      bg: null,                    tip: 'Needs review — click to open' },
+  new:       { label: 'New',    color: '#a78bfa',      bg: 'rgba(167,139,250,0.12)', tip: 'No match found — add to library?' },
+  committed: { label: '✓',      color: 'var(--green)', bg: 'rgba(69,179,107,0.12)', tip: 'Committed to master' },
+  skipped:   { label: 'Skip',   color: 'var(--text-sub)', bg: 'var(--surface-2)',   tip: 'Skipped' },
 };
 
 function StatusBadge({ status }) {
   const cfg = STATUS_BADGE[status] || STATUS_BADGE.matched;
+  // 'matched' = awaiting review — show a yellow dot instead of a text label
+  if (status === 'matched') {
+    return (
+      <span
+        className="queue-status-dot"
+        style={{ background: cfg.color }}
+        title={cfg.tip}
+      />
+    );
+  }
   return (
-    <span className="queue-status-badge" style={{ color: cfg.color, background: cfg.bg }}>
+    <span className="queue-status-badge" style={{ color: cfg.color, background: cfg.bg }} title={cfg.tip}>
       {cfg.label}
     </span>
   );
