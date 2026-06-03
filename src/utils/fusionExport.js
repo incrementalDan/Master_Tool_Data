@@ -244,10 +244,12 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
 
     if (tool.location) S(165, tsvStr(tool.location));
 
-    if (preset['use-stepdown'] && preset.stepdown) S(144, tsvNum(preset.stepdown));
-    if (preset['use-stepover'] && preset.stepover) S(145, tsvNum(preset.stepover));
-    S(168, tsvBool(preset['use-stepdown'] || false));
-    S(169, tsvBool(preset['use-stepover'] || false));
+    const useStepdown = !!(preset['use-stepdown']) && preset.stepdown != null && Number(preset.stepdown) > 0;
+    const useStepover = !!(preset['use-stepover']) && preset.stepover != null && Number(preset.stepover) > 0;
+    if (useStepdown) S(144, tsvNum(preset.stepdown));
+    if (useStepover) S(145, tsvNum(preset.stepover));
+    S(168, tsvBool(useStepdown));
+    S(169, tsvBool(useStepover));
 
     // Col 170: shaft (shank) segments — needed for Fusion to show the shank profile.
     // Use the raw entry for this assembly's instance, falling back to canonical.
