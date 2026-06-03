@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Tag, Ruler, Layers, Gauge, Settings2, Save, X, AlertTriangle } from 'lucide-react';
 import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getVisibleFields, getNextMachineNumber } from '../schema/toolSchema.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -270,19 +270,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
               </select>
             </div>
           )}
-          <div className="field-group">
-            <label className="field-label">Flute Design</label>
-            <input
-              className="field-input"
-              list="flute-design-list"
-              value={data.flute_design || ''}
-              onChange={e => setField('flute_design', e.target.value)}
-              placeholder="None"
-            />
-            <datalist id="flute-design-list">
-              {FLUTE_DESIGN_OPTS.map(v => <option key={v} value={v} />)}
-            </datalist>
-          </div>
+          <FluteDesignField value={data.flute_design || []} onChange={v => setField('flute_design', v)} />
         </div>
         {visibleFields.has('pitch') && (
           <div className="form-grid" style={{ marginTop: 14 }}>
@@ -367,6 +355,64 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
             <><Save size={15} /> {isNew ? 'Add to Library' : 'Save Changes'}</>
           )}
         </button>
+      </div>
+    </div>
+  );
+}
+
+function FluteDesignField({ value, onChange }) {
+  const selected = Array.isArray(value) ? value : (value ? [value] : []);
+  const [customInput, setCustomInput] = useState('');
+  const inputRef = useRef(null);
+
+  const toggle = (opt) => {
+    const next = selected.includes(opt) ? selected.filter(v => v !== opt) : [...selected, opt];
+    onChange(next);
+  };
+
+  const addCustom = () => {
+    const v = customInput.trim();
+    if (v && !selected.includes(v)) onChange([...selected, v]);
+    setCustomInput('');
+  };
+
+  const remove = (v) => onChange(selected.filter(x => x !== v));
+  const customValues = selected.filter(v => !FLUTE_DESIGN_OPTS.includes(v));
+
+  return (
+    <div className="field-group" style={{ gridColumn: '1 / -1' }}>
+      <label className="field-label">Flute Design</label>
+      <div className="chip-group" style={{ marginBottom: 6 }}>
+        {FLUTE_DESIGN_OPTS.map(opt => (
+          <button
+            key={opt}
+            type="button"
+            className={`chip ${selected.includes(opt) ? 'active' : ''}`}
+            onClick={() => toggle(opt)}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+      {customValues.length > 0 && (
+        <div className="tag-list" style={{ marginBottom: 6 }}>
+          {customValues.map(v => (
+            <span key={v} className="tag removable" onClick={() => remove(v)}>
+              {v} <X size={11} />
+            </span>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 6 }}>
+        <input
+          ref={inputRef}
+          className="field-input"
+          style={{ flex: 1 }}
+          value={customInput}
+          onChange={e => setCustomInput(e.target.value)}
+          placeholder="Custom value + Enter"
+          onKeyDown={e => { if (e.key === 'Enter') { addCustom(); e.preventDefault(); } }}
+        />
       </div>
     </div>
   );

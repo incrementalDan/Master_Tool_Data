@@ -271,7 +271,16 @@ export default function ToolDetail() {
                 <Field label="TSC Capable" value={tool.tsc_capable ? 'Yes' : 'No'} />
                 <Field label="Helix Angle" value={round4(tool.helix_angle)} unit="°" />
                 <Field label="Flute Type" value={tool.flute_type} />
-                <Field label="Flute Design" value={tool.flute_design || null} />
+                {Array.isArray(tool.flute_design) ? (tool.flute_design.length > 0 && (
+                  <div className="detail-field">
+                    <div className="detail-field-label">Flute Design</div>
+                    <div className="tag-list" style={{ marginTop: 4 }}>
+                      {tool.flute_design.map(d => <span key={d} className="tag">{d}</span>)}
+                    </div>
+                  </div>
+                )) : (tool.flute_design && (
+                  <Field label="Flute Design" value={tool.flute_design} />
+                ))}
                 <Field label="Cutting Direction" value={tool.cutting_direction} />
                 <Field label="Center Cutting" value={tool.center_cutting != null ? (tool.center_cutting ? 'Yes' : 'No') : null} />
                 {tool.pitch && <Field label="Thread Pitch" value={tool.pitch} />}

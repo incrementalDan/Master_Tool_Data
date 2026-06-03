@@ -37,7 +37,11 @@ export function applyFilters(tools, activeFilters) {
   const facets = activeFilters.facets || {};
 
   for (const [field, value] of Object.entries(facets)) {
-    if (!value && value !== 0) continue;
+    if (Array.isArray(value)) {
+      if (value.length === 0) continue;
+    } else if (!value && value !== 0) {
+      continue;
+    }
     result = result.filter(t => matchesFacet(t, field, value));
   }
 
@@ -50,6 +54,12 @@ function matchesFacet(tool, field, value) {
   }
   if (field === 'material_suitability') {
     return Array.isArray(tool.material_suitability) && tool.material_suitability.includes(value);
+  }
+  if (field === 'flute_design') {
+    // value is an array of selected designs; tool field is also an array; OR semantics
+    const toolDesigns = Array.isArray(tool.flute_design) ? tool.flute_design : (tool.flute_design ? [tool.flute_design] : []);
+    const filterValues = Array.isArray(value) ? value : [value];
+    return filterValues.some(v => toolDesigns.includes(v));
   }
   if (field === 'tsc_capable') {
     return value === 'Yes' ? !!tool.tsc_capable : !tool.tsc_capable;
@@ -83,6 +93,9 @@ export function getAvailableOptions(tools, activeFilters, targetField) {
       (tool.tags || []).forEach(v => v && values.add(v));
     } else if (targetField === 'material_suitability') {
       (tool.material_suitability || []).forEach(v => v && values.add(v));
+    } else if (targetField === 'flute_design') {
+      const fd = Array.isArray(tool.flute_design) ? tool.flute_design : (tool.flute_design ? [tool.flute_design] : []);
+      fd.forEach(v => v && values.add(v));
     } else if (targetField === 'tsc_capable') {
       values.add(tool.tsc_capable ? 'Yes' : 'No');
     } else {
@@ -98,7 +111,7 @@ export function getAvailableOptions(tools, activeFilters, targetField) {
 
   return {
     options: sorted,
-    showAsChips: targetField === 'tsc_capable' || sorted.length <= 5,
+    showAsChips: targetField === 'tsc_capable' || targetField === 'flute_design' || sorted.length <= 5,
   };
 }
 
@@ -113,6 +126,9 @@ export function buildIndex(tools) {
         (tool.tags || []).forEach(v => v && values.add(v));
       } else if (field === 'material_suitability') {
         (tool.material_suitability || []).forEach(v => v && values.add(v));
+      } else if (field === 'flute_design') {
+        const fd = Array.isArray(tool.flute_design) ? tool.flute_design : (tool.flute_design ? [tool.flute_design] : []);
+        fd.forEach(v => v && values.add(v));
       } else if (field === 'tsc_capable') {
         values.add(tool.tsc_capable ? 'Yes' : 'No');
       } else {
