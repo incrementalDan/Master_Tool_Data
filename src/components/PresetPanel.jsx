@@ -4,7 +4,7 @@ import { generateId, COOLANT_OPTS } from '../schema/toolSchema.js';
 import { useApp } from '../context/AppContext.jsx';
 import { holderColor } from './AssemblyCard.jsx';
 import {
-  composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES,
+  composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
 } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import {
@@ -592,7 +592,9 @@ function EditCard({
               onChange={e => {
                 const q = MATERIAL_QUERY_MAP[e.target.value] ?? '';
                 setDraft(d => {
-                  const nd = { ...d, material: { ...(d.material || {}), query: q } };
+                  // Derive Fusion's "Filter by Type" from the material so it's
+                  // never blank (all/metal/plastic).
+                  const nd = { ...d, material: { ...(d.material || {}), query: q, category: materialCategory(q) } };
                   nd.name = composeName(nd, assemblyId, nd.operation_type);
                   return nd;
                 });
@@ -604,10 +606,10 @@ function EditCard({
           <FGroup label="Filter by type">
             <select
               className="field-input"
-              value={draft.material?.category || 'all'}
+              value={['all', 'metal', 'plastic'].includes(draft.material?.category) ? draft.material.category : 'all'}
               onChange={e => setMat('category', e.target.value)}
             >
-              {['all', 'milling', 'turning', 'drilling'].map(c => (
+              {['all', 'metal', 'plastic'].map(c => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>

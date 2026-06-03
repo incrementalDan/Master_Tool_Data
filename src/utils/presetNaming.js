@@ -29,6 +29,18 @@ export function materialToCode(query) {
   return q;
 }
 
+// Fusion's `tool_presetMaterialCategory` ("Filter by Type") must never be blank.
+// Derive it from the preset material: a plastic material -> "plastic", any other
+// (metal) material -> "metal", and no/blank material -> "all".
+export const PRESET_CATEGORIES = ['all', 'metal', 'plastic'];
+
+export function materialCategory(query) {
+  const q = String(query || '').toUpperCase().trim();
+  if (!q) return 'all';
+  if (q.includes('PLASTIC') || q === 'PL') return 'plastic';
+  return 'metal';
+}
+
 // Operation types. `value` is the canonical stored value; `word` is what goes in
 // the preset name; `aliases` are accepted spellings when parsing a name.
 export const OP_TYPES = [
