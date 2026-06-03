@@ -37,7 +37,11 @@ export function applyFilters(tools, activeFilters) {
   const facets = activeFilters.facets || {};
 
   for (const [field, value] of Object.entries(facets)) {
-    if (!value && value !== 0) continue;
+    if (Array.isArray(value)) {
+      if (value.length === 0) continue;
+    } else if (!value && value !== 0) {
+      continue;
+    }
     result = result.filter(t => matchesFacet(t, field, value));
   }
 
@@ -50,6 +54,11 @@ function matchesFacet(tool, field, value) {
   }
   if (field === 'material_suitability') {
     return Array.isArray(tool.material_suitability) && tool.material_suitability.includes(value);
+  }
+  if (field === 'flute_design') {
+    // value is an array of selected designs (OR semantics); tool field is a string
+    const filterValues = Array.isArray(value) ? value : [value];
+    return filterValues.some(v => String(v).toLowerCase() === String(tool.flute_design || '').toLowerCase());
   }
   if (field === 'tsc_capable') {
     return value === 'Yes' ? !!tool.tsc_capable : !tool.tsc_capable;
@@ -98,13 +107,13 @@ export function getAvailableOptions(tools, activeFilters, targetField) {
 
   return {
     options: sorted,
-    showAsChips: targetField === 'tsc_capable' || sorted.length <= 5,
+    showAsChips: targetField === 'tsc_capable' || targetField === 'flute_design' || sorted.length <= 5,
   };
 }
 
 export function buildIndex(tools) {
   const fieldValues = new Map();
-  const allFacetFields = ['tool_type', 'diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'material_suitability', 'tags', 'corner_radius'];
+  const allFacetFields = ['tool_type', 'diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'flute_design', 'material_suitability', 'tags', 'corner_radius'];
 
   for (const field of allFacetFields) {
     const values = new Set();

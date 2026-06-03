@@ -11,6 +11,7 @@ const FACET_LABEL = {
   coating: 'Coating',
   vendor: 'Manufacturer',
   tsc_capable: 'TSC',
+  flute_design: 'Flute Design',
   material_suitability: 'Cuts',
   tags: 'Tags',
   corner_radius: 'Corner Radius',
@@ -18,13 +19,20 @@ const FACET_LABEL = {
   pitch: 'Thread Pitch',
 };
 
+const MULTI_SELECT_FIELDS = new Set(['flute_design']);
+
+function isFacetEmpty(value) {
+  if (Array.isArray(value)) return value.length === 0;
+  return value === '' || value === null || value === undefined;
+}
+
 export default function FacetFilters({ tools, activeFilters, onFilterChange }) {
   const { toolType, facets = {} } = activeFilters;
   const facetFields = getFacetFields(toolType);
 
   const setFacet = (field, value) => {
     const newFacets = { ...facets };
-    if (value === '' || value === null || value === undefined) {
+    if (isFacetEmpty(value)) {
       delete newFacets[field];
     } else {
       newFacets[field] = value;
@@ -48,8 +56,9 @@ export default function FacetFilters({ tools, activeFilters, onFilterChange }) {
             label={FACET_LABEL[field] || FIELD_LABELS[field] || field}
             tools={tools}
             activeFilters={activeFilters}
-            value={facets[field] ?? ''}
+            value={MULTI_SELECT_FIELDS.has(field) ? (facets[field] ?? []) : (facets[field] ?? '')}
             onChange={val => setFacet(field, val)}
+            isMulti={MULTI_SELECT_FIELDS.has(field)}
           />
         ))}
       </div>
@@ -57,13 +66,16 @@ export default function FacetFilters({ tools, activeFilters, onFilterChange }) {
       {activeCount > 0 && (
         <div className="active-filters" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
           <span className="text-sub text-xs">Active:</span>
-          {Object.entries(facets).map(([field, value]) => (
-            <span key={field} className="active-filter-tag">
-              <span className="text-xs">{FACET_LABEL[field] || field}:</span>
-              <strong style={{ fontSize: 12 }}>{String(value)}</strong>
-              <button onClick={() => setFacet(field, '')} aria-label={`Remove ${field} filter`}>×</button>
-            </span>
-          ))}
+          {Object.entries(facets).map(([field, value]) => {
+            const displayVal = Array.isArray(value) ? value.join(', ') : String(value);
+            return (
+              <span key={field} className="active-filter-tag">
+                <span className="text-xs">{FACET_LABEL[field] || field}:</span>
+                <strong style={{ fontSize: 12 }}>{displayVal}</strong>
+                <button onClick={() => setFacet(field, Array.isArray(value) ? [] : '')} aria-label={`Remove ${field} filter`}>×</button>
+              </span>
+            );
+          })}
           <button className="btn btn-ghost btn-sm" onClick={clearAll}>Clear all</button>
         </div>
       )}
@@ -71,15 +83,15 @@ export default function FacetFilters({ tools, activeFilters, onFilterChange }) {
   );
 }
 
-function FacetControl({ field, label, tools, activeFilters, value, onChange }) {
+function FacetControl({ field, label, tools, activeFilters, value, onChange, isMulti }) {
   const { options, showAsChips } = getAvailableOptions(tools, activeFilters, field);
-  const [inputVal, setInputVal] = useState(value !== undefined && value !== null ? String(value) : '');
+  const [inputVal, setInputVal] = useState(!isMulti && value !== undefined && value !== null ? String(value) : '');
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
 
   useEffect(() => {
-    setInputVal(value !== undefined && value !== null ? String(value) : '');
-  }, [value]);
+    if (!isMulti) setInputVal(value !== undefined && value !== null ? String(value) : '');
+  }, [value, isMulti]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -95,7 +107,42 @@ function FacetControl({ field, label, tools, activeFilters, value, onChange }) {
     setOpen(false);
   };
 
-  if (showAsChips && options.length > 0) {
+  // Multi-select chip group (e.g. flute_design)
+  if (isMulti && showAsChips && options.length > 0) {
+    const selected = Array.isArray(value) ? value : [];
+    const toggle = (opt) => {
+      const next = selected.includes(opt) ? selected.filter(v => v !== opt) : [...selected, opt];
+      onChange(next);
+    };
+    return (
+      <div className="facet-item">
+        <div className="facet-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {label}
+          {selected.length > 0 && (
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ fontSize: 10, padding: '0 5px', lineHeight: '16px', height: 16 }}
+              onClick={() => onChange([])}
+            >All</button>
+          )}
+        </div>
+        <div className="chip-group">
+          {options.map(opt => (
+            <button
+              key={opt}
+              className={`chip ${selected.includes(String(opt)) ? 'active' : ''}`}
+              onClick={() => toggle(String(opt))}
+            >
+              {String(opt)}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Single-select chip group (e.g. tsc_capable, small option sets)
+  if (!isMulti && showAsChips && options.length > 0) {
     return (
       <div className="facet-item">
         <div className="facet-label">{label}</div>
