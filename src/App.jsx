@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
-import { Wrench, FolderOpen, LogOut, Library, Upload, Settings, GitMerge, RefreshCw } from 'lucide-react';
+import { Wrench, FolderOpen, LogOut, Library, Upload, Settings, GitMerge, RefreshCw, AlertTriangle } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import ToastStack from './components/Toast.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
@@ -71,6 +71,7 @@ function AppShell() {
     content = (
       <div className="app-shell">
         <TopBar user={user} googleAuthenticated={googleAuthenticated} onSignOut={signOutAll} onChangeLibrary={clearLibraryLocation} />
+        <NormalizeBanner />
         <main className="page-content">
           <Routes>
             <Route path="/" element={<LandingPage />} />
@@ -92,6 +93,40 @@ function AppShell() {
       {content}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </>
+  );
+}
+
+// Shown when the library contains tools that predate the multi-instance model
+// (no tracking ID). Runs the one-time normalization: assigns tracking IDs, fans
+// tools out into per-assembly instances, and renames presets to the convention.
+function NormalizeBanner() {
+  const { needsNormalize, normalizeLibrary, isSaving } = useApp();
+  const [confirming, setConfirming] = useState(false);
+  if (!needsNormalize) return null;
+  return (
+    <div className="normalize-banner" role="alert" style={{
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      padding: '10px 16px', background: 'rgba(234,179,8,0.12)',
+      borderBottom: '1px solid rgba(234,179,8,0.4)', color: '#fde047', fontSize: 13,
+    }}>
+      <AlertTriangle size={16} />
+      <span style={{ flex: 1, minWidth: 220 }}>
+        Some tools haven't been migrated to the multi-instance model yet. Normalizing
+        assigns tracking IDs, splits each tool into per-assembly instances, and renames
+        presets to the standard convention. Back up your library + metadata first.
+      </span>
+      {confirming ? (
+        <>
+          <button className="btn btn-primary btn-sm" disabled={isSaving}
+            onClick={async () => { try { await normalizeLibrary(); } finally { setConfirming(false); } }}>
+            {isSaving ? 'Normalizing…' : 'Confirm — normalize now'}
+          </button>
+          <button className="btn btn-ghost btn-sm" disabled={isSaving} onClick={() => setConfirming(false)}>Cancel</button>
+        </>
+      ) : (
+        <button className="btn btn-secondary btn-sm" onClick={() => setConfirming(true)}>Normalize library</button>
+      )}
+    </div>
   );
 }
 

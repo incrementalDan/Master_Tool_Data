@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { GitMerge } from 'lucide-react';
 import { useApp } from '../../context/AppContext.jsx';
 import { buildQueue, queueProgress } from '../../services/mergeQueue.js';
-import { fusionToolToInternal, mergeFusionAndMetadata } from '../../schema/toolSchema.js';
+import { groupByTrackingId, buildLogicalTool, mergeFusionAndMetadata } from '../../schema/toolSchema.js';
 import ImportStep from './ImportStep.jsx';
 import MatchStep from './MatchStep.jsx';
 import DiffStep from './DiffStep.jsx';
@@ -60,16 +60,30 @@ export default function MergeFlow() {
         const rawList = await fetchRawLibrary();
         cacheRef.current = { data: rawList, fetchedAt: now };
       }
-      const rawFresh = cacheRef.current.data.find(t => t.guid === masterTool.id);
-      if (!rawFresh) return { tool: masterTool, updated: false };
+      // Group the raw library into logical tools (one per tracking ID; a logical
+      // tool fans out across N Fusion instances). Match by tracking ID, falling
+      // back to instance guid for legacy untracked tools.
+      const { groups, untracked } = groupByTrackingId(cacheRef.current.data);
+      const masterTid = masterTool.tracking_id || null;
+      let rawInstances = null;
+      if (masterTid && groups.has(masterTid)) {
+        rawInstances = groups.get(masterTid);
+      } else {
+        const raw = untracked.find(t => t.guid === masterTool.id);
+        if (raw) rawInstances = [raw];
+      }
+      if (!rawInstances || rawInstances.length === 0) return { tool: masterTool, updated: false };
+
       const masterMod = masterTool._fusionRaw?.last_modified || 0;
-      const freshMod = rawFresh.last_modified || 0;
+      const freshMod = Math.max(...rawInstances.map(r => r.last_modified || 0));
       if (freshMod <= masterMod) return { tool: masterTool, updated: false };
-      // Master changed — merge fresh Fusion data with existing metadata.
-      // mergeFusionAndMetadata preserves all metadata-only fields from masterTool
-      // (assemblies, notes, tags, vendor, merge_history, etc.) that fusionToolToInternal
-      // would otherwise wipe by returning empty defaults.
-      const fresh = { ...mergeFusionAndMetadata(fusionToolToInternal(rawFresh), masterTool), _fusionRaw: rawFresh };
+
+      // Master changed — rebuild the logical tool from fresh Fusion instances and
+      // merge in existing metadata. mergeFusionAndMetadata preserves all
+      // metadata-only fields from masterTool (notes, tags, vendor, merge_history,
+      // etc.) that a fresh build from Fusion alone would otherwise wipe.
+      const rebuilt = buildLogicalTool(rawInstances, new Map());
+      const fresh = { ...mergeFusionAndMetadata(rebuilt, masterTool), assemblies: rebuilt.assemblies, presets: rebuilt.presets, _instancesRaw: rebuilt._instancesRaw, _fusionRaw: rebuilt._fusionRaw };
       return { tool: fresh, updated: true };
     } catch {
       return { tool: masterTool, updated: false };

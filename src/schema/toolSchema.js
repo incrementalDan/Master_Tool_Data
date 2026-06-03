@@ -4,6 +4,7 @@ import {
   PS_GROUPS, AUTO_GROUP, COOLANT_OPTS, THROUGH_COOLANT_VALUES,
   getVisibleFields,
 } from '../../tool-extractor.tsx';
+import { parsePresetName } from '../utils/presetNaming.js';
 
 export { TT, TL, MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST, PS_GROUPS, AUTO_GROUP, COOLANT_OPTS };
 
@@ -195,6 +196,89 @@ export function generateId() {
 
 export const generateAssemblyId = generateId;
 
+// ─── Tracking ID (logical-tool family key) ─────────────────────────────────
+// One logical tool maps to N Fusion library instances (one per assembly). All
+// instances of a logical tool carry the same tracking ID, written into Fusion's
+// native `tool_comment` field so the grouping survives without this app or the
+// metadata file. Format: "FTL-" + 6 uppercase hex.
+const TRACKING_ID_RE = /^FTL-[0-9A-F]{4,}$/i;
+
+export function generateTrackingId() {
+  const hex = Math.floor(Math.random() * 0x1000000).toString(16).toUpperCase().padStart(6, '0');
+  return `FTL-${hex}`;
+}
+
+// Read a tracking ID from a raw Fusion tool. Only accepts the FTL- pattern so a
+// stray legacy value (e.g. an old ProShop RTA#) in tool_comment is ignored.
+export function readTrackingId(fTool) {
+  // Fusion stores the comment in post-process.comment (plain) and mirrors it in
+  // expressions.tool_comment (quoted). Check both.
+  const raw = stripQuotes(
+    fTool?.['post-process']?.comment ||
+    fTool?.expressions?.tool_comment ||
+    fTool?.tool_comment ||
+    ''
+  );
+  return TRACKING_ID_RE.test(raw) ? raw.toUpperCase() : null;
+}
+
+// Read the OOH (stick-out) from a raw Fusion tool. Source of truth is
+// geometry.LB (Body Length / "Length below Holder"). Always returned in inches.
+export function readOohFromFusion(fTool) {
+  const lb = fTool?.geometry?.LB;
+  if (lb === null || lb === undefined || lb === '') return null;
+  const v = Number(lb);
+  if (isNaN(v)) return null;
+  return fTool.unit === 'millimeters' ? v / 25.4 : v;
+}
+
+function round4(n) {
+  const v = Number(n);
+  return isNaN(v) ? 0 : Math.round(v * 10000) / 10000;
+}
+
+// Family signature for validating a tracking-ID group and for matching incoming
+// job tools: ProShop ID + tool type + cut diameter (4-decimal tolerance).
+export function familySignature(tool) {
+  const pid = String(tool.proshot_id || tool['product-id'] || '').trim();
+  const type = tool.tool_type || tool.type || '';
+  const dia = round4(tool.diameter ?? tool.geometry?.DC);
+  return `${pid}|${type}|${dia}`;
+}
+
+// Group a raw Fusion library array into logical-tool groups keyed by tracking
+// ID. Entries without a valid tracking ID are returned separately (each is its
+// own single-instance logical tool until normalized).
+export function groupByTrackingId(fusionList) {
+  const groups = new Map(); // tracking_id -> [rawInstance, ...]
+  const untracked = [];     // raw instances with no tracking ID
+  for (const f of (fusionList || [])) {
+    const tid = readTrackingId(f);
+    if (tid) {
+      if (!groups.has(tid)) groups.set(tid, []);
+      groups.get(tid).push(f);
+    } else {
+      untracked.push(f);
+    }
+  }
+  return { groups, untracked };
+}
+
+// Build a Fusion holder object from a holder-library entry.
+export function buildHolderObject(holderEntry) {
+  if (!holderEntry) return null;
+  return {
+    description: holderEntry.description,
+    guid: holderEntry.guid,
+    'product-id': holderEntry['product-id'] || '',
+    'product-link': holderEntry['product-link'] || '',
+    vendor: holderEntry.vendor || '',
+    gaugeLength: holderEntry.gaugeLength,
+    unit: holderEntry.unit,
+    segments: holderEntry.segments,
+  };
+}
+
 // ─── Machine tool numbers ─────────────────────────────────────────────────
 // The machine tool number is what the CNC machine reads to call a tool
 // (`post-process.number` in the Fusion JSON). It is completely separate from
@@ -289,6 +373,7 @@ export function fusionToolToInternal(fTool) {
 
   return {
     id: fTool.guid,
+    tracking_id: readTrackingId(fTool),
     tool_type: toolType,
     unit: fTool.unit || 'inches',
     description: fTool.description || '',
@@ -317,7 +402,10 @@ export function fusionToolToInternal(fTool) {
     // Full presets array (Fusion's start-values). Shallow-copied so editing in
     // the app never mutates the cached raw object. The flat speed/feed fields
     // above mirror presets[0] for forms that don't use the preset editor.
-    presets: (fTool['start-values']?.presets || []).map(p => ({ ...p })),
+    presets: (fTool['start-values']?.presets || []).map(p => ({
+      ...p,
+      operation_type: p.operation_type ?? parsePresetName(p.name)?.opType ?? null,
+    })),
     tool_number: fTool['post-process']?.number ? String(fTool['post-process'].number) : '',
     // Machine tool number — output mirror of post-process.number. The metadata
     // file is the source of truth; this is only a fallback when metadata is missing.
@@ -352,8 +440,11 @@ export function fusionToolToInternal(fTool) {
 // preset, preserving every field the app doesn't model and filling required
 // defaults. tscCapable only seeds the coolant when the preset has none of its own.
 function normalizePreset(p, tscCapable = false) {
+  // operation_type is an app-only field encoded in the preset name + metadata.
+  // It must never be written into the Fusion JSON (Fusion validates strictly).
+  const { operation_type, ...rest } = p;
   return {
-    ...p,
+    ...rest,
     guid: p.guid || generateId(),
     description: p.description || '',
     name: p.name || 'Default preset',
@@ -464,6 +555,7 @@ export function internalToFusionTool(tool) {
       tool_shaftDiameter: `${tool.shank_diameter || tool.diameter || 0} in`,
       tool_shoulderLength: `${tool.shoulder_length || tool.flute_length || 0} in`,
       tool_vendor: `'${tool.location || ''}'`,
+      ...(tool.tracking_id ? { tool_comment: `'${tool.tracking_id}'` } : {}),
       ...(tool.corner_radius ? { tool_cornerRadius: `${tool.corner_radius} in` } : {}),
       ...(hasMtn
         ? { tool_number: String(mtnInt), tool_lengthOffset: 'tool_number' }
@@ -495,6 +587,7 @@ export function internalToFusionTool(tool) {
     holder: existing.holder || null,
     'post-process': {
       ...(existing['post-process'] || {}),
+      ...(tool.tracking_id ? { comment: tool.tracking_id } : {}),
       ...(hasMtn
         ? { number: mtnInt, 'length-offset': mtnInt, 'diameter-offset': mtnInt }
         : (tool.tool_number ? { number: parseInt(tool.tool_number) || 0 } : {})),
@@ -560,11 +653,17 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
   };
 }
 
-// ─── Split unified tool → Fusion part + metadata part ─────────────────────
-export function splitToFusionAndMetadata(tool) {
-  const fusionTool = internalToFusionTool(tool);
-  const metadataTool = {
-    id: tool.id,
+// ─── Build the metadata record for a logical tool ─────────────────────────
+// Keyed by tracking_id. Assemblies carry instance_guid (the Fusion entry each
+// assembly maps to). preset_meta caches operation_type by preset guid as a
+// fallback when a preset name can't be parsed.
+export function buildMetadataTool(tool) {
+  const preset_meta = {};
+  for (const p of (tool.presets || [])) {
+    if (p.guid && p.operation_type) preset_meta[p.guid] = { operation_type: p.operation_type };
+  }
+  return {
+    id: tool.tracking_id || tool.id,
     vendor: tool.vendor || '',
     product_id: tool.product_id || '',
     coating: tool.coating || '',
@@ -600,10 +699,20 @@ export function splitToFusionAndMetadata(tool) {
     // Machine tool number — persisted here as the source of truth, independent
     // of what gets written to the Fusion JSON.
     machine_tool_number: (tool.machine_tool_number ?? null) === null ? null : Number(tool.machine_tool_number),
-    // Holder selection + proven assemblies — Fusion can't hold these, so they
-    // are persisted here in metadata and reloaded via mergeFusionAndMetadata.
+    // Holder selection + proven assemblies. Each assembly carries instance_guid
+    // (the Fusion entry it maps to); supplementary notes live here.
     selected_holder_guid: tool.selected_holder_guid || null,
-    assemblies: tool.assemblies || [],
+    assemblies: (tool.assemblies || []).map(a => ({
+      assembly_id: a.assembly_id || generateAssemblyId(),
+      instance_guid: a.instance_guid || null,
+      holder_guid: a.holder_guid || null,
+      holder_description: a.holder_description || '',
+      ooh: a.ooh ?? null,
+      notes: a.notes || '',
+      source: a.source || 'manual',
+      created_at: a.created_at || new Date().toISOString(),
+    })),
+    preset_meta,
     notes: tool.notes || '',
     last_used_job: tool.last_used_job || '',
     preferred_machine: tool.preferred_machine || '',
@@ -615,6 +724,120 @@ export function splitToFusionAndMetadata(tool) {
     created_at: tool.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
+}
+
+// ─── Build a logical tool from a group of raw Fusion instances ─────────────
+// rawInstances: all Fusion entries sharing one tracking ID (or a single legacy
+// entry). metaByTracking: Map keyed by tracking_id. The first instance sources
+// the shared fields; assemblies are derived one-per-instance.
+export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
+  const canonical = rawInstances[0];
+  const tracking_id = readTrackingId(canonical);
+  const meta = (tracking_id && metaByTracking) ? metaByTracking.get(tracking_id) : null;
+  const internal = fusionToolToInternal(canonical);
+  const merged = mergeFusionAndMetadata(internal, meta);
+
+  const metaAsmByGuid = new Map((meta?.assemblies || [])
+    .filter(a => a.instance_guid)
+    .map(a => [a.instance_guid, a]));
+
+  const assemblies = rawInstances.map(raw => {
+    const m = metaAsmByGuid.get(raw.guid) || {};
+    return {
+      assembly_id: m.assembly_id || generateAssemblyId(),
+      instance_guid: raw.guid,
+      holder_guid: raw.holder?.guid || m.holder_guid || null,
+      holder_description: raw.holder?.description || m.holder_description || '',
+      ooh: readOohFromFusion(raw) ?? (m.ooh ?? null),
+      notes: m.notes || '',
+      source: m.source || 'fusion',
+      created_at: m.created_at || merged.created_at,
+    };
+  });
+
+  // Overlay operation_type onto each preset: name wins, metadata cache is fallback.
+  const presetMeta = meta?.preset_meta || {};
+  const presets = (merged.presets || []).map(p => ({
+    ...p,
+    operation_type: parsePresetName(p.name)?.opType ?? presetMeta[p.guid]?.operation_type ?? null,
+  }));
+
+  const mtn = meta?.machine_tool_number ?? canonical['post-process']?.number ?? null;
+
+  return {
+    ...merged,
+    id: tracking_id || canonical.guid,
+    tracking_id: tracking_id || null,
+    machine_tool_number: mtn === null ? null : Number(mtn),
+    presets,
+    assemblies,
+    _instancesRaw: rawInstances,
+    _fusionRaw: canonical,
+  };
+}
+
+// ─── Split a logical tool into N raw Fusion instances + its metadata ───────
+// Produces one Fusion entry per assembly. All entries share every field except
+// guid, holder, and geometry.LB (per-instance OOH). holders is the holder
+// library (for resolving holder_guid → full holder object on new assemblies).
+export function splitToFusionInstances(tool, holders = []) {
+  const tracking_id = tool.tracking_id || tool.id;
+  const isMetric = tool.unit === 'millimeters';
+
+  let assemblies = (tool.assemblies && tool.assemblies.length > 0)
+    ? tool.assemblies
+    : [{
+        assembly_id: generateAssemblyId(),
+        instance_guid: tool.id,
+        holder_guid: tool.selected_holder_guid || null,
+        holder_description: '',
+        ooh: tool.ooh ?? null,
+        source: 'manual',
+      }];
+
+  const rawByGuid = new Map((tool._instancesRaw || []).map(r => [r.guid, r]));
+
+  const fusionInstances = assemblies.map(a => {
+    const instanceGuid = a.instance_guid || generateId();
+    const raw = rawByGuid.get(instanceGuid) || tool._fusionRaw || {};
+    const base = internalToFusionTool({
+      ...tool,
+      id: instanceGuid,
+      tracking_id,
+      _fusionRaw: raw,
+    });
+
+    // Shared machine tool number across every instance.
+    if (tool.machine_tool_number != null && tool.machine_tool_number !== '' &&
+        !isNaN(parseInt(tool.machine_tool_number))) {
+      applyMachineNumberToFusion(base, tool.machine_tool_number);
+    }
+
+    // Per-instance holder.
+    if (a.holder_guid) {
+      const holder = holders.find(h => h.guid === a.holder_guid);
+      base.holder = holder ? buildHolderObject(holder) : (raw.holder || null);
+    } else {
+      base.holder = raw.holder || null;
+    }
+
+    // Per-instance OOH → geometry.LB (the documented OOH source of truth).
+    if (a.ooh != null && a.ooh !== '' && !isNaN(Number(a.ooh))) {
+      const lb = isMetric ? Number(a.ooh) * 25.4 : Number(a.ooh);
+      base.geometry = { ...(base.geometry || {}), LB: lb };
+    }
+
+    return base;
+  });
+
+  return { fusionInstances, metadataTool: buildMetadataTool({ ...tool, tracking_id }) };
+}
+
+// Legacy single-entry split — retained for any caller that still needs a single
+// Fusion object (e.g. JSON file export of one assembly).
+export function splitToFusionAndMetadata(tool) {
+  const fusionTool = internalToFusionTool(tool);
+  const metadataTool = buildMetadataTool(tool);
   return { fusionTool, metadataTool };
 }
 

@@ -2,10 +2,13 @@ import { createContext, useContext, useReducer, useCallback, useEffect, useRef }
 import * as driveService from '../services/driveService.js';
 import * as aps from '../services/apsService.js';
 import {
-  validateTool, generateId,
-  fusionToolToInternal, mergeFusionAndMetadata, splitToFusionAndMetadata,
+  validateTool, generateId, generateAssemblyId, generateTrackingId,
+  groupByTrackingId, buildLogicalTool, splitToFusionInstances, readTrackingId,
   getNextMachineNumber, generateMachineNumbers, applyMachineNumberToFusion,
+  fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
 } from '../schema/toolSchema.js';
+import { composePresetName, opTypeWord, parsePresetName } from '../utils/presetNaming.js';
+import { holderShortName } from '../utils/holderNaming.js';
 
 const AppContext = createContext(null);
 
@@ -36,6 +39,7 @@ const initialState = {
   processingAuth: false,      // exchanging APS callback code
   tools: [],
   holders: [],                // loaded from Master-Holder library
+  needsNormalize: false,      // true when any tool lacks a tracking ID (pre-migration)
   isLoading: false,
   isSaving: false,
   error: null,
@@ -62,7 +66,7 @@ function reducer(state, action) {
         holderLibraryLocation: state.holderLibraryLocation,
       };
     case 'LOAD_START': return { ...state, isLoading: true, error: null };
-    case 'LOAD_SUCCESS': return { ...state, isLoading: false, tools: action.tools };
+    case 'LOAD_SUCCESS': return { ...state, isLoading: false, tools: action.tools, needsNormalize: !!action.needsNormalize };
     case 'LOAD_ERROR': return { ...state, isLoading: false, error: action.error };
     case 'SAVE_START': return { ...state, isSaving: true, error: null };
     case 'SAVE_SUCCESS': return { ...state, isSaving: false };
@@ -72,7 +76,7 @@ function reducer(state, action) {
       return { ...state, tools: state.tools.map(t => t.id === action.tool.id ? action.tool : t) };
     case 'DELETE_TOOL':
       return { ...state, tools: state.tools.filter(t => t.id !== action.id) };
-    case 'SET_TOOLS': return { ...state, tools: action.tools };
+    case 'SET_TOOLS': return { ...state, tools: action.tools, ...(action.needsNormalize !== undefined ? { needsNormalize: action.needsNormalize } : {}) };
     case 'CLEAR_ERROR': return { ...state, error: null };
     case 'ADD_TOAST': return { ...state, toasts: [...state.toasts, action.toast] };
     case 'DISMISS_TOAST': return { ...state, toasts: state.toasts.filter(t => t.id !== action.id) };
@@ -88,10 +92,12 @@ export function AppProvider({ children }) {
   const holderLocationRef = useRef(state.holderLibraryLocation);
   const googleRef = useRef(state.googleAuthenticated);
   const toolsRef = useRef(state.tools);
+  const holdersRef = useRef(state.holders);
   useEffect(() => { locationRef.current = state.libraryLocation; }, [state.libraryLocation]);
   useEffect(() => { holderLocationRef.current = state.holderLibraryLocation; }, [state.holderLibraryLocation]);
   useEffect(() => { googleRef.current = state.googleAuthenticated; }, [state.googleAuthenticated]);
   useEffect(() => { toolsRef.current = state.tools; }, [state.tools]);
+  useEffect(() => { holdersRef.current = state.holders; }, [state.holders]);
 
   // ─── Handle APS OAuth callback on mount ───────────────────────────────────
   useEffect(() => {
@@ -200,12 +206,17 @@ export function AppProvider({ children }) {
     try {
       const fusionList = await downloadFusionList();
       const metaList = googleRef.current ? await driveService.loadMetadata() : [];
-      const metaById = new Map(metaList.map(m => [m.id, m]));
-      const tools = fusionList.map(fTool => {
-        const internal = fusionToolToInternal(fTool);
-        return mergeFusionAndMetadata(internal, metaById.get(internal.id) || null);
-      });
-      dispatch({ type: 'LOAD_SUCCESS', tools });
+      const metaByTracking = new Map(metaList.map(m => [m.id, m]));
+
+      // Group Fusion entries into logical tools by tracking ID. Entries without
+      // a tracking ID are each their own single-instance tool until normalized.
+      const { groups, untracked } = groupByTrackingId(fusionList);
+      const tools = [];
+      for (const [, raws] of groups) tools.push(buildLogicalTool(raws, metaByTracking));
+      for (const raw of untracked) tools.push(buildLogicalTool([raw], metaByTracking));
+      const needsNormalize = untracked.length > 0;
+
+      dispatch({ type: 'LOAD_SUCCESS', tools, needsNormalize });
       // Load holder library alongside tools (non-critical — failure won't block)
       if (holderLocationRef.current) {
         try {
@@ -221,25 +232,63 @@ export function AppProvider({ children }) {
     }
   }, [downloadFusionList]);
 
+  // ─── Core write: reconcile a logical tool's instances into the library ────
+  // A logical tool maps to N Fusion entries (one per assembly). This drops every
+  // current entry carrying the tool's tracking ID and appends the freshly
+  // computed instance set, in a single library write. Always re-downloads first
+  // (per the re-download-before-write invariant) and refreshes each instance's
+  // raw Fusion data so a teammate's untouched fields survive. Returns the
+  // normalized tool with stable assembly ids and refreshed _instancesRaw.
+  const writeLogicalTool = useCallback(async (tool) => {
+    const holders = holdersRef.current || [];
+    const tracking_id = tool.tracking_id || generateTrackingId();
+
+    // Ensure at least one assembly, and stable ids on every assembly.
+    const baseAssemblies = (tool.assemblies && tool.assemblies.length > 0)
+      ? tool.assemblies
+      : [{
+          holder_guid: tool.selected_holder_guid || null,
+          holder_description: '',
+          ooh: tool.ooh ?? null,
+          source: 'manual',
+          created_at: new Date().toISOString(),
+        }];
+    const assemblies = baseAssemblies.map(a => ({
+      ...a,
+      assembly_id: a.assembly_id || generateAssemblyId(),
+      instance_guid: a.instance_guid || generateId(),
+    }));
+
+    const fusionList = await downloadFusionList();
+    const freshByGuid = new Map(fusionList.map(f => [f.guid, f]));
+    const refreshedRaws = assemblies.map(a => freshByGuid.get(a.instance_guid)).filter(Boolean);
+
+    const toWrite = {
+      ...tool,
+      tracking_id,
+      assemblies,
+      _instancesRaw: refreshedRaws,
+      _fusionRaw: refreshedRaws[0] || tool._fusionRaw || null,
+    };
+
+    const { fusionInstances, metadataTool } = splitToFusionInstances(toWrite, holders);
+    const next = fusionList
+      .filter(f => readTrackingId(f) !== tracking_id)
+      .concat(fusionInstances);
+
+    await uploadFusionList(next);
+    if (googleRef.current) await driveService.upsertMetadata(metadataTool);
+
+    return { ...toWrite, _instancesRaw: fusionInstances, _fusionRaw: fusionInstances[0] };
+  }, [downloadFusionList, uploadFusionList]);
+
   const saveTool = useCallback(async (tool) => {
     const { valid, errors } = validateTool(tool);
     if (!valid) throw new Error(errors.join(', '));
 
     dispatch({ type: 'SAVE_START' });
     try {
-      const updated = { ...tool, updated_at: new Date().toISOString() };
-      // Always re-download the current library before writing
-      const fusionList = await downloadFusionList();
-      const idx = fusionList.findIndex(t => t.guid === updated.id);
-      // Preserve any Fusion-specific data on the freshest copy
-      if (idx >= 0) updated._fusionRaw = fusionList[idx];
-      const { fusionTool, metadataTool } = splitToFusionAndMetadata(updated);
-      if (idx >= 0) fusionList[idx] = fusionTool;
-      else fusionList.push(fusionTool);
-
-      await uploadFusionList(fusionList);
-      if (googleRef.current) await driveService.upsertMetadata(metadataTool);
-
+      const updated = await writeLogicalTool({ ...tool, updated_at: new Date().toISOString() });
       dispatch({ type: 'UPDATE_TOOL', tool: updated });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify('Saved to Fusion library', 'success');
@@ -249,30 +298,23 @@ export function AppProvider({ children }) {
       notify(`Save failed: ${err.message}`, 'error', 7000);
       throw err;
     }
-  }, [downloadFusionList, uploadFusionList, notify]);
+  }, [writeLogicalTool, notify]);
 
   const addTool = useCallback(async (tool) => {
     const { valid, errors } = validateTool(tool);
     if (!valid) throw new Error(errors.join(', '));
 
     const now = new Date().toISOString();
-    const created = {
-      ...tool,
-      id: tool.id || generateId(),
-      created_at: tool.created_at || now,
-      updated_at: now,
-    };
 
     dispatch({ type: 'SAVE_START' });
     try {
       const fusionList = await downloadFusionList();
 
-      // Always assign the next available machine tool number at the moment of
-      // save (not when the form opened) so concurrent adds don't collide. The
-      // number is *always* app-managed — any value carried in on the incoming
-      // tool (e.g. a number copied from a job file in the Sync flow) is stale
-      // and must be ignored. The freshly-downloaded library is the authority for
-      // which numbers are taken; we union it with the in-memory list to be safe.
+      // Assign the next available machine tool number at save time so concurrent
+      // adds don't collide. The number is app-managed (any value carried in is
+      // ignored) and shared across every instance of the logical tool. Reading
+      // post-process.number from each entry naturally dedupes, since all
+      // instances of a tool share one number.
       const usedNumbers = new Set();
       for (const f of fusionList) {
         const n = f['post-process']?.number;
@@ -282,26 +324,28 @@ export function AppProvider({ children }) {
         const n = t.machine_tool_number;
         if (n !== null && n !== undefined && n !== '') usedNumbers.add(Number(n));
       }
-      created.machine_tool_number = getNextMachineNumber([...usedNumbers]);
 
-      const { fusionTool, metadataTool } = splitToFusionAndMetadata(created);
-      const idx = fusionList.findIndex(t => t.guid === created.id);
-      if (idx >= 0) fusionList[idx] = fusionTool;
-      else fusionList.push(fusionTool);
+      const tracking_id = generateTrackingId();
+      const created = {
+        ...tool,
+        id: tracking_id,
+        tracking_id,
+        machine_tool_number: getNextMachineNumber([...usedNumbers]),
+        created_at: tool.created_at || now,
+        updated_at: now,
+      };
 
-      await uploadFusionList(fusionList);
-      if (googleRef.current) await driveService.upsertMetadata(metadataTool);
-
-      dispatch({ type: 'ADD_TOOL', tool: created });
+      const written = await writeLogicalTool(created);
+      dispatch({ type: 'ADD_TOOL', tool: written });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify('Tool added to library', 'success');
-      return created;
+      return written;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
       notify(`Add failed: ${err.message}`, 'error', 7000);
       throw err;
     }
-  }, [downloadFusionList, uploadFusionList, notify]);
+  }, [downloadFusionList, writeLogicalTool, notify]);
 
   // Duplicate an existing tool as a starting point for a new one.
   const cloneTool = useCallback(async (id) => {
@@ -311,8 +355,15 @@ export function AppProvider({ children }) {
     const copy = {
       ...source,
       id: generateId(),
+      tracking_id: null,        // addTool assigns a fresh tracking ID
       description: `${source.description || 'Tool'} (copy)`,
       _fusionRaw: undefined,
+      _instancesRaw: undefined,
+      // Keep the holder/OOH of each assembly but force fresh instance + assembly
+      // ids so the copy gets its own Fusion entries.
+      assemblies: (source.assemblies || []).map(a => ({
+        ...a, assembly_id: undefined, instance_guid: undefined,
+      })),
       machine_tool_number: null, // assign a fresh number on save — never reuse the source's
       merge_history: [],
       created_at: now,
@@ -395,33 +446,35 @@ export function AppProvider({ children }) {
         updated.assemblies = assemblies;
       }
 
-      const fusionList = await downloadFusionList();
-      const idx = fusionList.findIndex(t => t.guid === masterTool.id);
-      if (idx >= 0) updated._fusionRaw = fusionList[idx];
-      const { fusionTool, metadataTool } = splitToFusionAndMetadata(updated);
-      if (idx >= 0) fusionList[idx] = fusionTool;
-      else fusionList.push(fusionTool);
-
-      await uploadFusionList(fusionList);
-      if (googleRef.current) await driveService.upsertMetadata(metadataTool);
-
-      dispatch({ type: 'UPDATE_TOOL', tool: updated });
+      const written = await writeLogicalTool(updated);
+      dispatch({ type: 'UPDATE_TOOL', tool: written });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify('Merged job values to master library', 'success');
-      return updated;
+      return written;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
       notify(`Merge failed: ${err.message}`, 'error', 7000);
       throw err;
     }
-  }, [downloadFusionList, uploadFusionList, notify]);
+  }, [writeLogicalTool, notify]);
 
   const deleteTool = useCallback(async (id) => {
     dispatch({ type: 'SAVE_START' });
     try {
+      const tool = toolsRef.current.find(t => t.id === id);
+      const tid = tool?.tracking_id || id;
       const fusionList = await downloadFusionList();
-      await uploadFusionList(fusionList.filter(t => t.guid !== id));
-      if (googleRef.current) await driveService.deleteMetadata(id);
+      let remaining;
+      if (tool?.tracking_id) {
+        // Delete every instance carrying this tracking ID.
+        remaining = fusionList.filter(f => readTrackingId(f) !== tid);
+      } else {
+        // Legacy untracked tool — delete by its instance guids.
+        const guids = new Set((tool?._instancesRaw || []).map(r => r.guid).concat([id]));
+        remaining = fusionList.filter(f => !guids.has(f.guid));
+      }
+      await uploadFusionList(remaining);
+      if (googleRef.current) await driveService.deleteMetadata(tid);
       dispatch({ type: 'DELETE_TOOL', id });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify('Tool deleted', 'success');
@@ -432,21 +485,115 @@ export function AppProvider({ children }) {
     }
   }, [downloadFusionList, uploadFusionList, notify]);
 
+  // ─── Assembly CRUD (each assembly = one Fusion instance) ──────────────────
+  const addAssembly = useCallback(async (toolId, assembly) => {
+    const tool = toolsRef.current.find(t => t.id === toolId);
+    if (!tool) throw new Error('Tool not found');
+    dispatch({ type: 'SAVE_START' });
+    try {
+      const next = {
+        ...tool,
+        assemblies: [...(tool.assemblies || []), {
+          ...assembly,
+          assembly_id: generateAssemblyId(),
+          instance_guid: generateId(),
+          source: assembly.source || 'manual',
+          created_at: new Date().toISOString(),
+        }],
+        updated_at: new Date().toISOString(),
+      };
+      const written = await writeLogicalTool(next);
+      dispatch({ type: 'UPDATE_TOOL', tool: written });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify('Assembly added — new tool instance created', 'success');
+      return written;
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Add assembly failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  }, [writeLogicalTool, notify]);
+
+  const updateAssembly = useCallback(async (toolId, assemblyId, patch) => {
+    const tool = toolsRef.current.find(t => t.id === toolId);
+    if (!tool) throw new Error('Tool not found');
+    dispatch({ type: 'SAVE_START' });
+    try {
+      const assemblies = (tool.assemblies || []).map(a =>
+        a.assembly_id === assemblyId ? { ...a, ...patch } : a);
+      const written = await writeLogicalTool({ ...tool, assemblies, updated_at: new Date().toISOString() });
+      dispatch({ type: 'UPDATE_TOOL', tool: written });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify('Assembly updated', 'success');
+      return written;
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Update assembly failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  }, [writeLogicalTool, notify]);
+
+  const deleteAssembly = useCallback(async (toolId, assemblyId) => {
+    const tool = toolsRef.current.find(t => t.id === toolId);
+    if (!tool) throw new Error('Tool not found');
+    if ((tool.assemblies || []).length <= 1) {
+      throw new Error('A tool must keep at least one assembly. Delete the tool instead.');
+    }
+    dispatch({ type: 'SAVE_START' });
+    try {
+      const assemblies = tool.assemblies.filter(a => a.assembly_id !== assemblyId);
+      const written = await writeLogicalTool({ ...tool, assemblies, updated_at: new Date().toISOString() });
+      dispatch({ type: 'UPDATE_TOOL', tool: written });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify('Assembly removed — tool instance deleted', 'success');
+      return written;
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Delete assembly failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  }, [writeLogicalTool, notify]);
+
   const saveFullLibrary = useCallback(async (tools) => {
     dispatch({ type: 'SAVE_START' });
     try {
+      const holders = holdersRef.current || [];
       const fusionList = [];
       const metaList = [];
       for (const tool of tools) {
-        const { fusionTool, metadataTool } = splitToFusionAndMetadata(tool);
-        fusionList.push(fusionTool);
+        const tracking_id = tool.tracking_id || generateTrackingId();
+        const assemblies = (tool.assemblies && tool.assemblies.length > 0)
+          ? tool.assemblies
+          : [{
+              holder_guid: tool.selected_holder_guid || null,
+              holder_description: '',
+              ooh: tool.ooh ?? null,
+              source: 'manual',
+              created_at: new Date().toISOString(),
+            }];
+        const withIds = assemblies.map(a => ({
+          ...a,
+          assembly_id: a.assembly_id || generateAssemblyId(),
+          instance_guid: a.instance_guid || generateId(),
+        }));
+        const { fusionInstances, metadataTool } =
+          splitToFusionInstances({ ...tool, tracking_id, assemblies: withIds }, holders);
+        fusionList.push(...fusionInstances);
         metaList.push(metadataTool);
       }
       await uploadFusionList(fusionList);
       if (googleRef.current) await driveService.saveAllMetadata(metaList);
-      dispatch({ type: 'SET_TOOLS', tools });
+
+      // Rebuild logical tools from what we wrote so in-memory state matches.
+      const metaByTracking = new Map(metaList.map(m => [m.id, m]));
+      const { groups, untracked } = groupByTrackingId(fusionList);
+      const rebuilt = [];
+      for (const [, raws] of groups) rebuilt.push(buildLogicalTool(raws, metaByTracking));
+      for (const raw of untracked) rebuilt.push(buildLogicalTool([raw], metaByTracking));
+
+      dispatch({ type: 'SET_TOOLS', tools: rebuilt, needsNormalize: untracked.length > 0 });
       dispatch({ type: 'SAVE_SUCCESS' });
-      notify(`Saved ${tools.length} tools to library`, 'success');
+      notify(`Saved ${rebuilt.length} tools to library`, 'success');
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
       notify(`Save failed: ${err.message}`, 'error', 7000);
@@ -463,35 +610,131 @@ export function AppProvider({ children }) {
     try {
       const fusionList = await downloadFusionList();
       const metaList = googleRef.current ? await driveService.loadMetadata() : [];
-      const metaById = new Map(metaList.map(m => [m.id, m]));
-      const numbers = generateMachineNumbers(fusionList.length);
+      const metaByTracking = new Map(metaList.map(m => [m.id, m]));
 
-      fusionList.forEach((fTool, i) => {
+      // One number per logical tool. Tracking-ID groups (in encounter order)
+      // first, then each untracked entry as its own group.
+      const { groups, untracked } = groupByTrackingId(fusionList);
+      const orderedGroups = [...groups.values(), ...untracked.map(r => [r])];
+      const numbers = generateMachineNumbers(orderedGroups.length);
+
+      orderedGroups.forEach((raws, i) => {
         const num = numbers[i];
-        applyMachineNumberToFusion(fTool, num);
-        const id = fTool.guid;
-        const meta = metaById.get(id) || { id };
-        metaById.set(id, { ...meta, machine_tool_number: num });
+        raws.forEach(r => applyMachineNumberToFusion(r, num));
+        const tid = readTrackingId(raws[0]);
+        if (tid) {
+          const meta = metaByTracking.get(tid) || { id: tid };
+          metaByTracking.set(tid, { ...meta, machine_tool_number: num });
+        }
       });
 
       await uploadFusionList(fusionList);
-      if (googleRef.current) await driveService.saveAllMetadata([...metaById.values()]);
+      if (googleRef.current) await driveService.saveAllMetadata([...metaByTracking.values()]);
 
       // Rebuild the in-memory library so the UI reflects the new numbers.
-      const tools = fusionList.map(fTool => {
-        const internal = fusionToolToInternal(fTool);
-        return mergeFusionAndMetadata(internal, metaById.get(internal.id) || null);
-      });
+      const tools = [];
+      for (const [, raws] of groups) tools.push(buildLogicalTool(raws, metaByTracking));
+      for (const raw of untracked) tools.push(buildLogicalTool([raw], metaByTracking));
       dispatch({ type: 'SET_TOOLS', tools });
       dispatch({ type: 'SAVE_SUCCESS' });
-      notify(`Renumbered ${fusionList.length} tools starting at #30`, 'success');
-      return fusionList.length;
+      notify(`Renumbered ${orderedGroups.length} tools starting at #30`, 'success');
+      return orderedGroups.length;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
       notify(`Renumber failed: ${err.message}`, 'error', 7000);
       throw err;
     }
   }, [downloadFusionList, uploadFusionList, notify]);
+
+  // ─── One-time normalization (transition to the multi-instance model) ──────
+  // Assigns tracking IDs to untracked tools, fans each out into instances per
+  // its existing metadata assemblies, renames presets to the naming convention,
+  // and extracts operation_type (from the name, or from `opOverrides` keyed by
+  // preset guid). Re-keys metadata from guid → tracking_id by overwriting the
+  // whole file. Idempotent: already-tracked tools are left as-is.
+  const normalizeLibrary = useCallback(async (opOverrides = {}) => {
+    dispatch({ type: 'SAVE_START' });
+    try {
+      const holders = holdersRef.current || [];
+      const fusionList = await downloadFusionList();
+      const metaList = googleRef.current ? await driveService.loadMetadata() : [];
+      const metaByGuid = new Map(metaList.map(m => [m.id, m]));
+      const metaByTracking = new Map(metaList.map(m => [m.id, m]));
+
+      const { groups, untracked } = groupByTrackingId(fusionList);
+      const logicalTools = [];
+
+      // Already-tracked tools: rebuild unchanged.
+      for (const [, raws] of groups) logicalTools.push(buildLogicalTool(raws, metaByTracking));
+
+      // Untracked tools: assign a tracking ID and fan out per metadata assemblies.
+      for (const raw of untracked) {
+        const meta = metaByGuid.get(raw.guid) || null;
+        const internal = fusionToolToInternal(raw);
+        const merged = mergeFusionAndMetadata(internal, meta);
+        const tracking_id = generateTrackingId();
+        const now = new Date().toISOString();
+
+        const oldAssemblies = (meta?.assemblies || []).filter(Boolean);
+        const assemblies = oldAssemblies.length
+          ? oldAssemblies.map((a, i) => ({
+              assembly_id: a.assembly_id || generateAssemblyId(),
+              instance_guid: i === 0 ? raw.guid : generateId(),
+              holder_guid: a.holder_guid || null,
+              holder_description: a.holder_description || '',
+              ooh: a.ooh ?? readOohFromFusion(raw) ?? merged.ooh ?? null,
+              notes: a.notes || '',
+              source: a.source || 'manual',
+              created_at: a.created_at || now,
+            }))
+          : [{
+              assembly_id: generateAssemblyId(),
+              instance_guid: raw.guid,
+              holder_guid: merged.selected_holder_guid || raw.holder?.guid || null,
+              holder_description: raw.holder?.description || '',
+              ooh: readOohFromFusion(raw) ?? merged.ooh ?? null,
+              notes: '',
+              source: 'fusion',
+              created_at: now,
+            }];
+
+        // Rename presets to the convention against the primary assembly, and set
+        // operation_type (name wins, else the user-supplied override).
+        const primary = assemblies[0];
+        const primaryHolderShort = holderShortName(primary.holder_description || '');
+        const presets = (merged.presets || []).map(p => {
+          const opType = parsePresetName(p.name)?.opType ?? opOverrides[p.guid] ?? p.operation_type ?? null;
+          const name = opTypeWord(opType)
+            ? composePresetName({
+                materialQuery: p.material?.query,
+                ooh: primary.ooh,
+                holderShort: primaryHolderShort,
+                opType,
+              })
+            : p.name;
+          return { ...p, name, operation_type: opType };
+        });
+
+        logicalTools.push({
+          ...merged,
+          id: tracking_id,
+          tracking_id,
+          assemblies,
+          presets,
+          _instancesRaw: [raw],
+          _fusionRaw: raw,
+        });
+      }
+
+      await saveFullLibrary(logicalTools);
+      notify(`Normalized ${untracked.length} tool${untracked.length === 1 ? '' : 's'} to the multi-instance model`, 'success', 6000);
+      return untracked.length;
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Normalize failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  }, [downloadFusionList, saveFullLibrary, notify]);
 
   const clearError = useCallback(() => dispatch({ type: 'CLEAR_ERROR' }), []);
 
@@ -514,8 +757,12 @@ export function AppProvider({ children }) {
       cloneTool,
       mergeTool,
       deleteTool,
+      addAssembly,
+      updateAssembly,
+      deleteAssembly,
       saveFullLibrary,
       renumberLibrary,
+      normalizeLibrary,
       clearError,
       notify,
       dismissToast,

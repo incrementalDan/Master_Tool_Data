@@ -1,4 +1,5 @@
 import { fusionToolToInternal, generateId } from '../schema/toolSchema.js';
+import { parsePresetName } from '../utils/presetNaming.js';
 import { matchTool } from './duplicateDetector.js';
 
 let _qid = 0;
@@ -85,9 +86,11 @@ const CSV_TYPE_MAP = {
 };
 
 function csvRowToPreset(r) {
+  const name = csvStr(r.preset_name) || 'Default preset';
   return {
     guid: generateId(),
-    name: csvStr(r.preset_name) || 'Default preset',
+    name,
+    operation_type: parsePresetName(name)?.opType ?? null,
     material: {
       category: csvStr(r.tool_presetMaterialCategory) || 'all',
       query: csvStr(r.tool_presetMaterialQuery) || '',
@@ -148,8 +151,10 @@ function parseFusionCsv(raw) {
     const presets = toolRows.map(csvRowToPreset);
     const p0 = presets[0];
 
+    const trackingRaw = csvStr(r.tool_comment);
     const tool = {
       id: null,
+      tracking_id: /^FTL-/i.test(trackingRaw) ? trackingRaw : null,
       unit: csvStr(r.tool_unit) || 'inches',
       tool_type: toolType,
       description: csvStr(r.tool_description) || '',

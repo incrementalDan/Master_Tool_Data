@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Pencil, X } from 'lucide-react';
+import { presetMatchesAssembly } from '../utils/presetNaming.js';
 
 function proshotUrl(id) {
   if (!id) return null;
@@ -51,9 +52,9 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
   const location = tool.location || '';
   const hasLocation = location.trim() !== '';
 
-  const linkedPresets = (assembly.linked_preset_guids || [])
-    .map(guid => tool.presets?.find(p => p.guid === guid))
-    .filter(Boolean);
+  // Presets belonging to this assembly are derived from the preset name
+  // (which encodes holder + OOH), not a stored link.
+  const linkedPresets = (tool.presets || []).filter(p => presetMatchesAssembly(p, assembly));
 
   return (
     <div style={{ border: '1px solid rgba(100, 116, 139, 0.30)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: 'var(--surface-2)' }}>

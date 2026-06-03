@@ -1,30 +1,25 @@
-import { internalToFusionTool } from '../schema/toolSchema.js';
+import { internalToFusionTool, buildHolderObject } from '../schema/toolSchema.js';
 
 // ─── JSON export (file downloads and library writes) ────────────────────────
 
-function buildHolderObject(holderEntry) {
-  if (!holderEntry) return null;
-  return {
-    description: holderEntry.description,
-    guid: holderEntry.guid,
-    'product-id': holderEntry['product-id'] || '',
-    'product-link': holderEntry['product-link'] || '',
-    vendor: holderEntry.vendor || '',
-    gaugeLength: holderEntry.gaugeLength,
-    unit: holderEntry.unit,
-    segments: holderEntry.segments,
-  };
-}
-
+// Render one logical tool as a single Fusion entry for the given assembly. The
+// emitted entry carries the assembly's instance guid + holder + OOH and the
+// tool's tracking ID (in the comment), so a pasted-back tool regroups correctly.
 function toFusionFormat(tool, holders = [], assembly = null) {
-  const f = internalToFusionTool(tool);
+  const tracking_id = tool.tracking_id || tool.id;
+  const instanceGuid = assembly?.instance_guid || tool._instancesRaw?.[0]?.guid || tool.id;
+  const raw = (tool._instancesRaw || []).find(r => r.guid === instanceGuid) || tool._fusionRaw || undefined;
+  const f = internalToFusionTool({ ...tool, id: instanceGuid, tracking_id, _fusionRaw: raw });
   delete f._fusionRaw;
 
   if (assembly) {
     const holder = holders.find(h => h.guid === assembly.holder_guid);
     if (holder) f.holder = buildHolderObject(holder);
-    const ooh = tool.unit === 'millimeters' ? assembly.ooh * 25.4 : assembly.ooh;
-    f['assembly-gauge-length'] = ooh;
+    if (assembly.ooh != null && !isNaN(Number(assembly.ooh))) {
+      const ooh = tool.unit === 'millimeters' ? assembly.ooh * 25.4 : assembly.ooh;
+      f['assembly-gauge-length'] = ooh;
+      f.geometry = { ...(f.geometry || {}), LB: ooh };   // OOH source of truth
+    }
   } else if (tool.selected_holder_guid && holders.length > 0) {
     const holder = holders.find(h => h.guid === tool.selected_holder_guid);
     if (holder) f.holder = buildHolderObject(holder);
@@ -50,7 +45,12 @@ export function exportSingleTool(tool, holders = [], assembly = null) {
 }
 
 export function exportFullLibrary(tools, holders = []) {
-  downloadJSON({ data: tools.map(t => toFusionFormat(t, holders)) }, 'fusion_tool_library.json');
+  const data = [];
+  for (const t of tools) {
+    const asms = (t.assemblies && t.assemblies.length > 0) ? t.assemblies : [null];
+    for (const a of asms) data.push(toFusionFormat(t, holders, a));
+  }
+  downloadJSON({ data }, 'fusion_tool_library.json');
 }
 
 // ─── TSV clipboard export (paste-compatible with Fusion 360 tool library) ───
@@ -170,6 +170,7 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
     if (bodyLength !== '') S(33, tsvNum(bodyLength));
     S(34, tsvBool(false));   // break control
     if (!isTap) S(38, tsvBool(true));  // clockwise
+    S(39, tsvStr(tool.tracking_id || ''));  // comment = logical-tool tracking ID
 
     // tool number → compensation/diameter/length offset (Fusion convention)
     if (toolNum !== '') {
@@ -246,8 +247,10 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
     S(168, tsvBool(preset['use-stepdown'] || false));
     S(169, tsvBool(preset['use-stepover'] || false));
 
-    // Col 170: shaft (shank) segments — needed for Fusion to show the shank profile
-    const shaftRaw = tool._fusionRaw?.shaft;
+    // Col 170: shaft (shank) segments — needed for Fusion to show the shank profile.
+    // Use the raw entry for this assembly's instance, falling back to canonical.
+    const instanceRaw = (tool._instancesRaw || []).find(r => r.guid === assembly?.instance_guid) || tool._fusionRaw;
+    const shaftRaw = instanceRaw?.shaft;
     if (shaftRaw) {
       const shaftSegs = Array.isArray(shaftRaw) ? shaftRaw : (shaftRaw.segments ?? shaftRaw);
       S(170, tsvStr(JSON.stringify(shaftSegs)));
@@ -267,8 +270,14 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
 
 function buildFusionTsv(tools, holders = [], assembly = null) {
   const rows = [FUSION_TSV_HDR];
-  tools.forEach((tool, i) => {
-    rows.push(...toolToTsvRows(tool, holders, assembly, i + 1));
+  let idx = 1;
+  tools.forEach((tool) => {
+    // Single-tool copy may target one assembly; bulk copy expands every
+    // assembly (one Fusion instance each), so all proven setups paste back.
+    const asms = assembly
+      ? [assembly]
+      : ((tool.assemblies && tool.assemblies.length > 0) ? tool.assemblies : [null]);
+    asms.forEach(a => { rows.push(...toolToTsvRows(tool, holders, a, idx++)); });
   });
   return rows.join('\n');
 }
