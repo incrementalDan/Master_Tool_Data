@@ -66,6 +66,12 @@ export function findTopMatches(importedTool, libraryTools, maxResults = 3) {
 // confidence: 'exact' | 'fuzzy' | 'none'
 // method: 'product-id' | 'guid' | 'fuzzy' | 'none'
 export function matchTool(incomingTool, libraryTools) {
+  // 0. Tracking ID exact match (most reliable — the logical-tool family key).
+  if (incomingTool.tracking_id) {
+    const match = libraryTools.find(m => m.tracking_id && m.tracking_id === incomingTool.tracking_id);
+    if (match) return { tool: match, confidence: 'exact', method: 'tracking-id', candidates: [] };
+  }
+
   // 1. proshot_id (Fusion product-id) exact match
   if (incomingTool.proshot_id) {
     const match = libraryTools.find(
@@ -74,9 +80,13 @@ export function matchTool(incomingTool, libraryTools) {
     if (match) return { tool: match, confidence: 'exact', method: 'product-id', candidates: [] };
   }
 
-  // 2. GUID exact match
+  // 2. GUID exact match — the incoming job entry's guid is one of a logical
+  //    tool's instance guids.
   if (incomingTool.id) {
-    const match = libraryTools.find(m => m.id === incomingTool.id);
+    const match = libraryTools.find(m =>
+      (m.assemblies || []).some(a => a.instance_guid === incomingTool.id) ||
+      m.id === incomingTool.id
+    );
     if (match) return { tool: match, confidence: 'exact', method: 'guid', candidates: [] };
   }
 

@@ -4,6 +4,10 @@ import { generateId, COOLANT_OPTS } from '../schema/toolSchema.js';
 import { useApp } from '../context/AppContext.jsx';
 import { holderColor } from './AssemblyCard.jsx';
 import {
+  composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES,
+} from '../utils/presetNaming.js';
+import { holderShortName } from '../utils/holderNaming.js';
+import {
   rpmToSFM, sfmToRPM,
   fptToIPM, ipmToFPT,
   iprToIPM, ipmToIPR,
@@ -260,6 +264,8 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
                     speedUnit={speedUnit}
                     diameter={diameter}
                     numberOfFlutes={numberOfFlutes}
+                    assemblies={tool.assemblies || []}
+                    holders={holders}
                     onSave={handlePresetSave}
                     onCancel={() => setEditingId(null)}
                     isSaving={isSaving}
@@ -273,7 +279,7 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
                     isDragOver={dragOverIdx === globalIdx}
                     dragEnabled={materialFilter === 'All'}
                     linkedAssemblies={(tool.assemblies || []).filter(a =>
-                      (a.linked_preset_guids || []).includes(preset.guid)
+                      presetMatchesAssembly(preset, a)
                     )}
                     holders={holders}
                     onEdit={() => setEditingId(preset.guid)}
@@ -421,12 +427,37 @@ function computeFormulaDraft(draft, fx, diameter, numberOfFlutes) {
 function EditCard({
   preset, lenUnit, feedUnit, speedUnit,
   diameter, numberOfFlutes,
+  assemblies = [], holders = [],
   onSave, onCancel, isSaving,
 }) {
   const [fx, setFx] = useState(DEFAULT_FX);
-  const [draft, setDraft] = useState(() =>
-    computeFormulaDraft({ ...preset }, DEFAULT_FX, diameter, numberOfFlutes)
+  const [draft, setDraft] = useState(() => {
+    const d = computeFormulaDraft({ ...preset }, DEFAULT_FX, diameter, numberOfFlutes);
+    d.operation_type = preset.operation_type ?? parsePresetName(preset.name)?.opType ?? null;
+    return d;
+  });
+
+  // Which assembly (holder + OOH) this preset is named for. Initialised by
+  // matching the current name; user can switch it to retarget the preset.
+  const [assemblyId, setAssemblyId] = useState(() =>
+    assemblies.find(a => presetMatchesAssembly(preset, a))?.assembly_id || assemblies[0]?.assembly_id || ''
   );
+
+  const holderDescOf = (a) =>
+    a ? (a.holder_description || holders.find(h => h.guid === a.holder_guid)?.description || '') : '';
+
+  // Compose the convention name from material + the selected assembly + op type.
+  // Falls back to the current draft name when there's nothing to compose from.
+  const composeName = (d, asmId, opType) => {
+    const a = assemblies.find(x => x.assembly_id === asmId);
+    if (!a || !opType) return d.name;
+    return composePresetName({
+      materialQuery: d.material?.query,
+      ooh: a.ooh,
+      holderShort: holderShortName(holderDescOf(a)),
+      opType,
+    });
+  };
 
   // Recalculate formula fields whenever geometry changes (e.g. user edits
   // number of flutes or diameter in the tool form while a preset is open).
@@ -558,7 +589,14 @@ function EditCard({
             <select
               className="field-input"
               value={selectedMat}
-              onChange={e => setMat('query', MATERIAL_QUERY_MAP[e.target.value] ?? '')}
+              onChange={e => {
+                const q = MATERIAL_QUERY_MAP[e.target.value] ?? '';
+                setDraft(d => {
+                  const nd = { ...d, material: { ...(d.material || {}), query: q } };
+                  nd.name = composeName(nd, assemblyId, nd.operation_type);
+                  return nd;
+                });
+              }}
             >
               {MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
@@ -571,6 +609,45 @@ function EditCard({
             >
               {['all', 'milling', 'turning', 'drilling'].map(c => (
                 <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </FGroup>
+        </div>
+      </div>
+
+      {/* Operation & Assembly — drive the convention preset name */}
+      <div className="preset-edit-section">
+        <div className="preset-edit-section-label">OPERATION &amp; ASSEMBLY</div>
+        <div className="preset-edit-grid">
+          <FGroup label="Operation">
+            <select
+              className="field-input"
+              value={draft.operation_type || ''}
+              onChange={e => {
+                const op = e.target.value || null;
+                setDraft(d => ({ ...d, operation_type: op, name: composeName(d, assemblyId, op) }));
+              }}
+            >
+              <option value="">—</option>
+              {OP_TYPES.map(o => <option key={o.value} value={o.value}>{o.word}</option>)}
+            </select>
+          </FGroup>
+          <FGroup label="Assembly (holder + OOH)">
+            <select
+              className="field-input"
+              value={assemblyId}
+              disabled={assemblies.length === 0}
+              onChange={e => {
+                const aid = e.target.value;
+                setAssemblyId(aid);
+                setDraft(d => ({ ...d, name: composeName(d, aid, d.operation_type) }));
+              }}
+            >
+              {assemblies.length === 0 && <option value="">No assemblies</option>}
+              {assemblies.map(a => (
+                <option key={a.assembly_id} value={a.assembly_id}>
+                  {holderShortName(holderDescOf(a)) || 'holder'} · {a.ooh != null ? `${Number(a.ooh).toFixed(3)}"` : 'no OOH'}
+                </option>
               ))}
             </select>
           </FGroup>

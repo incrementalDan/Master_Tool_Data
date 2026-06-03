@@ -10,6 +10,24 @@ This module is also the foundation of a future in-house ERP system. ProShop will
 
 -----
 
+## Logical Tools & Instances (multi-instance model)
+
+A **logical tool** maps to **N Fusion library entries ("instances")** — one instance per **assembly** (holder + OOH). Every instance is a real Fusion tool entry; all instances of a logical tool are identical **except** their holder and OOH (`geometry.LB`). This keeps proven setup knowledge (which holder/stick-out a preset was proven on) living natively in the Fusion library, not just in app metadata.
+
+- **Family key**: an app-generated **tracking ID** (`FTL-XXXXXX`) written into Fusion's native comment (`post-process.comment`, mirrored in `expressions.tool_comment`). All instances of one logical tool share it. The library is grouped strictly by tracking ID on load (`groupByTrackingId`). `familySignature` (proshot_id + tool_type + diameter ±0.0001) is used only to validate a group and to match incoming job tools — never to merge two different guids.
+- **Shared vs per-instance**: editing any shared field (description, geometry except LB, vendor, proshot_id, presets, tags, notes, machine number, …) propagates to **all** instances. Only **holder** and **OOH** are per-instance.
+- **Machine tool number** is shared across all instances of a logical tool.
+- **Presets** are a single shared set replicated identically onto every instance. Each preset's name encodes its assembly + operation (see below), so opening any instance in Fusion shows the full proven-preset set.
+- **In-memory shape**: `id` (= `tracking_id`), `tracking_id`, `assemblies[]` (`{ assembly_id, instance_guid, holder_guid, holder_description, ooh, notes, source }`), shared `presets[]` (each with `operation_type`), `machine_tool_number`, and `_instancesRaw[]` (raw Fusion entries).
+- **Write path**: `AppContext.writeLogicalTool()` reconciles in one library write — re-download, drop every entry whose tracking ID matches, append the freshly split instance set (`splitToFusionInstances`). It backs `saveTool`/`addTool`/`mergeTool` and the assembly CRUD (`addAssembly`/`updateAssembly`/`deleteAssembly` = create/edit/remove an instance). `deleteTool` removes all instances; a tool must keep ≥1 assembly. `renumberLibrary` assigns one number per logical tool.
+- **Transition**: `normalizeLibrary()` (one-time, surfaced via the `needsNormalize` banner) assigns tracking IDs to pre-migration tools, fans each out into instances per its existing metadata assemblies, and renames presets to the convention. Back up library + metadata first.
+
+### Preset naming convention
+
+`<MaterialCode> <OOH> <HolderShort> - <Operation>` — e.g. `SS 2.125 30-SK13-60 - Rough`. The name is the **durable source of truth** for the preset's assembly + operation. Helpers in `src/utils/presetNaming.js`: `composePresetName`, `parsePresetName`, `presetMatchesAssembly` (links a preset to an assembly by parsed holder short name + OOH within 0.0005"), `OP_TYPES`/`opTypeWord`/`matchOpType`. Holder short names (strip `NBT`, drop the `C` after `SK<n>`, + override map) come from `src/utils/holderNaming.js`. `operation_type` is stored on the in-memory preset and cached in metadata (`preset_meta`), but is **never written into the Fusion JSON** (Fusion validates strictly) — it lives in the name. On import, operation_type is parsed from the name; the name wins on conflict.
+
+-----
+
 ## The Problem Being Solved
 
 Current workflow:

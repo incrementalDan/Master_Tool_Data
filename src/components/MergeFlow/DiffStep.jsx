@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle, RefreshCw, Plus, CheckCircle } from 'lucide-react';
 import { FIELD_LABELS, generateId } from '../../schema/toolSchema.js';
+import { composePresetName, parsePresetName, presetMatchesAssembly } from '../../utils/presetNaming.js';
 import { useApp } from '../../context/AppContext.jsx';
 
 const DIFF_SECTIONS = [
@@ -96,14 +97,13 @@ function valuesEqual(a, b) {
 }
 
 // Returns true when the incoming OOH + holder combo doesn't match any existing
-// assembly that already links to this master preset — meaning these speeds were
-// proven in a different physical setup.
-function checkDifferentAssembly(presetGuid, incomingOoh, incomingHolderGuid, masterAssemblies) {
+// assembly that the master preset's name encodes — meaning these speeds were
+// proven in a different physical setup. The assembly↔preset link now lives in
+// the preset naming convention (presetMatchesAssembly), not linked_preset_guids.
+function checkDifferentAssembly(masterPreset, incomingOoh, incomingHolderGuid, masterAssemblies) {
   if (incomingOoh == null || incomingOoh <= 0) return false;
-  const linked = (masterAssemblies || []).filter(a =>
-    (a.linked_preset_guids || []).includes(presetGuid)
-  );
-  // Preset has no assembly recorded yet but incoming has OOH → new context
+  const linked = (masterAssemblies || []).filter(a => presetMatchesAssembly(masterPreset, a));
+  // Preset name doesn't encode any known assembly but incoming has OOH → new context
   if (linked.length === 0) return true;
   const OOH_TOLERANCE = 0.0005;
   return !linked.some(a =>
@@ -136,7 +136,7 @@ function matchPresets(incomingPresets, masterPresets, incomingOoh, incomingHolde
       const changedFields = PRESET_DIFF_FIELDS.filter(f => !valuesEqual(incoming[f], master[f]));
       if (changedFields.length === 0) {
         unchanged.push({ incoming, master });
-      } else if (checkDifferentAssembly(master.guid, incomingOoh, incomingHolderGuid, masterAssemblies)) {
+      } else if (checkDifferentAssembly(master, incomingOoh, incomingHolderGuid, masterAssemblies)) {
         conflicts.push({ incoming, master, changedFields });
       } else {
         blocked.push({ incoming, master, changedFields });
@@ -417,19 +417,34 @@ export default function DiffStep({
   const handleConfirm = () => {
     // Conflict presets chosen as 'create' become new presets with a fresh GUID
     // (the incoming preset's GUID matches the master preset's GUID, so we must
-    // generate a new one) and an OOH suffix appended to the name.
+    // generate a new one) and a convention name encoding the incoming assembly.
     const conflictPresetsToAdd = presetMatch.conflicts
       .filter(({ master }) => (conflictResolutions.get(master.guid) || 'ignore') === 'create')
-      .map(({ incoming }) => ({
-        ...incoming,
-        guid: generateId(),
-        name: incomingOoh != null
-          ? `${incoming.name} (OOH: ${incomingOoh.toFixed(3)}")`
-          : incoming.name,
+      .map(({ incoming }) => {
+        const opType = incoming.operation_type ?? parsePresetName(incoming.name)?.opType ?? null;
+        return {
+          ...incoming,
+          guid: generateId(),
+          operation_type: opType,
+          name: composePresetName({
+            materialQuery: incoming.material?.query,
+            ooh: incomingOoh,
+            holderDescription: incomingHolderDesc,
+            opType,
+          }) || incoming.name,
+        };
+      });
+
+    // New presets keep their incoming GUID; ensure each carries operation_type.
+    const newPresetsToAdd = presetMatch.newPresets
+      .filter(p => addedPresets.has(p.guid))
+      .map(p => ({
+        ...p,
+        operation_type: p.operation_type ?? parsePresetName(p.name)?.opType ?? null,
       }));
 
     const presetsToAdd = [
-      ...presetMatch.newPresets.filter(p => addedPresets.has(p.guid)),
+      ...newPresetsToAdd,
       ...conflictPresetsToAdd,
     ];
 

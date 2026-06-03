@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Info } from 'lucide-react';
 import { generateAssemblyId } from '../schema/toolSchema.js';
+import { presetMatchesAssembly } from '../utils/presetNaming.js';
 import HolderPicker from './HolderPicker.jsx';
 
 export default function AssemblyForm({ tool, holders, assembly, onSave, onClose }) {
@@ -8,7 +9,6 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
 
   const [holderGuid, setHolderGuid] = useState(assembly?.holder_guid || '');
   const [ooh, setOoh] = useState(assembly?.ooh != null ? String(assembly.ooh) : '');
-  const [linkedGuids, setLinkedGuids] = useState(new Set(assembly?.linked_preset_guids || []));
   const [notes, setNotes] = useState(assembly?.notes || '');
   const [showHolderPicker, setShowHolderPicker] = useState(false);
   const [error, setError] = useState('');
@@ -16,13 +16,14 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
   const selectedHolder = holders.find(h => h.guid === holderGuid);
   const presets = tool.presets || [];
 
-  const togglePreset = (guid) => {
-    setLinkedGuids(prev => {
-      const next = new Set(prev);
-      if (next.has(guid)) next.delete(guid); else next.add(guid);
-      return next;
-    });
+  // Presets that belong to this assembly are derived from the preset name
+  // (which encodes the holder short name + OOH), not stored links.
+  const oohPreview = parseFloat(ooh);
+  const previewAssembly = {
+    holder_description: selectedHolder?.description || assembly?.holder_description || '',
+    ooh: isNaN(oohPreview) ? null : oohPreview,
   };
+  const matchedPresets = presets.filter(p => presetMatchesAssembly(p, previewAssembly));
 
   const minOoh = tool.min_ooh ?? null;
 
@@ -37,10 +38,10 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
 
     const updatedAssembly = {
       assembly_id: assembly?.assembly_id || generateAssemblyId(),
+      instance_guid: assembly?.instance_guid,   // preserved on edit; assigned on add
       holder_guid: holderGuid,
       holder_description: selectedHolder?.description || assembly?.holder_description || '',
       ooh: oohNum,
-      linked_preset_guids: [...linkedGuids],
       notes,
       created_at: assembly?.created_at || new Date().toISOString(),
       source: assembly?.source || 'manual',
@@ -119,36 +120,23 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
           />
         </div>
 
-        {/* Linked presets */}
+        {/* Matched presets (read-only — derived from preset names) */}
         {presets.length > 0 && (
           <div className="field-group mb-16">
-            <label className="field-label">Linked Presets</label>
+            <label className="field-label">Presets for this assembly</label>
             <div className="text-sub text-xs mb-8">
-              Check which Speeds &amp; Feeds presets have been proven at this assembly.
+              Presets are linked automatically by name (holder + OOH). Set a preset's
+              holder/OOH in Speeds &amp; Feeds to attach it here.
             </div>
-            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-              {presets.map(p => (
-                <label
-                  key={p.guid}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '8px 12px', borderBottom: '1px solid var(--border)',
-                    cursor: 'pointer',
-                    background: linkedGuids.has(p.guid) ? 'var(--surface-2)' : 'transparent',
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={linkedGuids.has(p.guid)}
-                    onChange={() => togglePreset(p.guid)}
-                  />
-                  <span style={{ fontSize: 13 }}>{p.name || 'Unnamed'}</span>
-                  {p.material?.query && (
-                    <span className="text-sub text-xs">{p.material.query}</span>
-                  )}
-                </label>
-              ))}
-            </div>
+            {matchedPresets.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {matchedPresets.map(p => (
+                  <span key={p.guid} className="preset-tag">{p.name || 'Unnamed'}</span>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sub text-xs">No presets match this holder + OOH yet.</div>
+            )}
           </div>
         )}
 
