@@ -56,10 +56,9 @@ function matchesFacet(tool, field, value) {
     return Array.isArray(tool.material_suitability) && tool.material_suitability.includes(value);
   }
   if (field === 'flute_design') {
-    // value is an array of selected designs; tool field is also an array; OR semantics
-    const toolDesigns = Array.isArray(tool.flute_design) ? tool.flute_design : (tool.flute_design ? [tool.flute_design] : []);
+    // value is an array of selected designs (OR semantics); tool field is a string
     const filterValues = Array.isArray(value) ? value : [value];
-    return filterValues.some(v => toolDesigns.includes(v));
+    return filterValues.some(v => String(v).toLowerCase() === String(tool.flute_design || '').toLowerCase());
   }
   if (field === 'tsc_capable') {
     return value === 'Yes' ? !!tool.tsc_capable : !tool.tsc_capable;
@@ -93,9 +92,6 @@ export function getAvailableOptions(tools, activeFilters, targetField) {
       (tool.tags || []).forEach(v => v && values.add(v));
     } else if (targetField === 'material_suitability') {
       (tool.material_suitability || []).forEach(v => v && values.add(v));
-    } else if (targetField === 'flute_design') {
-      const fd = Array.isArray(tool.flute_design) ? tool.flute_design : (tool.flute_design ? [tool.flute_design] : []);
-      fd.forEach(v => v && values.add(v));
     } else if (targetField === 'tsc_capable') {
       values.add(tool.tsc_capable ? 'Yes' : 'No');
     } else {
@@ -126,9 +122,6 @@ export function buildIndex(tools) {
         (tool.tags || []).forEach(v => v && values.add(v));
       } else if (field === 'material_suitability') {
         (tool.material_suitability || []).forEach(v => v && values.add(v));
-      } else if (field === 'flute_design') {
-        const fd = Array.isArray(tool.flute_design) ? tool.flute_design : (tool.flute_design ? [tool.flute_design] : []);
-        fd.forEach(v => v && values.add(v));
       } else if (field === 'tsc_capable') {
         values.add(tool.tsc_capable ? 'Yes' : 'No');
       } else {
