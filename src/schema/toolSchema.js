@@ -290,6 +290,7 @@ export function fusionToolToInternal(fTool) {
   return {
     id: fTool.guid,
     tool_type: toolType,
+    unit: fTool.unit || 'inches',
     description: fTool.description || '',
     diameter: geo.DC || null,
     flute_length: geo.LCF || null,
@@ -313,6 +314,10 @@ export function fusionToolToInternal(fTool) {
     feed_per_tooth: preset.f_z || null,
     feed_per_rev: preset.f_n || null,
     cutting_speed: preset.v_c || null,
+    // Full presets array (Fusion's start-values). Shallow-copied so editing in
+    // the app never mutates the cached raw object. The flat speed/feed fields
+    // above mirror presets[0] for forms that don't use the preset editor.
+    presets: (fTool['start-values']?.presets || []).map(p => ({ ...p })),
     tool_number: fTool['post-process']?.number ? String(fTool['post-process'].number) : '',
     // Machine tool number — output mirror of post-process.number. The metadata
     // file is the source of truth; this is only a fallback when metadata is missing.
@@ -340,6 +345,34 @@ export function fusionToolToInternal(fTool) {
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     _fusionRaw: fTool,
+  };
+}
+
+// Normalize an internal/Fusion preset object into a complete Fusion start-values
+// preset, preserving every field the app doesn't model and filling required
+// defaults. tscCapable only seeds the coolant when the preset has none of its own.
+function normalizePreset(p, tscCapable = false) {
+  return {
+    ...p,
+    guid: p.guid || generateId(),
+    description: p.description || '',
+    name: p.name || 'Default preset',
+    material: p.material || { category: 'all', query: '', 'use-hardness': false },
+    'ramp-angle': p['ramp-angle'] ?? 2,
+    'tool-coolant': p['tool-coolant'] || (tscCapable ? 'flood and through tool' : 'flood'),
+    'use-stepdown': p['use-stepdown'] ?? false,
+    'use-stepover': p['use-stepover'] ?? false,
+    n: p.n ?? 0,
+    n_ramp: p.n_ramp ?? 0,
+    v_f: p.v_f ?? 0,
+    v_f_leadIn: p.v_f_leadIn ?? 0,
+    v_f_leadOut: p.v_f_leadOut ?? 0,
+    v_f_plunge: p.v_f_plunge ?? 0,
+    v_f_ramp: p.v_f_ramp ?? 0,
+    v_f_transition: p.v_f_transition ?? 0,
+    f_z: p.f_z ?? 0,
+    f_n: p.f_n ?? 0,
+    v_c: p.v_c ?? 0,
   };
 }
 
@@ -376,7 +409,29 @@ export function internalToFusionTool(tool) {
   };
 
   const fusionType = FT_MAP[tool.tool_type] || tool.tool_type;
-  const preset = existing['start-values']?.presets?.[0] || {};
+
+  // Write the FULL presets array — never collapse a multi-preset tool to one.
+  // The flat speed/feed fields (edited by ToolForm) are synced into presets[0]
+  // so edits made outside the preset editor are preserved. Falls back to a
+  // single synthesized preset only when the tool has no presets array yet.
+  const sourcePresets = (tool.presets && tool.presets.length > 0)
+    ? tool.presets
+    : [existing['start-values']?.presets?.[0] || {}];
+  const outPresets = sourcePresets.map((p, i) => {
+    const np = normalizePreset(p, tool.tsc_capable);
+    if (i === 0) {
+      np.n          = tool.spindle_speed     ?? np.n;
+      np.v_f        = tool.cutting_feedrate  ?? np.v_f;
+      np.f_z        = tool.feed_per_tooth    ?? np.f_z;
+      np.f_n        = tool.feed_per_rev      ?? np.f_n;
+      np.v_f_plunge = tool.plunge_feedrate   ?? np.v_f_plunge;
+      np.v_f_ramp   = tool.ramp_feedrate     ?? np.v_f_ramp;
+      np.v_f_leadIn  = tool.lead_in_feedrate  ?? np.v_f_leadIn;
+      np.v_f_leadOut = tool.lead_out_feedrate ?? np.v_f_leadOut;
+      np.v_c        = tool.cutting_speed     ?? np.v_c;
+    }
+    return np;
+  });
 
   // Machine tool number drives the post-process fields. When present, all three
   // (number / length-offset / diameter-offset) must be written to the same value,
@@ -435,28 +490,7 @@ export function internalToFusionTool(tool) {
       'tip-offset': 0,
     },
     'start-values': {
-      presets: [{
-        ...preset,
-        guid: preset.guid || generateId(),
-        description: preset.description || '',
-        name: preset.name || 'Default preset',
-        material: preset.material || { category: 'all', query: '', 'use-hardness': false },
-        'ramp-angle': preset['ramp-angle'] || 2,
-        'tool-coolant': tool.tsc_capable ? 'flood and through tool' : 'flood',
-        'use-stepdown': false,
-        'use-stepover': false,
-        n: tool.spindle_speed || preset.n || 0,
-        n_ramp: tool.spindle_speed || preset.n_ramp || 0,
-        v_f: tool.cutting_feedrate || preset.v_f || 0,
-        v_f_leadIn: tool.lead_in_feedrate || preset.v_f_leadIn || 0,
-        v_f_leadOut: tool.lead_out_feedrate || preset.v_f_leadOut || 0,
-        v_f_plunge: tool.plunge_feedrate || preset.v_f_plunge || 0,
-        v_f_ramp: tool.ramp_feedrate || preset.v_f_ramp || 0,
-        v_f_transition: tool.cutting_feedrate || preset.v_f_transition || 0,
-        f_z: tool.feed_per_tooth || preset.f_z || 0,
-        f_n: tool.feed_per_rev || preset.f_n || 0,
-        v_c: tool.cutting_speed || preset.v_c || 0,
-      }],
+      presets: outPresets,
     },
     holder: existing.holder || null,
     'post-process': {
@@ -503,6 +537,10 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     grouping: meta.grouping || '',
     preset_name: meta.preset_name || '',
     ooh: meta.ooh ?? null,
+    min_ooh: meta.min_ooh ?? null,
+    // Holder selection + proven assemblies live only in metadata.
+    selected_holder_guid: meta.selected_holder_guid || null,
+    assemblies: meta.assemblies || [],
     // Metadata-only fields
     // Machine tool number: metadata is the source of truth — it wins over the
     // value mirrored from the Fusion JSON on any conflict.
@@ -547,6 +585,7 @@ export function splitToFusionAndMetadata(tool) {
     axial_distance: tool.axial_distance ?? null,
     shoulder_length: tool.shoulder_length ?? null,
     ooh: tool.ooh ?? null,
+    min_ooh: tool.min_ooh ?? null,
     pitch: tool.pitch || '',
     tap_class: tool.tap_class || '',
     min_thread_pitch: tool.min_thread_pitch ?? null,
@@ -561,6 +600,10 @@ export function splitToFusionAndMetadata(tool) {
     // Machine tool number — persisted here as the source of truth, independent
     // of what gets written to the Fusion JSON.
     machine_tool_number: (tool.machine_tool_number ?? null) === null ? null : Number(tool.machine_tool_number),
+    // Holder selection + proven assemblies — Fusion can't hold these, so they
+    // are persisted here in metadata and reloaded via mergeFusionAndMetadata.
+    selected_holder_guid: tool.selected_holder_guid || null,
+    assemblies: tool.assemblies || [],
     notes: tool.notes || '',
     last_used_job: tool.last_used_job || '',
     preferred_machine: tool.preferred_machine || '',
@@ -581,6 +624,7 @@ export function newTool(toolType = 'flat end mill') {
   return {
     id: generateId(),
     tool_type: toolType,
+    unit: 'inches',
     description: '',
     diameter: null,
     flute_length: null,
@@ -597,6 +641,7 @@ export function newTool(toolType = 'flat end mill') {
     axial_distance: null,
     shoulder_length: null,
     ooh: null,
+    min_ooh: null,
     material: 'carbide',
     coating: '',
     material_suitability: [],
@@ -644,6 +689,9 @@ export function newTool(toolType = 'flat end mill') {
     tags: [],
     updated_by: '',
     revision_notes: '',
+    presets: [],
+    selected_holder_guid: null,
+    assemblies: [],
     created_at: now,
     updated_at: now,
   };
