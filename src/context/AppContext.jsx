@@ -797,7 +797,7 @@ export function AppProvider({ children }) {
         const now = new Date().toISOString();
 
         const oldAssemblies = (meta?.assemblies || []).filter(Boolean);
-        const assemblies = oldAssemblies.length
+        const rawAssemblies = oldAssemblies.length
           ? oldAssemblies.map((a, i) => ({
               assembly_id: a.assembly_id || generateAssemblyId(),
               instance_guid: i === 0 ? raw.guid : generateId(),
@@ -818,6 +818,17 @@ export function AppProvider({ children }) {
               source: 'fusion',
               created_at: now,
             }];
+
+        // MIN OOH (from ProShop, `lengthBelowShankDiameter`) is the per-tool
+        // stick-out floor. Normalization makes shoulder length equal to it and
+        // floors every assembly's OOH at it — no assembly may stick out less than
+        // the minimum, though it may stick out more. (shoulder/OOH can be adjusted
+        // manually afterward.) When there's no MIN OOH, leave lengths untouched.
+        const minOoh = merged.min_ooh ?? null;
+        const shoulder_length = minOoh != null ? minOoh : merged.shoulder_length;
+        const assemblies = minOoh != null
+          ? rawAssemblies.map(a => ({ ...a, ooh: (a.ooh != null && a.ooh < minOoh) ? minOoh : a.ooh }))
+          : rawAssemblies;
 
         // Rename presets to the convention against the primary assembly, and set
         // operation_type (name wins, else the user-supplied override).
@@ -840,6 +851,7 @@ export function AppProvider({ children }) {
           ...merged,
           id: tracking_id,
           tracking_id,
+          shoulder_length,
           assemblies,
           presets,
           _instancesRaw: [raw],

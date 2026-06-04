@@ -212,7 +212,10 @@ The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/sche
 | `number_of_flutes`| `geometry.NOF`         | `# Flutes`        |                                        |
 | `spindle_speed`  | `start-values.presets[0].n` | `RPM`        |                                        |
 | `cutting_feedrate`| `start-values.presets[0].v_f` | `Feed Rate` |                                       |
-| `vendor`         | — (metadata only)       | `Manufacturer`    |                                        |
+| `vendor`         | — (metadata only)       | `Manufacturer`    | Manufacturer name — **never** written to Fusion |
+| `location`       | `expressions.tool_vendor` | (cabinet location) | Fusion's **"Vendor"** UI field is repurposed as the cabinet location (e.g. "LC-8") |
+| `shoulder_length`| `geometry['shoulder-length']` | —          | Hyphenated key (not `LSCH`); normalization sets it = MIN OOH |
+| `min_ooh`        | — (metadata only)       | `MIN OOH` (`lengthBelowShankDiameter`) | Minimum stick-out floor — see the three-length-concepts table + ProShop Field Priority Rules |
 | `product_id`     | — (metadata only)       | `Part Number`     | Manufacturer EDP number                |
 | `proshot_id`     | `product-id`            | ProShop ID        | **Primary match key for Phase 2**      |
 
@@ -286,11 +289,28 @@ Key holder object fields:
 
 An **Assembly** records a specific tool + holder + OOH (Out of Holder length) combination that has been proven in a job. Assemblies are stored per-tool in `tool_metadata.json` under `assemblies[]`.
 
-### OOH (Out of Holder)
+### Three length concepts (MIN OOH vs. shoulder length vs. per-assembly OOH)
+
+These are easy to confuse — they are distinct and have a strict ordering:
+
+| Concept | Internal field | Lives in | Scope | Meaning |
+|---|---|---|---|---|
+| **MIN OOH** ("Length Below Holder - MIN OOH") | `min_ooh` | **metadata only** | per logical tool | The *minimum* stick-out — the smallest a tool can extend from the collet and still be held properly. A **floor**: no assembly may stick out less; any assembly may stick out more. |
+| **Shoulder length** (`tool_shoulderLength`) | `shoulder_length` | **Fusion** (`geometry['shoulder-length']`) | per logical tool (shared) | The unbroken shoulder of the tool. Defaults to MIN OOH; may be overridden, but only **smaller** (≤ MIN OOH and ≤ each instance's `geometry.LB`). |
+| **OOH / stick-out** ("Length below Holder") | per-assembly `ooh` → `geometry.LB` | **Fusion** (per instance) | per assembly | The actual stick-out for that holder setup. Edited per assembly, **≥ MIN OOH**, can be larger. |
+
+Strict ordering (enforced by `validateGeometry` + `AssemblyForm`):
+`flute_length ≤ shoulder_length ≤ min_ooh ≤ overall_length`, and per-assembly `ooh ≥ min_ooh`.
+
+- **MIN OOH source of truth**: pulled from **ProShop** (`lengthBelowShankDiameter` column) during import (`ImportFlow.psRowToTool` / `matchProShopToTools` — ProShop is authoritative, always overwrites). It is the initial source of truth through the full first-import + normalization workflow. It is **never written to a Fusion field** (Fusion has no native "minimum" field) — it reaches Fusion only indirectly, as the shoulder length (which normalization sets equal to it).
+- **Normalization rule** (implemented in `normalizeLibrary`): when a tool has a `min_ooh`, set `shoulder_length = min_ooh` and **floor** every assembly's OOH at `min_ooh` (raise any instance below the floor up to it). Lengths can be adjusted manually afterward; that's expected to be rare.
+
+### OOH (Out of Holder) — per-assembly stick-out
 - OOH = how much of the tool sticks out of the holder during cutting (aka gauge length / stick-out / "Length below Holder")
 - **Always stored in inches internally**, regardless of the tool's unit
-- **Source field**: `geometry.LB` (Body Length) in Fusion JSON — this is "Length below Holder" in the Fusion UI, and `tool_bodyLength` in the Fusion CSV export. Do NOT use `assembly-gauge-length` as the source; that field is what we WRITE on export, not the geometric source of truth.
+- **Source field**: `geometry.LB` (Body Length) in Fusion JSON — this is "Length below Holder" in the Fusion UI, and `tool_bodyLength` in the Fusion CSV export. Each instance carries its own `geometry.LB`. Do NOT use `assembly-gauge-length` as the source; that field is what we WRITE on export, not the geometric source of truth.
 - Unit conversion: if the tool's unit is `millimeters`, divide `geometry.LB` by 25.4 when reading; multiply OOH × 25.4 when writing back to `assembly-gauge-length` for metric tools
+- Editable per assembly in `AssemblyForm`, which blocks any value below `min_ooh` (the input's `min` is `min_ooh`, with a "Use" button to snap to the floor).
 
 ### Assembly lifecycle
 1. **Manual creation**: User clicks "+ Add Assembly" in ToolDetail → fills in holder (via HolderPicker), OOH, linked presets, notes
@@ -417,11 +437,84 @@ ProShop export must never be removed even as the app evolves toward a future ERP
 
 -----
 
+## ProShop Field Priority Rules
+
+These rules apply during the **initial ProShop CSV merge** and on any **subsequent ProShop sync**. "PS wins" = use the ProShop value, overwriting the Fusion value. "Flag" = surface to the user for a manual decision; do **not** auto-resolve.
+
+| Field | Rule | Notes |
+|---|---|---|
+| Tool description | PS wins | Always via the per-tool rename confirmation UI — see Description Rename Workflow |
+| `vendor` (manufacturer) | PS wins | Manufacturer name; metadata-only, **never** written to Fusion |
+| `location` (cabinet) | From PS + Fusion's "Vendor" field | Fusion's "Vendor" UI field (`expressions.tool_vendor`) holds the cabinet location → internal `location` |
+| `min_ooh` (MIN OOH floor) | PS wins | From `lengthBelowShankDiameter`; metadata-only, always overwrites |
+| `geometry['shoulder-length']` (shoulder length) | Set to MIN OOH at normalization | See MIN OOH rule below |
+| per-assembly `ooh` → `geometry.LB` | Floored at MIN OOH | See MIN OOH rule below |
+| `tsc_capable` (through-spindle coolant) | PS wins | Boolean capability flag (not a text field) |
+| All other differences | **Flag** to user | Do not auto-resolve |
+
+### MIN OOH floor rule (read carefully)
+
+ProShop's **MIN OOH** (internal `min_ooh`, from the `lengthBelowShankDiameter` column) is the authoritative minimum stick-out **floor** for the whole logical tool — see the three-length-concepts table under **Holder Library & Assemblies**. ProShop is the source of truth for it through the first-import + normalization workflow. It is **metadata-only** — never written to a dedicated Fusion field (Fusion has none); it reaches Fusion via shoulder length.
+
+**Implemented in `normalizeLibrary`** (and the intended behavior on any later ProShop sync):
+
+- Set the shared shoulder length (`shoulder_length` → `geometry['shoulder-length']`) **equal to** MIN OOH.
+- **Floor** every assembly's OOH (`geometry.LB`) at MIN OOH — raise any instance whose stick-out is below the minimum up to it. Instances already ≥ MIN OOH are left alone (each keeps its own larger, proven stick-out).
+
+```js
+// normalizeLibrary — per logical tool, when min_ooh is present
+shoulder_length = min_ooh;                    // shoulder defaults to the floor
+assemblies = assemblies.map(a => ({
+  ...a,
+  ooh: (a.ooh != null && a.ooh < min_ooh) ? min_ooh : a.ooh,   // floor, never lower a larger OOH
+}));
+```
+
+After normalization, shoulder length and per-assembly OOH can be adjusted manually (rare). `AssemblyForm` continues to block any per-assembly OOH below `min_ooh`. Note the floor applies **per instance** — a multi-assembly tool keeps each proven stick-out, only correcting ones that fall below the minimum.
+
+### Vendor / Location field mapping (Fusion repurposes "Vendor")
+
+Fusion's **"Vendor"** UI field — stored as `expressions.tool_vendor` in the Fusion JSON — is repurposed to hold the **tool cabinet location** (e.g. "LC-8"), **not** the manufacturer:
+
+```js
+// Fusion → internal
+tool.location = stripQuotes(expressions.tool_vendor);   // Fusion "Vendor" = our location
+tool.vendor   = psData.vendor;                          // PS Manufacturer = actual vendor (metadata only)
+
+// internal → Fusion
+expressions.tool_vendor = `'${tool.location || ''}'`;   // write location back to Fusion's "Vendor"
+// tool.vendor (manufacturer) is NEVER written to Fusion
+```
+
+This is a permanent convention and **already implemented** (`fusionToolToInternal` / `internalToFusionTool` in `src/schema/toolSchema.js`). Never write the manufacturer name into Fusion's vendor field — it would appear as the cabinet location in Fusion's UI.
+
+-----
+
+## Description Rename Workflow (normalization step)
+
+During initial normalization, tool descriptions are rationalized. The ProShop description takes priority, but each tool passes through a per-tool confirmation UI — descriptions are **never** silently renamed.
+
+**Reuse the existing generator** — `buildDesc()` in `tool-extractor.tsx` composes a standardized description from a tool's structured fields (e.g. `0.5 4FL EM 1.000LOC`, `#80 135DEG CARB DRILL`). It is a **generator** (specs → description), not rename/diff detection — use it to produce the *suggested* new description; check that file before writing any new naming logic.
+
+**Step-by-step UI** (a step in `NormalizeModal`, or a follow-on modal) — for each tool in sequence:
+
+1. Show current Fusion description and PS description side by side
+2. Show the suggested new description (PS description, or one generated via `buildDesc()`)
+3. User can: Accept suggestion / Edit and accept / Keep Fusion description / Skip
+4. "Next →" advances to the next tool; a progress indicator shows X of N
+5. At the end, "Apply all renames" writes the confirmed descriptions in one batch
+
+This is, alongside the preset operation-type assignment, one of the few normalization steps requiring per-tool user decisions; the two may share a single pre-flight review modal if the UX allows.
+
+**Priority rule**: PS description wins by default; if the PS description is blank, keep the Fusion description. User confirmation is **always** required. (Not yet implemented — the current `NormalizeModal` only handles preset operation-type assignment.)
+
+-----
+
 ## Phase 2 — Compare & Merge ✅ Implemented
 
 When a programmer proves better speeds/feeds in a job, they can sync those values back to master:
 
-1. Copy tool(s) from Fusion 360 (Ctrl+V copies to clipboard as JSON)
+1. Copy tool(s) from Fusion 360 — Fusion's right-click copy puts tool data on the clipboard as **TSV** (tab-separated, a CSV-family format), not JSON
 2. Go to "Sync Job" in the app → paste (Ctrl+V anywhere on the import screen)
 3. App builds a batch queue — auto-matches each tool by priority:
    - **`proshot_id` exact match** — primary (Fusion's `product-id` field)
@@ -430,7 +523,9 @@ When a programmer proves better speeds/feeds in a job, they can sync those value
    - **No match** → route to "Add to Library" flow
 4. For each matched tool: side-by-side diff → select which fields to commit → enter revision note
 5. Live re-fetch from APS before each diff (60-second cache) — detects if a teammate updated master during the session
-6. Summary screen shows results; "Copy All Committed Tools to Clipboard" pastes back into Fusion
+6. Summary screen shows results; "Copy All Committed Tools to Clipboard" exports the committed tools as **TSV** for pasting back into Fusion
+
+**Clipboard / import format**: the Fusion clipboard interchange is **TSV in both directions** — `copyToolToClipboard` / `copyToolsToClipboard` (`src/utils/fusionExport.js`) emit TSV, and `parseIncoming` (`src/services/mergeQueue.js`) parses Fusion CSV/TSV from a right-click copy. The importer **also** accepts a pasted Fusion library **JSON** file (it tries JSON first, then falls back to CSV/TSV), so JSON is a supported import path — but it is not the clipboard-copy format. The TSV uses the same tabular column layout as the full library import/export (including the `holder_segments` / `shaft_segments` columns).
 
 Merge history is appended to `merge_history[]` in `tool_metadata.json`.
 
@@ -460,7 +555,7 @@ These fields are set on the incoming tool object during parsing and are used by 
 ### Preset GUID rules during merge
 
 - **New presets** (`newPresets` bucket): keep their incoming GUID — this GUID is used by the assembly record created in CommitStep to link the preset to its assembly
-- **Conflict presets resolved as 'create'**: MUST receive a **new** GUID (via `generateId()`), because the incoming preset's GUID equals the master preset's GUID (it was copied from master). The new preset gets OOH appended to its name: `"Preset Name (OOH: X.XXX")`
+- **Conflict presets resolved as 'create'**: MUST receive a **new** GUID (via `generateId()`), because the incoming preset's GUID equals the master preset's GUID (it was copied from master). The new preset's name is composed with the **standard convention** via `composePresetName()` (`<MaterialCode> <OOH> <HolderShort> - <Operation>`, e.g. `SS 2.125 30-SK13-60 - Rough`) using the incoming OOH + holder + parsed operation type — **not** by appending `"(OOH: …)"` to the incoming name. Falls back to the incoming name only if the convention can't be composed.
 - **`presetsToAdd` GUIDs must be stable** between DiffStep confirmation and CommitStep commit — do not regenerate them
 
 ### CommitStep assembly detection
