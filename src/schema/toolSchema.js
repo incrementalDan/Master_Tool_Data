@@ -291,6 +291,10 @@ export function buildHolderObject(holderEntry) {
     gaugeLength,
     unit: holderEntry.unit,
     segments,
+    // `type: 'holder'` is the discriminator every Fusion-native holder carries.
+    // Without it Fusion does not recognize the object as a holder and silently
+    // drops the tool↔holder association on the next load.
+    type: 'holder',
   };
 }
 
