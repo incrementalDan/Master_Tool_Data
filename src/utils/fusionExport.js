@@ -205,7 +205,7 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
     // alongside the holder segments (col 171), to place the holder on paste.
     // assemblyGaugeLength = holder gauge length + body length (stick-out).
     if (holderGaugeConv != null) {
-      S(80, tsvNum(holderGaugeConv));
+      S(82, tsvNum(holderGaugeConv));   // tool_holderGaugeLength (not headClearance/headLength)
       const bl = bodyLength !== '' ? Number(bodyLength) : 0;
       S(15, tsvNum(round6(holderGaugeConv + bl)));
     }
