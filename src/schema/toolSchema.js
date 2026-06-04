@@ -288,9 +288,16 @@ function mergeLogicalTools(group) {
   const presets = [];
   const seenPresetName = new Set();
   const mergeHistory = [];
+  const registered = [];
+  const seenRegGuid = new Set();
   let machine = null;
 
   for (const t of ordered) {
+    for (const ra of (t._registeredAssemblies || [])) {
+      if (ra?.instance_guid && seenRegGuid.has(ra.instance_guid)) continue;
+      if (ra?.instance_guid) seenRegGuid.add(ra.instance_guid);
+      registered.push(ra);
+    }
     for (const a of (t.assemblies || [])) {
       const sig = `${a.holder_guid || ''}|${round4(Number(a.ooh) || 0)}`;
       if (seenAsmSig.has(sig)) continue;
@@ -320,6 +327,7 @@ function mergeLogicalTools(group) {
     merge_history: mergeHistory,
     _instancesRaw: raws,
     _fusionRaw: primary._fusionRaw || raws[0] || null,
+    _registeredAssemblies: registered,
   };
 }
 
@@ -876,6 +884,10 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
     assemblies,
     _instancesRaw: rawInstances,
     _fusionRaw: canonical,
+    // The metadata-registered assemblies — the instances the app has
+    // acknowledged. Used by reconciliation to tell app-known instances from
+    // entries dumped straight into the Fusion library.
+    _registeredAssemblies: (meta?.assemblies || []).filter(Boolean),
   };
 }
 

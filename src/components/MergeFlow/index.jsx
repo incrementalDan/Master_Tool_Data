@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { GitMerge } from 'lucide-react';
 import { useApp } from '../../context/AppContext.jsx';
 import { buildQueue, queueProgress } from '../../services/mergeQueue.js';
@@ -37,6 +37,7 @@ function StepHeader({ phase, subStep, queueLen }) {
 export default function MergeFlow() {
   const { id: preselectedId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { tools, fetchRawLibrary, notify } = useApp();
 
   // Phase: 'import' | 'queue' | 'summary'
@@ -165,6 +166,20 @@ export default function MergeFlow() {
     setPhase('queue');
     openQueueItem(0, q);
   };
+
+  // Launched from a tool's reconcile modal: a conflicting stray Fusion entry is
+  // handed in as the incoming tool, prefilled and matched to the open tool, so
+  // the user lands straight on the diff instead of pasting/uploading.
+  const reconcileLoadedRef = useRef(false);
+  useEffect(() => {
+    if (reconcileLoadedRef.current) return;
+    const incoming = location.state?.reconcileIncoming;
+    if (incoming && preselectedId) {
+      reconcileLoadedRef.current = true;
+      handleImported([incoming]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state, preselectedId]);
 
   const handleMatchConfirmed = async (masterTool) => {
     const updated = queue.map((e, i) => i === activeIdx ? {
