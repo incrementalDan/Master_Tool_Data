@@ -212,7 +212,10 @@ The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/sche
 | `number_of_flutes`| `geometry.NOF`         | `# Flutes`        |                                        |
 | `spindle_speed`  | `start-values.presets[0].n` | `RPM`        |                                        |
 | `cutting_feedrate`| `start-values.presets[0].v_f` | `Feed Rate` |                                       |
-| `vendor`         | — (metadata only)       | `Manufacturer`    |                                        |
+| `vendor`         | — (metadata only)       | `Manufacturer`    | Manufacturer name — **never** written to Fusion |
+| `location`       | `expressions.tool_vendor` | (cabinet location) | Fusion's **"Vendor"** UI field is repurposed as the cabinet location (e.g. "LC-8") |
+| `shoulder_length`| `geometry['shoulder-length']` | —          | Hyphenated key (not `LSCH`)            |
+| `min_ooh`        | — (validation / floor)  | `MIN OOH`         | Minimum OOH floor — see ProShop Field Priority Rules |
 | `product_id`     | — (metadata only)       | `Part Number`     | Manufacturer EDP number                |
 | `proshot_id`     | `product-id`            | ProShop ID        | **Primary match key for Phase 2**      |
 
@@ -417,11 +420,80 @@ ProShop export must never be removed even as the app evolves toward a future ERP
 
 -----
 
+## ProShop Field Priority Rules
+
+These rules apply during the **initial ProShop CSV merge** and on any **subsequent ProShop sync**. "PS wins" = use the ProShop value, overwriting the Fusion value. "Flag" = surface to the user for a manual decision; do **not** auto-resolve.
+
+| Field | Rule | Notes |
+|---|---|---|
+| Tool description | PS wins | Always via the per-tool rename confirmation UI — see Description Rename Workflow |
+| `vendor` (manufacturer) | PS wins | Manufacturer name; metadata-only, **never** written to Fusion |
+| `location` (cabinet) | From PS + Fusion's "Vendor" field | Fusion's "Vendor" UI field (`expressions.tool_vendor`) holds the cabinet location → internal `location` |
+| `geometry.LB` (OOH / "Length below Holder") vs MIN OOH | PS wins — **conditional** write | See LBH rule below |
+| `geometry['shoulder-length']` (shoulder length) | Set to PS MIN OOH | See LBH rule below |
+| `tsc_capable` (through-spindle coolant) | PS wins | Boolean capability flag (not a text field) |
+| All other differences | **Flag** to user | Do not auto-resolve |
+
+### Length Below Holder / MIN OOH rule (read carefully)
+
+ProShop carries a **MIN OOH** value (internal `min_ooh`) — the minimum out-of-holder length for that tool. It is the authoritative OOH **floor**.
+
+- **Only raise** Fusion's `geometry.LB` when the Fusion value is **smaller** than the PS MIN OOH — i.e. correct a tool that Fusion thinks sticks out less than it must. If `geometry.LB` is already ≥ PS MIN OOH, leave it alone.
+- **Always** set Fusion's shoulder length (`geometry['shoulder-length']`) to the PS MIN OOH value.
+
+```js
+// LBH merge logic — real Fusion geometry keys
+if (fusionLB < psMinOOH) {
+  fusionTool.geometry.LB = psMinOOH;                 // raise OOH to the floor
+}
+fusionTool.geometry['shoulder-length'] = psMinOOH;   // always
+```
+
+⚠️ **Interaction with the multi-instance model**: `geometry.LB` is also the **per-instance OOH** source of truth (each assembly has its own `LB`). A single per-tool MIN OOH meeting a tool that has multiple assemblies is ambiguous — confirm which instance(s) the floor applies to before implementing. (This rule is a documented intent; it is **not yet implemented** in the merge code.)
+
+### Vendor / Location field mapping (Fusion repurposes "Vendor")
+
+Fusion's **"Vendor"** UI field — stored as `expressions.tool_vendor` in the Fusion JSON — is repurposed to hold the **tool cabinet location** (e.g. "LC-8"), **not** the manufacturer:
+
+```js
+// Fusion → internal
+tool.location = stripQuotes(expressions.tool_vendor);   // Fusion "Vendor" = our location
+tool.vendor   = psData.vendor;                          // PS Manufacturer = actual vendor (metadata only)
+
+// internal → Fusion
+expressions.tool_vendor = `'${tool.location || ''}'`;   // write location back to Fusion's "Vendor"
+// tool.vendor (manufacturer) is NEVER written to Fusion
+```
+
+This is a permanent convention and **already implemented** (`fusionToolToInternal` / `internalToFusionTool` in `src/schema/toolSchema.js`). Never write the manufacturer name into Fusion's vendor field — it would appear as the cabinet location in Fusion's UI.
+
+-----
+
+## Description Rename Workflow (normalization step)
+
+During initial normalization, tool descriptions are rationalized. The ProShop description takes priority, but each tool passes through a per-tool confirmation UI — descriptions are **never** silently renamed.
+
+**Reuse the existing generator** — `buildDesc()` in `tool-extractor.tsx` composes a standardized description from a tool's structured fields (e.g. `0.5 4FL EM 1.000LOC`, `#80 135DEG CARB DRILL`). It is a **generator** (specs → description), not rename/diff detection — use it to produce the *suggested* new description; check that file before writing any new naming logic.
+
+**Step-by-step UI** (a step in `NormalizeModal`, or a follow-on modal) — for each tool in sequence:
+
+1. Show current Fusion description and PS description side by side
+2. Show the suggested new description (PS description, or one generated via `buildDesc()`)
+3. User can: Accept suggestion / Edit and accept / Keep Fusion description / Skip
+4. "Next →" advances to the next tool; a progress indicator shows X of N
+5. At the end, "Apply all renames" writes the confirmed descriptions in one batch
+
+This is, alongside the preset operation-type assignment, one of the few normalization steps requiring per-tool user decisions; the two may share a single pre-flight review modal if the UX allows.
+
+**Priority rule**: PS description wins by default; if the PS description is blank, keep the Fusion description. User confirmation is **always** required. (Not yet implemented — the current `NormalizeModal` only handles preset operation-type assignment.)
+
+-----
+
 ## Phase 2 — Compare & Merge ✅ Implemented
 
 When a programmer proves better speeds/feeds in a job, they can sync those values back to master:
 
-1. Copy tool(s) from Fusion 360 (Ctrl+V copies to clipboard as JSON)
+1. Copy tool(s) from Fusion 360 — Fusion's right-click copy puts tool data on the clipboard as **TSV** (tab-separated, a CSV-family format), not JSON
 2. Go to "Sync Job" in the app → paste (Ctrl+V anywhere on the import screen)
 3. App builds a batch queue — auto-matches each tool by priority:
    - **`proshot_id` exact match** — primary (Fusion's `product-id` field)
@@ -430,7 +502,9 @@ When a programmer proves better speeds/feeds in a job, they can sync those value
    - **No match** → route to "Add to Library" flow
 4. For each matched tool: side-by-side diff → select which fields to commit → enter revision note
 5. Live re-fetch from APS before each diff (60-second cache) — detects if a teammate updated master during the session
-6. Summary screen shows results; "Copy All Committed Tools to Clipboard" pastes back into Fusion
+6. Summary screen shows results; "Copy All Committed Tools to Clipboard" exports the committed tools as **TSV** for pasting back into Fusion
+
+**Clipboard / import format**: the Fusion clipboard interchange is **TSV in both directions** — `copyToolToClipboard` / `copyToolsToClipboard` (`src/utils/fusionExport.js`) emit TSV, and `parseIncoming` (`src/services/mergeQueue.js`) parses Fusion CSV/TSV from a right-click copy. The importer **also** accepts a pasted Fusion library **JSON** file (it tries JSON first, then falls back to CSV/TSV), so JSON is a supported import path — but it is not the clipboard-copy format. The TSV uses the same tabular column layout as the full library import/export (including the `holder_segments` / `shaft_segments` columns).
 
 Merge history is appended to `merge_history[]` in `tool_metadata.json`.
 
@@ -460,7 +534,7 @@ These fields are set on the incoming tool object during parsing and are used by 
 ### Preset GUID rules during merge
 
 - **New presets** (`newPresets` bucket): keep their incoming GUID — this GUID is used by the assembly record created in CommitStep to link the preset to its assembly
-- **Conflict presets resolved as 'create'**: MUST receive a **new** GUID (via `generateId()`), because the incoming preset's GUID equals the master preset's GUID (it was copied from master). The new preset gets OOH appended to its name: `"Preset Name (OOH: X.XXX")`
+- **Conflict presets resolved as 'create'**: MUST receive a **new** GUID (via `generateId()`), because the incoming preset's GUID equals the master preset's GUID (it was copied from master). The new preset's name is composed with the **standard convention** via `composePresetName()` (`<MaterialCode> <OOH> <HolderShort> - <Operation>`, e.g. `SS 2.125 30-SK13-60 - Rough`) using the incoming OOH + holder + parsed operation type — **not** by appending `"(OOH: …)"` to the incoming name. Falls back to the incoming name only if the convention can't be composed.
 - **`presetsToAdd` GUIDs must be stable** between DiffStep confirmation and CommitStep commit — do not regenerate them
 
 ### CommitStep assembly detection
