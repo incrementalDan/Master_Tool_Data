@@ -214,8 +214,8 @@ The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/sche
 | `cutting_feedrate`| `start-values.presets[0].v_f` | `Feed Rate` |                                       |
 | `vendor`         | — (metadata only)       | `Manufacturer`    | Manufacturer name — **never** written to Fusion |
 | `location`       | `expressions.tool_vendor` | (cabinet location) | Fusion's **"Vendor"** UI field is repurposed as the cabinet location (e.g. "LC-8") |
-| `shoulder_length`| `geometry['shoulder-length']` | —          | Hyphenated key (not `LSCH`)            |
-| `min_ooh`        | — (validation / floor)  | `MIN OOH`         | Minimum OOH floor — see ProShop Field Priority Rules |
+| `shoulder_length`| `geometry['shoulder-length']` | —          | Hyphenated key (not `LSCH`); normalization sets it = MIN OOH |
+| `min_ooh`        | — (metadata only)       | `MIN OOH` (`lengthBelowShankDiameter`) | Minimum stick-out floor — see the three-length-concepts table + ProShop Field Priority Rules |
 | `product_id`     | — (metadata only)       | `Part Number`     | Manufacturer EDP number                |
 | `proshot_id`     | `product-id`            | ProShop ID        | **Primary match key for Phase 2**      |
 
@@ -289,11 +289,28 @@ Key holder object fields:
 
 An **Assembly** records a specific tool + holder + OOH (Out of Holder length) combination that has been proven in a job. Assemblies are stored per-tool in `tool_metadata.json` under `assemblies[]`.
 
-### OOH (Out of Holder)
+### Three length concepts (MIN OOH vs. shoulder length vs. per-assembly OOH)
+
+These are easy to confuse — they are distinct and have a strict ordering:
+
+| Concept | Internal field | Lives in | Scope | Meaning |
+|---|---|---|---|---|
+| **MIN OOH** ("Length Below Holder - MIN OOH") | `min_ooh` | **metadata only** | per logical tool | The *minimum* stick-out — the smallest a tool can extend from the collet and still be held properly. A **floor**: no assembly may stick out less; any assembly may stick out more. |
+| **Shoulder length** (`tool_shoulderLength`) | `shoulder_length` | **Fusion** (`geometry['shoulder-length']`) | per logical tool (shared) | The unbroken shoulder of the tool. Defaults to MIN OOH; may be overridden, but only **smaller** (≤ MIN OOH and ≤ each instance's `geometry.LB`). |
+| **OOH / stick-out** ("Length below Holder") | per-assembly `ooh` → `geometry.LB` | **Fusion** (per instance) | per assembly | The actual stick-out for that holder setup. Edited per assembly, **≥ MIN OOH**, can be larger. |
+
+Strict ordering (enforced by `validateGeometry` + `AssemblyForm`):
+`flute_length ≤ shoulder_length ≤ min_ooh ≤ overall_length`, and per-assembly `ooh ≥ min_ooh`.
+
+- **MIN OOH source of truth**: pulled from **ProShop** (`lengthBelowShankDiameter` column) during import (`ImportFlow.psRowToTool` / `matchProShopToTools` — ProShop is authoritative, always overwrites). It is the initial source of truth through the full first-import + normalization workflow. It is **never written to a Fusion field** (Fusion has no native "minimum" field) — it reaches Fusion only indirectly, as the shoulder length (which normalization sets equal to it).
+- **Normalization rule** (implemented in `normalizeLibrary`): when a tool has a `min_ooh`, set `shoulder_length = min_ooh` and **floor** every assembly's OOH at `min_ooh` (raise any instance below the floor up to it). Lengths can be adjusted manually afterward; that's expected to be rare.
+
+### OOH (Out of Holder) — per-assembly stick-out
 - OOH = how much of the tool sticks out of the holder during cutting (aka gauge length / stick-out / "Length below Holder")
 - **Always stored in inches internally**, regardless of the tool's unit
-- **Source field**: `geometry.LB` (Body Length) in Fusion JSON — this is "Length below Holder" in the Fusion UI, and `tool_bodyLength` in the Fusion CSV export. Do NOT use `assembly-gauge-length` as the source; that field is what we WRITE on export, not the geometric source of truth.
+- **Source field**: `geometry.LB` (Body Length) in Fusion JSON — this is "Length below Holder" in the Fusion UI, and `tool_bodyLength` in the Fusion CSV export. Each instance carries its own `geometry.LB`. Do NOT use `assembly-gauge-length` as the source; that field is what we WRITE on export, not the geometric source of truth.
 - Unit conversion: if the tool's unit is `millimeters`, divide `geometry.LB` by 25.4 when reading; multiply OOH × 25.4 when writing back to `assembly-gauge-length` for metric tools
+- Editable per assembly in `AssemblyForm`, which blocks any value below `min_ooh` (the input's `min` is `min_ooh`, with a "Use" button to snap to the floor).
 
 ### Assembly lifecycle
 1. **Manual creation**: User clicks "+ Add Assembly" in ToolDetail → fills in holder (via HolderPicker), OOH, linked presets, notes
@@ -429,27 +446,31 @@ These rules apply during the **initial ProShop CSV merge** and on any **subseque
 | Tool description | PS wins | Always via the per-tool rename confirmation UI — see Description Rename Workflow |
 | `vendor` (manufacturer) | PS wins | Manufacturer name; metadata-only, **never** written to Fusion |
 | `location` (cabinet) | From PS + Fusion's "Vendor" field | Fusion's "Vendor" UI field (`expressions.tool_vendor`) holds the cabinet location → internal `location` |
-| `geometry.LB` (OOH / "Length below Holder") vs MIN OOH | PS wins — **conditional** write | See LBH rule below |
-| `geometry['shoulder-length']` (shoulder length) | Set to PS MIN OOH | See LBH rule below |
+| `min_ooh` (MIN OOH floor) | PS wins | From `lengthBelowShankDiameter`; metadata-only, always overwrites |
+| `geometry['shoulder-length']` (shoulder length) | Set to MIN OOH at normalization | See MIN OOH rule below |
+| per-assembly `ooh` → `geometry.LB` | Floored at MIN OOH | See MIN OOH rule below |
 | `tsc_capable` (through-spindle coolant) | PS wins | Boolean capability flag (not a text field) |
 | All other differences | **Flag** to user | Do not auto-resolve |
 
-### Length Below Holder / MIN OOH rule (read carefully)
+### MIN OOH floor rule (read carefully)
 
-ProShop carries a **MIN OOH** value (internal `min_ooh`) — the minimum out-of-holder length for that tool. It is the authoritative OOH **floor**.
+ProShop's **MIN OOH** (internal `min_ooh`, from the `lengthBelowShankDiameter` column) is the authoritative minimum stick-out **floor** for the whole logical tool — see the three-length-concepts table under **Holder Library & Assemblies**. ProShop is the source of truth for it through the first-import + normalization workflow. It is **metadata-only** — never written to a dedicated Fusion field (Fusion has none); it reaches Fusion via shoulder length.
 
-- **Only raise** Fusion's `geometry.LB` when the Fusion value is **smaller** than the PS MIN OOH — i.e. correct a tool that Fusion thinks sticks out less than it must. If `geometry.LB` is already ≥ PS MIN OOH, leave it alone.
-- **Always** set Fusion's shoulder length (`geometry['shoulder-length']`) to the PS MIN OOH value.
+**Implemented in `normalizeLibrary`** (and the intended behavior on any later ProShop sync):
+
+- Set the shared shoulder length (`shoulder_length` → `geometry['shoulder-length']`) **equal to** MIN OOH.
+- **Floor** every assembly's OOH (`geometry.LB`) at MIN OOH — raise any instance whose stick-out is below the minimum up to it. Instances already ≥ MIN OOH are left alone (each keeps its own larger, proven stick-out).
 
 ```js
-// LBH merge logic — real Fusion geometry keys
-if (fusionLB < psMinOOH) {
-  fusionTool.geometry.LB = psMinOOH;                 // raise OOH to the floor
-}
-fusionTool.geometry['shoulder-length'] = psMinOOH;   // always
+// normalizeLibrary — per logical tool, when min_ooh is present
+shoulder_length = min_ooh;                    // shoulder defaults to the floor
+assemblies = assemblies.map(a => ({
+  ...a,
+  ooh: (a.ooh != null && a.ooh < min_ooh) ? min_ooh : a.ooh,   // floor, never lower a larger OOH
+}));
 ```
 
-⚠️ **Interaction with the multi-instance model**: `geometry.LB` is also the **per-instance OOH** source of truth (each assembly has its own `LB`). A single per-tool MIN OOH meeting a tool that has multiple assemblies is ambiguous — confirm which instance(s) the floor applies to before implementing. (This rule is a documented intent; it is **not yet implemented** in the merge code.)
+After normalization, shoulder length and per-assembly OOH can be adjusted manually (rare). `AssemblyForm` continues to block any per-assembly OOH below `min_ooh`. Note the floor applies **per instance** — a multi-assembly tool keeps each proven stick-out, only correcting ones that fall below the minimum.
 
 ### Vendor / Location field mapping (Fusion repurposes "Vendor")
 
