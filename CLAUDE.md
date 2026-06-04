@@ -285,6 +285,28 @@ Key holder object fields:
 
 -----
 
+## Units (inches / millimeters)
+
+**Ultimate goal (not yet built — design every new feature with it in mind):** every **tool** and **holder** carries its **own unit** (`inches` or `millimeters`) that the user can change per-record, on top of a **global native/default unit** set in Settings. The app must work cleanly for an **inch-default shop** (like ours) *and* an **mm-default shop**, and switching the global default later must be easy. Build new code so a tool's unit is always read from the record (never assume inches), conversions are centralized, and display formats off the active unit — so the eventual global-default toggle is a small change, not a rewrite.
+
+**Current state (works today, inch-default):**
+- Global native unit is **inches**. There is **no** Settings toggle yet, and per-record unit editing is not exposed in the UI — but each tool already has a `unit` field (`inches` | `millimeters`) read from Fusion, and the model supports mixed libraries.
+- **Fusion uses both interchangeably.** A tool's `unit` comes from its Fusion entry.
+- **ProShop import defaults to inches** (the eventual import flow should let the user pick the ProShop file's unit and convert). MIN OOH is imported from ProShop with no conversion → it is **inches**.
+
+**Canonical internal units (today — the part that's easy to trip on):**
+- **OOH** (per-assembly stick-out) and **`min_ooh`** are **always stored in inches**, regardless of the tool's unit. These are the two "stick-out" concepts and share a canonical unit so they compare directly.
+- **All other length geometry** (`diameter`/DC, `flute_length`/LCF, `overall_length`/OAL, `shoulder_length`/`shoulder-length`) is stored in the tool's **native unit** (mm for a metric tool) — read raw from / written raw to Fusion (`fusionToolToInternal` / `internalToFusionTool`). Only `geometry.LB` (OOH) is converted (÷25.4 on read, ×25.4 on write) in `readOohFromFusion` / `splitToFusionInstances`.
+
+**Therefore, whenever inches-canonical `min_ooh`/OOH meets a native-unit length, convert.** Helper: `inchesToNative(value, unit)` / native is `value × 25.4` for `millimeters`. Current crossing points (all handled):
+- `normalizeLibrary`: `shoulder_length` (native) is set from `min_ooh` (inches) → convert for metric. The per-assembly OOH floor compares inches-to-inches → no conversion.
+- `validateGeometry`: the ordering chain is checked in native units, so `min_ooh` (inches) is converted to native before comparing against `shoulder_length`/`overall_length`.
+- `AssemblyForm`: compares per-assembly `ooh` (inches) to `min_ooh` (inches) → no conversion.
+
+> When you touch any length, ask "is this value inches-canonical (OOH/min_ooh) or native (everything else)?" and convert at the boundary. This is the seam the future per-record/global-unit work will formalize.
+
+-----
+
 ## Holder Library & Assemblies
 
 An **Assembly** records a specific tool + holder + OOH (Out of Holder length) combination that has been proven in a job. Assemblies are stored per-tool in `tool_metadata.json` under `assemblies[]`.
@@ -299,8 +321,8 @@ These are easy to confuse — they are distinct and have a strict ordering:
 | **Shoulder length** (`tool_shoulderLength`) | `shoulder_length` | **Fusion** (`geometry['shoulder-length']`) | per logical tool (shared) | The unbroken shoulder of the tool. Defaults to MIN OOH; may be overridden, but only **smaller** (≤ MIN OOH and ≤ each instance's `geometry.LB`). |
 | **OOH / stick-out** ("Length below Holder") | per-assembly `ooh` → `geometry.LB` | **Fusion** (per instance) | per assembly | The actual stick-out for that holder setup. Edited per assembly, **≥ MIN OOH**, can be larger. |
 
-Strict ordering (enforced by `validateGeometry` + `AssemblyForm`):
-`flute_length ≤ shoulder_length ≤ min_ooh ≤ overall_length`, and per-assembly `ooh ≥ min_ooh`.
+Strict ordering (`flute_length ≤ shoulder_length ≤ min_ooh ≤ overall_length`, and per-assembly `ooh ≥ min_ooh`):
+`validateGeometry` (`src/schema/toolSchema.js`) checks the chain and ToolForm **surfaces violations as non-blocking warnings** (it does not prevent save — only `validateTool` hard-blocks). `AssemblyForm.handleSave` **hard-blocks** any per-assembly `ooh < min_ooh`.
 
 - **MIN OOH source of truth**: pulled from **ProShop** (`lengthBelowShankDiameter` column) during import (`ImportFlow.psRowToTool` / `matchProShopToTools` — ProShop is authoritative, always overwrites). It is the initial source of truth through the full first-import + normalization workflow. It is **never written to a Fusion field** (Fusion has no native "minimum" field) — it reaches Fusion only indirectly, as the shoulder length (which normalization sets equal to it).
 - **Normalization rule** (implemented in `normalizeLibrary`): when a tool has a `min_ooh`, set `shoulder_length = min_ooh` and **floor** every assembly's OOH at `min_ooh` (raise any instance below the floor up to it). Lengths can be adjusted manually afterward; that's expected to be rare.
