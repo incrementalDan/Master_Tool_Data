@@ -561,18 +561,36 @@ function normalizePreset(p, tscCapable = false) {
   const category = ['all', 'metal', 'plastic'].includes(mat.category)
     ? mat.category
     : materialCategory(mat.query);
+  // stepdown/stepover live in THREE places that Fusion keeps in sync: the
+  // `use-*` boolean, the numeric value, and an expression string
+  // (expressions.tool_stepdown / tool_stepover, e.g. ".018 in"). If we write the
+  // boolean false but leave a leftover expression, Fusion re-derives the checkbox
+  // from the expression on reload and flips it back to true — the recurring
+  // "use stepdown/stepover became true" bug. So treat the boolean as the source
+  // of truth, source the numeric value from the field OR the expression (the value
+  // sometimes lives only in the expression), and strip the step expression whenever
+  // the flag is disabled so Fusion can't resurrect it.
+  const exprNum = (s) => { const m = String(s ?? '').match(/-?\d*\.?\d+/); return m ? Number(m[0]) : null; };
+  const sdNum = (p.stepdown != null && Number(p.stepdown) > 0) ? Number(p.stepdown) : exprNum(p.expressions?.tool_stepdown);
+  const soNum = (p.stepover != null && Number(p.stepover) > 0) ? Number(p.stepover) : exprNum(p.expressions?.tool_stepover);
+  const useStepdown = !!p['use-stepdown'] && sdNum != null && sdNum > 0;
+  const useStepover = !!p['use-stepover'] && soNum != null && soNum > 0;
+  const presetExpr = { ...(p.expressions || {}) };
+  if (!useStepdown) delete presetExpr.tool_stepdown;
+  if (!useStepover) delete presetExpr.tool_stepover;
   return {
     ...rest,
     guid: p.guid || generateId(),
     description: p.description || '',
     name: p.name || 'Default preset',
     material: { category, query: mat.query || '', 'use-hardness': mat['use-hardness'] || false },
+    expressions: presetExpr,
     'ramp-angle': p['ramp-angle'] ?? 2,
     'tool-coolant': p['tool-coolant'] || (tscCapable ? 'flood and through tool' : 'flood'),
-    'use-stepdown': !!(p['use-stepdown']) && p.stepdown != null && Number(p.stepdown) > 0,
-    'use-stepover': !!(p['use-stepover']) && p.stepover != null && Number(p.stepover) > 0,
-    stepdown: (p['use-stepdown'] && p.stepdown != null && Number(p.stepdown) > 0) ? p.stepdown : null,
-    stepover: (p['use-stepover'] && p.stepover != null && Number(p.stepover) > 0) ? p.stepover : null,
+    'use-stepdown': useStepdown,
+    'use-stepover': useStepover,
+    stepdown: useStepdown ? sdNum : null,
+    stepover: useStepover ? soNum : null,
     n: p.n ?? 0,
     n_ramp: p.n_ramp ?? 0,
     v_f: p.v_f ?? 0,
