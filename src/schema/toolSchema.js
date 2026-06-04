@@ -232,6 +232,15 @@ export function readOohFromFusion(fTool) {
   return fTool.unit === 'millimeters' ? v / 25.4 : v;
 }
 
+// Convert an inches-canonical length (OOH / min_ooh) into a tool's native unit.
+// OOH and min_ooh are always stored in inches; the other length geometry
+// (DC/LCF/OAL/shoulder-length) is stored in the tool's native unit — so any
+// place those two worlds meet must convert. See the "Units" section in CLAUDE.md.
+export function inchesToNative(value, unit) {
+  if (value == null || value === '' || isNaN(Number(value))) return value;
+  return unit === 'millimeters' ? Number(value) * 25.4 : Number(value);
+}
+
 function round4(n) {
   const v = Number(n);
   return isNaN(v) ? 0 : Math.round(v * 10000) / 10000;
@@ -1060,6 +1069,10 @@ export function validateGeometry(tool) {
 
   const { flute_length, shoulder_length, min_ooh, overall_length, corner_radius, diameter, tool_type } = tool;
 
+  // flute_length / shoulder_length / overall_length are in the tool's native unit;
+  // min_ooh is inches-canonical — convert it to native so the chain compares in one unit.
+  const minOohNative = isValid(min_ooh) ? inchesToNative(min_ooh, tool.unit) : min_ooh;
+
   if (isValid(flute_length) && isValid(shoulder_length) && flute_length > shoulder_length) {
     warnings.push({
       fields: ['flute_length', 'shoulder_length'],
@@ -1067,17 +1080,17 @@ export function validateGeometry(tool) {
     });
   }
 
-  if (isValid(shoulder_length) && isValid(min_ooh) && shoulder_length > min_ooh) {
+  if (isValid(shoulder_length) && isValid(minOohNative) && shoulder_length > minOohNative) {
     warnings.push({
       fields: ['shoulder_length', 'min_ooh'],
-      message: `Shoulder Length (${fmt(shoulder_length)}) must be less than or equal to MIN OOH (${fmt(min_ooh)})`,
+      message: `Shoulder Length (${fmt(shoulder_length)}) must be less than or equal to MIN OOH (${fmt(minOohNative)})`,
     });
   }
 
-  if (isValid(min_ooh) && isValid(overall_length) && min_ooh > overall_length) {
+  if (isValid(minOohNative) && isValid(overall_length) && minOohNative > overall_length) {
     warnings.push({
       fields: ['min_ooh', 'overall_length'],
-      message: `MIN OOH (${fmt(min_ooh)}) must be less than or equal to Overall Length (${fmt(overall_length)})`,
+      message: `MIN OOH (${fmt(minOohNative)}) must be less than or equal to Overall Length (${fmt(overall_length)})`,
     });
   }
 
