@@ -19,7 +19,7 @@ A **logical tool** maps to **N Fusion library entries ("instances")** — one in
 - **Machine tool number** is shared across all instances of a logical tool.
 - **Presets** are a single shared set replicated identically onto every instance. Each preset's name encodes its assembly + operation (see below), so opening any instance in Fusion shows the full proven-preset set.
 - **In-memory shape**: `id` (= `tracking_id`), `tracking_id`, `assemblies[]` (`{ assembly_id, instance_guid, holder_guid, holder_description, ooh, notes, source }`), shared `presets[]` (each with `operation_type`), `machine_tool_number`, and `_instancesRaw[]` (raw Fusion entries).
-- **Write path**: `AppContext.writeLogicalTool()` reconciles in one library write — re-download, drop every entry whose tracking ID matches, append the freshly split instance set (`splitToFusionInstances`). It backs `saveTool`/`addTool`/`mergeTool` and the assembly CRUD (`addAssembly`/`updateAssembly`/`deleteAssembly` = create/edit/remove an instance). `deleteTool` removes all instances; a tool must keep ≥1 assembly. `renumberLibrary` assigns one number per logical tool.
+- **Write path**: `AppContext.writeLogicalTool()` reconciles in one library write — re-download, drop every entry whose tracking ID matches, append the freshly split instance set (`splitToFusionInstances`). It backs `saveTool`/`addTool`/`mergeTool`, the assembly CRUD (`addAssembly`/`updateAssembly`/`deleteAssembly` = create/edit/remove an instance), and `applyReconcile` (adopt/drop strays found on open — see Sync & Merge Workflows). `deleteTool` removes all instances; a tool must keep ≥1 assembly. `renumberLibrary` assigns one number per logical tool.
 - **Transition**: `normalizeLibrary()` (one-time, surfaced via the `needsNormalize` banner) assigns tracking IDs to pre-migration tools, fans each out into instances per its existing metadata assemblies, and renames presets to the convention. Back up library + metadata first.
 
 ### Preset naming convention
@@ -341,6 +341,8 @@ src/
     searchEngine.js               # In-memory faceted search + filter logic
     duplicateDetector.js          # Weighted similarity scoring for Phase 2 matching
     mergeQueue.js                 # Phase 2 queue state: parseIncoming, buildQueue
+    reconcile.js                  # Reconcile-on-open: sharedSignature, instanceSig,
+                                  # classifyStrays (duplicate/newAssembly/conflict), hasReconcileWork
 
   utils/
     fusionExport.js               # exportSingleTool, exportFullLibrary,
@@ -364,6 +366,8 @@ src/
     ImportFlow.jsx                # Bulk Fusion JSON / ProShop CSV import
     MetadataConnect.jsx           # Google Drive connect flow + shared-drive-aware folder picker
     HolderPicker.jsx              # Modal for selecting a holder from the holder library
+    ReconcileModal.jsx            # Reconcile-on-open prompt: delete duplicates, add/delete
+                                  # new assemblies, review conflicts (→ Sync Job diff)
     AssemblyCard.jsx              # Read-only assembly display (holder, OOH, linked presets)
                                   # with inline edit/delete
     AssemblyForm.jsx              # Form for creating/editing assemblies
@@ -481,6 +485,47 @@ await mergeTool(
   assemblyUpdate       // { type: 'create'|'link', assembly: {...} } or null
 );
 ```
+
+-----
+
+## Sync & Merge Workflows
+
+There are **three distinct ways tool data gets reconciled** across the Fusion library, metadata, and incoming job edits. They are complementary — keep them straight:
+
+| Workflow | Trigger | Scope | Conflicts | Code |
+|---|---|---|---|---|
+| **Load-time auto-combine** | Every load + bulk write | Whole library, by ProShop # | Never silently overwrites — strays preserved in `_instancesRaw` | `combineToolsByProshopId` |
+| **Reconcile on open** | Opening a tool (ToolDetail) | One logical tool vs. live Fusion library | Surfaced — hands off to Sync Job diff | `reconcileTool` / `applyReconcile` |
+| **Sync Job (Phase 2)** | User pastes job tools | Batch queue of incoming tools | User picks per-field/per-preset | `MergeFlow` / `mergeTool` |
+
+All three ultimately persist through `writeLogicalTool()` (re-download → drop everything this tool owns → append fresh split instances).
+
+### 1. Load-time auto-combine (`combineToolsByProshopId`)
+
+In `src/schema/toolSchema.js`. Runs **silently** in `loadTools` (after `groupByTrackingId` + `buildLogicalTool`) and in bulk writes (`saveFullLibrary`, `normalizeLibrary`). Folds separate logical tools that share a `proshot_id` into **one** logical tool so a tool copied/dumped under a fresh GUID or tracking ID doesn't show up as a separate entry:
+
+- One instance per **distinct** (holder, OOH); identical (holder, OOH) instances collapse to one assembly.
+- Presets are unioned by name; the **primary** tool's shared fields win.
+- **Never destroys conflicting data** — every raw entry is kept in `_instancesRaw`, so the reconcile-on-open pass can still detect a folded sibling whose shared fields differ. `mergeLogicalTools` also **unions** each folded tool's `_registeredAssemblies` so legit app-known instances aren't later misflagged as strays.
+
+### 2. Reconcile on open (`reconcileTool` / `applyReconcile`)
+
+Catches entries **dumped straight into the Fusion library from Fusion 360** (bypassing Sync Job). Runs automatically once per opened tool in `ToolDetail` (skipped while editing); it **re-fetches the live Fusion library** (`fetchRawLibrary()` — an APS call each open) so it sees changes made since login.
+
+- **Match scope**: a raw entry belongs to this tool if it shares the tool's **tracking ID OR ProShop #**.
+- **Registered = metadata**: the "known" instances are the tool's metadata assemblies' `instance_guid`s, attached to the logical tool as `_registeredAssemblies` by `buildLogicalTool` (and unioned by the combine). A raw whose guid isn't registered is a **stray**.
+- **Shared signature** (`sharedSignature` in `src/services/reconcile.js`): a normalized fingerprint of everything *except* the per-instance dimensions — excludes `holder` and `geometry.LB`/OOH (and `assembly-gauge-length`). Includes `type`, geometry (DC/LCF/OAL/NOF/RE/SFDM/TA/shoulder/SIG/TP), `description`, `product-id`, `BMC`, and presets (name + speeds/feeds, **GUID-independent**). Numbers rounded (4dp; feed-per-tooth 6dp).
+- **Classification** of each stray (`classifyStrays`):
+  - shared sig **differs** from canonical → **conflict** → "Review…" navigates to the Sync Job diff prefilled (`navigate('/merge/:id', { state: { reconcileIncoming } })`).
+  - shared sig matches, (holder, OOH) matches a known assembly → **duplicate** → offer delete.
+  - shared sig matches, (holder, OOH) is new → **new assembly** → offer add or delete.
+- **No-metadata fallback**: when `_registeredAssemblies` is empty (Google Drive not connected), "new assembly" detection is **disabled** — only true duplicates and conflicts surface, and distinct holder/OOH instances are kept silently. This prevents misflagging a legitimate multi-assembly tool's extra instances as strays.
+- **Applying** (`applyReconcile(tool, { adopt, dropRaws })`): one `writeLogicalTool` call. Adopted strays become registered assemblies **keyed by their own guid** (and get normalized to the tool's shared fields on rewrite); dropped strays are removed. The write drops by tracking ID **plus** the supplied stray guids, so ProShop-matched strays carrying a *different* tracking ID are still cleaned up. Conflict resolution goes through the merge flow, **not** `applyReconcile`.
+- UI: `src/components/ReconcileModal.jsx`. Pure logic + helpers: `src/services/reconcile.js` (`sharedSignature`, `instanceSig`, `classifyStrays`, `hasReconcileWork`).
+
+### 3. Sync Job (Phase 2)
+
+The explicit, user-initiated batch flow — see the **Phase 2** section above. The reconcile-on-open "conflict" path reuses this exact diff screen: it passes the stray entry as the incoming tool (`location.state.reconcileIncoming`) and, because `preselectedId` is set, skips MatchStep straight to DiffStep against the open tool.
 
 -----
 

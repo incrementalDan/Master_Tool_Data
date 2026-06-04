@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
@@ -8,8 +8,10 @@ import PresetPanel from './PresetPanel.jsx';
 import HolderPicker from './HolderPicker.jsx';
 import AssemblyCard, { holderColor } from './AssemblyCard.jsx';
 import AssemblyForm from './AssemblyForm.jsx';
+import ReconcileModal from './ReconcileModal.jsx';
 import { useApp } from '../context/AppContext.jsx';
-import { TOOL_TYPE_LABELS, validateGeometry } from '../schema/toolSchema.js';
+import { TOOL_TYPE_LABELS, validateGeometry, fusionToolToInternal, readOohFromFusion } from '../schema/toolSchema.js';
+import { hasReconcileWork } from '../services/reconcile.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 import ToolForm from './ToolForm.jsx';
 import { exportSingleTool as exportFusion, copyToolToClipboard } from '../utils/fusionExport.js';
@@ -25,14 +27,54 @@ export default function ToolDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { tools, saveTool, deleteTool, cloneTool, isSaving, notify, holders, holderLibraryLocation } = useApp();
+  const { tools, saveTool, deleteTool, cloneTool, isSaving, notify, holders, holderLibraryLocation, reconcileTool } = useApp();
   const [editing, setEditing] = useState(searchParams.get('edit') === '1');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [copied, setCopied] = useState(false);
   const [showExportPicker, setShowExportPicker] = useState(null); // null | 'copy' | 'download'
+  const [reconcileResults, setReconcileResults] = useState(null);
 
   const tool = tools.find(t => t.id === id);
+
+  // Reconcile against the Fusion library on open: detect entries dumped straight
+  // from Fusion (sharing this tool's tracking ID or ProShop #) and prompt. Runs
+  // once per opened tool; skip while editing.
+  const reconciledRef = useRef(null);
+  useEffect(() => {
+    if (!tool || editing) return;
+    if (reconciledRef.current === tool.id) return;
+    reconciledRef.current = tool.id;
+    let cancelled = false;
+    (async () => {
+      try {
+        const results = await reconcileTool(tool);
+        if (!cancelled && hasReconcileWork(results)) setReconcileResults(results);
+      } catch { /* non-critical */ }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tool?.id, editing]);
+
+  // Re-check after a reconcile action; close the modal once nothing's left.
+  const refreshReconcile = async () => {
+    try {
+      const current = tools.find(t => t.id === id);
+      const results = await reconcileTool(current);
+      if (hasReconcileWork(results)) setReconcileResults(results);
+      else setReconcileResults(null);
+    } catch { setReconcileResults(null); }
+  };
+
+  // Send a conflicting stray entry to the Sync Job diff, prefilled.
+  const reviewConflict = (strayRaw) => {
+    const incoming = fusionToolToInternal(strayRaw);
+    incoming.incoming_ooh = readOohFromFusion(strayRaw);
+    incoming.incoming_holder_guid = strayRaw.holder?.guid || '';
+    incoming._incomingHolderDesc = strayRaw.holder?.description || '';
+    setReconcileResults(null);
+    navigate(`/merge/${tool.id}`, { state: { reconcileIncoming: incoming } });
+  };
   const isMetric = tool?.unit === 'millimeters';
   const lenUnit = isMetric ? 'mm' : 'in';
   const geoIssues = useMemo(
@@ -391,6 +433,16 @@ export default function ToolDetail() {
         )}
 
         {/* Delete confirmation modal */}
+        {reconcileResults && (
+          <ReconcileModal
+            tool={tool}
+            results={reconcileResults}
+            onClose={() => setReconcileResults(null)}
+            onResolved={refreshReconcile}
+            onReviewConflict={reviewConflict}
+          />
+        )}
+
         {showDeleteModal && (
           <div className="modal-backdrop">
             <div className="modal">
