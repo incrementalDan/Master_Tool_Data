@@ -264,6 +264,81 @@ export function groupByTrackingId(fusionList) {
   return { groups, untracked };
 }
 
+// ─── Combine logical tools that share a ProShop number ─────────────────────
+// The ProShop number (Fusion's `product-id`, our `proshot_id`) is the
+// authoritative identity of a physical tool. Two library entries carrying the
+// same ProShop number are the same tool — different holder/OOH setups at most —
+// so they are folded into ONE logical tool regardless of any other field
+// (type, diameter, description, …). Instances (assemblies), raw Fusion entries,
+// presets and merge history are unioned; identical assemblies (same holder +
+// OOH) collapse to one. Tools with no ProShop number are left untouched.
+//
+// Used everywhere new entries appear (load, normalize, import, add) so
+// duplicates never split into separate logical tools.
+function mergeLogicalTools(group) {
+  // Prefer an already-tracked tool as the primary so its tracking ID (and the
+  // metadata keyed to it) survives the combine.
+  const primary = group.find(t => t.tracking_id) || group[0];
+  const ordered = [primary, ...group.filter(t => t !== primary)];
+
+  const assemblies = [];
+  const seenAsmSig = new Set();   // collapse identical instances (holder + OOH)
+  const raws = [];
+  const seenRawGuid = new Set();
+  const presets = [];
+  const seenPresetName = new Set();
+  const mergeHistory = [];
+  let machine = null;
+
+  for (const t of ordered) {
+    for (const a of (t.assemblies || [])) {
+      const sig = `${a.holder_guid || ''}|${round4(Number(a.ooh) || 0)}`;
+      if (seenAsmSig.has(sig)) continue;
+      seenAsmSig.add(sig);
+      assemblies.push(a);
+    }
+    for (const r of (t._instancesRaw || [])) {
+      if (!r?.guid || seenRawGuid.has(r.guid)) continue;
+      seenRawGuid.add(r.guid);
+      raws.push(r);
+    }
+    for (const p of (t.presets || [])) {
+      const key = String(p.name || '').trim().toLowerCase();
+      if (key && seenPresetName.has(key)) continue;
+      if (key) seenPresetName.add(key);
+      presets.push(p);
+    }
+    if (machine == null && t.machine_tool_number != null) machine = t.machine_tool_number;
+    if (Array.isArray(t.merge_history)) mergeHistory.push(...t.merge_history);
+  }
+
+  return {
+    ...primary,
+    machine_tool_number: machine,
+    assemblies,
+    presets,
+    merge_history: mergeHistory,
+    _instancesRaw: raws,
+    _fusionRaw: primary._fusionRaw || raws[0] || null,
+  };
+}
+
+export function combineToolsByProshopId(tools) {
+  const groups = new Map();   // key -> [tool, ...]
+  const order = [];           // preserve first-seen order
+  let anon = 0;
+  for (const tool of (tools || [])) {
+    const pid = String(tool.proshot_id || '').trim();
+    const key = pid ? `pid:${pid}` : `anon:${anon++}`;
+    if (!groups.has(key)) { groups.set(key, []); order.push(key); }
+    groups.get(key).push(tool);
+  }
+  return order.map(key => {
+    const group = groups.get(key);
+    return group.length === 1 ? group[0] : mergeLogicalTools(group);
+  });
+}
+
 // Build a Fusion holder object from a holder-library entry.
 export function buildHolderObject(holderEntry) {
   if (!holderEntry) return null;

@@ -6,6 +6,7 @@ import {
   groupByTrackingId, buildLogicalTool, splitToFusionInstances, readTrackingId,
   getNextMachineNumber, generateMachineNumbers, applyMachineNumberToFusion,
   fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
+  combineToolsByProshopId,
 } from '../schema/toolSchema.js';
 import { composePresetName, opTypeWord, parsePresetName } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
@@ -211,9 +212,13 @@ export function AppProvider({ children }) {
       // Group Fusion entries into logical tools by tracking ID. Entries without
       // a tracking ID are each their own single-instance tool until normalized.
       const { groups, untracked } = groupByTrackingId(fusionList);
-      const tools = [];
-      for (const [, raws] of groups) tools.push(buildLogicalTool(raws, metaByTracking));
-      for (const raw of untracked) tools.push(buildLogicalTool([raw], metaByTracking));
+      const built = [];
+      for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
+      for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
+      // Fold any entries sharing a ProShop number into one logical tool so
+      // duplicates surface as a single combined tool (auto-combine). The merge
+      // is persisted on the next write of that tool / on normalize.
+      const tools = combineToolsByProshopId(built);
       const needsNormalize = untracked.length > 0;
 
       dispatch({ type: 'LOAD_SUCCESS', tools, needsNormalize });
@@ -272,8 +277,18 @@ export function AppProvider({ children }) {
     };
 
     const { fusionInstances, metadataTool } = splitToFusionInstances(toWrite, holders);
+
+    // Drop every entry this logical tool owns before re-appending the fresh set:
+    // its tracking ID, plus any guid carried by an assembly or absorbed raw
+    // instance. The guid sweep removes leftovers from entries that were combined
+    // in (e.g. same-ProShop duplicates that previously had a different/no
+    // tracking ID), so no orphans remain in the library.
+    const dropGuids = new Set();
+    for (const a of assemblies) if (a.instance_guid) dropGuids.add(a.instance_guid);
+    for (const r of (tool._instancesRaw || [])) if (r?.guid) dropGuids.add(r.guid);
+
     const next = fusionList
-      .filter(f => readTrackingId(f) !== tracking_id)
+      .filter(f => readTrackingId(f) !== tracking_id && !dropGuids.has(f.guid))
       .concat(fusionInstances);
 
     await uploadFusionList(next);
@@ -308,6 +323,25 @@ export function AppProvider({ children }) {
 
     dispatch({ type: 'SAVE_START' });
     try {
+      // Auto-combine: if a tool with this ProShop number already exists, fold the
+      // new entry into it instead of creating a duplicate logical tool. The
+      // ProShop number alone decides identity — no other field is checked.
+      const pid = String(tool.proshot_id || '').trim();
+      const existingDup = pid
+        ? toolsRef.current.find(t => String(t.proshot_id || '').trim() === pid)
+        : null;
+      if (existingDup) {
+        const combined = combineToolsByProshopId([
+          existingDup,
+          { ...tool, tracking_id: null, id: undefined },
+        ])[0];
+        const written = await writeLogicalTool({ ...combined, updated_at: now });
+        dispatch({ type: 'UPDATE_TOOL', tool: written });
+        dispatch({ type: 'SAVE_SUCCESS' });
+        notify(`Combined with existing tool sharing ProShop ${pid}`, 'success');
+        return written;
+      }
+
       const fusionList = await downloadFusionList();
 
       // Assign the next available machine tool number at save time so concurrent
@@ -558,9 +592,12 @@ export function AppProvider({ children }) {
     dispatch({ type: 'SAVE_START' });
     try {
       const holders = holdersRef.current || [];
+      // Auto-combine any same-ProShop-number duplicates before writing the full
+      // library (covers bulk import, which routes through here).
+      const combinedTools = combineToolsByProshopId(tools);
       const fusionList = [];
       const metaList = [];
-      for (const tool of tools) {
+      for (const tool of combinedTools) {
         const tracking_id = tool.tracking_id || generateTrackingId();
         const assemblies = (tool.assemblies && tool.assemblies.length > 0)
           ? tool.assemblies
@@ -726,8 +763,17 @@ export function AppProvider({ children }) {
         });
       }
 
-      await saveFullLibrary(logicalTools);
-      notify(`Normalized ${untracked.length} tool${untracked.length === 1 ? '' : 's'} to the multi-instance model`, 'success', 6000);
+      // Fold tools sharing a ProShop number into one logical tool before saving,
+      // so duplicate copies pushed into the library merge into a single tool
+      // (with one instance per distinct holder/OOH) instead of staying separate.
+      const combined = combineToolsByProshopId(logicalTools);
+      const dupCount = logicalTools.length - combined.length;
+
+      await saveFullLibrary(combined);
+      const base = `Normalized ${untracked.length} tool${untracked.length === 1 ? '' : 's'} to the multi-instance model`;
+      notify(dupCount > 0
+        ? `${base}; combined ${dupCount} ProShop-number duplicate${dupCount === 1 ? '' : 's'}`
+        : base, 'success', 6000);
       return untracked.length;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
