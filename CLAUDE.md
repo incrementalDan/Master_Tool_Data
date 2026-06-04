@@ -26,6 +26,10 @@ A **logical tool** maps to **N Fusion library entries ("instances")** — one in
 
 `<MaterialCode> <OOH> <HolderShort> - <Operation>` — e.g. `SS 2.125 30-SK13-60 - Rough`. The name is the **durable source of truth** for the preset's assembly + operation. Helpers in `src/utils/presetNaming.js`: `composePresetName`, `parsePresetName`, `presetMatchesAssembly` (links a preset to an assembly by parsed holder short name + OOH within 0.0005"), `OP_TYPES`/`opTypeWord`/`matchOpType`. Holder short names (strip `NBT`, drop the `C` after `SK<n>`, + override map) come from `src/utils/holderNaming.js`. `operation_type` is stored on the in-memory preset and cached in metadata (`preset_meta`), but is **never written into the Fusion JSON** (Fusion validates strictly) — it lives in the name. On import, operation_type is parsed from the name; the name wins on conflict.
 
+### Stepdown / stepover three-way sync (Fusion gotcha)
+
+Each Fusion preset stores stepdown and stepover in **three** places that must agree: the `use-stepdown`/`use-stepover` **boolean**, the **numeric** `stepdown`/`stepover`, and an **expression string** (`expressions.tool_stepdown` / `tool_stepover`, e.g. `".018 in"`). **Fusion re-derives the checkbox from the expression on load** — so if we write the boolean `false` but leave a leftover expression, Fusion flips the flag back to `true` on the next pull (the recurring "use stepdown/stepover became true" bug). `normalizePreset` (`src/schema/toolSchema.js`) is the single point that keeps all three consistent: the **boolean is the source of truth**, the numeric value is sourced from the field *or* parsed from the expression (the value sometimes lives only in the expression), and the step expression is **stripped whenever the flag is disabled**. Any new code that writes presets to Fusion must preserve this invariant — never set a step boolean without syncing its number and expression.
+
 -----
 
 ## The Problem Being Solved
