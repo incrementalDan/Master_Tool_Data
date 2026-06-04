@@ -553,7 +553,9 @@ export function fusionToolToInternal(fTool) {
 function normalizePreset(p, tscCapable = false) {
   // operation_type is an app-only field encoded in the preset name + metadata.
   // It must never be written into the Fusion JSON (Fusion validates strictly).
-  const { operation_type, ...rest } = p;
+  // stepdown/stepover are pulled out of `rest` so a disabled flag leaves NO
+  // leftover numeric key (Fusion omits the key entirely when disabled).
+  const { operation_type, stepdown: _sd, stepover: _so, ...rest } = p;
   // Fusion's "Filter by Type" (material.category) must never be blank and only
   // accepts all/metal/plastic. Heal blanks and the app's old invalid values
   // (milling/turning/drilling) by deriving from the material query.
@@ -564,12 +566,13 @@ function normalizePreset(p, tscCapable = false) {
   // stepdown/stepover live in THREE places that Fusion keeps in sync: the
   // `use-*` boolean, the numeric value, and an expression string
   // (expressions.tool_stepdown / tool_stepover, e.g. ".018 in"). If we write the
-  // boolean false but leave a leftover expression, Fusion re-derives the checkbox
-  // from the expression on reload and flips it back to true — the recurring
-  // "use stepdown/stepover became true" bug. So treat the boolean as the source
-  // of truth, source the numeric value from the field OR the expression (the value
-  // sometimes lives only in the expression), and strip the step expression whenever
-  // the flag is disabled so Fusion can't resurrect it.
+  // boolean false but leave a leftover expression OR a numeric value, Fusion
+  // re-derives the checkbox from it on reload and flips the flag back to true —
+  // the recurring "use stepdown/stepover became true" bug. So treat the boolean
+  // as the source of truth, source the numeric value from the field OR the
+  // expression (the value sometimes lives only in the expression), and when the
+  // flag is disabled strip BOTH the expression and the numeric key (match
+  // Fusion's native "off" preset, which omits them entirely).
   const exprNum = (s) => { const m = String(s ?? '').match(/-?\d*\.?\d+/); return m ? Number(m[0]) : null; };
   const sdNum = (p.stepdown != null && Number(p.stepdown) > 0) ? Number(p.stepdown) : exprNum(p.expressions?.tool_stepdown);
   const soNum = (p.stepover != null && Number(p.stepover) > 0) ? Number(p.stepover) : exprNum(p.expressions?.tool_stepover);
@@ -578,7 +581,7 @@ function normalizePreset(p, tscCapable = false) {
   const presetExpr = { ...(p.expressions || {}) };
   if (!useStepdown) delete presetExpr.tool_stepdown;
   if (!useStepover) delete presetExpr.tool_stepover;
-  return {
+  const out = {
     ...rest,
     guid: p.guid || generateId(),
     description: p.description || '',
@@ -589,8 +592,6 @@ function normalizePreset(p, tscCapable = false) {
     'tool-coolant': p['tool-coolant'] || (tscCapable ? 'flood and through tool' : 'flood'),
     'use-stepdown': useStepdown,
     'use-stepover': useStepover,
-    stepdown: useStepdown ? sdNum : null,
-    stepover: useStepover ? soNum : null,
     n: p.n ?? 0,
     n_ramp: p.n_ramp ?? 0,
     v_f: p.v_f ?? 0,
@@ -603,6 +604,11 @@ function normalizePreset(p, tscCapable = false) {
     f_n: p.f_n ?? 0,
     v_c: p.v_c ?? 0,
   };
+  // Only emit the numeric keys when the flag is enabled — otherwise omit them so
+  // a disabled preset matches Fusion's native "off" shape exactly (no value at all).
+  if (useStepdown) out.stepdown = sdNum;
+  if (useStepover) out.stepover = soNum;
+  return out;
 }
 
 export function internalToFusionTool(tool) {
