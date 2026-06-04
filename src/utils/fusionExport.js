@@ -102,6 +102,28 @@ function tsvBool(v) {
   return String(Boolean(v));
 }
 
+// Length unit conversion factor (Fusion units: 'inches' | 'millimeters').
+function unitFactor(fromUnit, toUnit) {
+  if (fromUnit === toUnit) return 1;
+  if (fromUnit === 'millimeters' && toUnit !== 'millimeters') return 1 / 25.4;
+  if (fromUnit !== 'millimeters' && toUnit === 'millimeters') return 25.4;
+  return 1;
+}
+
+const round6 = (n) => Math.round(n * 1e6) / 1e6;
+
+// Fusion's clipboard format encodes shaft/holder profiles as a semicolon-
+// separated list of "H<height> U<upper-diameter> L<lower-diameter>" segments,
+// expressed in the tool's unit — NOT as JSON. Pasting JSON into these columns
+// makes Fusion silently drop the shaft/holder, so the assembly loses its holder.
+function segmentsToFusionTsv(segments, factor = 1) {
+  return (segments || [])
+    .map(s => `H${((Number(s.height) || 0) * factor).toFixed(6)}`
+            + ` U${((Number(s['upper-diameter']) || 0) * factor).toFixed(6)}`
+            + ` L${((Number(s['lower-diameter']) || 0) * factor).toFixed(6)}`)
+    .join('; ');
+}
+
 // Produces one TSV data row per preset. Internal geometry values are already
 // in tool.unit — no conversion needed except OOH (always stored in inches).
 function toolToTsvRows(tool, holders, assembly, toolIndex) {
@@ -113,6 +135,8 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
   const holderGuid = assembly?.holder_guid || tool.selected_holder_guid;
   let holderDesc = '', holderPid = '', holderPlink = '', holderVendor = '';
   let holderObj = null;
+  let holderSegStr = '';
+  let holderGaugeConv = null;   // holder gauge length, converted to the tool's unit
   if (holderGuid && holders.length > 0) {
     holderObj = holders.find(hh => hh.guid === holderGuid) || null;
     if (holderObj) {
@@ -120,6 +144,14 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
       holderPid = holderObj['product-id'] || '';
       holderPlink = holderObj['product-link'] || '';
       holderVendor = holderObj.vendor || '';
+      // The holder library stores lengths in the holder's own unit, which may
+      // differ from the tool's. Convert segments + gauge length to the tool's
+      // unit so Fusion can reconstruct and place the holder on paste.
+      const hf = unitFactor(holderObj.unit, tool.unit || 'inches');
+      holderSegStr = segmentsToFusionTsv(holderObj.segments, hf);
+      if (typeof holderObj.gaugeLength === 'number') {
+        holderGaugeConv = round6(holderObj.gaugeLength * hf);
+      }
     }
   }
 
@@ -168,6 +200,16 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
     S(11, tsvStr(holderVendor));
 
     if (bodyLength !== '') S(33, tsvNum(bodyLength));
+
+    // Holder + assembly gauge lengths (in the tool's unit). Fusion uses these,
+    // alongside the holder segments (col 171), to place the holder on paste.
+    // assemblyGaugeLength = holder gauge length + body length (stick-out).
+    if (holderGaugeConv != null) {
+      S(80, tsvNum(holderGaugeConv));
+      const bl = bodyLength !== '' ? Number(bodyLength) : 0;
+      S(15, tsvNum(round6(holderGaugeConv + bl)));
+    }
+
     S(34, tsvBool(false));   // break control
     if (!isTap) S(38, tsvBool(true));  // clockwise
     S(39, tsvStr(tool.tracking_id || ''));  // comment = logical-tool tracking ID
@@ -253,18 +295,16 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
 
     // Col 170: shaft (shank) segments — needed for Fusion to show the shank profile.
     // Use the raw entry for this assembly's instance, falling back to canonical.
+    // Raw shaft segments are already in the tool's unit (factor 1).
     const instanceRaw = (tool._instancesRaw || []).find(r => r.guid === assembly?.instance_guid) || tool._fusionRaw;
     const shaftRaw = instanceRaw?.shaft;
     if (shaftRaw) {
       const shaftSegs = Array.isArray(shaftRaw) ? shaftRaw : (shaftRaw.segments ?? shaftRaw);
-      S(170, tsvStr(JSON.stringify(shaftSegs)));
+      S(170, tsvStr(segmentsToFusionTsv(shaftSegs, 1)));
     }
 
-    // Col 171: holder segments — needed for Fusion to reconstruct the holder association
-    if (holderObj) {
-      const holderSegs = holderObj.segments ?? holderObj;
-      S(171, tsvStr(JSON.stringify(holderSegs)));
-    }
+    // Col 171: holder segments — needed for Fusion to reconstruct the holder association.
+    if (holderSegStr) S(171, tsvStr(holderSegStr));
 
     S(172, tsvNum(36));  // tool_library_version
 
