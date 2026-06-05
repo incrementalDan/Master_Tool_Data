@@ -546,6 +546,7 @@ function HolderSection({ tool, holders, holderLibrarySetupComplete, onSelectHold
 function AssembliesSection({ tool, holders, onSave }) {
   const [showForm, setShowForm] = useState(false);
   const [editingAssembly, setEditingAssembly] = useState(null);
+  const [pendingAssembly, setPendingAssembly] = useState(null);
   const assemblies = tool.assemblies || [];
 
   // Group by holder description, sort each group short → long OOH
@@ -565,9 +566,18 @@ function AssembliesSection({ tool, holders, onSave }) {
     await onSave({ ...tool, assemblies: assemblies.filter(a => a.assembly_id !== assemblyId) });
   };
 
+  // Clear pendingAssembly once the real data lands in the tool prop
+  const prevAssemblyIds = useRef(new Set(assemblies.map(a => a.assembly_id)));
+  useEffect(() => {
+    if (!pendingAssembly) return;
+    const ids = new Set(assemblies.map(a => a.assembly_id));
+    if (ids.has(pendingAssembly.assembly_id)) setPendingAssembly(null);
+    prevAssemblyIds.current = ids;
+  }, [assemblies, pendingAssembly]);
+
   return (
     <Section title="Assemblies" icon={Wrench}>
-      {assemblies.length === 0 && (
+      {assemblies.length === 0 && !pendingAssembly && (
         <div className="detail-field-empty text-sm" style={{ marginBottom: 10 }}>
           No assemblies recorded yet.
         </div>
@@ -596,9 +606,44 @@ function AssembliesSection({ tool, holders, onSave }) {
           </div>
         );
       })}
+
+      {/* Optimistic placeholder card while save is in flight */}
+      {pendingAssembly && (() => {
+        const c = holderColor(pendingAssembly.holder_description || null);
+        return (
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ marginBottom: 4 }}>
+              <span className="holder-pill" style={{ background: c.bg, borderColor: c.border, color: c.text }}>
+                {pendingAssembly.holder_description || '—'}
+              </span>
+            </div>
+            <div className="assemblies-grid">
+              <div style={{
+                border: '1px solid rgba(100, 116, 139, 0.30)',
+                borderRadius: 'var(--radius-sm)',
+                background: 'var(--surface-2)',
+                padding: '6px 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                opacity: 0.7,
+              }}>
+                <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2, flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
+                    OOH: {pendingAssembly.ooh?.toFixed(3)}"
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-sub)', marginTop: 2 }}>Saving…</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <button
         className="btn btn-secondary btn-sm"
-        style={{ marginTop: assemblies.length > 0 ? 4 : 0 }}
+        style={{ marginTop: (assemblies.length > 0 || pendingAssembly) ? 4 : 0 }}
         onClick={() => { setEditingAssembly(null); setShowForm(true); }}
       >
         + Add Assembly
@@ -609,8 +654,14 @@ function AssembliesSection({ tool, holders, onSave }) {
           holders={holders}
           assembly={editingAssembly}
           onSave={async (updatedTool) => {
+            const isNew = !editingAssembly;
             setShowForm(false);
             setEditingAssembly(null);
+            if (isNew) {
+              // Show the last assembly in the updated list as pending immediately
+              const added = updatedTool.assemblies?.at(-1) ?? null;
+              setPendingAssembly(added);
+            }
             await onSave(updatedTool);
           }}
           onClose={() => { setShowForm(false); setEditingAssembly(null); }}
