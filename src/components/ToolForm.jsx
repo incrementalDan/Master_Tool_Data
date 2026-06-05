@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Tag, Ruler, Layers, Settings2, Save, X, AlertTriangle } from 'lucide-react';
-import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getNextMachineNumber } from '../schema/toolSchema.js';
+import { Tag, Ruler, Layers, Settings2, Save, X, AlertTriangle, Wand2 } from 'lucide-react';
+import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getNextMachineNumber, toolToExtractor } from '../schema/toolSchema.js';
+import { buildDesc } from '../../tool-extractor.tsx';
 import { fieldsForType } from '../schema/fieldRegistry.js';
 import { useApp } from '../context/AppContext.jsx';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
@@ -138,7 +139,27 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
         <div className="form-grid">
           <div className="field-group form-grid-wide">
             <label className="field-label">Description <span className="required">*</span></label>
-            <input className="field-input" value={data.description || ''} onChange={e => setField('description', e.target.value)} placeholder="Auto-generated if left blank" />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                className="field-input"
+                style={{ flex: 1 }}
+                value={data.description || ''}
+                onChange={e => setField('description', e.target.value)}
+                placeholder="e.g. 0.500 4FL EM 1.000LOC"
+              />
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                title="Suggest description from geometry"
+                onClick={() => {
+                  const suggested = buildDesc(toolToExtractor(data));
+                  if (suggested) setField('description', suggested);
+                }}
+                style={{ flexShrink: 0 }}
+              >
+                <Wand2 size={14} /> Suggest
+              </button>
+            </div>
           </div>
           <FieldInput field="vendor" label="Manufacturer" data={data} setField={setField} list={MANUFACTURER_LIST} />
           <FieldInput field="product_id" label="Mfr Part # (EDP)" data={data} setField={setField} />

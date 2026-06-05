@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2 } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { generateMachineNumbers } from '../schema/toolSchema.js';
 import { FilePicker } from './LibrarySetup.jsx';
+import DescRenameModal from './DescRenameModal.jsx';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -14,6 +15,7 @@ export default function Settings() {
   } = useApp();
 
   const [showHolderPicker, setShowHolderPicker] = useState(false);
+  const [showDescRename, setShowDescRename] = useState(false);
 
   // 'idle' → warning, 'preview' → table + confirm input, 'done' → success
   const [stage, setStage] = useState('idle');
@@ -121,6 +123,27 @@ export default function Settings() {
             />
           </div>
         )}
+      </div>
+
+      {/* Description rename */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Wand2 size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Rename Tool Descriptions</h3>
+        </div>
+        <p className="text-sub text-sm mb-16">
+          Preview and apply geometry-based description suggestions across the whole library.
+          Each tool shows its current description next to the generated suggestion — uncheck
+          any you want to skip or edit the text before applying.
+        </p>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => setShowDescRename(true)}
+          disabled={tools.length === 0}
+        >
+          <Wand2 size={13} /> Review &amp; rename descriptions…
+        </button>
+        {showDescRename && <DescRenameModal onClose={() => setShowDescRename(false)} />}
       </div>
 
       <div className="card" style={{ maxWidth: 760 }}>
