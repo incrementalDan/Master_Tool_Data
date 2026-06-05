@@ -360,7 +360,6 @@ export function combineToolsByProshopId(tools) {
 // Build a Fusion holder object from a holder-library entry.
 export function buildHolderObject(holderEntry) {
   if (!holderEntry) return null;
-  const segments = holderEntry.segments;
   let gaugeLength = holderEntry.gaugeLength;
 
   // A holder's gauge length can never physically exceed the total height of its
@@ -370,24 +369,18 @@ export function buildHolderObject(holderEntry) {
   // the assembly is recomputed. Clamp to the exact section total — this fixes
   // the rounding artifact without touching gauge lengths that are legitimately
   // shorter than the holder (the common case), since min() keeps the smaller.
-  if (Array.isArray(segments) && segments.length > 0 && typeof gaugeLength === 'number') {
-    const totalHeight = segments.reduce((sum, seg) => sum + (Number(seg?.height) || 0), 0);
+  if (Array.isArray(holderEntry.segments) && holderEntry.segments.length > 0 && typeof gaugeLength === 'number') {
+    const totalHeight = holderEntry.segments.reduce((sum, seg) => sum + (Number(seg?.height) || 0), 0);
     if (totalHeight > 0 && gaugeLength > totalHeight) gaugeLength = totalHeight;
   }
 
+  // Spread the full Fusion-native holder object so no required fields are
+  // dropped (e.g. BMC, expressions, or any future Fusion additions), then
+  // override only the fields we need to adjust.
   return {
-    description: holderEntry.description,
-    guid: holderEntry.guid,
-    'product-id': holderEntry['product-id'] || '',
-    'product-link': holderEntry['product-link'] || '',
-    vendor: holderEntry.vendor || '',
-    gaugeLength,
-    unit: holderEntry.unit,
-    segments,
-    // `type: 'holder'` is the discriminator every Fusion-native holder carries.
-    // Without it Fusion does not recognize the object as a holder and silently
-    // drops the tool↔holder association on the next load.
-    type: 'holder',
+    ...holderEntry,
+    gaugeLength,  // clamped value from above; overrides original if it changed
+    type: 'holder',  // discriminator — Fusion uses this to recognize the object
   };
 }
 
