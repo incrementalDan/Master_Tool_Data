@@ -4,6 +4,7 @@ import {
   PS_GROUPS, AUTO_GROUP, COOLANT_OPTS, THROUGH_COOLANT_VALUES,
   getVisibleFields,
 } from '../../tool-extractor.tsx';
+import { isMetadataOnly } from './fieldRegistry.js';
 import { parsePresetName, materialCategory } from '../utils/presetNaming.js';
 
 export { TT, TL, MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST, PS_GROUPS, AUTO_GROUP, COOLANT_OPTS };
@@ -676,7 +677,7 @@ export function internalToFusionTool(tool) {
   const hasMtn = mtn !== null && mtn !== undefined && mtn !== '' && !isNaN(parseInt(mtn));
   const mtnInt = hasMtn ? parseInt(mtn) : null;
 
-  return {
+  const fusionObj = {
     ...existing,
     BMC: tool.material || existing.BMC || 'carbide',
     GRADE: existing.GRADE || 'Mill Generic',
@@ -737,6 +738,11 @@ export function internalToFusionTool(tool) {
         : (tool.tool_number ? { number: parseInt(tool.tool_number) || 0 } : {})),
     },
   };
+  // Guard: delete any metadata-only internal field names that shouldn't appear in Fusion JSON.
+  // Fusion uses its own key names (BMC, DC, NOF, etc.) so this only catches accidental direct
+  // copies of internal field names (e.g. if someone wrote fusionObj.vendor = tool.vendor).
+  Object.keys(fusionObj).forEach(k => { if (isMetadataOnly(k)) delete fusionObj[k]; });
+  return fusionObj;
 }
 
 // ─── Merge Fusion tool + metadata into single object ──────────────────────

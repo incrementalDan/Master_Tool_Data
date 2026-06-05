@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Tag, Ruler, Layers, Settings2, Save, X, AlertTriangle } from 'lucide-react';
-import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getVisibleFields, getNextMachineNumber } from '../schema/toolSchema.js';
+import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getNextMachineNumber } from '../schema/toolSchema.js';
+import { fieldsForType } from '../schema/fieldRegistry.js';
 import { useApp } from '../context/AppContext.jsx';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 
@@ -15,21 +16,6 @@ const FIELD_STEP = {
   helix_angle: '0.5', min_thread_pitch: '0.0001', max_thread_pitch: '0.0001',
 };
 
-// Map extractor key names to our field names for getVisibleFields results
-const EXTRACTOR_TO_APP_FIELD = {
-  toolType: 'tool_type', loc: 'flute_length', oal: 'overall_length', flutes: 'number_of_flutes',
-  shankDia: 'shank_diameter', cornerRadius: 'corner_radius', edpNumber: 'product_id',
-  approvedBrand: 'vendor', vendor: 'distributor', vendorStockNum: 'distributor_stock_num',
-  productLink: 'product_link', presetName: 'preset_name', toolNumber: 'tool_number',
-  helixAngle: 'helix_angle', centerCutting: 'center_cutting', fluteType: 'flute_type',
-  cuttingDirection: 'cutting_direction', tapClass: 'tap_class', pointType: 'point_type',
-  stubJobber: 'stub_jobber', doubleEnded: 'double_ended', fullProfile: 'full_profile',
-  backsideCapable: 'backside_capable', tipAngle: 'tip_angle', tipDiameter: 'tip_diameter',
-  taperAngle: 'taper_angle', lowerRadius: 'lower_radius', upperRadius: 'upper_radius',
-  profileRadius: 'profile_radius', axialDistance: 'axial_distance',
-  minThreadPitch: 'min_thread_pitch', maxThreadPitch: 'max_thread_pitch',
-  psToolId: 'proshot_id', workpieceMats: 'material_suitability', shoulderLen: 'shoulder_length',
-};
 
 const FLUTE_DESIGN_OPTS = ['Variable Index', 'Variable Flute', 'Variable Helix', 'Variable Pitch'];
 
@@ -55,13 +41,6 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
   const setField = (field, value) => setData(d => ({ ...d, [field]: value }));
 
   const dirty = useMemo(() => JSON.stringify(data) !== JSON.stringify(tool), [data, tool]);
-
-  const getVisibleAppFields = () => {
-    const extFields = getVisibleFields(data.tool_type);
-    return extFields
-      .map(({ key, optional }) => ({ field: EXTRACTOR_TO_APP_FIELD[key] || key, optional }))
-      .filter(({ field }) => field !== 'tool_type' && field !== 'grouping');
-  };
 
   const handleSave = async () => {
     const { valid, errors: errs } = validateTool(data);
@@ -100,7 +79,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
 
-  const visibleFields = new Set(getVisibleAppFields().map(f => f.field));
+  const visibleFields = new Set(fieldsForType(data.tool_type));
 
   const geoIssues = useMemo(
     () => validateGeometry(data),
