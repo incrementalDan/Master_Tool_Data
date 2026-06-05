@@ -361,12 +361,12 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px;
+  padding: 10px;
   cursor: pointer;
   transition: border-color var(--ease), transform var(--ease), box-shadow var(--ease);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   position: relative;
 }
 .tool-card:hover {
@@ -377,14 +377,14 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 .tool-card-header {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
 }
 
 .tool-card-icon {
   flex-shrink: 0;
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;

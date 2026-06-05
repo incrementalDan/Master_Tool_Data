@@ -19,7 +19,7 @@ function proshotUrl(id) {
 
 export default function ToolCard({ tool, variant = 'grid' }) {
   const navigate = useNavigate();
-  const { cloneTool, notify, holders } = useApp();
+  const { cloneTool, notify } = useApp();
   const label = TOOL_TYPE_LABELS[tool.tool_type] || tool.tool_type;
 
   const open = () => navigate(`/tool/${tool.id}`);
@@ -48,9 +48,25 @@ export default function ToolCard({ tool, variant = 'grid' }) {
 
   const hasMachineNum = tool.machine_tool_number !== null && tool.machine_tool_number !== undefined && tool.machine_tool_number !== '';
 
-  const selectedHolder = tool.selected_holder_guid
-    ? holders.find(h => h.guid === tool.selected_holder_guid)
-    : null;
+  // Type row: label + location + proshot side-by-side
+  const typeRow = (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
+      <span className="tool-card-type">{label}</span>
+      {tool.location && (
+        <span className="location-tag" title="Location" style={{ fontSize: 10, padding: '1px 6px' }}>{tool.location}</span>
+      )}
+      {tool.proshot_id && (
+        <a
+          className="proshot-pill font-mono"
+          href={proshotUrl(tool.proshot_id)}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
+          style={{ fontSize: 10, padding: '1px 7px' }}
+        >{tool.proshot_id}</a>
+      )}
+    </div>
+  );
 
   const badges = (
     <div className="tool-card-meta">
@@ -66,23 +82,6 @@ export default function ToolCard({ tool, variant = 'grid' }) {
       {tool.preferred_machine && (
         <span className="meta-badge meta-badge-blue">{tool.preferred_machine}</span>
       )}
-      {tool.location && (
-        <span className="location-tag" title="Location">{tool.location}</span>
-      )}
-      {tool.proshot_id && (
-        <a
-          className="proshot-pill font-mono"
-          href={proshotUrl(tool.proshot_id)}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={e => e.stopPropagation()}
-        >{tool.proshot_id}</a>
-      )}
-      {selectedHolder && (
-        <span className="holder-pill truncate" style={{ maxWidth: 160 }} title={`Holder: ${selectedHolder.description}`}>
-          {selectedHolder.description}
-        </span>
-      )}
     </div>
   );
 
@@ -92,7 +91,7 @@ export default function ToolCard({ tool, variant = 'grid' }) {
         <span className="tool-row-icon"><ToolTypeIcon type={tool.tool_type} size={24} /></span>
         <div className="tool-row-main">
           <span className="tool-row-title description-badge truncate" style={{ display: 'inline-block', fontSize: 13 }}>{tool.description || '—'}</span>
-          <span className="tool-card-type">{label}</span>
+          {typeRow}
         </div>
         {badges}
         {actions}
@@ -103,8 +102,8 @@ export default function ToolCard({ tool, variant = 'grid' }) {
   return (
     <div className="tool-card" onClick={open}>
       <div className="tool-card-header">
-        <span className="tool-card-icon"><ToolTypeIcon type={tool.tool_type} size={26} /></span>
-        <div className="tool-card-type" style={{ flex: 1, alignSelf: 'center' }}>{label}</div>
+        <span className="tool-card-icon"><ToolTypeIcon type={tool.tool_type} size={24} /></span>
+        {typeRow}
         {actions}
       </div>
       <div className="tool-card-desc description-badge">{tool.description || '—'}</div>
