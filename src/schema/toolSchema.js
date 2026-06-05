@@ -641,9 +641,11 @@ export function internalToFusionTool(tool) {
 
   // Feed-rate unit strings depend on whether the tool is stored in inches or mm.
   const isInch = (tool.unit || existing.unit || 'inches') !== 'millimeters';
-  const feedUnit  = isInch ? 'inpm'    : 'mmpm';
-  const speedUnit = isInch ? 'fpm'     : 'm/min';
-  const fzUnit    = isInch ? 'in/tooth': 'mm/tooth';
+  const feedUnit  = isInch ? 'inpm'  : 'mmpm';
+  const speedUnit = isInch ? 'fpm'   : 'm/min';
+  // Fusion's feed-per-tooth expression unit is just the linear unit ("in" / "mm"),
+  // NOT "in/tooth" — using "in/tooth" causes Fusion to fail parsing the expression.
+  const fzUnit    = isInch ? 'in'    : 'mm';
 
   // Write the FULL presets array — never collapse a multi-preset tool to one.
   // The flat speed/feed fields (edited by ToolForm) are synced into presets[0]
@@ -672,17 +674,29 @@ export function internalToFusionTool(tool) {
     // is never a mismatch between the stored number and its expression string.
     // normalizePreset already handled tool_stepdown / tool_stepover (deleted when
     // the flag is off), so spread np.expressions first to preserve those.
+    //
+    // Fusion presets use ONE speed input mode (RPM *or* surface speed) and ONE feed
+    // input mode (IPM *or* feed-per-tooth). We update whichever key(s) were already
+    // present and add tool_spindleSpeed / tool_feedCutting as defaults when neither
+    // mode key exists. Never add tool_feedLeadIn / tool_feedLeadOut — Fusion derives
+    // those from v_f and does not expect them as expression inputs.
+    const origExprs = np.expressions || {};
+    const hasSurfaceSpeed = 'tool_surfaceSpeed' in origExprs;
+    const hasSpindleSpeed = 'tool_spindleSpeed'  in origExprs;
+    const hasFeedPerTooth = 'tool_feedPerTooth'  in origExprs;
+    const hasFeedCutting  = 'tool_feedCutting'   in origExprs;
     np.expressions = {
-      ...(np.expressions || {}),
-      tool_spindleSpeed:   `${np.n ?? 0} rpm`,
-      tool_feedCutting:    `${np.v_f ?? 0} ${feedUnit}`,
+      ...origExprs,
+      // Speed — update existing mode or default to RPM
+      ...(hasSpindleSpeed || !hasSurfaceSpeed ? { tool_spindleSpeed: `${np.n ?? 0} rpm` } : {}),
+      ...(hasSurfaceSpeed                     ? { tool_surfaceSpeed: `${np.v_c ?? 0} ${speedUnit}` } : {}),
+      // Feed — update existing mode or default to cutting feed
+      ...(hasFeedCutting  || !hasFeedPerTooth ? { tool_feedCutting:  `${np.v_f ?? 0} ${feedUnit}` } : {}),
+      ...(hasFeedPerTooth                     ? { tool_feedPerTooth: `${np.f_z ?? 0} ${fzUnit}` } : {}),
+      // These direct feed rates are always regenerated
       tool_feedPlunge:     `${np.v_f_plunge ?? 0} ${feedUnit}`,
       tool_feedRamp:       `${np.v_f_ramp ?? 0} ${feedUnit}`,
-      tool_feedLeadIn:     `${np.v_f_leadIn ?? 0} ${feedUnit}`,
-      tool_feedLeadOut:    `${np.v_f_leadOut ?? 0} ${feedUnit}`,
       tool_feedTransition: `${np.v_f_transition ?? 0} ${feedUnit}`,
-      tool_surfaceSpeed:   `${np.v_c ?? 0} ${speedUnit}`,
-      tool_feedPerTooth:   `${np.f_z ?? 0} ${fzUnit}`,
     };
     return np;
   });
