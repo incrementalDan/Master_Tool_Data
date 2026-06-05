@@ -1149,6 +1149,8 @@ export function validateGeometry(tool) {
 export { getVisibleFields };
 
 // ─── Human-readable field labels ──────────────────────────────────────────
+// Source of truth for labels has moved to src/schema/fieldRegistry.js (FIELD_REGISTRY[field].label).
+// Keep this map in sync when adding or renaming fields, but add new fields to the registry first.
 export const FIELD_LABELS = {
   tool_type: 'Tool Type',
   description: 'Description',
