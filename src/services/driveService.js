@@ -5,12 +5,22 @@
 
 let _accessToken = null;
 let _userInfo = null;
+let _expiresAt = null;
 
-export function setAccessToken(token) { _accessToken = token; }
+export function setAccessToken(token, expiresIn) {
+  _accessToken = token;
+  // Store expiry with a 60-second buffer so we detect expiry before Drive rejects it
+  _expiresAt = (token && expiresIn) ? Date.now() + (expiresIn - 60) * 1000 : null;
+}
 export function setUserInfo(info) { _userInfo = info; }
 export function getCurrentUser() { return _userInfo; }
-export function signOut() { _accessToken = null; _userInfo = null; }
+export function signOut() { _accessToken = null; _userInfo = null; _expiresAt = null; }
 export function hasToken() { return !!_accessToken; }
+export function isTokenExpired() {
+  if (!_accessToken) return true;
+  if (!_expiresAt) return false; // no expiry info — assume valid
+  return Date.now() >= _expiresAt;
+}
 
 const CACHED_FILE_ID_KEY = 'drive_metadata_file_id';
 
@@ -26,6 +36,7 @@ async function driveGet(fileId) {
     { headers: { Authorization: `Bearer ${_accessToken}` } }
   );
   if (res.status === 404) return null;
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     throw new Error(`Drive read failed (${res.status}): ${txt.slice(0, 200)}`);
@@ -87,6 +98,7 @@ async function driveUpdate(fileId, content) {
       body: JSON.stringify(content),
     }
   );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
   if (res.status === 404) {
     // File no longer exists — create a fresh one and cache the new ID
     localStorage.removeItem(CACHED_FILE_ID_KEY);
@@ -103,6 +115,7 @@ export async function fetchUserInfo() {
   const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
     headers: { Authorization: `Bearer ${_accessToken}` },
   });
+  if (res.status === 401) throw Object.assign(new Error('Google token expired'), { code: 'TOKEN_EXPIRED' });
   if (!res.ok) throw new Error('Failed to fetch user info');
   const info = await res.json();
   setUserInfo(info);

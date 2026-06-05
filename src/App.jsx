@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import { useGoogleLogin } from '@react-oauth/google';
 import { Wrench, FolderOpen, LogOut, Library, Upload, Settings, GitMerge, RefreshCw, AlertTriangle } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
+import { setAccessToken, fetchUserInfo } from './services/driveService.js';
 import ToastStack from './components/Toast.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
 import LibrarySetup from './components/LibrarySetup.jsx';
@@ -73,6 +75,7 @@ function AppShell() {
       <div className="app-shell">
         <TopBar user={user} googleAuthenticated={googleAuthenticated} onSignOut={signOutAll} onChangeLibrary={clearLibraryLocation} />
         <NormalizeBanner />
+        <GoogleReconnectBanner />
         <main className="page-content">
           <Routes>
             <Route path="/" element={<LandingPage />} />
@@ -118,6 +121,54 @@ function NormalizeBanner() {
       </span>
       <button className="btn btn-secondary btn-sm" onClick={() => setShowModal(true)}>Review &amp; normalize</button>
       {showModal && <NormalizeModal onClose={() => setShowModal(false)} />}
+    </div>
+  );
+}
+
+// Shown when the Google token expires while the user is already in the app —
+// makes the silent sign-out visible and provides a one-click reconnect.
+function GoogleReconnectBanner() {
+  const { googleAuthenticated, googleExpired, setGoogleUser, loadTools } = useApp();
+  const [reconnecting, setReconnecting] = useState(false);
+
+  const login = useGoogleLogin({
+    scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+    onSuccess: async (tokenResponse) => {
+      setReconnecting(true);
+      try {
+        setAccessToken(tokenResponse.access_token, tokenResponse.expires_in);
+        localStorage.setItem('google_drive_connected', '1');
+        const userInfo = await fetchUserInfo();
+        setGoogleUser(userInfo);
+        await loadTools();
+      } catch {
+        // stay showing banner — user can try again
+      } finally {
+        setReconnecting(false);
+      }
+    },
+    onError: () => setReconnecting(false),
+  });
+
+  if (!googleAuthenticated || !googleExpired) return null;
+
+  return (
+    <div role="alert" style={{
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      padding: '10px 16px', background: 'rgba(239,68,68,0.1)',
+      borderBottom: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5', fontSize: 13,
+    }}>
+      <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 220 }}>
+        Google Drive disconnected — metadata changes won't be saved until you reconnect.
+      </span>
+      <button
+        className="btn btn-secondary btn-sm"
+        onClick={() => { setReconnecting(true); login(); }}
+        disabled={reconnecting}
+      >
+        {reconnecting ? <><span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> Reconnecting…</> : 'Reconnect Drive'}
+      </button>
     </div>
   );
 }

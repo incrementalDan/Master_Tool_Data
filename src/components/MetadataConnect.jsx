@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { HardDrive, Folder, Home, ChevronRight } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
@@ -7,11 +7,16 @@ import {
   checkMetadataFile, listFolders, listSharedDrives, createMetadataInFolder,
 } from '../services/driveService.js';
 
-// Steps: 'connect' → (auth) → 'checking' → 'picker' (if no file) → 'creating' → done
-//                                         → done (if file exists)
+const GOOGLE_CONNECTED_KEY = 'google_drive_connected';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
+
+// Steps: 'reconnecting' → silent attempt → 'connect' (if fails) or done (if succeeds)
+//        'connect' → user clicks → 'checking' → 'picker' (no file) → 'creating' → done
+//                                              → done (file exists)
 export default function MetadataConnect() {
   const { setGoogleUser, skipMetadata, signOutAll } = useApp();
-  const [view, setView] = useState('connect'); // 'connect' | 'checking' | 'picker' | 'creating'
+  const wasConnected = !!localStorage.getItem(GOOGLE_CONNECTED_KEY);
+  const [view, setView] = useState(wasConnected ? 'reconnecting' : 'connect');
   const [error, setError] = useState('');
 
   // Folder picker state
@@ -24,29 +29,54 @@ export default function MetadataConnect() {
   // Stored user info so we can call setGoogleUser after file is created
   const [pendingUser, setPendingUser] = useState(null);
 
-  const login = useGoogleLogin({
-    scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
-    onSuccess: async (tokenResponse) => {
-      setError('');
-      setView('checking');
-      try {
-        setAccessToken(tokenResponse.access_token);
-        const userInfo = await fetchUserInfo();
-        const fileExists = await checkMetadataFile();
-        if (fileExists) {
-          setGoogleUser(userInfo);
-        } else {
-          setPendingUser(userInfo);
-          setView('picker');
-          loadPickerRoot();
-        }
-      } catch (err) {
-        setError(err.message || 'Google sign-in failed.');
-        setView('connect');
+  // loadPickerRoot defined before handleSuccess so it can be referenced
+  const loadPickerRootRef = useRef(null);
+
+  const handleSuccess = useCallback(async (tokenResponse) => {
+    setError('');
+    setView('checking');
+    try {
+      setAccessToken(tokenResponse.access_token, tokenResponse.expires_in);
+      localStorage.setItem(GOOGLE_CONNECTED_KEY, '1');
+      const userInfo = await fetchUserInfo();
+      const fileExists = await checkMetadataFile();
+      if (fileExists) {
+        setGoogleUser(userInfo);
+      } else {
+        setPendingUser(userInfo);
+        setView('picker');
+        loadPickerRootRef.current?.();
       }
-    },
+    } catch (err) {
+      setError(err.message || 'Google sign-in failed.');
+      setView('connect');
+    }
+  }, [setGoogleUser]);
+
+  // Silent login: prompt:'none' — works when the user has an active Google session.
+  // Browsers may block the popup if not initiated by a user gesture; onError handles that.
+  const silentLogin = useGoogleLogin({
+    scope: DRIVE_SCOPE,
+    prompt: 'none',
+    onSuccess: handleSuccess,
+    onError: () => setView('connect'),
+  });
+
+  const interactiveLogin = useGoogleLogin({
+    scope: DRIVE_SCOPE,
+    onSuccess: handleSuccess,
     onError: () => { setError('Google sign-in was cancelled or failed.'); setView('connect'); },
   });
+
+  // On mount: if the user previously connected, try a silent token refresh before
+  // showing the connect screen. Falls back to the connect screen on any failure.
+  const silentAttempted = useRef(false);
+  useEffect(() => {
+    if (wasConnected && !silentAttempted.current) {
+      silentAttempted.current = true;
+      silentLogin();
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadPickerRoot() {
     setFolderLoading(true);
@@ -63,6 +93,7 @@ export default function MetadataConnect() {
       setFolderLoading(false);
     }
   }
+  loadPickerRootRef.current = loadPickerRoot;
 
   async function openFolder(folder) {
     setFolderLoading(true);
@@ -132,26 +163,38 @@ export default function MetadataConnect() {
 
   // ─── Views ────────────────────────────────────────────────────────────────
 
+  if (view === 'reconnecting') {
+    return (
+      <div className="loading-screen" style={{ minHeight: '100vh' }}>
+        <div className="spinner" />
+        <span>Reconnecting Google Drive…</span>
+      </div>
+    );
+  }
+
   if (view === 'connect' || view === 'checking') {
+    const isReturning = wasConnected && !error;
     return (
       <div className="login-screen">
         <div className="login-card">
           <div className="login-logo"><HardDrive size={26} strokeWidth={2.2} /></div>
-          <h1 className="login-title">Connect Google Drive</h1>
-          <p className="login-subtitle">
-            Extra fields Fusion doesn't support (tags, notes, ProShop IDs, material suitability) are stored in
-            <code> tool_metadata.json</code> on Google Drive. Connect now to load and save them.
-          </p>
+          <h1 className="login-title">{isReturning ? 'Reconnect Google Drive' : 'Connect Google Drive'}</h1>
+          {!isReturning && (
+            <p className="login-subtitle">
+              Extra fields Fusion doesn't support (tags, notes, ProShop IDs, material suitability) are stored in
+              <code> tool_metadata.json</code> on Google Drive. Connect now to load and save them.
+            </p>
+          )}
           {error && <div className="error-banner" style={{ marginBottom: 16 }}>{error}</div>}
           <button
             className="btn btn-primary btn-lg"
-            onClick={() => login()}
+            onClick={() => interactiveLogin()}
             disabled={view === 'checking'}
             style={{ width: '100%', justifyContent: 'center', marginBottom: 10 }}
           >
             {view === 'checking' ? (
               <><span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} /> Checking…</>
-            ) : 'Connect Google Drive'}
+            ) : (isReturning ? 'Sign in with Google' : 'Connect Google Drive')}
           </button>
           <button className="btn btn-ghost" onClick={skipMetadata} style={{ width: '100%', justifyContent: 'center' }}>
             Skip — use Fusion data only
