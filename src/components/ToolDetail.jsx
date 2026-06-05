@@ -216,19 +216,8 @@ export default function ToolDetail() {
             <ToolTypeIcon type={tool.tool_type} size={30} />
           </span>
           <div className="tool-sticky-header-body">
-            <div className="detail-header-type" style={{ fontSize: 12 }}>{typeLabel}</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              {tool.proshot_id && (
-                <a
-                  className="proshot-pill"
-                  href={proshotUrl(tool.proshot_id)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Open in ProShop"
-                  onClick={e => e.stopPropagation()}
-                  style={{ fontSize: 12, padding: '3px 11px' }}
-                >{tool.proshot_id}</a>
-              )}
+              <div className="detail-header-type" style={{ fontSize: 12, flexShrink: 0 }}>{typeLabel}</div>
               <h1
                 className="detail-header-title description-badge"
                 style={{
@@ -245,6 +234,17 @@ export default function ToolDetail() {
                 {tool.description || '—'}
               </h1>
             </div>
+            {tool.proshot_id && (
+              <a
+                className="proshot-pill"
+                href={proshotUrl(tool.proshot_id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open in ProShop"
+                onClick={e => e.stopPropagation()}
+                style={{ fontSize: 15, padding: '4px 16px', alignSelf: 'flex-start' }}
+              >{tool.proshot_id}</a>
+            )}
           </div>
         </div>
 
@@ -252,9 +252,9 @@ export default function ToolDetail() {
             <Section title="Identity" icon={Tag}>
               {/* Location chip */}
               {tool.location && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0', marginBottom: 8, borderBottom: '1px solid var(--border)' }}>
-                  <span className="text-sub" style={{ fontSize: 12 }}>Cabinet / Location</span>
-                  <span className="location-tag">{tool.location}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
+                  <span className="text-sub" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Cabinet</span>
+                  <span className="location-tag" style={{ fontSize: 15, padding: '4px 13px' }}>{tool.location}</span>
                 </div>
               )}
               <div className="detail-fields">
@@ -268,11 +268,9 @@ export default function ToolDetail() {
                     </div>
                   </div>
                 )}
-                <Field label="Description" value={tool.description} />
                 <Field label="Type" value={typeLabel} />
                 <Field label="Manufacturer" value={tool.vendor} />
                 <Field label="Mfr Part # (EDP)" value={tool.product_id} mono />
-                <Field label="ProShop ID" value={tool.proshot_id} mono href={proshotUrl(tool.proshot_id)} />
               </div>
             </Section>
 
@@ -330,18 +328,6 @@ export default function ToolDetail() {
               )}
             </Section>
 
-            <HolderSection
-              tool={tool}
-              holders={holders}
-              holderLibrarySetupComplete={!!holderLibraryLocation}
-              onSelectHolder={async (guid) => {
-                try {
-                  await saveTool({ ...tool, selected_holder_guid: guid });
-                  notify('Holder updated', 'success');
-                } catch { /* toast handled in context */ }
-              }}
-            />
-
             <AssembliesSection
               tool={tool}
               holders={holders}
@@ -353,6 +339,18 @@ export default function ToolDetail() {
             />
 
             <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving} />
+
+            <HolderSection
+              tool={tool}
+              holders={holders}
+              holderLibrarySetupComplete={!!holderLibraryLocation}
+              onSelectHolder={async (guid) => {
+                try {
+                  await saveTool({ ...tool, selected_holder_guid: guid });
+                  notify('Holder updated', 'success');
+                } catch { /* toast handled in context */ }
+              }}
+            />
 
             <Section title="History" icon={Clock} defaultOpen={false}>
               <div className="detail-fields" style={{ marginBottom: (tool.merge_history || []).length > 0 ? 12 : 0 }}>

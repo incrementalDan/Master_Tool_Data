@@ -51,7 +51,7 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
           {holderDescription}
         </span>
         <span style={{ fontSize: 13, fontWeight: 700, flex: 'none', color: 'var(--text)' }}>
-          {assembly.ooh != null ? `${assembly.ooh.toFixed(3)}"` : '—'}
+          {assembly.ooh != null ? `OOH: ${assembly.ooh.toFixed(3)}"` : '—'}
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, flexShrink: 0 }}>
           <button className="icon-btn" style={{ width: 22, height: 22 }} title="Edit assembly" onClick={() => onEdit(assembly)}>

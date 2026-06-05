@@ -93,21 +93,43 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
               <Info size={12} />
             </span>
           </label>
-          {minOoh != null && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <span className="text-sub text-xs">
-                Length Below Holder - MIN OOH: <strong>{minOoh.toFixed(3)}"</strong>
-              </span>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                style={{ fontSize: 11, padding: '2px 8px' }}
-                onClick={() => setOoh(String(minOoh))}
-              >
-                Use
-              </button>
+
+          {/* Reference pills: OAL (info only) + MIN OOH (clickable to fill) */}
+          {(tool.overall_length != null || minOoh != null) && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+              {tool.overall_length != null && (
+                <div style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  padding: '5px 14px', borderRadius: 999,
+                  border: '1px solid var(--border)', background: 'var(--surface-2)',
+                  minWidth: 72,
+                }}>
+                  <span style={{ fontSize: 10, color: 'var(--text-sub)', textTransform: 'uppercase', letterSpacing: '0.06em', lineHeight: 1 }}>OAL</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginTop: 2 }}>
+                    {tool.overall_length.toFixed(3)}{tool.unit === 'millimeters' ? ' mm' : '"'}
+                  </span>
+                </div>
+              )}
+              {minOoh != null && (
+                <button
+                  type="button"
+                  title="Click to use as OOH"
+                  style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                    padding: '5px 14px', borderRadius: 999,
+                    border: '1px solid var(--blue)', background: 'var(--blue-tint)',
+                    color: 'var(--blue)', cursor: 'pointer',
+                    minWidth: 72, fontFamily: 'inherit',
+                  }}
+                  onClick={() => setOoh(String(minOoh))}
+                >
+                  <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', lineHeight: 1 }}>MIN OOH</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, marginTop: 2 }}>{minOoh.toFixed(3)}"</span>
+                </button>
+              )}
             </div>
           )}
+
           <input
             className="field-input"
             style={{ maxWidth: 160 }}
