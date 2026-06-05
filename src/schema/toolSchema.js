@@ -693,10 +693,12 @@ export function internalToFusionTool(tool) {
       // Feed — update existing mode or default to cutting feed
       ...(hasFeedCutting  || !hasFeedPerTooth ? { tool_feedCutting:  `${np.v_f ?? 0} ${feedUnit}` } : {}),
       ...(hasFeedPerTooth                     ? { tool_feedPerTooth: `${np.f_z ?? 0} ${fzUnit}` } : {}),
-      // These direct feed rates are always regenerated
-      tool_feedPlunge:     `${np.v_f_plunge ?? 0} ${feedUnit}`,
-      tool_feedRamp:       `${np.v_f_ramp ?? 0} ${feedUnit}`,
-      tool_feedTransition: `${np.v_f_transition ?? 0} ${feedUnit}`,
+      // tool_feedPlunge / tool_feedRamp / tool_feedTransition are NOT regenerated.
+      // Fusion's default presets store these as formula expressions that reference
+      // other fields (e.g. "tool_feedCutting/3", "tool_feedPlunge", "tool_feedCutting").
+      // Overwriting them with literal numeric strings breaks those dynamic links and
+      // causes Fusion to write back wrong computed values on the next load, creating a
+      // corrupt-values cycle. Preserve whatever origExprs has for these keys instead.
     };
     return np;
   });
@@ -1005,15 +1007,32 @@ export function splitToFusionInstances(tool, holders = []) {
     // original GUID to maintain its link back to the holder library.
     if (a.holder_guid) {
       const holder = holders.find(h => h.guid === a.holder_guid);
-      base.holder = holder ? buildHolderObject(holder) : (raw.holder || null);
+      if (holder) {
+        const holderObj = buildHolderObject(holder);
+        // Preserve gaugeLength from the raw Fusion entry when the holder GUID matches.
+        // Fusion may recompute or the user may have corrected this value after the
+        // holder library entry was created — always using the library's value would
+        // silently revert those corrections.
+        if (raw.holder?.guid === holder.guid && typeof raw.holder.gaugeLength === 'number') {
+          base.holder = { ...holderObj, gaugeLength: raw.holder.gaugeLength };
+        } else {
+          base.holder = holderObj;
+        }
+      } else {
+        base.holder = raw.holder || null;
+      }
     } else {
       base.holder = raw.holder || null;
     }
 
     // Per-instance OOH → geometry.LB (the documented OOH source of truth).
+    // ALSO update expressions.tool_bodyLength — Fusion re-derives LB from this
+    // expression on every library load, silently overriding the numeric field if
+    // the two don't match. Both must be updated together.
     if (a.ooh != null && a.ooh !== '' && !isNaN(Number(a.ooh))) {
       const lb = isMetric ? Number(a.ooh) * 25.4 : Number(a.ooh);
       base.geometry = { ...(base.geometry || {}), LB: lb };
+      base.expressions = { ...(base.expressions || {}), tool_bodyLength: `${lb} ${isMetric ? 'mm' : 'in'}` };
     }
 
     return base;
