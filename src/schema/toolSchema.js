@@ -646,6 +646,12 @@ export function internalToFusionTool(tool) {
 
   const fusionType = FT_MAP[tool.tool_type] || tool.tool_type;
 
+  // Feed-rate unit strings depend on whether the tool is stored in inches or mm.
+  const isInch = (tool.unit || existing.unit || 'inches') !== 'millimeters';
+  const feedUnit  = isInch ? 'inpm'    : 'mmpm';
+  const speedUnit = isInch ? 'fpm'     : 'm/min';
+  const fzUnit    = isInch ? 'in/tooth': 'mm/tooth';
+
   // Write the FULL presets array — never collapse a multi-preset tool to one.
   // The flat speed/feed fields (edited by ToolForm) are synced into presets[0]
   // so edits made outside the preset editor are preserved. Falls back to a
@@ -666,6 +672,25 @@ export function internalToFusionTool(tool) {
       np.v_f_leadOut = tool.lead_out_feedrate ?? np.v_f_leadOut;
       np.v_c        = tool.cutting_speed     ?? np.v_c;
     }
+    // Regenerate preset-level expression strings to match the final numeric values.
+    // Fusion re-derives numeric values from expressions on every load, so a stale
+    // expression silently overrides the field we just wrote — the root cause of the
+    // "edits not sticking after sync" bug. Regenerate unconditionally here so there
+    // is never a mismatch between the stored number and its expression string.
+    // normalizePreset already handled tool_stepdown / tool_stepover (deleted when
+    // the flag is off), so spread np.expressions first to preserve those.
+    np.expressions = {
+      ...(np.expressions || {}),
+      tool_spindleSpeed:   `${np.n ?? 0} rpm`,
+      tool_feedCutting:    `${np.v_f ?? 0} ${feedUnit}`,
+      tool_feedPlunge:     `${np.v_f_plunge ?? 0} ${feedUnit}`,
+      tool_feedRamp:       `${np.v_f_ramp ?? 0} ${feedUnit}`,
+      tool_feedLeadIn:     `${np.v_f_leadIn ?? 0} ${feedUnit}`,
+      tool_feedLeadOut:    `${np.v_f_leadOut ?? 0} ${feedUnit}`,
+      tool_feedTransition: `${np.v_f_transition ?? 0} ${feedUnit}`,
+      tool_surfaceSpeed:   `${np.v_c ?? 0} ${speedUnit}`,
+      tool_feedPerTooth:   `${np.f_z ?? 0} ${fzUnit}`,
+    };
     return np;
   });
 
@@ -968,6 +993,9 @@ export function splitToFusionInstances(tool, holders = []) {
     }
 
     // Per-instance holder.
+    // buildHolderObject always uses holderEntry.guid (the original GUID from the
+    // holder library entry), never generates a new one — Fusion requires the
+    // original GUID to maintain its link back to the holder library.
     if (a.holder_guid) {
       const holder = holders.find(h => h.guid === a.holder_guid);
       base.holder = holder ? buildHolderObject(holder) : (raw.holder || null);
