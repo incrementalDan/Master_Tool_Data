@@ -374,6 +374,10 @@ src/
                                   #          user, notify, mergeTool, saveTool, deleteTool, etc.
 
   schema/
+    fieldRegistry.js              # Central field registry — source of truth for
+                                  # all field metadata: labels, types, units,
+                                  # Fusion paths, ProShop columns, type applicability.
+                                  # Add new fields here first before touching anything else.
     toolSchema.js                 # Tool types, field labels, fusionToolToInternal,
                                   # internalToFusionTool, splitToFusionAndMetadata,
                                   # mergeFusionAndMetadata, validateTool, generateId,

@@ -327,6 +327,10 @@ const WM=["","N","M","P","S","K"];
 const CO=["","UC","AlTiN","TiAlN","TiN","ZrN","DLC"];
 const MA=["carbide","hss","cobalt","ceramic"];
 
+// FIELD_VISIBILITY — per-type show/hide matrix (1=required, 0=hidden, "o"=optional).
+// Type applicability is now also captured in src/schema/fieldRegistry.js
+// (FIELD_REGISTRY[field].appliesToTypes). Keep both in sync when adding fields,
+// but add new fields to the registry first.
 const _FV_KEYS=["flat end mill","ball end mill","bull nose end mill","tapered mill","radius mill","form mill","face mill","chamfer mill","dovetail","lollipop mill","slot/key cutter","thread mill","circle segment barrel","circle segment lens","circle segment oval","circle segment taper","drill","center drill","spot drill","reamer","counter bore","counter sink","tap form","boring head","turning general"];
 const FIELD_VISIBILITY={
   toolType:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],grouping:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],

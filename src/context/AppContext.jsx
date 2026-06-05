@@ -35,6 +35,7 @@ const initialState = {
   user: null,                 // Google user (metadata identity) or null
   apsAuthenticated: false,    // Autodesk signed in
   googleAuthenticated: false, // Google signed in (metadata)
+  googleExpired: false,       // token expired while in-app (reconnect banner shown)
   metadataSkipped: false,     // user chose to proceed without Drive metadata
   libraryLocation: loadStoredLocation(), // { hubId, projectId, folderId, itemId, fileName }
   holderLibraryLocation: loadStoredHolderLocation(), // same shape, optional
@@ -54,7 +55,9 @@ function reducer(state, action) {
     case 'APS_AUTHED': return { ...state, processingAuth: false, apsAuthenticated: true };
     case 'AUTH_ERROR': return { ...state, processingAuth: false, error: action.error };
     case 'SET_GOOGLE_USER':
-      return { ...state, user: action.user, googleAuthenticated: true };
+      return { ...state, user: action.user, googleAuthenticated: true, googleExpired: false };
+    case 'GOOGLE_EXPIRED':
+      return { ...state, googleExpired: true };
     case 'SKIP_METADATA': return { ...state, metadataSkipped: true };
     case 'SET_LIBRARY_LOCATION': return { ...state, libraryLocation: action.location };
     case 'CLEAR_LIBRARY_LOCATION': return { ...state, libraryLocation: null, tools: [] };
@@ -199,6 +202,7 @@ export function AppProvider({ children }) {
   const signOutAll = useCallback(() => {
     aps.signOut();
     driveService.signOut();
+    localStorage.removeItem('google_drive_connected');
     dispatch({ type: 'SIGN_OUT' });
   }, []);
 
@@ -207,7 +211,19 @@ export function AppProvider({ children }) {
     dispatch({ type: 'LOAD_START' });
     try {
       const fusionList = await downloadFusionList();
-      const metaList = googleRef.current ? await driveService.loadMetadata() : [];
+      let metaList = [];
+      if (googleRef.current) {
+        try {
+          metaList = await driveService.loadMetadata();
+        } catch (err) {
+          if (err.code === 'TOKEN_EXPIRED') {
+            dispatch({ type: 'GOOGLE_EXPIRED' });
+            // Continue — tools load without metadata; banner prompts reconnect
+          } else {
+            throw err;
+          }
+        }
+      }
       const metaByTracking = new Map(metaList.map(m => [m.id, m]));
 
       // Group Fusion entries into logical tools by tracking ID. Entries without
@@ -293,7 +309,14 @@ export function AppProvider({ children }) {
       .concat(fusionInstances);
 
     await uploadFusionList(next);
-    if (googleRef.current) await driveService.upsertMetadata(metadataTool);
+    if (googleRef.current) {
+      try {
+        await driveService.upsertMetadata(metadataTool);
+      } catch (err) {
+        if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
+        throw err; // Still fail the save so the user knows metadata didn't persist
+      }
+    }
 
     return { ...toWrite, _instancesRaw: fusionInstances, _fusionRaw: fusionInstances[0] };
   }, [downloadFusionList, uploadFusionList]);

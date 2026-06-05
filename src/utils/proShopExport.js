@@ -1,6 +1,7 @@
 import { buildProShopCSV, PS_MAIN_COLS, buildBrandRows } from '../../tool-extractor.tsx';
 import { toolToExtractor } from '../schema/toolSchema.js';
 import { downloadCSV } from '../../tool-extractor.tsx';
+import { proShopFields } from '../schema/fieldRegistry.js';
 
 function csvCell(v) {
   const s = String(v === null || v === undefined ? '' : v);
@@ -16,7 +17,15 @@ export function exportSingleTool(tool) {
 export function exportFullLibrary(tools) {
   if (tools.length === 0) return;
 
-  const headerCols = [...PS_MAIN_COLS.map(([h]) => h), 'approvedBrand', 'EDP#', 'cost', 'vendor'];
+  // Brand-section column names driven by the field registry (registry is source of truth).
+  const psFieldMap = Object.fromEntries(proShopFields().map(f => [f.fieldName, f.proShopColumn]));
+  const headerCols = [
+    ...PS_MAIN_COLS.map(([h]) => h),
+    psFieldMap.vendor,         // 'approvedBrand' — manufacturer
+    psFieldMap.product_id,     // 'EDP#' — mfr part number
+    psFieldMap.cost,           // 'cost'
+    psFieldMap.distributor,    // 'vendor' — distributor (PS column naming convention)
+  ];
   const rows = [headerCols.map(csvCell).join(',')];
 
   for (const tool of tools) {
