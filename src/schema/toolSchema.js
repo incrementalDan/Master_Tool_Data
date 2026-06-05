@@ -583,7 +583,7 @@ function normalizePreset(p, tscCapable = false) {
     material: { category, query: mat.query || '', 'use-hardness': mat['use-hardness'] || false },
     expressions: presetExpr,
     'ramp-angle': p['ramp-angle'] ?? 2,
-    'tool-coolant': p['tool-coolant'] || (tscCapable ? 'tool' : 'flood'),
+    'tool-coolant': ({ 'flood and through tool': 'flood tool' }[p['tool-coolant']] ?? p['tool-coolant']) || (tscCapable ? 'tool' : 'flood'),
     'use-stepdown': useStepdown,
     'use-stepover': useStepover,
     n: p.n ?? 0,
