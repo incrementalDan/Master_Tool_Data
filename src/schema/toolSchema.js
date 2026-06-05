@@ -583,7 +583,7 @@ function normalizePreset(p, tscCapable = false) {
     material: { category, query: mat.query || '', 'use-hardness': mat['use-hardness'] || false },
     expressions: presetExpr,
     'ramp-angle': p['ramp-angle'] ?? 2,
-    'tool-coolant': p['tool-coolant'] || (tscCapable ? 'flood and through tool' : 'flood'),
+    'tool-coolant': p['tool-coolant'] || (tscCapable ? 'tool' : 'flood'),
     'use-stepdown': useStepdown,
     'use-stepover': useStepover,
     n: p.n ?? 0,
@@ -1005,22 +1005,13 @@ export function splitToFusionInstances(tool, holders = []) {
     // buildHolderObject always uses holderEntry.guid (the original GUID from the
     // holder library entry), never generates a new one — Fusion requires the
     // original GUID to maintain its link back to the holder library.
+    // The holder library is the source of truth for gaugeLength — it stores the
+    // correct value (total segment height minus the last segment, which Fusion
+    // marks "above the gauge line"). Raw Fusion entries may carry a stale/wrong
+    // gaugeLength from a previous bad write; always re-read from the library.
     if (a.holder_guid) {
       const holder = holders.find(h => h.guid === a.holder_guid);
-      if (holder) {
-        const holderObj = buildHolderObject(holder);
-        // Preserve gaugeLength from the raw Fusion entry when the holder GUID matches.
-        // Fusion may recompute or the user may have corrected this value after the
-        // holder library entry was created — always using the library's value would
-        // silently revert those corrections.
-        if (raw.holder?.guid === holder.guid && typeof raw.holder.gaugeLength === 'number') {
-          base.holder = { ...holderObj, gaugeLength: raw.holder.gaugeLength };
-        } else {
-          base.holder = holderObj;
-        }
-      } else {
-        base.holder = raw.holder || null;
-      }
+      base.holder = holder ? buildHolderObject(holder) : (raw.holder || null);
     } else {
       base.holder = raw.holder || null;
     }
@@ -1033,6 +1024,18 @@ export function splitToFusionInstances(tool, holders = []) {
       const lb = isMetric ? Number(a.ooh) * 25.4 : Number(a.ooh);
       base.geometry = { ...(base.geometry || {}), LB: lb };
       base.expressions = { ...(base.expressions || {}), tool_bodyLength: `${lb} ${isMetric ? 'mm' : 'in'}` };
+    }
+
+    // Recompute assemblyGaugeLength (geometry.assemblyGaugeLength) from the
+    // holder's gauge length and the per-instance OOH. Previous bad writes may
+    // have stored a stale value derived from an incorrect holder gaugeLength —
+    // always recompute so it stays consistent with what we just wrote.
+    if (base.holder && typeof base.holder.gaugeLength === 'number' && a.ooh != null && !isNaN(Number(a.ooh))) {
+      const holderGaugeLengthIn = (base.holder.unit === 'millimeters')
+        ? base.holder.gaugeLength / 25.4
+        : base.holder.gaugeLength;
+      const assemblyGaugeLength = holderGaugeLengthIn + Number(a.ooh);
+      base.geometry = { ...(base.geometry || {}), assemblyGaugeLength };
     }
 
     return base;
