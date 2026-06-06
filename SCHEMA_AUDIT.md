@@ -101,6 +101,19 @@ Status legend: ☐ open · ☑ resolved.
 
 ---
 
+## 📌 CLAUDE.md — documents a root-level `assembly-gauge-length` (contradicts ground truth) ☐ needs user decision
+
+- **Schema says:** there is **no** root-level `assembly-gauge-length` field in any of the 226 reference tools; the value lives at `geometry.assemblyGaugeLength` = holder gauge + OOH.
+- **CLAUDE.md says:** lines 263, 373, and 762 describe `assembly-gauge-length` as "a Fusion-native root-level field for OOH, safe to write" and "what we WRITE on export". This is factually wrong per the reference exports and now contradicts the corrected code.
+- **Impact:** future work guided by CLAUDE.md could reintroduce the root-level field that this audit removed. (Also note line 616 says `incoming_ooh` is read from `assembly-gauge-length`, but the code actually — and correctly — reads it from `tool_bodyLength`/`geometry.LB`.)
+- **Fix:** **flagged for the user** — CLAUDE.md is the canonical instruction file and was left unedited to stay within the task's stated scope (FUSION_SCHEMA.md, SCHEMA_AUDIT.md, the four code files). Recommend updating those CLAUDE.md lines to say the assembly gauge length is `geometry.assemblyGaugeLength` (= holder gauge + OOH).
+
+## ☐ services/mergeQueue.js — Phase 2 JSON import does not capture `incoming_ooh` (out of scope)
+
+- **Schema/observation:** the primary Fusion clipboard path is CSV/TSV; `parseFusionCsv` correctly derives `incoming_ooh` from `tool_bodyLength` (geometry.LB). The secondary JSON-paste path (`parseIncoming` → `fusionToolToInternal`) does not set `incoming_ooh` at all.
+- **Impact:** a tool imported via pasted **JSON** carries no incoming OOH, so CommitStep's assembly detection won't fire for that path. Minor — JSON paste is the fallback, not the documented clipboard format.
+- **Fix:** out of Phase-3 scope (not one of the four target files). Recorded for a follow-up; would read `geometry.LB` (÷25.4 for mm) in the JSON branch.
+
 ## Verified correct (no action)
 
 - **TSV column positions** — every `S(pos,…)` in `toolToTsvRows` matches the reference 173-column header exactly (assemblyGaugeLength=15, bodyLength=33, holderGaugeLength=82, feedCutting=59, feedPerRevolution=66, feedPerTooth=67, spindleSpeed=141, surfaceSpeed=146, shaftDiameter=134, shoulderDiameter=137, shoulderLength=138, taperAngle=147, tipAngle=155, tipDiameter=156, lowerRadius=99, upperRadius=162, vendor/location=165, stepdown=144, stepover=145, use_stepdown=168, use_stepover=169, shaft_segments=170, holder_segments=171, version=172).

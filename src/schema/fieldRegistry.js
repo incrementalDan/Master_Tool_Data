@@ -5,6 +5,14 @@
 //   label          — display label (matches FIELD_LABELS in toolSchema.js)
 //   type           — 'number' | 'string' | 'boolean' | 'array'
 //   unit           — 'length' | 'angle' | 'speed' | 'feed' | 'rpm' | null
+//   canonicalUnit  — for length fields only: how the value is STORED internally.
+//                    'native'  = the tool's own unit (mm for a metric tool) —
+//                                read raw from / written raw to Fusion.
+//                    'inches'  = always inches regardless of the tool's unit
+//                                (OOH / min_ooh) — convert at any boundary with a
+//                                native length via inchesToNative(). See the Units
+//                                section in CLAUDE.md and FUSION_SCHEMA.md §1e.
+//                    Absent on non-length fields.
 //   fusionPath     — dot-path into Fusion JSON (null = not written to Fusion)
 //   proShopColumn  — PS CSV column header (null = not directly exported to ProShop)
 //   metadataOnly   — true = never written to Fusion JSON (lives in tool_metadata.json only)
@@ -218,6 +226,7 @@ export const FIELD_REGISTRY = {
     label: 'Diameter (in)',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'native',
     fusionPath: 'geometry.DC',
     proShopColumn: 'cutDiameter',
     metadataOnly: false,
@@ -230,6 +239,7 @@ export const FIELD_REGISTRY = {
     label: 'Flute Length (in)',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'native',
     fusionPath: 'geometry.LCF',
     proShopColumn: 'lengthOfCut',
     metadataOnly: false,
@@ -242,6 +252,7 @@ export const FIELD_REGISTRY = {
     label: 'Overall Length (in)',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'native',
     fusionPath: 'geometry.OAL',
     proShopColumn: 'overallLength',
     metadataOnly: false,
@@ -266,6 +277,7 @@ export const FIELD_REGISTRY = {
     label: 'Shank Diameter (in)',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'native',
     fusionPath: 'geometry.SFDM',
     proShopColumn: 'shankDiameter',
     metadataOnly: false,
@@ -278,6 +290,7 @@ export const FIELD_REGISTRY = {
     label: 'Corner Radius (in)',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'native',
     fusionPath: 'geometry.RE',
     proShopColumn: 'cornerRadius',
     metadataOnly: false,
@@ -293,6 +306,7 @@ export const FIELD_REGISTRY = {
     label: 'Shoulder Length (in)',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'native',
     fusionPath: 'geometry.shoulder-length',
     proShopColumn: null,
     metadataOnly: false,
@@ -333,6 +347,7 @@ export const FIELD_REGISTRY = {
     label: 'Tip Diameter (in)',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'native',
     fusionPath: 'geometry.tip-diameter',
     proShopColumn: null,
     metadataOnly: false,
@@ -348,6 +363,7 @@ export const FIELD_REGISTRY = {
     label: 'Lower Radius (in)',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'native',
     fusionPath: null,
     proShopColumn: null,
     metadataOnly: true,
@@ -363,6 +379,7 @@ export const FIELD_REGISTRY = {
     label: 'Upper Radius (in)',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'native',
     fusionPath: null,
     proShopColumn: null,
     metadataOnly: true,
@@ -375,6 +392,7 @@ export const FIELD_REGISTRY = {
     label: 'Profile Radius (in)',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'native',
     fusionPath: null,
     proShopColumn: null,
     metadataOnly: true,
@@ -389,6 +407,7 @@ export const FIELD_REGISTRY = {
     label: 'Axial Distance (in)',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'native',
     fusionPath: null,
     proShopColumn: null,
     metadataOnly: true,
@@ -403,6 +422,7 @@ export const FIELD_REGISTRY = {
     label: 'Out of Holder (OOH)',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'inches',      // ALWAYS inches — convert to native at geometry boundaries
     fusionPath: 'geometry.LB',    // per-instance field written by splitToFusionInstances
     proShopColumn: 'lengthBelowShankDiameter',
     metadataOnly: false,
@@ -415,6 +435,7 @@ export const FIELD_REGISTRY = {
     label: 'MIN OOH',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'inches',      // ALWAYS inches — convert to native at geometry boundaries
     fusionPath: null,             // metadata only; reaches Fusion indirectly via shoulder_length
     proShopColumn: null,
     metadataOnly: true,
@@ -773,6 +794,7 @@ export const FIELD_REGISTRY = {
     label: 'Depth of Cut (in)',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'native',
     fusionPath: null,
     proShopColumn: null,
     metadataOnly: true,
@@ -785,6 +807,7 @@ export const FIELD_REGISTRY = {
     label: 'Width of Cut (in)',
     type: 'number',
     unit: 'length',
+    canonicalUnit: 'native',
     fusionPath: null,
     proShopColumn: null,
     metadataOnly: true,

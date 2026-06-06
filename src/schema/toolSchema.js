@@ -158,7 +158,7 @@ export function toolToExtractor(tool) {
     productLink: tool.product_link || '',
     presetName: tool.preset_name || '',
     toolNumber: tool.tool_number || '',
-    coolant: tool.tsc_capable ? 'flood and through tool' : 'flood',
+    coolant: tool.tsc_capable ? 'flood tool' : 'flood',
     helixAngle: String(tool.helix_angle ?? ''),
     centerCutting: tool.center_cutting || false,
     fluteType: tool.flute_type || '',
@@ -357,10 +357,65 @@ export function combineToolsByProshopId(tools) {
   });
 }
 
+// ─── Holder gauge length (expression-derived) ──────────────────────────────
+// Fusion numbers holder segments top→bottom starting at 1, but the JSON
+// `segments` array stores them in the OPPOSITE order (bottom/collet face first,
+// spindle end last): fusionSegmentNumber = S - jsonArrayIndex. The
+// `expressions.tool_holderGaugeLength` string sums the segment heights that are
+// BELOW the gauge line — segments absent from it are "above the gauge line"
+// (inside the spindle) and excluded. See FUSION_SCHEMA.md §1b.
+
+// Sum the heights of the included (below-gauge-line) segments, in the holder's
+// OWN unit. Returns null when there is no usable expression so callers can fall
+// back to the stored gaugeLength.
+function sumGaugeSegments(holder) {
+  const segs = holder?.segments;
+  if (!Array.isArray(segs) || segs.length === 0) return null;
+  const expr = String(holder?.expressions?.tool_holderGaugeLength ?? '');
+  const included = [...expr.matchAll(/segment_(\d+)_height/g)].map(m => parseInt(m[1], 10));
+  if (included.length === 0) return null;
+  const S = segs.length;
+  let total = 0;
+  for (const fusionNum of included) {
+    const jsonIdx = S - fusionNum;   // Fusion UI number → JSON array index
+    if (jsonIdx >= 0 && jsonIdx < S) total += Number(segs[jsonIdx]?.height) || 0;
+  }
+  return total;
+}
+
+// Holder gauge length in INCHES, derived from the expression + segments
+// (converts from the holder's unit when metric). Falls back to the stored
+// gaugeLength when there is no parseable expression.
+export function computeGaugeLength(holder) {
+  const native = sumGaugeSegments(holder);
+  const value = (native != null && native > 0) ? native : Number(holder?.gaugeLength);
+  if (value == null || isNaN(value)) return null;
+  return holder?.unit === 'millimeters' ? value / 25.4 : value;
+}
+
+// Build a holder's tool_holderGaugeLength expression. `aboveGaugeLineCount` is
+// the number of spindle-side segments excluded from the gauge length — almost
+// always 1; never hardcode a different value without evidence (parse the
+// existing expression when correcting one).
+export function buildGaugeLengthExpression(totalSegments, aboveGaugeLineCount = 1) {
+  const firstIncluded = aboveGaugeLineCount + 1;
+  const terms = [];
+  for (let n = firstIncluded; n <= totalSegments; n++) terms.push(`segment_${n}_height`);
+  return terms.join(' + ');
+}
+
 // Build a Fusion holder object from a holder-library entry.
 export function buildHolderObject(holderEntry) {
   if (!holderEntry) return null;
   let gaugeLength = holderEntry.gaugeLength;
+
+  // Prefer the gauge length derived from the holder's own
+  // tool_holderGaugeLength expression (sum of the below-gauge-line segment
+  // heights, in the holder's native unit). This excludes any "above the gauge
+  // line" segment and corrects stale/wrong stored values left by older bad
+  // writes. Falls back to the stored value when there is no usable expression.
+  const nativeSum = sumGaugeSegments(holderEntry);
+  if (nativeSum != null && nativeSum > 0) gaugeLength = nativeSum;
 
   // A holder's gauge length can never physically exceed the total height of its
   // sections. Some holder-library entries store a gauge length rounded a hair
@@ -646,6 +701,11 @@ export function internalToFusionTool(tool) {
   // Fusion's feed-per-tooth expression unit is just the linear unit ("in" / "mm"),
   // NOT "in/tooth" — using "in/tooth" causes Fusion to fail parsing the expression.
   const fzUnit    = isInch ? 'in'    : 'mm';
+  // Linear unit suffix for geometry expression strings (tool_diameter, etc.).
+  // Fusion re-derives every numeric geometry field from its paired expression on
+  // load, so the suffix MUST match the tool's stored unit — writing " in" on a mm
+  // tool makes Fusion parse the value as inches and corrupt the geometry.
+  const lenUnit   = isInch ? 'in'    : 'mm';
 
   // Write the FULL presets array — never collapse a multi-preset tool to one.
   // The flat speed/feed fields (edited by ToolForm) are synced into presets[0]
@@ -714,7 +774,9 @@ export function internalToFusionTool(tool) {
   const fusionObj = {
     ...existing,
     BMC: tool.material || existing.BMC || 'carbide',
-    GRADE: existing.GRADE || 'Mill Generic',
+    // GRADE is absent on ~27% of native Fusion tools (the UI defaults it). Only
+    // carry it forward when the original entry had one — never inject a default.
+    ...(existing.GRADE ? { GRADE: existing.GRADE } : {}),
     description: tool.description || '',
     type: fusionType,
     unit: existing.unit || 'inches',
@@ -725,17 +787,17 @@ export function internalToFusionTool(tool) {
     expressions: {
       ...(existing.expressions || {}),
       tool_description: `'${tool.description || ''}'`,
-      tool_diameter: `${tool.diameter || 0} in`,
-      tool_fluteLength: `${tool.flute_length || 0} in`,
-      tool_overallLength: `${tool.overall_length || 0} in`,
+      tool_diameter: `${tool.diameter || 0} ${lenUnit}`,
+      tool_fluteLength: `${tool.flute_length || 0} ${lenUnit}`,
+      tool_overallLength: `${tool.overall_length || 0} ${lenUnit}`,
       tool_material: `'${tool.material || 'carbide'}'`,
       tool_productId: `'${tool.proshot_id || tool.product_id || ''}'`,
       tool_productLink: `'${tool.product_link || ''}'`,
-      tool_shaftDiameter: `${tool.shank_diameter || tool.diameter || 0} in`,
-      tool_shoulderLength: `${tool.shoulder_length || tool.flute_length || 0} in`,
+      tool_shaftDiameter: `${tool.shank_diameter || tool.diameter || 0} ${lenUnit}`,
+      tool_shoulderLength: `${tool.shoulder_length || tool.flute_length || 0} ${lenUnit}`,
       tool_vendor: `'${tool.location || ''}'`,
       ...(tool.tracking_id ? { tool_comment: `'${tool.tracking_id}'` } : {}),
-      ...(tool.corner_radius ? { tool_cornerRadius: `${tool.corner_radius} in` } : {}),
+      ...(tool.corner_radius ? { tool_cornerRadius: `${tool.corner_radius} ${lenUnit}` } : {}),
       ...(hasMtn
         ? { tool_number: String(mtnInt), tool_lengthOffset: 'tool_number' }
         : (tool.tool_number ? { tool_number: tool.tool_number } : {})),

@@ -1,4 +1,4 @@
-import { internalToFusionTool, buildHolderObject } from '../schema/toolSchema.js';
+import { internalToFusionTool, buildHolderObject, computeGaugeLength } from '../schema/toolSchema.js';
 
 // ─── JSON export (file downloads and library writes) ────────────────────────
 
@@ -16,9 +16,22 @@ function toFusionFormat(tool, holders = [], assembly = null) {
     const holder = holders.find(h => h.guid === assembly.holder_guid);
     if (holder) f.holder = buildHolderObject(holder);
     if (assembly.ooh != null && !isNaN(Number(assembly.ooh))) {
-      const ooh = tool.unit === 'millimeters' ? assembly.ooh * 25.4 : assembly.ooh;
-      f['assembly-gauge-length'] = ooh;
-      f.geometry = { ...(f.geometry || {}), LB: ooh };   // OOH source of truth
+      const isMetric = tool.unit === 'millimeters';
+      // OOH is stored canonically in inches; geometry.LB is in the tool's unit.
+      const lb = isMetric ? Number(assembly.ooh) * 25.4 : Number(assembly.ooh);
+      f.geometry = { ...(f.geometry || {}), LB: lb };   // OOH source of truth
+      // Fusion re-derives LB from tool_bodyLength on load — keep them in sync.
+      f.expressions = { ...(f.expressions || {}), tool_bodyLength: `${lb} ${isMetric ? 'mm' : 'in'}` };
+      // assemblyGaugeLength = holder gauge length + OOH, in the tool's unit. It
+      // lives at geometry.assemblyGaugeLength (camelCase) — Fusion has NO
+      // root-level `assembly-gauge-length` field (see FUSION_SCHEMA.md §1a).
+      if (holder) {
+        const gaugeIn = computeGaugeLength(holder);
+        if (gaugeIn != null) {
+          const gaugeNative = isMetric ? gaugeIn * 25.4 : gaugeIn;
+          f.geometry.assemblyGaugeLength = gaugeNative + lb;
+        }
+      }
     }
   } else if (tool.selected_holder_guid && holders.length > 0) {
     const holder = holders.find(h => h.guid === tool.selected_holder_guid);
@@ -178,7 +191,7 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
     'ramp-angle': 2,
     v_f_plunge: tool.plunge_feedrate || 0,
     f_n: tool.feed_per_rev || 0,
-    'tool-coolant': tool.tsc_capable ? 'flood and through tool' : 'flood',
+    'tool-coolant': tool.tsc_capable ? 'flood tool' : 'flood',
     'use-stepdown': false,
     'use-stepover': false,
   }];
@@ -221,7 +234,7 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
       S(97, tsvNum(toolNum));
     }
 
-    S(42, tsvStr(preset['tool-coolant'] || (tool.tsc_capable ? 'flood and through tool' : 'flood')));
+    S(42, tsvStr(preset['tool-coolant'] || (tool.tsc_capable ? 'flood tool' : 'flood')));
     S(43, tsvStr('no'));  // coolant support
 
     if (tool.corner_radius)  S(44, tsvNum(tool.corner_radius));
@@ -249,8 +262,8 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
     const urTypes = new Set(['face mill','circle segment barrel','circle segment taper']);
     const prTypes = new Set(['circle segment barrel','circle segment oval','circle segment taper']);
 
-    if (tool.thread_pitch_max) S(106, tsvNum(tool.thread_pitch_max));
-    if (tool.thread_pitch_min) S(107, tsvNum(tool.thread_pitch_min));
+    if (tool.max_thread_pitch) S(106, tsvNum(tool.max_thread_pitch));
+    if (tool.min_thread_pitch) S(107, tsvNum(tool.min_thread_pitch));
 
     if (tool.number_of_flutes) S(110, tsvNum(tool.number_of_flutes));
     if (tool.overall_length)   S(114, tsvNum(tool.overall_length));
