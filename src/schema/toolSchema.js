@@ -747,18 +747,17 @@ export function internalToFusionTool(tool) {
       HAND: true,
       LCF: tool.flute_length || 0,
       NOF: tool.number_of_flutes || 0,
-      NT: 1,
       OAL: tool.overall_length || 0,
-      RE: tool.corner_radius || 0,
       SFDM: tool.shank_diameter || tool.diameter || 0,
-      TA: tool.taper_angle || 0,
-      TP: 0,
       'shoulder-diameter': tool.shank_diameter || tool.diameter || 0,
       'shoulder-length': tool.shoulder_length || tool.flute_length || 0,
-      'thread-profile-angle': 60,
-      'tip-diameter': tool.tip_diameter || 0,
-      'tip-length': 0,
-      'tip-offset': 0,
+      // Only write these when non-zero (or when existing had a non-zero value, to support clearing).
+      // The ...existing spread above preserves them from the original Fusion entry.
+      ...(tool.corner_radius > 0 || (existing.geometry?.RE > 0) ? { RE: tool.corner_radius || 0 } : {}),
+      ...(tool.taper_angle > 0 || (existing.geometry?.TA > 0) ? { TA: tool.taper_angle || 0 } : {}),
+      ...(tool.tip_diameter > 0 || (existing.geometry?.['tip-diameter'] > 0) ? { 'tip-diameter': tool.tip_diameter || 0 } : {}),
+      // NT, TP, thread-profile-angle, tip-length, tip-offset: never written explicitly;
+      // preserved from ...existing if the original Fusion entry had them.
     },
     'start-values': {
       presets: outPresets,
