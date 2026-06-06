@@ -59,7 +59,7 @@ The only values Fusion accepts for `tool-coolant` are: `"flood"`, `"tool"` (TSC 
 
 ### Geometry field minimalism
 
-Only write geometry fields that the tool actually uses. `internalToFusionTool` writes the core set (`CSP`, `DC`, `HAND`, `LCF`, `NOF`, `OAL`, `SFDM`, `shoulder-diameter`, `shoulder-length`) unconditionally, and writes `RE`, `TA`, `tip-diameter` **only when non-zero** (or when the original Fusion entry already had a non-zero value — to support clearing). The fields `NT`, `TP`, `thread-profile-angle`, `tip-length`, `tip-offset` are **never written explicitly** — they are preserved from `...existing` if the original Fusion entry had them, and are absent for tools that never had them. Injecting these as constant defaults adds unexpected fields that differ between tools and bloat the diff.
+Only write geometry fields that the tool actually uses. `internalToFusionTool` writes the core set (`CSP`, `DC`, `HAND`, `LCF`, `NOF`, `OAL`, `SFDM`, `shoulder-diameter`, `shoulder-length`) unconditionally, and writes `RE`, `TA`, `tip-diameter` **only when non-zero** (or when the original Fusion entry already had a non-zero value — to support clearing). `SIG` (point angle) is written for `TIP_ANGLE_TYPES` and `TP` (thread pitch) for `THREAD_PITCH_TYPES` — each only when its value is non-zero or the original entry had it. `TP` is always written together with its paired `expressions.tool_threadPitch` (same suffix rule as other geometry — Fusion re-derives `TP` from the expression on load, so they must agree). The fields `NT`, `thread-profile-angle`, `tip-length`, `tip-offset` are **never written explicitly** — they are preserved from `...existing` if the original Fusion entry had them, and are absent for tools that never had them. Injecting these as constant defaults adds unexpected fields that differ between tools and bloat the diff.
 
 ### Holder gaugeLength — always from the library
 
@@ -260,6 +260,7 @@ The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/sche
 | `shoulder_length`| `geometry['shoulder-length']` | —          | Hyphenated key (not `LSCH`); normalization sets it = MIN OOH |
 | `tip_angle`      | `geometry.SIG`          | `tipAngle`        | Drill/spot/chamfer point (included) angle — **Fusion-native** (read+write both JSON and TSV paths) for `drill`, `center drill`, `spot drill`, `counter sink`, `chamfer mill`. Fusion wins; metadata is a transition fallback |
 | `cutting_direction`| `geometry.HAND`       | `cuttingDirection`| **Fusion-native** boolean (`true` = `Right Hand`, `false` = `Left Hand`). Read from / written to `geometry.HAND`; never hardcode `true`. Fusion wins; metadata fallback |
+| `thread_pitch`   | `geometry.TP`           | —                 | **Fusion-native** numeric pitch (tool's unit) for `thread mill`, `tap form`, `tap cut`; written with `expressions.tool_threadPitch`. Distinct from `pitch` (the human thread **designation** string, e.g. `"5/16-24"`, metadata-only) |
 | `min_ooh`        | — (metadata only)       | `MIN OOH` (`lengthBelowShankDiameter`) | Minimum stick-out floor — see the three-length-concepts table + ProShop Field Priority Rules |
 | `product_id`     | — (metadata only)       | `Part Number`     | Manufacturer EDP number                |
 | `proshot_id`     | `product-id`            | ProShop ID        | **Primary match key for Phase 2**      |

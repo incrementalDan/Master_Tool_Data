@@ -545,6 +545,7 @@ export function fusionToolToInternal(fTool) {
     shank_diameter: geo.SFDM || null,
     taper_angle: geo.TA || null,
     tip_angle: geo.SIG || null,
+    thread_pitch: geo.TP || null,
     shoulder_length: geo['shoulder-length'] || null,
     material: fTool.BMC || 'carbide',
     proshot_id: fTool['product-id'] || stripQuotes(expr.tool_productId) || '',
@@ -666,6 +667,10 @@ function normalizePreset(p, tscCapable = false) {
 // with the TSV path's tipAngleTypes (fusionExport.js) and tip_angle's
 // appliesToTypes (fieldRegistry.js).
 const TIP_ANGLE_TYPES = new Set(['drill', 'center drill', 'spot drill', 'counter sink', 'chamfer mill']);
+
+// Tool types that carry a thread pitch in geometry.TP (numeric, the tool's unit).
+// The human-readable thread designation lives separately in `pitch` (metadata).
+const THREAD_PITCH_TYPES = new Set(['thread mill', 'tap form', 'tap cut']);
 
 export function internalToFusionTool(tool) {
   const existing = tool._fusionRaw || {};
@@ -805,6 +810,7 @@ export function internalToFusionTool(tool) {
       tool_vendor: `'${tool.location || ''}'`,
       ...(tool.tracking_id ? { tool_comment: `'${tool.tracking_id}'` } : {}),
       ...(tool.corner_radius ? { tool_cornerRadius: `${tool.corner_radius} ${lenUnit}` } : {}),
+      ...((THREAD_PITCH_TYPES.has(tool.tool_type) && (tool.thread_pitch > 0 || existing.geometry?.TP > 0)) ? { tool_threadPitch: `${tool.thread_pitch || 0} ${lenUnit}` } : {}),
       ...(hasMtn
         ? { tool_number: String(mtnInt), tool_lengthOffset: 'tool_number' }
         : (tool.tool_number ? { tool_number: tool.tool_number } : {})),
@@ -830,6 +836,10 @@ export function internalToFusionTool(tool) {
       // that carry it (matches the TSV path's tipAngleTypes), or when clearing an
       // existing value. Fusion is the source of truth for it (read back into tip_angle).
       ...((TIP_ANGLE_TYPES.has(tool.tool_type) && tool.tip_angle > 0) || (existing.geometry?.SIG > 0) ? { SIG: tool.tip_angle || 0 } : {}),
+      // TP = thread pitch (numeric). Written for thread/tap types; kept in sync
+      // with expressions.tool_threadPitch below (Fusion re-derives TP from the
+      // expression on load, so the two must always agree).
+      ...((THREAD_PITCH_TYPES.has(tool.tool_type) && (tool.thread_pitch > 0 || existing.geometry?.TP > 0)) ? { TP: tool.thread_pitch || 0 } : {}),
       ...(tool.tip_diameter > 0 || (existing.geometry?.['tip-diameter'] > 0) ? { 'tip-diameter': tool.tip_diameter || 0 } : {}),
       // NT, TP, thread-profile-angle, tip-length, tip-offset: never written explicitly;
       // preserved from ...existing if the original Fusion entry had them.
@@ -1170,6 +1180,7 @@ export function newTool(toolType = 'flat end mill') {
     tsc_capable: false,
     cutting_direction: 'Right Hand',
     pitch: '',
+    thread_pitch: null,
     tap_class: '',
     min_thread_pitch: null,
     max_thread_pitch: null,
@@ -1342,6 +1353,7 @@ export const FIELD_LABELS = {
   created_at: 'Created',
   updated_at: 'Last Updated',
   pitch: 'Thread Pitch',
+  thread_pitch: 'Thread Pitch (value)',
   tap_class: 'Tap Class',
   min_thread_pitch: 'Min Thread Pitch',
   max_thread_pitch: 'Max Thread Pitch',

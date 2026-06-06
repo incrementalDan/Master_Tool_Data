@@ -169,6 +169,7 @@ function parseFusionCsv(raw) {
       taper_angle: csvNum(r.tool_taperAngle),
       tip_angle: csvNum(r.tool_tipAngle),
       tip_diameter: csvNum(r.tool_tipDiameter),
+      thread_pitch: csvNum(r.tool_threadPitch),
       shoulder_length: csvNum(r.tool_shoulderLength),
       material: csvStr(r.tool_material) || 'carbide',
       proshot_id: csvStr(r.tool_productId) || '',
@@ -192,7 +193,8 @@ function parseFusionCsv(raw) {
       distributor_stock_num: '',
       cost: '',
       center_cutting: false,
-      cutting_direction: 'Right Hand',
+      // Fusion-native: tool_hand → cutting_direction (anything matching "left" = Left Hand).
+      cutting_direction: /left/i.test(csvStr(r.tool_hand)) ? 'Left Hand' : 'Right Hand',
       material_suitability: [],
       tags: [],
       notes: '',

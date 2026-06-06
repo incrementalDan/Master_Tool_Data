@@ -608,6 +608,19 @@ export const FIELD_REGISTRY = {
     precision: null,
   },
 
+  thread_pitch: {
+    label: 'Thread Pitch (value)',
+    type: 'number',
+    unit: 'length',
+    canonicalUnit: 'native',     // numeric pitch distance, stored in the tool's unit
+    fusionPath: 'geometry.TP',   // Fusion-native; the `pitch` designation string stays metadata-only
+    proShopColumn: null,
+    metadataOnly: false,
+    appliesToTypes: ['thread mill', 'tap form', 'tap cut'],
+    required: false,
+    precision: 4,
+  },
+
   tap_class: {
     label: 'Tap Class',
     type: 'string',

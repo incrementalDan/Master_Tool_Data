@@ -261,6 +261,7 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
     const lrTypes = new Set(['circle segment barrel','circle segment lens','circle segment oval','circle segment taper']);
     const urTypes = new Set(['face mill','circle segment barrel','circle segment taper']);
     const prTypes = new Set(['circle segment barrel','circle segment oval','circle segment taper']);
+    const threadTypes = new Set(['tap right hand','thread mill']);   // Fusion type names
 
     if (tool.max_thread_pitch) S(106, tsvNum(tool.max_thread_pitch));
     if (tool.min_thread_pitch) S(107, tsvNum(tool.min_thread_pitch));
@@ -291,6 +292,7 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
     if (taperTypes.has(fusionType) && tool.taper_angle) S(147, tsvNum(tool.taper_angle));
     if (tipAngleTypes.has(fusionType) && tool.tip_angle) S(155, tsvNum(tool.tip_angle));
     if (tipDiaTypes.has(fusionType) && tool.tip_diameter) S(156, tsvNum(tool.tip_diameter));
+    if (threadTypes.has(fusionType) && tool.thread_pitch) S(150, tsvNum(tool.thread_pitch));
 
     S(161, tsvNum(0));  // turret
 
