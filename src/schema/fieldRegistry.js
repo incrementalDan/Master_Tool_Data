@@ -557,9 +557,9 @@ export const FIELD_REGISTRY = {
     label: 'Cutting Direction',
     type: 'string',
     unit: null,
-    fusionPath: null,
+    fusionPath: 'geometry.HAND',   // boolean true = Right Hand — Fusion-native
     proShopColumn: 'cuttingDirection',
-    metadataOnly: true,
+    metadataOnly: false,
     appliesToTypes: 'all',
     required: false,
     precision: null,

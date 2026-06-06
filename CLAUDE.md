@@ -18,7 +18,7 @@ A **logical tool** maps to **N Fusion library entries ("instances")** — one in
 - **Shared vs per-instance**: editing any shared field (description, geometry except LB, vendor, proshot_id, presets, tags, notes, machine number, …) propagates to **all** instances. Only **holder** and **OOH** are per-instance.
 - **Machine tool number** is shared across all instances of a logical tool.
 - **Presets** are a single shared set replicated identically onto every instance. Each preset's name encodes its assembly + operation (see below), so opening any instance in Fusion shows the full proven-preset set.
-- **In-memory shape**: `id` (= `tracking_id`), `tracking_id`, `assemblies[]` (`{ assembly_id, instance_guid, holder_guid, holder_description, ooh, notes, source }`), shared `presets[]` (each with `operation_type`), `machine_tool_number`, and `_instancesRaw[]` (raw Fusion entries).
+- **In-memory shape**: `id` (= `tracking_id`), `tracking_id`, `assemblies[]` (`{ assembly_id, instance_guid, holder_guid, holder_description, ooh, linked_preset_guids, notes, source }`), shared `presets[]` (each with `operation_type`), `machine_tool_number`, and `_instancesRaw[]` (raw Fusion entries).
 - **Write path**: `AppContext.writeLogicalTool()` reconciles in one library write — re-download, drop every entry whose tracking ID matches, append the freshly split instance set (`splitToFusionInstances`). It backs `saveTool`/`addTool`/`mergeTool`, the assembly CRUD (`addAssembly`/`updateAssembly`/`deleteAssembly` = create/edit/remove an instance), and `applyReconcile` (adopt/drop strays found on open — see Sync & Merge Workflows). `deleteTool` removes all instances; a tool must keep ≥1 assembly. `renumberLibrary` assigns one number per logical tool.
 - **Transition**: `normalizeLibrary()` (one-time, surfaced via the `needsNormalize` banner) assigns tracking IDs to pre-migration tools, fans each out into instances per its existing metadata assemblies, and renames presets to the convention. Back up library + metadata first.
 
@@ -197,7 +197,7 @@ Deployment is **fully automated via GitHub Actions** — see `.github/workflows/
 
 **Drills / hole tools**: `drill`, `center drill`, `spot drill`, `reamer`, `counter bore`, `counter sink`
 
-**Taps**: `tap form`, `tap cut`
+**Taps**: `tap form`, `tap cut` — note both map to Fusion's single `tap right hand` type on write, and the read map sends `tap right hand` → `tap form`. So the `tap form`/`tap cut` distinction is **not preserved by the Fusion type field on reload** (Fusion has no separate cut-tap type); it must be carried in metadata if it needs to survive a round-trip.
 
 **Other**: `boring head`, `turning general`, `face mill`
 
@@ -259,6 +259,7 @@ The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/sche
 | `location`       | `expressions.tool_vendor` | (cabinet location) | Fusion's **"Vendor"** UI field is repurposed as the cabinet location (e.g. "LC-8") |
 | `shoulder_length`| `geometry['shoulder-length']` | —          | Hyphenated key (not `LSCH`); normalization sets it = MIN OOH |
 | `tip_angle`      | `geometry.SIG`          | `tipAngle`        | Drill/spot/chamfer point (included) angle — **Fusion-native** (read+write both JSON and TSV paths) for `drill`, `center drill`, `spot drill`, `counter sink`, `chamfer mill`. Fusion wins; metadata is a transition fallback |
+| `cutting_direction`| `geometry.HAND`       | `cuttingDirection`| **Fusion-native** boolean (`true` = `Right Hand`, `false` = `Left Hand`). Read from / written to `geometry.HAND`; never hardcode `true`. Fusion wins; metadata fallback |
 | `min_ooh`        | — (metadata only)       | `MIN OOH` (`lengthBelowShankDiameter`) | Minimum stick-out floor — see the three-length-concepts table + ProShop Field Priority Rules |
 | `product_id`     | — (metadata only)       | `Part Number`     | Manufacturer EDP number                |
 | `proshot_id`     | `product-id`            | ProShop ID        | **Primary match key for Phase 2**      |
@@ -269,14 +270,13 @@ The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/sche
 
 ### Metadata Schema (`tool_metadata.json`)
 
-Stored in a single file on Google Drive. The file contains an array of metadata objects — one per tool. The `id` field matches the tool's `guid` in the Fusion library.
+Stored in a single file on Google Drive. The file contains an array of metadata objects — one per **logical tool**. The `id` field is the tool's **`tracking_id`** (`FTL-XXXXXX`), falling back to the Fusion `guid` for pre-migration untracked tools — it is **not** keyed per Fusion instance. `buildMetadataTool` in `src/schema/toolSchema.js` is the authoritative source of the full field set (the example below is abridged); add new metadata fields there and read them back in `mergeFusionAndMetadata` / `buildLogicalTool`. Note `proshot_id` is **Fusion-owned** (`product-id`) and is **not** written to metadata.
 
 ```json
 {
-  "id": "matches tool guid in Fusion library",
+  "id": "tracking_id (FTL-XXXXXX); falls back to Fusion guid for untracked tools",
   "vendor": "",
   "product_id": "",
-  "proshot_id": "",
   "coating": "",
   "notes": "",
   "last_used_job": "",
@@ -289,13 +289,14 @@ Stored in a single file on Google Drive. The file contains an array of metadata 
   "assemblies": [
     {
       "assembly_id": "generated UUID (via generateAssemblyId / generateId)",
+      "instance_guid": "guid of the Fusion entry this assembly maps to (the join key)",
       "holder_guid": "guid from the holder library",
       "holder_description": "cached holder description at creation time",
       "ooh": 2.125,
       "linked_preset_guids": ["preset-guid-1", "preset-guid-2"],
       "notes": "",
       "created_at": "ISO timestamp",
-      "source": "merge | manual"
+      "source": "merge | manual | fusion"
     }
   ],
   "merge_history": [
@@ -441,6 +442,10 @@ src/
                                   # copyToolToClipboard, copyToolsToClipboard
                                   # All accept optional selectedAssembly param for OOH export
     proShopExport.js              # ProShop CSV export (always maintain this)
+    presetNaming.js               # composePresetName, parsePresetName, presetMatchesAssembly,
+                                  # OP_TYPES / opTypeWord / matchOpType
+    holderNaming.js               # holder short names (strip NBT, drop SK<n> C, override map)
+    speedsAndFeedsCalc.js         # speeds & feeds calculator helpers
 
   components/
     LandingPage.jsx               # Search + facets + sort + grid/list toggle
@@ -464,6 +469,13 @@ src/
                                   # with inline edit/delete
     AssemblyForm.jsx              # Form for creating/editing assemblies
                                   # Fields: holder (HolderPicker), OOH, linked presets, notes
+    NormalizeModal.jsx            # One-time normalization: preset operation-type assignment
+    DescRenameModal.jsx           # Per-tool description rename confirmation (buildDesc suggestions)
+    PresetPanel.jsx               # Preset editor panel (speeds/feeds per preset)
+    LibrarySetup.jsx              # First-run APS library location picker
+    LoginScreen.jsx               # APS PKCE login gate (unauthorized visitors)
+    Settings.jsx                  # Settings (library/holder locations, Google Drive connect)
+    ToolExtractorTab.jsx          # Hosts the tool-extractor image/spec extraction UI
     Toast.jsx                     # Fixed bottom-right toast stack
 
     icons/
@@ -578,7 +590,7 @@ During initial normalization, tool descriptions are rationalized. The ProShop de
 
 This is, alongside the preset operation-type assignment, one of the few normalization steps requiring per-tool user decisions; the two may share a single pre-flight review modal if the UX allows.
 
-**Priority rule**: PS description wins by default; if the PS description is blank, keep the Fusion description. User confirmation is **always** required. (Not yet implemented — the current `NormalizeModal` only handles preset operation-type assignment.)
+**Priority rule**: PS description wins by default; if the PS description is blank, keep the Fusion description. User confirmation is **always** required. (Implemented in `src/components/DescRenameModal.jsx` — a standalone per-tool rename confirmation modal that uses `buildDesc(toolToExtractor(t))` for suggestions and commits via `saveFullLibrary`. `NormalizeModal` handles the preset operation-type assignment step.)
 
 -----
 

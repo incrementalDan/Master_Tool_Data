@@ -117,8 +117,38 @@ Status legend: ☐ open · ☑ resolved.
 ## Verified correct (no action)
 
 - **TSV column positions** — every `S(pos,…)` in `toolToTsvRows` matches the reference 173-column header exactly (assemblyGaugeLength=15, bodyLength=33, holderGaugeLength=82, feedCutting=59, feedPerRevolution=66, feedPerTooth=67, spindleSpeed=141, surfaceSpeed=146, shaftDiameter=134, shoulderDiameter=137, shoulderLength=138, taperAngle=147, tipAngle=155, tipDiameter=156, lowerRadius=99, upperRadius=162, vendor/location=165, stepdown=144, stepover=145, use_stepdown=168, use_stepover=169, shaft_segments=170, holder_segments=171, version=172).
-- **`splitToFusionInstances`** — correctly writes `geometry.assemblyGaugeLength` (camelCase, nested) = holder gauge (unit-converted) + OOH, and keeps `geometry.LB` + `expressions.tool_bodyLength` in sync.
+- **`splitToFusionInstances`** — writes `geometry.assemblyGaugeLength` (camelCase, nested) = holder gauge + OOH, and keeps `geometry.LB` + `expressions.tool_bodyLength` in sync. (Corrected — see full-stack pass §A1: it previously emitted the gauge length in inches while `geometry.LB` was native, wrong for mm tools; now both are in the tool's unit.)
 - **Holder/shaft segment TSV format** — `H<h> U<upper> L<lower>; …` in tool unit, JSON array order; matches the reference.
 - **Stepdown/stepover three-way sync** — `normalizePreset` correctly drops numeric+expression when the flag is off.
 - **Preset formula expressions** — `internalToFusionTool` correctly preserves `tool_feedPlunge/Ramp/Transition` and only regenerates the active speed/feed mode keys with correct units.
 - **Holder gauge unit conversion in TSV** — `unitFactor(holder.unit, tool.unit)` correctly handles mm-holder-on-inch-tool.
+
+---
+
+# Full-stack sync pass (4-axis audit)
+
+A second audit across four axes — flat field-mapping, CLAUDE.md-vs-code, units, and metadata coherence. Items resolved below; the `pitch`/`geometry.TP` item is left **open pending a decision** (see end).
+
+## ☑ A1 🔴 `splitToFusionInstances` wrote `assemblyGaugeLength` in inches for metric tools
+- The live save path summed holder-gauge-in-inches + inches OOH while the sibling `geometry.LB` was written in the tool's native unit — two geometry fields in different units for a mm tool. **Fixed:** both now converted to the tool's native unit before summing (mirrors `fusionExport.js`). Reopened the stale "verified correct" note above.
+
+## ☑ A2 🔴 Sync Job could never commit TSC capability
+- `DiffStep.jsx` diffed a non-existent flat field `'coolant'`; the real field is `tsc_capable`. **Fixed:** Setup diff now lists `tsc_capable` (boolean, rendered Yes/No, label from `FIELD_LABELS`).
+
+## ☑ A3 🟠 `linked_preset_guids` dropped on every save (data loss)
+- Producers (`DiffStep` create/link, `ToolDetail`) wrote it, but `buildMetadataTool` omitted it and `buildLogicalTool` never read it back → stripped on the next write. **Fixed (user chose persist):** `buildMetadataTool` now persists `linked_preset_guids`, `buildLogicalTool` reads it back. CLAUDE.md in-memory shape + metadata example reconciled.
+
+## ☑ A4 🟠 `cutting_direction` / `geometry.HAND` — left-hand tools lost their hand
+- `internalToFusionTool` hardcoded `HAND: true` and never read it. **Fixed (user chose map):** `fusionToolToInternal` reads `geometry.HAND` → `cutting_direction` (`true`=Right Hand); `internalToFusionTool` writes `HAND` from `cutting_direction`; `mergeFusionAndMetadata` now Fusion-authoritative; `fieldRegistry` `cutting_direction` → `fusionPath: 'geometry.HAND'`, `metadataOnly: false`. CLAUDE.md mapping-table row added.
+
+## ☑ A5 🟡 CLAUDE.md doc drift
+- **Fixed:** metadata schema lead-in (keyed by `tracking_id`, `buildMetadataTool` authoritative, `proshot_id` Fusion-owned) + assembly example (`instance_guid` added, `source` includes `fusion`); Description Rename marked implemented (`DescRenameModal.jsx`); Source Layout updated (added `NormalizeModal`, `DescRenameModal`, `PresetPanel`, `LibrarySetup`, `LoginScreen`, `Settings`, `ToolExtractorTab`, `utils/presetNaming.js`, `holderNaming.js`, `speedsAndFeedsCalc.js`); `tap cut`/`tap form` round-trip caveat documented.
+
+## ☐ B1 🟠 `pitch` / `geometry.TP` — OPEN, pending decision
+- Internal `pitch` is a free-form thread **designation string** (e.g. `"5/16-24"`); the extractor derives numeric `geometry.TP` via `calcThreadPitch` (which always returns **inches**, even for metric designations, and is a non-exported helper in `tool-extractor.tsx`). The JSON path neither reads nor writes `TP`, so thread pitch is dropped on JSON round-trip, while the extractor-CSV writes it — paths disagree.
+- User chose "make it Fusion-native", but unlike `SIG` this is **string→derived-numeric**, not a clean 1:1, and `calcThreadPitch` has its own latent mm bug. **Recommended approach (awaiting confirm):** keep `pitch` as the metadata source-of-truth designation; have `internalToFusionTool` **derive** `geometry.TP` + `expressions.tool_threadPitch` from it on write (for tap/thread-mill types, unit-correct), with no lossy read-back. Not yet implemented.
+
+## 🟡 Noted, not changed (low priority)
+- Dead `?? fusionInternal.X` fallbacks in `mergeFusionAndMetadata` for metadata-only `center_cutting` / `helix_angle` (harmless; left for a cleanup pass).
+- Registry: `tool_number` and `machine_tool_number` both map to `post-process.number` (precedence is hand-coded in `internalToFusionTool`); `proshot_id`'s mirrored `expressions.tool_productId` write not noted in the registry.
+- `(in)`/inches hardcoded in some `FIELD_LABELS` / `AssemblyForm` labels — fine for the inch-default shop; a seam for the future per-record-unit work.

@@ -27,7 +27,7 @@ const DIFF_SECTIONS = [
     key: 'setup',
     icon: Settings2,
     fields: [
-      'material', 'coating', 'coolant', 'helix_angle', 'flute_type',
+      'material', 'coating', 'tsc_capable', 'helix_angle', 'flute_type',
       'cutting_direction', 'center_cutting', 'preferred_machine',
       'material_suitability', 'tags',
     ],

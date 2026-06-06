@@ -583,7 +583,8 @@ export function fusionToolToInternal(fTool) {
     tsc_capable: false,
     center_cutting: false,
     flute_design: '',
-    cutting_direction: 'Right Hand',
+    // cutting_direction is Fusion-native: geometry.HAND boolean (true = right hand).
+    cutting_direction: geo.HAND === false ? 'Left Hand' : 'Right Hand',
     material_suitability: [],
     tags: [],
     notes: '',
@@ -812,7 +813,9 @@ export function internalToFusionTool(tool) {
       ...(existing.geometry || {}),
       CSP: false,
       DC: tool.diameter || 0,
-      HAND: true,
+      // HAND from cutting_direction (true = right hand) — never hardcode true, or
+      // left-hand tools silently flip to right-hand on every write.
+      HAND: tool.cutting_direction !== 'Left Hand',
       LCF: tool.flute_length || 0,
       NOF: tool.number_of_flutes || 0,
       OAL: tool.overall_length || 0,
@@ -863,7 +866,8 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     cost: meta.cost || '',
     tsc_capable: Boolean(meta.tsc_capable),
     center_cutting: meta.center_cutting ?? fusionInternal.center_cutting ?? false,
-    cutting_direction: meta.cutting_direction || fusionInternal.cutting_direction || 'Right Hand',
+    // cutting_direction is Fusion-native (geometry.HAND); Fusion wins, metadata fallback.
+    cutting_direction: fusionInternal.cutting_direction || meta.cutting_direction || 'Right Hand',
     helix_angle: meta.helix_angle ?? fusionInternal.helix_angle ?? null,
     flute_type: meta.flute_type || '',
     flute_design: meta.flute_design || '',
@@ -965,6 +969,7 @@ export function buildMetadataTool(tool) {
       holder_guid: a.holder_guid || null,
       holder_description: a.holder_description || '',
       ooh: a.ooh ?? null,
+      linked_preset_guids: a.linked_preset_guids || [],
       notes: a.notes || '',
       source: a.source || 'manual',
       created_at: a.created_at || new Date().toISOString(),
@@ -1006,6 +1011,7 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
       holder_guid: raw.holder?.guid || m.holder_guid || null,
       holder_description: raw.holder?.description || m.holder_description || '',
       ooh: readOohFromFusion(raw) ?? (m.ooh ?? null),
+      linked_preset_guids: m.linked_preset_guids || [],
       notes: m.notes || '',
       source: m.source || 'fusion',
       created_at: m.created_at || merged.created_at,
@@ -1102,13 +1108,18 @@ export function splitToFusionInstances(tool, holders = []) {
     // Recompute assemblyGaugeLength (geometry.assemblyGaugeLength) from the
     // holder's gauge length and the per-instance OOH. Previous bad writes may
     // have stored a stale value derived from an incorrect holder gaugeLength —
-    // always recompute so it stays consistent with what we just wrote.
+    // always recompute so it stays consistent with what we just wrote. The value
+    // must be in the TOOL's unit to match the sibling geometry.LB: base.holder
+    // .gaugeLength is in the holder's own unit, and OOH is inches-canonical, so
+    // convert both into the tool's native unit before summing (mirrors the
+    // export path in fusionExport.js).
     if (base.holder && typeof base.holder.gaugeLength === 'number' && a.ooh != null && !isNaN(Number(a.ooh))) {
-      const holderGaugeLengthIn = (base.holder.unit === 'millimeters')
+      const holderGaugeIn = (base.holder.unit === 'millimeters')
         ? base.holder.gaugeLength / 25.4
         : base.holder.gaugeLength;
-      const assemblyGaugeLength = holderGaugeLengthIn + Number(a.ooh);
-      base.geometry = { ...(base.geometry || {}), assemblyGaugeLength };
+      const holderGaugeNative = isMetric ? holderGaugeIn * 25.4 : holderGaugeIn;
+      const oohNative = isMetric ? Number(a.ooh) * 25.4 : Number(a.ooh);
+      base.geometry = { ...(base.geometry || {}), assemblyGaugeLength: holderGaugeNative + oohNative };
     }
 
     return base;
