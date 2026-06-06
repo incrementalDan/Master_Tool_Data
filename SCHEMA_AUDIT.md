@@ -156,6 +156,13 @@ A second audit across four axes — flat field-mapping, CLAUDE.md-vs-code, units
 - Two internal fields mapped to the same Fusion slot `post-process.number` with different types (legacy string `tool_number` vs. number `machine_tool_number`), with write precedence hand-coded in `internalToFusionTool`.
 - **Fixed (user: "there should be only one variable"):** removed the legacy internal `tool_number` entirely; `machine_tool_number` is now the single field owning `post-process.number` (assigned by the renumber function). Updated the extractor map (`toolNumber ↔ machine_tool_number`), `extractorToTool`/`toolToExtractor`, `fusionToolToInternal` (dropped the duplicate string read), `internalToFusionTool` (dropped both legacy fallback branches), `newTool`, `FIELD_LABELS`, and the field registry. The Fusion-native `expressions.tool_number` write (inside `applyMachineNumberToFusion`) is unrelated and kept.
 
+## ☑ B4 🟡 `proshot_id` mirror not noted in the registry — resolved
+- `internalToFusionTool` writes `proshot_id` to both `product-id` and `expressions.tool_productId`, but the registry only listed the primary path.
+- **Fixed:** added a `fusionMirror: 'expressions.tool_productId'` annotation (plus a comment) to the `proshot_id` registry entry, so the mirror is documented at the source of truth.
+
+## ☑ B5 🟡 Hardcoded `(in)` linear-unit suffixes in labels — resolved
+- The linear-unit suffix was hardcoded as `(in)` / `(in/min)` across three places (`FIELD_REGISTRY` labels, `FIELD_LABELS`, `FacetFilters`), contradicting the "display off the active unit" goal.
+- **Fixed:** added a single `fieldLabel(field, unit)` helper in the registry — the one source of the linear suffix (native lengths → `(in)`/`(mm)`, feeds → `(in)`/`(mm)`, feedrates → `(in/min)`/`(mm/min)`); a `DEFAULT_LINEAR_UNIT` constant makes the future global toggle a one-line change. Stripped the 20 hardcoded suffixes from the registry labels; `FIELD_LABELS` is now generated from the registry (eliminating the duplicate map); `FacetFilters` drops the entries that duplicated `FIELD_LABELS`; and `ToolForm` now calls `fieldLabel(field, data.unit)` so a metric tool's edit form shows `(mm)`. `AssemblyForm`'s OOH/MIN OOH labels are left as inches — those values are **canonical inches by design**, so the suffix is correct, not a bug.
+
 ## 🟡 Noted, not changed (low priority)
-- `proshot_id`'s mirrored `expressions.tool_productId` write not noted in the registry (cosmetic registry-completeness gap).
-- `(in)`/inches hardcoded in some `FIELD_LABELS` / `AssemblyForm` labels — fine for the inch-default shop; a seam for the future per-record-unit work.
+- Merge/facet read-only surfaces (`CommitStep`, `DiffStep`, `NewToolStep`, `FacetFilters`) still read the static (inch-default) `FIELD_LABELS`; they can be switched to `fieldLabel(field, unit)` when per-record units are surfaced. The suffix logic is already centralized, so this is a call-site swap, not a rewrite.

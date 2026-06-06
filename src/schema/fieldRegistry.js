@@ -104,7 +104,11 @@ export const FIELD_REGISTRY = {
     label: 'ProShop ID',
     type: 'string',
     unit: null,
+    // Primary Fusion path is product-id; internalToFusionTool also mirrors it to
+    // expressions.tool_productId (Fusion re-derives the field from the expression
+    // on load, so both are written together).
     fusionPath: 'product-id',     // Fusion's product-id field = our ProShop ID
+    fusionMirror: 'expressions.tool_productId',
     proShopColumn: null,
     metadataOnly: false,
     appliesToTypes: 'all',
@@ -213,7 +217,7 @@ export const FIELD_REGISTRY = {
   // ── Geometry ──────────────────────────────────────────────────────────────
 
   diameter: {
-    label: 'Diameter (in)',
+    label: 'Diameter',
     type: 'number',
     unit: 'length',
     canonicalUnit: 'native',
@@ -226,7 +230,7 @@ export const FIELD_REGISTRY = {
   },
 
   flute_length: {
-    label: 'Flute Length (in)',
+    label: 'Flute Length',
     type: 'number',
     unit: 'length',
     canonicalUnit: 'native',
@@ -239,7 +243,7 @@ export const FIELD_REGISTRY = {
   },
 
   overall_length: {
-    label: 'Overall Length (in)',
+    label: 'Overall Length',
     type: 'number',
     unit: 'length',
     canonicalUnit: 'native',
@@ -264,7 +268,7 @@ export const FIELD_REGISTRY = {
   },
 
   shank_diameter: {
-    label: 'Shank Diameter (in)',
+    label: 'Shank Diameter',
     type: 'number',
     unit: 'length',
     canonicalUnit: 'native',
@@ -277,7 +281,7 @@ export const FIELD_REGISTRY = {
   },
 
   corner_radius: {
-    label: 'Corner Radius (in)',
+    label: 'Corner Radius',
     type: 'number',
     unit: 'length',
     canonicalUnit: 'native',
@@ -293,7 +297,7 @@ export const FIELD_REGISTRY = {
   },
 
   shoulder_length: {
-    label: 'Shoulder Length (in)',
+    label: 'Shoulder Length',
     type: 'number',
     unit: 'length',
     canonicalUnit: 'native',
@@ -334,7 +338,7 @@ export const FIELD_REGISTRY = {
   },
 
   tip_diameter: {
-    label: 'Tip Diameter (in)',
+    label: 'Tip Diameter',
     type: 'number',
     unit: 'length',
     canonicalUnit: 'native',
@@ -350,7 +354,7 @@ export const FIELD_REGISTRY = {
   },
 
   lower_radius: {
-    label: 'Lower Radius (in)',
+    label: 'Lower Radius',
     type: 'number',
     unit: 'length',
     canonicalUnit: 'native',
@@ -366,7 +370,7 @@ export const FIELD_REGISTRY = {
   },
 
   upper_radius: {
-    label: 'Upper Radius (in)',
+    label: 'Upper Radius',
     type: 'number',
     unit: 'length',
     canonicalUnit: 'native',
@@ -379,7 +383,7 @@ export const FIELD_REGISTRY = {
   },
 
   profile_radius: {
-    label: 'Profile Radius (in)',
+    label: 'Profile Radius',
     type: 'number',
     unit: 'length',
     canonicalUnit: 'native',
@@ -394,7 +398,7 @@ export const FIELD_REGISTRY = {
   },
 
   axial_distance: {
-    label: 'Axial Distance (in)',
+    label: 'Axial Distance',
     type: 'number',
     unit: 'length',
     canonicalUnit: 'native',
@@ -599,7 +603,7 @@ export const FIELD_REGISTRY = {
   },
 
   thread_pitch: {
-    label: 'Thread Pitch (value)',
+    label: 'Thread Pitch Value',
     type: 'number',
     unit: 'length',
     canonicalUnit: 'native',     // numeric pitch distance, stored in the tool's unit
@@ -698,7 +702,7 @@ export const FIELD_REGISTRY = {
   },
 
   cutting_feedrate: {
-    label: 'Cutting Feedrate (in/min)',
+    label: 'Cutting Feedrate',
     type: 'number',
     unit: 'feed',
     fusionPath: 'start-values.presets[0].v_f',
@@ -710,7 +714,7 @@ export const FIELD_REGISTRY = {
   },
 
   plunge_feedrate: {
-    label: 'Plunge Feedrate (in/min)',
+    label: 'Plunge Feedrate',
     type: 'number',
     unit: 'feed',
     fusionPath: 'start-values.presets[0].v_f_plunge',
@@ -722,7 +726,7 @@ export const FIELD_REGISTRY = {
   },
 
   ramp_feedrate: {
-    label: 'Ramp Feedrate (in/min)',
+    label: 'Ramp Feedrate',
     type: 'number',
     unit: 'feed',
     fusionPath: 'start-values.presets[0].v_f_ramp',
@@ -734,7 +738,7 @@ export const FIELD_REGISTRY = {
   },
 
   lead_in_feedrate: {
-    label: 'Lead-In Feedrate (in/min)',
+    label: 'Lead-In Feedrate',
     type: 'number',
     unit: 'feed',
     fusionPath: 'start-values.presets[0].v_f_leadIn',
@@ -746,7 +750,7 @@ export const FIELD_REGISTRY = {
   },
 
   lead_out_feedrate: {
-    label: 'Lead-Out Feedrate (in/min)',
+    label: 'Lead-Out Feedrate',
     type: 'number',
     unit: 'feed',
     fusionPath: 'start-values.presets[0].v_f_leadOut',
@@ -758,7 +762,7 @@ export const FIELD_REGISTRY = {
   },
 
   feed_per_tooth: {
-    label: 'Feed per Tooth (in)',
+    label: 'Feed per Tooth',
     type: 'number',
     unit: 'feed',
     fusionPath: 'start-values.presets[0].f_z',
@@ -770,7 +774,7 @@ export const FIELD_REGISTRY = {
   },
 
   feed_per_rev: {
-    label: 'Feed per Rev (in)',
+    label: 'Feed per Rev',
     type: 'number',
     unit: 'feed',
     fusionPath: 'start-values.presets[0].f_n',
@@ -794,7 +798,7 @@ export const FIELD_REGISTRY = {
   },
 
   depth_of_cut: {
-    label: 'Depth of Cut (in)',
+    label: 'Depth of Cut',
     type: 'number',
     unit: 'length',
     canonicalUnit: 'native',
@@ -807,7 +811,7 @@ export const FIELD_REGISTRY = {
   },
 
   width_of_cut: {
-    label: 'Width of Cut (in)',
+    label: 'Width of Cut',
     type: 'number',
     unit: 'length',
     canonicalUnit: 'native',
@@ -1019,4 +1023,35 @@ export function fieldAppliesTo(fieldName, toolType) {
  */
 export function isMetadataOnly(fieldName) {
   return FIELD_REGISTRY[fieldName]?.metadataOnly === true;
+}
+
+// Shop-wide default linear unit. Per-record unit editing isn't surfaced in the
+// UI yet; when it is, callers pass the record's own unit to fieldLabel() and the
+// global toggle becomes a single change here rather than a sweep of literals.
+export const DEFAULT_LINEAR_UNIT = 'inches';
+
+// Linear-unit suffix for a record unit: 'in' for inches, 'mm' for millimeters.
+export function linearSuffix(unit = DEFAULT_LINEAR_UNIT) {
+  return unit === 'millimeters' ? 'mm' : 'in';
+}
+
+/**
+ * Display label for a field, with the unit suffix derived from the record's unit
+ * instead of hardcoded. This is the single source of the linear-unit suffix:
+ *  - native-unit length fields  → '(in)' / '(mm)'
+ *  - feed-per-tooth/rev fields  → '(in)' / '(mm)'
+ *  - feedrate fields            → '(in/min)' / '(mm/min)'
+ * OOH/min_ooh (canonical inches) and angle/rpm/speed/currency fields keep the
+ * unit-invariant suffix already baked into their base label.
+ */
+export function fieldLabel(fieldName, unit = DEFAULT_LINEAR_UNIT) {
+  const def = FIELD_REGISTRY[fieldName];
+  if (!def) return fieldName;
+  if (def.unit === 'length' && def.canonicalUnit !== 'inches') {
+    return `${def.label} (${linearSuffix(unit)})`;
+  }
+  if (def.unit === 'feed') {
+    return `${def.label} (${linearSuffix(unit)}${fieldName.endsWith('feedrate') ? '/min' : ''})`;
+  }
+  return def.label;
 }

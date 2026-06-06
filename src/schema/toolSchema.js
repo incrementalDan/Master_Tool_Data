@@ -4,7 +4,7 @@ import {
   PS_GROUPS, AUTO_GROUP, COOLANT_OPTS, THROUGH_COOLANT_VALUES,
   getVisibleFields,
 } from '../../tool-extractor.tsx';
-import { isMetadataOnly } from './fieldRegistry.js';
+import { isMetadataOnly, FIELD_REGISTRY, fieldLabel } from './fieldRegistry.js';
 import { parsePresetName, materialCategory } from '../utils/presetNaming.js';
 
 export { TT, TL, MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST, PS_GROUPS, AUTO_GROUP, COOLANT_OPTS };
@@ -1295,72 +1295,10 @@ export function validateGeometry(tool) {
 export { getVisibleFields };
 
 // ─── Human-readable field labels ──────────────────────────────────────────
-// Source of truth for labels has moved to src/schema/fieldRegistry.js (FIELD_REGISTRY[field].label).
-// Keep this map in sync when adding or renaming fields, but add new fields to the registry first.
-export const FIELD_LABELS = {
-  tool_type: 'Tool Type',
-  description: 'Description',
-  vendor: 'Manufacturer',
-  product_id: 'Mfr Part # (EDP)',
-  proshot_id: 'ProShop ID',
-  distributor: 'Distributor',
-  distributor_stock_num: 'Distributor Stock #',
-  diameter: 'Diameter (in)',
-  flute_length: 'Flute Length (in)',
-  overall_length: 'Overall Length (in)',
-  number_of_flutes: '# Flutes',
-  shank_diameter: 'Shank Diameter (in)',
-  corner_radius: 'Corner Radius (in)',
-  shoulder_length: 'Shoulder Length (in)',
-  tip_angle: 'Tip Angle (°)',
-  taper_angle: 'Taper Angle (°)',
-  tip_diameter: 'Tip Diameter (in)',
-  material: 'Tool Material',
-  coating: 'Coating',
-  material_suitability: 'Material Suitability',
-  tsc_capable: 'TSC Capable',
-  flute_design: 'Flute Design',
-  helix_angle: 'Helix Angle (°)',
-  flute_type: 'Flute Type',
-  center_cutting: 'Center Cutting',
-  cutting_direction: 'Cutting Direction',
-  spindle_speed: 'Spindle Speed (RPM)',
-  cutting_feedrate: 'Cutting Feedrate (in/min)',
-  feed_per_tooth: 'Feed per Tooth (in)',
-  feed_per_rev: 'Feed per Rev (in)',
-  plunge_feedrate: 'Plunge Feedrate (in/min)',
-  ramp_feedrate: 'Ramp Feedrate (in/min)',
-  lead_in_feedrate: 'Lead-In Feedrate (in/min)',
-  lead_out_feedrate: 'Lead-Out Feedrate (in/min)',
-  cutting_speed: 'Surface Speed (SFM)',
-  depth_of_cut: 'Depth of Cut (in)',
-  width_of_cut: 'Width of Cut (in)',
-  preferred_machine: 'Preferred Machine',
-  cost: 'Cost ($)',
-  product_link: 'Product Link',
-  location: 'Location (Cabinet)',
-  notes: 'Notes',
-  tags: 'Tags',
-  last_used_job: 'Last Used Job',
-  revision_notes: 'Revision Notes',
-  updated_by: 'Updated By',
-  created_at: 'Created',
-  updated_at: 'Last Updated',
-  pitch: 'Thread Pitch',
-  thread_pitch: 'Thread Pitch (value)',
-  tap_class: 'Tap Class',
-  min_thread_pitch: 'Min Thread Pitch',
-  max_thread_pitch: 'Max Thread Pitch',
-  point_type: 'Point Type',
-  stub_jobber: 'Stub/Jobber',
-  double_ended: 'Double Ended',
-  full_profile: 'Full Profile',
-  backside_capable: 'Backside Capable',
-  lower_radius: 'Lower Radius (in)',
-  upper_radius: 'Upper Radius (in)',
-  profile_radius: 'Profile Radius (in)',
-  axial_distance: 'Axial Distance (in)',
-  grouping: 'ProShop Group',
-  machine_tool_number: 'Machine Tool #',
-  preset_name: 'Preset Name',
-};
+// Generated from the field registry (the single source of truth for labels).
+// Linear-unit suffixes are derived centrally by fieldLabel() at the shop default
+// unit — to show a record's own unit (e.g. mm), call fieldLabel(field, unit)
+// directly instead of reading this static map. Add/rename fields in the registry.
+export const FIELD_LABELS = Object.fromEntries(
+  Object.keys(FIELD_REGISTRY).map(name => [name, fieldLabel(name)])
+);

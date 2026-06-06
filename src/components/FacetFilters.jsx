@@ -2,21 +2,15 @@ import { useState, useRef, useEffect } from 'react';
 import { getAvailableOptions } from '../services/searchEngine.js';
 import { getFacetFields, FIELD_LABELS } from '../schema/toolSchema.js';
 
+// Short facet-specific overrides only. Fields not listed fall through to the
+// central FIELD_LABELS (registry-derived, incl. the unit suffix). corner_radius
+// is kept here intentionally so the compact facet omits the unit.
 const FACET_LABEL = {
-  diameter: 'Diameter (in)',
   number_of_flutes: 'Flutes',
-  flute_length: 'Flute Length (in)',
-  overall_length: 'Overall Length (in)',
   material: 'Material',
-  coating: 'Coating',
-  vendor: 'Manufacturer',
   tsc_capable: 'TSC',
-  flute_design: 'Flute Design',
   material_suitability: 'Cuts',
-  tags: 'Tags',
   corner_radius: 'Corner Radius',
-  tip_angle: 'Tip Angle (°)',
-  pitch: 'Thread Pitch',
 };
 
 const MULTI_SELECT_FIELDS = new Set(['flute_design']);
