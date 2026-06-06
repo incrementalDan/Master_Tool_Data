@@ -56,12 +56,12 @@ Status legend: ☐ open · ☑ resolved.
 
 ---
 
-## 🟠 fieldRegistry.js / toolSchema.js — drill point angle (`SIG`) not mapped to Fusion ☑(documented)
+## 🟠 fieldRegistry.js / toolSchema.js — drill point angle (`SIG`) not mapped to Fusion ☑ resolved
 
 - **Schema says:** drills/spot drills store the point (included) angle in `geometry.SIG` (e.g. 118/135/140); it is a real Fusion geometry field (71 tools).
 - **App does:** `fieldRegistry.js` marks `tip_angle` as `fusionPath: null, metadataOnly: true`; `fusionToolToInternal` never reads `geometry.SIG`, and `internalToFusionTool` never writes it. The drill point angle is read from / written to ProShop + metadata only.
 - **Impact:** a drill's point angle present in the Fusion library is ignored on read and never written back — Fusion-side point angle is lost for app-managed drills. The CSV/TSV path *does* write col 155 (`tool_tipAngle`→SIG) from `tool.tip_angle`, so the JSON and CSV paths disagree.
-- **Fix (conservative):** documented here as a known gap. Mapping `tip_angle`↔`geometry.SIG` in the JSON path is a semantic change to a field CLAUDE.md currently designates metadata-only; **flagged for user decision** rather than auto-changed. The unit/registry annotation (below) is applied; the JSON read/write mapping is left to a deliberate follow-up.
+- **Fix:** ☑ done (user-approved). `tip_angle` is now Fusion-native: `fusionToolToInternal` reads `geometry.SIG`; `internalToFusionTool` writes `geometry.SIG` for the point-angle types (`TIP_ANGLE_TYPES` = drill/center drill/spot drill/counter sink/chamfer mill, matching the TSV `tipAngleTypes`), with clearing support. `fieldRegistry.js` now sets `fusionPath: 'geometry.SIG'`, `metadataOnly: false`. `mergeFusionAndMetadata` now prefers `fusionInternal.tip_angle` (Fusion authoritative) with metadata as a transition-only fallback; the value is still cached in metadata (parallel to `shoulder_length`). JSON and TSV paths now agree. CLAUDE.md mapping table documents the field.
 
 ---
 

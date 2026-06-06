@@ -34,6 +34,8 @@ Each Fusion preset stores stepdown and stepover in **three** places that must ag
 
 **Fusion re-derives every numeric field from its paired expression string on library load.** If you write a numeric field (e.g. `geometry.LB = 0.751`) but leave the expression stale (`expressions.tool_bodyLength = "3.1 in"`), Fusion evaluates the expression and silently reverts your write. This applies to all geometry and preset fields that have a corresponding `expressions.*` entry.
 
+**The expression unit suffix must match the tool's unit.** Every length expression carries a linear-unit suffix (`tool_diameter`, `tool_fluteLength`, `tool_overallLength`, `tool_shaftDiameter`, `tool_shoulderLength`, `tool_cornerRadius`, `tool_bodyLength`, …). Fusion parses the number *through* that suffix — so writing `"5 in"` for a millimeters tool makes Fusion read 5 in = 127 mm and silently corrupt the geometry on the next load. `internalToFusionTool` computes one `lenUnit = isInch ? 'in' : 'mm'` (from `tool.unit`) and uses it for **all** geometry expression suffixes; the feed/speed expressions use their own `feedUnit`/`speedUnit`/`fzUnit`. **Never hardcode `" in"`** — always derive the suffix from the tool's unit. (This is the seam that makes the app correct for an mm-default shop.)
+
 **The OOH / body-length case** (the most common place to get this wrong): `splitToFusionInstances` writes per-instance OOH to `geometry.LB` **and** `expressions.tool_bodyLength` together in one step. Never update one without the other:
 
 ```js
@@ -61,7 +63,9 @@ Only write geometry fields that the tool actually uses. `internalToFusionTool` w
 
 ### Holder gaugeLength — always from the library
 
-`buildHolderObject(holderEntry)` in `splitToFusionInstances` is always called with the live holder library entry — **never preserve `gaugeLength` from the existing Fusion tool's `raw.holder`**. The holder library stores the correct gauge length (total segment height minus any segment marked "above the gauge line" in Fusion). Preserving from a previous write perpetuates stale values from older bad writes. The `buildHolderObject` function also clamps the library value to the exact section sum to prevent a "Gauge length exceeds total section height" error from floating-point rounding.
+`buildHolderObject(holderEntry)` in `splitToFusionInstances` is always called with the live holder library entry — **never preserve `gaugeLength` from the existing Fusion tool's `raw.holder`**. Preserving from a previous write perpetuates stale values from older bad writes.
+
+**Gauge length is expression-derived, not just trusted.** Fusion's `expressions.tool_holderGaugeLength` sums the heights of the segments **below the gauge line**; segments absent from it are "above the gauge line" (inside the spindle) and excluded. `sumGaugeSegments` parses that expression and sums the named segment heights — mapping each Fusion segment number to its JSON array index via `jsonIndex = S − fusionNumber` (the `segments` array is stored bottom-first, the opposite of Fusion's top-down numbering). `buildHolderObject` **prefers this computed sum** (in the holder's native unit) over the stored `gaugeLength`, which corrects stale/wrong stored values left by older writes; it **falls back** to the stored value only when there's no usable expression (e.g. embedded holders that lack one). `computeGaugeLength(holder)` returns the same value in inches; `buildGaugeLengthExpression(totalSegments, aboveGaugeLineCount = 1)` builds the expression — **never hardcode an above-gauge-line count other than 1** without parsing the existing expression. As a final guard, `buildHolderObject` clamps the result down to the exact section sum to avoid a "Gauge length exceeds total section height" floating-point error.
 
 `geometry.assemblyGaugeLength` (a Fusion-native field **nested in `geometry`**, not root-level; = holder gauge length + OOH, in the tool's unit) is always **explicitly recomputed** in `splitToFusionInstances` from the freshly-built holder's `gaugeLength` + the assembly's `ooh` — never carried forward from `...existing`.
 
@@ -254,6 +258,7 @@ The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/sche
 | `vendor`         | — (metadata only)       | `Manufacturer`    | Manufacturer name — **never** written to Fusion |
 | `location`       | `expressions.tool_vendor` | (cabinet location) | Fusion's **"Vendor"** UI field is repurposed as the cabinet location (e.g. "LC-8") |
 | `shoulder_length`| `geometry['shoulder-length']` | —          | Hyphenated key (not `LSCH`); normalization sets it = MIN OOH |
+| `tip_angle`      | `geometry.SIG`          | `tipAngle`        | Drill/spot/chamfer point (included) angle — **Fusion-native** (read+write both JSON and TSV paths) for `drill`, `center drill`, `spot drill`, `counter sink`, `chamfer mill`. Fusion wins; metadata is a transition fallback |
 | `min_ooh`        | — (metadata only)       | `MIN OOH` (`lengthBelowShankDiameter`) | Minimum stick-out floor — see the three-length-concepts table + ProShop Field Priority Rules |
 | `product_id`     | — (metadata only)       | `Part Number`     | Manufacturer EDP number                |
 | `proshot_id`     | `product-id`            | ProShop ID        | **Primary match key for Phase 2**      |
@@ -336,6 +341,8 @@ Key holder object fields:
 **Canonical internal units (today — the part that's easy to trip on):**
 - **OOH** (per-assembly stick-out) and **`min_ooh`** are **always stored in inches**, regardless of the tool's unit. These are the two "stick-out" concepts and share a canonical unit so they compare directly.
 - **All other length geometry** (`diameter`/DC, `flute_length`/LCF, `overall_length`/OAL, `shoulder_length`/`shoulder-length`) is stored in the tool's **native unit** (mm for a metric tool) — read raw from / written raw to Fusion (`fusionToolToInternal` / `internalToFusionTool`). Only `geometry.LB` (OOH) is converted (÷25.4 on read, ×25.4 on write) in `readOohFromFusion` / `splitToFusionInstances`.
+
+**The field registry encodes which is which.** Every `unit: 'length'` field in `src/schema/fieldRegistry.js` carries a `canonicalUnit` annotation — `'inches'` for `ooh`/`min_ooh`, `'native'` for all other lengths — so conversion can be driven from the registry rather than hand-coded. Add it to any new length field. (The future per-record/global-unit work will consume this flag to centralize conversions.)
 
 **Therefore, whenever inches-canonical `min_ooh`/OOH meets a native-unit length, convert.** Helper: `inchesToNative(value, unit)` / native is `value × 25.4` for `millimeters`. Current crossing points (all handled):
 - `normalizeLibrary`: `shoulder_length` (native) is set from `min_ooh` (inches) → convert for metric. The per-assembly OOH floor compares inches-to-inches → no conversion.

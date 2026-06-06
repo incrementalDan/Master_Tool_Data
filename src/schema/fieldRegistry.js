@@ -319,9 +319,9 @@ export const FIELD_REGISTRY = {
     label: 'Tip Angle (°)',
     type: 'number',
     unit: 'angle',
-    fusionPath: null,             // stored in metadata; not a top-level Fusion geometry field
+    fusionPath: 'geometry.SIG',   // drill/spot/chamfer point (included) angle — Fusion-native
     proShopColumn: 'tipAngle',
-    metadataOnly: true,
+    metadataOnly: false,
     appliesToTypes: [
       'chamfer mill', 'drill', 'center drill', 'spot drill', 'counter sink',
     ],

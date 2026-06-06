@@ -544,6 +544,7 @@ export function fusionToolToInternal(fTool) {
     corner_radius: geo.RE || null,
     shank_diameter: geo.SFDM || null,
     taper_angle: geo.TA || null,
+    tip_angle: geo.SIG || null,
     shoulder_length: geo['shoulder-length'] || null,
     material: fTool.BMC || 'carbide',
     proshot_id: fTool['product-id'] || stripQuotes(expr.tool_productId) || '',
@@ -659,6 +660,11 @@ function normalizePreset(p, tscCapable = false) {
   if (useStepover) out.stepover = soNum;
   return out;
 }
+
+// Tool types that carry a point (included) angle in geometry.SIG — kept in sync
+// with the TSV path's tipAngleTypes (fusionExport.js) and tip_angle's
+// appliesToTypes (fieldRegistry.js).
+const TIP_ANGLE_TYPES = new Set(['drill', 'center drill', 'spot drill', 'counter sink', 'chamfer mill']);
 
 export function internalToFusionTool(tool) {
   const existing = tool._fusionRaw || {};
@@ -817,6 +823,10 @@ export function internalToFusionTool(tool) {
       // The ...existing spread above preserves them from the original Fusion entry.
       ...(tool.corner_radius > 0 || (existing.geometry?.RE > 0) ? { RE: tool.corner_radius || 0 } : {}),
       ...(tool.taper_angle > 0 || (existing.geometry?.TA > 0) ? { TA: tool.taper_angle || 0 } : {}),
+      // SIG = drill/spot/chamfer point (included) angle. Write only for the types
+      // that carry it (matches the TSV path's tipAngleTypes), or when clearing an
+      // existing value. Fusion is the source of truth for it (read back into tip_angle).
+      ...((TIP_ANGLE_TYPES.has(tool.tool_type) && tool.tip_angle > 0) || (existing.geometry?.SIG > 0) ? { SIG: tool.tip_angle || 0 } : {}),
       ...(tool.tip_diameter > 0 || (existing.geometry?.['tip-diameter'] > 0) ? { 'tip-diameter': tool.tip_diameter || 0 } : {}),
       // NT, TP, thread-profile-angle, tip-length, tip-offset: never written explicitly;
       // preserved from ...existing if the original Fusion entry had them.
@@ -857,7 +867,9 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     helix_angle: meta.helix_angle ?? fusionInternal.helix_angle ?? null,
     flute_type: meta.flute_type || '',
     flute_design: meta.flute_design || '',
-    tip_angle: meta.tip_angle ?? fusionInternal.tip_angle ?? null,
+    // tip_angle is now Fusion-native (geometry.SIG); Fusion wins, metadata is a
+    // transition-only fallback for tools whose Fusion entry lacks SIG.
+    tip_angle: fusionInternal.tip_angle ?? meta.tip_angle ?? null,
     tip_diameter: meta.tip_diameter ?? fusionInternal.tip_diameter ?? null,
     lower_radius: meta.lower_radius ?? null,
     upper_radius: meta.upper_radius ?? null,
