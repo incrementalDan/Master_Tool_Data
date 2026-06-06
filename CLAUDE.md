@@ -30,6 +30,41 @@ A **logical tool** maps to **N Fusion library entries ("instances")** — one in
 
 Each Fusion preset stores stepdown and stepover in **three** places that must agree: the `use-stepdown`/`use-stepover` **boolean**, the **numeric** `stepdown`/`stepover`, and an **expression string** (`expressions.tool_stepdown` / `tool_stepover`, e.g. `".018 in"`). **Fusion re-derives the checkbox from the expression on load** — so if we write the boolean `false` but leave a leftover expression, Fusion flips the flag back to `true` on the next pull (the recurring "use stepdown/stepover became true" bug). `normalizePreset` (`src/schema/toolSchema.js`) is the single point that keeps all three consistent: the **boolean is the source of truth**, the numeric value is sourced from the field *or* parsed from the expression (the value sometimes lives only in the expression), and the step expression is **stripped whenever the flag is disabled**. Any new code that writes presets to Fusion must preserve this invariant — never set a step boolean without syncing its number and expression.
 
+### Fusion expression-numeric sync — general rule
+
+**Fusion re-derives every numeric field from its paired expression string on library load.** If you write a numeric field (e.g. `geometry.LB = 0.751`) but leave the expression stale (`expressions.tool_bodyLength = "3.1 in"`), Fusion evaluates the expression and silently reverts your write. This applies to all geometry and preset fields that have a corresponding `expressions.*` entry.
+
+**The OOH / body-length case** (the most common place to get this wrong): `splitToFusionInstances` writes per-instance OOH to `geometry.LB` **and** `expressions.tool_bodyLength` together in one step. Never update one without the other:
+
+```js
+base.geometry   = { ...(base.geometry || {}), LB: lb };
+base.expressions = { ...(base.expressions || {}), tool_bodyLength: `${lb} ${isMetric ? 'mm' : 'in'}` };
+```
+
+### Preset formula expressions — do not regenerate
+
+Fusion's default presets store `tool_feedPlunge`, `tool_feedRamp`, and `tool_feedTransition` as **formula expressions** that reference other fields (e.g. `"tool_feedCutting/3"`, `"tool_feedPlunge"`, `"tool_feedCutting"`). If you overwrite them with literal numeric strings you break the dynamic links, and the values change every round-trip.
+
+**Rule**: `internalToFusionTool` only regenerates `tool_spindleSpeed`, `tool_surfaceSpeed`, `tool_feedCutting`, and `tool_feedPerTooth`. It explicitly does **not** regenerate `tool_feedPlunge`, `tool_feedRamp`, or `tool_feedTransition` — those are preserved from `origExprs` (the raw Fusion preset's original expressions block). Do not add them back.
+
+### Valid Fusion coolant values
+
+The only values Fusion accepts for `tool-coolant` are: `"flood"`, `"tool"` (TSC / through-spindle), `"disabled"`, `"air"`, `"flood tool"` (flood + TSC combined). **Not** `"through tool"`, **not** `"flood and through tool"`.
+
+- Default for TSC-capable tools (`tsc_capable: true`): `"tool"`
+- Default for non-TSC tools: `"flood"`
+- `normalizePreset` remaps any stored `"flood and through tool"` → `"flood tool"` on every write
+
+### Geometry field minimalism
+
+Only write geometry fields that the tool actually uses. `internalToFusionTool` writes the core set (`CSP`, `DC`, `HAND`, `LCF`, `NOF`, `OAL`, `SFDM`, `shoulder-diameter`, `shoulder-length`) unconditionally, and writes `RE`, `TA`, `tip-diameter` **only when non-zero** (or when the original Fusion entry already had a non-zero value — to support clearing). The fields `NT`, `TP`, `thread-profile-angle`, `tip-length`, `tip-offset` are **never written explicitly** — they are preserved from `...existing` if the original Fusion entry had them, and are absent for tools that never had them. Injecting these as constant defaults adds unexpected fields that differ between tools and bloat the diff.
+
+### Holder gaugeLength — always from the library
+
+`buildHolderObject(holderEntry)` in `splitToFusionInstances` is always called with the live holder library entry — **never preserve `gaugeLength` from the existing Fusion tool's `raw.holder`**. The holder library stores the correct gauge length (total segment height minus any segment marked "above the gauge line" in Fusion). Preserving from a previous write perpetuates stale values from older bad writes. The `buildHolderObject` function also clamps the library value to the exact section sum to prevent a "Gauge length exceeds total section height" error from floating-point rounding.
+
+`assemblyGaugeLength` (the root-level geometry field = holder gauge length + OOH) is always **explicitly recomputed** in `splitToFusionInstances` from the freshly-built holder's `gaugeLength` + the assembly's `ooh` — never carried forward from `...existing`.
+
 -----
 
 ## The Problem Being Solved
