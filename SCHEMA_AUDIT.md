@@ -101,18 +101,18 @@ Status legend: ☐ open · ☑ resolved.
 
 ---
 
-## 📌 CLAUDE.md — documents a root-level `assembly-gauge-length` (contradicts ground truth) ☐ needs user decision
+## 📌 CLAUDE.md — documents a root-level `assembly-gauge-length` (contradicts ground truth) ☑ resolved
 
 - **Schema says:** there is **no** root-level `assembly-gauge-length` field in any of the 226 reference tools; the value lives at `geometry.assemblyGaugeLength` = holder gauge + OOH.
 - **CLAUDE.md says:** lines 263, 373, and 762 describe `assembly-gauge-length` as "a Fusion-native root-level field for OOH, safe to write" and "what we WRITE on export". This is factually wrong per the reference exports and now contradicts the corrected code.
 - **Impact:** future work guided by CLAUDE.md could reintroduce the root-level field that this audit removed. (Also note line 616 says `incoming_ooh` is read from `assembly-gauge-length`, but the code actually — and correctly — reads it from `tool_bodyLength`/`geometry.LB`.)
-- **Fix:** **flagged for the user** — CLAUDE.md is the canonical instruction file and was left unedited to stay within the task's stated scope (FUSION_SCHEMA.md, SCHEMA_AUDIT.md, the four code files). Recommend updating those CLAUDE.md lines to say the assembly gauge length is `geometry.assemblyGaugeLength` (= holder gauge + OOH).
+- **Fix:** ☑ done — updated CLAUDE.md lines 66, 263, 372–373, 616, 677, and 762 to describe the field as `geometry.assemblyGaugeLength` (nested, = holder gauge + OOH) and to source `incoming_ooh` from `geometry.LB`/`tool_bodyLength`. No remaining references describe a root-level `assembly-gauge-length` as what we write.
 
-## ☐ services/mergeQueue.js — Phase 2 JSON import does not capture `incoming_ooh` (out of scope)
+## ☑ services/mergeQueue.js — Phase 2 JSON import does not capture `incoming_ooh` (resolved)
 
 - **Schema/observation:** the primary Fusion clipboard path is CSV/TSV; `parseFusionCsv` correctly derives `incoming_ooh` from `tool_bodyLength` (geometry.LB). The secondary JSON-paste path (`parseIncoming` → `fusionToolToInternal`) does not set `incoming_ooh` at all.
 - **Impact:** a tool imported via pasted **JSON** carries no incoming OOH, so CommitStep's assembly detection won't fire for that path. Minor — JSON paste is the fallback, not the documented clipboard format.
-- **Fix:** out of Phase-3 scope (not one of the four target files). Recorded for a follow-up; would read `geometry.LB` (÷25.4 for mm) in the JSON branch.
+- **Fix:** ☑ done — the JSON branch of `parseIncoming` now attaches the same transient fields as `parseFusionCsv`: `incoming_ooh = readOohFromFusion(ft)` (reads `geometry.LB`, ÷25.4 for mm), plus `incoming_holder_guid` and `_incomingHolderDesc` from the raw tool. CommitStep assembly detection now fires for JSON-pasted tools too.
 
 ## Verified correct (no action)
 

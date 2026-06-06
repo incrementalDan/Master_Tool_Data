@@ -1,4 +1,4 @@
-import { fusionToolToInternal, generateId } from '../schema/toolSchema.js';
+import { fusionToolToInternal, generateId, readOohFromFusion } from '../schema/toolSchema.js';
 import { parsePresetName } from '../utils/presetNaming.js';
 import { matchTool } from './duplicateDetector.js';
 
@@ -244,7 +244,16 @@ export function parseIncoming(raw) {
     }
 
     if (fusionTools.length === 0) throw new Error('No tools found in the pasted content.');
-    return fusionTools.map(fusionToolToInternal);
+    // Attach the same transient assembly-context fields parseFusionCsv sets, so
+    // CommitStep's assembly detection works for JSON-pasted tools too. OOH comes
+    // from geometry.LB (converted to inches by readOohFromFusion), never from
+    // assembly-gauge-length (= holder gauge + OOH, not the OOH source).
+    return fusionTools.map((ft) => ({
+      ...fusionToolToInternal(ft),
+      incoming_ooh: readOohFromFusion(ft),
+      incoming_holder_guid: ft?.holder?.guid || '',
+      _incomingHolderDesc: ft?.holder?.description || '',
+    }));
   }
 
   // Fall back to Fusion CSV/TSV format (right-click → Copy from tool library)
