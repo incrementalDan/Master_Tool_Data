@@ -1,4 +1,4 @@
-import { fusionToolToInternal, generateId } from '../schema/toolSchema.js';
+import { fusionToolToInternal, generateId, readOohFromFusion } from '../schema/toolSchema.js';
 import { parsePresetName } from '../utils/presetNaming.js';
 import { matchTool } from './duplicateDetector.js';
 
@@ -169,6 +169,7 @@ function parseFusionCsv(raw) {
       taper_angle: csvNum(r.tool_taperAngle),
       tip_angle: csvNum(r.tool_tipAngle),
       tip_diameter: csvNum(r.tool_tipDiameter),
+      thread_pitch: csvNum(r.tool_threadPitch),
       shoulder_length: csvNum(r.tool_shoulderLength),
       material: csvStr(r.tool_material) || 'carbide',
       proshot_id: csvStr(r.tool_productId) || '',
@@ -192,7 +193,8 @@ function parseFusionCsv(raw) {
       distributor_stock_num: '',
       cost: '',
       center_cutting: false,
-      cutting_direction: 'Right Hand',
+      // Fusion-native: tool_hand → cutting_direction (anything matching "left" = Left Hand).
+      cutting_direction: /left/i.test(csvStr(r.tool_hand)) ? 'Left Hand' : 'Right Hand',
       material_suitability: [],
       tags: [],
       notes: '',
@@ -244,7 +246,16 @@ export function parseIncoming(raw) {
     }
 
     if (fusionTools.length === 0) throw new Error('No tools found in the pasted content.');
-    return fusionTools.map(fusionToolToInternal);
+    // Attach the same transient assembly-context fields parseFusionCsv sets, so
+    // CommitStep's assembly detection works for JSON-pasted tools too. OOH comes
+    // from geometry.LB (converted to inches by readOohFromFusion), never from
+    // assembly-gauge-length (= holder gauge + OOH, not the OOH source).
+    return fusionTools.map((ft) => ({
+      ...fusionToolToInternal(ft),
+      incoming_ooh: readOohFromFusion(ft),
+      incoming_holder_guid: ft?.holder?.guid || '',
+      _incomingHolderDesc: ft?.holder?.description || '',
+    }));
   }
 
   // Fall back to Fusion CSV/TSV format (right-click → Copy from tool library)

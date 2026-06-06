@@ -18,7 +18,7 @@ A **logical tool** maps to **N Fusion library entries ("instances")** — one in
 - **Shared vs per-instance**: editing any shared field (description, geometry except LB, vendor, proshot_id, presets, tags, notes, machine number, …) propagates to **all** instances. Only **holder** and **OOH** are per-instance.
 - **Machine tool number** is shared across all instances of a logical tool.
 - **Presets** are a single shared set replicated identically onto every instance. Each preset's name encodes its assembly + operation (see below), so opening any instance in Fusion shows the full proven-preset set.
-- **In-memory shape**: `id` (= `tracking_id`), `tracking_id`, `assemblies[]` (`{ assembly_id, instance_guid, holder_guid, holder_description, ooh, notes, source }`), shared `presets[]` (each with `operation_type`), `machine_tool_number`, and `_instancesRaw[]` (raw Fusion entries).
+- **In-memory shape**: `id` (= `tracking_id`), `tracking_id`, `assemblies[]` (`{ assembly_id, instance_guid, holder_guid, holder_description, ooh, linked_preset_guids, notes, source }`), shared `presets[]` (each with `operation_type`), `machine_tool_number`, and `_instancesRaw[]` (raw Fusion entries).
 - **Write path**: `AppContext.writeLogicalTool()` reconciles in one library write — re-download, drop every entry whose tracking ID matches, append the freshly split instance set (`splitToFusionInstances`). It backs `saveTool`/`addTool`/`mergeTool`, the assembly CRUD (`addAssembly`/`updateAssembly`/`deleteAssembly` = create/edit/remove an instance), and `applyReconcile` (adopt/drop strays found on open — see Sync & Merge Workflows). `deleteTool` removes all instances; a tool must keep ≥1 assembly. `renumberLibrary` assigns one number per logical tool.
 - **Transition**: `normalizeLibrary()` (one-time, surfaced via the `needsNormalize` banner) assigns tracking IDs to pre-migration tools, fans each out into instances per its existing metadata assemblies, and renames presets to the convention. Back up library + metadata first.
 
@@ -33,6 +33,8 @@ Each Fusion preset stores stepdown and stepover in **three** places that must ag
 ### Fusion expression-numeric sync — general rule
 
 **Fusion re-derives every numeric field from its paired expression string on library load.** If you write a numeric field (e.g. `geometry.LB = 0.751`) but leave the expression stale (`expressions.tool_bodyLength = "3.1 in"`), Fusion evaluates the expression and silently reverts your write. This applies to all geometry and preset fields that have a corresponding `expressions.*` entry.
+
+**The expression unit suffix must match the tool's unit.** Every length expression carries a linear-unit suffix (`tool_diameter`, `tool_fluteLength`, `tool_overallLength`, `tool_shaftDiameter`, `tool_shoulderLength`, `tool_cornerRadius`, `tool_bodyLength`, …). Fusion parses the number *through* that suffix — so writing `"5 in"` for a millimeters tool makes Fusion read 5 in = 127 mm and silently corrupt the geometry on the next load. `internalToFusionTool` computes one `lenUnit = isInch ? 'in' : 'mm'` (from `tool.unit`) and uses it for **all** geometry expression suffixes; the feed/speed expressions use their own `feedUnit`/`speedUnit`/`fzUnit`. **Never hardcode `" in"`** — always derive the suffix from the tool's unit. (This is the seam that makes the app correct for an mm-default shop.)
 
 **The OOH / body-length case** (the most common place to get this wrong): `splitToFusionInstances` writes per-instance OOH to `geometry.LB` **and** `expressions.tool_bodyLength` together in one step. Never update one without the other:
 
@@ -57,13 +59,15 @@ The only values Fusion accepts for `tool-coolant` are: `"flood"`, `"tool"` (TSC 
 
 ### Geometry field minimalism
 
-Only write geometry fields that the tool actually uses. `internalToFusionTool` writes the core set (`CSP`, `DC`, `HAND`, `LCF`, `NOF`, `OAL`, `SFDM`, `shoulder-diameter`, `shoulder-length`) unconditionally, and writes `RE`, `TA`, `tip-diameter` **only when non-zero** (or when the original Fusion entry already had a non-zero value — to support clearing). The fields `NT`, `TP`, `thread-profile-angle`, `tip-length`, `tip-offset` are **never written explicitly** — they are preserved from `...existing` if the original Fusion entry had them, and are absent for tools that never had them. Injecting these as constant defaults adds unexpected fields that differ between tools and bloat the diff.
+Only write geometry fields that the tool actually uses. `internalToFusionTool` writes the core set (`CSP`, `DC`, `HAND`, `LCF`, `NOF`, `OAL`, `SFDM`, `shoulder-diameter`, `shoulder-length`) unconditionally, and writes `RE`, `TA`, `tip-diameter` **only when non-zero** (or when the original Fusion entry already had a non-zero value — to support clearing). `SIG` (point angle) is written for `TIP_ANGLE_TYPES` and `TP` (thread pitch) for `THREAD_PITCH_TYPES` — each only when its value is non-zero or the original entry had it. `TP` is always written together with its paired `expressions.tool_threadPitch` (same suffix rule as other geometry — Fusion re-derives `TP` from the expression on load, so they must agree). The fields `NT`, `thread-profile-angle`, `tip-length`, `tip-offset` are **never written explicitly** — they are preserved from `...existing` if the original Fusion entry had them, and are absent for tools that never had them. Injecting these as constant defaults adds unexpected fields that differ between tools and bloat the diff.
 
 ### Holder gaugeLength — always from the library
 
-`buildHolderObject(holderEntry)` in `splitToFusionInstances` is always called with the live holder library entry — **never preserve `gaugeLength` from the existing Fusion tool's `raw.holder`**. The holder library stores the correct gauge length (total segment height minus any segment marked "above the gauge line" in Fusion). Preserving from a previous write perpetuates stale values from older bad writes. The `buildHolderObject` function also clamps the library value to the exact section sum to prevent a "Gauge length exceeds total section height" error from floating-point rounding.
+`buildHolderObject(holderEntry)` in `splitToFusionInstances` is always called with the live holder library entry — **never preserve `gaugeLength` from the existing Fusion tool's `raw.holder`**. Preserving from a previous write perpetuates stale values from older bad writes.
 
-`assemblyGaugeLength` (the root-level geometry field = holder gauge length + OOH) is always **explicitly recomputed** in `splitToFusionInstances` from the freshly-built holder's `gaugeLength` + the assembly's `ooh` — never carried forward from `...existing`.
+**Gauge length is expression-derived, not just trusted.** Fusion's `expressions.tool_holderGaugeLength` sums the heights of the segments **below the gauge line**; segments absent from it are "above the gauge line" (inside the spindle) and excluded. `sumGaugeSegments` parses that expression and sums the named segment heights — mapping each Fusion segment number to its JSON array index via `jsonIndex = S − fusionNumber` (the `segments` array is stored bottom-first, the opposite of Fusion's top-down numbering). `buildHolderObject` **prefers this computed sum** (in the holder's native unit) over the stored `gaugeLength`, which corrects stale/wrong stored values left by older writes; it **falls back** to the stored value only when there's no usable expression (e.g. embedded holders that lack one). `computeGaugeLength(holder)` returns the same value in inches; `buildGaugeLengthExpression(totalSegments, aboveGaugeLineCount = 1)` builds the expression — **never hardcode an above-gauge-line count other than 1** without parsing the existing expression. As a final guard, `buildHolderObject` clamps the result down to the exact section sum to avoid a "Gauge length exceeds total section height" floating-point error.
+
+`geometry.assemblyGaugeLength` (a Fusion-native field **nested in `geometry`**, not root-level; = holder gauge length + OOH, in the tool's unit) is always **explicitly recomputed** in `splitToFusionInstances` from the freshly-built holder's `gaugeLength` + the assembly's `ooh` — never carried forward from `...existing`.
 
 -----
 
@@ -193,7 +197,7 @@ Deployment is **fully automated via GitHub Actions** — see `.github/workflows/
 
 **Drills / hole tools**: `drill`, `center drill`, `spot drill`, `reamer`, `counter bore`, `counter sink`
 
-**Taps**: `tap form`, `tap cut`
+**Taps**: `tap form`, `tap cut` — note both map to Fusion's single `tap right hand` type on write, and the read map sends `tap right hand` → `tap form`. So the `tap form`/`tap cut` distinction is **not preserved by the Fusion type field on reload** (Fusion has no separate cut-tap type); it must be carried in metadata if it needs to survive a round-trip.
 
 **Other**: `boring head`, `turning general`, `face mill`
 
@@ -254,24 +258,26 @@ The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/sche
 | `vendor`         | — (metadata only)       | `Manufacturer`    | Manufacturer name — **never** written to Fusion |
 | `location`       | `expressions.tool_vendor` | (cabinet location) | Fusion's **"Vendor"** UI field is repurposed as the cabinet location (e.g. "LC-8") |
 | `shoulder_length`| `geometry['shoulder-length']` | —          | Hyphenated key (not `LSCH`); normalization sets it = MIN OOH |
+| `tip_angle`      | `geometry.SIG`          | `tipAngle`        | Drill/spot/chamfer point (included) angle — **Fusion-native** (read+write both JSON and TSV paths) for `drill`, `center drill`, `spot drill`, `counter sink`, `chamfer mill`. Fusion wins; metadata is a transition fallback |
+| `cutting_direction`| `geometry.HAND`       | `cuttingDirection`| **Fusion-native** boolean (`true` = `Right Hand`, `false` = `Left Hand`). Read from / written to `geometry.HAND`; never hardcode `true`. Fusion wins; metadata fallback |
+| `thread_pitch`   | `geometry.TP`           | —                 | **Fusion-native** numeric pitch (tool's unit) for `thread mill`, `tap form`, `tap cut`; written with `expressions.tool_threadPitch`. Distinct from `pitch` (the human thread **designation** string, e.g. `"5/16-24"`, metadata-only) |
 | `min_ooh`        | — (metadata only)       | `MIN OOH` (`lengthBelowShankDiameter`) | Minimum stick-out floor — see the three-length-concepts table + ProShop Field Priority Rules |
 | `product_id`     | — (metadata only)       | `Part Number`     | Manufacturer EDP number                |
 | `proshot_id`     | `product-id`            | ProShop ID        | **Primary match key for Phase 2**      |
 
 **Important**: `proshot_id` (our field) = Fusion's `product-id` field (shown as "Vendor Number" in Fusion UI). This is the ProShop-assigned ID and is the primary key for Phase 2 tool matching. It is stored in both the Fusion JSON and in metadata.
 
-**Assembly export**: When exporting a tool with an assembly selected, `assembly-gauge-length` is written as a root-level field in the Fusion JSON. This is Fusion's field for the gauge/stick-out length from the holder. OOH is always stored internally in inches; the export converts to mm for metric tools.
+**Assembly export**: When exporting a tool with an assembly selected, the assembly gauge length is written as `geometry.assemblyGaugeLength` (Fusion-native, nested in `geometry` — **not** a root-level `assembly-gauge-length`). Its value is **holder gauge length + OOH**, in the tool's unit. OOH is always stored internally in inches; the export converts to the tool's native unit (×25.4 for metric tools) before adding it to the holder gauge length.
 
 ### Metadata Schema (`tool_metadata.json`)
 
-Stored in a single file on Google Drive. The file contains an array of metadata objects — one per tool. The `id` field matches the tool's `guid` in the Fusion library.
+Stored in a single file on Google Drive. The file contains an array of metadata objects — one per **logical tool**. The `id` field is the tool's **`tracking_id`** (`FTL-XXXXXX`), falling back to the Fusion `guid` for pre-migration untracked tools — it is **not** keyed per Fusion instance. `buildMetadataTool` in `src/schema/toolSchema.js` is the authoritative source of the full field set (the example below is abridged); add new metadata fields there and read them back in `mergeFusionAndMetadata` / `buildLogicalTool`. Note `proshot_id` is **Fusion-owned** (`product-id`) and is **not** written to metadata.
 
 ```json
 {
-  "id": "matches tool guid in Fusion library",
+  "id": "tracking_id (FTL-XXXXXX); falls back to Fusion guid for untracked tools",
   "vendor": "",
   "product_id": "",
-  "proshot_id": "",
   "coating": "",
   "notes": "",
   "last_used_job": "",
@@ -284,13 +290,14 @@ Stored in a single file on Google Drive. The file contains an array of metadata 
   "assemblies": [
     {
       "assembly_id": "generated UUID (via generateAssemblyId / generateId)",
+      "instance_guid": "guid of the Fusion entry this assembly maps to (the join key)",
       "holder_guid": "guid from the holder library",
       "holder_description": "cached holder description at creation time",
       "ooh": 2.125,
       "linked_preset_guids": ["preset-guid-1", "preset-guid-2"],
       "notes": "",
       "created_at": "ISO timestamp",
-      "source": "merge | manual"
+      "source": "merge | manual | fusion"
     }
   ],
   "merge_history": [
@@ -337,6 +344,8 @@ Key holder object fields:
 - **OOH** (per-assembly stick-out) and **`min_ooh`** are **always stored in inches**, regardless of the tool's unit. These are the two "stick-out" concepts and share a canonical unit so they compare directly.
 - **All other length geometry** (`diameter`/DC, `flute_length`/LCF, `overall_length`/OAL, `shoulder_length`/`shoulder-length`) is stored in the tool's **native unit** (mm for a metric tool) — read raw from / written raw to Fusion (`fusionToolToInternal` / `internalToFusionTool`). Only `geometry.LB` (OOH) is converted (÷25.4 on read, ×25.4 on write) in `readOohFromFusion` / `splitToFusionInstances`.
 
+**The field registry encodes which is which.** Every `unit: 'length'` field in `src/schema/fieldRegistry.js` carries a `canonicalUnit` annotation — `'inches'` for `ooh`/`min_ooh`, `'native'` for all other lengths — so conversion can be driven from the registry rather than hand-coded. Add it to any new length field. (The future per-record/global-unit work will consume this flag to centralize conversions.)
+
 **Therefore, whenever inches-canonical `min_ooh`/OOH meets a native-unit length, convert.** Helper: `inchesToNative(value, unit)` / native is `value × 25.4` for `millimeters`. Current crossing points (all handled):
 - `normalizeLibrary`: `shoulder_length` (native) is set from `min_ooh` (inches) → convert for metric. The per-assembly OOH floor compares inches-to-inches → no conversion.
 - `validateGeometry`: the ordering chain is checked in native units, so `min_ooh` (inches) is converted to native before comparing against `shoulder_length`/`overall_length`.
@@ -369,8 +378,8 @@ Strict ordering (`flute_length ≤ shoulder_length ≤ min_ooh ≤ overall_lengt
 ### OOH (Out of Holder) — per-assembly stick-out
 - OOH = how much of the tool sticks out of the holder during cutting (aka gauge length / stick-out / "Length below Holder")
 - **Always stored in inches internally**, regardless of the tool's unit
-- **Source field**: `geometry.LB` (Body Length) in Fusion JSON — this is "Length below Holder" in the Fusion UI, and `tool_bodyLength` in the Fusion CSV export. Each instance carries its own `geometry.LB`. Do NOT use `assembly-gauge-length` as the source; that field is what we WRITE on export, not the geometric source of truth.
-- Unit conversion: if the tool's unit is `millimeters`, divide `geometry.LB` by 25.4 when reading; multiply OOH × 25.4 when writing back to `assembly-gauge-length` for metric tools
+- **Source field**: `geometry.LB` (Body Length) in Fusion JSON — this is "Length below Holder" in the Fusion UI, and `tool_bodyLength` in the Fusion CSV export. Each instance carries its own `geometry.LB`. Do NOT use `geometry.assemblyGaugeLength` as the source; that field is holder gauge length + OOH (what we WRITE on export), not the per-instance OOH source of truth.
+- Unit conversion: if the tool's unit is `millimeters`, divide `geometry.LB` by 25.4 when reading. On write, per-instance OOH is multiplied ×25.4 (for metric tools) into `geometry.LB`/`tool_bodyLength`, and `geometry.assemblyGaugeLength` is recomputed as holder gauge length + OOH in the tool's unit.
 - Editable per assembly in `AssemblyForm`, which blocks any value below `min_ooh` (the input's `min` is `min_ooh`, with a "Use" button to snap to the floor).
 
 ### Assembly lifecycle
@@ -434,6 +443,10 @@ src/
                                   # copyToolToClipboard, copyToolsToClipboard
                                   # All accept optional selectedAssembly param for OOH export
     proShopExport.js              # ProShop CSV export (always maintain this)
+    presetNaming.js               # composePresetName, parsePresetName, presetMatchesAssembly,
+                                  # OP_TYPES / opTypeWord / matchOpType
+    holderNaming.js               # holder short names (strip NBT, drop SK<n> C, override map)
+    speedsAndFeedsCalc.js         # speeds & feeds calculator helpers
 
   components/
     LandingPage.jsx               # Search + facets + sort + grid/list toggle
@@ -457,6 +470,13 @@ src/
                                   # with inline edit/delete
     AssemblyForm.jsx              # Form for creating/editing assemblies
                                   # Fields: holder (HolderPicker), OOH, linked presets, notes
+    NormalizeModal.jsx            # One-time normalization: preset operation-type assignment
+    DescRenameModal.jsx           # Per-tool description rename confirmation (buildDesc suggestions)
+    PresetPanel.jsx               # Preset editor panel (speeds/feeds per preset)
+    LibrarySetup.jsx              # First-run APS library location picker
+    LoginScreen.jsx               # APS PKCE login gate (unauthorized visitors)
+    Settings.jsx                  # Settings (library/holder locations, Google Drive connect)
+    ToolExtractorTab.jsx          # Hosts the tool-extractor image/spec extraction UI
     Toast.jsx                     # Fixed bottom-right toast stack
 
     icons/
@@ -571,7 +591,7 @@ During initial normalization, tool descriptions are rationalized. The ProShop de
 
 This is, alongside the preset operation-type assignment, one of the few normalization steps requiring per-tool user decisions; the two may share a single pre-flight review modal if the UX allows.
 
-**Priority rule**: PS description wins by default; if the PS description is blank, keep the Fusion description. User confirmation is **always** required. (Not yet implemented — the current `NormalizeModal` only handles preset operation-type assignment.)
+**Priority rule**: PS description wins by default; if the PS description is blank, keep the Fusion description. User confirmation is **always** required. (Implemented in `src/components/DescRenameModal.jsx` — a standalone per-tool rename confirmation modal that uses `buildDesc(toolToExtractor(t))` for suggestions and commits via `saveFullLibrary`. `NormalizeModal` handles the preset operation-type assignment step.)
 
 -----
 
@@ -613,7 +633,7 @@ Presets are matched **by name (case-insensitive)**, not by GUID. This is because
 
 These fields are set on the incoming tool object during parsing and are used by DiffStep/CommitStep but are **never saved to metadata**:
 
-- `incoming_ooh` — OOH value from the imported Fusion JSON's `assembly-gauge-length` field (converted to inches)
+- `incoming_ooh` — OOH value from the imported tool's `geometry.LB` (JSON) / `tool_bodyLength` (CSV/TSV), converted to inches. **Not** from `assembly-gauge-length` (which is holder gauge + OOH)
 - `incoming_holder_guid` — holder GUID from the imported tool (if present)
 - `_incomingHolderDesc` — pre-resolved holder description string (set during import parsing)
 
@@ -674,7 +694,7 @@ Catches entries **dumped straight into the Fusion library from Fusion 360** (byp
 
 - **Match scope**: a raw entry belongs to this tool if it shares the tool's **tracking ID OR ProShop #**.
 - **Registered = metadata**: the "known" instances are the tool's metadata assemblies' `instance_guid`s, attached to the logical tool as `_registeredAssemblies` by `buildLogicalTool` (and unioned by the combine). A raw whose guid isn't registered is a **stray**.
-- **Shared signature** (`sharedSignature` in `src/services/reconcile.js`): a normalized fingerprint of everything *except* the per-instance dimensions — excludes `holder` and `geometry.LB`/OOH (and `assembly-gauge-length`). Includes `type`, geometry (DC/LCF/OAL/NOF/RE/SFDM/TA/shoulder/SIG/TP), `description`, `product-id`, `BMC`, and presets (name + speeds/feeds, **GUID-independent**). Numbers rounded (4dp; feed-per-tooth 6dp).
+- **Shared signature** (`sharedSignature` in `src/services/reconcile.js`): a normalized fingerprint of everything *except* the per-instance dimensions — excludes `holder` and `geometry.LB`/OOH (and `geometry.assemblyGaugeLength`). Includes `type`, geometry (DC/LCF/OAL/NOF/RE/SFDM/TA/shoulder/SIG/TP), `description`, `product-id`, `BMC`, and presets (name + speeds/feeds, **GUID-independent**). Numbers rounded (4dp; feed-per-tooth 6dp).
 - **Classification** of each stray (`classifyStrays`):
   - shared sig **differs** from canonical → **conflict** → "Review…" navigates to the Sync Job diff prefilled (`navigate('/merge/:id', { state: { reconcileIncoming } })`).
   - shared sig matches, (holder, OOH) matches a known assembly → **duplicate** → offer delete.
@@ -759,7 +779,7 @@ The Google Drive metadata folder picker supports shared drives (team drives). Ke
 - **Tool IDs are permanent** — they are the Fusion `guid`, link the two JSON files, and are referenced in merge history. Never reassign them.
 - **APS token in memory only** — `window._apsToken`, never localStorage. The refresh token is stored in `sessionStorage` (`aps_refresh_token`) so the session survives page refreshes within the same browser tab.
 - **Always re-download before write** — call `downloadFusionList()` immediately before any `uploadFusionList()`.
-- **No extra fields in Fusion JSON** — Fusion validates strictly. Only Fusion-native fields go in the library file; everything else goes in `tool_metadata.json`. Exception: `assembly-gauge-length` is a Fusion-native root-level field for OOH, safe to write.
+- **No extra fields in Fusion JSON** — Fusion validates strictly. Only Fusion-native fields go in the library file; everything else goes in `tool_metadata.json`. Exception: `geometry.assemblyGaugeLength` is a Fusion-native field (nested in `geometry`; = holder gauge length + OOH, not OOH alone), safe to write.
 - **`proshot_id` is the primary match key** — it is Fusion's `product-id` field (the ProShop-assigned number). Do not confuse with `product_id` (manufacturer EDP number, metadata-only).
 - **OOH is always stored in inches** — convert from mm on import, convert back to mm on export for metric tools.
 - **Preset GUIDs are stable through the merge flow** — `presetsToAdd` GUIDs must not be regenerated after DiffStep. The assembly record in CommitStep uses them.

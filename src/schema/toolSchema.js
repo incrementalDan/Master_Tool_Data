@@ -544,6 +544,8 @@ export function fusionToolToInternal(fTool) {
     corner_radius: geo.RE || null,
     shank_diameter: geo.SFDM || null,
     taper_angle: geo.TA || null,
+    tip_angle: geo.SIG || null,
+    thread_pitch: geo.TP || null,
     shoulder_length: geo['shoulder-length'] || null,
     material: fTool.BMC || 'carbide',
     proshot_id: fTool['product-id'] || stripQuotes(expr.tool_productId) || '',
@@ -582,7 +584,8 @@ export function fusionToolToInternal(fTool) {
     tsc_capable: false,
     center_cutting: false,
     flute_design: '',
-    cutting_direction: 'Right Hand',
+    // cutting_direction is Fusion-native: geometry.HAND boolean (true = right hand).
+    cutting_direction: geo.HAND === false ? 'Left Hand' : 'Right Hand',
     material_suitability: [],
     tags: [],
     notes: '',
@@ -659,6 +662,15 @@ function normalizePreset(p, tscCapable = false) {
   if (useStepover) out.stepover = soNum;
   return out;
 }
+
+// Tool types that carry a point (included) angle in geometry.SIG — kept in sync
+// with the TSV path's tipAngleTypes (fusionExport.js) and tip_angle's
+// appliesToTypes (fieldRegistry.js).
+const TIP_ANGLE_TYPES = new Set(['drill', 'center drill', 'spot drill', 'counter sink', 'chamfer mill']);
+
+// Tool types that carry a thread pitch in geometry.TP (numeric, the tool's unit).
+// The human-readable thread designation lives separately in `pitch` (metadata).
+const THREAD_PITCH_TYPES = new Set(['thread mill', 'tap form', 'tap cut']);
 
 export function internalToFusionTool(tool) {
   const existing = tool._fusionRaw || {};
@@ -798,6 +810,7 @@ export function internalToFusionTool(tool) {
       tool_vendor: `'${tool.location || ''}'`,
       ...(tool.tracking_id ? { tool_comment: `'${tool.tracking_id}'` } : {}),
       ...(tool.corner_radius ? { tool_cornerRadius: `${tool.corner_radius} ${lenUnit}` } : {}),
+      ...((THREAD_PITCH_TYPES.has(tool.tool_type) && (tool.thread_pitch > 0 || existing.geometry?.TP > 0)) ? { tool_threadPitch: `${tool.thread_pitch || 0} ${lenUnit}` } : {}),
       ...(hasMtn
         ? { tool_number: String(mtnInt), tool_lengthOffset: 'tool_number' }
         : (tool.tool_number ? { tool_number: tool.tool_number } : {})),
@@ -806,7 +819,9 @@ export function internalToFusionTool(tool) {
       ...(existing.geometry || {}),
       CSP: false,
       DC: tool.diameter || 0,
-      HAND: true,
+      // HAND from cutting_direction (true = right hand) — never hardcode true, or
+      // left-hand tools silently flip to right-hand on every write.
+      HAND: tool.cutting_direction !== 'Left Hand',
       LCF: tool.flute_length || 0,
       NOF: tool.number_of_flutes || 0,
       OAL: tool.overall_length || 0,
@@ -817,6 +832,14 @@ export function internalToFusionTool(tool) {
       // The ...existing spread above preserves them from the original Fusion entry.
       ...(tool.corner_radius > 0 || (existing.geometry?.RE > 0) ? { RE: tool.corner_radius || 0 } : {}),
       ...(tool.taper_angle > 0 || (existing.geometry?.TA > 0) ? { TA: tool.taper_angle || 0 } : {}),
+      // SIG = drill/spot/chamfer point (included) angle. Write only for the types
+      // that carry it (matches the TSV path's tipAngleTypes), or when clearing an
+      // existing value. Fusion is the source of truth for it (read back into tip_angle).
+      ...((TIP_ANGLE_TYPES.has(tool.tool_type) && tool.tip_angle > 0) || (existing.geometry?.SIG > 0) ? { SIG: tool.tip_angle || 0 } : {}),
+      // TP = thread pitch (numeric). Written for thread/tap types; kept in sync
+      // with expressions.tool_threadPitch below (Fusion re-derives TP from the
+      // expression on load, so the two must always agree).
+      ...((THREAD_PITCH_TYPES.has(tool.tool_type) && (tool.thread_pitch > 0 || existing.geometry?.TP > 0)) ? { TP: tool.thread_pitch || 0 } : {}),
       ...(tool.tip_diameter > 0 || (existing.geometry?.['tip-diameter'] > 0) ? { 'tip-diameter': tool.tip_diameter || 0 } : {}),
       // NT, TP, thread-profile-angle, tip-length, tip-offset: never written explicitly;
       // preserved from ...existing if the original Fusion entry had them.
@@ -853,11 +876,14 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     cost: meta.cost || '',
     tsc_capable: Boolean(meta.tsc_capable),
     center_cutting: meta.center_cutting ?? fusionInternal.center_cutting ?? false,
-    cutting_direction: meta.cutting_direction || fusionInternal.cutting_direction || 'Right Hand',
+    // cutting_direction is Fusion-native (geometry.HAND); Fusion wins, metadata fallback.
+    cutting_direction: fusionInternal.cutting_direction || meta.cutting_direction || 'Right Hand',
     helix_angle: meta.helix_angle ?? fusionInternal.helix_angle ?? null,
     flute_type: meta.flute_type || '',
     flute_design: meta.flute_design || '',
-    tip_angle: meta.tip_angle ?? fusionInternal.tip_angle ?? null,
+    // tip_angle is now Fusion-native (geometry.SIG); Fusion wins, metadata is a
+    // transition-only fallback for tools whose Fusion entry lacks SIG.
+    tip_angle: fusionInternal.tip_angle ?? meta.tip_angle ?? null,
     tip_diameter: meta.tip_diameter ?? fusionInternal.tip_diameter ?? null,
     lower_radius: meta.lower_radius ?? null,
     upper_radius: meta.upper_radius ?? null,
@@ -953,6 +979,7 @@ export function buildMetadataTool(tool) {
       holder_guid: a.holder_guid || null,
       holder_description: a.holder_description || '',
       ooh: a.ooh ?? null,
+      linked_preset_guids: a.linked_preset_guids || [],
       notes: a.notes || '',
       source: a.source || 'manual',
       created_at: a.created_at || new Date().toISOString(),
@@ -994,6 +1021,7 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
       holder_guid: raw.holder?.guid || m.holder_guid || null,
       holder_description: raw.holder?.description || m.holder_description || '',
       ooh: readOohFromFusion(raw) ?? (m.ooh ?? null),
+      linked_preset_guids: m.linked_preset_guids || [],
       notes: m.notes || '',
       source: m.source || 'fusion',
       created_at: m.created_at || merged.created_at,
@@ -1090,13 +1118,18 @@ export function splitToFusionInstances(tool, holders = []) {
     // Recompute assemblyGaugeLength (geometry.assemblyGaugeLength) from the
     // holder's gauge length and the per-instance OOH. Previous bad writes may
     // have stored a stale value derived from an incorrect holder gaugeLength —
-    // always recompute so it stays consistent with what we just wrote.
+    // always recompute so it stays consistent with what we just wrote. The value
+    // must be in the TOOL's unit to match the sibling geometry.LB: base.holder
+    // .gaugeLength is in the holder's own unit, and OOH is inches-canonical, so
+    // convert both into the tool's native unit before summing (mirrors the
+    // export path in fusionExport.js).
     if (base.holder && typeof base.holder.gaugeLength === 'number' && a.ooh != null && !isNaN(Number(a.ooh))) {
-      const holderGaugeLengthIn = (base.holder.unit === 'millimeters')
+      const holderGaugeIn = (base.holder.unit === 'millimeters')
         ? base.holder.gaugeLength / 25.4
         : base.holder.gaugeLength;
-      const assemblyGaugeLength = holderGaugeLengthIn + Number(a.ooh);
-      base.geometry = { ...(base.geometry || {}), assemblyGaugeLength };
+      const holderGaugeNative = isMetric ? holderGaugeIn * 25.4 : holderGaugeIn;
+      const oohNative = isMetric ? Number(a.ooh) * 25.4 : Number(a.ooh);
+      base.geometry = { ...(base.geometry || {}), assemblyGaugeLength: holderGaugeNative + oohNative };
     }
 
     return base;
@@ -1147,6 +1180,7 @@ export function newTool(toolType = 'flat end mill') {
     tsc_capable: false,
     cutting_direction: 'Right Hand',
     pitch: '',
+    thread_pitch: null,
     tap_class: '',
     min_thread_pitch: null,
     max_thread_pitch: null,
@@ -1319,6 +1353,7 @@ export const FIELD_LABELS = {
   created_at: 'Created',
   updated_at: 'Last Updated',
   pitch: 'Thread Pitch',
+  thread_pitch: 'Thread Pitch (value)',
   tap_class: 'Tap Class',
   min_thread_pitch: 'Min Thread Pitch',
   max_thread_pitch: 'Max Thread Pitch',

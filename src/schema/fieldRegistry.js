@@ -319,9 +319,9 @@ export const FIELD_REGISTRY = {
     label: 'Tip Angle (°)',
     type: 'number',
     unit: 'angle',
-    fusionPath: null,             // stored in metadata; not a top-level Fusion geometry field
+    fusionPath: 'geometry.SIG',   // drill/spot/chamfer point (included) angle — Fusion-native
     proShopColumn: 'tipAngle',
-    metadataOnly: true,
+    metadataOnly: false,
     appliesToTypes: [
       'chamfer mill', 'drill', 'center drill', 'spot drill', 'counter sink',
     ],
@@ -557,9 +557,9 @@ export const FIELD_REGISTRY = {
     label: 'Cutting Direction',
     type: 'string',
     unit: null,
-    fusionPath: null,
+    fusionPath: 'geometry.HAND',   // boolean true = Right Hand — Fusion-native
     proShopColumn: 'cuttingDirection',
-    metadataOnly: true,
+    metadataOnly: false,
     appliesToTypes: 'all',
     required: false,
     precision: null,
@@ -606,6 +606,19 @@ export const FIELD_REGISTRY = {
     appliesToTypes: ['thread mill', 'tap form', 'tap cut'],
     required: false,
     precision: null,
+  },
+
+  thread_pitch: {
+    label: 'Thread Pitch (value)',
+    type: 'number',
+    unit: 'length',
+    canonicalUnit: 'native',     // numeric pitch distance, stored in the tool's unit
+    fusionPath: 'geometry.TP',   // Fusion-native; the `pitch` designation string stays metadata-only
+    proShopColumn: null,
+    metadataOnly: false,
+    appliesToTypes: ['thread mill', 'tap form', 'tap cut'],
+    required: false,
+    precision: 4,
   },
 
   tap_class: {
