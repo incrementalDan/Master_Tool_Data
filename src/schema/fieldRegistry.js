@@ -196,18 +196,8 @@ export const FIELD_REGISTRY = {
     precision: null,
   },
 
-  tool_number: {
-    label: 'Tool Number',
-    type: 'string',
-    unit: null,
-    fusionPath: 'post-process.number',
-    proShopColumn: null,
-    metadataOnly: false,
-    appliesToTypes: 'all',
-    required: false,
-    precision: null,
-  },
-
+  // The single machine tool number. Maps to post-process.number in Fusion
+  // (assigned by the renumber function); metadata is the source of truth.
   machine_tool_number: {
     label: 'Machine Tool #',
     type: 'number',

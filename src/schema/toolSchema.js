@@ -59,7 +59,7 @@ function extractorKeyToAppKey(k) {
     vendorStockNum: 'distributor_stock_num',
     productLink: 'product_link',
     presetName: 'preset_name',
-    toolNumber: 'tool_number',
+    toolNumber: 'machine_tool_number',
     helixAngle: 'helix_angle',
     centerCutting: 'center_cutting',
     fluteType: 'flute_type',
@@ -132,7 +132,7 @@ export function extractorToTool(f) {
     cost: f.cost || '',
     product_link: f.productLink || '',
     preset_name: f.presetName || '',
-    tool_number: f.toolNumber || '',
+    machine_tool_number: (f.toolNumber === '' || f.toolNumber == null) ? null : Number(f.toolNumber),
     grouping: f.grouping || '',
     proshot_id: f.psToolId || '',
     location: f.location || '',
@@ -157,7 +157,7 @@ export function toolToExtractor(tool) {
     edpNumber: tool.product_id || '',
     productLink: tool.product_link || '',
     presetName: tool.preset_name || '',
-    toolNumber: tool.tool_number || '',
+    toolNumber: tool.machine_tool_number != null ? String(tool.machine_tool_number) : '',
     coolant: tool.tsc_capable ? 'flood tool' : 'flood',
     helixAngle: String(tool.helix_angle ?? ''),
     centerCutting: tool.center_cutting || false,
@@ -568,9 +568,8 @@ export function fusionToolToInternal(fTool) {
       ...p,
       operation_type: p.operation_type ?? parsePresetName(p.name)?.opType ?? null,
     })),
-    tool_number: fTool['post-process']?.number ? String(fTool['post-process'].number) : '',
-    // Machine tool number — output mirror of post-process.number. The metadata
-    // file is the source of truth; this is only a fallback when metadata is missing.
+    // Machine tool number — read from post-process.number. The metadata file is
+    // the source of truth; this is only a fallback when metadata is missing.
     machine_tool_number: (fTool['post-process']?.number ?? null) === null
       ? null
       : Number(fTool['post-process'].number),
@@ -777,8 +776,8 @@ export function internalToFusionTool(tool) {
 
   // Machine tool number drives the post-process fields. When present, all three
   // (number / length-offset / diameter-offset) must be written to the same value,
-  // and the expression link must be kept intact. Falls back to the legacy
-  // freeform `tool_number` field only when no machine number is assigned.
+  // and the expression link must be kept intact. When no number is assigned, the
+  // post-process number / expression are simply left unwritten.
   const mtn = tool.machine_tool_number;
   const hasMtn = mtn !== null && mtn !== undefined && mtn !== '' && !isNaN(parseInt(mtn));
   const mtnInt = hasMtn ? parseInt(mtn) : null;
@@ -811,9 +810,7 @@ export function internalToFusionTool(tool) {
       ...(tool.tracking_id ? { tool_comment: `'${tool.tracking_id}'` } : {}),
       ...(tool.corner_radius ? { tool_cornerRadius: `${tool.corner_radius} ${lenUnit}` } : {}),
       ...((THREAD_PITCH_TYPES.has(tool.tool_type) && (tool.thread_pitch > 0 || existing.geometry?.TP > 0)) ? { tool_threadPitch: `${tool.thread_pitch || 0} ${lenUnit}` } : {}),
-      ...(hasMtn
-        ? { tool_number: String(mtnInt), tool_lengthOffset: 'tool_number' }
-        : (tool.tool_number ? { tool_number: tool.tool_number } : {})),
+      ...(hasMtn ? { tool_number: String(mtnInt), tool_lengthOffset: 'tool_number' } : {}),
     },
     geometry: {
       ...(existing.geometry || {}),
@@ -851,9 +848,7 @@ export function internalToFusionTool(tool) {
     'post-process': {
       ...(existing['post-process'] || {}),
       ...(tool.tracking_id ? { comment: tool.tracking_id } : {}),
-      ...(hasMtn
-        ? { number: mtnInt, 'length-offset': mtnInt, 'diameter-offset': mtnInt }
-        : (tool.tool_number ? { number: parseInt(tool.tool_number) || 0 } : {})),
+      ...(hasMtn ? { number: mtnInt, 'length-offset': mtnInt, 'diameter-offset': mtnInt } : {}),
     },
   };
   // Guard: delete any metadata-only internal field names that shouldn't appear in Fusion JSON.
@@ -868,14 +863,14 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
   if (!meta) return fusionInternal;
   return {
     ...fusionInternal,
-    vendor: meta.vendor || fusionInternal.vendor || '',
-    product_id: meta.product_id || fusionInternal.product_id || '',
-    coating: meta.coating || fusionInternal.coating || '',
+    vendor: meta.vendor || '',
+    product_id: meta.product_id || '',
+    coating: meta.coating || '',
     distributor: meta.distributor || '',
     distributor_stock_num: meta.distributor_stock_num || '',
     cost: meta.cost || '',
     tsc_capable: Boolean(meta.tsc_capable),
-    center_cutting: meta.center_cutting ?? fusionInternal.center_cutting ?? false,
+    center_cutting: meta.center_cutting ?? false,
     // cutting_direction is Fusion-native (geometry.HAND); Fusion wins, metadata fallback.
     cutting_direction: fusionInternal.cutting_direction || meta.cutting_direction || 'Right Hand',
     helix_angle: meta.helix_angle ?? fusionInternal.helix_angle ?? null,
@@ -914,7 +909,7 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     notes: meta.notes || '',
     last_used_job: meta.last_used_job || '',
     preferred_machine: meta.preferred_machine || '',
-    material_suitability: meta.material_suitability || fusionInternal.material_suitability || [],
+    material_suitability: meta.material_suitability || [],
     tags: meta.tags || [],
     updated_by: meta.updated_by || '',
     revision_notes: meta.revision_notes || '',
@@ -1196,7 +1191,6 @@ export function newTool(toolType = 'flat end mill') {
     cost: '',
     product_link: '',
     preset_name: '',
-    tool_number: '',
     grouping: '',
     proshot_id: '',
     location: '',
@@ -1367,7 +1361,6 @@ export const FIELD_LABELS = {
   profile_radius: 'Profile Radius (in)',
   axial_distance: 'Axial Distance (in)',
   grouping: 'ProShop Group',
-  tool_number: 'Tool Number',
   machine_tool_number: 'Machine Tool #',
   preset_name: 'Preset Name',
 };
