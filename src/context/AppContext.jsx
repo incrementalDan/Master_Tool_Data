@@ -16,6 +16,18 @@ const AppContext = createContext(null);
 
 const LOCATION_KEY = 'aps_library_location';
 const HOLDER_LOCATION_KEY = 'aps_holder_library_location';
+const SETUP_PROGRESS_KEY = 'tms_setup_progress';
+const SETUP_CELEBRATED_KEY = 'tms_setup_celebrated';
+
+// The 4 steps of the initial setup/normalization/ProShop workflow, in order.
+// Each is toggled on at the moment its triggering action happens — see
+// setLibraryLocation, normalizeLibrary, and ImportFlow's merge/export buttons.
+export const SETUP_STEPS = [
+  { key: 'fusionConnected', label: 'Connect Fusion library' },
+  { key: 'normalized', label: 'Normalize the library' },
+  { key: 'proshopMerged', label: 'Merge ProShop data' },
+  { key: 'proshopExported', label: 'Export to ProShop' },
+];
 
 function loadStoredLocation() {
   try {
@@ -31,6 +43,13 @@ function loadStoredHolderLocation() {
   } catch { return null; }
 }
 
+function loadSetupProgress() {
+  try {
+    const raw = localStorage.getItem(SETUP_PROGRESS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
 const initialState = {
   user: null,                 // Google user (metadata identity) or null
   apsAuthenticated: false,    // Autodesk signed in
@@ -39,6 +58,7 @@ const initialState = {
   metadataSkipped: false,     // user chose to proceed without Drive metadata
   libraryLocation: loadStoredLocation(), // { hubId, projectId, folderId, itemId, fileName }
   holderLibraryLocation: loadStoredHolderLocation(), // same shape, optional
+  setupProgress: loadSetupProgress() || {}, // { fusionConnected, normalized, proshopMerged, proshopExported }
   processingAuth: false,      // exchanging APS callback code
   tools: [],
   holders: [],                // loaded from Master-Holder library
@@ -65,6 +85,10 @@ function reducer(state, action) {
     case 'SET_HOLDER_LOCATION': return { ...state, holderLibraryLocation: action.location };
     case 'CLEAR_HOLDER_LOCATION': return { ...state, holderLibraryLocation: null, holders: [] };
     case 'SET_HOLDERS': return { ...state, holders: action.holders };
+    case 'SET_SETUP_PROGRESS': return { ...state, setupProgress: action.progress };
+    case 'MARK_SETUP_STEP':
+      if (state.setupProgress[action.key]) return state; // already done — no-op
+      return { ...state, setupProgress: { ...state.setupProgress, [action.key]: true } };
     case 'SIGN_OUT':
       return {
         ...initialState,
@@ -99,11 +123,20 @@ export function AppProvider({ children }) {
   const googleRef = useRef(state.googleAuthenticated);
   const toolsRef = useRef(state.tools);
   const holdersRef = useRef(state.holders);
+  // Tracks whether we've already seeded setup-progress flags for an established
+  // library this session — seeding should run at most once, and only when no
+  // progress has been stored yet (a brand-new install).
+  const setupSeededRef = useRef(loadSetupProgress() !== null);
   useEffect(() => { locationRef.current = state.libraryLocation; }, [state.libraryLocation]);
   useEffect(() => { holderLocationRef.current = state.holderLibraryLocation; }, [state.holderLibraryLocation]);
   useEffect(() => { googleRef.current = state.googleAuthenticated; }, [state.googleAuthenticated]);
   useEffect(() => { toolsRef.current = state.tools; }, [state.tools]);
   useEffect(() => { holdersRef.current = state.holders; }, [state.holders]);
+
+  // Persist setup-progress flags whenever they change (seeding or step marks).
+  useEffect(() => {
+    localStorage.setItem(SETUP_PROGRESS_KEY, JSON.stringify(state.setupProgress));
+  }, [state.setupProgress]);
 
   // ─── Handle APS OAuth callback on mount ───────────────────────────────────
   useEffect(() => {
@@ -196,9 +229,19 @@ export function AppProvider({ children }) {
   // Resolves the linked metadata file's name + folder/drive location for display in Settings.
   const fetchMetadataLocation = useCallback(() => driveService.getMetadataFileLocation(), []);
 
+  // Marks one step of the setup guide as complete (idempotent — see MARK_SETUP_STEP).
+  // Called at each of the 4 trigger points: connecting the Fusion library,
+  // normalizing, merging ProShop data, and exporting to ProShop.
+  const markSetupStep = useCallback((key) => dispatch({ type: 'MARK_SETUP_STEP', key }), []);
+
+  // One-time-ever flag so the congratulations popup doesn't fire again after dismissal.
+  const setupCelebrated = useCallback(() => localStorage.getItem(SETUP_CELEBRATED_KEY) === '1', []);
+  const markSetupCelebrated = useCallback(() => localStorage.setItem(SETUP_CELEBRATED_KEY, '1'), []);
+
   const setLibraryLocation = useCallback((location) => {
     localStorage.setItem(LOCATION_KEY, JSON.stringify(location));
     dispatch({ type: 'SET_LIBRARY_LOCATION', location });
+    dispatch({ type: 'MARK_SETUP_STEP', key: 'fusionConnected' });
   }, []);
 
   const clearLibraryLocation = useCallback(() => {
@@ -244,6 +287,23 @@ export function AppProvider({ children }) {
       // is persisted on the next write of that tool / on normalize.
       const tools = combineToolsByProshopId(built);
       const needsNormalize = untracked.length > 0;
+
+      // Seed setup-progress flags once for libraries that already completed this
+      // workflow before the setup guide existed — otherwise an established shop
+      // would be told "you haven't done this yet" the first time they open the app.
+      if (!setupSeededRef.current) {
+        setupSeededRef.current = true;
+        const normalized = !needsNormalize && tools.length > 0;
+        const proshopMerged = tools.some(t => t.min_ooh != null && t.min_ooh > 0);
+        const established = normalized && proshopMerged;
+        dispatch({ type: 'SET_SETUP_PROGRESS', progress: {
+          fusionConnected: true,
+          normalized,
+          proshopMerged,
+          proshopExported: established,
+        }});
+        if (established) localStorage.setItem(SETUP_CELEBRATED_KEY, '1');
+      }
 
       dispatch({ type: 'LOAD_SUCCESS', tools, needsNormalize });
       // Load holder library alongside tools (non-critical — failure won't block)
@@ -898,6 +958,7 @@ export function AppProvider({ children }) {
       const dupCount = logicalTools.length - combined.length;
 
       await saveFullLibrary(combined);
+      dispatch({ type: 'MARK_SETUP_STEP', key: 'normalized' });
       const base = `Normalized ${untracked.length} tool${untracked.length === 1 ? '' : 's'} to the multi-instance model`;
       notify(dupCount > 0
         ? `${base}; combined ${dupCount} ProShop-number duplicate${dupCount === 1 ? '' : 's'}`
@@ -920,6 +981,9 @@ export function AppProvider({ children }) {
       skipMetadata,
       reconnectMetadata,
       fetchMetadataLocation,
+      markSetupStep,
+      setupCelebrated,
+      markSetupCelebrated,
       setLibraryLocation,
       clearLibraryLocation,
       setHolderLibraryLocation,

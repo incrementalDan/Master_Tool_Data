@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, ListChecks } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { generateMachineNumbers } from '../schema/toolSchema.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
 import { FilePicker } from './LibrarySetup.jsx';
 import DescRenameModal from './DescRenameModal.jsx';
 import InfoTip from './InfoTip.jsx';
+import { SetupGuideSummary } from './SetupGuide.jsx';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -124,6 +125,19 @@ export default function Settings() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* Setup checklist — sanity-check summary of the initial workflow */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <ListChecks size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Setup Checklist</h3>
+          <InfoTip text="Reference for the initial Fusion → normalize → ProShop workflow: connect the Fusion library, normalize it, merge in ProShop data, then export back. Each step checks itself off as you complete it — this is just a sanity check that it ran, not something you manage here." />
+        </div>
+        <p className="text-sub text-sm mb-16">
+          Status of the one-time initial setup and ProShop import workflow.
+        </p>
+        <SetupGuideSummary />
       </div>
 
       {/* Tool metadata (Google Drive) connection */}

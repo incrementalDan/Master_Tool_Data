@@ -16,6 +16,7 @@ import ImportFlow from './components/ImportFlow.jsx';
 import MergeFlow from './components/MergeFlow/index.jsx';
 import SettingsPage from './components/Settings.jsx';
 import NormalizeModal from './components/NormalizeModal.jsx';
+import { SetupGuideBanner, SetupCompleteModal } from './components/SetupGuide.jsx';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 const APS_CLIENT_ID = import.meta.env.VITE_APS_CLIENT_ID || '';
@@ -76,6 +77,8 @@ function AppShell() {
         <TopBar user={user} googleAuthenticated={googleAuthenticated} onSignOut={signOutAll} onChangeLibrary={clearLibraryLocation} />
         <NormalizeBanner />
         <GoogleReconnectBanner />
+        <SetupGuideBanner />
+        <SetupCompleteModal />
         <main className="page-content">
           <Routes>
             <Route path="/" element={<LandingPage />} />
