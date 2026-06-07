@@ -4,7 +4,7 @@ import {
   PS_GROUPS, AUTO_GROUP, COOLANT_OPTS, THROUGH_COOLANT_VALUES,
   getVisibleFields,
 } from '../../tool-extractor.tsx';
-import { isMetadataOnly } from './fieldRegistry.js';
+import { isMetadataOnly, FIELD_REGISTRY, fieldLabel } from './fieldRegistry.js';
 import { parsePresetName, materialCategory } from '../utils/presetNaming.js';
 
 export { TT, TL, MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST, PS_GROUPS, AUTO_GROUP, COOLANT_OPTS };
@@ -59,7 +59,7 @@ function extractorKeyToAppKey(k) {
     vendorStockNum: 'distributor_stock_num',
     productLink: 'product_link',
     presetName: 'preset_name',
-    toolNumber: 'tool_number',
+    toolNumber: 'machine_tool_number',
     helixAngle: 'helix_angle',
     centerCutting: 'center_cutting',
     fluteType: 'flute_type',
@@ -132,7 +132,7 @@ export function extractorToTool(f) {
     cost: f.cost || '',
     product_link: f.productLink || '',
     preset_name: f.presetName || '',
-    tool_number: f.toolNumber || '',
+    machine_tool_number: (f.toolNumber === '' || f.toolNumber == null) ? null : Number(f.toolNumber),
     grouping: f.grouping || '',
     proshot_id: f.psToolId || '',
     location: f.location || '',
@@ -157,7 +157,7 @@ export function toolToExtractor(tool) {
     edpNumber: tool.product_id || '',
     productLink: tool.product_link || '',
     presetName: tool.preset_name || '',
-    toolNumber: tool.tool_number || '',
+    toolNumber: tool.machine_tool_number != null ? String(tool.machine_tool_number) : '',
     coolant: tool.tsc_capable ? 'flood tool' : 'flood',
     helixAngle: String(tool.helix_angle ?? ''),
     centerCutting: tool.center_cutting || false,
@@ -568,9 +568,8 @@ export function fusionToolToInternal(fTool) {
       ...p,
       operation_type: p.operation_type ?? parsePresetName(p.name)?.opType ?? null,
     })),
-    tool_number: fTool['post-process']?.number ? String(fTool['post-process'].number) : '',
-    // Machine tool number — output mirror of post-process.number. The metadata
-    // file is the source of truth; this is only a fallback when metadata is missing.
+    // Machine tool number — read from post-process.number. The metadata file is
+    // the source of truth; this is only a fallback when metadata is missing.
     machine_tool_number: (fTool['post-process']?.number ?? null) === null
       ? null
       : Number(fTool['post-process'].number),
@@ -777,8 +776,8 @@ export function internalToFusionTool(tool) {
 
   // Machine tool number drives the post-process fields. When present, all three
   // (number / length-offset / diameter-offset) must be written to the same value,
-  // and the expression link must be kept intact. Falls back to the legacy
-  // freeform `tool_number` field only when no machine number is assigned.
+  // and the expression link must be kept intact. When no number is assigned, the
+  // post-process number / expression are simply left unwritten.
   const mtn = tool.machine_tool_number;
   const hasMtn = mtn !== null && mtn !== undefined && mtn !== '' && !isNaN(parseInt(mtn));
   const mtnInt = hasMtn ? parseInt(mtn) : null;
@@ -811,9 +810,7 @@ export function internalToFusionTool(tool) {
       ...(tool.tracking_id ? { tool_comment: `'${tool.tracking_id}'` } : {}),
       ...(tool.corner_radius ? { tool_cornerRadius: `${tool.corner_radius} ${lenUnit}` } : {}),
       ...((THREAD_PITCH_TYPES.has(tool.tool_type) && (tool.thread_pitch > 0 || existing.geometry?.TP > 0)) ? { tool_threadPitch: `${tool.thread_pitch || 0} ${lenUnit}` } : {}),
-      ...(hasMtn
-        ? { tool_number: String(mtnInt), tool_lengthOffset: 'tool_number' }
-        : (tool.tool_number ? { tool_number: tool.tool_number } : {})),
+      ...(hasMtn ? { tool_number: String(mtnInt), tool_lengthOffset: 'tool_number' } : {}),
     },
     geometry: {
       ...(existing.geometry || {}),
@@ -851,9 +848,7 @@ export function internalToFusionTool(tool) {
     'post-process': {
       ...(existing['post-process'] || {}),
       ...(tool.tracking_id ? { comment: tool.tracking_id } : {}),
-      ...(hasMtn
-        ? { number: mtnInt, 'length-offset': mtnInt, 'diameter-offset': mtnInt }
-        : (tool.tool_number ? { number: parseInt(tool.tool_number) || 0 } : {})),
+      ...(hasMtn ? { number: mtnInt, 'length-offset': mtnInt, 'diameter-offset': mtnInt } : {}),
     },
   };
   // Guard: delete any metadata-only internal field names that shouldn't appear in Fusion JSON.
@@ -868,14 +863,14 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
   if (!meta) return fusionInternal;
   return {
     ...fusionInternal,
-    vendor: meta.vendor || fusionInternal.vendor || '',
-    product_id: meta.product_id || fusionInternal.product_id || '',
-    coating: meta.coating || fusionInternal.coating || '',
+    vendor: meta.vendor || '',
+    product_id: meta.product_id || '',
+    coating: meta.coating || '',
     distributor: meta.distributor || '',
     distributor_stock_num: meta.distributor_stock_num || '',
     cost: meta.cost || '',
     tsc_capable: Boolean(meta.tsc_capable),
-    center_cutting: meta.center_cutting ?? fusionInternal.center_cutting ?? false,
+    center_cutting: meta.center_cutting ?? false,
     // cutting_direction is Fusion-native (geometry.HAND); Fusion wins, metadata fallback.
     cutting_direction: fusionInternal.cutting_direction || meta.cutting_direction || 'Right Hand',
     helix_angle: meta.helix_angle ?? fusionInternal.helix_angle ?? null,
@@ -914,7 +909,7 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     notes: meta.notes || '',
     last_used_job: meta.last_used_job || '',
     preferred_machine: meta.preferred_machine || '',
-    material_suitability: meta.material_suitability || fusionInternal.material_suitability || [],
+    material_suitability: meta.material_suitability || [],
     tags: meta.tags || [],
     updated_by: meta.updated_by || '',
     revision_notes: meta.revision_notes || '',
@@ -1196,7 +1191,6 @@ export function newTool(toolType = 'flat end mill') {
     cost: '',
     product_link: '',
     preset_name: '',
-    tool_number: '',
     grouping: '',
     proshot_id: '',
     location: '',
@@ -1301,73 +1295,10 @@ export function validateGeometry(tool) {
 export { getVisibleFields };
 
 // ─── Human-readable field labels ──────────────────────────────────────────
-// Source of truth for labels has moved to src/schema/fieldRegistry.js (FIELD_REGISTRY[field].label).
-// Keep this map in sync when adding or renaming fields, but add new fields to the registry first.
-export const FIELD_LABELS = {
-  tool_type: 'Tool Type',
-  description: 'Description',
-  vendor: 'Manufacturer',
-  product_id: 'Mfr Part # (EDP)',
-  proshot_id: 'ProShop ID',
-  distributor: 'Distributor',
-  distributor_stock_num: 'Distributor Stock #',
-  diameter: 'Diameter (in)',
-  flute_length: 'Flute Length (in)',
-  overall_length: 'Overall Length (in)',
-  number_of_flutes: '# Flutes',
-  shank_diameter: 'Shank Diameter (in)',
-  corner_radius: 'Corner Radius (in)',
-  shoulder_length: 'Shoulder Length (in)',
-  tip_angle: 'Tip Angle (°)',
-  taper_angle: 'Taper Angle (°)',
-  tip_diameter: 'Tip Diameter (in)',
-  material: 'Tool Material',
-  coating: 'Coating',
-  material_suitability: 'Material Suitability',
-  tsc_capable: 'TSC Capable',
-  flute_design: 'Flute Design',
-  helix_angle: 'Helix Angle (°)',
-  flute_type: 'Flute Type',
-  center_cutting: 'Center Cutting',
-  cutting_direction: 'Cutting Direction',
-  spindle_speed: 'Spindle Speed (RPM)',
-  cutting_feedrate: 'Cutting Feedrate (in/min)',
-  feed_per_tooth: 'Feed per Tooth (in)',
-  feed_per_rev: 'Feed per Rev (in)',
-  plunge_feedrate: 'Plunge Feedrate (in/min)',
-  ramp_feedrate: 'Ramp Feedrate (in/min)',
-  lead_in_feedrate: 'Lead-In Feedrate (in/min)',
-  lead_out_feedrate: 'Lead-Out Feedrate (in/min)',
-  cutting_speed: 'Surface Speed (SFM)',
-  depth_of_cut: 'Depth of Cut (in)',
-  width_of_cut: 'Width of Cut (in)',
-  preferred_machine: 'Preferred Machine',
-  cost: 'Cost ($)',
-  product_link: 'Product Link',
-  location: 'Location (Cabinet)',
-  notes: 'Notes',
-  tags: 'Tags',
-  last_used_job: 'Last Used Job',
-  revision_notes: 'Revision Notes',
-  updated_by: 'Updated By',
-  created_at: 'Created',
-  updated_at: 'Last Updated',
-  pitch: 'Thread Pitch',
-  thread_pitch: 'Thread Pitch (value)',
-  tap_class: 'Tap Class',
-  min_thread_pitch: 'Min Thread Pitch',
-  max_thread_pitch: 'Max Thread Pitch',
-  point_type: 'Point Type',
-  stub_jobber: 'Stub/Jobber',
-  double_ended: 'Double Ended',
-  full_profile: 'Full Profile',
-  backside_capable: 'Backside Capable',
-  lower_radius: 'Lower Radius (in)',
-  upper_radius: 'Upper Radius (in)',
-  profile_radius: 'Profile Radius (in)',
-  axial_distance: 'Axial Distance (in)',
-  grouping: 'ProShop Group',
-  tool_number: 'Tool Number',
-  machine_tool_number: 'Machine Tool #',
-  preset_name: 'Preset Name',
-};
+// Generated from the field registry (the single source of truth for labels).
+// Linear-unit suffixes are derived centrally by fieldLabel() at the shop default
+// unit — to show a record's own unit (e.g. mm), call fieldLabel(field, unit)
+// directly instead of reading this static map. Add/rename fields in the registry.
+export const FIELD_LABELS = Object.fromEntries(
+  Object.keys(FIELD_REGISTRY).map(name => [name, fieldLabel(name)])
+);

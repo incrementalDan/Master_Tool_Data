@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Tag, Ruler, Layers, Settings2, Save, X, AlertTriangle, Wand2 } from 'lucide-react';
-import { TOOL_TYPES, TOOL_TYPE_LABELS, FIELD_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getNextMachineNumber, toolToExtractor } from '../schema/toolSchema.js';
+import { TOOL_TYPES, TOOL_TYPE_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getNextMachineNumber, toolToExtractor } from '../schema/toolSchema.js';
+import { fieldLabel } from '../schema/fieldRegistry.js';
 import { buildDesc } from '../../tool-extractor.tsx';
 import { fieldsForType } from '../schema/fieldRegistry.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -382,7 +383,7 @@ function NumField({ field, data, setField, required }) {
   return (
     <div className="field-group">
       <label className="field-label">
-        {FIELD_LABELS[field] || field}
+        {fieldLabel(field, data?.unit) || field}
         {required && <span className="required"> *</span>}
       </label>
       <input
@@ -400,7 +401,7 @@ function NumField({ field, data, setField, required }) {
 function FieldInput({ field, label, data, setField, type = 'text', step, list, placeholder }) {
   return (
     <div className="field-group">
-      <label className="field-label">{label || FIELD_LABELS[field] || field}</label>
+      <label className="field-label">{label || fieldLabel(field, data?.unit) || field}</label>
       {list ? (
         <>
           <input
