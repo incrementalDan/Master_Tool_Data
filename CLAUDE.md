@@ -29,6 +29,13 @@ I'm not an experienced developer. When you do something non-trivial:
 - Analogies to physical/real-world things when possible
 - Don't assume I know what acronyms mean
 
+### Flag big asks before building them
+
+- If a feature request is actually a big deal — it touches a lot of files, the data model, several workflows, or implies a large rewrite — and I haven't acknowledged that scope, **stop before implementing**
+- Give a quick summary of *why* it's a big deal (what it would touch and what could break), then ask me to confirm before proceeding
+- Goal: make sure we both understand the size of the thing before time gets sunk into it — not to gatekeep, just to avoid a false-triggered rewrite neither of us meant to start
+- If I say "doesn't need to be a big deal, keep it simple" (as with the setup guide), take that as permission to scope it down rather than building the full version
+
 -----
 
 ## Project Overview
@@ -789,6 +796,17 @@ All six classes are defined in `src/index.css` in the "Data-field visual tokens"
 - `.preset-tag` — `AssemblyCard` linked presets list, `DiffStep` new-preset rows, `CommitStep` new-preset rows
 
 **Exception**: `AssemblyCard` uses its own `.operator-tag` / `.tag-box` / `.tag-proshot-oval` layout to match the physical shop tag format. That internal layout is intentional and is not subject to this rule.
+
+-----
+
+## Inline help — `InfoTip` (`src/components/InfoTip.jsx`)
+
+**Universal rule**: when a piece of UI encodes a non-obvious rule, constraint, or quirk of an external system (Drive/Fusion/ProShop behavior, terminology, "why can't I just edit this," workflow gotchas) — put the explanation in an `InfoTip` right next to it, not in a permanent paragraph of body text. A short label is for people who already know what it means; the `ⓘ` is for the person hitting it for the first time, and it doesn't compete for visual space once they do.
+
+- `<InfoTip text="…" alignRight={false} />` renders a small `HelpCircle` icon that reveals `text` in a hover tooltip (`.info-tip` / `.info-tip::after` in `src/index.css`). Pass `alignRight` when the tip sits near the right edge of its container so the popup doesn't clip off-screen.
+- This is distinct from a `title=""` attribute (plain browser tooltip, used for short one-line action hints like sidebar buttons and topbar icons) — reach for `InfoTip` when the explanation is multi-sentence or explains *why*, not just *what*.
+- **Current usages**: `DiffStep` (preset-matching categories, assembly detection), `Settings` (Google Drive metadata-file location semantics — why the location can't be changed in-app and how to actually move the file in Drive's own UI).
+- Originally local to `DiffStep`; promoted to a shared component when `Settings` needed the same pattern. Reuse it rather than redefining a local copy or writing a standalone explanatory paragraph.
 
 -----
 

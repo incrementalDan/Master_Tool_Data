@@ -1,23 +1,45 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, ListChecks } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { generateMachineNumbers } from '../schema/toolSchema.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
 import { FilePicker } from './LibrarySetup.jsx';
 import DescRenameModal from './DescRenameModal.jsx';
+import InfoTip from './InfoTip.jsx';
+import { SetupGuideSummary } from './SetupGuide.jsx';
 
 export default function Settings() {
   const navigate = useNavigate();
   const {
     tools, fetchRawLibrary, renumberLibrary, isSaving,
-    holderLibraryLocation, holderLibrarySetupComplete,
+    libraryLocation, holderLibraryLocation, holderLibrarySetupComplete,
     setHolderLibraryLocation, clearHolderLibraryLocation, notify,
+    googleAuthenticated, metadataSkipped, user: googleUser,
+    fetchMetadataLocation, reconnectMetadata,
   } = useApp();
 
   const [showHolderPicker, setShowHolderPicker] = useState(false);
   const [showDescRename, setShowDescRename] = useState(false);
   const [defaultUnit, setDefaultUnitState] = useState(getDefaultUnit());
+
+  // Metadata file location — fetched lazily so Settings doesn't add a Drive
+  // round-trip to every page load; only resolved while this page is open.
+  const [metaLocation, setMetaLocation] = useState(null);
+  const [metaLocLoading, setMetaLocLoading] = useState(false);
+  const [metaLocError, setMetaLocError] = useState('');
+
+  useEffect(() => {
+    if (!googleAuthenticated) return;
+    let cancelled = false;
+    setMetaLocLoading(true);
+    setMetaLocError('');
+    fetchMetadataLocation()
+      .then(loc => { if (!cancelled) setMetaLocation(loc); })
+      .catch(err => { if (!cancelled) setMetaLocError(err.message); })
+      .finally(() => { if (!cancelled) setMetaLocLoading(false); });
+    return () => { cancelled = true; };
+  }, [googleAuthenticated, fetchMetadataLocation]);
 
   const changeDefaultUnit = (unit) => {
     setDefaultUnit(unit);
@@ -102,6 +124,104 @@ export default function Settings() {
               {label}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Setup checklist — sanity-check summary of the initial workflow */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <ListChecks size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Setup Checklist</h3>
+          <InfoTip text="Reference for the initial Fusion → normalize → ProShop workflow: connect the Fusion library, normalize it, merge in ProShop data, then export back. Each step checks itself off as you complete it — this is just a sanity check that it ran, not something you manage here." />
+        </div>
+        <p className="text-sub text-sm mb-16">
+          Status of the one-time initial setup and ProShop import workflow.
+        </p>
+        <SetupGuideSummary />
+      </div>
+
+      {/* Tool metadata (Google Drive) connection */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <HardDrive size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Tool Metadata (Google Drive)</h3>
+        </div>
+        <p className="text-sub text-sm mb-16">
+          Notes, tags, ProShop IDs, assemblies, and other fields Fusion can&apos;t store live in
+          one <code>tool_metadata.json</code> file, linked one-to-one with this Fusion tool library.
+        </p>
+
+        <div className="text-sm" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="flex items-center gap-8">
+            <FileJson size={14} className="text-sub" style={{ flexShrink: 0 }} />
+            <span className="text-sub" style={{ minWidth: 100 }}>Fusion library</span>
+            <span className="font-mono text-xs">{libraryLocation?.fileName || '—'}</span>
+          </div>
+
+          {googleAuthenticated ? (
+            <>
+              <div className="flex items-center gap-8">
+                <HardDrive size={14} className="text-sub" style={{ flexShrink: 0 }} />
+                <span className="text-sub" style={{ minWidth: 100 }}>Metadata file</span>
+                {metaLocLoading ? (
+                  <span className="text-sub text-xs">Loading…</span>
+                ) : metaLocation ? (
+                  <span className="flex items-center gap-8">
+                    <span className="font-mono text-xs">{metaLocation.fileName}</span>
+                    {metaLocation.webViewLink && (
+                      <a
+                        href={metaLocation.webViewLink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--blue)' }}
+                      >
+                        <ExternalLink size={11} /> Open in Drive
+                      </a>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-sub text-xs">{metaLocError || '✓ Connected'}</span>
+                )}
+              </div>
+
+              {metaLocation && (
+                <div className="flex items-center gap-8">
+                  <span style={{ width: 14, flexShrink: 0 }} />
+                  <span className="text-sub flex items-center" style={{ minWidth: 100, gap: 4 }}>
+                    Location
+                    <InfoTip text="The app always re-reads this exact file by its Drive ID, so this isn't an in-app setting — it's just informational. To actually relocate the file, drag it to a new folder in Google Drive's own UI; Drive keeps the file's ID, so the app keeps working with no reconfiguration needed." />
+                  </span>
+                  <span className="text-xs">
+                    {[metaLocation.driveName, metaLocation.folderName].filter(Boolean).join(' / ') || 'My Drive (root)'}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-center gap-8">
+                <span style={{ width: 14, flexShrink: 0 }} />
+                <span className="text-sub" style={{ minWidth: 100 }}>Signed in as</span>
+                <span className="text-xs">{googleUser?.email || googleUser?.name || '—'}</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex items-center gap-8">
+                <HardDrive size={14} className="text-sub" style={{ flexShrink: 0 }} />
+                <span className="text-sub" style={{ minWidth: 100 }}>Metadata file</span>
+                <span className="text-sub text-xs">
+                  {metadataSkipped ? 'Not connected — metadata is being skipped' : 'Not connected'}
+                </span>
+              </div>
+              <div className="flex items-center gap-8">
+                <span style={{ width: 14, flexShrink: 0 }} />
+                <button className="btn btn-secondary btn-sm" onClick={reconnectMetadata}>
+                  Connect Google Drive…
+                </button>
+                <InfoTip text="This opens the setup flow, where you pick the Drive folder tool_metadata.json is created in. Choose carefully — once the file exists, the app always re-reads that exact file by its Drive ID, so this isn't something you change in-app afterward (though you can still drag the file to a new folder in Drive's own UI later; Drive keeps the ID, so the app keeps working)." />
+              </div>
+            </>
+          )}
         </div>
       </div>
 

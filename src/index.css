@@ -627,6 +627,76 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .import-step.active .import-step-num { background: var(--blue); border-color: var(--blue); color: #fff; }
 .import-step.done .import-step-num { background: var(--green); border-color: var(--green); color: #fff; }
 
+/* ─── Setup guide (banner + Settings summary) ─────────────────────────────── */
+.setup-guide-banner {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.setup-guide-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+.setup-guide-circles { flex: 1; min-width: 280px; }
+
+.setup-guide-bar-track {
+  height: 4px;
+  background: var(--surface-3);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.setup-guide-bar-fill {
+  height: 100%;
+  background: var(--green);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.setup-guide-steps {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+.setup-guide-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-sub);
+}
+.setup-guide-step.active { color: var(--blue); font-weight: 600; }
+.setup-guide-step.done { color: var(--green); }
+
+.setup-guide-circle {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.setup-guide-step.active .setup-guide-circle { background: var(--blue); border-color: var(--blue); color: #fff; }
+.setup-guide-step.done .setup-guide-circle { background: var(--green); border-color: var(--green); color: #fff; }
+
+.setup-guide-circles.compact .setup-guide-bar-track { margin-bottom: 8px; }
+.setup-guide-circles.compact .setup-guide-steps { gap: 12px; }
+.setup-guide-circles.compact .setup-guide-step { font-size: 11px; gap: 5px; }
+.setup-guide-circles.compact .setup-guide-circle { width: 18px; height: 18px; font-size: 9px; }
+
 /* ─── Upload zone ─────────────────────────────────────────────────────────── */
 .upload-zone {
   border: 2px dashed var(--border);
@@ -671,6 +741,47 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .modal-body { color: var(--text-sub); margin-bottom: 20px; line-height: 1.6; }
 
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ─── Setup-complete celebration (8-bit pixel fireworks) ──────────────────── */
+.setup-complete-modal {
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  max-width: 400px;
+}
+.setup-complete-title {
+  font-family: 'Courier New', monospace;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--green);
+  text-align: center;
+}
+
+.pixel-fireworks {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.pixel-burst {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+.pixel {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 4px;
+  height: 4px;
+  image-rendering: pixelated;
+  animation: pixel-fly 900ms steps(6) var(--delay, 0ms) both;
+}
+@keyframes pixel-fly {
+  0%   { transform: translate(0, 0); opacity: 1; }
+  65%  { opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)); opacity: 0; }
+}
 
 /* ─── Login screen ────────────────────────────────────────────────────────── */
 .login-screen {

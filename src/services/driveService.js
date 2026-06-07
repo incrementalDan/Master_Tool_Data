@@ -158,6 +158,55 @@ export async function checkMetadataFile() {
   return data !== null;
 }
 
+async function fetchFileName(fileId) {
+  if (!fileId) return null;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=name&supportsAllDrives=true`,
+    { headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (!res.ok) return null;
+  return (await res.json()).name;
+}
+
+async function fetchDriveName(driveId) {
+  if (!driveId) return null;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/drives/${driveId}?fields=name`,
+    { headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (!res.ok) return null;
+  return (await res.json()).name;
+}
+
+// Resolves the configured metadata file's name and where it lives (parent folder,
+// and shared-drive name if applicable) — used by Settings to show the operator
+// which Drive file this Fusion library's metadata is linked to, and its location.
+// Returns null if no metadata file is configured.
+export async function getMetadataFileLocation() {
+  const id = getMetaFileId();
+  if (!id) return null;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${id}?fields=id,name,parents,driveId,webViewLink&supportsAllDrives=true`,
+    { headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (!res.ok) return null;
+  const file = await res.json();
+
+  const [folderName, driveName] = await Promise.all([
+    fetchFileName(file.parents?.[0]),
+    fetchDriveName(file.driveId),
+  ]);
+
+  return {
+    fileId: file.id,
+    fileName: file.name,
+    folderName,
+    driveName,
+    webViewLink: file.webViewLink,
+  };
+}
+
 // List folders inside a Drive parent ('root' = My Drive root, or a folder ID).
 export async function listFolders(parentId = 'root') {
   const q = `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;

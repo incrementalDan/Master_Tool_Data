@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
-import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle, RefreshCw, Plus, CheckCircle, HelpCircle, Wrench } from 'lucide-react';
+import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle, RefreshCw, Plus, CheckCircle, Wrench } from 'lucide-react';
 import { generateId, generateAssemblyId } from '../../schema/toolSchema.js';
 import { fieldLabel } from '../../schema/fieldRegistry.js';
 import { composePresetName, parsePresetName, presetMatchesAssembly } from '../../utils/presetNaming.js';
 import { lengthEps, unitAbbr } from '../../utils/units.js';
 import { useApp } from '../../context/AppContext.jsx';
+import InfoTip from '../InfoTip.jsx';
 
 const DIFF_SECTIONS = [
   {
@@ -165,15 +166,6 @@ function matchPresets(incomingPresets, masterPresets, incomingOoh, incomingHolde
 
   const masterOnly = (masterPresets || []).filter(p => !matchedMasterGuids.has(p.guid));
   return { unchanged, blocked, conflicts, newPresets, masterOnly };
-}
-
-// ─── Tooltip helper ───────────────────────────────────────────────────────────
-function InfoTip({ text, alignRight = false }) {
-  return (
-    <span className={`info-tip${alignRight ? ' tip-right' : ''}`} data-tip={text}>
-      <HelpCircle size={11} />
-    </span>
-  );
 }
 
 // ─── Preset diff sub-component ────────────────────────────────────────────────

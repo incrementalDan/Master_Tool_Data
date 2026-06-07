@@ -9,7 +9,7 @@ import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
 
 export default function ImportFlow() {
   const navigate = useNavigate();
-  const { tools, saveFullLibrary, isSaving } = useApp();
+  const { tools, saveFullLibrary, isSaving, markSetupStep } = useApp();
   const [step, setStep] = useState(1);
   const [fusionTools, setFusionTools] = useState(tools);
   const [parseError, setParseError] = useState('');
@@ -77,6 +77,7 @@ export default function ImportFlow() {
 
   const handleApplyMerge = () => {
     if (!proShopMatches) return;
+    markSetupStep('proshopMerged');
     const merged = [...fusionTools];
 
     proShopMatches.matched.forEach(({ toolIdx, psRow, additions }) => {
@@ -285,7 +286,7 @@ export default function ImportFlow() {
           </p>
 
           <div className="flex gap-8 mb-20" style={{ flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary" onClick={() => exportProShop(fusionTools)}>
+            <button className="btn btn-secondary" onClick={() => { markSetupStep('proshopExported'); exportProShop(fusionTools); }}>
               ↓ Export Full ProShop CSV
             </button>
             <button className="btn btn-secondary" onClick={() => exportFusion(fusionTools)}>
