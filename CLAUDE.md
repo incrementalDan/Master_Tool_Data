@@ -29,6 +29,13 @@ I'm not an experienced developer. When you do something non-trivial:
 - Analogies to physical/real-world things when possible
 - Don't assume I know what acronyms mean
 
+### Flag big asks before building them
+
+- If a feature request is actually a big deal — it touches a lot of files, the data model, several workflows, or implies a large rewrite — and I haven't acknowledged that scope, **stop before implementing**
+- Give a quick summary of *why* it's a big deal (what it would touch and what could break), then ask me to confirm before proceeding
+- Goal: make sure we both understand the size of the thing before time gets sunk into it — not to gatekeep, just to avoid a false-triggered rewrite neither of us meant to start
+- If I say "doesn't need to be a big deal, keep it simple" (as with the setup guide), take that as permission to scope it down rather than building the full version
+
 -----
 
 ## Project Overview
