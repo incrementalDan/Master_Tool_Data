@@ -350,6 +350,62 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 .active-filter-tag button:hover { opacity: 1; }
 
+/* ─── Numeric comparison operator dial (≤ = ≥) ───────────────────────────── */
+/* Sits directly left of a numeric facet input — together they read as one
+   connected control, so the dial owns the left border/radius and the input
+   drops its left border/radius (see FacetFilters.jsx). */
+.operator-dial {
+  position: relative;
+  width: 36px;
+  flex-shrink: 0;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-right: none;
+  overflow: hidden;
+}
+
+.operator-dial-track {
+  position: relative;
+  height: 100%;
+}
+
+.operator-dial-symbol {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.operator-dial-active {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.operator-dial-faded {
+  color: var(--text-sub);
+  opacity: 0.35;
+  font-size: 11px;
+}
+
+.operator-dial-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  z-index: 1;
+}
+.operator-dial-zone-left { left: 0; }
+.operator-dial-zone-right { right: 0; }
+
 /* ─── Tool cards ─────────────────────────────────────────────────────────── */
 .tool-grid {
   display: grid;

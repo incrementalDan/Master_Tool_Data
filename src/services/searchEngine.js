@@ -21,8 +21,26 @@ export function textSearch(tools, query) {
   });
 }
 
+// A numeric facet's filter value (diameter, flute length, OAL, …) — set via the
+// ≤ = ≥ operator dial in FacetFilters — is shaped { value, op } rather than a
+// bare string. Detected structurally (not by importing the field registry) to
+// keep this module schema-independent, per the header note above.
+function isOperatorFilter(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) && 'op' in value;
+}
+
+function matchesNumericFacet(toolValue, filter) {
+  const tv = parseFloat(toolValue);
+  const fv = parseFloat(filter.value);
+  if (isNaN(tv) || isNaN(fv)) return false;
+  if (filter.op === '>=') return tv >= fv;
+  if (filter.op === '<=') return tv <= fv;
+  return Math.abs(tv - fv) < 0.00051; // '=' with float tolerance
+}
+
 // activeFilters shape:
 // { toolType, textQuery, facets: { diameter, number_of_flutes, flute_length, overall_length, material, coating, vendor, preferred_machine, material_suitability, tags, ... } }
+// Numeric facets are { value, op } objects (see isOperatorFilter); everything else is a bare string/array.
 export function applyFilters(tools, activeFilters) {
   let result = tools;
 
@@ -39,6 +57,8 @@ export function applyFilters(tools, activeFilters) {
   for (const [field, value] of Object.entries(facets)) {
     if (Array.isArray(value)) {
       if (value.length === 0) continue;
+    } else if (isOperatorFilter(value)) {
+      if (!value.value && value.value !== 0) continue;
     } else if (!value && value !== 0) {
       continue;
     }
@@ -49,6 +69,9 @@ export function applyFilters(tools, activeFilters) {
 }
 
 function matchesFacet(tool, field, value) {
+  if (isOperatorFilter(value)) {
+    return matchesNumericFacet(tool[field], value);
+  }
   if (field === 'tags') {
     return Array.isArray(tool.tags) && tool.tags.includes(value);
   }
@@ -63,7 +86,7 @@ function matchesFacet(tool, field, value) {
   if (field === 'tsc_capable') {
     return value === 'Yes' ? !!tool.tsc_capable : !tool.tsc_capable;
   }
-  // Numeric exact or close match
+  // Numeric exact or close match (bare-value path — e.g. chip-selected small option sets)
   if (['diameter', 'flute_length', 'overall_length', 'number_of_flutes', 'corner_radius'].includes(field)) {
     const tv = parseFloat(tool[field]);
     const fv = parseFloat(value);
