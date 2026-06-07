@@ -33,11 +33,14 @@ I'm not an experienced developer. When you do something non-trivial:
 
 ## Project Overview
 
-A web application for managing a CNC cutting tool library. It replaces a fragmented, manual workflow where tools are pulled from a master Fusion library, modified per-job, and rarely synced back — causing duplicates and data loss.
+A **Tool Management System (TMS)** — the single source of truth for the shop's CNC cutting tool library. It owns tool specifications (geometry, speeds/feeds, holders, assemblies, presets, notes, tags) and replaces a fragmented, manual workflow where tools were pulled from a master Fusion library, modified per-job, and rarely synced back — causing duplicates and data loss.
 
-The Fusion tool library JSON lives in Autodesk cloud (BIM 360 / ACC) and is accessed via the Autodesk Platform Services (APS) Data Management API. Tool metadata that Fusion doesn't support (notes, tags, ProShop ID, preferred machine, assemblies, etc.) is stored in a separate `tool_metadata.json` on Google Drive. The app acts as the single source of truth across both files.
+The TMS integrates with the shop's other systems rather than being tied to any one of them:
+- **Fusion 360 / Autodesk cloud** — the CAM tool library. The Fusion tool library JSON lives in Autodesk cloud (BIM 360 / ACC) and is read/written via the Autodesk Platform Services (APS) Data Management API. Tools are pulled from Fusion and synced back, with a compare/merge workflow for committing proven job values to master.
+- **ProShop** — inventory and purchasing. ProShop import/export must always be maintained.
+- **Google Drive** — tool metadata Fusion doesn't support (notes, tags, ProShop ID, preferred machine, assemblies, etc.) is stored in a separate `tool_metadata.json`. The TMS is the single source of truth across these files.
 
-This module is also the foundation of a future in-house ERP system. ProShop will continue to be used for inventory and purchasing in the interim, so ProShop import/export must always be maintained.
+This is also the foundation of a future in-house **ERP system**: ProShop continues to handle inventory and purchasing in the interim, so the ProShop integration stays first-class. As the TMS grows, Fusion becomes one integration among several rather than the center of the design.
 
 -----
 
