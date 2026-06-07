@@ -59,7 +59,7 @@ export default function OperatorDial({ value, onChange }) {
           <span
             key={pos}
             className={`operator-dial-symbol operator-dial-${slot.kind}`}
-            style={{ left: pos * SLOT, transform: `translateX(${offset}px)`, transition }}
+            style={{ left: pos * SLOT - SLOT / 2, transform: `translateX(${offset}px)`, transition }}
           >
             {OP_SYMBOLS[SEQUENCE[slot.i]]}
           </span>
