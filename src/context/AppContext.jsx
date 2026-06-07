@@ -59,6 +59,7 @@ function reducer(state, action) {
     case 'GOOGLE_EXPIRED':
       return { ...state, googleExpired: true };
     case 'SKIP_METADATA': return { ...state, metadataSkipped: true };
+    case 'RECONNECT_METADATA': return { ...state, metadataSkipped: false };
     case 'SET_LIBRARY_LOCATION': return { ...state, libraryLocation: action.location };
     case 'CLEAR_LIBRARY_LOCATION': return { ...state, libraryLocation: null, tools: [] };
     case 'SET_HOLDER_LOCATION': return { ...state, holderLibraryLocation: action.location };
@@ -188,6 +189,12 @@ export function AppProvider({ children }) {
   }, []);
 
   const skipMetadata = useCallback(() => dispatch({ type: 'SKIP_METADATA' }), []);
+
+  // Lets a user who skipped metadata setup return to the connect screen from Settings.
+  const reconnectMetadata = useCallback(() => dispatch({ type: 'RECONNECT_METADATA' }), []);
+
+  // Resolves the linked metadata file's name + folder/drive location for display in Settings.
+  const fetchMetadataLocation = useCallback(() => driveService.getMetadataFileLocation(), []);
 
   const setLibraryLocation = useCallback((location) => {
     localStorage.setItem(LOCATION_KEY, JSON.stringify(location));
@@ -911,6 +918,8 @@ export function AppProvider({ children }) {
       holderLibrarySetupComplete: !!state.holderLibraryLocation,
       setGoogleUser,
       skipMetadata,
+      reconnectMetadata,
+      fetchMetadataLocation,
       setLibraryLocation,
       clearLibraryLocation,
       setHolderLibraryLocation,
