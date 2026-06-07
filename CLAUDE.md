@@ -1,5 +1,36 @@
 # Fusion Tool Library Manager
 
+## Working Style
+
+- Keep responses short. Bullets over prose. Bold key terms.
+- Don't repeat back what was just said before answering.
+- When referencing code, explain what it does in plain English first, then mention the file/function name.
+- I know manufacturing deeply but communicate it conversationally — ask one clarifying question at a time, not a list.
+- Don't assume all details have been stated. Manufacturing has many implicit constraints that may not be mentioned until they matter.
+
+I'm not an experienced developer. When you do something non-trivial:
+
+### After completing a task, add a short "What I did & why" section
+
+- 1–3 bullet points max
+- Plain English, no jargon (or explain the jargon inline)
+- Focus on the *why*, not just the *what*
+- Keep it separate from the work output so it's easy to skip if I just want the result
+
+### Proactively suggest better approaches
+
+- If there's a built-in tool, library, or Claude feature that would do this better or more simply, mention it
+- Flag if what I asked for is a workaround when a cleaner solution exists
+- But don't overwhelm — one suggestion at a time
+
+### Keep explanations digestible
+
+- Short sentences
+- Analogies to physical/real-world things when possible
+- Don't assume I know what acronyms mean
+
+-----
+
 ## Project Overview
 
 A web application for managing a CNC cutting tool library. It replaces a fragmented, manual workflow where tools are pulled from a master Fusion library, modified per-job, and rarely synced back — causing duplicates and data loss.
