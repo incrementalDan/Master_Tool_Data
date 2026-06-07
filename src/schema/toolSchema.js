@@ -6,6 +6,7 @@ import {
 } from '../../tool-extractor.tsx';
 import { isMetadataOnly, FIELD_REGISTRY, fieldLabel } from './fieldRegistry.js';
 import { parsePresetName, materialCategory } from '../utils/presetNaming.js';
+import { convertLength, unitAbbr, getDefaultUnit } from '../utils/units.js';
 
 export { TT, TL, MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST, PS_GROUPS, AUTO_GROUP, COOLANT_OPTS };
 
@@ -224,22 +225,14 @@ export function readTrackingId(fTool) {
 }
 
 // Read the OOH (stick-out) from a raw Fusion tool. Source of truth is
-// geometry.LB (Body Length / "Length below Holder"). Always returned in inches.
+// geometry.LB (Body Length / "Length below Holder"), stored in the tool's own
+// unit — returned raw in that unit (like all other geometry).
 export function readOohFromFusion(fTool) {
   const lb = fTool?.geometry?.LB;
   if (lb === null || lb === undefined || lb === '') return null;
   const v = Number(lb);
   if (isNaN(v)) return null;
-  return fTool.unit === 'millimeters' ? v / 25.4 : v;
-}
-
-// Convert an inches-canonical length (OOH / min_ooh) into a tool's native unit.
-// OOH and min_ooh are always stored in inches; the other length geometry
-// (DC/LCF/OAL/shoulder-length) is stored in the tool's native unit — so any
-// place those two worlds meet must convert. See the "Units" section in CLAUDE.md.
-export function inchesToNative(value, unit) {
-  if (value == null || value === '' || isNaN(Number(value))) return value;
-  return unit === 'millimeters' ? Number(value) * 25.4 : Number(value);
+  return v;
 }
 
 function round4(n) {
@@ -1101,11 +1094,12 @@ export function splitToFusionInstances(tool, holders = []) {
     }
 
     // Per-instance OOH → geometry.LB (the documented OOH source of truth).
+    // OOH is stored in the tool's own unit, so it's written raw (no conversion).
     // ALSO update expressions.tool_bodyLength — Fusion re-derives LB from this
     // expression on every library load, silently overriding the numeric field if
     // the two don't match. Both must be updated together.
     if (a.ooh != null && a.ooh !== '' && !isNaN(Number(a.ooh))) {
-      const lb = isMetric ? Number(a.ooh) * 25.4 : Number(a.ooh);
+      const lb = Number(a.ooh);
       base.geometry = { ...(base.geometry || {}), LB: lb };
       base.expressions = { ...(base.expressions || {}), tool_bodyLength: `${lb} ${isMetric ? 'mm' : 'in'}` };
     }
@@ -1114,17 +1108,13 @@ export function splitToFusionInstances(tool, holders = []) {
     // holder's gauge length and the per-instance OOH. Previous bad writes may
     // have stored a stale value derived from an incorrect holder gaugeLength —
     // always recompute so it stays consistent with what we just wrote. The value
-    // must be in the TOOL's unit to match the sibling geometry.LB: base.holder
-    // .gaugeLength is in the holder's own unit, and OOH is inches-canonical, so
-    // convert both into the tool's native unit before summing (mirrors the
-    // export path in fusionExport.js).
+    // must be in the TOOL's unit to match the sibling geometry.LB: the holder's
+    // gaugeLength is in the HOLDER's own unit (a mm holder may sit on an inch
+    // tool), so convert it into the tool's unit before adding the OOH (already in
+    // the tool's unit). Mirrors the export path in fusionExport.js.
     if (base.holder && typeof base.holder.gaugeLength === 'number' && a.ooh != null && !isNaN(Number(a.ooh))) {
-      const holderGaugeIn = (base.holder.unit === 'millimeters')
-        ? base.holder.gaugeLength / 25.4
-        : base.holder.gaugeLength;
-      const holderGaugeNative = isMetric ? holderGaugeIn * 25.4 : holderGaugeIn;
-      const oohNative = isMetric ? Number(a.ooh) * 25.4 : Number(a.ooh);
-      base.geometry = { ...(base.geometry || {}), assemblyGaugeLength: holderGaugeNative + oohNative };
+      const holderGaugeNative = convertLength(base.holder.gaugeLength, base.holder.unit, tool.unit);
+      base.geometry = { ...(base.geometry || {}), assemblyGaugeLength: holderGaugeNative + Number(a.ooh) };
     }
 
     return base;
@@ -1147,7 +1137,7 @@ export function newTool(toolType = 'flat end mill') {
   return {
     id: generateId(),
     tool_type: toolType,
-    unit: 'inches',
+    unit: getDefaultUnit(),
     description: '',
     diameter: null,
     flute_length: null,
@@ -1239,16 +1229,15 @@ export function validateGeometry(tool) {
     return v !== null && v !== undefined && typeof v === 'number' && !isNaN(v) && v > 0;
   }
 
+  const suffix = unitAbbr(tool.unit);
   function fmt(n) {
-    return n.toFixed(4).replace(/\.?0+$/, '') + '"';
+    return n.toFixed(4).replace(/\.?0+$/, '') + ' ' + suffix;
   }
 
   const { flute_length, shoulder_length, min_ooh, overall_length, corner_radius, diameter, tool_type } = tool;
 
-  // flute_length / shoulder_length / overall_length are in the tool's native unit;
-  // min_ooh is inches-canonical — convert it to native so the chain compares in one unit.
-  const minOohNative = isValid(min_ooh) ? inchesToNative(min_ooh, tool.unit) : min_ooh;
-
+  // All lengths (flute_length / shoulder_length / overall_length / min_ooh) are
+  // stored in the tool's native unit, so the chain compares directly — no conversion.
   if (isValid(flute_length) && isValid(shoulder_length) && flute_length > shoulder_length) {
     warnings.push({
       fields: ['flute_length', 'shoulder_length'],
@@ -1256,17 +1245,17 @@ export function validateGeometry(tool) {
     });
   }
 
-  if (isValid(shoulder_length) && isValid(minOohNative) && shoulder_length > minOohNative) {
+  if (isValid(shoulder_length) && isValid(min_ooh) && shoulder_length > min_ooh) {
     warnings.push({
       fields: ['shoulder_length', 'min_ooh'],
-      message: `Shoulder Length (${fmt(shoulder_length)}) must be less than or equal to MIN OOH (${fmt(minOohNative)})`,
+      message: `Shoulder Length (${fmt(shoulder_length)}) must be less than or equal to MIN OOH (${fmt(min_ooh)})`,
     });
   }
 
-  if (isValid(minOohNative) && isValid(overall_length) && minOohNative > overall_length) {
+  if (isValid(min_ooh) && isValid(overall_length) && min_ooh > overall_length) {
     warnings.push({
       fields: ['min_ooh', 'overall_length'],
-      message: `MIN OOH (${fmt(minOohNative)}) must be less than or equal to Overall Length (${fmt(overall_length)})`,
+      message: `MIN OOH (${fmt(min_ooh)}) must be less than or equal to Overall Length (${fmt(overall_length)})`,
     });
   }
 

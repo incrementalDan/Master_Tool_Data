@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Pencil, X } from 'lucide-react';
 import { presetMatchesAssembly } from '../utils/presetNaming.js';
+import { unitAbbr } from '../utils/units.js';
 
 // ── Holder color system ───────────────────────────────────────────────────────
 const NAMED_COLORS = {
@@ -40,7 +41,7 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
   const holderDescription = assembly.holder_description || holder?.description || '—';
   const color = holderColor(holderDescription === '—' ? null : holderDescription);
 
-  const linkedPresets = (tool.presets || []).filter(p => presetMatchesAssembly(p, assembly));
+  const linkedPresets = (tool.presets || []).filter(p => presetMatchesAssembly(p, assembly, tool.unit));
 
   return (
     <div style={{ border: '1px solid rgba(100, 116, 139, 0.30)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: 'var(--surface-2)' }}>
@@ -51,7 +52,7 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
           {holderDescription}
         </span>
         <span style={{ fontSize: 13, fontWeight: 700, flex: 'none', color: 'var(--text)' }}>
-          {assembly.ooh != null ? `OOH: ${assembly.ooh.toFixed(3)}"` : '—'}
+          {assembly.ooh != null ? `OOH: ${assembly.ooh.toFixed(3)} ${unitAbbr(tool.unit)}` : '—'}
         </span>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 2, flexShrink: 0 }}>
           <button className="icon-btn" style={{ width: 22, height: 22 }} title="Edit assembly" onClick={() => onEdit(assembly)}>

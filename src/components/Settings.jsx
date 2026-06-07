@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2 } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { generateMachineNumbers } from '../schema/toolSchema.js';
+import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
 import { FilePicker } from './LibrarySetup.jsx';
 import DescRenameModal from './DescRenameModal.jsx';
 
@@ -16,6 +17,13 @@ export default function Settings() {
 
   const [showHolderPicker, setShowHolderPicker] = useState(false);
   const [showDescRename, setShowDescRename] = useState(false);
+  const [defaultUnit, setDefaultUnitState] = useState(getDefaultUnit());
+
+  const changeDefaultUnit = (unit) => {
+    setDefaultUnit(unit);
+    setDefaultUnitState(unit);
+    notify(`Default unit set to ${unit === 'millimeters' ? 'millimeters (mm)' : 'inches (in)'}`, 'success');
+  };
 
   // 'idle' → warning, 'preview' → table + confirm input, 'done' → success
   const [stage, setStage] = useState('idle');
@@ -72,6 +80,29 @@ export default function Settings() {
         <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
           <SettingsIcon size={16} /> Settings
         </h2>
+      </div>
+
+      {/* Default unit */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Ruler size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Default Unit</h3>
+        </div>
+        <p className="text-sub text-sm mb-16">
+          The unit used for new tools you create. Existing tools keep their own unit
+          (read from Fusion); lengths always display in each record&apos;s own unit.
+        </p>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[['inches', 'Inches (in)'], ['millimeters', 'Millimeters (mm)']].map(([val, label]) => (
+            <button
+              key={val}
+              className={`btn btn-sm ${defaultUnit === val ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => changeDefaultUnit(val)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Holder library setup */}

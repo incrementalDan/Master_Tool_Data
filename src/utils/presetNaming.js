@@ -18,6 +18,7 @@
 // cannot be parsed, the UI prompts the user.
 
 import { holderShortName } from './holderNaming.js';
+import { lengthEps } from './units.js';
 
 // Material query code -> the token used in preset names. The query value Fusion
 // stores already matches these codes, so the code IS the query (uppercased).
@@ -118,8 +119,10 @@ export function parsePresetName(name) {
 }
 
 // Does a preset's name encode the given assembly (holder + OOH)?
-// Compares the parsed holder short name (case-insensitive) and OOH (0.0005" tol).
-export function presetMatchesAssembly(preset, assembly) {
+// Compares the parsed holder short name (case-insensitive) and OOH. The OOH in
+// the name and the assembly OOH are both in the tool's own unit; the match
+// tolerance scales with that unit (≈0.0005"), so pass the tool's unit.
+export function presetMatchesAssembly(preset, assembly, unit = 'inches') {
   if (!preset || !assembly) return false;
   const parsed = parsePresetName(preset.name);
   if (!parsed) return false;
@@ -127,6 +130,6 @@ export function presetMatchesAssembly(preset, assembly) {
   const holderOk = !!parsed.holderShortName && !!aShort &&
     parsed.holderShortName.toUpperCase() === aShort.toUpperCase();
   const oohOk = parsed.ooh != null && assembly.ooh != null &&
-    Math.abs(parsed.ooh - assembly.ooh) <= 0.0005;
+    Math.abs(parsed.ooh - assembly.ooh) <= lengthEps(unit);
   return holderOk && oohOk;
 }

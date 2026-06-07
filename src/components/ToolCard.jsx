@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { Pencil, Copy, FileDown } from 'lucide-react';
 import { TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
+import { unitAbbr } from '../utils/units.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { exportSingleTool as exportProShop } from '../utils/proShopExport.js';
@@ -75,7 +76,7 @@ export default function ToolCard({ tool, variant = 'grid' }) {
           T{tool.machine_tool_number}
         </span>
       )}
-      {formatDim(tool.diameter) && <span className="meta-badge">⌀ {formatDim(tool.diameter)}"</span>}
+      {formatDim(tool.diameter) && <span className="meta-badge">⌀ {formatDim(tool.diameter)} {unitAbbr(tool.unit)}</span>}
       {tool.number_of_flutes && <span className="meta-badge">{tool.number_of_flutes}FL</span>}
       {tool.vendor && <span className="meta-badge truncate" style={{ maxWidth: 120 }}>{tool.vendor}</span>}
       {tool.coating && <span className="meta-badge">{tool.coating}</span>}

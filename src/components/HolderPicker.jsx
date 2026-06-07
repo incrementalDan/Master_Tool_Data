@@ -1,10 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Search, X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-
-function gaugeToInches(gaugeLength, unit) {
-  return unit === 'millimeters' ? gaugeLength / 25.4 : gaugeLength;
-}
+import { unitAbbr } from '../utils/units.js';
 
 export default function HolderPicker({ currentGuid, onSelect, onClose }) {
   const { holders } = useApp();
@@ -47,7 +44,7 @@ export default function HolderPicker({ currentGuid, onSelect, onClose }) {
             <div className="text-sub text-sm" style={{ padding: 16 }}>No matches.</div>
           ) : (
             filtered.map(h => {
-              const gl = gaugeToInches(h.gaugeLength ?? 0, h.unit);
+              const gl = h.gaugeLength ?? 0;
               const selected = pendingGuid === h.guid;
               return (
                 <div
@@ -65,7 +62,7 @@ export default function HolderPicker({ currentGuid, onSelect, onClose }) {
                     {h.description || '—'}
                   </div>
                   <div className="text-sub text-xs" style={{ marginTop: 2 }}>
-                    Gauge: {gl.toFixed(3)} in
+                    Gauge: {gl.toFixed(3)} {unitAbbr(h.unit)}
                     {h.vendor ? ` · ${h.vendor}` : ''}
                   </div>
                 </div>

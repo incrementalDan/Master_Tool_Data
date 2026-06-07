@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { ArrowLeft, GitMerge, Plus, Wrench } from 'lucide-react';
 import { useApp } from '../../context/AppContext.jsx';
-import { FIELD_LABELS, TOOL_TYPE_LABELS } from '../../schema/toolSchema.js';
+import { TOOL_TYPE_LABELS } from '../../schema/toolSchema.js';
+import { fieldLabel } from '../../schema/fieldRegistry.js';
+import { unitAbbr } from '../../utils/units.js';
 import ToolTypeIcon from '../icons/ToolTypeIcon.jsx';
 
 function formatValue(v) {
@@ -84,7 +86,7 @@ export default function CommitStep({
             <div className="commit-field-list">
               {fieldList.map(f => (
                 <div key={f} className="commit-field-row">
-                  <span className="commit-field-name">{FIELD_LABELS[f] || f}</span>
+                  <span className="commit-field-name">{fieldLabel(f, masterTool.unit) || f}</span>
                   <span className="commit-field-old">{formatValue(masterTool[f])}</span>
                   <span className="diff-arrow">→</span>
                   <span className="commit-field-new">{formatValue(importedTool[f])}</span>
@@ -114,7 +116,7 @@ export default function CommitStep({
               <Wrench size={11} />
               {assemblyUpdate.type === 'create' ? 'Creating new assembly record' : 'Linking presets to existing assembly'}
               {assemblyUpdate.assembly?.ooh != null && (
-                <> · OOH <strong style={{ color: 'var(--text)' }}>{assemblyUpdate.assembly.ooh.toFixed(3)}"</strong></>
+                <> · OOH <strong style={{ color: 'var(--text)' }}>{assemblyUpdate.assembly.ooh.toFixed(3)} {unitAbbr(masterTool.unit)}</strong></>
               )}
             </div>
           )}

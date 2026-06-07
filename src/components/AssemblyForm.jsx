@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Info } from 'lucide-react';
 import { generateAssemblyId } from '../schema/toolSchema.js';
 import { presetMatchesAssembly } from '../utils/presetNaming.js';
+import { unitAbbr } from '../utils/units.js';
 import HolderPicker from './HolderPicker.jsx';
 
 export default function AssemblyForm({ tool, holders, assembly, onSave, onClose }) {
@@ -23,16 +24,17 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
     holder_description: selectedHolder?.description || assembly?.holder_description || '',
     ooh: isNaN(oohPreview) ? null : oohPreview,
   };
-  const matchedPresets = presets.filter(p => presetMatchesAssembly(p, previewAssembly));
+  const matchedPresets = presets.filter(p => presetMatchesAssembly(p, previewAssembly, tool.unit));
 
   const minOoh = tool.min_ooh ?? null;
+  const unit = unitAbbr(tool.unit);
 
   const handleSave = () => {
     const oohNum = parseFloat(ooh);
     if (!holderGuid) { setError('Please select a holder.'); return; }
     if (!ooh || isNaN(oohNum) || oohNum <= 0) { setError('OOH must be a positive number.'); return; }
     if (minOoh != null && oohNum < minOoh) {
-      setError(`OOH cannot be less than the MIN OOH for this tool (${minOoh.toFixed(3)}")`);
+      setError(`OOH cannot be less than the MIN OOH for this tool (${minOoh.toFixed(3)} ${unit})`);
       return;
     }
 
@@ -88,7 +90,7 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
         {/* OOH */}
         <div className="field-group mb-16">
           <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            OOH / Stick Out (inches)
+            OOH / Stick Out ({unit})
             <span title="Distance from collet nut face to tool tip" style={{ cursor: 'help', color: 'var(--text-sub)' }}>
               <Info size={12} />
             </span>
@@ -124,7 +126,7 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
                   onClick={() => setOoh(String(minOoh))}
                 >
                   <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.06em', lineHeight: 1 }}>MIN OOH</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, marginTop: 2 }}>{minOoh.toFixed(3)}"</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, marginTop: 2 }}>{minOoh.toFixed(3)} {unit}</span>
                 </button>
               )}
             </div>

@@ -281,7 +281,7 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
                     isDragOver={dragOverIdx === globalIdx}
                     dragEnabled={materialFilter === 'All'}
                     linkedAssemblies={(tool.assemblies || []).filter(a =>
-                      presetMatchesAssembly(preset, a)
+                      presetMatchesAssembly(preset, a, tool.unit)
                     )}
                     holders={holders}
                     onEdit={() => setEditingId(preset.guid)}
@@ -368,7 +368,7 @@ function CollapsedCard({
                     style={assemblyHolderColor ? { background: assemblyHolderColor.bg, borderColor: assemblyHolderColor.border, color: assemblyHolderColor.text } : {}}
                   >{assemblyHolderDesc}</span>
                 )}
-                <span className="text-xs text-sub">OOH: {singleAssembly.ooh != null ? singleAssembly.ooh.toFixed(3) + '"' : '—'}</span>
+                <span className="text-xs text-sub">OOH: {singleAssembly.ooh != null ? `${singleAssembly.ooh.toFixed(3)} ${lenUnit}` : '—'}</span>
               </div>
             ) : (
               <span className="text-xs text-sub">{linkedAssemblies.length} assemblies</span>
@@ -442,7 +442,7 @@ function EditCard({
   // Which assembly (holder + OOH) this preset is named for. Initialised by
   // matching the current name; user can switch it to retarget the preset.
   const [assemblyId, setAssemblyId] = useState(() =>
-    assemblies.find(a => presetMatchesAssembly(preset, a))?.assembly_id || assemblies[0]?.assembly_id || ''
+    assemblies.find(a => presetMatchesAssembly(preset, a, lenUnit))?.assembly_id || assemblies[0]?.assembly_id || ''
   );
 
   const holderDescOf = (a) =>
@@ -650,7 +650,7 @@ function EditCard({
               {assemblies.length === 0 && <option value="">No assemblies</option>}
               {assemblies.map(a => (
                 <option key={a.assembly_id} value={a.assembly_id}>
-                  {holderShortName(holderDescOf(a)) || 'holder'} · {a.ooh != null ? `${Number(a.ooh).toFixed(3)}"` : 'no OOH'}
+                  {holderShortName(holderDescOf(a)) || 'holder'} · {a.ooh != null ? `${Number(a.ooh).toFixed(3)} ${lenUnit}` : 'no OOH'}
                 </option>
               ))}
             </select>

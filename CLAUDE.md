@@ -267,7 +267,7 @@ The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/sche
 
 **Important**: `proshot_id` (our field) = Fusion's `product-id` field (shown as "Vendor Number" in Fusion UI). This is the ProShop-assigned ID and is the primary key for Phase 2 tool matching. It is stored in both the Fusion JSON and in metadata.
 
-**Assembly export**: When exporting a tool with an assembly selected, the assembly gauge length is written as `geometry.assemblyGaugeLength` (Fusion-native, nested in `geometry` — **not** a root-level `assembly-gauge-length`). Its value is **holder gauge length + OOH**, in the tool's unit. OOH is always stored internally in inches; the export converts to the tool's native unit (×25.4 for metric tools) before adding it to the holder gauge length.
+**Assembly export**: When exporting a tool with an assembly selected, the assembly gauge length is written as `geometry.assemblyGaugeLength` (Fusion-native, nested in `geometry` — **not** a root-level `assembly-gauge-length`). Its value is **holder gauge length + OOH**, in the tool's unit. OOH is stored in the tool's unit (written raw to `geometry.LB`); only the holder's `gaugeLength` (in the holder's unit) is converted into the tool's unit via `convertLength` before adding the OOH.
 
 ### Metadata Schema (`tool_metadata.json`)
 
@@ -333,25 +333,23 @@ Key holder object fields:
 
 ## Units (inches / millimeters)
 
-**Ultimate goal (not yet built — design every new feature with it in mind):** every **tool** and **holder** carries its **own unit** (`inches` or `millimeters`) that the user can change per-record, on top of a **global native/default unit** set in Settings. The app must work cleanly for an **inch-default shop** (like ours) *and* an **mm-default shop**, and switching the global default later must be easy. Build new code so a tool's unit is always read from the record (never assume inches), conversions are centralized, and display formats off the active unit — so the eventual global-default toggle is a small change, not a rewrite.
+**Goal:** every **tool** and **holder** carries its **own unit** (`inches` or `millimeters`), on top of a **global default unit** set in Settings. The app works cleanly for an **inch-default shop** (like ours) *and* an **mm-default shop**. A tool's unit is always read from the record (never assume inches), conversions are centralized in `src/utils/units.js`, and display formats off the active unit.
 
-**Current state (works today, inch-default):**
-- Global native unit is **inches**. There is **no** Settings toggle yet, and per-record unit editing is not exposed in the UI — but each tool already has a `unit` field (`inches` | `millimeters`) read from Fusion, and the model supports mixed libraries.
-- **Fusion uses both interchangeably.** A tool's `unit` comes from its Fusion entry.
-- **ProShop import defaults to inches** (the eventual import flow should let the user pick the ProShop file's unit and convert). MIN OOH is imported from ProShop with no conversion → it is **inches**.
+**Canonical model — every length is stored in its record's OWN unit.** There is **no** hidden inches-canonical length. A tool's lengths (`diameter`/DC, `flute_length`/LCF, `overall_length`/OAL, `shoulder_length`, `corner_radius`, **`ooh`**, **`min_ooh`**, `tip_diameter`, radii, `thread_pitch`, …) are all in the tool's `unit`; a holder's `gaugeLength` is in the holder's `unit`. Everything is read raw from / written raw to Fusion (`fusionToolToInternal` / `internalToFusionTool` / `readOohFromFusion` / `splitToFusionInstances` — no ÷25.4/×25.4 on tool geometry). OOH (`geometry.LB`) is treated exactly like the other geometry.
 
-**Canonical internal units (today — the part that's easy to trip on):**
-- **OOH** (per-assembly stick-out) and **`min_ooh`** are **always stored in inches**, regardless of the tool's unit. These are the two "stick-out" concepts and share a canonical unit so they compare directly.
-- **All other length geometry** (`diameter`/DC, `flute_length`/LCF, `overall_length`/OAL, `shoulder_length`/`shoulder-length`) is stored in the tool's **native unit** (mm for a metric tool) — read raw from / written raw to Fusion (`fusionToolToInternal` / `internalToFusionTool`). Only `geometry.LB` (OOH) is converted (÷25.4 on read, ×25.4 on write) in `readOohFromFusion` / `splitToFusionInstances`.
+**Convert only at genuine cross-unit boundaries**, always via `src/utils/units.js`:
+- `convertLength(value, fromUnit, toUnit)` — the one conversion primitive (`toInches`/`fromInches` wrap it). `MM_PER_IN = 25.4`.
+- `getDefaultUnit()` / `setDefaultUnit()` — the shop-wide default (localStorage `app_default_unit`, default inches), set by the **Default Unit** toggle in Settings and used by `newTool()` and as the fallback display unit.
+- `unitAbbr(unit)` → `'in'`/`'mm'`; `formatLength(value, unit)`; `lengthEps(unit)` → unit-aware match tolerance (≈0.0005").
 
-**The field registry encodes which is which.** Every `unit: 'length'` field in `src/schema/fieldRegistry.js` carries a `canonicalUnit` annotation — `'inches'` for `ooh`/`min_ooh`, `'native'` for all other lengths — so conversion can be driven from the registry rather than hand-coded. Add it to any new length field. (The future per-record/global-unit work will consume this flag to centralize conversions.)
+Current cross-unit boundaries (all handled with `convertLength`):
+- **Holder gauge + OOH → `assemblyGaugeLength`** (`splitToFusionInstances`, `fusionExport`): the holder's `gaugeLength` is in the *holder's* unit (a mm holder may sit on an inch tool), so it's converted into the *tool's* unit before adding the OOH (already in the tool's unit).
+- **ProShop import** (`ImportFlow`): the import has a **ProShop file unit** selector. `min_ooh` merged onto an existing tool is converted from the file unit into the matched tool's unit; a brand-new tool created from a ProShop row adopts the file unit (its lengths taken as-is).
+- **Display of a holder's gauge in a tool's context** (`ToolDetail`): converted holder-unit → tool-unit. The holder picker shows each holder in its **own** unit.
 
-**Therefore, whenever inches-canonical `min_ooh`/OOH meets a native-unit length, convert.** Helper: `inchesToNative(value, unit)` / native is `value × 25.4` for `millimeters`. Current crossing points (all handled):
-- `normalizeLibrary`: `shoulder_length` (native) is set from `min_ooh` (inches) → convert for metric. The per-assembly OOH floor compares inches-to-inches → no conversion.
-- `validateGeometry`: the ordering chain is checked in native units, so `min_ooh` (inches) is converted to native before comparing against `shoulder_length`/`overall_length`.
-- `AssemblyForm`: compares per-assembly `ooh` (inches) to `min_ooh` (inches) → no conversion.
+**The field registry** marks every `unit: 'length'` field with `canonicalUnit: 'native'` (uniformly — the value is in the record's own unit). `fieldLabel(field, unit)` derives the `(in)`/`(mm)` suffix from the passed record unit. **Same-unit comparisons need no conversion** — within one tool, `ooh`, `min_ooh`, `shoulder_length`, and the validation chain are all in that tool's unit, so they compare/assign directly (`normalizeLibrary`, `validateGeometry`, `AssemblyForm`). Preset-name OOH and preset/OOH matching use the tool's unit with a `lengthEps(unit)` tolerance.
 
-> When you touch any length, ask "is this value inches-canonical (OOH/min_ooh) or native (everything else)?" and convert at the boundary. This is the seam the future per-record/global-unit work will formalize.
+> When you touch a length, it is in **its record's own unit**. Convert (via `convertLength`) only when crossing between two records of possibly-different units (tool↔holder) or from an external source (a ProShop file) — never to reach a hidden inches canonical.
 
 -----
 
@@ -372,14 +370,14 @@ These are easy to confuse — they are distinct and have a strict ordering:
 Strict ordering (`flute_length ≤ shoulder_length ≤ min_ooh ≤ overall_length`, and per-assembly `ooh ≥ min_ooh`):
 `validateGeometry` (`src/schema/toolSchema.js`) checks the chain and ToolForm **surfaces violations as non-blocking warnings** (it does not prevent save — only `validateTool` hard-blocks). `AssemblyForm.handleSave` **hard-blocks** any per-assembly `ooh < min_ooh`.
 
-- **MIN OOH source of truth**: pulled from **ProShop** (`lengthBelowShankDiameter` column) during import (`ImportFlow.psRowToTool` / `matchProShopToTools` — ProShop is authoritative, always overwrites). It is the initial source of truth through the full first-import + normalization workflow. It is **never written to a Fusion field** (Fusion has no native "minimum" field) — it reaches Fusion only indirectly, as the shoulder length (which normalization sets equal to it).
+- **MIN OOH source of truth**: pulled from **ProShop** (`lengthBelowShankDiameter` column) during import (`ImportFlow.psRowToTool` / `matchProShopToTools` — ProShop is authoritative, always overwrites). The import has a **ProShop file unit** selector; `min_ooh` is converted from the file unit into the tool's own unit (a new tool created from a ProShop row adopts the file unit). It is the initial source of truth through the full first-import + normalization workflow. It is **never written to a Fusion field** (Fusion has no native "minimum" field) — it reaches Fusion only indirectly, as the shoulder length (which normalization sets equal to it).
 - **Normalization rule** (implemented in `normalizeLibrary`): when a tool has a `min_ooh`, set `shoulder_length = min_ooh` and **floor** every assembly's OOH at `min_ooh` (raise any instance below the floor up to it). Lengths can be adjusted manually afterward; that's expected to be rare.
 
 ### OOH (Out of Holder) — per-assembly stick-out
 - OOH = how much of the tool sticks out of the holder during cutting (aka gauge length / stick-out / "Length below Holder")
-- **Always stored in inches internally**, regardless of the tool's unit
+- **Stored in the tool's own unit**, exactly like the rest of the tool's geometry (mm for a metric tool)
 - **Source field**: `geometry.LB` (Body Length) in Fusion JSON — this is "Length below Holder" in the Fusion UI, and `tool_bodyLength` in the Fusion CSV export. Each instance carries its own `geometry.LB`. Do NOT use `geometry.assemblyGaugeLength` as the source; that field is holder gauge length + OOH (what we WRITE on export), not the per-instance OOH source of truth.
-- Unit conversion: if the tool's unit is `millimeters`, divide `geometry.LB` by 25.4 when reading. On write, per-instance OOH is multiplied ×25.4 (for metric tools) into `geometry.LB`/`tool_bodyLength`, and `geometry.assemblyGaugeLength` is recomputed as holder gauge length + OOH in the tool's unit.
+- No conversion on read/write: `readOohFromFusion` returns `geometry.LB` raw, and `splitToFusionInstances` writes OOH raw to `geometry.LB`/`tool_bodyLength`. `geometry.assemblyGaugeLength` is recomputed as holder gauge length (converted into the tool's unit) + OOH, in the tool's unit.
 - Editable per assembly in `AssemblyForm`, which blocks any value below `min_ooh` (the input's `min` is `min_ooh`, with a "Use" button to snap to the floor).
 
 ### Assembly lifecycle
@@ -633,7 +631,7 @@ Presets are matched **by name (case-insensitive)**, not by GUID. This is because
 
 These fields are set on the incoming tool object during parsing and are used by DiffStep/CommitStep but are **never saved to metadata**:
 
-- `incoming_ooh` — OOH value from the imported tool's `geometry.LB` (JSON) / `tool_bodyLength` (CSV/TSV), converted to inches. **Not** from `assembly-gauge-length` (which is holder gauge + OOH)
+- `incoming_ooh` — OOH value from the imported tool's `geometry.LB` (JSON) / `tool_bodyLength` (CSV/TSV), taken raw in the tool's own unit. **Not** from `assembly-gauge-length` (which is holder gauge + OOH)
 - `incoming_holder_guid` — holder GUID from the imported tool (if present)
 - `_incomingHolderDesc` — pre-resolved holder description string (set during import parsing)
 
@@ -781,7 +779,7 @@ The Google Drive metadata folder picker supports shared drives (team drives). Ke
 - **Always re-download before write** — call `downloadFusionList()` immediately before any `uploadFusionList()`.
 - **No extra fields in Fusion JSON** — Fusion validates strictly. Only Fusion-native fields go in the library file; everything else goes in `tool_metadata.json`. Exception: `geometry.assemblyGaugeLength` is a Fusion-native field (nested in `geometry`; = holder gauge length + OOH, not OOH alone), safe to write.
 - **`proshot_id` is the primary match key** — it is Fusion's `product-id` field (the ProShop-assigned number). Do not confuse with `product_id` (manufacturer EDP number, metadata-only).
-- **OOH is always stored in inches** — convert from mm on import, convert back to mm on export for metric tools.
+- **Every length is stored in its record's own unit** (tool lengths in the tool's unit, holder gauge in the holder's unit) — OOH/min_ooh included. Convert only at cross-unit boundaries via `src/utils/units.js` (`convertLength`); never to a hidden inches canonical.
 - **Preset GUIDs are stable through the merge flow** — `presetsToAdd` GUIDs must not be regenerated after DiffStep. The assembly record in CommitStep uses them.
 - **Conflict presets must get a new GUID** — when a conflict preset is resolved as 'create', the incoming preset's GUID matches the master, so `generateId()` must produce a fresh one.
 - **GitHub Pages = HashRouter** — never switch to BrowserRouter.
