@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Tag, Ruler, Layers, Settings2, Save, X, AlertTriangle, Wand2 } from 'lucide-react';
 import { TOOL_TYPES, TOOL_TYPE_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getNextMachineNumber, toolToExtractor } from '../schema/toolSchema.js';
 import { fieldLabel } from '../schema/fieldRegistry.js';
+import { unitAbbr } from '../utils/units.js';
 import { buildDesc } from '../../tool-extractor.tsx';
 import { fieldsForType } from '../schema/fieldRegistry.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -137,6 +138,27 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
             <span className="text-xs text-sub">— read-only</span>
           </div>
         ) : null}
+        {/* Unit — selectable when creating a tool; pulled from Fusion (read-only) when editing. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <span className="text-xs text-sub">Unit</span>
+          {isNew ? (
+            [['inches', 'Inches (in)'], ['millimeters', 'Millimeters (mm)']].map(([val, label]) => (
+              <button
+                key={val}
+                type="button"
+                className={`btn btn-sm ${data.unit === val ? 'btn-primary' : 'btn-secondary'}`}
+                onClick={() => setField('unit', val)}
+              >
+                {label}
+              </button>
+            ))
+          ) : (
+            <>
+              <span className="machine-num-badge">{unitAbbr(data.unit)}</span>
+              <span className="text-xs text-sub">— from Fusion (read-only)</span>
+            </>
+          )}
+        </div>
         <div className="form-grid">
           <div className="field-group form-grid-wide">
             <label className="field-label">Description <span className="required">*</span></label>

@@ -335,6 +335,8 @@ Key holder object fields:
 
 **Goal:** every **tool** and **holder** carries its **own unit** (`inches` or `millimeters`), on top of a **global default unit** set in Settings. The app works cleanly for an **inch-default shop** (like ours) *and* an **mm-default shop**. A tool's unit is always read from the record (never assume inches), conversions are centralized in `src/utils/units.js`, and display formats off the active unit.
 
+**Where a tool's unit comes from:** an **existing** tool's unit is pulled from its Fusion entry (`fusionToolToInternal`) and shown read-only in `ToolForm`. When **creating** a tool, `ToolForm` exposes an inches/mm selector (defaulting to `getDefaultUnit()`); the chosen unit is written back to Fusion (`internalToFusionTool` writes `tool.unit`) with the geometry interpreted in that unit. So you author a new tool in mm or inches independently of existing tools, and Fusion receives it in that unit.
+
 **Canonical model — every length is stored in its record's OWN unit.** There is **no** hidden inches-canonical length. A tool's lengths (`diameter`/DC, `flute_length`/LCF, `overall_length`/OAL, `shoulder_length`, `corner_radius`, **`ooh`**, **`min_ooh`**, `tip_diameter`, radii, `thread_pitch`, …) are all in the tool's `unit`; a holder's `gaugeLength` is in the holder's `unit`. Everything is read raw from / written raw to Fusion (`fusionToolToInternal` / `internalToFusionTool` / `readOohFromFusion` / `splitToFusionInstances` — no ÷25.4/×25.4 on tool geometry). OOH (`geometry.LB`) is treated exactly like the other geometry.
 
 **Convert only at genuine cross-unit boundaries**, always via `src/utils/units.js`:

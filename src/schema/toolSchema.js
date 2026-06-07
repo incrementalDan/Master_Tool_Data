@@ -92,6 +92,7 @@ function extractorKeyToAppKey(k) {
 export function extractorToTool(f) {
   return {
     tool_type: f.toolType || 'flat end mill',
+    unit: f.unit || getDefaultUnit(),
     description: '',
     diameter: parseFloat(f.diameter) || null,
     flute_length: parseFloat(f.loc) || null,
@@ -783,7 +784,10 @@ export function internalToFusionTool(tool) {
     ...(existing.GRADE ? { GRADE: existing.GRADE } : {}),
     description: tool.description || '',
     type: fusionType,
-    unit: existing.unit || 'inches',
+    // Write the tool's own unit. For existing tools this equals the Fusion entry's
+    // unit (read back into tool.unit); for new tools it's the user-selected unit, so
+    // the geometry we write raw is interpreted by Fusion in the right unit.
+    unit: tool.unit || existing.unit || 'inches',
     guid: tool.id,
     last_modified: Date.now(),
     'product-id': tool.proshot_id || '',
