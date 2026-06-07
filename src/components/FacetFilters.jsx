@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { getAvailableOptions } from '../services/searchEngine.js';
 import { getFacetFields, FIELD_LABELS } from '../schema/toolSchema.js';
+import { FIELD_REGISTRY } from '../schema/fieldRegistry.js';
+import OperatorDial, { OP_SYMBOLS } from './OperatorDial.jsx';
 
 // Short facet-specific overrides only. Fields not listed fall through to the
 // central FIELD_LABELS (registry-derived, incl. the unit suffix). corner_radius
@@ -15,8 +17,16 @@ const FACET_LABEL = {
 
 const MULTI_SELECT_FIELDS = new Set(['flute_design']);
 
+// Numeric facets (diameter, flute length, OAL, …) get the ≤ = ≥ operator dial —
+// their filter value is { value, op } rather than a bare string. Driven by the
+// field registry so any field typed `number` picks it up automatically.
+function isNumericFacet(field) {
+  return FIELD_REGISTRY[field]?.type === 'number';
+}
+
 function isFacetEmpty(value) {
   if (Array.isArray(value)) return value.length === 0;
+  if (value !== null && typeof value === 'object') return isFacetEmpty(value.value);
   return value === '' || value === null || value === undefined;
 }
 
@@ -61,7 +71,10 @@ export default function FacetFilters({ tools, activeFilters, onFilterChange }) {
         <div className="active-filters" style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
           <span className="text-sub text-xs">Active:</span>
           {Object.entries(facets).map(([field, value]) => {
-            const displayVal = Array.isArray(value) ? value.join(', ') : String(value);
+            const isOperatorValue = isNumericFacet(field) && value !== null && typeof value === 'object';
+            const displayVal = isOperatorValue
+              ? `${OP_SYMBOLS[value.op] || '='} ${value.value}`
+              : Array.isArray(value) ? value.join(', ') : String(value);
             return (
               <span key={field} className="active-filter-tag">
                 <span className="text-xs">{FACET_LABEL[field] || field}:</span>
@@ -79,13 +92,22 @@ export default function FacetFilters({ tools, activeFilters, onFilterChange }) {
 
 function FacetControl({ field, label, tools, activeFilters, value, onChange, isMulti }) {
   const { options, showAsChips } = getAvailableOptions(tools, activeFilters, field);
-  const [inputVal, setInputVal] = useState(!isMulti && value !== undefined && value !== null ? String(value) : '');
+  const numeric = isNumericFacet(field);
+  // Numeric facets carry { value, op }; everything below works against the bare
+  // value, with the chosen operator handled separately (see `op` below).
+  const isOperatorValue = numeric && value !== null && typeof value === 'object';
+  const rawValue = isOperatorValue ? (value.value ?? '') : value;
+
+  const [inputVal, setInputVal] = useState(!isMulti && rawValue !== undefined && rawValue !== null ? String(rawValue) : '');
   const [open, setOpen] = useState(false);
+  // The operator is "sticky" — it lives in local state so a chosen comparison
+  // (e.g. ≥) survives the user clearing the value, rather than resetting to =.
+  const [op, setOp] = useState((isOperatorValue && value.op) || '=');
   const wrapRef = useRef(null);
 
   useEffect(() => {
-    if (!isMulti) setInputVal(value !== undefined && value !== null ? String(value) : '');
-  }, [value, isMulti]);
+    if (!isMulti) setInputVal(rawValue !== undefined && rawValue !== null ? String(rawValue) : '');
+  }, [rawValue, isMulti]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -95,10 +117,17 @@ function FacetControl({ field, label, tools, activeFilters, value, onChange, isM
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  const commitValue = (val) => (numeric ? { value: val, op } : val);
+
   const handleCommit = (val) => {
     const trimmed = val.trim();
-    onChange(trimmed === '' ? '' : trimmed);
+    onChange(commitValue(trimmed === '' ? '' : trimmed));
     setOpen(false);
+  };
+
+  const handleOpChange = (newOp) => {
+    setOp(newOp);
+    onChange({ value: rawValue, op: newOp });
   };
 
   // Multi-select chip group (e.g. flute_design)
@@ -156,32 +185,44 @@ function FacetControl({ field, label, tools, activeFilters, value, onChange, isM
   }
 
   const filtered = options.filter(o =>
-    String(o).toLowerCase().includes(inputVal.toLowerCase()) && String(o) !== String(value)
+    String(o).toLowerCase().includes(inputVal.toLowerCase()) && String(o) !== String(rawValue)
+  );
+
+  const input = (
+    <input
+      className="facet-input"
+      style={{
+        borderColor: rawValue ? 'var(--blue)' : undefined,
+        ...(numeric ? { borderLeft: 'none', borderRadius: '0 var(--radius-sm) var(--radius-sm) 0' } : {}),
+      }}
+      placeholder={`${options.length} available`}
+      value={inputVal}
+      onChange={e => { setInputVal(e.target.value); setOpen(true); }}
+      onFocus={() => setOpen(true)}
+      onKeyDown={e => {
+        if (e.key === 'Enter') handleCommit(inputVal);
+        if (e.key === 'Escape') { setOpen(false); setInputVal(String(rawValue ?? '')); }
+      }}
+      onBlur={() => setTimeout(() => { if (!wrapRef.current?.querySelector(':focus')) setOpen(false); }, 150)}
+    />
   );
 
   return (
     <div className="facet-item autocomplete-wrap" ref={wrapRef}>
       <div className="facet-label">{label}</div>
-      <input
-        className="facet-input"
-        style={{ borderColor: value ? 'var(--blue)' : undefined }}
-        placeholder={`${options.length} available`}
-        value={inputVal}
-        onChange={e => { setInputVal(e.target.value); setOpen(true); }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') handleCommit(inputVal);
-          if (e.key === 'Escape') { setOpen(false); setInputVal(String(value ?? '')); }
-        }}
-        onBlur={() => setTimeout(() => { if (!wrapRef.current?.querySelector(':focus')) setOpen(false); }, 150)}
-      />
+      {numeric ? (
+        <div style={{ display: 'flex', alignItems: 'stretch' }}>
+          <OperatorDial value={op} onChange={handleOpChange} />
+          {input}
+        </div>
+      ) : input}
       {open && filtered.length > 0 && (
         <div className="autocomplete-list">
           {filtered.slice(0, 30).map(opt => (
             <div
               key={opt}
               className="autocomplete-item"
-              onMouseDown={e => { e.preventDefault(); onChange(opt); setInputVal(String(opt)); setOpen(false); }}
+              onMouseDown={e => { e.preventDefault(); onChange(commitValue(opt)); setInputVal(String(opt)); setOpen(false); }}
             >
               {String(opt)}
             </div>
