@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react';
 import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle, RefreshCw, Plus, CheckCircle, HelpCircle, Wrench } from 'lucide-react';
-import { FIELD_LABELS, generateId, generateAssemblyId } from '../../schema/toolSchema.js';
+import { generateId, generateAssemblyId } from '../../schema/toolSchema.js';
+import { fieldLabel } from '../../schema/fieldRegistry.js';
 import { composePresetName, parsePresetName, presetMatchesAssembly } from '../../utils/presetNaming.js';
+import { lengthEps, unitAbbr } from '../../utils/units.js';
 import { useApp } from '../../context/AppContext.jsx';
 
 const DIFF_SECTIONS = [
@@ -115,18 +117,19 @@ function valuesEqual(a, b) {
   return false;
 }
 
-function checkDifferentAssembly(masterPreset, incomingOoh, incomingHolderGuid, masterAssemblies) {
+function checkDifferentAssembly(masterPreset, incomingOoh, incomingHolderGuid, masterAssemblies, unit = 'inches') {
   if (incomingOoh == null || incomingOoh <= 0) return false;
-  const linked = (masterAssemblies || []).filter(a => presetMatchesAssembly(masterPreset, a));
+  const linked = (masterAssemblies || []).filter(a => presetMatchesAssembly(masterPreset, a, unit));
   if (linked.length === 0) return true;
-  const OOH_TOLERANCE = 0.0005;
+  // OOH (both incoming and stored) is in the tool's own unit; tolerance scales with it.
+  const oohTol = lengthEps(unit);
   return !linked.some(a =>
-    a.ooh != null && Math.abs(a.ooh - incomingOoh) < OOH_TOLERANCE &&
+    a.ooh != null && Math.abs(a.ooh - incomingOoh) < oohTol &&
     (!incomingHolderGuid || a.holder_guid === incomingHolderGuid)
   );
 }
 
-function matchPresets(incomingPresets, masterPresets, incomingOoh, incomingHolderGuid, masterAssemblies) {
+function matchPresets(incomingPresets, masterPresets, incomingOoh, incomingHolderGuid, masterAssemblies, unit = 'inches') {
   const masterByName = new Map(
     (masterPresets || []).map(p => [p.name?.toLowerCase().trim(), p])
   );
@@ -150,7 +153,7 @@ function matchPresets(incomingPresets, masterPresets, incomingOoh, incomingHolde
       });
       if (changedFields.length === 0) {
         unchanged.push({ incoming, master });
-      } else if (checkDifferentAssembly(master, incomingOoh, incomingHolderGuid, masterAssemblies)) {
+      } else if (checkDifferentAssembly(master, incomingOoh, incomingHolderGuid, masterAssemblies, unit)) {
         conflicts.push({ incoming, master, changedFields });
       } else {
         blocked.push({ incoming, master, changedFields });
@@ -256,7 +259,7 @@ function PresetsDiff({
             <div className="preset-assembly-context-line">
               Proven at:
               {incomingHolderDesc ? <strong> {incomingHolderDesc}</strong> : ''}
-              {incomingOoh != null ? <> · OOH <strong>{incomingOoh.toFixed(3)}"</strong></> : ''}
+              {incomingOoh != null ? <> · OOH <strong>{incomingOoh.toFixed(3)} {unitAbbr(masterTool.unit)}</strong></> : ''}
             </div>
             <div className="preset-assembly-options">
               <label>
@@ -386,7 +389,7 @@ function PresetsDiff({
                   Save as new preset variant
                   {incomingOoh != null && (
                     <span className="text-sub text-xs" style={{ marginLeft: 5 }}>
-                      (at OOH {incomingOoh.toFixed(3)}")
+                      (at OOH {incomingOoh.toFixed(3)} {unitAbbr(masterTool.unit)})
                     </span>
                   )}
                 </label>
@@ -441,10 +444,10 @@ export default function DiffStep({
   const presetMatch = useMemo(
     () => matchPresets(
       importedTool.presets, masterTool.presets,
-      incomingOoh, incomingHolderGuid, masterTool.assemblies
+      incomingOoh, incomingHolderGuid, masterTool.assemblies, masterTool.unit
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [importedTool.presets, masterTool.presets, incomingOoh, incomingHolderGuid, masterTool.assemblies]
+    [importedTool.presets, masterTool.presets, incomingOoh, incomingHolderGuid, masterTool.assemblies, masterTool.unit]
   );
 
   const diffs = useMemo(() => {
@@ -664,7 +667,7 @@ export default function DiffStep({
                     checked={selected.has(field)}
                     onChange={() => toggleFlat(field)}
                   />
-                  <span className="diff-field-label">{FIELD_LABELS[field] || field}</span>
+                  <span className="diff-field-label">{fieldLabel(field, masterTool.unit) || field}</span>
                   <span className="diff-val diff-val-master">{formatValue(masterTool[field])}</span>
                   <span className="diff-arrow">→</span>
                   <span className="diff-val diff-val-job">{formatValue(importedTool[field])}</span>

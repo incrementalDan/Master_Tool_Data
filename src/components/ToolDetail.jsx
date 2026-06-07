@@ -11,6 +11,7 @@ import AssemblyForm from './AssemblyForm.jsx';
 import ReconcileModal from './ReconcileModal.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS, validateGeometry, fusionToolToInternal, readOohFromFusion } from '../schema/toolSchema.js';
+import { convertLength, unitAbbr } from '../utils/units.js';
 import { hasReconcileWork } from '../services/reconcile.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 import ToolForm from './ToolForm.jsx';
@@ -290,7 +291,7 @@ export default function ToolDetail() {
                 {tool.upper_radius && <Field label="Upper Radius" value={round4(tool.upper_radius)} unit={lenUnit} />}
                 {tool.profile_radius && <Field label="Profile Radius" value={round4(tool.profile_radius)} unit={lenUnit} />}
                 {tool.axial_distance && <Field label="Axial Distance" value={round4(tool.axial_distance)} unit={lenUnit} />}
-                <Field label="Length Below Holder - MIN OOH" value={tool.min_ooh != null ? round4(tool.min_ooh) : null} unit="in" />
+                <Field label="Length Below Holder - MIN OOH" value={tool.min_ooh != null ? round4(tool.min_ooh) : null} unit={lenUnit} />
               </div>
               {geoIssues.length > 0 && (
                 <div className="warn-banner" style={{ marginTop: 8 }}>
@@ -477,10 +478,6 @@ function SidebarBtn({ icon: Icon, label, tip, onClick, style, className = '' }) 
   );
 }
 
-function gaugeToInches(gaugeLength, unit) {
-  return unit === 'millimeters' ? gaugeLength / 25.4 : gaugeLength;
-}
-
 function HolderSection({ tool, holders, holderLibrarySetupComplete, onSelectHolder }) {
   const navigate = useNavigate();
   const [showPicker, setShowPicker] = useState(false);
@@ -516,7 +513,7 @@ function HolderSection({ tool, holders, holderLibrarySetupComplete, onSelectHold
             {selectedHolder.description}
           </span>
           <div className="text-sub text-sm" style={{ marginTop: 4 }}>
-            Gauge Length: {gaugeToInches(selectedHolder.gaugeLength ?? 0, selectedHolder.unit).toFixed(3)} in
+            Gauge Length: {convertLength(selectedHolder.gaugeLength ?? 0, selectedHolder.unit, tool.unit).toFixed(3)} {unitAbbr(tool.unit)}
             {selectedHolder.vendor ? ` · ${selectedHolder.vendor}` : ''}
           </div>
         </div>
@@ -631,7 +628,7 @@ function AssembliesSection({ tool, holders, onSave }) {
                 <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2, flexShrink: 0 }} />
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
-                    OOH: {pendingAssembly.ooh?.toFixed(3)}"
+                    OOH: {pendingAssembly.ooh?.toFixed(3)} {unitAbbr(tool.unit)}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--text-sub)', marginTop: 2 }}>Saving…</div>
                 </div>
@@ -751,7 +748,7 @@ function AssemblyExportPicker({ tool, holders, onConfirm, onCancel }) {
                   <span className="holder-pill" style={{ background: c.bg, borderColor: c.border, color: c.text }}>
                     {a.holder_description || '—'}
                   </span>
-                  <span style={{ fontSize: 13 }}>OOH: {a.ooh?.toFixed(3)}"</span>
+                  <span style={{ fontSize: 13 }}>OOH: {a.ooh?.toFixed(3)} {unitAbbr(tool.unit)}</span>
                   {(a.linked_preset_guids?.length > 0) && (
                     <span className="text-sub" style={{ fontSize: 11, marginLeft: 'auto' }}>
                       {a.linked_preset_guids.length} preset{a.linked_preset_guids.length !== 1 ? 's' : ''}
@@ -782,7 +779,7 @@ function AssemblyExportPicker({ tool, holders, onConfirm, onCancel }) {
               </select>
             </div>
             <div>
-              <label className="field-label">OOH (inches)</label>
+              <label className="field-label">OOH ({unitAbbr(tool.unit)})</label>
               <input
                 className="field-input"
                 type="number"

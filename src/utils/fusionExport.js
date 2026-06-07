@@ -1,4 +1,5 @@
-import { internalToFusionTool, buildHolderObject, computeGaugeLength } from '../schema/toolSchema.js';
+import { internalToFusionTool, buildHolderObject } from '../schema/toolSchema.js';
+import { convertLength } from './units.js';
 
 // ─── JSON export (file downloads and library writes) ────────────────────────
 
@@ -17,20 +18,19 @@ function toFusionFormat(tool, holders = [], assembly = null) {
     if (holder) f.holder = buildHolderObject(holder);
     if (assembly.ooh != null && !isNaN(Number(assembly.ooh))) {
       const isMetric = tool.unit === 'millimeters';
-      // OOH is stored canonically in inches; geometry.LB is in the tool's unit.
-      const lb = isMetric ? Number(assembly.ooh) * 25.4 : Number(assembly.ooh);
+      // OOH is stored in the tool's own unit; geometry.LB is in that unit too —
+      // written raw, no conversion.
+      const lb = Number(assembly.ooh);
       f.geometry = { ...(f.geometry || {}), LB: lb };   // OOH source of truth
       // Fusion re-derives LB from tool_bodyLength on load — keep them in sync.
       f.expressions = { ...(f.expressions || {}), tool_bodyLength: `${lb} ${isMetric ? 'mm' : 'in'}` };
       // assemblyGaugeLength = holder gauge length + OOH, in the tool's unit. It
       // lives at geometry.assemblyGaugeLength (camelCase) — Fusion has NO
-      // root-level `assembly-gauge-length` field (see FUSION_SCHEMA.md §1a).
-      if (holder) {
-        const gaugeIn = computeGaugeLength(holder);
-        if (gaugeIn != null) {
-          const gaugeNative = isMetric ? gaugeIn * 25.4 : gaugeIn;
-          f.geometry.assemblyGaugeLength = gaugeNative + lb;
-        }
+      // root-level `assembly-gauge-length` field (see FUSION_SCHEMA.md §1a). The
+      // holder gauge is in the HOLDER's unit, so convert it into the tool's unit.
+      if (f.holder && typeof f.holder.gaugeLength === 'number') {
+        const gaugeNative = convertLength(f.holder.gaugeLength, f.holder.unit, tool.unit);
+        f.geometry.assemblyGaugeLength = gaugeNative + lb;
       }
     }
   } else if (tool.selected_holder_guid && holders.length > 0) {
@@ -168,10 +168,10 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
     }
   }
 
-  // OOH is stored internally in inches; convert to tool's output unit
+  // OOH is stored in the tool's own unit; tool_bodyLength is in that unit too — raw.
   let bodyLength = '';
   if (assembly?.ooh > 0) {
-    bodyLength = isMetric ? assembly.ooh * 25.4 : assembly.ooh;
+    bodyLength = assembly.ooh;
   }
 
   const toolNum = tool.machine_tool_number != null ? tool.machine_tool_number : '';

@@ -5,7 +5,7 @@ import {
   validateTool, generateId, generateAssemblyId, generateTrackingId,
   groupByTrackingId, buildLogicalTool, splitToFusionInstances, readTrackingId,
   getNextMachineNumber, generateMachineNumbers, applyMachineNumberToFusion,
-  fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion, inchesToNative,
+  fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
   combineToolsByProshopId,
 } from '../schema/toolSchema.js';
 import { composePresetName, opTypeWord, parsePresetName } from '../utils/presetNaming.js';
@@ -847,10 +847,10 @@ export function AppProvider({ children }) {
         // floors every assembly's OOH at it — no assembly may stick out less than
         // the minimum, though it may stick out more. (shoulder/OOH can be adjusted
         // manually afterward.) When there's no MIN OOH, leave lengths untouched.
-        // Units: min_ooh and per-assembly OOH are inches-canonical; shoulder_length
-        // is stored in the tool's native unit — convert min_ooh → native for metric.
+        // Units: min_ooh, per-assembly OOH and shoulder_length are all stored in
+        // the tool's own unit, so they compare/assign directly — no conversion.
         const minOoh = merged.min_ooh ?? null;
-        const shoulder_length = minOoh != null ? inchesToNative(minOoh, merged.unit) : merged.shoulder_length;
+        const shoulder_length = minOoh != null ? minOoh : merged.shoulder_length;
         const assemblies = minOoh != null
           ? rawAssemblies.map(a => ({ ...a, ooh: (a.ooh != null && a.ooh < minOoh) ? minOoh : a.ooh }))
           : rawAssemblies;

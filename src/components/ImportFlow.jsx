@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { UploadCloud } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers } from '../schema/toolSchema.js';
+import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
 import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
 import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
 
@@ -14,6 +15,7 @@ export default function ImportFlow() {
   const [parseError, setParseError] = useState('');
   const [fusionPreview, setFusionPreview] = useState(null);
   const [proShopMatches, setProShopMatches] = useState(null);
+  const [psUnit, setPsUnit] = useState(getDefaultUnit());
   const [saving, setSaving] = useState(false);
   const fusionFileRef = useRef(null);
   const proShopFileRef = useRef(null);
@@ -64,7 +66,7 @@ export default function ImportFlow() {
           header.forEach((h, i) => { obj[h.trim()] = (row[i] || '').trim(); });
           return obj;
         });
-        const matches = matchProShopToTools(data, fusionTools);
+        const matches = matchProShopToTools(data, fusionTools, psUnit);
         setProShopMatches(matches);
       } catch (err) {
         setParseError(`ProShop CSV parse error: ${err.message}`);
@@ -83,7 +85,7 @@ export default function ImportFlow() {
 
     proShopMatches.unmatched.forEach(({ psRow, action }) => {
       if (action === 'add') {
-        merged.push(psRowToTool(psRow));
+        merged.push(psRowToTool(psRow, psUnit));
       }
     });
 
@@ -173,6 +175,24 @@ export default function ImportFlow() {
             Upload a ProShop CSV export. The app matches rows to existing tools by Part Number → description similarity.
             Matched fields fill gaps — they don't overwrite existing values.
           </p>
+
+          <div className="field-group mb-16" style={{ maxWidth: 340 }}>
+            <label className="field-label">ProShop file unit</label>
+            <div className="text-sub text-xs mb-8">
+              Unit of the length columns in this CSV (e.g. MIN OOH). Set this before uploading.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[['inches', 'Inches (in)'], ['millimeters', 'Millimeters (mm)']].map(([val, label]) => (
+                <button
+                  key={val}
+                  className={`btn btn-sm ${psUnit === val ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setPsUnit(val)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <DropZone
             label="Drop ProShop CSV export or click to browse"
@@ -290,7 +310,7 @@ export default function ImportFlow() {
                     <td className="text-sub text-xs">{i + 1}</td>
                     <td className="truncate" style={{ maxWidth: 220 }}>{t.description || '—'}</td>
                     <td className="text-xs text-sub">{t.tool_type}</td>
-                    <td>{t.diameter ? `${t.diameter}"` : '—'}</td>
+                    <td>{t.diameter ? `${t.diameter} ${unitAbbr(t.unit)}` : '—'}</td>
                     <td className="text-xs">{t.vendor || '—'}</td>
                   </tr>
                 ))}
@@ -419,11 +439,14 @@ function parseCSV(text) {
 }
 
 // ── ProShop row → internal tool ────────────────────────────────────────────
-function psRowToTool(row) {
+// psUnit is the unit of the ProShop file; a tool created from a ProShop row
+// adopts that unit, so its lengths are taken as-is (no conversion).
+function psRowToTool(row, psUnit = 'inches') {
   const desc = row['Tool Description'] || row.description || '';
   const diam = parseFloat(row.Diameter || row.cutDiameter || '0') || null;
   return {
     ...newTool('flat end mill'),
+    unit: psUnit,
     description: desc,
     diameter: diam,
     flute_length: parseFloat(row['Flute Length'] || row.lengthOfCut || '') || null,
@@ -438,7 +461,9 @@ function psRowToTool(row) {
 }
 
 // ── Match ProShop rows to existing tools ──────────────────────────────────
-function matchProShopToTools(psRows, tools) {
+// psUnit is the unit of the ProShop file; min_ooh (the only length merged onto
+// an existing tool) is converted from it into the matched tool's own unit.
+function matchProShopToTools(psRows, tools, psUnit = 'inches') {
   const matched = [];
   const usedToolIdxs = new Set();
 
@@ -473,9 +498,10 @@ function matchProShopToTools(psRows, tools) {
       if (!tool.vendor && (psRow.Manufacturer || psRow.approvedBrand)) additions.vendor = psRow.Manufacturer || psRow.approvedBrand;
       if (!tool.product_id && partNum) additions.product_id = partNum;
       if (!tool.coating && psRow.coating) additions.coating = psRow.coating;
-      // min_ooh: ProShop is authoritative — always overwrite with ProShop value when present
+      // min_ooh: ProShop is authoritative — always overwrite when present, after
+      // converting from the ProShop file unit into the matched tool's own unit.
       const psMinOoh = parseFloat(psRow.lengthBelowShankDiameter || '') || null;
-      if (psMinOoh != null) additions.min_ooh = psMinOoh;
+      if (psMinOoh != null) additions.min_ooh = convertLength(psMinOoh, psUnit, tool.unit);
       matched.push({ toolIdx, psRow, additions });
     }
   }

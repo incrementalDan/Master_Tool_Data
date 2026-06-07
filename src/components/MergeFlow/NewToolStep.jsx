@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { PackagePlus, SkipForward, Tag, Ruler, Gauge } from 'lucide-react';
 import { TOOL_TYPE_LABELS, FIELD_LABELS } from '../../schema/toolSchema.js';
+import { fieldLabel } from '../../schema/fieldRegistry.js';
+import { unitAbbr } from '../../utils/units.js';
 import { useApp } from '../../context/AppContext.jsx';
 import ToolTypeIcon from '../icons/ToolTypeIcon.jsx';
 import ToolForm from '../ToolForm.jsx';
@@ -18,6 +20,7 @@ function FieldRow({ label, value }) {
 export default function NewToolStep({ incomingTool, onAdded, onSkip }) {
   const { addTool, isSaving, notify } = useApp();
   const [adding, setAdding] = useState(false);
+  const u = unitAbbr(incomingTool.unit);
 
   const handleSave = async (tool) => {
     try {
@@ -69,9 +72,9 @@ export default function NewToolStep({ incomingTool, onAdded, onSkip }) {
           </div>
         </div>
         <div className="detail-fields">
-          <FieldRow label={FIELD_LABELS.diameter} value={incomingTool.diameter != null ? `${incomingTool.diameter}"` : null} />
-          <FieldRow label={FIELD_LABELS.flute_length} value={incomingTool.flute_length != null ? `${incomingTool.flute_length}"` : null} />
-          <FieldRow label={FIELD_LABELS.overall_length} value={incomingTool.overall_length != null ? `${incomingTool.overall_length}"` : null} />
+          <FieldRow label={fieldLabel('diameter', incomingTool.unit)} value={incomingTool.diameter != null ? `${incomingTool.diameter} ${u}` : null} />
+          <FieldRow label={fieldLabel('flute_length', incomingTool.unit)} value={incomingTool.flute_length != null ? `${incomingTool.flute_length} ${u}` : null} />
+          <FieldRow label={fieldLabel('overall_length', incomingTool.unit)} value={incomingTool.overall_length != null ? `${incomingTool.overall_length} ${u}` : null} />
           <FieldRow label={FIELD_LABELS.number_of_flutes} value={incomingTool.number_of_flutes} />
           <FieldRow label={FIELD_LABELS.vendor} value={incomingTool.vendor} />
           <FieldRow label={FIELD_LABELS.proshot_id} value={incomingTool.proshot_id} />

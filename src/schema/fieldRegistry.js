@@ -1,18 +1,17 @@
 // Central field registry — source of truth for all field metadata.
 // Add new fields HERE before touching toolSchema.js, fusionExport.js, or proShopExport.js.
+import { unitAbbr, getDefaultUnit } from '../utils/units.js';
+
 //
 // Field entry shape:
 //   label          — display label (matches FIELD_LABELS in toolSchema.js)
 //   type           — 'number' | 'string' | 'boolean' | 'array'
 //   unit           — 'length' | 'angle' | 'speed' | 'feed' | 'rpm' | null
-//   canonicalUnit  — for length fields only: how the value is STORED internally.
-//                    'native'  = the tool's own unit (mm for a metric tool) —
-//                                read raw from / written raw to Fusion.
-//                    'inches'  = always inches regardless of the tool's unit
-//                                (OOH / min_ooh) — convert at any boundary with a
-//                                native length via inchesToNative(). See the Units
-//                                section in CLAUDE.md and FUSION_SCHEMA.md §1e.
-//                    Absent on non-length fields.
+//   canonicalUnit  — for length fields only, always 'native': the value is
+//                    stored in the record's own unit (mm for a metric tool),
+//                    read raw from / written raw to Fusion. Convert only at true
+//                    cross-unit boundaries via src/utils/units.js (convertLength).
+//                    See the Units section in CLAUDE.md. Absent on non-length fields.
 //   fusionPath     — dot-path into Fusion JSON (null = not written to Fusion)
 //   proShopColumn  — PS CSV column header (null = not directly exported to ProShop)
 //   metadataOnly   — true = never written to Fusion JSON (lives in tool_metadata.json only)
@@ -410,13 +409,14 @@ export const FIELD_REGISTRY = {
     precision: 4,
   },
 
-  // OOH / min_ooh: always stored in inches (see CLAUDE.md Units section)
+  // OOH / min_ooh: stored in the record's own unit, like all other lengths
+  // (see CLAUDE.md Units section). Source is Fusion geometry.LB (the tool's unit).
 
   ooh: {
-    label: 'Out of Holder (OOH)',
+    label: 'Out of Holder',
     type: 'number',
     unit: 'length',
-    canonicalUnit: 'inches',      // ALWAYS inches — convert to native at geometry boundaries
+    canonicalUnit: 'native',      // stored in the tool's own unit
     fusionPath: 'geometry.LB',    // per-instance field written by splitToFusionInstances
     proShopColumn: 'lengthBelowShankDiameter',
     metadataOnly: false,
@@ -426,10 +426,10 @@ export const FIELD_REGISTRY = {
   },
 
   min_ooh: {
-    label: 'MIN OOH',
+    label: 'Min OOH',
     type: 'number',
     unit: 'length',
-    canonicalUnit: 'inches',      // ALWAYS inches — convert to native at geometry boundaries
+    canonicalUnit: 'native',      // stored in the tool's own unit
     fusionPath: null,             // metadata only; reaches Fusion indirectly via shoulder_length
     proShopColumn: null,
     metadataOnly: true,
@@ -1025,29 +1025,25 @@ export function isMetadataOnly(fieldName) {
   return FIELD_REGISTRY[fieldName]?.metadataOnly === true;
 }
 
-// Shop-wide default linear unit. Per-record unit editing isn't surfaced in the
-// UI yet; when it is, callers pass the record's own unit to fieldLabel() and the
-// global toggle becomes a single change here rather than a sweep of literals.
-export const DEFAULT_LINEAR_UNIT = 'inches';
-
 // Linear-unit suffix for a record unit: 'in' for inches, 'mm' for millimeters.
-export function linearSuffix(unit = DEFAULT_LINEAR_UNIT) {
-  return unit === 'millimeters' ? 'mm' : 'in';
+// Defaults to the shop-wide default unit; pass a record's own unit to override.
+export function linearSuffix(unit = getDefaultUnit()) {
+  return unitAbbr(unit);
 }
 
 /**
  * Display label for a field, with the unit suffix derived from the record's unit
  * instead of hardcoded. This is the single source of the linear-unit suffix:
- *  - native-unit length fields  → '(in)' / '(mm)'
- *  - feed-per-tooth/rev fields  → '(in)' / '(mm)'
- *  - feedrate fields            → '(in/min)' / '(mm/min)'
- * OOH/min_ooh (canonical inches) and angle/rpm/speed/currency fields keep the
- * unit-invariant suffix already baked into their base label.
+ *  - length fields (incl. OOH/min_ooh) → '(in)' / '(mm)'
+ *  - feed-per-tooth/rev fields         → '(in)' / '(mm)'
+ *  - feedrate fields                   → '(in/min)' / '(mm/min)'
+ * Angle/rpm/speed/currency fields keep the unit-invariant suffix already baked
+ * into their base label.
  */
-export function fieldLabel(fieldName, unit = DEFAULT_LINEAR_UNIT) {
+export function fieldLabel(fieldName, unit = getDefaultUnit()) {
   const def = FIELD_REGISTRY[fieldName];
   if (!def) return fieldName;
-  if (def.unit === 'length' && def.canonicalUnit !== 'inches') {
+  if (def.unit === 'length') {
     return `${def.label} (${linearSuffix(unit)})`;
   }
   if (def.unit === 'feed') {
