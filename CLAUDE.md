@@ -792,6 +792,17 @@ All six classes are defined in `src/index.css` in the "Data-field visual tokens"
 
 -----
 
+## Inline help — `InfoTip` (`src/components/InfoTip.jsx`)
+
+**Universal rule**: when a piece of UI encodes a non-obvious rule, constraint, or quirk of an external system (Drive/Fusion/ProShop behavior, terminology, "why can't I just edit this," workflow gotchas) — put the explanation in an `InfoTip` right next to it, not in a permanent paragraph of body text. A short label is for people who already know what it means; the `ⓘ` is for the person hitting it for the first time, and it doesn't compete for visual space once they do.
+
+- `<InfoTip text="…" alignRight={false} />` renders a small `HelpCircle` icon that reveals `text` in a hover tooltip (`.info-tip` / `.info-tip::after` in `src/index.css`). Pass `alignRight` when the tip sits near the right edge of its container so the popup doesn't clip off-screen.
+- This is distinct from a `title=""` attribute (plain browser tooltip, used for short one-line action hints like sidebar buttons and topbar icons) — reach for `InfoTip` when the explanation is multi-sentence or explains *why*, not just *what*.
+- **Current usages**: `DiffStep` (preset-matching categories, assembly detection), `Settings` (Google Drive metadata-file location semantics — why the location can't be changed in-app and how to actually move the file in Drive's own UI).
+- Originally local to `DiffStep`; promoted to a shared component when `Settings` needed the same pattern. Reuse it rather than redefining a local copy or writing a standalone explanatory paragraph.
+
+-----
+
 ## Google Drive — Shared Drive Support
 
 The Google Drive metadata folder picker supports shared drives (team drives). Key requirements:

@@ -6,6 +6,7 @@ import { generateMachineNumbers } from '../schema/toolSchema.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
 import { FilePicker } from './LibrarySetup.jsx';
 import DescRenameModal from './DescRenameModal.jsx';
+import InfoTip from './InfoTip.jsx';
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -173,7 +174,10 @@ export default function Settings() {
               {metaLocation && (
                 <div className="flex items-center gap-8">
                   <span style={{ width: 14, flexShrink: 0 }} />
-                  <span className="text-sub" style={{ minWidth: 100 }}>Location</span>
+                  <span className="text-sub flex items-center" style={{ minWidth: 100, gap: 4 }}>
+                    Location
+                    <InfoTip text="The app always re-reads this exact file by its Drive ID, so this isn't an in-app setting — it's just informational. To actually relocate the file, drag it to a new folder in Google Drive's own UI; Drive keeps the file's ID, so the app keeps working with no reconfiguration needed." />
+                  </span>
                   <span className="text-xs">
                     {[metaLocation.driveName, metaLocation.folderName].filter(Boolean).join(' / ') || 'My Drive (root)'}
                   </span>
@@ -185,11 +189,6 @@ export default function Settings() {
                 <span className="text-sub" style={{ minWidth: 100 }}>Signed in as</span>
                 <span className="text-xs">{googleUser?.email || googleUser?.name || '—'}</span>
               </div>
-
-              <p className="text-sub text-xs" style={{ marginTop: 4 }}>
-                Once a metadata file exists, its location can only be changed by moving the
-                file in Google Drive directly — the app always re-reads the same linked file.
-              </p>
             </>
           ) : (
             <>
@@ -200,15 +199,12 @@ export default function Settings() {
                   {metadataSkipped ? 'Not connected — metadata is being skipped' : 'Not connected'}
                 </span>
               </div>
-              <div>
+              <div className="flex items-center gap-8">
+                <span style={{ width: 14, flexShrink: 0 }} />
                 <button className="btn btn-secondary btn-sm" onClick={reconnectMetadata}>
                   Connect Google Drive…
                 </button>
-                <p className="text-sub text-xs" style={{ marginTop: 6 }}>
-                  This opens the setup flow, where you can pick the Drive folder the metadata
-                  file is created in. Once that file exists its location is fixed — choose
-                  carefully.
-                </p>
+                <InfoTip text="This opens the setup flow, where you pick the Drive folder tool_metadata.json is created in. Choose carefully — once the file exists, the app always re-reads that exact file by its Drive ID, so this isn't something you change in-app afterward (though you can still drag the file to a new folder in Drive's own UI later; Drive keeps the ID, so the app keeps working)." />
               </div>
             </>
           )}
