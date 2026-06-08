@@ -1,8 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Tag, Ruler, Layers, Settings2, Save, X, AlertTriangle, Wand2 } from 'lucide-react';
-import { TOOL_TYPES, TOOL_TYPE_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getNextMachineNumber, toolToExtractor } from '../schema/toolSchema.js';
+import {
+  TOOL_TYPES, TOOL_TYPE_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getNextMachineNumber, toolToExtractor,
+  INCH_THREAD_SIZES, METRIC_THREAD_SIZES,
+  TAP_LIMIT_TOLERANCE_OPTIONS_INCH, TAP_LIMIT_TOLERANCE_DEFAULT_INCH, TAP_LIMIT_TOLERANCE_OPTIONS_METRIC, TAP_LIMIT_TOLERANCE_DEFAULT_METRIC,
+  CLASS_OF_FIT_OPTIONS, CLASS_OF_FIT_DEFAULT,
+} from '../schema/toolSchema.js';
 import { fieldLabel } from '../schema/fieldRegistry.js';
 import { unitAbbr } from '../utils/units.js';
+import InfoTip from './InfoTip.jsx';
 import { buildDesc } from '../../tool-extractor.tsx';
 import { fieldsForType } from '../schema/fieldRegistry.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -21,6 +27,12 @@ const FIELD_STEP = {
 
 
 const FLUTE_DESIGN_OPTS = ['Variable Index', 'Variable Flute', 'Variable Helix', 'Variable Pitch'];
+
+const TAP_SUB_TYPE_OPTS = [
+  { value: 'cut', label: 'Cut' },
+  { value: 'form', label: 'Form' },
+  { value: 'sti', label: 'STI / Helicoil' },
+];
 
 export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
   const { tools } = useApp();
@@ -44,6 +56,15 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
   const setField = (field, value) => setData(d => ({ ...d, [field]: value }));
 
   const dirty = useMemo(() => JSON.stringify(data) !== JSON.stringify(tool), [data, tool]);
+
+  // Thread-size / tolerance option lists for Tap & Thread Mill — driven by
+  // tap_thread_unit (independent of the tool's overall unit). The combobox input
+  // is already freeform (datalist), so the verbatim 'Custom...' sentinel is dropped
+  // from the suggestion list — typing any size already works without selecting it.
+  const isMetricThread = data.tap_thread_unit === 'metric';
+  const threadSizeOptions = (isMetricThread ? METRIC_THREAD_SIZES : INCH_THREAD_SIZES).filter(s => s !== 'Custom...');
+  const tapLimitToleranceOptions = isMetricThread ? TAP_LIMIT_TOLERANCE_OPTIONS_METRIC : TAP_LIMIT_TOLERANCE_OPTIONS_INCH;
+  const tapLimitToleranceDefault = isMetricThread ? TAP_LIMIT_TOLERANCE_DEFAULT_METRIC : TAP_LIMIT_TOLERANCE_DEFAULT_INCH;
 
   const handleSave = async () => {
     const { valid, errors: errs } = validateTool(data);
@@ -192,6 +213,28 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
       </Section>
 
       <Section title="Geometry" icon={Ruler}>
+        {data.tool_type === 'tap' && (
+          <div className="field-group" style={{ marginBottom: 16 }}>
+            <label className="field-label">Tap Sub-Type</label>
+            <div className="chip-group">
+              {TAP_SUB_TYPE_OPTS.map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`btn btn-sm ${(data.tap_sub_type || 'cut') === opt.value ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setField('tap_sub_type', opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {data.tap_sub_type === 'sti' && (
+              <p className="text-sub text-sm" style={{ marginTop: 6 }}>
+                STI / Helicoil — pick the <strong>parent</strong> thread size below, not the oversized tap size. "STI" is auto-prepended to the suggested description.
+              </p>
+            )}
+          </div>
+        )}
         <div className="form-grid">
           <NumField field="diameter" data={data} setField={setField} required warn={geoIssueFields.has('diameter')} />
           {visibleFields.has('number_of_flutes') && <NumField field="number_of_flutes" data={data} setField={setField} />}
@@ -302,8 +345,66 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
         </div>
         {visibleFields.has('pitch') && (
           <div className="form-grid" style={{ marginTop: 14 }}>
-            <FieldInput field="pitch" label="Thread Pitch" data={data} setField={setField} placeholder="e.g. 1/4-20 or M6x1.0" />
-            {visibleFields.has('tap_class') && <FieldInput field="tap_class" label="Tap Class" data={data} setField={setField} placeholder="H2-H6, D2-D6" />}
+            {visibleFields.has('tap_thread_unit') && (
+              <div className="field-group">
+                <label className="field-label">Thread Unit</label>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {[['inch', 'Inch'], ['metric', 'Metric']].map(([val, label]) => (
+                    <button
+                      key={val}
+                      type="button"
+                      className={`btn btn-sm ${(data.tap_thread_unit || 'inch') === val ? 'btn-primary' : 'btn-secondary'}`}
+                      onClick={() => setField('tap_thread_unit', val)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-sub text-sm" style={{ marginTop: 4 }}>
+                  Independent of the tool's overall unit ({unitAbbr(data.unit)}) — only changes which thread sizes are suggested.
+                </p>
+              </div>
+            )}
+            <FieldInput
+              field="pitch"
+              label={data.tool_type === 'tap' ? 'Thread Size' : fieldLabel('pitch', data?.unit)}
+              data={data}
+              setField={setField}
+              list={threadSizeOptions}
+              placeholder="e.g. 1/4-20 UNC or M6 x 1.0"
+            />
+            {visibleFields.has('tap_class') && (
+              <div className="field-group">
+                <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  {fieldLabel('tap_class', data?.unit)}
+                  <InfoTip text={`The tap's pitch-diameter limit tolerance (e.g. "${tapLimitToleranceDefault}") — set by the tap's grind. This is NOT "class of fit" (below), which describes how the tapped hole mates with its mating part.`} />
+                </label>
+                <select className="field-input" value={data.tap_class || ''} onChange={e => setField('tap_class', e.target.value)}>
+                  <option value="">Not specified</option>
+                  {tapLimitToleranceOptions.map(t => (
+                    <option key={t} value={t}>{t}{t === tapLimitToleranceDefault ? ' — standard' : ''}</option>
+                  ))}
+                </select>
+                <p className="text-sub text-sm" style={{ marginTop: 4 }}>
+                  Manufacturer-stated tolerance only — never derived or pulled from vendor sites (those are frequently wrong on this field).
+                </p>
+              </div>
+            )}
+            {visibleFields.has('class_of_fit') && (
+              <div className="field-group">
+                <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  {fieldLabel('class_of_fit', data?.unit)}
+                  <InfoTip text="How the tapped hole fits its mating part — a thread-fit grade (1B loosest … 3B tightest), not a property of the tap itself. Tracked nowhere else (not ProShop, not Fusion); reference only." />
+                </label>
+                <select className="field-input" value={data.class_of_fit || ''} onChange={e => setField('class_of_fit', e.target.value)}>
+                  <option value="">Not specified</option>
+                  {CLASS_OF_FIT_OPTIONS.map(c => (
+                    <option key={c} value={c}>{c}{c === CLASS_OF_FIT_DEFAULT ? ' — general purpose' : ''}</option>
+                  ))}
+                </select>
+                {/* TODO: no auto-derivation — the 2B/3B selection formula isn't understood yet (manual entry only, per spec) */}
+              </div>
+            )}
             {visibleFields.has('point_type') && (
               <div className="field-group">
                 <label className="field-label">Point Type</label>

@@ -80,7 +80,8 @@ const CSV_TYPE_MAP = {
   'reamer': 'reamer',
   'counter bore': 'counter bore',
   'counter sink': 'counter sink',
-  'tap right hand': 'tap form',
+  'tap right hand': 'tap',
+  'tap left hand': 'tap', // unconfirmed Fusion type string — mapped defensively, see toolSchema.js FUSION_TYPE_MAP
   'boring bar': 'boring head',
   'turning general': 'turning general',
 };

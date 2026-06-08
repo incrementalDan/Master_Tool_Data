@@ -234,6 +234,9 @@ export default function ToolDetail() {
               >
                 {tool.description || '—'}
               </h1>
+              {tool.tool_type === 'tap' && tool.tap_sub_type === 'sti' && (
+                <span className="sti-pill" title="STI / Helicoil — thread insert tap">STI / Helicoil</span>
+              )}
             </div>
             {tool.proshot_id && (
               <a
@@ -276,6 +279,14 @@ export default function ToolDetail() {
             </Section>
 
             <Section title="Geometry" icon={Ruler}>
+              {tool.tool_type === 'tap' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
+                  <span className="text-sub" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Sub-Type</span>
+                  <span className="machine-num-badge" style={{ textTransform: 'capitalize' }}>
+                    {tool.tap_sub_type === 'sti' ? 'STI / Helicoil' : (tool.tap_sub_type || 'Cut')}
+                  </span>
+                </div>
+              )}
               <div className="detail-fields">
                 <Field label="Diameter" value={round4(tool.diameter)} unit={lenUnit} />
                 <Field label="Flute Length" value={round4(tool.flute_length)} unit={lenUnit} />
@@ -315,8 +326,10 @@ export default function ToolDetail() {
                 <Field label="Flute Design" value={tool.flute_design || null} />
                 <Field label="Cutting Direction" value={tool.cutting_direction} />
                 <Field label="Center Cutting" value={tool.center_cutting != null ? (tool.center_cutting ? 'Yes' : 'No') : null} />
-                {tool.pitch && <Field label="Thread Pitch" value={tool.pitch} />}
-                {tool.tap_class && <Field label="Tap Class" value={tool.tap_class} />}
+                {tool.pitch && <Field label={tool.tool_type === 'tap' ? 'Thread Size' : 'Thread Pitch'} value={tool.pitch} />}
+                {tool.tap_thread_unit && <Field label="Thread Unit" value={tool.tap_thread_unit === 'metric' ? 'Metric' : 'Inch'} />}
+                {tool.tap_class && <Field label="Tap Limit Tolerance" value={tool.tap_class} />}
+                {tool.class_of_fit && <Field label="Class of Fit" value={tool.class_of_fit} />}
                 {tool.point_type && <Field label="Point Type" value={tool.point_type} />}
               </div>
               {(tool.material_suitability || []).length > 0 && (
