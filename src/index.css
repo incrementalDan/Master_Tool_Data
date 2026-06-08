@@ -263,9 +263,11 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--text-sub);
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  margin: 28px 0 10px;
+  margin: 40px 0 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
 }
-.type-group-label:first-child { margin-top: 0; }
+.type-group-label:first-child { margin-top: 0; padding-top: 0; border-top: none; }
 
 /* ─── Facet filters ──────────────────────────────────────────────────────── */
 .facet-panel {
