@@ -1008,6 +1008,9 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     merge_history: meta.merge_history || [],
     created_at: meta.created_at || fusionInternal.created_at,
     updated_at: meta.updated_at || fusionInternal.updated_at,
+    primary_photo_id: meta.primary_photo_id || null,
+    primary_photo_name: meta.primary_photo_name || null,
+    attachments: meta.attachments || [],
   };
 }
 
@@ -1085,6 +1088,14 @@ export function buildMetadataTool(tool) {
     merge_history: tool.merge_history || [],
     created_at: tool.created_at || new Date().toISOString(),
     updated_at: new Date().toISOString(),
+    primary_photo_id: tool.primary_photo_id || null,
+    primary_photo_name: tool.primary_photo_name || null,
+    attachments: (tool.attachments || []).map(a => ({
+      file_id: a.file_id,
+      filename: a.filename,
+      type: a.type || 'other',
+      uploaded_at: a.uploaded_at || new Date().toISOString(),
+    })),
   };
 }
 

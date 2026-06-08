@@ -2,13 +2,16 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
-  Tag, Ruler, Settings2, StickyNote, Clock, Package, Wrench, AlertTriangle,
+  Tag, Ruler, Settings2, StickyNote, Clock, Package, Wrench, AlertTriangle, Camera,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
 import HolderPicker from './HolderPicker.jsx';
 import AssemblyCard, { holderColor } from './AssemblyCard.jsx';
 import AssemblyForm from './AssemblyForm.jsx';
 import ReconcileModal from './ReconcileModal.jsx';
+import FilesSection from './FilesSection.jsx';
+import AttachmentUploadModal from './AttachmentUploadModal.jsx';
+import { fetchFileBlob } from '../services/driveService.js';
 import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS, validateGeometry, fusionToolToInternal, readOohFromFusion } from '../schema/toolSchema.js';
 import { convertLength, unitAbbr } from '../utils/units.js';
@@ -28,13 +31,17 @@ export default function ToolDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { tools, saveTool, deleteTool, cloneTool, isSaving, notify, holders, holderLibraryLocation, reconcileTool } = useApp();
+  const {
+    tools, saveTool, deleteTool, cloneTool, isSaving, notify, holders, holderLibraryLocation,
+    reconcileTool, googleAuthenticated, uploadToolPhoto, uploadToolAttachment, deleteToolAttachment,
+  } = useApp();
   const [editing, setEditing] = useState(searchParams.get('edit') === '1');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [copied, setCopied] = useState(false);
   const [showExportPicker, setShowExportPicker] = useState(null); // null | 'copy' | 'download'
   const [reconcileResults, setReconcileResults] = useState(null);
+  const [showPhotoUpload, setShowPhotoUpload] = useState(false);
 
   const tool = tools.find(t => t.id === id);
 
@@ -254,27 +261,40 @@ export default function ToolDetail() {
 
         <div className="detail-layout">
             <Section title="Identity" icon={Tag}>
-              {/* Location chip */}
-              {tool.location && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
-                  <span className="text-sub" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Cabinet</span>
-                  <span className="location-tag" style={{ fontSize: 15, padding: '4px 13px' }}>{tool.location}</span>
-                </div>
-              )}
-              <div className="detail-fields">
-                {(tool.machine_tool_number !== null && tool.machine_tool_number !== undefined && tool.machine_tool_number !== '') && (
-                  <div className="detail-field">
-                    <div className="detail-field-label">Machine #</div>
-                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                      <span className="machine-num-badge">T{tool.machine_tool_number}</span>
-                      <span className="machine-num-badge">H{tool.machine_tool_number}</span>
-                      <span className="machine-num-badge">D{tool.machine_tool_number}</span>
+              <div className="identity-layout">
+                <div className="identity-fields">
+                  {/* Location chip */}
+                  {tool.location && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
+                      <span className="text-sub" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Cabinet</span>
+                      <span className="location-tag" style={{ fontSize: 15, padding: '4px 13px' }}>{tool.location}</span>
                     </div>
+                  )}
+                  <div className="detail-fields">
+                    {(tool.machine_tool_number !== null && tool.machine_tool_number !== undefined && tool.machine_tool_number !== '') && (
+                      <div className="detail-field">
+                        <div className="detail-field-label">Machine #</div>
+                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                          <span className="machine-num-badge">T{tool.machine_tool_number}</span>
+                          <span className="machine-num-badge">H{tool.machine_tool_number}</span>
+                          <span className="machine-num-badge">D{tool.machine_tool_number}</span>
+                        </div>
+                      </div>
+                    )}
+                    <Field label="Type" value={typeLabel} />
+                    <Field label="Manufacturer" value={tool.vendor} />
+                    <Field label="Mfr Part # (EDP)" value={tool.product_id} mono />
                   </div>
-                )}
-                <Field label="Type" value={typeLabel} />
-                <Field label="Manufacturer" value={tool.vendor} />
-                <Field label="Mfr Part # (EDP)" value={tool.product_id} mono />
+                </div>
+                <PhotoSlot
+                  tool={tool}
+                  googleAuthenticated={googleAuthenticated}
+                  onChangePhoto={() => setShowPhotoUpload(true)}
+                  onDeletePhoto={async () => {
+                    try { await deleteToolAttachment(tool, tool.primary_photo_id, true); }
+                    catch { /* toast handled in context */ }
+                  }}
+                />
               </div>
             </Section>
 
@@ -352,6 +372,19 @@ export default function ToolDetail() {
               }}
             />
 
+            <FilesSection
+              tool={tool}
+              googleAuthenticated={googleAuthenticated}
+              onUpload={async (file, fileName, fileType) => {
+                try { await uploadToolAttachment(tool, file, fileName, fileType); }
+                catch { throw new Error('Upload failed — check your Google Drive connection'); }
+              }}
+              onDelete={async (fileId) => {
+                try { await deleteToolAttachment(tool, fileId, false); }
+                catch { /* toast handled in context */ }
+              }}
+            />
+
             <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving} />
 
             <HolderSection
@@ -418,6 +451,18 @@ export default function ToolDetail() {
               )}
             </Section>
         </div>
+
+        {/* Primary photo upload modal */}
+        {showPhotoUpload && (
+          <AttachmentUploadModal
+            open={showPhotoUpload}
+            onClose={() => setShowPhotoUpload(false)}
+            onUpload={async (file, fileName) => {
+              await uploadToolPhoto(tool, file, fileName);
+            }}
+            photoMode
+          />
+        )}
 
         {/* Fusion export picker modal */}
         {showExportPicker && (
@@ -834,6 +879,104 @@ function Field({ label, value, unit, mono, href }) {
       ) : (
         <div className={`detail-field-value ${isEmpty ? 'detail-field-empty' : ''} ${mono ? 'font-mono' : ''}`}>
           {display}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PhotoSlot({ tool, googleAuthenticated, onChangePhoto, onDeletePhoto }) {
+  const [photoUrl, setPhotoUrl] = useState(null);
+  const [photoLoading, setPhotoLoading] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const objectUrlRef = useRef(null);
+
+  useEffect(() => {
+    setPhotoUrl(null);
+    setPhotoLoading(false);
+    if (!tool.primary_photo_id || !googleAuthenticated) return;
+    let cancelled = false;
+    setPhotoLoading(true);
+    fetchFileBlob(tool.primary_photo_id)
+      .then(blob => {
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        objectUrlRef.current = url;
+        setPhotoUrl(url);
+      })
+      .catch(() => { if (!cancelled) setPhotoUrl(null); })
+      .finally(() => { if (!cancelled) setPhotoLoading(false); });
+    return () => {
+      cancelled = true;
+      if (objectUrlRef.current) {
+        URL.revokeObjectURL(objectUrlRef.current);
+        objectUrlRef.current = null;
+      }
+    };
+  }, [tool.primary_photo_id, googleAuthenticated]);
+
+  const hasPhoto = !!photoUrl;
+
+  return (
+    <div className="identity-photo-column">
+      <div
+        className="identity-photo-slot"
+        onClick={!hasPhoto && googleAuthenticated ? onChangePhoto : undefined}
+        style={{ cursor: !hasPhoto && googleAuthenticated ? 'pointer' : 'default' }}
+        title={!hasPhoto && googleAuthenticated ? 'Add photo' : undefined}
+      >
+        {photoLoading ? (
+          <div className="identity-photo-placeholder">
+            <Camera size={24} />
+            <span style={{ fontSize: 11 }}>Loading…</span>
+          </div>
+        ) : hasPhoto ? (
+          <img src={photoUrl} alt={tool.description || 'Tool'} className="identity-photo-img" />
+        ) : (
+          <div className="identity-photo-placeholder">
+            <Camera size={24} />
+            {googleAuthenticated && <span style={{ fontSize: 11 }}>Add photo</span>}
+          </div>
+        )}
+      </div>
+
+      {googleAuthenticated && (
+        <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            style={{ flex: 1, fontSize: 11 }}
+            onClick={onChangePhoto}
+          >
+            {hasPhoto ? '📷 Change' : '📷 Add photo'}
+          </button>
+          {hasPhoto && !confirmRemove && (
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ fontSize: 11, color: 'var(--text-sub)' }}
+              title="Remove photo"
+              onClick={() => setConfirmRemove(true)}
+            >
+              ×
+            </button>
+          )}
+          {hasPhoto && confirmRemove && (
+            <>
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ fontSize: 11, color: 'var(--red)' }}
+                onClick={async () => { setConfirmRemove(false); await onDeletePhoto(); }}
+              >
+                Remove
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                style={{ fontSize: 11 }}
+                onClick={() => setConfirmRemove(false)}
+              >
+                ✕
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>

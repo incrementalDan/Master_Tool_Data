@@ -14,7 +14,13 @@ export function setAccessToken(token, expiresIn) {
 }
 export function setUserInfo(info) { _userInfo = info; }
 export function getCurrentUser() { return _userInfo; }
-export function signOut() { _accessToken = null; _userInfo = null; _expiresAt = null; }
+export function getAccessToken() { return _accessToken; }
+export function signOut() {
+  _accessToken = null;
+  _userInfo = null;
+  _expiresAt = null;
+  localStorage.removeItem(TOOL_FILES_FOLDER_CACHE_KEY);
+}
 export function hasToken() { return !!_accessToken; }
 export function isTokenExpired() {
   if (!_accessToken) return true;
@@ -23,6 +29,7 @@ export function isTokenExpired() {
 }
 
 const CACHED_FILE_ID_KEY = 'drive_metadata_file_id';
+const TOOL_FILES_FOLDER_CACHE_KEY = 'drive_tool_files_folder_id';
 
 // Use localStorage-cached ID first (set after auto-create), then env var.
 function getMetaFileId() {
@@ -236,4 +243,112 @@ export async function listSharedDrives() {
 // Create an empty tool_metadata.json in the specified folder and cache its ID.
 export async function createMetadataInFolder(folderId) {
   return driveCreate([], folderId);
+}
+
+// ─── Tool file storage ────────────────────────────────────────────────────────
+// Folder layout: [metadata root]/tool_files/{trackingId}/{filename}
+
+async function findOrCreateFolder(parentId, name) {
+  const q = `'${parentId}' in parents and name=${JSON.stringify(name)} and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+    { headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (!res.ok) throw new Error(`Folder search failed (${res.status})`);
+  const data = await res.json();
+  if (data.files?.length > 0) return data.files[0].id;
+  const cr = await fetch(
+    'https://www.googleapis.com/drive/v3/files?supportsAllDrives=true',
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${_accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, mimeType: 'application/vnd.google-apps.folder', parents: [parentId] }),
+    }
+  );
+  if (!cr.ok) throw new Error(`Folder create failed (${cr.status})`);
+  return (await cr.json()).id;
+}
+
+async function getMetaParentFolderId() {
+  const metaId = getMetaFileId();
+  if (!metaId) throw new Error('No metadata file configured — connect Google Drive first');
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${metaId}?fields=parents&supportsAllDrives=true`,
+    { headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (!res.ok) throw new Error('Failed to read metadata file location');
+  const file = await res.json();
+  const parentId = file.parents?.[0];
+  if (!parentId) throw new Error('Metadata file has no parent folder');
+  return parentId;
+}
+
+// Ensures [metadata root]/tool_files/{trackingId}/ exists and returns its Drive ID.
+export async function ensureToolFolder(trackingId) {
+  let toolFilesFolderId = localStorage.getItem(TOOL_FILES_FOLDER_CACHE_KEY);
+  if (!toolFilesFolderId) {
+    const parentId = await getMetaParentFolderId();
+    toolFilesFolderId = await findOrCreateFolder(parentId, 'tool_files');
+    localStorage.setItem(TOOL_FILES_FOLDER_CACHE_KEY, toolFilesFolderId);
+  }
+  return findOrCreateFolder(toolFilesFolderId, trackingId);
+}
+
+// Upload a File object into the given Drive folder. Returns { id, name }.
+export async function uploadToolFile(folderId, file, fileName) {
+  const meta = { name: fileName, parents: [folderId] };
+  const boundary = 'tms_file_upload_boundary';
+  const fileBuffer = await file.arrayBuffer();
+  const enc = new TextEncoder();
+  const header = enc.encode(
+    `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(meta)}\r\n` +
+    `--${boundary}\r\nContent-Type: ${file.type || 'application/octet-stream'}\r\n\r\n`
+  );
+  const tail = enc.encode(`\r\n--${boundary}--`);
+  const body = new Uint8Array(header.byteLength + fileBuffer.byteLength + tail.byteLength);
+  body.set(header);
+  body.set(new Uint8Array(fileBuffer), header.byteLength);
+  body.set(tail, header.byteLength + fileBuffer.byteLength);
+  const res = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${_accessToken}`,
+        'Content-Type': `multipart/related; boundary="${boundary}"`,
+      },
+      body,
+    }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`File upload failed (${res.status}): ${txt.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+// Delete a file from Drive. 404 is treated as success (already gone).
+export async function deleteToolFile(fileId) {
+  if (!fileId) return;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`,
+    { method: 'DELETE', headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (res.status === 404) return;
+  if (!res.ok) throw new Error(`File delete failed (${res.status})`);
+}
+
+// Fetch a Drive file as a Blob (authenticated, works for team/shared files).
+export async function fetchFileBlob(fileId) {
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+    { headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (!res.ok) throw new Error(`File fetch failed (${res.status})`);
+  return res.blob();
 }

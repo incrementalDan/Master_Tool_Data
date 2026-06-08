@@ -726,6 +726,95 @@ export function AppProvider({ children }) {
     }
   }, [writeLogicalTool, notify]);
 
+  // ─── Tool file attachments (Google Drive storage) ─────────────────────────
+
+  const uploadToolPhoto = useCallback(async (tool, file, fileName) => {
+    if (!googleRef.current) {
+      notify('Connect Google Drive to upload photos', 'error');
+      throw new Error('Google Drive not connected');
+    }
+    dispatch({ type: 'SAVE_START' });
+    try {
+      const trackingId = tool.tracking_id || tool.id;
+      const folderId = await driveService.ensureToolFolder(trackingId);
+      const driveFile = await driveService.uploadToolFile(folderId, file, fileName);
+      const updatedTool = { ...tool, primary_photo_id: driveFile.id, primary_photo_name: fileName };
+      const result = await writeLogicalTool({ ...updatedTool, updated_at: new Date().toISOString() });
+      dispatch({ type: 'UPDATE_TOOL', tool: result });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify('Photo saved', 'success');
+      return result;
+    } catch (err) {
+      if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Photo upload failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  }, [writeLogicalTool, notify]);
+
+  const uploadToolAttachment = useCallback(async (tool, file, fileName, fileType) => {
+    if (!googleRef.current) {
+      notify('Connect Google Drive to upload files', 'error');
+      throw new Error('Google Drive not connected');
+    }
+    dispatch({ type: 'SAVE_START' });
+    try {
+      const trackingId = tool.tracking_id || tool.id;
+      const folderId = await driveService.ensureToolFolder(trackingId);
+      const driveFile = await driveService.uploadToolFile(folderId, file, fileName);
+      const newAttachment = {
+        file_id: driveFile.id,
+        filename: fileName,
+        type: fileType || 'other',
+        uploaded_at: new Date().toISOString(),
+      };
+      const updatedTool = { ...tool, attachments: [...(tool.attachments || []), newAttachment] };
+      const result = await writeLogicalTool({ ...updatedTool, updated_at: new Date().toISOString() });
+      dispatch({ type: 'UPDATE_TOOL', tool: result });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify('File saved', 'success');
+      return result;
+    } catch (err) {
+      if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`File upload failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  }, [writeLogicalTool, notify]);
+
+  const deleteToolAttachment = useCallback(async (tool, fileId, isPrimary = false) => {
+    if (!googleRef.current) {
+      notify('Connect Google Drive to manage files', 'error');
+      throw new Error('Google Drive not connected');
+    }
+    try {
+      await driveService.deleteToolFile(fileId);
+    } catch (err) {
+      if (err.code === 'TOKEN_EXPIRED') {
+        dispatch({ type: 'GOOGLE_EXPIRED' });
+        notify('Google Drive session expired — reconnect to remove the file from storage', 'error', 7000);
+        throw err;
+      }
+      // File may already be gone from Drive — clean up metadata anyway
+    }
+    dispatch({ type: 'SAVE_START' });
+    try {
+      const updatedTool = isPrimary
+        ? { ...tool, primary_photo_id: null, primary_photo_name: null }
+        : { ...tool, attachments: (tool.attachments || []).filter(a => a.file_id !== fileId) };
+      const result = await writeLogicalTool({ ...updatedTool, updated_at: new Date().toISOString() });
+      dispatch({ type: 'UPDATE_TOOL', tool: result });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify('File removed', 'success');
+      return result;
+    } catch (err) {
+      if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Remove failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  }, [writeLogicalTool, notify]);
+
   // ─── Reconcile a tool against the live Fusion library ─────────────────────
   // Detects entries that were dumped straight into the Fusion library (sharing
   // this tool's tracking ID or ProShop number) instead of going through Sync
@@ -1048,6 +1137,9 @@ export function AppProvider({ children }) {
       addAssembly,
       updateAssembly,
       deleteAssembly,
+      uploadToolPhoto,
+      uploadToolAttachment,
+      deleteToolAttachment,
       reconcileTool,
       applyReconcile,
       saveFullLibrary,

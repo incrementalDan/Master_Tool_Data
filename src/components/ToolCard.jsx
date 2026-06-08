@@ -88,7 +88,8 @@ export default function ToolCard({ tool, variant = 'grid' }) {
 
   if (variant === 'list') {
     return (
-      <div className="tool-row" onClick={open}>
+      // TODO: wire up hover photo preview using data-photo-id and the Drive blob URL pattern
+      <div className="tool-row" onClick={open} data-photo-id={tool.primary_photo_id || undefined}>
         <span className="tool-row-icon"><ToolTypeIcon type={tool.tool_type} size={24} /></span>
         <div className="tool-row-main">
           <span className="tool-row-title description-badge truncate" style={{ display: 'inline-block', fontSize: 13 }}>{tool.description || '—'}</span>
@@ -101,7 +102,8 @@ export default function ToolCard({ tool, variant = 'grid' }) {
   }
 
   return (
-    <div className="tool-card" onClick={open}>
+    // TODO: wire up hover photo preview using data-photo-id and the Drive blob URL pattern
+    <div className="tool-card" onClick={open} data-photo-id={tool.primary_photo_id || undefined}>
       <div className="tool-card-header">
         <span className="tool-card-icon"><ToolTypeIcon type={tool.tool_type} size={24} /></span>
         {typeRow}
