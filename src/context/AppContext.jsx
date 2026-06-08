@@ -135,6 +135,9 @@ export function AppProvider({ children }) {
   const googleRef = useRef(state.googleAuthenticated);
   const toolsRef = useRef(state.tools);
   const holdersRef = useRef(state.holders);
+  // Caches wrapper-level fields (e.g. `version`) from the last-loaded Fusion
+  // library file, other than `data` — see downloadFusionList/uploadFusionList.
+  const libraryWrapperRef = useRef(null);
   locationRef.current = state.libraryLocation;
   holderLocationRef.current = state.holderLibraryLocation;
   googleRef.current = state.googleAuthenticated;
@@ -214,12 +217,21 @@ export function AppProvider({ children }) {
     const loc = locationRef.current;
     if (!loc) throw new Error('No tool library location selected');
     const json = await aps.loadToolLibrary(loc.projectId, loc.itemId);
+    // Remember every wrapper-level field besides `data` (e.g. `version: 36`) so
+    // uploadFusionList can write the file back with the same wrapper shape —
+    // Fusion's library file is `{ data: [...], version: 36 }`, and silently
+    // dropping `version` on every save makes Fusion treat the round-tripped
+    // file as a different/unversioned library (symptoms: reassigned guids, etc).
+    if (json && typeof json === 'object' && !Array.isArray(json)) {
+      const { data, ...wrapperRest } = json;
+      libraryWrapperRef.current = wrapperRest;
+    }
     return Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
   }, []);
 
   const uploadFusionList = useCallback(async (list) => {
     const loc = locationRef.current;
-    await aps.saveToolLibrary(loc.projectId, loc.folderId, loc.itemId, loc.fileName, { data: list });
+    await aps.saveToolLibrary(loc.projectId, loc.folderId, loc.itemId, loc.fileName, { ...libraryWrapperRef.current, data: list });
   }, []);
 
   // Expose raw Fusion list download for the merge flow live-fetch feature.
