@@ -442,7 +442,7 @@ function EditCard({
   // Which assembly (holder + OOH) this preset is named for. Initialised by
   // matching the current name; user can switch it to retarget the preset.
   const [assemblyId, setAssemblyId] = useState(() =>
-    assemblies.find(a => presetMatchesAssembly(preset, a, lenUnit))?.assembly_id || assemblies[0]?.assembly_id || ''
+    assemblies.find(a => presetMatchesAssembly(preset, a, lenUnit))?.assembly_id || ''
   );
 
   const holderDescOf = (a) =>
@@ -648,6 +648,7 @@ function EditCard({
               }}
             >
               {assemblies.length === 0 && <option value="">No assemblies</option>}
+              {assemblies.length > 0 && <option value="">— None —</option>}
               {assemblies.map(a => (
                 <option key={a.assembly_id} value={a.assembly_id}>
                   {holderShortName(holderDescOf(a)) || 'holder'} · {a.ooh != null ? `${Number(a.ooh).toFixed(3)} ${lenUnit}` : 'no OOH'}

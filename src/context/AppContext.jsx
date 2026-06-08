@@ -505,9 +505,20 @@ export function AppProvider({ children }) {
       ...source,
       id: generateId(),
       tracking_id: null,        // addTool assigns a fresh tracking ID
+      // Clear the ProShop ID — keeping it would make addTool's auto-combine
+      // (combineToolsByProshopId) fold this copy straight back into the source,
+      // so the "duplicate" would never actually appear as its own tool.
+      proshot_id: '',
       description: `${source.description || 'Tool'} (copy)`,
       _fusionRaw: undefined,
       _instancesRaw: undefined,
+      // Carrying the source's _registeredAssemblies forward would make
+      // reconcile-on-open compare the copy's brand-new instances against the
+      // SOURCE's registered (holder, OOH) pairs — since the clone keeps the
+      // same holder/OOH values, its own fresh instances would match and get
+      // flagged as "duplicate" of themselves. Clearing it lets the next load
+      // rebuild it correctly from this tool's own metadata.
+      _registeredAssemblies: undefined,
       // Keep the holder/OOH of each assembly but force fresh instance + assembly
       // ids so the copy gets its own Fusion entries.
       assemblies: (source.assemblies || []).map(a => ({
