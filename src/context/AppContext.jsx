@@ -122,21 +122,28 @@ function reducer(state, action) {
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  // Keep latest values accessible inside async callbacks without stale closures
+  // Keep latest values accessible inside async callbacks without stale closures.
+  // Assigned directly during render (NOT via useEffect): an effect that reads one
+  // of these refs (e.g. AppShell's "ready → loadTools" trigger below) can run in
+  // the same flush as — and before — a useEffect-based sync would have updated it,
+  // which raced a stale `locationRef.current = null` into "No tool library location
+  // selected" right after picking a new library while already Google-connected
+  // (both `libraryLocation` and `ready` flip true on the same render in that case).
+  // Render-time assignment is always current before any effect can run.
   const locationRef = useRef(state.libraryLocation);
   const holderLocationRef = useRef(state.holderLibraryLocation);
   const googleRef = useRef(state.googleAuthenticated);
   const toolsRef = useRef(state.tools);
   const holdersRef = useRef(state.holders);
+  locationRef.current = state.libraryLocation;
+  holderLocationRef.current = state.holderLibraryLocation;
+  googleRef.current = state.googleAuthenticated;
+  toolsRef.current = state.tools;
+  holdersRef.current = state.holders;
   // Tracks whether we've already seeded setup-progress flags for an established
   // library this session — seeding should run at most once, and only when no
   // progress has been stored yet (a brand-new install).
   const setupSeededRef = useRef(loadSetupProgress() !== null);
-  useEffect(() => { locationRef.current = state.libraryLocation; }, [state.libraryLocation]);
-  useEffect(() => { holderLocationRef.current = state.holderLibraryLocation; }, [state.holderLibraryLocation]);
-  useEffect(() => { googleRef.current = state.googleAuthenticated; }, [state.googleAuthenticated]);
-  useEffect(() => { toolsRef.current = state.tools; }, [state.tools]);
-  useEffect(() => { holdersRef.current = state.holders; }, [state.holders]);
 
   // Persist setup-progress flags whenever they change (seeding or step marks).
   useEffect(() => {
