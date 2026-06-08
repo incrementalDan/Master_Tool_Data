@@ -19,11 +19,13 @@ const TYPE_GROUPS = [
   },
   {
     label: 'Hole Making',
-    types: ['drill', 'tap', 'spot drill', 'center drill', 'counter sink', 'counter bore', 'reamer'],
+    // boring head is a milling-machine hole-making tool (bores an existing hole on
+    // the mill) — distinct from a turning boring bar (a lathe tool, not in TOOL_TYPES).
+    types: ['drill', 'tap', 'spot drill', 'center drill', 'counter sink', 'counter bore', 'reamer', 'boring head'],
   },
   {
     label: 'Turning',
-    types: ['turning general', 'boring head'],
+    types: ['turning general'],
   },
 ];
 
