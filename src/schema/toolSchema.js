@@ -27,7 +27,7 @@ export function getFacetFields(toolType) {
     extras.push('corner_radius');
   }
   if (toolType === 'tap') {
-    extras.push('tap_sub_type', 'pitch', 'tap_thread_unit', 'cutting_direction', 'tap_class');
+    extras.push('tap_sub_type', 'pitch', 'tap_thread_unit', 'cutting_direction', 'tap_class', 'class_of_fit');
   } else if (toolType === 'thread mill') {
     extras.push('pitch', 'tap_thread_unit', 'cutting_direction');
   }
@@ -713,14 +713,23 @@ export const METRIC_THREAD_SIZES = [
   'Custom...',
 ];
 
-// Tap tolerance ("tap_class") option lists. H3 / 6H are the standard/most-common
-// defaults for inch and metric machine taps respectively.
-// TODO: 2B/3B class of fit — add as a separate selector once the governing formula
-// is understood (per spec: do not build now).
-export const TAP_TOLERANCE_OPTIONS_INCH = ['H1', 'H2', 'H3', 'H4', 'H5', 'H6'];
-export const TAP_TOLERANCE_DEFAULT_INCH = 'H3'; // most common — standard machine tap
-export const TAP_TOLERANCE_OPTIONS_METRIC = ['4H', '5H', '6H', '7H', '6G', '7G'];
-export const TAP_TOLERANCE_DEFAULT_METRIC = '6H'; // standard
+// Tap LIMIT TOLERANCE ("tap_class") option lists — H1-H6 / 4H-7G are pitch-diameter
+// limit tolerances (how loose/tight the thread is cut), set by the tap manufacturer.
+// H3 / 6H are the standard/most-common defaults for inch and metric machine taps.
+// This is DISTINCT from "class of fit" (1B/2B/3B below) — that's an assembly-level
+// spec for how the tapped hole mates with its mating part, not a tap-grinding spec.
+export const TAP_LIMIT_TOLERANCE_OPTIONS_INCH = ['H1', 'H2', 'H3', 'H4', 'H5', 'H6'];
+export const TAP_LIMIT_TOLERANCE_DEFAULT_INCH = 'H3'; // most common — standard machine tap
+export const TAP_LIMIT_TOLERANCE_OPTIONS_METRIC = ['4H', '5H', '6H', '7H', '6G', '7G'];
+export const TAP_LIMIT_TOLERANCE_DEFAULT_METRIC = '6H'; // standard
+
+// Class of fit ("class_of_fit") — internal-thread fit grade (1B loosest … 3B tightest).
+// Distinct from tap limit tolerance above; tracked nowhere else (not ProShop, not
+// Fusion) — purely a manually-entered reference field. 2B is the general-purpose default.
+// TODO: no auto-derivation — per spec, the 2B/3B selection formula isn't understood yet.
+export const CLASS_OF_FIT_OPTIONS = ['1B', '2B', '3B'];
+export const CLASS_OF_FIT_DEFAULT = '2B';
+
 
 export function internalToFusionTool(tool) {
   const existing = tool._fusionRaw || {};
@@ -948,6 +957,9 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     // pre-unification tap form/cut tools simply pick up these defaults on first load.
     tap_sub_type: meta.tap_sub_type || 'cut',
     tap_thread_unit: meta.tap_thread_unit || '',
+    // class_of_fit (1B/2B/3B) is distinct from tap_class/tap_class limit tolerance —
+    // tracked nowhere else (not ProShop, not Fusion), metadata-only.
+    class_of_fit: meta.class_of_fit || '',
     min_thread_pitch: meta.min_thread_pitch ?? null,
     max_thread_pitch: meta.max_thread_pitch ?? null,
     point_type: meta.point_type || '',
@@ -1017,6 +1029,7 @@ export function buildMetadataTool(tool) {
     tap_class: tool.tap_class || '',
     tap_sub_type: tool.tap_sub_type || 'cut',
     tap_thread_unit: tool.tap_thread_unit || '',
+    class_of_fit: tool.class_of_fit || '',
     min_thread_pitch: tool.min_thread_pitch ?? null,
     max_thread_pitch: tool.max_thread_pitch ?? null,
     point_type: tool.point_type || '',
@@ -1240,6 +1253,7 @@ export function newTool(toolType = 'flat end mill') {
     tap_class: '',
     tap_sub_type: 'cut',
     tap_thread_unit: '',
+    class_of_fit: '',
     min_thread_pitch: null,
     max_thread_pitch: null,
     point_type: '',

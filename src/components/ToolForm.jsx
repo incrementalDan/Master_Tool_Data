@@ -3,10 +3,12 @@ import { Tag, Ruler, Layers, Settings2, Save, X, AlertTriangle, Wand2 } from 'lu
 import {
   TOOL_TYPES, TOOL_TYPE_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getNextMachineNumber, toolToExtractor,
   INCH_THREAD_SIZES, METRIC_THREAD_SIZES,
-  TAP_TOLERANCE_OPTIONS_INCH, TAP_TOLERANCE_DEFAULT_INCH, TAP_TOLERANCE_OPTIONS_METRIC, TAP_TOLERANCE_DEFAULT_METRIC,
+  TAP_LIMIT_TOLERANCE_OPTIONS_INCH, TAP_LIMIT_TOLERANCE_DEFAULT_INCH, TAP_LIMIT_TOLERANCE_OPTIONS_METRIC, TAP_LIMIT_TOLERANCE_DEFAULT_METRIC,
+  CLASS_OF_FIT_OPTIONS, CLASS_OF_FIT_DEFAULT,
 } from '../schema/toolSchema.js';
 import { fieldLabel } from '../schema/fieldRegistry.js';
 import { unitAbbr } from '../utils/units.js';
+import InfoTip from './InfoTip.jsx';
 import { buildDesc } from '../../tool-extractor.tsx';
 import { fieldsForType } from '../schema/fieldRegistry.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -61,8 +63,8 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
   // from the suggestion list — typing any size already works without selecting it.
   const isMetricThread = data.tap_thread_unit === 'metric';
   const threadSizeOptions = (isMetricThread ? METRIC_THREAD_SIZES : INCH_THREAD_SIZES).filter(s => s !== 'Custom...');
-  const tapToleranceOptions = isMetricThread ? TAP_TOLERANCE_OPTIONS_METRIC : TAP_TOLERANCE_OPTIONS_INCH;
-  const tapToleranceDefault = isMetricThread ? TAP_TOLERANCE_DEFAULT_METRIC : TAP_TOLERANCE_DEFAULT_INCH;
+  const tapLimitToleranceOptions = isMetricThread ? TAP_LIMIT_TOLERANCE_OPTIONS_METRIC : TAP_LIMIT_TOLERANCE_OPTIONS_INCH;
+  const tapLimitToleranceDefault = isMetricThread ? TAP_LIMIT_TOLERANCE_DEFAULT_METRIC : TAP_LIMIT_TOLERANCE_DEFAULT_INCH;
 
   const handleSave = async () => {
     const { valid, errors: errs } = validateTool(data);
@@ -373,17 +375,34 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
             />
             {visibleFields.has('tap_class') && (
               <div className="field-group">
-                <label className="field-label">{fieldLabel('tap_class', data?.unit)}</label>
+                <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  {fieldLabel('tap_class', data?.unit)}
+                  <InfoTip text={`The tap's pitch-diameter limit tolerance (e.g. "${tapLimitToleranceDefault}") — set by the tap's grind. This is NOT "class of fit" (below), which describes how the tapped hole mates with its mating part.`} />
+                </label>
                 <select className="field-input" value={data.tap_class || ''} onChange={e => setField('tap_class', e.target.value)}>
                   <option value="">Not specified</option>
-                  {tapToleranceOptions.map(t => (
-                    <option key={t} value={t}>{t}{t === tapToleranceDefault ? ' — standard' : ''}</option>
+                  {tapLimitToleranceOptions.map(t => (
+                    <option key={t} value={t}>{t}{t === tapLimitToleranceDefault ? ' — standard' : ''}</option>
                   ))}
                 </select>
-                {/* TODO: 2B/3B class of fit — add as its own selector once the governing formula is understood (do not build yet) */}
                 <p className="text-sub text-sm" style={{ marginTop: 4 }}>
                   Manufacturer-stated tolerance only — never derived or pulled from vendor sites (those are frequently wrong on this field).
                 </p>
+              </div>
+            )}
+            {visibleFields.has('class_of_fit') && (
+              <div className="field-group">
+                <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                  {fieldLabel('class_of_fit', data?.unit)}
+                  <InfoTip text="How the tapped hole fits its mating part — a thread-fit grade (1B loosest … 3B tightest), not a property of the tap itself. Tracked nowhere else (not ProShop, not Fusion); reference only." />
+                </label>
+                <select className="field-input" value={data.class_of_fit || ''} onChange={e => setField('class_of_fit', e.target.value)}>
+                  <option value="">Not specified</option>
+                  {CLASS_OF_FIT_OPTIONS.map(c => (
+                    <option key={c} value={c}>{c}{c === CLASS_OF_FIT_DEFAULT ? ' — general purpose' : ''}</option>
+                  ))}
+                </select>
+                {/* TODO: no auto-derivation — the 2B/3B selection formula isn't understood yet (manual entry only, per spec) */}
               </div>
             )}
             {visibleFields.has('point_type') && (

@@ -17,7 +17,8 @@ const FACET_LABEL = {
   tap_thread_unit: 'Thread Unit',
   cutting_direction: 'Hand',
   pitch: 'Thread Size',
-  tap_class: 'Tolerance',
+  tap_class: 'Limit Tolerance',
+  class_of_fit: 'Class of Fit',
 };
 
 const MULTI_SELECT_FIELDS = new Set(['flute_design']);

@@ -617,11 +617,29 @@ export const FIELD_REGISTRY = {
   },
 
   tap_class: {
-    label: 'Tap Tolerance',          // e.g. "H3" (inch) or "6H" (metric) — the spec's tap_tolerance concept
+    // "Tap class" is ProShop's (confusing) name for this column — it's really the tap's
+    // pitch-diameter LIMIT TOLERANCE (e.g. "H3" / "6H", set by the tap grind). Distinct
+    // from "class of fit" below (an assembly-level spec, e.g. "2B") — do not conflate them.
+    label: 'Tap Limit Tolerance',
     type: 'string',
     unit: null,
     fusionPath: null,
     proShopColumn: 'tapClass',
+    metadataOnly: true,
+    appliesToTypes: ['tap'],
+    required: false,
+    precision: null,
+  },
+
+  class_of_fit: {
+    // The thread fit grade for the tapped hole (1B loosest … 3B tightest) — an
+    // assembly-level spec, NOT a property of the tap itself. Tracked nowhere else
+    // (not ProShop, not Fusion); manually entered here as a reference field only.
+    label: 'Class of Fit',
+    type: 'string',
+    unit: null,
+    fusionPath: null,
+    proShopColumn: null,             // not tracked in ProShop
     metadataOnly: true,
     appliesToTypes: ['tap'],
     required: false,
