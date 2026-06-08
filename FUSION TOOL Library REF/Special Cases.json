@@ -1,0 +1,998 @@
+{
+    "data": [
+        {
+            "BMC": "carbide",
+            "GRADE": "Mill Generic",
+            "description": "3/8 Endmill Coolant EXamples",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-60'",
+                "tool_bodyLength": "1.322 in",
+                "tool_comment": "''",
+                "tool_description": "'3/8 Endmill Coolant EXamples'",
+                "tool_diameter": "0.375 in",
+                "tool_fluteLength": "0.875 in",
+                "tool_lengthOffset": "tool_number",
+                "tool_material": "'carbide'",
+                "tool_number": "92",
+                "tool_numberOfFlutes": "3",
+                "tool_overallLength": "3 in",
+                "tool_productId": "'A-222233'",
+                "tool_productLink": "''",
+                "tool_shaftDiameter": "((tool_type == 'reamer') ? (tool_diameter * 0.9) : ((tool_type == 'counter bore') ? (tool_diameter * 0.8) : ((tool_type == 'counter sink') ? (tool_diameter * 0.6) : ((tool_type == 'dovetail mill' || tool_type == 'lollipop mill' || tool_type == 'circle segment barrel') ? (tool_diameter * 0.5) : ((tool_type == 'slot mill') ? (tool_diameter / 3) : ((tool_type == 'face mill' || tool_type == 'radius mill' || tool_type == 'tapered mill') ? (tool_shoulderDiameter) : ((tool_type == 'probe') ? (4mm) : (tool_diameter))))))))",
+                "tool_shoulderLength": "0.875 in",
+                "tool_vendor": "''"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.375,
+                "HAND": true,
+                "LB": 1.322,
+                "LCF": 0.875,
+                "NOF": 3,
+                "OAL": 3,
+                "SFDM": 0.375,
+                "assemblyGaugeLength": 3.487314960629922,
+                "shoulder-diameter": 0.375,
+                "shoulder-length": 0.875
+            },
+            "guid": "82da64a3-6692-4e56-b9e5-71098e962631",
+            "holder": {
+                "description": "NBT30-SK13C-60",
+                "expressions": {
+                    "tool_description": "'NBT30-SK13C-60'",
+                    "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+                },
+                "gaugeLength": 54.999,
+                "guid": "5f52f738-7099-4cdc-8bf7-a93859237490",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 35,
+                        "lower-diameter": 33,
+                        "upper-diameter": 33
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 44,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 3.4,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 46,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 3.381,
+                        "lower-diameter": 38,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 38,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 6.6,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 46,
+                        "upper-diameter": 44
+                    },
+                    {
+                        "height": 2,
+                        "lower-diameter": 31.75,
+                        "upper-diameter": 31.75
+                    }
+                ],
+                "type": "holder",
+                "unit": "millimeters",
+                "vendor": ""
+            },
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 92,
+                "length-offset": 92,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 92,
+                "turret": 0
+            },
+            "product-id": "A-222233",
+            "product-link": "",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_coolant": "'flood'",
+                            "tool_feedPerTooth": "0.002 in",
+                            "tool_feedPlunge": "60 inpm",
+                            "tool_feedRamp": "40 inpm",
+                            "tool_surfaceSpeed": "850 fpm"
+                        },
+                        "f_n": 0.006929983794683365,
+                        "f_z": 0.002,
+                        "guid": "6a33a966-48bf-474b-a092-c310805a25af",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 8658.02890419911,
+                        "n_ramp": 8658.02890419911,
+                        "name": "Flood",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 850,
+                        "v_f": 51.94817342519466,
+                        "v_f_leadIn": 51.94817342519466,
+                        "v_f_leadOut": 51.94817342519466,
+                        "v_f_plunge": 60,
+                        "v_f_ramp": 40,
+                        "v_f_transition": 51.94817342519466
+                    },
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_coolant": "'tool'",
+                            "tool_feedPerTooth": "0.002 in",
+                            "tool_feedPlunge": "60 inpm",
+                            "tool_feedRamp": "40 inpm",
+                            "tool_surfaceSpeed": "850 fpm"
+                        },
+                        "f_n": 0.006929983794683365,
+                        "f_z": 0.002,
+                        "guid": "3dbe74f8-9870-4198-a294-8c6659847196",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 8658.02890419911,
+                        "n_ramp": 8658.02890419911,
+                        "name": "Through tool",
+                        "ramp-angle": 2,
+                        "tool-coolant": "tool",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 850,
+                        "v_f": 51.94817342519466,
+                        "v_f_leadIn": 51.94817342519466,
+                        "v_f_leadOut": 51.94817342519466,
+                        "v_f_plunge": 60,
+                        "v_f_ramp": 40,
+                        "v_f_transition": 51.94817342519466
+                    },
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_coolant": "'disabled'",
+                            "tool_feedPerTooth": "0.002 in",
+                            "tool_feedPlunge": "60 inpm",
+                            "tool_feedRamp": "40 inpm",
+                            "tool_surfaceSpeed": "850 fpm"
+                        },
+                        "f_n": 0.006929983794683365,
+                        "f_z": 0.002,
+                        "guid": "4e0ec7bc-7027-4f5e-9633-40d30f6c8a8b",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 8658.02890419911,
+                        "n_ramp": 8658.02890419911,
+                        "name": "Disabled",
+                        "ramp-angle": 2,
+                        "tool-coolant": "disabled",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 850,
+                        "v_f": 51.94817342519466,
+                        "v_f_leadIn": 51.94817342519466,
+                        "v_f_leadOut": 51.94817342519466,
+                        "v_f_plunge": 60,
+                        "v_f_ramp": 40,
+                        "v_f_transition": 51.94817342519466
+                    },
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_coolant": "'air'",
+                            "tool_feedPerTooth": "0.002 in",
+                            "tool_feedPlunge": "60 inpm",
+                            "tool_feedRamp": "40 inpm",
+                            "tool_surfaceSpeed": "850 fpm"
+                        },
+                        "f_n": 0.006929983794683365,
+                        "f_z": 0.002,
+                        "guid": "90d6e0c5-7fa0-49b1-b3e0-327b2fa06a60",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 8658.02890419911,
+                        "n_ramp": 8658.02890419911,
+                        "name": "Air",
+                        "ramp-angle": 2,
+                        "tool-coolant": "air",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 850,
+                        "v_f": 51.94817342519466,
+                        "v_f_leadIn": 51.94817342519466,
+                        "v_f_leadOut": 51.94817342519466,
+                        "v_f_plunge": 60,
+                        "v_f_ramp": 40,
+                        "v_f_transition": 51.94817342519466
+                    },
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_coolant": "'flood tool'",
+                            "tool_feedPerTooth": "0.002 in",
+                            "tool_feedPlunge": "60 inpm",
+                            "tool_feedRamp": "40 inpm",
+                            "tool_rampSpindleSpeed": "tool_spindleSpeed",
+                            "tool_surfaceSpeed": "850 fpm"
+                        },
+                        "f_n": 0.006929983794683365,
+                        "f_z": 0.002,
+                        "guid": "f2bbfcbc-e86c-4541-b1ea-4fcf79cdb114",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 8658.02890419911,
+                        "n_ramp": 8658.02890419911,
+                        "name": "Flood and through tool",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood tool",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 850,
+                        "v_f": 51.94817342519466,
+                        "v_f_leadIn": 51.94817342519466,
+                        "v_f_leadOut": 51.94817342519466,
+                        "v_f_plunge": 60,
+                        "v_f_ramp": 40,
+                        "v_f_transition": 51.94817342519466
+                    }
+                ]
+            },
+            "type": "flat end mill",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "hss",
+            "description": "Left Hand tap example",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-60'",
+                "tool_description": "'Left Hand tap example'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.4,
+                "LB": 2,
+                "LCF": 0.8,
+                "NOF": 3,
+                "OAL": 2,
+                "SFDM": 0.4,
+                "TP": 0.04,
+                "assemblyGaugeLength": 4.165314960629922,
+                "shoulder-length": 1.2
+            },
+            "guid": "173bf587-ffb5-4061-92a3-48dc4e96fe3b",
+            "holder": {
+                "description": "NBT30-SK13C-60",
+                "expressions": {
+                    "tool_description": "'NBT30-SK13C-60'",
+                    "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+                },
+                "gaugeLength": 54.999,
+                "guid": "5f52f738-7099-4cdc-8bf7-a93859237490",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 35,
+                        "lower-diameter": 33,
+                        "upper-diameter": 33
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 44,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 3.4,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 46,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 3.381,
+                        "lower-diameter": 38,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 38,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 6.6,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 46,
+                        "upper-diameter": 44
+                    },
+                    {
+                        "height": 2,
+                        "lower-diameter": 31.75,
+                        "upper-diameter": 31.75
+                    }
+                ],
+                "type": "holder",
+                "unit": "millimeters",
+                "vendor": ""
+            },
+            "last_modified": 1780927153557,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 1,
+                "length-offset": 1,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 1,
+                "turret": 0
+            },
+            "product-id": "",
+            "product-link": "",
+            "reference_guid": "<NEW TOOL GUID>",
+            "start-values": {
+                "presets": [
+                    {
+                        "guid": "ec72385b-5fea-4c76-8b4a-0a8dcd31c144",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 500,
+                        "name": "See preset too",
+                        "tool-coolant": "flood",
+                        "v_c": 52.3598775598299
+                    }
+                ]
+            },
+            "type": "tap left hand",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "hss",
+            "description": "Right hand tap preset example",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-120'",
+                "tool_description": "'Right hand tap preset example'",
+                "tool_number": "2"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.4,
+                "LB": 2,
+                "LCF": 0.8,
+                "NOF": 3,
+                "OAL": 2,
+                "SFDM": 0.4,
+                "TP": 0.04,
+                "assemblyGaugeLength": 6.527519685039372,
+                "shoulder-length": 1.2
+            },
+            "guid": "eb721899-11cd-4ae6-abaf-08046444f5c9",
+            "holder": {
+                "description": "NBT30-SK13C-120",
+                "expressions": {
+                    "tool_description": "'NBT30-SK13C-120'",
+                    "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+                },
+                "gaugeLength": 114.999,
+                "guid": "0330cb19-c7eb-4668-8ba8-ecdccfde500b",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 95,
+                        "lower-diameter": 33,
+                        "upper-diameter": 33
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 44,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 3.4,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 46,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 3.381,
+                        "lower-diameter": 38,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 38,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 6.6,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 46,
+                        "upper-diameter": 44
+                    },
+                    {
+                        "height": 2,
+                        "lower-diameter": 31.75,
+                        "upper-diameter": 31.75
+                    }
+                ],
+                "type": "holder",
+                "unit": "millimeters",
+                "vendor": ""
+            },
+            "last_modified": 1780927189659,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 2,
+                "length-offset": 2,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 2,
+                "turret": 0
+            },
+            "product-id": "",
+            "product-link": "",
+            "reference_guid": "<NEW TOOL GUID>",
+            "start-values": {
+                "presets": [
+                    {
+                        "guid": "d68b798e-e6d8-4cc2-a3de-7a78586b3b26",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 500,
+                        "name": "See here",
+                        "tool-coolant": "flood",
+                        "v_c": 52.3598775598299
+                    }
+                ]
+            },
+            "type": "tap right hand",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "hss",
+            "description": "Drill Preset example - applies to other hole making tool types",
+            "expressions": {
+                "holder_description": "'DRILL CHUCK - BT30'",
+                "holder_productId": "'BT30-APU13D'",
+                "holder_productLink": "'https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Drill-Chucks/c23_33_444_533/p17945/BT30-DUAL-CONTACT-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html'",
+                "holder_vendor": "'Maritool'",
+                "tool_description": "'Drill Preset example - applies to other hole making tool types'",
+                "tool_tipAngle": "118.00 degrees"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.4,
+                "HAND": true,
+                "LB": 4,
+                "LCF": 3.2,
+                "NOF": 2,
+                "OAL": 5.2,
+                "SFDM": 0.4,
+                "SIG": 118,
+                "assemblyGaugeLength": 8.265003858267717,
+                "shoulder-length": 3.600000000000001
+            },
+            "guid": "32abb346-f915-4eeb-a520-6fc114c62885",
+            "holder": {
+                "description": "DRILL CHUCK - BT30",
+                "expressions": {
+                    "tool_description": "'DRILL CHUCK - BT30'",
+                    "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height + segment_10_height + segment_11_height",
+                    "tool_productId": "'BT30-APU13D'",
+                    "tool_productLink": "'https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Drill-Chucks/c23_33_444_533/p17945/BT30-DUAL-CONTACT-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html'",
+                    "tool_unit": "'inches'",
+                    "tool_vendor": "'Maritool'"
+                },
+                "gaugeLength": 4.265003858267717,
+                "guid": "420a54c7-ed6a-429f-92aa-281028199826",
+                "product-id": "BT30-APU13D",
+                "product-link": "https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Drill-Chucks/c23_33_444_533/p17945/BT30-DUAL-CONTACT-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html",
+                "segments": [
+                    {
+                        "height": 0.23,
+                        "lower-diameter": 0.685,
+                        "upper-diameter": 0.9
+                    },
+                    {
+                        "height": 0.8,
+                        "lower-diameter": 1.5,
+                        "upper-diameter": 1.943
+                    },
+                    {
+                        "height": 0.1,
+                        "lower-diameter": 1.95,
+                        "upper-diameter": 1.95
+                    },
+                    {
+                        "height": 1.82087,
+                        "lower-diameter": 1.99,
+                        "upper-diameter": 1.99
+                    },
+                    {
+                        "height": 0.7,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.09090551181102365,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.4960629921259845
+                    },
+                    {
+                        "height": 0.13311023622047244,
+                        "lower-diameter": 1.4960629921259845,
+                        "upper-diameter": 1.4960629921259845
+                    },
+                    {
+                        "height": 0.09090551181102365,
+                        "lower-diameter": 1.4960629921259845,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.25984251968503935,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.03937007874015748,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.7322834645669292
+                    },
+                    {
+                        "height": 0.07874015748031496,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": "Maritool"
+            },
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 3,
+                "length-offset": 3,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 3,
+                "turret": 0
+            },
+            "product-id": "",
+            "product-link": "",
+            "start-values": {
+                "presets": [
+                    {
+                        "expressions": {
+                            "tool_feedPerRevolution": ".008 in",
+                            "tool_surfaceSpeed": "200 fpm"
+                        },
+                        "guid": "0e307f9f-a245-4bcb-b68c-3e8fe05fbc0a",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 1909.859317102744,
+                        "name": "See here for drills",
+                        "tool-coolant": "flood",
+                        "use-feed-per-revolution": false,
+                        "v_c": 200,
+                        "v_f_plunge": 15.278874536821954,
+                        "v_f_retract": 40
+                    }
+                ]
+            },
+            "type": "drill",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "carbide",
+            "description": "End Mill Prest examples",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-60'",
+                "tool_description": "'End Mill Prest examples'",
+                "tool_material": "'carbide'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.25,
+                "HAND": true,
+                "LB": 1,
+                "LCF": 0.75,
+                "NOF": 4,
+                "OAL": 1.5,
+                "SFDM": 0.25,
+                "assemblyGaugeLength": 3.165314960629922,
+                "shoulder-diameter": 0.25,
+                "shoulder-length": 0.875
+            },
+            "guid": "4ed53496-f688-438c-adbc-c386a7c7e6dc",
+            "holder": {
+                "description": "NBT30-SK13C-60",
+                "expressions": {
+                    "tool_description": "'NBT30-SK13C-60'",
+                    "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+                },
+                "gaugeLength": 54.999,
+                "guid": "5f52f738-7099-4cdc-8bf7-a93859237490",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 35,
+                        "lower-diameter": 33,
+                        "upper-diameter": 33
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 44,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 3.4,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 46,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 3.381,
+                        "lower-diameter": 38,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 38,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 6.6,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 46,
+                        "upper-diameter": 44
+                    },
+                    {
+                        "height": 2,
+                        "lower-diameter": 31.75,
+                        "upper-diameter": 31.75
+                    }
+                ],
+                "type": "holder",
+                "unit": "millimeters",
+                "vendor": ""
+            },
+            "last_modified": 1780927625467,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 4,
+                "length-offset": 4,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 4,
+                "turret": 0
+            },
+            "product-id": "",
+            "product-link": "",
+            "reference_guid": "<NEW TOOL GUID>",
+            "start-values": {
+                "presets": [
+                    {
+                        "f_n": 0.0026666666666666666,
+                        "f_z": 0.002,
+                        "guid": "4fba98ac-f42e-4115-b2ef-4979825efcc2",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5000,
+                        "n_ramp": 5000,
+                        "name": "Default preset ref",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 327.2492347489367,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 13.333333333333334,
+                        "v_f_ramp": 13.333333333333334,
+                        "v_f_transition": 40
+                    },
+                    {
+                        "expressions": {
+                            "tool_stepdown": "tool_fluteLength * 0.95",
+                            "tool_stepover": "tool_diameter * 0.1",
+                            "use_tool_stepdown": "true",
+                            "use_tool_stepover": "true"
+                        },
+                        "f_n": 0.0026666666666666666,
+                        "f_z": 0.002,
+                        "guid": "2bea151f-db5d-4409-84a0-674f03dbd494",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5000,
+                        "n_ramp": 5000,
+                        "name": "Default with step down and step over",
+                        "ramp-angle": 2,
+                        "stepdown": 0.7124999999999998,
+                        "stepover": 0.025,
+                        "tool-coolant": "flood",
+                        "use-stepdown": true,
+                        "use-stepover": true,
+                        "v_c": 327.2492347489367,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 13.333333333333334,
+                        "v_f_ramp": 13.333333333333334,
+                        "v_f_transition": 40
+                    },
+                    {
+                        "expressions": {
+                            "tool_stepdown": ".4 in",
+                            "tool_stepover": ".025 in",
+                            "use_tool_stepdown": "true",
+                            "use_tool_stepover": "true"
+                        },
+                        "f_n": 0.0026666666666666666,
+                        "f_z": 0.002,
+                        "guid": "5de88e45-1c82-48e6-9bf9-fc54a00d5ad6",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5000,
+                        "n_ramp": 5000,
+                        "name": "Step down and step over manual values",
+                        "ramp-angle": 2,
+                        "stepdown": 0.4,
+                        "stepover": 0.025,
+                        "tool-coolant": "flood",
+                        "use-stepdown": true,
+                        "use-stepover": true,
+                        "v_c": 327.2492347489367,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 13.333333333333334,
+                        "v_f_ramp": 13.333333333333334,
+                        "v_f_transition": 40
+                    }
+                ]
+            },
+            "type": "flat end mill",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "carbide",
+            "description": "Test tool with addded fusion segments ref",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-120'",
+                "tool_bodyLength": "2. in",
+                "tool_cornerRadius": ".03 in",
+                "tool_description": "'Test tool with addded fusion segments ref'",
+                "tool_diameter": ".375 in",
+                "tool_material": "'carbide'",
+                "tool_overallLength": "3. in"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.375,
+                "HAND": true,
+                "LB": 2,
+                "LCF": 0.75,
+                "NOF": 4,
+                "OAL": 3,
+                "RE": 0.03,
+                "SFDM": 0.375,
+                "assemblyGaugeLength": 6.527519685039372,
+                "shoulder-diameter": 0.375,
+                "shoulder-length": 0.875
+            },
+            "guid": "dac1ec18-5902-4e75-8466-e7369c991723",
+            "holder": {
+                "description": "NBT30-SK13C-120",
+                "expressions": {
+                    "tool_description": "'NBT30-SK13C-120'",
+                    "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+                },
+                "gaugeLength": 114.999,
+                "guid": "0330cb19-c7eb-4668-8ba8-ecdccfde500b",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 95,
+                        "lower-diameter": 33,
+                        "upper-diameter": 33
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 44,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 3.4,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 46,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 3.381,
+                        "lower-diameter": 38,
+                        "upper-diameter": 38
+                    },
+                    {
+                        "height": 2.309,
+                        "lower-diameter": 38,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 6.6,
+                        "lower-diameter": 46,
+                        "upper-diameter": 46
+                    },
+                    {
+                        "height": 1,
+                        "lower-diameter": 46,
+                        "upper-diameter": 44
+                    },
+                    {
+                        "height": 2,
+                        "lower-diameter": 31.75,
+                        "upper-diameter": 31.75
+                    }
+                ],
+                "type": "holder",
+                "unit": "millimeters",
+                "vendor": ""
+            },
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 5,
+                "length-offset": 5,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 5,
+                "turret": 0
+            },
+            "product-id": "",
+            "product-link": "",
+            "shaft": {
+                "segments": [
+                    {
+                        "height": 0.25,
+                        "lower-diameter": 0.375,
+                        "upper-diameter": 0.375
+                    },
+                    {
+                        "height": 0.25,
+                        "lower-diameter": 0.375,
+                        "upper-diameter": 0.5
+                    },
+                    {
+                        "height": 0.5,
+                        "lower-diameter": 0.5,
+                        "upper-diameter": 0.5
+                    }
+                ],
+                "type": "shaft"
+            },
+            "start-values": {
+                "presets": [
+                    {
+                        "f_n": 0.0026666666666666666,
+                        "f_z": 0.002,
+                        "guid": "b37a76e2-66e4-4133-8855-2e73cfa6c6ee",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5000,
+                        "n_ramp": 5000,
+                        "name": "Default preset",
+                        "ramp-angle": 2,
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 490.873852123405,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 13.333333333333334,
+                        "v_f_ramp": 13.333333333333334,
+                        "v_f_transition": 40
+                    }
+                ]
+            },
+            "type": "bull nose end mill",
+            "unit": "inches",
+            "vendor": ""
+        }
+    ],
+    "version": 36
+}
