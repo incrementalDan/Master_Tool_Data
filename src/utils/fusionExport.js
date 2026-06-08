@@ -15,7 +15,14 @@ function toFusionFormat(tool, holders = [], assembly = null) {
 
   if (assembly) {
     const holder = holders.find(h => h.guid === assembly.holder_guid);
-    if (holder) f.holder = buildHolderObject(holder);
+    if (holder) {
+      f.holder = buildHolderObject(holder);
+      // Sync expressions.holder_description to the resolved holder — Fusion
+      // displays the holder name from this expression, not from holder.description,
+      // so a stale expression (carried over from the holder this tool first had)
+      // shows the wrong holder name even though our holder object is correct.
+      f.expressions = { ...(f.expressions || {}), holder_description: `'${f.holder.description || ''}'` };
+    }
     if (assembly.ooh != null && !isNaN(Number(assembly.ooh))) {
       const isMetric = tool.unit === 'millimeters';
       // OOH is stored in the tool's own unit; geometry.LB is in that unit too —
@@ -35,7 +42,10 @@ function toFusionFormat(tool, holders = [], assembly = null) {
     }
   } else if (tool.selected_holder_guid && holders.length > 0) {
     const holder = holders.find(h => h.guid === tool.selected_holder_guid);
-    if (holder) f.holder = buildHolderObject(holder);
+    if (holder) {
+      f.holder = buildHolderObject(holder);
+      f.expressions = { ...(f.expressions || {}), holder_description: `'${f.holder.description || ''}'` };
+    }
   }
 
   return f;

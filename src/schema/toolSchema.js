@@ -1177,6 +1177,20 @@ export function splitToFusionInstances(tool, holders = []) {
       base.holder = raw.holder || null;
     }
 
+    // Sync expressions.holder_description to the resolved holder — Fusion
+    // re-derives the displayed holder name from this expression, not from
+    // holder.description, so a stale expression (e.g. carried over from the
+    // first holder ever attached to this tool) shows the wrong holder name in
+    // Fusion even though our holder object is correct. Same "write the native
+    // value AND its paired expression together" rule as geometry.LB/tool_bodyLength.
+    // Fusion omits this key entirely when the tool has no holder, so mirror that.
+    base.expressions = { ...(base.expressions || {}) };
+    if (base.holder?.description) {
+      base.expressions.holder_description = `'${base.holder.description}'`;
+    } else {
+      delete base.expressions.holder_description;
+    }
+
     // Per-instance OOH → geometry.LB (the documented OOH source of truth).
     // OOH is stored in the tool's own unit, so it's written raw (no conversion).
     // ALSO update expressions.tool_bodyLength — Fusion re-derives LB from this
