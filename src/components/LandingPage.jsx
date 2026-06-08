@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, X, Plus, LayoutGrid, List, PackageOpen } from 'lucide-react';
+import { Search, X, Plus, LayoutGrid, List, PackageOpen, FolderOpen } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { applyFilters } from '../services/searchEngine.js';
 import ToolTypeGrid from './ToolTypeGrid.jsx';
@@ -20,7 +20,7 @@ const SORTS = {
 };
 
 export default function LandingPage() {
-  const { tools, isLoading, error } = useApp();
+  const { tools, isLoading, error, clearLibraryLocation } = useApp();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchRef = useRef(null);
@@ -100,7 +100,19 @@ export default function LandingPage() {
 
   return (
     <div>
-      {error && <div className="error-banner">{error}</div>}
+      {error && (
+        <div className="error-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <span>{error}</span>
+          {/* No tools loaded + an error almost always means the library itself failed
+              to load (missing/moved/permissions) — point straight at the fix rather
+              than leaving the operator to guess what a raw error string means. */}
+          {tools.length === 0 && (
+            <button className="btn btn-secondary btn-sm" onClick={clearLibraryLocation} style={{ flexShrink: 0 }}>
+              <FolderOpen size={14} /> Change library…
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Search bar + Add button */}
       <div className="flex items-center gap-12 mb-16">
