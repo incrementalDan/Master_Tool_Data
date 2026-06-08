@@ -13,9 +13,7 @@ function indexOf(value) {
 }
 
 // Small horizontal "drum" that loops through the three comparison operators.
-// Click its left/right halves to roll the drum that direction. Three
-// absolutely-positioned symbol spans translate together on each click — the
-// center one is always the active operator once the roll settles.
+// Single click anywhere on the dial advances forward: = → ≥ → ≤ → = …
 export default function OperatorDial({ value, onChange }) {
   const idx = indexOf(value);
   const [roll, setRoll] = useState(null); // { idx, offset, settle } while a roll is animating
@@ -67,15 +65,9 @@ export default function OperatorDial({ value, onChange }) {
       </div>
       <button
         type="button"
-        className="operator-dial-zone operator-dial-zone-left"
-        onClick={() => advance('left')}
-        aria-label="Use the previous comparison operator"
-      />
-      <button
-        type="button"
-        className="operator-dial-zone operator-dial-zone-right"
+        className="operator-dial-zone"
         onClick={() => advance('right')}
-        aria-label="Use the next comparison operator"
+        aria-label="Cycle comparison operator"
       />
     </div>
   );
