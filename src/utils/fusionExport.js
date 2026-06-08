@@ -95,8 +95,10 @@ const INTERNAL_TO_FUSION_TYPE = {
   'reamer': 'reamer',
   'counter bore': 'counter bore',
   'counter sink': 'counter sink',
-  'tap form': 'tap right hand',
-  'tap cut': 'tap right hand',
+  // 'tap left hand' is not a confirmed Fusion type string (see toolSchema.js FT_MAP
+  // for the full explanation) — every tap exports as 'tap right hand' for now.
+  // TODO: branch on cutting_direction once the left-hand string is confirmed.
+  'tap': 'tap right hand',
   'boring head': 'boring bar',
   'turning general': 'turning general',
 };
@@ -257,7 +259,7 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
 
     const taperTypes = new Set(['tapered mill','face mill','chamfer mill','dovetail','circle segment taper']);
     const tipAngleTypes = new Set(['drill','center drill','spot drill','counter sink','chamfer mill']);
-    const tipDiaTypes = new Set(['chamfer mill','dovetail','spot drill','thread mill','center drill','counter sink','tap form','tap cut']);
+    const tipDiaTypes = new Set(['chamfer mill','dovetail','spot drill','thread mill','center drill','counter sink','tap']);
     const lrTypes = new Set(['circle segment barrel','circle segment lens','circle segment oval','circle segment taper']);
     const urTypes = new Set(['face mill','circle segment barrel','circle segment taper']);
     const prTypes = new Set(['circle segment barrel','circle segment oval','circle segment taper']);

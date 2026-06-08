@@ -2144,6 +2144,23 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 .proshot-pill:hover { filter: brightness(1.2); text-decoration: none; }
 
+/* Bright, prominent — flags an STI/Helicoil tap (a meaningfully different tool to grab) */
+.sti-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(74, 222, 128, 0.22);
+  border: 1px solid rgba(74, 222, 128, 0.65);
+  color: #4ade80;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .machine-num-badge {
   display: inline-block;
   padding: 2px 7px;

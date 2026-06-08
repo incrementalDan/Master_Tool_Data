@@ -13,6 +13,11 @@ const FACET_LABEL = {
   tsc_capable: 'TSC',
   material_suitability: 'Cuts',
   corner_radius: 'Corner Radius',
+  tap_sub_type: 'Sub-Type',
+  tap_thread_unit: 'Thread Unit',
+  cutting_direction: 'Hand',
+  pitch: 'Thread Size',
+  tap_class: 'Tolerance',
 };
 
 const MULTI_SELECT_FIELDS = new Set(['flute_design']);

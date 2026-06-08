@@ -73,14 +73,14 @@ const AUTO_GROUP = {
   "reamer":"F","counter bore":"F","face mill":"I","slot/key cutter":"J","radius mill":"K",
   "chamfer mill":"L","counter sink":"L","form mill":"M","lollipop mill":"M","dovetail":"M",
   "circle segment barrel":"M","circle segment oval":"M","circle segment taper":"M",
-  "thread mill":"N","spot drill":"O","tap form":"R","tap cut":"R",
+  "thread mill":"N","spot drill":"O","tap":"R",
   "boring head":"TD","boring bar":"TD","turning general":"TF",
 };
 const ROUND_SHANK_TYPES = new Set([
   "flat end mill","ball end mill","bull nose end mill","tapered mill","radius mill","form mill","lollipop mill",
   "slot/key cutter","dovetail","thread mill","chamfer mill",
   "circle segment barrel","circle segment lens","circle segment oval","circle segment taper",
-  "drill","center drill","spot drill","reamer","counter bore","counter sink","tap form","tap cut",
+  "drill","center drill","spot drill","reamer","counter bore","counter sink","tap",
 ]);
 const FLUTE_TYPE_OPTS = ["","Roughing","Semi-Finishing","Finishing","Yes","No"];
 
@@ -180,8 +180,8 @@ function buildDesc(f, inputWasMm=false){
     case"spot drill":        return `${smartDiam(d,inputWasMm)} SPOT DRILL ${ang||"90"}DEG${tsc}`.trim();
     case"chamfer mill":      return `${smartDiam(d,inputWasMm)} CHAMFER ${ang||"90"}DEG${tsc}`.trim();
     case"face mill":         return `${dStr} FACE MILL${tsc}`.trim();
-    case"tap form":          return `${pitch||r4(d)} FORM TAP${f.tapClass?" "+f.tapClass:""}${tsc}`.trim();
-    case"tap cut":           return `${pitch||r4(d)} CUT TAP${f.tapClass?" "+f.tapClass:""}${tsc}`.trim();
+    case"tap":               { const stiPfx=f.tapSubType==="sti"?"STI ":"",subWord=f.tapSubType==="form"?"FORM":"CUT";
+                               return `${stiPfx}${pitch||r4(d)} ${subWord} TAP${f.tapClass?" "+f.tapClass:""}${tsc}`.trim(); }
     case"thread mill":       return `${dStr} THREAD MILL${tsc}`.trim();
     case"slot/key cutter":   return `${dStr} Slot${cr?" ."+descDec(cr)+"KERF":""}${tsc}`.trim();
     case"dovetail":          return `${dStr} Dove ${ang||""}inc${tsc}`.trim();
@@ -209,7 +209,11 @@ const FT = {
   "slot/key cutter":"slot mill","dovetail":"dovetail mill","thread mill":"thread mill","face mill":"face mill","chamfer mill":"chamfer mill",
   "circle segment barrel":"circle segment barrel","circle segment lens":"circle segment lens","circle segment oval":"circle segment oval","circle segment taper":"circle segment taper",
   "drill":"drill","center drill":"center drill","spot drill":"spot drill","reamer":"reamer","counter bore":"counter bore","counter sink":"counter sink",
-  "tap form":"tap right hand","tap cut":"tap right hand","boring head":"boring bar","boring bar":"boring bar","turning general":"turning general",
+  // "tap left hand" is not a confirmed Fusion type string (absent from FUSION_SCHEMA.md
+  // and the sample library — only "tap right hand" appears). Until confirmed in live
+  // Fusion, every tap writes "tap right hand" regardless of cuttingDirection — the
+  // safer choice vs. risking an unrecognized type string corrupting the tool on load.
+  "tap":"tap right hand","boring head":"boring bar","boring bar":"boring bar","turning general":"turning general",
 };
 
 const FUSION_HDR=`"Tool Index (tool_index)"\t"Preset Name (preset_name)"\t"Type (tool_type)"\t"Description (tool_description)"\t"Diameter (tool_diameter)"\t"Number (tool_number)"\t"Unit (tool_unit)"\t"Holder Description (holder_description)"\t"Holder Product ID (holder_productId)"\t"Holder Product Link (holder_productLink)"\t"Holder Vendor (holder_vendor)"\t"Abrasive Flow Rate (tool_abrasiveFlowRate)"\t"Size (tool_adaptiveItemSize)"\t"Orientation (tool_angle)"\t"Tool Assembly Gauge Length (tool_assemblyGaugeLength)"\t"Assist Gas (tool_assistGas)"\t"Axial Distance (tool_axialDistance)"\t"Bead Width (tool_beadWidth)"\t"Tool Block Size (tool_block_adaptiveItemSize)"\t"Tool Block Comment (tool_block_comment)"\t"Tool Block Description (tool_block_description)"\t"Tool Block Half Index (tool_block_isHalfIndex)"\t"Tool Block Live (tool_block_live)"\t"Tool Block Connection Type (tool_block_machineSideConnectionType)"\t"Tool Block Maximum RPM (tool_block_maximumRotationalSpeed)"\t"Tool Block Attachment points (tool_block_numberOfAttachmentPoints)"\t"Tool Block Number of Tools (tool_block_numberOfTools)"\t"Tool Block Orientation (tool_block_orientationType)"\t"Tool Block Product ID (tool_block_productId)"\t"Tool Block Product Link (tool_block_productLink)"\t"Tool Block Station Number (tool_block_stationNumber)"\t"Tool Block Vendor (tool_block_vendor)"\t"Body Length (tool_bodyLength)"\t"Break Control (tool_breakControl)"\t"Chamfer Angle (tool_chamferAngle)"\t"Chamfer Width (tool_chamferWidth)"\t"Clamping (tool_clamping)"\t"Clockwise Spindle Rotation (tool_clockwise)"\t"Comment (tool_comment)"\t"Compensation (tool_compensation)"\t"Compensation Offset (tool_compensationOffset)"\t"Coolant (tool_coolant)"\t"Coolant Support (tool_coolantSupport)"\t"Corner Radius (tool_cornerRadius)"\t"Cross Section (tool_crossSection)"\t"Cut Height (tool_cutHeight)"\t"Cut Power (tool_cutPower)"\t"Cutting Width (tool_cuttingWidth)"\t"Auxiliary Gas Flow Rate (tool_depositingAuxiliaryGasFlowRate)"\t"Carrier Gas Flow Rate (tool_depositingCarrierGasFlowRate)"\t"Current (tool_depositingCurrent)"\t"Power (tool_depositingPower)"\t"Shield Gas Flow Rate (tool_depositingShieldGasFlowRate)"\t"Voltage (tool_depositingVoltage)"\t"Depth of Cut (tool_depthOfCut)"\t"Diameter Offset (tool_diameterOffset)"\t"End Angle (tool_endAngle)"\t"End Cutting (tool_endCutting)"\t"Cutting Feedrate (tool_feedCutting)"\t"Cutting Feed per Revolution (tool_feedCuttingRel)"\t"Depositing Feedrate (tool_feedDepositing)"\t"Lead-In Feedrate (tool_feedEntry)"\t"Lead-In Feed per Revolution (tool_feedEntryRel)"\t"Lead-Out Feedrate (tool_feedExit)"\t"Lead-Out Feed per Revolution (tool_feedExitRel)"\t"Plunge Feed per Revolution (tool_feedPerRevolution)"\t"Feed per Tooth (tool_feedPerTooth)"\t"Plunge Feedrate (tool_feedPlunge)"\t"Link Feedrate (tool_feedProbeLink)"\t"Measure Feedrate (tool_feedProbeMeasure)"\t"Ramp Feedrate (tool_feedRamp)"\t"Retract Feedrate (tool_feedRetract)"\t"Retract Feed per Revolution (tool_feedRetractPerRevolution)"\t"Transition Feedrate (tool_feedTransition)"\t"Wire Feedrate (tool_feedWire)"\t"Flute Length (tool_fluteLength)"\t"Use Opposite Edge (tool_grooveCompOppositeEdge)"\t"Groove Width (tool_grooveWidth)"\t"Hand (tool_hand)"\t"Head Clearance (tool_headClearance)"\t"Head Length (tool_headLength)"\t"Tool Holder Gauge Length (tool_holderGaugeLength)"\t"Head Length (tool_holderHeadLength)"\t"Overall Length (tool_holderOverallLength)"\t"Style (tool_holderType)"\t"Angle (tool_insertAngle)"\t"Insert size (tool_insertSize)"\t"Size specified by (tool_insertSizeSpecificationMode)"\t"Shape (tool_insertType)"\t"Width (tool_insertWidth)"\t"Internal Thread (tool_internalThread)"\t"Half Index (tool_isHalfIndex)"\t"Kerf Width (tool_kerfWidth)"\t"Layer Thickness (tool_layerThickness)"\t"Leading Angle (tool_leadingAngle)"\t"Trailing edge length (tool_lengthNonCuttingEdge)"\t"Length Offset (tool_lengthOffset)"\t"Live Tool (tool_live)"\t"Lower Radius (tool_lowerRadius)"\t"Quality Control (tool_machineQualityControl)"\t"Connection Type (tool_machineSideConnectionType)"\t"Manual Tool Change (tool_manualToolChange)"\t"Material (tool_material)"\t"Maximum Diameter (tool_maximumCuttingDiameter)"\t"Maximum RPM (tool_maximumRotationalSpeed)"\t"Maximum Thread Pitch (tool_maximumThreadPitch)"\t"Minimum Thread Pitch (tool_minimumThreadPitch)"\t"Nozzle Diameter (tool_nozzleDiameter)"\t"Attachment points (tool_numberOfAttachmentPoints)"\t"Number of Flutes (tool_numberOfFlutes)"\t"Number of Teeth (tool_numberOfTeeth)"\t"Number of Tools (tool_numberOfTools)"\t"Orientation (tool_orientationType)"\t"Overall Length (tool_overallLength)"\t"Pierce Height (tool_pierceHeight)"\t"Pierce Power (tool_piercePower)"\t"Pierce Time (tool_pierceTime)"\t"Powder Flow Rate (tool_powderFlowRate)"\t"Filter by Type (tool_presetMaterialCategory)"\t"Maximum hardness (tool_presetMaterialMaximumHardness)"\t"Minimum hardness (tool_presetMaterialMinimumHardness)"\t"Filter by Search (tool_presetMaterialQuery)"\t"Filter by hardness (tool_presetMaterialUseHardness)"\t"Preset Program Number (tool_presetProgram)"\t"Pressure (tool_pressure)"\t"Product ID (tool_productId)"\t"Product Link (tool_productLink)"\t"Profile Radius (tool_profileRadius)"\t"Ramp Angle (tool_rampAngle)"\t"Ramp Spindle Speed (tool_rampSpindleSpeed)"\t"Relief Angle (tool_reliefAngle)"\t"Round Shank (tool_roundShank)"\t"Flip (tool_shaftAxisAngle)"\t"Shaft Diameter (tool_shaftDiameter)"\t"Shank Height (tool_shankHeight)"\t"Shank Width (tool_shankWidth)"\t"Shoulder Diameter (tool_shoulderDiameter)"\t"Shoulder Length (tool_shoulderLength)"\t"Side Angle (tool_sideAngle)"\t"Side Cutting (tool_sideCutting)"\t"Spindle Speed (tool_spindleSpeed)"\t"Stand-off Distance (tool_standoffDistance)"\t"Station Number (tool_stationNumber)"\t"Stepdown (tool_stepdown)"\t"Stepover (tool_stepover)"\t"Surface Speed (tool_surfaceSpeed)"\t"Taper Angle (tool_taperAngle)"\t"Tapered Type (tool_taperedType)"\t"Thickness (tool_thickness)"\t"Thread Pitch (tool_threadPitch)"\t"Thread Profile Angle (tool_threadProfileAngle)"\t"Thread Tip Radius (tool_threadTipRadius)"\t"Thread Tip Type (tool_threadTipType)"\t"Thread Tip Width (tool_threadTipWidth)"\t"Tip Angle (tool_tipAngle)"\t"Tip Diameter (tool_tipDiameter)"\t"Tip Length (tool_tipLength)"\t"Tip Offset (tool_tipOffset)"\t"Tolerance (tool_tolerance)"\t"Trailing Angle (tool_trailingAngle)"\t"Turret (tool_turret)"\t"Upper Radius (tool_upperRadius)"\t"Use Constant Surface Speed (tool_useConstantSurfaceSpeed)"\t"Use Feed per Revolution (tool_useFeedPerRevolution)"\t"Vendor (tool_vendor)"\t"Use Depth of Cut (use_tool_depthOfCut)"\t"Use Preset Program Number (use_tool_presetProgram)"\t"Use Stepdown (use_tool_stepdown)"\t"Use Stepover (use_tool_stepover)"\t"Shaft Segments (shaft_segments)"\t"Holder Segments (holder_segments)"\t"Tool Library Version (tool_library_version)"\t"CSV_TOOLS_VERSION_1"`;
@@ -220,7 +224,7 @@ function buildFusionRow(f, outputUnit='inches'){
   const pn=f.toolNumber?parseFloat(f.toolNumber):"",ft=FT[f.toolType]||f.toolType||"";
   const desc=buildDesc(f,false),pre=f.presetName||desc,edp=f.edpNumber||"",url=f.productLink||"";
   const coolant=f.coolant||"flood";
-  const isTap=f.toolType==="tap form"||f.toolType==="tap cut";
+  const isTap=f.toolType==="tap";
   const cr=parseFloat(f.cornerRadius)||0;
   const E='""',str=x=>`"${String(x===null||x===undefined?"":x).replace(/"/g,'""')}"`;
   const num=x=>(x===""||x===null||x===undefined)?E:String(x),bol=x=>String(x);
@@ -247,7 +251,7 @@ function buildFusionRow(f, outputUnit='inches'){
   if(taperTypes.has(f.toolType)&&f.taperAngle) S(147,num(parseFloat(f.taperAngle)));
   const tipTypes=new Set(["drill","center drill","spot drill","counter sink","chamfer mill"]);
   if(tipTypes.has(f.toolType)&&f.tipAngle) S(155,num(parseFloat(f.tipAngle)));
-  const tipDiaTypes=new Set(["chamfer mill","dovetail","spot drill","thread mill","center drill","counter sink","tap form","tap cut"]);
+  const tipDiaTypes=new Set(["chamfer mill","dovetail","spot drill","thread mill","center drill","counter sink","tap"]);
   if(tipDiaTypes.has(f.toolType)&&f.tipDiameter) S(156,num(parseFloat(f.tipDiameter)));
   const lrTypes=new Set(["circle segment barrel","circle segment lens","circle segment oval","circle segment taper"]);
   if(lrTypes.has(f.toolType)&&f.lowerRadius) S(99,num(parseFloat(f.lowerRadius)));
@@ -276,7 +280,7 @@ const PS_MAIN_COLS=[
   ["roundShank",f=>ROUND_SHANK_TYPES.has(f.toolType)?"true":"false"],["toolGroupLetter",f=>f.grouping||AUTO_GROUP[f.toolType]||"M"],
   ["pitch",f=>f.pitch||""],["fluteType",f=>f.fluteType||""],["lengthBelowShankDiameter",f=>f.ooh?String(parseFloat(f.ooh)):""],
   ["tapClass",f=>f.tapClass||""],["threadsPerInch",f=>calcTPI(f.pitch)||""],["thread",f=>f.pitch||""],
-  ["threadType",f=>f.toolType==="tap form"?"Form":f.toolType==="tap cut"?"Cut":""],["pointType",f=>f.pointType||""],
+  ["threadType",f=>f.toolType!=="tap"?"":f.tapSubType==="form"?"Form":f.tapSubType==="sti"?"Form":"Cut"],  // STI is mechanically a form tap; TODO: confirm ProShop wants "Form" for STI rows["pointType",f=>f.pointType||""],
   ["fullProfile",f=>f.fullProfile?"true":""],["stubJobber",f=>f.stubJobber||""],["backsideCapable",f=>f.backsideCapable?"true":""],
   ["doubleEnded",f=>f.doubleEnded?"true":""],["cuttingDirection",f=>f.cuttingDirection||"Right Hand"],
   ["taperAngle",f=>f.taperAngle||""],["minThreadPitch",f=>f.minThreadPitch||""],["maxThreadPitch",f=>f.maxThreadPitch||""],
@@ -312,7 +316,7 @@ const TT=[
   "flat end mill","ball end mill","bull nose end mill","tapered mill","radius mill","form mill","lollipop mill",
   "slot/key cutter","dovetail","thread mill","face mill","chamfer mill",
   "circle segment barrel","circle segment lens","circle segment oval","circle segment taper",
-  "drill","center drill","spot drill","reamer","counter bore","counter sink","tap form","tap cut",
+  "drill","center drill","spot drill","reamer","counter bore","counter sink","tap",
   "boring head","turning general",
 ];
 const TL={
@@ -321,7 +325,7 @@ const TL={
   "slot/key cutter":"Slot / Key Cutter","dovetail":"Dovetail Mill","thread mill":"Thread Mill","face mill":"Face Mill","chamfer mill":"Chamfer / Engrave Mill",
   "circle segment barrel":"Circle Segment Barrel","circle segment lens":"Circle Segment Lens (High Feed)","circle segment oval":"Circle Segment Oval","circle segment taper":"Circle Segment Taper",
   "drill":"Drill","center drill":"Center Drill","spot drill":"Spot Drill","reamer":"Reamer","counter bore":"Counter Bore","counter sink":"Counter Sink",
-  "tap form":"Tap (Form)","tap cut":"Tap (Cut)","boring head":"Boring Bar","boring bar":"Boring Bar","turning general":"Turning (Insert)",
+  "tap":"Tap","boring head":"Boring Bar","boring bar":"Boring Bar","turning general":"Turning (Insert)",
 };
 const WM=["","N","M","P","S","K"];
 const CO=["","UC","AlTiN","TiAlN","TiN","ZrN","DLC"];
@@ -331,7 +335,7 @@ const MA=["carbide","hss","cobalt","ceramic"];
 // Type applicability is now also captured in src/schema/fieldRegistry.js
 // (FIELD_REGISTRY[field].appliesToTypes). Keep both in sync when adding fields,
 // but add new fields to the registry first.
-const _FV_KEYS=["flat end mill","ball end mill","bull nose end mill","tapered mill","radius mill","form mill","face mill","chamfer mill","dovetail","lollipop mill","slot/key cutter","thread mill","circle segment barrel","circle segment lens","circle segment oval","circle segment taper","drill","center drill","spot drill","reamer","counter bore","counter sink","tap form","boring head","turning general"];
+const _FV_KEYS=["flat end mill","ball end mill","bull nose end mill","tapered mill","radius mill","form mill","face mill","chamfer mill","dovetail","lollipop mill","slot/key cutter","thread mill","circle segment barrel","circle segment lens","circle segment oval","circle segment taper","drill","center drill","spot drill","reamer","counter bore","counter sink","tap","boring head","turning general"];
 const FIELD_VISIBILITY={
   toolType:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],grouping:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
   diameter:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],loc:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
@@ -366,7 +370,7 @@ const VENDOR_LIST_STR=VENDOR_LIST.join(", ");
 const MANUFACTURER_LIST_STR=MANUFACTURER_LIST.join(", ");
 function buildSYS(){
   return `You are a machining expert. Extract tool data from product pages, spec sheets, or text. Return ONLY valid JSON — no markdown, no extra text:
-{"toolType":"flat end mill|ball end mill|bull nose end mill|tapered mill|radius mill|form mill|lollipop mill|slot/key cutter|dovetail|thread mill|face mill|chamfer mill|circle segment barrel|circle segment lens|circle segment oval|circle segment taper|drill|center drill|spot drill|reamer|counter bore|counter sink|tap form|tap cut|boring head|turning general","diameter":"cutting diameter decimal inches","loc":"flute/cutting length decimal inches","oal":"overall length decimal inches","flutes":"integer string","shankDia":"shank diameter decimal inches","cornerRadius":"0 for square, half-dia for ball, actual CR for bull nose","material":"carbide|hss|cobalt|ceramic","coating":"Normalize: Uncoated/Bright → UC. Otherwise copy verbatim. Empty if not stated.","workpieceMats":"Array ISO codes N=Al,M=SS,P=Steel,S=HTA,K=CI primary first","tipAngle":"included angle degrees for drills/chamfers/spot — else empty","helixAngle":"helix degrees if visible","pitch":"thread size x pitch for taps — else empty","productLink":"url if visible","edpNumber":"Mfr# — NOT distributor stock#","approvedBrand":"manufacturer of the tool. Match to: ${MANUFACTURER_LIST_STR}. If the brand is not in the list but clearly a tool manufacturer, still return it exactly as shown on the page.","vendorStockNum":"distributor catalog#. Empty if not found.","vendor":"seller. Match: ${VENDOR_LIST_STR}. Empty if not confident.","coolant":"flood|disabled|mist|through tool|air|air through tool|suction|flood and mist|flood and through tool — default flood. If tool is described as through-coolant or through-spindle coolant, return \"flood and through tool\".","centerCutting":true,"fluteType":"Roughing|Semi-Finishing|Finishing|Yes|No or empty","tapClass":"H2-H6 or D2-D6. Empty if not tap.","pointType":"Bottoming|Modified Bottoming|Plug|Taper|Spiral Point|Spiral Flute|Forming. Empty if not tap.","shoulderLen":"shoulder length >= LOC decimal inches. Empty if unsure.","ooh":"Leave empty — user sets manually.","cost":"The best actual purchase price for this specific tool. Follow these rules in order:
+{"toolType":"flat end mill|ball end mill|bull nose end mill|tapered mill|radius mill|form mill|lollipop mill|slot/key cutter|dovetail|thread mill|face mill|chamfer mill|circle segment barrel|circle segment lens|circle segment oval|circle segment taper|drill|center drill|spot drill|reamer|counter bore|counter sink|tap|boring head|turning general","diameter":"cutting diameter decimal inches","loc":"flute/cutting length decimal inches","oal":"overall length decimal inches","flutes":"integer string","shankDia":"shank diameter decimal inches","cornerRadius":"0 for square, half-dia for ball, actual CR for bull nose","material":"carbide|hss|cobalt|ceramic","coating":"Normalize: Uncoated/Bright → UC. Otherwise copy verbatim. Empty if not stated.","workpieceMats":"Array ISO codes N=Al,M=SS,P=Steel,S=HTA,K=CI primary first","tipAngle":"included angle degrees for drills/chamfers/spot — else empty","helixAngle":"helix degrees if visible","pitch":"thread size x pitch (e.g. 1/4-20 or M6x1.0) for taps/thread mills — else empty","productLink":"url if visible","edpNumber":"Mfr# — NOT distributor stock#","approvedBrand":"manufacturer of the tool. Match to: ${MANUFACTURER_LIST_STR}. If the brand is not in the list but clearly a tool manufacturer, still return it exactly as shown on the page.","vendorStockNum":"distributor catalog#. Empty if not found.","vendor":"seller. Match: ${VENDOR_LIST_STR}. Empty if not confident.","coolant":"flood|disabled|mist|through tool|air|air through tool|suction|flood and mist|flood and through tool — default flood. If tool is described as through-coolant or through-spindle coolant, return \"flood and through tool\".","centerCutting":true,"fluteType":"Roughing|Semi-Finishing|Finishing|Yes|No or empty","tapClass":"Tolerance class, e.g. H3/6H or D2-D6. Empty if not tap.","tapSubType":"cut|form|sti — tap sub-type from description/markings (sti = STI/Helicoil thread insert tap). Empty if not tap.","threadUnit":"inch|metric — infer from the thread designation format (M-prefix or mm pitch = metric). Empty if not tap or thread mill.","pointType":"Bottoming|Modified Bottoming|Plug|Taper|Spiral Point|Spiral Flute|Forming. Empty if not tap.","shoulderLen":"shoulder length >= LOC decimal inches. Empty if unsure.","ooh":"Leave empty — user sets manually.","cost":"The best actual purchase price for this specific tool. Follow these rules in order:
   1. HAAS TOOLS ONLY: Use the Winner's Circle price if shown — ignore all other prices.
   2. DISCOUNTED PRICE: If a sale price, your price, web price, or discounted price is shown alongside a list/regular price, use the discounted one.
   3. PACK PRICING: If the item is only sold in a multi-pack (e.g. pkg of 10, box of 5), use the total pack price — not the per-unit breakdown price.

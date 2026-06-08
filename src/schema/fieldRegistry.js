@@ -19,13 +19,14 @@ import { unitAbbr, getDefaultUnit } from '../utils/units.js';
 //   required       — true = always required for a valid tool (from validateTool())
 //   precision      — display decimal places for numeric fields, null otherwise
 
-// All 26 tool types — mirrors TT from tool-extractor.tsx (duplicated to avoid circular dep)
+// All 25 tool types — mirrors TT from tool-extractor.tsx (duplicated to avoid circular dep)
+// 'tap form' and 'tap cut' are unified into a single 'tap' type (sub-type lives in metadata).
 const ALL_TYPES = [
   'flat end mill', 'ball end mill', 'bull nose end mill', 'tapered mill', 'radius mill',
   'form mill', 'lollipop mill', 'slot/key cutter', 'dovetail', 'thread mill', 'face mill',
   'chamfer mill', 'circle segment barrel', 'circle segment lens', 'circle segment oval',
   'circle segment taper', 'drill', 'center drill', 'spot drill', 'reamer', 'counter bore',
-  'counter sink', 'tap form', 'tap cut', 'boring head', 'turning general',
+  'counter sink', 'tap', 'boring head', 'turning general',
 ];
 
 // Reusable applicability subsets (derived from tool-extractor.tsx FIELD_VISIBILITY)
@@ -346,7 +347,7 @@ export const FIELD_REGISTRY = {
     metadataOnly: false,
     appliesToTypes: [
       'chamfer mill', 'dovetail', 'thread mill', 'circle segment taper',
-      'center drill', 'spot drill', 'counter sink', 'tap form', 'tap cut',
+      'center drill', 'spot drill', 'counter sink', 'tap',
     ],
     required: false,
     precision: 4,
@@ -591,13 +592,13 @@ export const FIELD_REGISTRY = {
   // ── Threading / Tapping ───────────────────────────────────────────────────
 
   pitch: {
-    label: 'Thread Pitch',
+    label: 'Thread Size',           // e.g. "1/4-20 UNC" or "M6 x 1.0" — the human thread designation (spec calls this tap_thread_size)
     type: 'string',
     unit: null,
     fusionPath: null,
     proShopColumn: 'pitch',
     metadataOnly: true,
-    appliesToTypes: ['thread mill', 'tap form', 'tap cut'],
+    appliesToTypes: ['thread mill', 'tap'],
     required: false,
     precision: null,
   },
@@ -610,19 +611,43 @@ export const FIELD_REGISTRY = {
     fusionPath: 'geometry.TP',   // Fusion-native; the `pitch` designation string stays metadata-only
     proShopColumn: null,
     metadataOnly: false,
-    appliesToTypes: ['thread mill', 'tap form', 'tap cut'],
+    appliesToTypes: ['thread mill', 'tap'],
     required: false,
     precision: 4,
   },
 
   tap_class: {
-    label: 'Tap Class',
+    label: 'Tap Tolerance',          // e.g. "H3" (inch) or "6H" (metric) — the spec's tap_tolerance concept
     type: 'string',
     unit: null,
     fusionPath: null,
     proShopColumn: 'tapClass',
     metadataOnly: true,
-    appliesToTypes: ['tap form', 'tap cut'],
+    appliesToTypes: ['tap'],
+    required: false,
+    precision: null,
+  },
+
+  tap_sub_type: {
+    label: 'Tap Sub-Type',           // 'cut' | 'form' | 'sti' — selected within the unified Tap tool page
+    type: 'string',
+    unit: null,
+    fusionPath: null,
+    proShopColumn: null,             // TODO: ProShop thread-field mapping for sub-type — do not build now
+    metadataOnly: true,
+    appliesToTypes: ['tap'],
+    required: false,
+    precision: null,
+  },
+
+  tap_thread_unit: {
+    label: 'Thread Unit',            // 'inch' | 'metric' — independent of the tool's overall unit; only controls which thread-size list is shown
+    type: 'string',
+    unit: null,
+    fusionPath: null,
+    proShopColumn: null,             // TODO: ProShop thread-field mapping for thread unit — do not build now
+    metadataOnly: true,
+    appliesToTypes: ['tap', 'thread mill'],
     required: false,
     precision: null,
   },
@@ -658,7 +683,7 @@ export const FIELD_REGISTRY = {
     fusionPath: null,
     proShopColumn: 'pointType',
     metadataOnly: true,
-    appliesToTypes: ['drill', 'center drill', 'spot drill', 'counter sink', 'tap form', 'tap cut'],
+    appliesToTypes: ['drill', 'center drill', 'spot drill', 'counter sink', 'tap'],
     required: false,
     precision: null,
   },
