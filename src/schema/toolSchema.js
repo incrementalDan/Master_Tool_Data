@@ -918,6 +918,18 @@ export function internalToFusionTool(tool) {
       ...(hasMtn ? { number: mtnInt, 'length-offset': mtnInt, 'diameter-offset': mtnInt } : {}),
     },
   };
+  // Fusion writes a literal "<NEW TOOL GUID>" placeholder into reference_guid on
+  // freshly-created/duplicated tools that haven't been saved into the library yet —
+  // it tells Fusion to mint a brand-new guid for the entry on its next save,
+  // discarding whatever guid we supply. The ...existing spread carries this stale
+  // placeholder forward on every subsequent write, so Fusion keeps minting a fresh
+  // guid each sync — breaking the guid join between metadata's instance_guid and
+  // the saved Fusion entry (the tool then looks like a stray on the next reconcile).
+  // Strip it once the tool has entered our system; a real reference_guid (an actual
+  // source/template guid Fusion assigned) is harmless and preserved as-is.
+  if (fusionObj.reference_guid === '<NEW TOOL GUID>') {
+    delete fusionObj.reference_guid;
+  }
   // Guard: delete any metadata-only internal field names that shouldn't appear in Fusion JSON.
   // Fusion uses its own key names (BMC, DC, NOF, etc.) so this only catches accidental direct
   // copies of internal field names (e.g. if someone wrote fusionObj.vendor = tool.vendor).
