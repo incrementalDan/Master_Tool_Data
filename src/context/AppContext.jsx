@@ -56,6 +56,9 @@ const initialState = {
   googleAuthenticated: false, // Google signed in (metadata)
   googleExpired: false,       // token expired while in-app (reconnect banner shown)
   metadataSkipped: false,     // user chose to proceed without Drive metadata
+  metadataForceNew: false,    // user explicitly disconnected to set up a brand-new file —
+                              // skip the "does a file already exist" check and go straight
+                              // to the folder picker (e.g. after deleting the old file in Drive)
   libraryLocation: loadStoredLocation(), // { hubId, projectId, folderId, itemId, fileName }
   holderLibraryLocation: loadStoredHolderLocation(), // same shape, optional
   setupProgress: loadSetupProgress() || {}, // { fusionConnected, normalized, proshopMerged, proshopExported }
@@ -75,11 +78,13 @@ function reducer(state, action) {
     case 'APS_AUTHED': return { ...state, processingAuth: false, apsAuthenticated: true };
     case 'AUTH_ERROR': return { ...state, processingAuth: false, error: action.error };
     case 'SET_GOOGLE_USER':
-      return { ...state, user: action.user, googleAuthenticated: true, googleExpired: false };
+      return { ...state, user: action.user, googleAuthenticated: true, googleExpired: false, metadataForceNew: false };
     case 'GOOGLE_EXPIRED':
       return { ...state, googleExpired: true };
     case 'SKIP_METADATA': return { ...state, metadataSkipped: true };
     case 'RECONNECT_METADATA': return { ...state, metadataSkipped: false };
+    case 'DISCONNECT_METADATA':
+      return { ...state, user: null, googleAuthenticated: false, googleExpired: false, metadataSkipped: false, metadataForceNew: true };
     case 'SET_LIBRARY_LOCATION': return { ...state, libraryLocation: action.location };
     case 'CLEAR_LIBRARY_LOCATION': return { ...state, libraryLocation: null, tools: [] };
     case 'SET_HOLDER_LOCATION': return { ...state, holderLibraryLocation: action.location };
@@ -225,6 +230,18 @@ export function AppProvider({ children }) {
 
   // Lets a user who skipped metadata setup return to the connect screen from Settings.
   const reconnectMetadata = useCallback(() => dispatch({ type: 'RECONNECT_METADATA' }), []);
+
+  // Fully disconnects the linked metadata file (e.g. it was deleted in Drive and the
+  // user wants a fresh one in a new location). Drops the cached file ID so the old
+  // (possibly trashed-but-still-readable) file can't be silently picked back up, and
+  // sets metadataForceNew so MetadataConnect skips straight to the folder picker —
+  // re-running "does a file already exist?" would otherwise re-find a trashed file.
+  const disconnectMetadata = useCallback(() => {
+    driveService.signOut();
+    localStorage.removeItem('google_drive_connected');
+    localStorage.removeItem('drive_metadata_file_id');
+    dispatch({ type: 'DISCONNECT_METADATA' });
+  }, []);
 
   // Resolves the linked metadata file's name + folder/drive location for display in Settings.
   const fetchMetadataLocation = useCallback(() => driveService.getMetadataFileLocation(), []);
@@ -980,6 +997,7 @@ export function AppProvider({ children }) {
       setGoogleUser,
       skipMetadata,
       reconnectMetadata,
+      disconnectMetadata,
       fetchMetadataLocation,
       markSetupStep,
       setupCelebrated,

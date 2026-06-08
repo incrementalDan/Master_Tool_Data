@@ -16,7 +16,7 @@ export default function Settings() {
     libraryLocation, holderLibraryLocation, holderLibrarySetupComplete,
     setHolderLibraryLocation, clearHolderLibraryLocation, notify,
     googleAuthenticated, metadataSkipped, user: googleUser,
-    fetchMetadataLocation, reconnectMetadata,
+    fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
   } = useApp();
 
   const [showHolderPicker, setShowHolderPicker] = useState(false);
@@ -76,6 +76,16 @@ export default function Settings() {
     } finally {
       setLoadingPreview(false);
     }
+  };
+
+  const handleDisconnectMetadata = () => {
+    if (!window.confirm(
+      "Disconnect this metadata file and set up a new one?\n\n" +
+      "This only changes which Drive file the app links to — nothing in Drive gets deleted. " +
+      "You'll be sent back through the connect screen to sign in and pick a folder for a " +
+      "brand-new tool_metadata.json. None of the old file's notes, tags, or assemblies carry over."
+    )) return;
+    disconnectMetadata();
   };
 
   const handleRenumber = async () => {
@@ -202,6 +212,14 @@ export default function Settings() {
                 <span style={{ width: 14, flexShrink: 0 }} />
                 <span className="text-sub" style={{ minWidth: 100 }}>Signed in as</span>
                 <span className="text-xs">{googleUser?.email || googleUser?.name || '—'}</span>
+              </div>
+
+              <div className="flex items-center gap-8">
+                <span style={{ width: 14, flexShrink: 0 }} />
+                <button className="btn btn-secondary btn-sm" onClick={handleDisconnectMetadata}>
+                  Disconnect &amp; set up a new file…
+                </button>
+                <InfoTip text="Use this if the linked file was deleted in Drive (or you just want a fresh start). It only changes which file the app links to — nothing in Drive is deleted by this. You'll go back through the connect screen, sign in, and pick a folder for a brand-new tool_metadata.json; none of the old file's notes, tags, or assemblies carry over." />
               </div>
             </>
           ) : (
