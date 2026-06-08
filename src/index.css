@@ -231,16 +231,16 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /* ─── Tool type grid ─────────────────────────────────────────────────────── */
 .type-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 6px;
 }
 
 .type-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 16px 8px 12px;
+  gap: 6px;
+  padding: 10px 8px 8px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -253,7 +253,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .type-tile:hover { border-color: #4a4a4a; background: var(--surface-3); color: var(--text); transform: translateY(-2px); box-shadow: var(--shadow-sm); }
 .type-tile.selected { border-color: var(--blue); background: var(--blue-tint); color: var(--blue); box-shadow: 0 0 0 1px var(--blue) inset; }
 
-.type-tile-icon { display: flex; align-items: center; justify-content: center; height: 42px; }
+.type-tile-icon { display: flex; align-items: center; justify-content: center; height: 36px; }
 .type-tile-label { font-size: 11px; line-height: 1.3; }
 .type-tile.selected .type-tile-label { color: var(--blue); }
 
@@ -263,7 +263,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--text-sub);
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  margin: 16px 0 8px;
+  margin: 28px 0 10px;
 }
 .type-group-label:first-child { margin-top: 0; }
 
