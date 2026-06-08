@@ -57,7 +57,7 @@ A **logical tool** maps to **N Fusion library entries ("instances")** — one in
 
 - **Family key**: an app-generated **tracking ID** (`FTL-XXXXXX`) written into Fusion's native comment (`post-process.comment`, mirrored in `expressions.tool_comment`). All instances of one logical tool share it. The library is grouped strictly by tracking ID on load (`groupByTrackingId`). `familySignature` (proshot_id + tool_type + diameter ±0.0001) is used only to validate a group and to match incoming job tools — never to merge two different guids.
 - **Shared vs per-instance**: editing any shared field (description, geometry except LB, vendor, proshot_id, presets, tags, notes, machine number, …) propagates to **all** instances. Only **holder** and **OOH** are per-instance.
-- **Machine tool number** is shared across all instances of a logical tool.
+- **Machine tool number** is shared across all instances of a logical tool. When a programmer copies a tool into a Fusion job file, they will typically reassign the T# to a job-specific value (e.g. ≤ 100 for the Haas, ≤ 200 for the M300) — this is intentional and should never sync back to master. `machine_tool_number` is deliberately excluded from `DIFF_SECTIONS` in `DiffStep.jsx` so job-modified T# values are silently ignored during Phase 2 job sync. Do not add it to those fields.
 - **Presets** are a single shared set replicated identically onto every instance. Each preset's name encodes its assembly + operation (see below), so opening any instance in Fusion shows the full proven-preset set.
 - **In-memory shape**: `id` (= `tracking_id`), `tracking_id`, `assemblies[]` (`{ assembly_id, instance_guid, holder_guid, holder_description, ooh, linked_preset_guids, notes, source }`), shared `presets[]` (each with `operation_type`), `machine_tool_number`, and `_instancesRaw[]` (raw Fusion entries).
 - **Write path**: `AppContext.writeLogicalTool()` reconciles in one library write — re-download, drop every entry whose tracking ID matches, append the freshly split instance set (`splitToFusionInstances`). It backs `saveTool`/`addTool`/`mergeTool`, the assembly CRUD (`addAssembly`/`updateAssembly`/`deleteAssembly` = create/edit/remove an instance), and `applyReconcile` (adopt/drop strays found on open — see Sync & Merge Workflows). `deleteTool` removes all instances; a tool must keep ≥1 assembly. `renumberLibrary` assigns one number per logical tool.
@@ -83,6 +83,22 @@ Each Fusion preset stores stepdown and stepover in **three** places that must ag
 base.geometry   = { ...(base.geometry || {}), LB: lb };
 base.expressions = { ...(base.expressions || {}), tool_bodyLength: `${lb} ${isMetric ? 'mm' : 'in'}` };
 ```
+
+**The holder expression fields case** — two tool-level expression strings (NOT inside `holder.expressions`) that Fusion re-derives the displayed holder name and vendor from: `expressions.holder_description` mirrors `holder.description` and `expressions.holder_vendor` mirrors `holder.vendor`. The same "write native + expression together" rule applies. Both must be regenerated every time a holder is set or changed, not carried forward from `...existing`:
+
+```js
+// after base.holder is set:
+base.expressions = { ...(base.expressions || {}) };
+if (base.holder?.description) base.expressions.holder_description = `'${base.holder.description}'`;
+else delete base.expressions.holder_description;
+if (base.holder?.vendor)      base.expressions.holder_vendor      = `'${base.holder.vendor}'`;
+else delete base.expressions.holder_vendor;
+```
+
+- **Absent, not empty**: Fusion omits `holder_vendor` entirely when the holder has no vendor (common) — write the key only when the value is non-empty, and delete any stale key otherwise. Never write `"''"` for a missing vendor; that itself becomes a mismatch.
+- Synced in: `splitToFusionInstances` (`toolSchema.js`) and `syncHolderExpressions` / `toFusionFormat` (`fusionExport.js`).
+
+**The `reference_guid` placeholder** — Fusion writes the literal string `"<NEW TOOL GUID>"` into `reference_guid` on freshly created/duplicated tools that haven't been committed to the library yet. This is a sentinel telling Fusion to mint a brand-new GUID for the entry on its next save, discarding whatever GUID is supplied. The `...existing` spread in `internalToFusionTool` would carry this stale placeholder forward on every subsequent write — causing Fusion to generate a new GUID each sync and breaking the `instance_guid` join between metadata and the saved Fusion entry (the tool then surfaces as a stray on the next reconcile). `internalToFusionTool` strips this placeholder explicitly when `fusionObj.reference_guid === '<NEW TOOL GUID>'`. Real (non-placeholder) `reference_guid` values are left untouched.
 
 ### Preset formula expressions — do not regenerate
 
@@ -614,6 +630,8 @@ expressions.tool_vendor = `'${tool.location || ''}'`;   // write location back t
 
 This is a permanent convention and **already implemented** (`fusionToolToInternal` / `internalToFusionTool` in `src/schema/toolSchema.js`). Never write the manufacturer name into Fusion's vendor field — it would appear as the cabinet location in Fusion's UI.
 
+**Root-level `vendor` field**: Fusion also stores a plain-string `vendor` at the root level of the tool object (unquoted value of `expressions.tool_vendor` — Fusion re-derives one from the other, same expression/native pairing as all other fields). `internalToFusionTool` writes it as `fusionObj.vendor = tool.location || ''` **after** the `isMetadataOnly` guard — it cannot be set inside the `fusionObj = { ... }` literal because the field registry marks our internal `tool.vendor` (manufacturer) as `metadataOnly: true`, and the guard would strip it. The post-guard assignment bypasses this correctly. The value is always `tool.location` (the cabinet location), never the manufacturer.
+
 -----
 
 ## Description Rename Workflow (normalization step)
@@ -841,3 +859,5 @@ The Google Drive metadata folder picker supports shared drives (team drives). Ke
 - **Speeds & feeds display**: round to 4 decimal places for display using `round4()` — values are stored at full precision.
 - **Deployment is automated via GitHub Actions** — do NOT run `npm run deploy` from agent/cloud/CI sessions. See the Deployment section above.
 - **Google Drive scope must be `drive`** — do not downgrade back to `drive.file`; it breaks shared drive browsing.
+- **Library wrapper preserves `version`** — the Fusion library file on disk is `{ "data": [...], "version": 36 }`. `downloadFusionList` / `uploadFusionList` in `AppContext.jsx` cache all wrapper-level fields (other than `data`) via `libraryWrapperRef` and write them back on every save. Never reconstruct the upload payload as bare `{ data: list }` — stripping `version` can make Fusion treat the file as incompatible and reassign GUIDs or lose holder links.
+- **Orphaned metadata is harmless but permanent** — when a tool is deleted directly from Fusion 360 (outside the app), its `tool_metadata.json` entry persists indefinitely; no prune/cleanup pass exists anywhere. Only `deleteTool` (via the app UI) removes the metadata record. This is safe because `generateTrackingId` (`FTL-` + random 6-hex-digit, ~16.7M values) and `generateId` (random UUID) have effectively zero collision probability — a brand-new tool will never accidentally inherit an old deleted tool's stale metadata. Orphaned entries accumulate silently but cause no functional harm.
