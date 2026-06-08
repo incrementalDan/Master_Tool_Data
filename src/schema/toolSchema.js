@@ -934,6 +934,12 @@ export function internalToFusionTool(tool) {
   // Fusion uses its own key names (BMC, DC, NOF, etc.) so this only catches accidental direct
   // copies of internal field names (e.g. if someone wrote fusionObj.vendor = tool.vendor).
   Object.keys(fusionObj).forEach(k => { if (isMetadataOnly(k)) delete fusionObj[k]; });
+  // Root-level `vendor` is a genuine Fusion-native field (NOT our metadata-only
+  // `vendor`/manufacturer — same key name, different meaning, hence set after the
+  // guard above so it isn't stripped). It mirrors expressions.tool_vendor — Fusion
+  // re-derives one from the other — and Fusion's "Vendor" field is repurposed here
+  // as the cabinet location, so the value is tool.location.
+  fusionObj.vendor = tool.location || '';
   return fusionObj;
 }
 
@@ -1189,18 +1195,24 @@ export function splitToFusionInstances(tool, holders = []) {
       base.holder = raw.holder || null;
     }
 
-    // Sync expressions.holder_description to the resolved holder — Fusion
-    // re-derives the displayed holder name from this expression, not from
-    // holder.description, so a stale expression (e.g. carried over from the
-    // first holder ever attached to this tool) shows the wrong holder name in
-    // Fusion even though our holder object is correct. Same "write the native
-    // value AND its paired expression together" rule as geometry.LB/tool_bodyLength.
-    // Fusion omits this key entirely when the tool has no holder, so mirror that.
+    // Sync expressions.holder_description / holder_vendor to the resolved holder —
+    // Fusion re-derives the displayed holder name/vendor from these expressions, not
+    // from holder.description/holder.vendor, so stale values (e.g. carried over from
+    // the first holder ever attached to this tool) show the wrong holder identity in
+    // Fusion even though our holder object is correct. Same "write the native value
+    // AND its paired expression together" rule as geometry.LB/tool_bodyLength.
+    // Fusion omits each key entirely when the holder has no value for it (not every
+    // holder has a vendor), so mirror that rather than writing an empty string.
     base.expressions = { ...(base.expressions || {}) };
     if (base.holder?.description) {
       base.expressions.holder_description = `'${base.holder.description}'`;
     } else {
       delete base.expressions.holder_description;
+    }
+    if (base.holder?.vendor) {
+      base.expressions.holder_vendor = `'${base.holder.vendor}'`;
+    } else {
+      delete base.expressions.holder_vendor;
     }
 
     // Per-instance OOH → geometry.LB (the documented OOH source of truth).

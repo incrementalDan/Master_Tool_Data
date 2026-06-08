@@ -3,6 +3,21 @@ import { convertLength } from './units.js';
 
 // ─── JSON export (file downloads and library writes) ────────────────────────
 
+// Sync expressions.holder_description / holder_vendor to f.holder — Fusion
+// displays the holder's name/vendor from these expressions, not from
+// holder.description/holder.vendor, so a stale expression (carried over from
+// the holder this tool first had) shows the wrong holder identity even though
+// our holder object is correct. Fusion omits each key when the holder has no
+// value for it (not every holder has a vendor) — mirror that, don't write ''.
+// Mirrors the same sync in splitToFusionInstances (toolSchema.js).
+function syncHolderExpressions(f) {
+  f.expressions = { ...(f.expressions || {}) };
+  if (f.holder?.description) f.expressions.holder_description = `'${f.holder.description}'`;
+  else delete f.expressions.holder_description;
+  if (f.holder?.vendor) f.expressions.holder_vendor = `'${f.holder.vendor}'`;
+  else delete f.expressions.holder_vendor;
+}
+
 // Render one logical tool as a single Fusion entry for the given assembly. The
 // emitted entry carries the assembly's instance guid + holder + OOH and the
 // tool's tracking ID (in the comment), so a pasted-back tool regroups correctly.
@@ -17,11 +32,7 @@ function toFusionFormat(tool, holders = [], assembly = null) {
     const holder = holders.find(h => h.guid === assembly.holder_guid);
     if (holder) {
       f.holder = buildHolderObject(holder);
-      // Sync expressions.holder_description to the resolved holder — Fusion
-      // displays the holder name from this expression, not from holder.description,
-      // so a stale expression (carried over from the holder this tool first had)
-      // shows the wrong holder name even though our holder object is correct.
-      f.expressions = { ...(f.expressions || {}), holder_description: `'${f.holder.description || ''}'` };
+      syncHolderExpressions(f);
     }
     if (assembly.ooh != null && !isNaN(Number(assembly.ooh))) {
       const isMetric = tool.unit === 'millimeters';
@@ -44,7 +55,7 @@ function toFusionFormat(tool, holders = [], assembly = null) {
     const holder = holders.find(h => h.guid === tool.selected_holder_guid);
     if (holder) {
       f.holder = buildHolderObject(holder);
-      f.expressions = { ...(f.expressions || {}), holder_description: `'${f.holder.description || ''}'` };
+      syncHolderExpressions(f);
     }
   }
 
