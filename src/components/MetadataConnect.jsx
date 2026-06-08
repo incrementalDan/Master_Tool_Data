@@ -14,7 +14,7 @@ const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive https://www.googleapi
 //        'connect' → user clicks → 'checking' → 'picker' (no file) → 'creating' → done
 //                                              → done (file exists)
 export default function MetadataConnect() {
-  const { setGoogleUser, skipMetadata, signOutAll } = useApp();
+  const { setGoogleUser, skipMetadata, signOutAll, metadataForceNew } = useApp();
   const wasConnected = !!localStorage.getItem(GOOGLE_CONNECTED_KEY);
   const [view, setView] = useState(wasConnected ? 'reconnecting' : 'connect');
   const [error, setError] = useState('');
@@ -52,7 +52,10 @@ export default function MetadataConnect() {
       setAccessToken(tokenResponse.access_token, tokenResponse.expires_in);
       localStorage.setItem(GOOGLE_CONNECTED_KEY, '1');
       const userInfo = await fetchUserInfo();
-      const fileExists = await checkMetadataFile();
+      // Skip the "does a file already exist" check when the user explicitly disconnected
+      // to start fresh — re-running it could re-find the old file (e.g. still readable
+      // in Drive's trash) and silently reconnect to the very thing they're replacing.
+      const fileExists = !metadataForceNew && await checkMetadataFile();
       if (fileExists) {
         setGoogleUser(userInfo);
       } else {
@@ -64,7 +67,7 @@ export default function MetadataConnect() {
       setError(err.message || 'Google sign-in failed.');
       setView('connect');
     }
-  }, [setGoogleUser]);
+  }, [setGoogleUser, metadataForceNew]);
 
   // Silent login: prompt:'none' — works when the user has an active Google session.
   // Browsers may block the popup if not initiated by a user gesture; onError handles that.
