@@ -32,7 +32,20 @@ export default function MetadataConnect() {
   // loadPickerRoot defined before handleSuccess so it can be referenced
   const loadPickerRootRef = useRef(null);
 
+  // Silent reconnect can hang with neither onSuccess nor onError firing — e.g.
+  // mobile browsers that block the third-party cookies the hidden-iframe check
+  // needs. This timer guarantees we fall through to the manual button instead
+  // of leaving the user stuck on a spinner forever.
+  const silentTimeoutRef = useRef(null);
+  const clearSilentTimeout = () => {
+    if (silentTimeoutRef.current) {
+      clearTimeout(silentTimeoutRef.current);
+      silentTimeoutRef.current = null;
+    }
+  };
+
   const handleSuccess = useCallback(async (tokenResponse) => {
+    clearSilentTimeout();
     setError('');
     setView('checking');
     try {
@@ -59,7 +72,7 @@ export default function MetadataConnect() {
     scope: DRIVE_SCOPE,
     prompt: 'none',
     onSuccess: handleSuccess,
-    onError: () => setView('connect'),
+    onError: () => { clearSilentTimeout(); setView('connect'); },
   });
 
   const interactiveLogin = useGoogleLogin({
@@ -69,13 +82,19 @@ export default function MetadataConnect() {
   });
 
   // On mount: if the user previously connected, try a silent token refresh before
-  // showing the connect screen. Falls back to the connect screen on any failure.
+  // showing the connect screen. Falls back to the connect screen on any failure —
+  // or, if neither callback ever fires (the hang described above), on timeout.
   const silentAttempted = useRef(false);
   useEffect(() => {
     if (wasConnected && !silentAttempted.current) {
       silentAttempted.current = true;
       silentLogin();
+      silentTimeoutRef.current = setTimeout(() => {
+        silentTimeoutRef.current = null;
+        setView(v => (v === 'reconnecting' ? 'connect' : v));
+      }, 6000);
     }
+    return clearSilentTimeout;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function loadPickerRoot() {
