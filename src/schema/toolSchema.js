@@ -866,51 +866,97 @@ export function internalToFusionTool(tool) {
         np.f_n        = tool.feed_per_rev    ?? np.f_n;
       }
     }
+    // Classify this tool's category for the preset expression logic below.
+    const isDrillFamilyTool = isHoleMakingTool && !isTapTool;
+    const isTurningTool = TURNING_TYPES.has(tool.tool_type);
+    const isMillingTool = !isHoleMakingTool && !isTurningTool;
+
+    // Detect a blank preset: all numeric speed/feed fields are zero, meaning the
+    // tool was just created in the app with no values entered yet. We seed Fusion's
+    // standard default values so the library is immediately usable without requiring
+    // the user to manually enter speeds and feeds first.
+    const origExprs = np.expressions || {};
+    const isBlankPreset = !np.n && !np.v_c;
+    if (isBlankPreset) {
+      np.n = isTapTool ? 500 : 5000;
+      if (isMillingTool) np.n_ramp = np.n;
+      // Surface speed companion (Fusion formula: diameter × π × n).
+      const dia = tool.diameter || 0;
+      np.v_c = isInch ? (dia * Math.PI * np.n / 12) : (dia * Math.PI * np.n / 1000);
+      if (isMillingTool) {
+        np.v_f           = 40;
+        np.v_f_leadIn    = 40;
+        np.v_f_leadOut   = 40;
+        np.v_f_plunge    = 40 / 3;
+        np.v_f_ramp      = 40 / 3;
+        np.v_f_transition = 40;
+        const nof = Math.max(tool.number_of_flutes || 1, 1);
+        np.f_z = np.n > 0 ? np.v_f / (np.n * nof) : 0;
+        np.f_n = np.n > 0 ? np.v_f_plunge / np.n : 0;
+      } else if (isDrillFamilyTool) {
+        np.v_f_plunge        = 40;
+        np['v_f_retract'] = 40;
+      }
+    }
+
     // Regenerate preset-level expression strings to match the final numeric values.
     // Fusion re-derives numeric values from expressions on every load, so a stale
-    // expression silently overrides the field we just wrote — the root cause of the
-    // "edits not sticking after sync" bug. Regenerate unconditionally here so there
-    // is never a mismatch between the stored number and its expression string.
+    // expression silently overrides the field we just wrote. Regenerate here so the
+    // stored number and its expression string are always in sync.
     // normalizePreset already handled tool_stepdown / tool_stepover (deleted when
-    // the flag is off), so spread np.expressions first to preserve those.
+    // the flag is off), so spread origExprs first to preserve those.
     //
-    // Fusion presets use ONE speed input mode (RPM *or* surface speed) and ONE feed
-    // input mode (IPM *or* feed-per-tooth). We update whichever key(s) were already
-    // present and add tool_spindleSpeed / tool_feedCutting as defaults when neither
-    // mode key exists. Never add tool_feedLeadIn / tool_feedLeadOut — Fusion derives
-    // those from v_f and does not expect them as expression inputs.
-    // Hole-making tools never get tool_feedCutting / tool_feedPerTooth expressions.
-    const origExprs = np.expressions || {};
+    // Speed mode: ONE of tool_spindleSpeed or tool_surfaceSpeed is the user input;
+    // the other is a companion display formula. Feed mode: tool_feedCutting (IPM)
+    // or tool_feedPerTooth is the user input; the companion formula is always written.
     const hasSurfaceSpeed = 'tool_surfaceSpeed' in origExprs;
     const hasSpindleSpeed = 'tool_spindleSpeed'  in origExprs;
     const hasFeedPerTooth = 'tool_feedPerTooth'  in origExprs;
     const hasFeedCutting  = 'tool_feedCutting'   in origExprs;
 
-    // Taps: default to 500 RPM when no spindle speed has been set — 0 RPM is
-    // useless and Fusion won't compute a sensible feed from a zero speed.
-    if (isTapTool && !np.n) np.n = 500;
+    // Fusion's universal spindle-speed formula (handles probe/tap/all other types).
+    const SPINDLE_FORMULA = "tool_type == 'probe' ? 0 : tool_type == 'tap right hand' || tool_type == 'tap left hand' ? 500rpm : 5000rpm";
+    // Surface-speed companion formula (always evaluated by Fusion alongside RPM).
+    const SURFACE_FORMULA = 'tool_diameter * Math.PI * tool_spindleSpeed';
 
     np.expressions = {
       ...origExprs,
-      // Speed — update existing mode or default to RPM
-      ...(hasSpindleSpeed || !hasSurfaceSpeed ? { tool_spindleSpeed: `${np.n ?? 0} rpm` } : {}),
-      ...(hasSurfaceSpeed                     ? { tool_surfaceSpeed: `${np.v_c ?? 0} ${speedUnit}` } : {}),
-      // Feed — update existing mode or default to cutting feed (milling only)
-      ...(!isHoleMakingTool && (hasFeedCutting  || !hasFeedPerTooth) ? { tool_feedCutting: `${np.v_f ?? 0} ${feedUnit}` } : {}),
-      ...(!isHoleMakingTool && hasFeedPerTooth                       ? { tool_feedPerTooth: `${np.f_z ?? 0} ${fzUnit}` } : {}),
-      // tool_feedPlunge / tool_feedRamp / tool_feedTransition are preserved from
-      // origExprs when the preset already exists (to avoid clobbering formula links).
-      // For brand-new milling presets (origExprs empty), inject Fusion's default
-      // formula expressions so these fields are never absent in the written JSON:
-      //   plunge  = cutting/3 for milling, 40inpm for drills/reamers (ternary)
-      //   ramp    = tracks plunge
-      //   transition = tracks cutting feedrate
-      ...(!isHoleMakingTool && !('tool_feedPlunge' in origExprs)
+      // Speed: Fusion's universal formula for blank presets; literal for user-set values.
+      // The formula covers probe (0), tap (500 rpm), and all other tools (5000 rpm).
+      ...(hasSpindleSpeed || !hasSurfaceSpeed
+        ? { tool_spindleSpeed: isBlankPreset ? SPINDLE_FORMULA : `${np.n ?? 0} rpm` }
+        : {}),
+      // Surface speed: literal when user is in surface-speed input mode;
+      // companion formula otherwise (Fusion displays it alongside the RPM value).
+      ...(hasSurfaceSpeed
+        ? { tool_surfaceSpeed: `${np.v_c ?? 0} ${speedUnit}` }
+        : { tool_surfaceSpeed: SURFACE_FORMULA }),
+      // Cutting feed (milling only) — literal for the primary input mode.
+      ...(isMillingTool && (hasFeedCutting || !hasFeedPerTooth)
+        ? { tool_feedCutting: `${np.v_f ?? 0} ${feedUnit}` } : {}),
+      // Feed-per-tooth: literal when user is in fpt input mode; Fusion companion
+      // formula otherwise (always written so Fusion can display it next to IPM).
+      ...(isMillingTool
+        ? (hasFeedPerTooth
+            ? { tool_feedPerTooth: `${np.f_z ?? 0} ${fzUnit}` }
+            : { tool_feedPerTooth: 'tool_spindleSpeed > 0 ? tool_feedCutting/(tool_spindleSpeed * tool_numberOfFlutes) : 0.0' })
+        : {}),
+      // Plunge: applies to all non-tap tools. Preserved from origExprs on existing
+      // presets; Fusion's default ternary injected for new presets.
+      ...(!isTapTool && !('tool_feedPlunge' in origExprs)
         ? { tool_feedPlunge: "(tool_type=='drill' || tool_type=='reamer' || tool_isDepositing)?(40inpm):(tool_feedCutting/3)" } : {}),
-      ...(!isHoleMakingTool && !('tool_feedRamp' in origExprs)
+      // Ramp and transition: milling only.
+      ...(isMillingTool && !('tool_feedRamp' in origExprs)
         ? { tool_feedRamp: 'tool_feedPlunge' } : {}),
-      ...(!isHoleMakingTool && !('tool_feedTransition' in origExprs)
+      ...(isMillingTool && !('tool_feedTransition' in origExprs)
         ? { tool_feedTransition: 'tool_feedCutting' } : {}),
+      // Drill-specific companion formulas for retract and feed-per-revolution.
+      ...(isDrillFamilyTool && !('tool_feedRetract' in origExprs)
+        ? { tool_feedRetract: 'tool_feedPlunge' } : {}),
+      ...(isDrillFamilyTool && !('tool_feedPerRevolution' in origExprs)
+        ? { tool_feedPerRevolution: 'tool_spindleSpeed > 0 ? tool_feedPlunge/tool_spindleSpeed : 0.0' } : {}),
+      ...(isDrillFamilyTool && !('tool_feedRetractPerRevolution' in origExprs)
+        ? { tool_feedRetractPerRevolution: 'tool_feedPerRevolution' } : {}),
     };
     return np;
   });
