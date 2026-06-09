@@ -1397,6 +1397,9 @@ export function splitToFusionAndMetadata(tool) {
 }
 
 // ─── Create a new blank tool ───────────────────────────────────────────────
+const TAP_TYPES = new Set(['tap']);
+function isTapType(t) { return TAP_TYPES.has(t); }
+
 export function newTool(toolType = 'flat end mill') {
   const now = new Date().toISOString();
   return {
@@ -1420,7 +1423,7 @@ export function newTool(toolType = 'flat end mill') {
     shoulder_length: null,
     ooh: null,
     min_ooh: null,
-    material: 'carbide',
+    material: isTapType(toolType) ? 'hss' : 'carbide',
     coating: '',
     material_suitability: [],
     helix_angle: null,
