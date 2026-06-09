@@ -8,7 +8,7 @@ import {
   fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
   combineToolsByProshopId,
 } from '../schema/toolSchema.js';
-import { composePresetName, opTypeWord, parsePresetName } from '../utils/presetNaming.js';
+import { composePresetName, opTypeWord, parsePresetName, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import { classifyStrays } from '../services/reconcile.js';
 
@@ -795,7 +795,11 @@ export function AppProvider({ children }) {
         notify('Google Drive session expired — reconnect to remove the file from storage', 'error', 7000);
         throw err;
       }
-      // File may already be gone from Drive — clean up metadata anyway
+      // Real Drive error (deleteToolFile already swallows 404 internally, so this
+      // is a genuine failure). Abort — do not wipe metadata for a file that still
+      // exists in Drive, which would orphan it with no way to recover.
+      notify(`Could not delete file from Drive: ${err.message}`, 'error', 7000);
+      throw err;
     }
     dispatch({ type: 'SAVE_START' });
     try {
@@ -1062,9 +1066,12 @@ export function AppProvider({ children }) {
         // operation_type (name wins, else the user-supplied override).
         const primary = assemblies[0];
         const primaryHolderShort = holderShortName(primary.holder_description || '');
+        const isHoleMakingTool = HOLE_MAKING_TYPES.has(merged.tool_type);
         const presets = (merged.presets || []).map(p => {
-          const opType = parsePresetName(p.name)?.opType ?? opOverrides[p.guid] ?? p.operation_type ?? null;
-          const name = opTypeWord(opType)
+          const opType = isHoleMakingTool
+            ? null
+            : (parsePresetName(p.name)?.opType ?? opOverrides[p.guid] ?? p.operation_type ?? null);
+          const name = (!isHoleMakingTool && opTypeWord(opType))
             ? composePresetName({
                 materialQuery: p.material?.query,
                 ooh: primary.ooh,

@@ -5,7 +5,7 @@ import {
   getVisibleFields,
 } from '../../tool-extractor.tsx';
 import { isMetadataOnly, FIELD_REGISTRY, fieldLabel } from './fieldRegistry.js';
-import { parsePresetName, materialCategory } from '../utils/presetNaming.js';
+import { parsePresetName, materialCategory, HOLE_MAKING_TYPES, TURNING_TYPES } from '../utils/presetNaming.js';
 import { convertLength, unitAbbr, getDefaultUnit } from '../utils/units.js';
 
 export { TT, TL, MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST, PS_GROUPS, AUTO_GROUP, COOLANT_OPTS };
@@ -516,9 +516,9 @@ const FUSION_TYPE_MAP = {
   'reamer': 'reamer',
   'counter bore': 'counter bore',
   'counter sink': 'counter sink',
-  // 'tap left hand' is not a confirmed Fusion type string (absent from FUSION_SCHEMA.md
-  // and the sample library — only 'tap right hand' appears). Both map to the unified
-  // internal 'tap' type; sub-type ('cut'/'form'/'sti') and hand live in metadata.
+  // Both tap hands are confirmed Fusion type strings (Special Cases library verified
+  // 'tap left hand'). Both map to the unified internal 'tap' type; cutting_direction
+  // is set from the Fusion type string on read (not from geometry.HAND for taps).
   'tap right hand': 'tap',
   'tap left hand': 'tap',
   'boring bar': 'boring head',
@@ -589,8 +589,10 @@ export function fusionToolToInternal(fTool) {
     tsc_capable: false,
     center_cutting: false,
     flute_design: '',
-    // cutting_direction is Fusion-native: geometry.HAND boolean (true = right hand).
-    cutting_direction: geo.HAND === false ? 'Left Hand' : 'Right Hand',
+    // cutting_direction: for taps, derived from the Fusion type string (tap left/right hand)
+    // since HAND may not be reliable; for all other tools, from geometry.HAND (true = RH).
+    cutting_direction: rawType === 'tap left hand' ? 'Left Hand'
+      : (geo.HAND === false ? 'Left Hand' : 'Right Hand'),
     material_suitability: [],
     tags: [],
     notes: '',
@@ -607,12 +609,43 @@ export function fusionToolToInternal(fTool) {
 // Normalize an internal/Fusion preset object into a complete Fusion start-values
 // preset, preserving every field the app doesn't model and filling required
 // defaults. tscCapable only seeds the coolant when the preset has none of its own.
-function normalizePreset(p, tscCapable = false) {
+// toolType conditions which fields are emitted (milling vs. hole-making vs. turning).
+function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
+  const isTap = toolType === 'tap';
+  const isDrillFamily = !isTap && HOLE_MAKING_TYPES.has(toolType);
+  const isHoleMaking = isTap || isDrillFamily;
+  const isTurning = TURNING_TYPES.has(toolType);
+  const isMilling = !isHoleMaking && !isTurning;
+
   // operation_type is an app-only field encoded in the preset name + metadata.
   // It must never be written into the Fusion JSON (Fusion validates strictly).
   // stepdown/stepover are pulled out of `rest` so a disabled flag leaves NO
   // leftover numeric key (Fusion omits the key entirely when disabled).
   const { operation_type, stepdown: _sd, stepover: _so, ...rest } = p;
+
+  // Strip milling-specific fields from hole-making and turning presets so they
+  // don't survive as stale keys in the Fusion JSON.
+  if (isHoleMaking || isTurning) {
+    delete rest['use-stepdown'];
+    delete rest['use-stepover'];
+  }
+  if (isHoleMaking) {
+    delete rest.v_f;
+    delete rest.f_z;
+    delete rest.v_f_leadIn;
+    delete rest.v_f_leadOut;
+    delete rest.v_f_transition;
+    delete rest.v_f_ramp;
+    delete rest['ramp-angle'];
+    delete rest.n_ramp;
+  }
+  if (isTap) {
+    delete rest.v_f_plunge;
+    delete rest['v_f_retract'];
+    delete rest.f_n;
+    delete rest['use-feed-per-revolution'];
+  }
+
   // Fusion's "Filter by Type" (material.category) must never be blank and only
   // accepts all/metal/plastic. Heal blanks and the app's old invalid values
   // (milling/turning/drilling) by deriving from the material query.
@@ -620,6 +653,7 @@ function normalizePreset(p, tscCapable = false) {
   const category = ['all', 'metal', 'plastic'].includes(mat.category)
     ? mat.category
     : materialCategory(mat.query);
+
   // stepdown/stepover live in THREE places that Fusion keeps in sync: the
   // `use-*` boolean, the numeric value, and an expression string
   // (expressions.tool_stepdown / tool_stepover, e.g. ".018 in"). If we write the
@@ -633,11 +667,13 @@ function normalizePreset(p, tscCapable = false) {
   const exprNum = (s) => { const m = String(s ?? '').match(/-?\d*\.?\d+/); return m ? Number(m[0]) : null; };
   const sdNum = (p.stepdown != null && Number(p.stepdown) > 0) ? Number(p.stepdown) : exprNum(p.expressions?.tool_stepdown);
   const soNum = (p.stepover != null && Number(p.stepover) > 0) ? Number(p.stepover) : exprNum(p.expressions?.tool_stepover);
-  const useStepdown = !!p['use-stepdown'] && sdNum != null && sdNum > 0;
-  const useStepover = !!p['use-stepover'] && soNum != null && soNum > 0;
+  const useStepdown = isMilling && !!p['use-stepdown'] && sdNum != null && sdNum > 0;
+  const useStepover = isMilling && !!p['use-stepover'] && soNum != null && soNum > 0;
   const presetExpr = { ...(p.expressions || {}) };
   if (!useStepdown) delete presetExpr.tool_stepdown;
   if (!useStepover) delete presetExpr.tool_stepover;
+
+  // Base fields present for every tool category.
   const out = {
     ...rest,
     guid: p.guid || generateId(),
@@ -645,26 +681,44 @@ function normalizePreset(p, tscCapable = false) {
     name: p.name || 'Default preset',
     material: { category, query: mat.query || '', 'use-hardness': mat['use-hardness'] || false },
     expressions: presetExpr,
-    'ramp-angle': p['ramp-angle'] ?? 2,
     'tool-coolant': ({ 'flood and through tool': 'flood tool' }[p['tool-coolant']] ?? p['tool-coolant']) || (tscCapable ? 'tool' : 'flood'),
-    'use-stepdown': useStepdown,
-    'use-stepover': useStepover,
     n: p.n ?? 0,
-    n_ramp: p.n_ramp ?? 0,
-    v_f: p.v_f ?? 0,
-    v_f_leadIn: p.v_f_leadIn ?? 0,
-    v_f_leadOut: p.v_f_leadOut ?? 0,
-    v_f_plunge: p.v_f_plunge ?? 0,
-    v_f_ramp: p.v_f_ramp ?? 0,
-    v_f_transition: p.v_f_transition ?? 0,
-    f_z: p.f_z ?? 0,
-    f_n: p.f_n ?? 0,
     v_c: p.v_c ?? 0,
   };
-  // Only emit the numeric keys when the flag is enabled — otherwise omit them so
-  // a disabled preset matches Fusion's native "off" shape exactly (no value at all).
-  if (useStepdown) out.stepdown = sdNum;
-  if (useStepover) out.stepover = soNum;
+
+  if (isMilling) {
+    // Full milling preset: cutting feeds, ramp, lead-in/out, stepdown/stepover.
+    out['ramp-angle'] = p['ramp-angle'] ?? 2;
+    out['use-stepdown'] = useStepdown;
+    out['use-stepover'] = useStepover;
+    out.n_ramp = p.n_ramp ?? 0;
+    out.v_f = p.v_f ?? 0;
+    out.v_f_leadIn = p.v_f_leadIn ?? 0;
+    out.v_f_leadOut = p.v_f_leadOut ?? 0;
+    out.v_f_plunge = p.v_f_plunge ?? 0;
+    out.v_f_ramp = p.v_f_ramp ?? 0;
+    out.v_f_transition = p.v_f_transition ?? 0;
+    out.f_z = p.f_z ?? 0;
+    out.f_n = p.f_n ?? 0;
+    // Only emit the numeric step keys when the flag is enabled — otherwise omit
+    // them so a disabled preset matches Fusion's native "off" shape exactly.
+    if (useStepdown) out.stepdown = sdNum;
+    if (useStepover) out.stepover = soNum;
+  } else if (isTurning) {
+    // Turning/boring: cutting feed + feed-per-rev + plunge; no step fields or ramp.
+    out.n_ramp = p.n_ramp ?? 0;
+    out.v_f = p.v_f ?? 0;
+    out.f_n = p.f_n ?? 0;
+    out.v_f_plunge = p.v_f_plunge ?? 0;
+  } else if (isDrillFamily) {
+    // Drills/reamers: plunge + retract feedrates and optional feed-per-revolution.
+    out.v_f_plunge = p.v_f_plunge ?? 0;
+    out['v_f_retract'] = p['v_f_retract'] ?? 0;
+    out.f_n = p.f_n ?? 0;
+    out['use-feed-per-revolution'] = p['use-feed-per-revolution'] ?? false;
+  }
+  // Tap: only n, v_c, tool-coolant — already set in the base fields above.
+
   return out;
 }
 
@@ -756,18 +810,18 @@ export function internalToFusionTool(tool) {
     'reamer': 'reamer',
     'counter bore': 'counter bore',
     'counter sink': 'counter sink',
-    // 'tap left hand' is not a confirmed Fusion type string (absent from FUSION_SCHEMA.md
-    // and the sample library — only 'tap right hand' appears). Until confirmed in live
-    // Fusion, every tap writes 'tap right hand' regardless of `cutting_direction` — the
-    // safer choice vs. risking an unrecognized type string corrupting the tool on load.
-    // TODO: once confirmed, branch here on tool.cutting_direction === 'Left Hand'.
+    // 'tap left hand' is a confirmed Fusion type (Special Cases library verified).
+    // The actual value is resolved below based on cutting_direction.
     'tap': 'tap right hand',
     'boring head': 'boring bar',
     'boring bar': 'boring bar',
     'turning general': 'turning general',
   };
 
-  const fusionType = FT_MAP[tool.tool_type] || tool.tool_type;
+  // Taps branch on cutting_direction since Fusion has distinct 'tap left/right hand' types.
+  const fusionType = tool.tool_type === 'tap'
+    ? (tool.cutting_direction === 'Left Hand' ? 'tap left hand' : 'tap right hand')
+    : (FT_MAP[tool.tool_type] || tool.tool_type);
 
   // Feed-rate unit strings depend on whether the tool is stored in inches or mm.
   const isInch = (tool.unit || existing.unit || 'inches') !== 'millimeters';
@@ -789,18 +843,28 @@ export function internalToFusionTool(tool) {
   const sourcePresets = (tool.presets && tool.presets.length > 0)
     ? tool.presets
     : [existing['start-values']?.presets?.[0] || {}];
+  const isHoleMakingTool = HOLE_MAKING_TYPES.has(tool.tool_type);
+  const isTapTool = tool.tool_type === 'tap';
+
   const outPresets = sourcePresets.map((p, i) => {
-    const np = normalizePreset(p, tool.tsc_capable);
+    const np = normalizePreset(p, tool.tsc_capable, tool.tool_type);
     if (i === 0) {
-      np.n          = tool.spindle_speed     ?? np.n;
-      np.v_f        = tool.cutting_feedrate  ?? np.v_f;
-      np.f_z        = tool.feed_per_tooth    ?? np.f_z;
-      np.f_n        = tool.feed_per_rev      ?? np.f_n;
-      np.v_f_plunge = tool.plunge_feedrate   ?? np.v_f_plunge;
-      np.v_f_ramp   = tool.ramp_feedrate     ?? np.v_f_ramp;
-      np.v_f_leadIn  = tool.lead_in_feedrate  ?? np.v_f_leadIn;
-      np.v_f_leadOut = tool.lead_out_feedrate ?? np.v_f_leadOut;
-      np.v_c        = tool.cutting_speed     ?? np.v_c;
+      // Speed fields apply to all tool types.
+      np.n   = tool.spindle_speed ?? np.n;
+      np.v_c = tool.cutting_speed ?? np.v_c;
+      // Milling-only flat fields — not written for hole-making tools.
+      if (!isHoleMakingTool) {
+        np.v_f        = tool.cutting_feedrate  ?? np.v_f;
+        np.f_z        = tool.feed_per_tooth    ?? np.f_z;
+        np.v_f_ramp   = tool.ramp_feedrate     ?? np.v_f_ramp;
+        np.v_f_leadIn  = tool.lead_in_feedrate  ?? np.v_f_leadIn;
+        np.v_f_leadOut = tool.lead_out_feedrate ?? np.v_f_leadOut;
+      }
+      // Plunge + feed-per-rev apply to drills/reamers and turning, not taps.
+      if (!isTapTool) {
+        np.v_f_plunge = tool.plunge_feedrate ?? np.v_f_plunge;
+        np.f_n        = tool.feed_per_rev    ?? np.f_n;
+      }
     }
     // Regenerate preset-level expression strings to match the final numeric values.
     // Fusion re-derives numeric values from expressions on every load, so a stale
@@ -815,6 +879,7 @@ export function internalToFusionTool(tool) {
     // present and add tool_spindleSpeed / tool_feedCutting as defaults when neither
     // mode key exists. Never add tool_feedLeadIn / tool_feedLeadOut — Fusion derives
     // those from v_f and does not expect them as expression inputs.
+    // Hole-making tools never get tool_feedCutting / tool_feedPerTooth expressions.
     const origExprs = np.expressions || {};
     const hasSurfaceSpeed = 'tool_surfaceSpeed' in origExprs;
     const hasSpindleSpeed = 'tool_spindleSpeed'  in origExprs;
@@ -825,9 +890,9 @@ export function internalToFusionTool(tool) {
       // Speed — update existing mode or default to RPM
       ...(hasSpindleSpeed || !hasSurfaceSpeed ? { tool_spindleSpeed: `${np.n ?? 0} rpm` } : {}),
       ...(hasSurfaceSpeed                     ? { tool_surfaceSpeed: `${np.v_c ?? 0} ${speedUnit}` } : {}),
-      // Feed — update existing mode or default to cutting feed
-      ...(hasFeedCutting  || !hasFeedPerTooth ? { tool_feedCutting:  `${np.v_f ?? 0} ${feedUnit}` } : {}),
-      ...(hasFeedPerTooth                     ? { tool_feedPerTooth: `${np.f_z ?? 0} ${fzUnit}` } : {}),
+      // Feed — update existing mode or default to cutting feed (milling only)
+      ...(!isHoleMakingTool && (hasFeedCutting  || !hasFeedPerTooth) ? { tool_feedCutting: `${np.v_f ?? 0} ${feedUnit}` } : {}),
+      ...(!isHoleMakingTool && hasFeedPerTooth                       ? { tool_feedPerTooth: `${np.f_z ?? 0} ${fzUnit}` } : {}),
       // tool_feedPlunge / tool_feedRamp / tool_feedTransition are NOT regenerated.
       // Fusion's default presets store these as formula expressions that reference
       // other fields (e.g. "tool_feedCutting/3", "tool_feedPlunge", "tool_feedCutting").

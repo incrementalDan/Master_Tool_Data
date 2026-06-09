@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { holderColor } from './AssemblyCard.jsx';
 import {
   composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
+  HOLE_MAKING_TYPES, TURNING_TYPES,
 } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import {
@@ -82,6 +83,7 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
   const lenUnit = isMetric ? 'mm' : 'in';
   const feedUnit = isMetric ? 'mm/min' : 'in/min';
   const speedUnit = isMetric ? 'm/min' : 'SFM';
+  const toolType = tool.tool_type || 'flat end mill';
 
   const diameter = tool.diameter;
   const numberOfFlutes = tool.number_of_flutes;
@@ -260,6 +262,7 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
                 {editingId === preset.guid ? (
                   <EditCard
                     preset={preset}
+                    toolType={toolType}
                     lenUnit={lenUnit}
                     feedUnit={feedUnit}
                     speedUnit={speedUnit}
@@ -275,6 +278,7 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
                 ) : (
                   <CollapsedCard
                     preset={preset}
+                    toolType={toolType}
                     lenUnit={lenUnit}
                     feedUnit={feedUnit}
                     speedUnit={speedUnit}
@@ -312,12 +316,16 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
 
 // ── Collapsed card ───────────────────────────────────────────────────────────
 function CollapsedCard({
-  preset, lenUnit, feedUnit, speedUnit,
+  preset, toolType, lenUnit, feedUnit, speedUnit,
   isDragOver, dragEnabled,
   linkedAssemblies, holders,
   onEdit, onDelete,
   onDragStart, onDragOver, onDrop, onDragEnd,
 }) {
+  const isTap = toolType === 'tap';
+  const isDrillFamily = !isTap && HOLE_MAKING_TYPES.has(toolType);
+  const isTurning = TURNING_TYPES.has(toolType);
+
   const mat = matchMaterial(preset.material?.query);
   const coolantRaw = preset['tool-coolant'];
   const coolantLabel = coolantRaw
@@ -353,9 +361,25 @@ function CollapsedCard({
         <div className="preset-card-stats">
           <StatRow label="Spindle" value={r4(preset.n)} unit="rpm" />
           <StatRow label="Surface" value={r4(preset.v_c)} unit={sfcLabel} />
-          <StatRow label="Cutting" value={r4(preset.v_f)} unit={feedUnit} />
-          <StatRow label="Feed/Tooth" value={r4(preset.f_z)} unit={lenUnit} />
-          <StatRow label="Plunge" value={r4(preset.v_f_plunge)} unit={feedUnit} />
+          {isTap ? null : isDrillFamily ? (
+            <>
+              <StatRow label="Plunge" value={r4(preset.v_f_plunge)} unit={feedUnit} />
+              <StatRow label="Retract" value={r4(preset['v_f_retract'])} unit={feedUnit} />
+              <StatRow label="Feed/Rev" value={r4(preset.f_n)} unit={`${lenUnit}/rev`} />
+            </>
+          ) : isTurning ? (
+            <>
+              <StatRow label="Cutting" value={r4(preset.v_f)} unit={feedUnit} />
+              <StatRow label="Feed/Rev" value={r4(preset.f_n)} unit={`${lenUnit}/rev`} />
+              <StatRow label="Plunge" value={r4(preset.v_f_plunge)} unit={feedUnit} />
+            </>
+          ) : (
+            <>
+              <StatRow label="Cutting" value={r4(preset.v_f)} unit={feedUnit} />
+              <StatRow label="Feed/Tooth" value={r4(preset.f_z)} unit={lenUnit} />
+              <StatRow label="Plunge" value={r4(preset.v_f_plunge)} unit={feedUnit} />
+            </>
+          )}
           <StatRow label="Coolant" value={coolantLabel} />
         </div>
         {linkedAssemblies?.length > 0 && (
@@ -427,11 +451,17 @@ function computeFormulaDraft(draft, fx, diameter, numberOfFlutes) {
 
 // ── Edit card ────────────────────────────────────────────────────────────────
 function EditCard({
-  preset, lenUnit, feedUnit, speedUnit,
+  preset, toolType, lenUnit, feedUnit, speedUnit,
   diameter, fluteLength, numberOfFlutes,
   assemblies = [], holders = [],
   onSave, onCancel, isSaving,
 }) {
+  const isTap = toolType === 'tap';
+  const isDrillFamily = !isTap && HOLE_MAKING_TYPES.has(toolType);
+  const isHoleMaking = isTap || isDrillFamily;
+  const isTurning = TURNING_TYPES.has(toolType);
+  const isMilling = !isHoleMaking && !isTurning;
+
   const [fx, setFx] = useState(DEFAULT_FX);
   const [draft, setDraft] = useState(() => {
     const d = computeFormulaDraft({ ...preset }, DEFAULT_FX, diameter, numberOfFlutes);
@@ -449,15 +479,18 @@ function EditCard({
     a ? (a.holder_description || holders.find(h => h.guid === a.holder_guid)?.description || '') : '';
 
   // Compose the convention name from material + the selected assembly + op type.
-  // Falls back to the current draft name when there's nothing to compose from.
+  // For hole-making tools, op type is omitted — the name is material + OOH + holder.
+  // Falls back to the current draft name when no assembly is selected, or when a
+  // milling tool has no op type selected yet.
   const composeName = (d, asmId, opType) => {
     const a = assemblies.find(x => x.assembly_id === asmId);
-    if (!a || !opType) return d.name;
+    if (!a) return d.name;
+    if (!isHoleMaking && !opType) return d.name;
     return composePresetName({
       materialQuery: d.material?.query,
       ooh: a.ooh,
       holderShort: holderShortName(holderDescOf(a)),
-      opType,
+      opType: isHoleMaking ? null : opType,
     });
   };
 
@@ -621,21 +654,23 @@ function EditCard({
 
       {/* Operation & Assembly — drive the convention preset name */}
       <div className="preset-edit-section">
-        <div className="preset-edit-section-label">OPERATION &amp; ASSEMBLY</div>
+        <div className="preset-edit-section-label">{isHoleMaking ? 'ASSEMBLY' : 'OPERATION & ASSEMBLY'}</div>
         <div className="preset-edit-grid">
-          <FGroup label="Operation">
-            <select
-              className="field-input"
-              value={draft.operation_type || ''}
-              onChange={e => {
-                const op = e.target.value || null;
-                setDraft(d => ({ ...d, operation_type: op, name: composeName(d, assemblyId, op) }));
-              }}
-            >
-              <option value="">—</option>
-              {OP_TYPES.map(o => <option key={o.value} value={o.value}>{o.word}</option>)}
-            </select>
-          </FGroup>
+          {!isHoleMaking && (
+            <FGroup label="Operation">
+              <select
+                className="field-input"
+                value={draft.operation_type || ''}
+                onChange={e => {
+                  const op = e.target.value || null;
+                  setDraft(d => ({ ...d, operation_type: op, name: composeName(d, assemblyId, op) }));
+                }}
+              >
+                <option value="">—</option>
+                {OP_TYPES.map(o => <option key={o.value} value={o.value}>{o.word}</option>)}
+              </select>
+            </FGroup>
+          )}
           <FGroup label="Assembly (holder + OOH)">
             <select
               className="field-input"
@@ -673,68 +708,105 @@ function EditCard({
             formulaField="v_c" formulaState={fx.v_c}
             onChange={v => handleNumChange('v_c', v)}
           />
-          <NField
-            label="Ramp spindle speed" value={draft.n_ramp} unit="RPM"
-            formulaField="n_ramp" formulaState={fx.n_ramp}
-            onChange={v => handleNumChange('n_ramp', v)}
-          />
+          {!isHoleMaking && (
+            <NField
+              label="Ramp spindle speed" value={draft.n_ramp} unit="RPM"
+              formulaField="n_ramp" formulaState={fx.n_ramp}
+              onChange={v => handleNumChange('n_ramp', v)}
+            />
+          )}
         </div>
       </div>
 
-      {/* Feedrates */}
-      <div className="preset-edit-section">
-        <div className="preset-edit-section-label">FEEDRATES</div>
-        <div className="preset-edit-grid">
-          <NField
-            label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
-            formulaField="v_f" formulaState={fx.v_f}
-            warning={noSpeed ? 'Set spindle speed first' : undefined}
-            onChange={v => handleNumChange('v_f', v)}
-          />
-          <NField
-            label="Feed per tooth" value={draft.f_z} unit={lenUnit}
-            formulaField="f_z" formulaState={fx.f_z}
-            warning={noSpeed ? 'Set spindle speed first' : undefined}
-            onChange={v => handleNumChange('f_z', v)}
-          />
-          <NField
-            label="Lead-in feedrate" value={draft.v_f_leadIn} unit={feedUnit}
-            formulaField="v_f_leadIn" formulaState={fx.v_f_leadIn}
-            onChange={v => handleNumChange('v_f_leadIn', v)}
-          />
-          <NField
-            label="Lead-out feedrate" value={draft.v_f_leadOut} unit={feedUnit}
-            formulaField="v_f_leadOut" formulaState={fx.v_f_leadOut}
-            onChange={v => handleNumChange('v_f_leadOut', v)}
-          />
-          <NField
-            label="Transition feedrate" value={draft.v_f_transition} unit={feedUnit}
-            formulaField="v_f_transition" formulaState={fx.v_f_transition}
-            onChange={v => handleNumChange('v_f_transition', v)}
-          />
-          <NField label="Ramp feedrate"       value={draft.v_f_ramp}      unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
-          <NField label="Ramp angle"          value={draft['ramp-angle']} unit="°"        onChange={v => set('ramp-angle', v)} />
+      {/* Feedrates — milling only */}
+      {isMilling && (
+        <div className="preset-edit-section">
+          <div className="preset-edit-section-label">FEEDRATES</div>
+          <div className="preset-edit-grid">
+            <NField
+              label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
+              formulaField="v_f" formulaState={fx.v_f}
+              warning={noSpeed ? 'Set spindle speed first' : undefined}
+              onChange={v => handleNumChange('v_f', v)}
+            />
+            <NField
+              label="Feed per tooth" value={draft.f_z} unit={lenUnit}
+              formulaField="f_z" formulaState={fx.f_z}
+              warning={noSpeed ? 'Set spindle speed first' : undefined}
+              onChange={v => handleNumChange('f_z', v)}
+            />
+            <NField
+              label="Lead-in feedrate" value={draft.v_f_leadIn} unit={feedUnit}
+              formulaField="v_f_leadIn" formulaState={fx.v_f_leadIn}
+              onChange={v => handleNumChange('v_f_leadIn', v)}
+            />
+            <NField
+              label="Lead-out feedrate" value={draft.v_f_leadOut} unit={feedUnit}
+              formulaField="v_f_leadOut" formulaState={fx.v_f_leadOut}
+              onChange={v => handleNumChange('v_f_leadOut', v)}
+            />
+            <NField
+              label="Transition feedrate" value={draft.v_f_transition} unit={feedUnit}
+              formulaField="v_f_transition" formulaState={fx.v_f_transition}
+              onChange={v => handleNumChange('v_f_transition', v)}
+            />
+            <NField label="Ramp feedrate" value={draft.v_f_ramp}      unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
+            <NField label="Ramp angle"    value={draft['ramp-angle']} unit="°"        onChange={v => set('ramp-angle', v)} />
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Vertical Feedrates */}
-      <div className="preset-edit-section">
-        <div className="preset-edit-section-label">VERTICAL FEEDRATES</div>
-        <div className="preset-edit-grid">
-          <NField
-            label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
-            formulaField="v_f_plunge" formulaState={fx.v_f_plunge}
-            onChange={v => handleNumChange('v_f_plunge', v)}
-          />
-          <NField
-            label="Plunge feed per rev" value={draft.f_n} unit={`${lenUnit}/rev`}
-            formulaField="f_n" formulaState={fx.f_n}
-            onChange={v => handleNumChange('f_n', v)}
-          />
+      {/* Feedrates — turning/boring */}
+      {isTurning && (
+        <div className="preset-edit-section">
+          <div className="preset-edit-section-label">FEEDRATES</div>
+          <div className="preset-edit-grid">
+            <NField
+              label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
+              formulaField="v_f" formulaState={fx.v_f}
+              warning={noSpeed ? 'Set spindle speed first' : undefined}
+              onChange={v => handleNumChange('v_f', v)}
+            />
+            <NField
+              label="Feed per rev" value={draft.f_n} unit={`${lenUnit}/rev`}
+              formulaField="f_n" formulaState={fx.f_n}
+              onChange={v => handleNumChange('f_n', v)}
+            />
+            <NField
+              label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
+              formulaField="v_f_plunge" formulaState={fx.v_f_plunge}
+              onChange={v => handleNumChange('v_f_plunge', v)}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Passes & Linking */}
+      {/* Feedrates — drill family: plunge + retract + feed/rev */}
+      {isDrillFamily && (
+        <div className="preset-edit-section">
+          <div className="preset-edit-section-label">FEEDRATES</div>
+          <div className="preset-edit-grid">
+            <NField
+              label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
+              formulaField="v_f_plunge" formulaState={fx.v_f_plunge}
+              warning={noSpeed ? 'Set spindle speed first' : undefined}
+              onChange={v => handleNumChange('v_f_plunge', v)}
+            />
+            <NField
+              label="Retract feedrate" value={draft['v_f_retract']} unit={feedUnit}
+              onChange={v => set('v_f_retract', v)}
+            />
+            <NField
+              label="Feed per rev" value={draft.f_n} unit={`${lenUnit}/rev`}
+              formulaField="f_n" formulaState={fx.f_n}
+              onChange={v => handleNumChange('f_n', v)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Passes & Linking — milling only */}
+      {isMilling && (
       <div className="preset-edit-section">
         <div className="preset-edit-section-label">PASSES &amp; LINKING</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -772,6 +844,7 @@ function EditCard({
           />
         </div>
       </div>
+      )}
 
       {/* Coolant */}
       <div className="preset-edit-section">
