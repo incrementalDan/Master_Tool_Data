@@ -118,6 +118,17 @@ export function parsePresetName(name) {
   return { materialCode, ooh, holderShortName: holderShort, opType };
 }
 
+// Tool type sets for preset field conditioning.
+// Hole-making tools don't use operation types (Rough/Finish) and have
+// a different preset field set: plunge/retract feedrates instead of
+// cutting feedrate/feed-per-tooth/stepdown/stepover.
+export const HOLE_MAKING_TYPES = new Set([
+  'drill', 'center drill', 'spot drill', 'reamer', 'counter bore', 'counter sink', 'tap',
+]);
+
+// Turning/boring tools share speed + feed-per-rev fields but no step fields.
+export const TURNING_TYPES = new Set(['turning general', 'boring head']);
+
 // Does a preset's name encode the given assembly (holder + OOH)?
 // Compares the parsed holder short name (case-insensitive) and OOH. The OOH in
 // the name and the assembly OOH are both in the tool's own unit; the match
