@@ -976,7 +976,7 @@ export function internalToFusionTool(tool) {
     'start-values': {
       presets: outPresets,
     },
-    holder: existing.holder || null,
+    ...(existing.holder ? { holder: existing.holder } : {}),
     'post-process': {
       ...(existing['post-process'] || {}),
       ...(tool.tracking_id ? { comment: tool.tracking_id } : {}),
@@ -1266,9 +1266,12 @@ export function splitToFusionInstances(tool, holders = []) {
     // gaugeLength from a previous bad write; always re-read from the library.
     if (a.holder_guid) {
       const holder = holders.find(h => h.guid === a.holder_guid);
-      base.holder = holder ? buildHolderObject(holder) : (raw.holder || null);
+      base.holder = holder ? buildHolderObject(holder) : (raw.holder || undefined);
+      if (!base.holder) delete base.holder;
+    } else if (raw.holder) {
+      base.holder = raw.holder;
     } else {
-      base.holder = raw.holder || null;
+      delete base.holder;
     }
 
     // Sync expressions.holder_description / holder_vendor to the resolved holder —
@@ -1296,11 +1299,17 @@ export function splitToFusionInstances(tool, holders = []) {
     // ALSO update expressions.tool_bodyLength — Fusion re-derives LB from this
     // expression on every library load, silently overriding the numeric field if
     // the two don't match. Both must be updated together.
-    if (a.ooh != null && a.ooh !== '' && !isNaN(Number(a.ooh))) {
-      const lb = Number(a.ooh);
-      base.geometry = { ...(base.geometry || {}), LB: lb };
-      base.expressions = { ...(base.expressions || {}), tool_bodyLength: `${lb} ${isMetric ? 'mm' : 'in'}` };
-    }
+    // When ooh is null (no assembly yet), fall back to the existing LB (from a
+    // prior Fusion entry) or seed with shoulder_length / flute_length so Fusion
+    // always receives a valid LB — it requires the field to be present.
+    const oohNum = (a.ooh != null && a.ooh !== '' && !isNaN(Number(a.ooh))) ? Number(a.ooh) : null;
+    const lb = oohNum ??
+      raw.geometry?.LB ??
+      tool.shoulder_length ??
+      tool.flute_length ??
+      0;
+    base.geometry = { ...(base.geometry || {}), LB: lb };
+    base.expressions = { ...(base.expressions || {}), tool_bodyLength: `${lb} ${isMetric ? 'mm' : 'in'}` };
 
     // Recompute assemblyGaugeLength (geometry.assemblyGaugeLength) from the
     // holder's gauge length and the per-instance OOH. Previous bad writes may
