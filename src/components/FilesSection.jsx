@@ -57,7 +57,8 @@ export default function FilesSection({ tool, googleAuthenticated, onUpload, onDe
         const blob = await fetchFileBlob(att.file_id);
         const url = URL.createObjectURL(blob);
         window.open(url, '_blank', 'noopener');
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
+        // Do NOT revoke: the browser tab holds its own reference and may still
+        // be loading a large image. The URL is GC'd when the tab closes.
       } catch { /* non-critical — token expiry shows toast elsewhere */ }
       finally { setViewingId(null); }
     }

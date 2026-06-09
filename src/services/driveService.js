@@ -20,6 +20,7 @@ export function signOut() {
   _userInfo = null;
   _expiresAt = null;
   localStorage.removeItem(TOOL_FILES_FOLDER_CACHE_KEY);
+  localStorage.removeItem(CACHED_FILE_ID_KEY);
 }
 export function hasToken() { return !!_accessToken; }
 export function isTokenExpired() {
@@ -345,7 +346,7 @@ export async function deleteToolFile(fileId) {
 // Fetch a Drive file as a Blob (authenticated, works for team/shared files).
 export async function fetchFileBlob(fileId) {
   const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
+    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`,
     { headers: { Authorization: `Bearer ${_accessToken}` } }
   );
   if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });

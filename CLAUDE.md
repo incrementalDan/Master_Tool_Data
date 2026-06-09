@@ -328,6 +328,16 @@ Stored in a single file on Google Drive. The file contains an array of metadata 
   "updated_by": "",
   "revision_notes": "",
   "selected_holder_guid": "guid from the holder library",
+  "primary_photo_id": "Drive file ID of the primary photo (optional)",
+  "primary_photo_name": "filename of the primary photo (optional)",
+  "attachments": [
+    {
+      "file_id": "Google Drive file ID",
+      "filename": "original filename",
+      "type": "photo | spec_sheet | model_3d | fusion_file | other",
+      "uploaded_at": "ISO timestamp"
+    }
+  ],
   "assemblies": [
     {
       "assembly_id": "generated UUID (via generateAssemblyId / generateId)",
@@ -817,6 +827,98 @@ The Google Drive metadata folder picker supports shared drives (team drives). Ke
 - **OAuth scope**: `https://www.googleapis.com/auth/drive` — NOT `drive.file`. The `drive.file` scope blocks `drives.list` and prevents browsing shared drive contents. Using `drive` is required for any app that needs to browse or create files in shared drives.
 - **API calls**: All Drive API calls (`files.get`, `files.list`, `files.create`, `files.update`) must include `supportsAllDrives=true`. Folder listings also need `includeItemsFromAllDrives=true`.
 - The folder picker in `MetadataConnect.jsx` shows a "Shared Drives" section above "My Drive" when shared drives are available. Clicking a shared drive navigates into it; the section header updates to show the drive name.
+
+-----
+
+## Tool File Attachments & Photos
+
+Each tool can have a primary photo and a list of other file attachments (spec sheets, 3D models, Fusion files, etc.). Files are stored in Google Drive under the metadata root folder:
+
+```
+[metadata root]/
+└── tool_files/
+    └── {trackingId}/
+        ├── photo.jpg
+        ├── spec_sheet.pdf
+        └── tool.step
+```
+
+- **Folder creation**: `ensureToolFolder(trackingId)` in `driveService.js` finds or creates `tool_files/{trackingId}/` under the metadata root. The `tool_files/` folder ID is cached in localStorage (`drive_tool_files_folder_id`). The cache key is cleared on `signOut()` via `localStorage.removeItem(TOOL_FILES_FOLDER_CACHE_KEY)`.
+- **Upload**: `uploadToolFile(folderId, file, fileName)` uses the Drive multipart upload API.
+- **Download/view**: `fetchFileBlob(fileId)` fetches a Drive file as a Blob (authenticated). For images, a Blob URL is opened in a new tab. **Do NOT revoke the Blob URL after opening** — the browser tab holds its own reference and may still be loading a large file; the URL is GC'd automatically when the tab closes. For PDFs, the Google Drive preview URL (`/preview`) is opened directly.
+- **Delete**: `deleteToolFile(fileId)` sends a Drive DELETE. 404 is treated as success internally (already gone). Any error that reaches the AppContext `deleteToolAttachment` handler is a real failure and **must NOT silently proceed** to wipe the metadata record — that would orphan the file in Drive with no way to recover. The handler re-throws and shows a toast.
+- **All Drive calls** must include `supportsAllDrives=true`. `fetchFileBlob` includes it.
+
+### Metadata fields
+- `primary_photo_id` / `primary_photo_name` — Drive file ID + filename of the primary photo. Stored in `tool_metadata.json` per-tool. Displayed in the Identity section of ToolDetail.
+- `attachments[]` — array of `{ file_id, filename, type, uploaded_at }`. `type` is one of `photo | spec_sheet | model_3d | fusion_file | other`. Displayed in the collapsible "Files & Attachments" panel in ToolDetail.
+
+### UI components
+- `FilesSection.jsx` — collapsible panel showing the attachments list with view/download/delete per file.
+- `AttachmentUploadModal.jsx` — upload modal supporting file picker, drag-and-drop, and clipboard paste. `photoMode` prop restricts to image types only.
+- Photos are also uploaded via the Identity section's photo slot (not via FilesSection).
+
+### Tool card
+Each tool card receives a `data-photo-id` attribute when a primary photo exists — reserved for a future hover preview feature.
+
+-----
+
+## Hole-Making Tool Presets
+
+Drills, reamers, taps, center drills, spot drills, counter bores, and counter sinks are **hole-making tools**. Boring heads are treated as **turning tools**, not hole-making. These categories affect preset fields and naming.
+
+### Constants (`src/utils/presetNaming.js`)
+
+```js
+export const HOLE_MAKING_TYPES = new Set([
+  'drill', 'center drill', 'spot drill', 'reamer', 'counter bore', 'counter sink', 'tap',
+]);
+export const TURNING_TYPES = new Set(['turning general', 'boring head']);
+```
+
+### Preset field behavior by tool category
+
+| Category | Has op type? | Preset fields |
+|---|---|---|
+| **Milling** (all end mills, etc.) | Yes (Rough/Finish/etc.) | Full set: spindle/surface, cutting feed, feed/tooth, plunge, ramp, stepdown/stepover |
+| **Hole-making** (drill, reamer, tap, etc.) | **No** — `opType` forced to `null` | Drills/reamers: spindle, surface speed, plunge (`v_f_plunge`), retract (`v_f_retract`), feed/rev (`use-feed-per-revolution`), coolant. Taps: spindle, surface speed, coolant only. `use-stepdown`/`use-stepover` and `tool_feedCutting`/`tool_feedPerTooth` expressions are **never written** for these tools. |
+| **Turning** (turning general, boring head) | No | Spindle, surface speed, cutting feed (`v_f`), feed/rev (`f_n`), plunge, coolant |
+
+`normalizePreset(p, tscCapable, toolType)` in `src/schema/toolSchema.js` is the single point that conditions preset fields by tool type — pass `toolType` whenever calling it.
+
+### Preset naming for hole-making tools
+
+`composePresetName` is called with `opType: null` for hole-making tools — the name omits the ` - Rough`/` - Finish` suffix. Any legacy preset names with a ` - Rough` suffix on a hole-making tool are **stripped during `normalizeLibrary`** (the `opType` is forced to `null` and the name recomposed without it).
+
+The same `HOLE_MAKING_TYPES` guard is applied in **three places**; keep them in sync if the set changes:
+1. `normalizePreset` in `src/schema/toolSchema.js`
+2. `normalizeLibrary` in `src/context/AppContext.jsx`
+3. `handleConfirm` (conflict preset rename) in `src/components/MergeFlow/DiffStep.jsx`
+
+### Left-hand taps
+
+Fusion has a real `tap left hand` type (in addition to `tap right hand`). The app stores both under the internal type `tap`; the Fusion type on write is determined by `tool.cutting_direction`:
+
+```js
+// internalToFusionTool
+const fusionType = tool.tool_type === 'tap'
+  ? (tool.cutting_direction === 'Left Hand' ? 'tap left hand' : 'tap right hand')
+  : (FT_MAP[tool.tool_type] || tool.tool_type);
+```
+
+On read, `fusionToolToInternal` sets `cutting_direction` from the raw Fusion type string for taps (not from `geometry.HAND`):
+
+```js
+cutting_direction: rawType === 'tap left hand' ? 'Left Hand'
+  : (geo.HAND === false ? 'Left Hand' : 'Right Hand'),
+```
+
+### New Fusion preset fields for drills
+
+- `v_f_retract` — retract feedrate (drill-specific). Already in `blankPreset()` as `0`.
+- `use-feed-per-revolution` — boolean flag (drill-specific). Fusion uses feed/rev for drilling operations.
+
+These fields are **never written for milling tools** — `normalizePreset` strips them for non-drill-family types.
 
 -----
 

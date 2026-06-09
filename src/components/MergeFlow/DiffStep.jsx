@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle, RefreshCw, Plus, CheckCircle, Wrench } from 'lucide-react';
 import { generateId, generateAssemblyId } from '../../schema/toolSchema.js';
 import { fieldLabel } from '../../schema/fieldRegistry.js';
-import { composePresetName, parsePresetName, presetMatchesAssembly } from '../../utils/presetNaming.js';
+import { composePresetName, parsePresetName, presetMatchesAssembly, HOLE_MAKING_TYPES } from '../../utils/presetNaming.js';
 import { lengthEps, unitAbbr } from '../../utils/units.js';
 import { useApp } from '../../context/AppContext.jsx';
 import InfoTip from '../InfoTip.jsx';
@@ -514,7 +514,10 @@ export default function DiffStep({
     const conflictPresetsToAdd = presetMatch.conflicts
       .filter(({ master }) => (conflictResolutions.get(master.guid) || 'ignore') === 'create')
       .map(({ incoming }) => {
-        const opType = incoming.operation_type ?? parsePresetName(incoming.name)?.opType ?? null;
+        const isHoleMakingTool = HOLE_MAKING_TYPES.has(masterTool.tool_type);
+        const opType = isHoleMakingTool
+          ? null
+          : (incoming.operation_type ?? parsePresetName(incoming.name)?.opType ?? null);
         return {
           ...incoming,
           guid: generateId(),
