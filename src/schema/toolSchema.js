@@ -885,6 +885,11 @@ export function internalToFusionTool(tool) {
     const hasSpindleSpeed = 'tool_spindleSpeed'  in origExprs;
     const hasFeedPerTooth = 'tool_feedPerTooth'  in origExprs;
     const hasFeedCutting  = 'tool_feedCutting'   in origExprs;
+
+    // Taps: default to 500 RPM when no spindle speed has been set — 0 RPM is
+    // useless and Fusion won't compute a sensible feed from a zero speed.
+    if (isTapTool && !np.n) np.n = 500;
+
     np.expressions = {
       ...origExprs,
       // Speed — update existing mode or default to RPM
@@ -893,12 +898,19 @@ export function internalToFusionTool(tool) {
       // Feed — update existing mode or default to cutting feed (milling only)
       ...(!isHoleMakingTool && (hasFeedCutting  || !hasFeedPerTooth) ? { tool_feedCutting: `${np.v_f ?? 0} ${feedUnit}` } : {}),
       ...(!isHoleMakingTool && hasFeedPerTooth                       ? { tool_feedPerTooth: `${np.f_z ?? 0} ${fzUnit}` } : {}),
-      // tool_feedPlunge / tool_feedRamp / tool_feedTransition are NOT regenerated.
-      // Fusion's default presets store these as formula expressions that reference
-      // other fields (e.g. "tool_feedCutting/3", "tool_feedPlunge", "tool_feedCutting").
-      // Overwriting them with literal numeric strings breaks those dynamic links and
-      // causes Fusion to write back wrong computed values on the next load, creating a
-      // corrupt-values cycle. Preserve whatever origExprs has for these keys instead.
+      // tool_feedPlunge / tool_feedRamp / tool_feedTransition are preserved from
+      // origExprs when the preset already exists (to avoid clobbering formula links).
+      // For brand-new milling presets (origExprs empty), inject Fusion's default
+      // formula expressions so these fields are never absent in the written JSON:
+      //   plunge  = cutting/3 for milling, 40inpm for drills/reamers (ternary)
+      //   ramp    = tracks plunge
+      //   transition = tracks cutting feedrate
+      ...(!isHoleMakingTool && !('tool_feedPlunge' in origExprs)
+        ? { tool_feedPlunge: "(tool_type=='drill' || tool_type=='reamer' || tool_isDepositing)?(40inpm):(tool_feedCutting/3)" } : {}),
+      ...(!isHoleMakingTool && !('tool_feedRamp' in origExprs)
+        ? { tool_feedRamp: 'tool_feedPlunge' } : {}),
+      ...(!isHoleMakingTool && !('tool_feedTransition' in origExprs)
+        ? { tool_feedTransition: 'tool_feedCutting' } : {}),
     };
     return np;
   });
