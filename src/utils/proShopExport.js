@@ -1,7 +1,6 @@
 import { buildProShopCSV, PS_MAIN_COLS, buildBrandRows } from '../../tool-extractor.tsx';
 import { toolToExtractor } from '../schema/toolSchema.js';
 import { downloadCSV } from '../../tool-extractor.tsx';
-import { proShopFields } from '../schema/fieldRegistry.js';
 
 function csvCell(v) {
   const s = String(v === null || v === undefined ? '' : v);
@@ -14,37 +13,27 @@ export function exportSingleTool(tool) {
   downloadCSV(csv, `${tool.proshot_id || tool.product_id || tool.id}_proshop.csv`);
 }
 
+// Purchasing/Approved-Brand columns — one CSV row per `tool.purchasing[]` entry,
+// matching ProShop's real multi-row export. Geometry/spec columns are populated
+// only on each tool's first row.
+const PURCHASING_COLS = ['approvedBrand', 'vendor', 'vendorToolId', 'cost', 'leadTime'];
+
 export function exportFullLibrary(tools) {
   if (tools.length === 0) return;
 
-  // Brand-section column names driven by the field registry (registry is source of truth).
-  const psFieldMap = Object.fromEntries(proShopFields().map(f => [f.fieldName, f.proShopColumn]));
-  const headerCols = [
-    ...PS_MAIN_COLS.map(([h]) => h),
-    psFieldMap.vendor,         // 'approvedBrand' — manufacturer
-    psFieldMap.product_id,     // 'EDP#' — mfr part number
-    psFieldMap.cost,           // 'cost'
-    psFieldMap.distributor,    // 'vendor' — distributor (PS column naming convention)
-  ];
+  const headerCols = [...PS_MAIN_COLS.map(([h]) => h), ...PURCHASING_COLS];
   const rows = [headerCols.map(csvCell).join(',')];
 
   for (const tool of tools) {
     const extFmt = toolToExtractor(tool);
     const brandRows = buildBrandRows(extFmt);
-    const b1 = brandRows[0] || {};
-    const b2 = brandRows[1] || {};
-    const rowData = [
-      ...PS_MAIN_COLS.map(([, fn]) => fn(extFmt)),
-      b1.approvedBrand || '', b1.edp || '', b1.cost || '', b1.vendor || '',
-    ];
-    rows.push(rowData.map(csvCell).join(','));
-    if (b2.approvedBrand) {
-      const row2 = [
-        ...PS_MAIN_COLS.map(([, fn]) => fn(extFmt)),
-        b2.approvedBrand, b2.edp || '', b2.cost || '', b2.vendor || '',
-      ];
-      rows.push(row2.map(csvCell).join(','));
-    }
+    const mainVals = PS_MAIN_COLS.map(([, fn]) => fn(extFmt));
+    const blankMain = mainVals.map(() => '');
+    const toolRows = brandRows.length ? brandRows : [{}];
+    toolRows.forEach((b, i) => {
+      const main = i === 0 ? mainVals : blankMain;
+      rows.push([...main, b.approvedBrand || '', b.vendor || '', b.edp || '', b.cost || '', b.leadTime || ''].map(csvCell).join(','));
+    });
   }
 
   downloadCSV(rows.join('\n'), 'proshop_library_export.csv');
