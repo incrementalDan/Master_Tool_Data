@@ -34,6 +34,11 @@ export const LETTER_DRILLS = {
   A:0.234,B:0.238,C:0.242,D:0.246,E:0.25,F:0.257,G:0.261,H:0.266,I:0.272,J:0.277,K:0.281,L:0.29,M:0.295,N:0.302,O:0.316,P:0.323,Q:0.332,R:0.339,S:0.348,T:0.358,U:0.368,V:0.377,W:0.386,X:0.397,Y:0.404,Z:0.413,
 };
 
+// Strip the UNC/UNF thread-series designation from a thread size for naming —
+// it's implied for inch taps. NPT/NPTF (pipe threads) are kept since they
+// change the tap's form and aren't implied.
+export const stripThreadSeries = pitch => (pitch || "").replace(/\s*UN[CF]\b/i, "").trim();
+
 export const descDec = x => { const s = String(r4(x)); return s.startsWith("0.") ? s.slice(1) : s; };
 // 3-decimal version for LOC/REACH/KERF in descriptions
 export const descDec3 = x => { const s = String(parseFloat(parseFloat(x).toFixed(3))); return s.startsWith("0.") ? s.slice(1) : s; };
@@ -112,7 +117,7 @@ export function buildDesc(f, inputWasMm = false) {
       const classStr = f.tapClass ? ` ${f.tapClass}` : "";
       const hand = f.cuttingDirection === "Left Hand" ? " LH" : "";
       const sti = f.isSTI ? " STI" : "";
-      const tapSize = f.pitch || "";
+      const tapSize = stripThreadSeries(f.pitch);
       if (!tapSize) return `${subWord} TAP${classStr}${hand}${sti}${tsc}`.trim();
       return `${tapSize} ${subWord} TAP${classStr}${hand}${sti}${tsc}`.trim();
     }

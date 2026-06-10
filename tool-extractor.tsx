@@ -208,6 +208,7 @@ const PS_MAIN_COLS=[
   ["fullProfile",f=>f.fullProfile?"true":""],["stubJobber",f=>f.stubJobber||""],["backsideCapable",f=>f.backsideCapable?"true":""],
   ["doubleEnded",f=>f.doubleEnded?"true":""],["cuttingDirection",f=>f.cuttingDirection||"Right Hand"],
   ["taperAngle",f=>f.taperAngle||""],["minThreadPitch",f=>f.minThreadPitch||""],["maxThreadPitch",f=>f.maxThreadPitch||""],
+  ["tipToFirstFullThread",f=>f.tipToFirstFullThread||""],
 ];
 
 function buildBrandRows(f){
@@ -235,7 +236,7 @@ const BLANK={
   cuttingDirection:"Right Hand",tipDiameter:"",lowerRadius:"",upperRadius:"",profileRadius:"",axialDistance:"",
   psToolId:"",    // ProShop Tool # → Fusion tool_productId (col 126)
   location:"",    // e.g. LC-140 → Fusion tool_vendor (col 165)
-  tapSubType:"cut",isSTI:false,tpiMin:"",tpiMax:"",threadProfileAngle:"",
+  tapSubType:"cut",isSTI:false,tpiMin:"",tpiMax:"",threadProfileAngle:"",tipToFirstFullThread:"",
 };
 const TT=[
   "flat end mill","ball end mill","bull nose end mill","tapered mill","radius mill","form mill","lollipop mill",

@@ -353,7 +353,8 @@ export default function ToolDetail() {
                 {tool.tap_thread_unit && <Field label="Thread Unit" value={tool.tap_thread_unit === 'metric' ? 'Metric' : 'Inch'} />}
                 {tool.tap_class && <Field label="Tap Limit Tolerance" value={tool.tap_class} />}
                 {tool.class_of_fit && <Field label="Class of Fit" value={tool.class_of_fit} />}
-                {tool.point_type && <Field label="Point Type" value={tool.point_type_value != null ? `${tool.point_type} (${tool.point_type_value})` : tool.point_type} />}
+                {tool.point_type && <Field label="Point Type" value={tool.point_type} />}
+                {tool.tip_to_first_thread != null && <Field label="Tip to 1st Full Thread" value={round4(tool.tip_to_first_thread)} unit={lenUnit} />}
               </div>
               {(tool.material_suitability || []).length > 0 && (
                 <div style={{ marginTop: 10 }}>

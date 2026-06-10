@@ -756,16 +756,17 @@ export const FIELD_REGISTRY = {
     precision: null,
   },
 
-  point_type_value: {
-    label: 'Point Type Value',     // number of chamfered threads at the point (taps) or similar point-geometry count
+  tip_to_first_thread: {
+    label: 'Tip to 1st Full Thread',   // Z distance from the tip to where the first full thread starts (tap chamfer length)
     type: 'number',
-    unit: null,
+    unit: 'length',
+    canonicalUnit: 'native',      // stored in the tool's own unit, like other lengths
     fusionPath: null,
-    proShopColumn: null,
+    proShopColumn: 'tipToFirstFullThread',
     metadataOnly: true,
-    appliesToTypes: ['drill', 'center drill', 'spot drill', 'counter sink', 'tap'],
+    appliesToTypes: ['tap'],
     required: false,
-    precision: 1,
+    precision: 4,
   },
 
   stub_jobber: {
