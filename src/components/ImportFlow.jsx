@@ -458,6 +458,9 @@ function psRowToTool(row, psUnit = 'inches') {
     coating: row.coating || '',
     material: row.toolMaterial || row.material || 'carbide',
     min_ooh: parseFloat(row.lengthBelowShankDiameter || '') || null,
+    // Tip to 1st Full Thread (taps) — column name guessed; confirm against
+    // an actual ProShop export and adjust if needed.
+    tip_to_first_thread: parseFloat(row['Tip to 1st Full Thread'] || row.tipToFirstFullThread || '') || null,
   };
 }
 
@@ -503,6 +506,13 @@ function matchProShopToTools(psRows, tools, psUnit = 'inches') {
       // converting from the ProShop file unit into the matched tool's own unit.
       const psMinOoh = parseFloat(psRow.lengthBelowShankDiameter || '') || null;
       if (psMinOoh != null) additions.min_ooh = convertLength(psMinOoh, psUnit, tool.unit);
+      // Tip to 1st Full Thread (taps) — fills a gap only; column name guessed
+      // ('Tip to 1st Full Thread' / tipToFirstFullThread) pending confirmation
+      // against an actual ProShop export.
+      if (tool.tip_to_first_thread == null) {
+        const psTipToFirstThread = parseFloat(psRow['Tip to 1st Full Thread'] || psRow.tipToFirstFullThread || '') || null;
+        if (psTipToFirstThread != null) additions.tip_to_first_thread = convertLength(psTipToFirstThread, psUnit, tool.unit);
+      }
       matched.push({ toolIdx, psRow, additions });
     }
   }

@@ -751,7 +751,7 @@ export const FIELD_REGISTRY = {
     fusionPath: null,
     proShopColumn: 'pointType',
     metadataOnly: true,
-    appliesToTypes: ['drill', 'center drill', 'spot drill', 'counter sink', 'tap'],
+    appliesToTypes: ['tap'],
     required: false,
     precision: null,
   },
