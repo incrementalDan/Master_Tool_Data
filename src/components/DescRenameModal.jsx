@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { X, Wand2 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { buildDesc } from '../../tool-extractor.tsx';
+import { buildDesc } from '../utils/toolNaming.js';
 import { toolToExtractor } from '../schema/toolSchema.js';
 
 export default function DescRenameModal({ onClose }) {

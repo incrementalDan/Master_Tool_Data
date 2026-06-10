@@ -647,11 +647,23 @@ export const FIELD_REGISTRY = {
   },
 
   tap_sub_type: {
-    label: 'Tap Sub-Type',           // 'cut' | 'form' | 'sti' — selected within the unified Tap tool page
+    label: 'Tap Sub-Type',           // 'cut' | 'form' — selected within the unified Tap tool page
     type: 'string',
     unit: null,
     fusionPath: null,
     proShopColumn: null,             // TODO: ProShop thread-field mapping for sub-type — do not build now
+    metadataOnly: true,
+    appliesToTypes: ['tap'],
+    required: false,
+    precision: null,
+  },
+
+  is_sti: {
+    label: 'STI / Helicoil',         // independent of tap_sub_type — an STI tap is still cut or form
+    type: 'boolean',
+    unit: null,
+    fusionPath: null,
+    proShopColumn: null,
     metadataOnly: true,
     appliesToTypes: ['tap'],
     required: false,
@@ -694,6 +706,44 @@ export const FIELD_REGISTRY = {
     precision: 4,
   },
 
+  tpi_min: {
+    // TPI range CAPABILITY of the thread mill — distinct from `pitch`, the specific
+    // thread designation it's set up to cut (e.g. "1/4-20 UNC").
+    label: 'TPI Min',
+    type: 'number',
+    unit: null,
+    fusionPath: null,
+    proShopColumn: null,
+    metadataOnly: true,
+    appliesToTypes: ['thread mill'],
+    required: false,
+    precision: 0,
+  },
+
+  tpi_max: {
+    label: 'TPI Max',
+    type: 'number',
+    unit: null,
+    fusionPath: null,
+    proShopColumn: null,
+    metadataOnly: true,
+    appliesToTypes: ['thread mill'],
+    required: false,
+    precision: 0,
+  },
+
+  thread_profile_angle: {
+    label: 'Thread Profile Angle (°)',
+    type: 'number',
+    unit: 'angle',
+    fusionPath: null,             // CSV-only (tool_threadProfileAngle, col 151) — geometry['thread-profile-angle'] is preserved from `...existing`, never written explicitly
+    proShopColumn: null,
+    metadataOnly: true,
+    appliesToTypes: ['thread mill'],
+    required: false,
+    precision: 2,
+  },
+
   point_type: {
     label: 'Point Type',
     type: 'string',
@@ -704,6 +754,18 @@ export const FIELD_REGISTRY = {
     appliesToTypes: ['drill', 'center drill', 'spot drill', 'counter sink', 'tap'],
     required: false,
     precision: null,
+  },
+
+  point_type_value: {
+    label: 'Point Type Value',     // number of chamfered threads at the point (taps) or similar point-geometry count
+    type: 'number',
+    unit: null,
+    fusionPath: null,
+    proShopColumn: null,
+    metadataOnly: true,
+    appliesToTypes: ['drill', 'center drill', 'spot drill', 'counter sink', 'tap'],
+    required: false,
+    precision: 1,
   },
 
   stub_jobber: {

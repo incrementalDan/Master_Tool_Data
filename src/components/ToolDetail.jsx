@@ -241,7 +241,7 @@ export default function ToolDetail() {
               >
                 {tool.description || '—'}
               </h1>
-              {tool.tool_type === 'tap' && tool.tap_sub_type === 'sti' && (
+              {tool.tool_type === 'tap' && tool.is_sti && (
                 <span className="sti-pill" title="STI / Helicoil — thread insert tap">STI / Helicoil</span>
               )}
             </div>
@@ -303,8 +303,11 @@ export default function ToolDetail() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
                   <span className="text-sub" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Sub-Type</span>
                   <span className="machine-num-badge" style={{ textTransform: 'capitalize' }}>
-                    {tool.tap_sub_type === 'sti' ? 'STI / Helicoil' : (tool.tap_sub_type || 'Cut')}
+                    {tool.tap_sub_type === 'form' ? 'Form' : 'Cut'}
                   </span>
+                  {tool.is_sti && (
+                    <span className="sti-pill" title="STI / Helicoil — thread insert tap">STI / Helicoil</span>
+                  )}
                 </div>
               )}
               <div className="detail-fields">
@@ -350,7 +353,7 @@ export default function ToolDetail() {
                 {tool.tap_thread_unit && <Field label="Thread Unit" value={tool.tap_thread_unit === 'metric' ? 'Metric' : 'Inch'} />}
                 {tool.tap_class && <Field label="Tap Limit Tolerance" value={tool.tap_class} />}
                 {tool.class_of_fit && <Field label="Class of Fit" value={tool.class_of_fit} />}
-                {tool.point_type && <Field label="Point Type" value={tool.point_type} />}
+                {tool.point_type && <Field label="Point Type" value={tool.point_type_value != null ? `${tool.point_type} (${tool.point_type_value})` : tool.point_type} />}
               </div>
               {(tool.material_suitability || []).length > 0 && (
                 <div style={{ marginTop: 10 }}>

@@ -9,7 +9,7 @@ import {
 import { fieldLabel } from '../schema/fieldRegistry.js';
 import { unitAbbr } from '../utils/units.js';
 import InfoTip from './InfoTip.jsx';
-import { buildDesc } from '../../tool-extractor.tsx';
+import { buildDesc } from '../utils/toolNaming.js';
 import { fieldsForType } from '../schema/fieldRegistry.js';
 import { useApp } from '../context/AppContext.jsx';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
@@ -23,6 +23,7 @@ const FIELD_STEP = {
   feed_per_tooth: '0.0001', feed_per_rev: '0.0001', cutting_speed: '1',
   depth_of_cut: '0.001', width_of_cut: '0.001', tip_angle: '0.5', taper_angle: '0.5',
   helix_angle: '0.5', min_thread_pitch: '0.0001', max_thread_pitch: '0.0001',
+  tpi_min: '1', tpi_max: '1', thread_profile_angle: '0.5', point_type_value: '0.5',
 };
 
 
@@ -31,7 +32,6 @@ const FLUTE_DESIGN_OPTS = ['Variable Index', 'Variable Flute', 'Variable Helix',
 const TAP_SUB_TYPE_OPTS = [
   { value: 'cut', label: 'Cut' },
   { value: 'form', label: 'Form' },
-  { value: 'sti', label: 'STI / Helicoil' },
 ];
 
 function derivePitchFromThreadSize(pitchStr, toolUnit = 'inches') {
@@ -265,11 +265,6 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
                   </button>
                 ))}
               </div>
-              {data.tap_sub_type === 'sti' && (
-                <p className="text-sub text-sm" style={{ marginTop: 6 }}>
-                  STI / Helicoil — pick the <strong>parent</strong> thread size below, not the oversized tap size.
-                </p>
-              )}
             </div>
             <div className="form-grid">
               {visibleFields.has('tap_thread_unit') && (
@@ -305,21 +300,6 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
                       <option value="__custom__">{data.pitch && !threadSizeOptions.includes(data.pitch) ? data.pitch : 'Select…'}</option>
                       {threadSizeOptions.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
-                    {data.tap_sub_type === 'sti' && (
-                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                        {[['cut', 'Cut'], ['form', 'Form']].map(([val, lbl]) => (
-                          <button
-                            key={val}
-                            type="button"
-                            className={`btn btn-sm ${(data.sti_form_type || 'form') === val ? 'btn-primary' : 'btn-secondary'}`}
-                            style={(data.sti_form_type || 'form') === val ? { background: '#8b5cf6' } : undefined}
-                            onClick={() => setField('sti_form_type', val)}
-                          >
-                            {lbl}
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                   {data.pitch && !threadSizeOptions.includes(data.pitch) && (
                     <input
@@ -329,6 +309,19 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
                       onChange={e => setField('pitch', e.target.value)}
                       placeholder="e.g. 1/4-20 UNC or M6 x 1.0"
                     />
+                  )}
+                  {visibleFields.has('is_sti') && (
+                    <>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={!!data.is_sti} onChange={e => setField('is_sti', e.target.checked)} />
+                        <span className="text-sub text-sm">STI / Helicoil</span>
+                      </label>
+                      {data.is_sti && (
+                        <p className="text-sub text-sm" style={{ marginTop: 4 }}>
+                          STI / Helicoil — thread size above is the <strong>parent</strong> thread, not the oversized tap size.
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -511,10 +504,13 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
             </div>
           )}
         </div>
-        {visibleFields.has('min_thread_pitch') && (
+        {(visibleFields.has('min_thread_pitch') || visibleFields.has('tpi_min') || visibleFields.has('thread_profile_angle')) && (
           <div className="form-grid" style={{ marginTop: 14 }}>
             {visibleFields.has('min_thread_pitch') && <NumField field="min_thread_pitch" data={data} setField={setField} />}
             {visibleFields.has('max_thread_pitch') && <NumField field="max_thread_pitch" data={data} setField={setField} />}
+            {visibleFields.has('tpi_min') && <NumField field="tpi_min" data={data} setField={setField} />}
+            {visibleFields.has('tpi_max') && <NumField field="tpi_max" data={data} setField={setField} />}
+            {visibleFields.has('thread_profile_angle') && <NumField field="thread_profile_angle" data={data} setField={setField} />}
           </div>
         )}
       </Section>
