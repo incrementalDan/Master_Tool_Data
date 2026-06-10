@@ -34,6 +34,26 @@ const TAP_SUB_TYPE_OPTS = [
   { value: 'sti', label: 'STI / Helicoil' },
 ];
 
+function derivePitchFromThreadSize(pitchStr, toolUnit = 'inches') {
+  const str = (pitchStr || '').trim();
+  // Metric: "M5 x 0.8", "M6 x 1.0"
+  const mm = str.match(/^M[\d.]+\s*[xX×]\s*([\d.]+)/i);
+  if (mm) {
+    const p = parseFloat(mm[1]);
+    if (isNaN(p)) return null;
+    return toolUnit === 'millimeters' ? p : p / 25.4;
+  }
+  // Inch: "1/4-20 UNC", "#10-32"  — TPI is after the dash
+  const tpi = str.match(/-(\d+)/);
+  if (tpi) {
+    const n = parseFloat(tpi[1]);
+    if (!n) return null;
+    const pitchIn = 1 / n;
+    return toolUnit === 'millimeters' ? pitchIn * 25.4 : pitchIn;
+  }
+  return null;
+}
+
 export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
   const { tools } = useApp();
   const [data, setData] = useState({ ...tool });
@@ -53,9 +73,25 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
     return getNextMachineNumber(existing);
   }, [isNew, tools]);
 
-  const setField = (field, value) => setData(d => ({ ...d, [field]: value }));
+  const setField = (field, value) => setData(d => {
+    const next = { ...d, [field]: value };
+    // Auto-derive thread_pitch from thread size string for tap/thread mill.
+    if (field === 'pitch' && (d.tool_type === 'tap' || d.tool_type === 'thread mill') && typeof value === 'string') {
+      const tp = derivePitchFromThreadSize(value, d.unit);
+      if (tp !== null) next.thread_pitch = Number(tp.toFixed(8));
+    }
+    return next;
+  });
 
   const dirty = useMemo(() => JSON.stringify(data) !== JSON.stringify(tool), [data, tool]);
+
+  // New taps default to HSS — taps are rarely carbide.
+  useEffect(() => {
+    if (isNew && data.tool_type === 'tap' && (!data.material || data.material === 'carbide')) {
+      setData(d => ({ ...d, material: 'hss' }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.tool_type]);
 
   // Thread-size / tolerance option lists for Tap & Thread Mill — driven by
   // tap_thread_unit (independent of the tool's overall unit). The combobox input
@@ -214,25 +250,153 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
 
       <Section title="Geometry" icon={Ruler}>
         {data.tool_type === 'tap' && (
-          <div className="field-group" style={{ marginBottom: 16 }}>
-            <label className="field-label">Tap Sub-Type</label>
-            <div className="chip-group">
-              {TAP_SUB_TYPE_OPTS.map(opt => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  className={`btn btn-sm ${(data.tap_sub_type || 'cut') === opt.value ? 'btn-primary' : 'btn-secondary'}`}
-                  onClick={() => setField('tap_sub_type', opt.value)}
-                >
-                  {opt.label}
-                </button>
-              ))}
+          <div style={{ marginBottom: 16 }}>
+            <div className="field-group" style={{ marginBottom: 12 }}>
+              <label className="field-label">Tap Sub-Type</label>
+              <div className="chip-group">
+                {TAP_SUB_TYPE_OPTS.map(opt => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={`btn btn-sm ${(data.tap_sub_type || 'cut') === opt.value ? 'btn-primary' : 'btn-secondary'}`}
+                    onClick={() => setField('tap_sub_type', opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              {data.tap_sub_type === 'sti' && (
+                <p className="text-sub text-sm" style={{ marginTop: 6 }}>
+                  STI / Helicoil — pick the <strong>parent</strong> thread size below, not the oversized tap size.
+                </p>
+              )}
             </div>
-            {data.tap_sub_type === 'sti' && (
-              <p className="text-sub text-sm" style={{ marginTop: 6 }}>
-                STI / Helicoil — pick the <strong>parent</strong> thread size below, not the oversized tap size. "STI" is auto-prepended to the suggested description.
-              </p>
-            )}
+            <div className="form-grid">
+              {visibleFields.has('tap_thread_unit') && (
+                <div className="field-group">
+                  <label className="field-label">Thread Unit</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[['inch', 'Inch'], ['metric', 'Metric']].map(([val, label]) => (
+                      <button
+                        key={val}
+                        type="button"
+                        className={`btn btn-sm ${(data.tap_thread_unit || 'inch') === val ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setField('tap_thread_unit', val)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {visibleFields.has('pitch') && (
+                <div className="field-group">
+                  <label className="field-label">Thread Size</label>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <select
+                      className="field-input"
+                      style={{ flex: 1 }}
+                      value={threadSizeOptions.includes(data.pitch) ? data.pitch : '__custom__'}
+                      onChange={e => {
+                        const v = e.target.value;
+                        if (v !== '__custom__') setField('pitch', v);
+                      }}
+                    >
+                      <option value="__custom__">{data.pitch && !threadSizeOptions.includes(data.pitch) ? data.pitch : 'Select…'}</option>
+                      {threadSizeOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    {data.tap_sub_type === 'sti' && (
+                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                        {[['cut', 'Cut'], ['form', 'Form']].map(([val, lbl]) => (
+                          <button
+                            key={val}
+                            type="button"
+                            className={`btn btn-sm ${(data.sti_form_type || 'form') === val ? 'btn-primary' : 'btn-secondary'}`}
+                            style={(data.sti_form_type || 'form') === val ? { background: '#8b5cf6' } : undefined}
+                            onClick={() => setField('sti_form_type', val)}
+                          >
+                            {lbl}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {data.pitch && !threadSizeOptions.includes(data.pitch) && (
+                    <input
+                      className="field-input"
+                      style={{ marginTop: 4 }}
+                      value={data.pitch || ''}
+                      onChange={e => setField('pitch', e.target.value)}
+                      placeholder="e.g. 1/4-20 UNC or M6 x 1.0"
+                    />
+                  )}
+                </div>
+              )}
+              {visibleFields.has('pitch') && data.thread_pitch > 0 && (
+                <div className="field-group">
+                  <label className="field-label">Thread Pitch</label>
+                  <div className="field-input" style={{ background: 'var(--bg-2)', cursor: 'default', color: 'var(--text-sub)' }}>
+                    {Number(data.thread_pitch).toFixed(6)} {unitAbbr(data.unit)}
+                  </div>
+                </div>
+              )}
+              {visibleFields.has('point_type') && (
+                <div className="field-group">
+                  <label className="field-label">Point Type</label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <select
+                      className="field-input"
+                      style={{ flex: 1 }}
+                      value={data.point_type || ''}
+                      onChange={e => setField('point_type', e.target.value)}
+                    >
+                      {['', 'Bottoming', 'Modified Bottoming', 'Plug', 'Taper', 'Spiral Point', 'Spiral Flute'].map(p => (
+                        <option key={p} value={p}>{p || 'Not specified'}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="number"
+                      className="field-input"
+                      style={{ width: 80 }}
+                      value={data.point_type_value || ''}
+                      onChange={e => setField('point_type_value', e.target.value ? Number(e.target.value) : null)}
+                      placeholder="#"
+                      min="0"
+                      step="0.5"
+                      title="Number of chamfered threads at point"
+                    />
+                  </div>
+                </div>
+              )}
+              {visibleFields.has('tap_class') && (
+                <div className="field-group">
+                  <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    {fieldLabel('tap_class', data?.unit)}
+                    <InfoTip text={`The tap's pitch-diameter limit tolerance (e.g. "${tapLimitToleranceDefault}") — set by the tap's grind. NOT "class of fit" which describes how the tapped hole mates with its mating part.`} />
+                  </label>
+                  <select className="field-input" value={data.tap_class || ''} onChange={e => setField('tap_class', e.target.value)}>
+                    <option value="">Not specified</option>
+                    {tapLimitToleranceOptions.map(t => (
+                      <option key={t} value={t}>{t}{t === tapLimitToleranceDefault ? ' — standard' : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {visibleFields.has('class_of_fit') && (
+                <div className="field-group">
+                  <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    {fieldLabel('class_of_fit', data?.unit)}
+                    <InfoTip text="How the tapped hole fits its mating part — a thread-fit grade (1B loosest … 3B tightest). Reference only — not a property of the tap itself." />
+                  </label>
+                  <select className="field-input" value={data.class_of_fit || ''} onChange={e => setField('class_of_fit', e.target.value)}>
+                    <option value="">Not specified</option>
+                    {CLASS_OF_FIT_OPTIONS.map(c => (
+                      <option key={c} value={c}>{c}{c === CLASS_OF_FIT_DEFAULT ? ' — general purpose' : ''}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
           </div>
         )}
         <div className="form-grid">
@@ -252,6 +416,17 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
           {visibleFields.has('axial_distance') && <NumField field="axial_distance" data={data} setField={setField} />}
           <NumField field="min_ooh" data={data} setField={setField} warn={geoIssueFields.has('min_ooh')} />
         </div>
+        {visibleFields.has('cutting_direction') && (
+          <div className="form-grid" style={{ marginTop: 10 }}>
+            <div className="field-group">
+              <label className="field-label">Cutting Direction</label>
+              <select className="field-input" value={data.cutting_direction || 'Right Hand'} onChange={e => setField('cutting_direction', e.target.value)}>
+                <option value="Right Hand">Right Hand</option>
+                <option value="Left Hand">Left Hand</option>
+              </select>
+            </div>
+          </div>
+        )}
         {geoIssues.length > 0 && (
           <div className="warn-banner" style={{ marginTop: 12 }}>
             {geoIssues.map((issue, i) => (
@@ -303,15 +478,6 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
             </label>
           </div>
           {visibleFields.has('helix_angle') && <NumField field="helix_angle" data={data} setField={setField} />}
-          {visibleFields.has('cutting_direction') && (
-            <div className="field-group">
-              <label className="field-label">Cutting Direction</label>
-              <select className="field-input" value={data.cutting_direction || 'Right Hand'} onChange={e => setField('cutting_direction', e.target.value)}>
-                <option value="Right Hand">Right Hand</option>
-                <option value="Left Hand">Left Hand</option>
-              </select>
-            </div>
-          )}
           {visibleFields.has('center_cutting') && (
             <div className="field-group">
               <label className="field-label">Center Cutting</label>
@@ -329,90 +495,24 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
               </select>
             </div>
           )}
-          <div className="field-group">
-            <label className="field-label">Flute Design</label>
-            <input
-              className="field-input"
-              list="flute-design-list"
-              value={data.flute_design || ''}
-              onChange={e => setField('flute_design', e.target.value)}
-              placeholder="None"
-            />
-            <datalist id="flute-design-list">
-              {FLUTE_DESIGN_OPTS.map(v => <option key={v} value={v} />)}
-            </datalist>
-          </div>
+          {data.tool_type !== 'tap' && (
+            <div className="field-group">
+              <label className="field-label">Flute Design</label>
+              <input
+                className="field-input"
+                list="flute-design-list"
+                value={data.flute_design || ''}
+                onChange={e => setField('flute_design', e.target.value)}
+                placeholder="None"
+              />
+              <datalist id="flute-design-list">
+                {FLUTE_DESIGN_OPTS.map(v => <option key={v} value={v} />)}
+              </datalist>
+            </div>
+          )}
         </div>
-        {visibleFields.has('pitch') && (
+        {visibleFields.has('min_thread_pitch') && (
           <div className="form-grid" style={{ marginTop: 14 }}>
-            {visibleFields.has('tap_thread_unit') && (
-              <div className="field-group">
-                <label className="field-label">Thread Unit</label>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {[['inch', 'Inch'], ['metric', 'Metric']].map(([val, label]) => (
-                    <button
-                      key={val}
-                      type="button"
-                      className={`btn btn-sm ${(data.tap_thread_unit || 'inch') === val ? 'btn-primary' : 'btn-secondary'}`}
-                      onClick={() => setField('tap_thread_unit', val)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-sub text-sm" style={{ marginTop: 4 }}>
-                  Independent of the tool's overall unit ({unitAbbr(data.unit)}) — only changes which thread sizes are suggested.
-                </p>
-              </div>
-            )}
-            <FieldInput
-              field="pitch"
-              label={data.tool_type === 'tap' ? 'Thread Size' : fieldLabel('pitch', data?.unit)}
-              data={data}
-              setField={setField}
-              list={threadSizeOptions}
-              placeholder="e.g. 1/4-20 UNC or M6 x 1.0"
-            />
-            {visibleFields.has('tap_class') && (
-              <div className="field-group">
-                <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  {fieldLabel('tap_class', data?.unit)}
-                  <InfoTip text={`The tap's pitch-diameter limit tolerance (e.g. "${tapLimitToleranceDefault}") — set by the tap's grind. This is NOT "class of fit" (below), which describes how the tapped hole mates with its mating part.`} />
-                </label>
-                <select className="field-input" value={data.tap_class || ''} onChange={e => setField('tap_class', e.target.value)}>
-                  <option value="">Not specified</option>
-                  {tapLimitToleranceOptions.map(t => (
-                    <option key={t} value={t}>{t}{t === tapLimitToleranceDefault ? ' — standard' : ''}</option>
-                  ))}
-                </select>
-                <p className="text-sub text-sm" style={{ marginTop: 4 }}>
-                  Manufacturer-stated tolerance only — never derived or pulled from vendor sites (those are frequently wrong on this field).
-                </p>
-              </div>
-            )}
-            {visibleFields.has('class_of_fit') && (
-              <div className="field-group">
-                <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  {fieldLabel('class_of_fit', data?.unit)}
-                  <InfoTip text="How the tapped hole fits its mating part — a thread-fit grade (1B loosest … 3B tightest), not a property of the tap itself. Tracked nowhere else (not ProShop, not Fusion); reference only." />
-                </label>
-                <select className="field-input" value={data.class_of_fit || ''} onChange={e => setField('class_of_fit', e.target.value)}>
-                  <option value="">Not specified</option>
-                  {CLASS_OF_FIT_OPTIONS.map(c => (
-                    <option key={c} value={c}>{c}{c === CLASS_OF_FIT_DEFAULT ? ' — general purpose' : ''}</option>
-                  ))}
-                </select>
-                {/* TODO: no auto-derivation — the 2B/3B selection formula isn't understood yet (manual entry only, per spec) */}
-              </div>
-            )}
-            {visibleFields.has('point_type') && (
-              <div className="field-group">
-                <label className="field-label">Point Type</label>
-                <select className="field-input" value={data.point_type || ''} onChange={e => setField('point_type', e.target.value)}>
-                  {['', 'Bottoming', 'Modified Bottoming', 'Plug', 'Taper', 'Spiral Point', 'Spiral Flute', 'Forming'].map(p => <option key={p} value={p}>{p || 'Not specified'}</option>)}
-                </select>
-              </div>
-            )}
             {visibleFields.has('min_thread_pitch') && <NumField field="min_thread_pitch" data={data} setField={setField} />}
             {visibleFields.has('max_thread_pitch') && <NumField field="max_thread_pitch" data={data} setField={setField} />}
           </div>

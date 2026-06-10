@@ -347,7 +347,7 @@ export const FIELD_REGISTRY = {
     metadataOnly: false,
     appliesToTypes: [
       'chamfer mill', 'dovetail', 'thread mill', 'circle segment taper',
-      'center drill', 'spot drill', 'counter sink', 'tap',
+      'center drill', 'spot drill', 'counter sink',
     ],
     required: false,
     precision: 4,

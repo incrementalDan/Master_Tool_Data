@@ -251,7 +251,7 @@ function buildFusionRow(f, outputUnit='inches'){
   if(taperTypes.has(f.toolType)&&f.taperAngle) S(147,num(parseFloat(f.taperAngle)));
   const tipTypes=new Set(["drill","center drill","spot drill","counter sink","chamfer mill"]);
   if(tipTypes.has(f.toolType)&&f.tipAngle) S(155,num(parseFloat(f.tipAngle)));
-  const tipDiaTypes=new Set(["chamfer mill","dovetail","spot drill","thread mill","center drill","counter sink","tap"]);
+  const tipDiaTypes=new Set(["chamfer mill","dovetail","spot drill","thread mill","center drill","counter sink"]);
   if(tipDiaTypes.has(f.toolType)&&f.tipDiameter) S(156,num(parseFloat(f.tipDiameter)));
   const lrTypes=new Set(["circle segment barrel","circle segment lens","circle segment oval","circle segment taper"]);
   if(lrTypes.has(f.toolType)&&f.lowerRadius) S(99,num(parseFloat(f.lowerRadius)));
