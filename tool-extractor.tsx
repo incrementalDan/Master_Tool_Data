@@ -195,48 +195,68 @@ function buildFusionRow(f, outputUnit='inches'){
 }
 
 const PS_MAIN_COLS=[
+  ["toolNumber",f=>f.psToolId||""],
   ["description",f=>buildDesc(f,false)],["cutDiameter",f=>f.diameter||""],["lengthOfCut",f=>f.loc||""],
-  ["overallLength",f=>f.oal||""],["no. of flutes",f=>f.flutes||""],["shankDiameter",f=>f.shankDia||f.diameter||""],
+  ["overallLength",f=>f.oal||""],["numberOfFlutes",f=>f.flutes||""],["shankDiameter",f=>f.shankDia||f.diameter||""],
   ["bodyDiameter",f=>f.shankDia||f.diameter||""],["cornerRadius",f=>f.cornerRadius||""],["tipAngle",f=>f.tipAngle||""],
   ["helixAngle",f=>f.helixAngle||""],["coating",f=>f.coating||""],["toolMaterial",f=>f.material||""],
   ["recommendedWorkpieceMaterial",f=>(f.workpieceMats&&f.workpieceMats.length?f.workpieceMats.join(", "):f.workpieceMat||"")],
   ["centerCutting",f=>f.centerCutting?"true":"false"],["throughCoolant",f=>THROUGH_COOLANT_VALUES.has(f.coolant||"")?"true":"false"],
   ["roundShank",f=>ROUND_SHANK_TYPES.has(f.toolType)?"true":"false"],["toolGroupLetter",f=>f.grouping||AUTO_GROUP[f.toolType]||"M"],
-  ["pitch",f=>f.pitch||""],["fluteType",f=>f.fluteType||""],["lengthBelowShankDiameter",f=>f.ooh?String(parseFloat(f.ooh)):""],
+  ["pitch",f=>f.pitch||""],["fluteType",f=>f.fluteType||""],["lengthBelowShankDiameter",f=>f.minOoh?String(parseFloat(f.minOoh)):""],
   ["tapClass",f=>f.tapClass||""],["threadsPerInch",f=>calcTPI(f.pitch)||""],["thread",f=>f.pitch||""],
   ["threadType",f=>f.toolType!=="tap"?"":f.tapSubType==="form"?"Form":"Cut"],
   ["fullProfile",f=>f.fullProfile?"true":""],["stubJobber",f=>f.stubJobber||""],["backsideCapable",f=>f.backsideCapable?"true":""],
   ["doubleEnded",f=>f.doubleEnded?"true":""],["cuttingDirection",f=>f.cuttingDirection||"Right Hand"],
-  ["taperAngle",f=>f.taperAngle||""],["minThreadPitch",f=>f.minThreadPitch||""],["maxThreadPitch",f=>f.maxThreadPitch||""],
-  ["tipToFirstFullThread",f=>f.tipToFirstFullThread||""],
+  ["taper",f=>f.taperAngle||""],["tipDiameter",f=>f.tipDiameter||""],
+  ["tipTo1stFullThread",f=>f.tipToFirstFullThread||""],
 ];
 
+// Each purchasing entry ("Approved Brands" sub-table row in ProShop) becomes one
+// CSV row: { approvedBrand (manufacturer), vendor (distributor), edp (distributor
+// part #), cost, leadTime }. Falls back to the flat extractor fields (used by the
+// AddToolFlow form, which hasn't built a `purchasing[]` array yet).
 function buildBrandRows(f){
-  const mfr=f.approvedBrand||"",vendor=f.vendor||"",mfrEdp=f.edpNumber||"",venEdp=f.vendorStockNum||"",cost=f.cost||"";
-  if(!vendor||vendor===mfr) return [{approvedBrand:mfr||vendor,edp:mfrEdp||venEdp,cost,vendor}];
-  const rows=[];
-  if(mfr||mfrEdp) rows.push({approvedBrand:mfr,edp:mfrEdp,cost:"",vendor:""});
-  rows.push({approvedBrand:vendor,edp:venEdp,cost,vendor});
-  return rows;
+  if(f.purchasing&&f.purchasing.length){
+    return f.purchasing.map(p=>({
+      approvedBrand:p.manufacturer||f.approvedBrand||"",
+      vendor:p.distributor||"",
+      edp:p.distributor_part_number||"",
+      cost:p.cost||"",
+      leadTime:p.lead_time||"",
+    }));
+  }
+  const approvedBrand=f.approvedBrand||"",vendor=f.vendor||"",edp=f.vendorStockNum||"",cost=f.cost||"";
+  if(!approvedBrand&&!vendor&&!edp&&!cost) return [];
+  return [{approvedBrand,vendor,edp,cost,leadTime:""}];
 }
 function csvCell(v){const s=String(v===null||v===undefined?"":v);return(s.includes(",")||s.includes('"')||s.includes("\n"))?`"${s.replace(/"/g,'""')}"`:s;}
+// Real ProShop exports use one row per purchasing/Approved-Brand option, all
+// sharing the same Tool # — geometry/spec columns are populated only on the first row.
 function buildProShopCSV(f){
-  const brandRows=buildBrandRows(f),b1=brandRows[0]||{},b2=brandRows[1]||{};
-  const hdr=[...PS_MAIN_COLS.map(([h])=>h),"approvedBrand","EDP#","cost","vendor",...(brandRows.length>1?["approvedBrand_2","EDP#_2","cost_2","vendor_2"]:[])].map(csvCell).join(",");
-  const row=[...PS_MAIN_COLS.map(([,fn])=>fn(f)),b1.approvedBrand||"",b1.edp||"",b1.cost||"",b1.vendor||"",...(brandRows.length>1?[b2.approvedBrand||"",b2.edp||"",b2.cost||"",b2.vendor||""]:[])].map(csvCell).join(",");
-  return hdr+"\n"+row;
+  const brandRows=buildBrandRows(f);
+  const purchCols=["approvedBrand","vendor","vendorToolId","cost","leadTime"];
+  const hdr=[...PS_MAIN_COLS.map(([h])=>h),...purchCols].map(csvCell).join(",");
+  const mainVals=PS_MAIN_COLS.map(([,fn])=>fn(f));
+  const blankMain=mainVals.map(()=>"");
+  const rows=(brandRows.length?brandRows:[{}]).map((b,i)=>{
+    const main=i===0?mainVals:blankMain;
+    return [...main,b.approvedBrand||"",b.vendor||"",b.edp||"",b.cost||"",b.leadTime||""].map(csvCell).join(",");
+  });
+  return [hdr,...rows].join("\n");
 }
 
 const BLANK={
   toolType:"flat end mill",diameter:"",loc:"",oal:"",flutes:"",shankDia:"",cornerRadius:"0",material:"carbide",
   coating:"",workpieceMats:[],tipAngle:"",pitch:"",edpNumber:"",productLink:"",presetName:"",toolNumber:"",
   coolant:"flood",helixAngle:"",centerCutting:false,fluteType:"",grouping:"",approvedBrand:"",vendor:"",
-  cost:"",vendorStockNum:"",tapClass:"",pointType:"",shoulderLen:"",ooh:"",taperAngle:"",
+  cost:"",vendorStockNum:"",tapClass:"",pointType:"",shoulderLen:"",ooh:"",minOoh:"",taperAngle:"",
   minThreadPitch:"",maxThreadPitch:"",fullProfile:false,stubJobber:"",backsideCapable:false,doubleEnded:false,
   cuttingDirection:"Right Hand",tipDiameter:"",lowerRadius:"",upperRadius:"",profileRadius:"",axialDistance:"",
   psToolId:"",    // ProShop Tool # → Fusion tool_productId (col 126)
   location:"",    // e.g. LC-140 → Fusion tool_vendor (col 165)
   tapSubType:"cut",isSTI:false,tpiMin:"",tpiMax:"",threadProfileAngle:"",tipToFirstFullThread:"",
+  purchasing:[],  // [{ manufacturer, distributor, distributor_part_number, cost, lead_time }]
 };
 const TT=[
   "flat end mill","ball end mill","bull nose end mill","tapered mill","radius mill","form mill","lollipop mill",

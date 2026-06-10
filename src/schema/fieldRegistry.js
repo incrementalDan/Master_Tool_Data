@@ -93,7 +93,9 @@ export const FIELD_REGISTRY = {
     type: 'string',
     unit: null,
     fusionPath: null,             // metadata only; proshot_id goes to Fusion product-id
-    proShopColumn: 'EDP#',
+    // Real ProShop "EDP#" (Id: vendertoolid, API: vendorToolId) is a PER-PURCHASING-OPTION
+    // distributor part number, not a single manufacturer part number — see `purchasing[]`.
+    proShopColumn: null,
     metadataOnly: true,
     appliesToTypes: 'all',
     required: false,
@@ -109,47 +111,27 @@ export const FIELD_REGISTRY = {
     // on load, so both are written together).
     fusionPath: 'product-id',     // Fusion's product-id field = our ProShop ID
     fusionMirror: 'expressions.tool_productId',
-    proShopColumn: null,
+    proShopColumn: 'toolNumber',  // ProShop's "Tool #" — Primary Key, e.g. "A-217"
     metadataOnly: false,
     appliesToTypes: 'all',
     required: false,
     precision: null,
   },
 
-  distributor: {
-    label: 'Distributor',
-    type: 'string',
+  // Purchasing options ("Approved Brands" sub-table in ProShop). One logical
+  // tool can have multiple purchasing rows in the ProShop CSV, all sharing the
+  // same Tool # — they differ only in manufacturer/distributor/part#/cost/lead time.
+  // Entry shape: { manufacturer, distributor, distributor_part_number, cost, lead_time }
+  purchasing: {
+    label: 'Purchasing Options',
+    type: 'array',
     unit: null,
     fusionPath: null,
-    proShopColumn: 'vendor',      // confusingly, PS names the distributor column "vendor"
+    proShopColumn: null,           // multi-column/multi-row — handled directly by proShopExport.js
     metadataOnly: true,
     appliesToTypes: 'all',
     required: false,
     precision: null,
-  },
-
-  distributor_stock_num: {
-    label: 'Distributor Stock #',
-    type: 'string',
-    unit: null,
-    fusionPath: null,
-    proShopColumn: null,
-    metadataOnly: true,
-    appliesToTypes: 'all',
-    required: false,
-    precision: null,
-  },
-
-  cost: {
-    label: 'Cost ($)',
-    type: 'string',
-    unit: null,
-    fusionPath: null,
-    proShopColumn: 'cost',
-    metadataOnly: true,
-    appliesToTypes: 'all',
-    required: false,
-    precision: 2,
   },
 
   product_link: {
@@ -260,7 +242,7 @@ export const FIELD_REGISTRY = {
     type: 'number',
     unit: null,
     fusionPath: 'geometry.NOF',
-    proShopColumn: 'no. of flutes',
+    proShopColumn: 'numberOfFlutes',
     metadataOnly: false,
     appliesToTypes: NO_BORING,
     required: false,
@@ -328,7 +310,7 @@ export const FIELD_REGISTRY = {
     type: 'number',
     unit: 'angle',
     fusionPath: 'geometry.TA',
-    proShopColumn: 'taperAngle',
+    proShopColumn: 'taper',       // ProShop's "Taper" attribute (Id/API: taper) — no separate "taperAngle"
     metadataOnly: false,
     appliesToTypes: [
       'tapered mill', 'face mill', 'chamfer mill', 'dovetail', 'circle segment taper',
@@ -343,7 +325,7 @@ export const FIELD_REGISTRY = {
     unit: 'length',
     canonicalUnit: 'native',
     fusionPath: 'geometry.tip-diameter',
-    proShopColumn: null,
+    proShopColumn: 'tipDiameter',
     metadataOnly: false,
     appliesToTypes: [
       'chamfer mill', 'dovetail', 'thread mill', 'circle segment taper',
@@ -419,7 +401,7 @@ export const FIELD_REGISTRY = {
     unit: 'length',
     canonicalUnit: 'native',      // stored in the tool's own unit
     fusionPath: 'geometry.LB',    // per-instance field written by splitToFusionInstances
-    proShopColumn: 'lengthBelowShankDiameter',
+    proShopColumn: null,          // per-assembly, Fusion-only — no single ProShop column
     metadataOnly: false,
     appliesToTypes: NO_TURNING,
     required: false,
@@ -432,7 +414,7 @@ export const FIELD_REGISTRY = {
     unit: 'length',
     canonicalUnit: 'native',      // stored in the tool's own unit
     fusionPath: null,             // metadata only; reaches Fusion indirectly via shoulder_length
-    proShopColumn: null,
+    proShopColumn: 'lengthBelowShankDiameter', // ProShop's "Length Below Holder - MIN OOH"
     metadataOnly: true,
     appliesToTypes: 'all',
     required: false,
@@ -687,7 +669,7 @@ export const FIELD_REGISTRY = {
     type: 'number',
     unit: null,
     fusionPath: null,
-    proShopColumn: 'minThreadPitch',
+    proShopColumn: null,          // not a real ProShop attribute (Fusion-CSV-only field)
     metadataOnly: true,
     appliesToTypes: ['thread mill'],
     required: false,
@@ -699,7 +681,7 @@ export const FIELD_REGISTRY = {
     type: 'number',
     unit: null,
     fusionPath: null,
-    proShopColumn: 'maxThreadPitch',
+    proShopColumn: null,          // not a real ProShop attribute (Fusion-CSV-only field)
     metadataOnly: true,
     appliesToTypes: ['thread mill'],
     required: false,
@@ -762,7 +744,7 @@ export const FIELD_REGISTRY = {
     unit: 'length',
     canonicalUnit: 'native',      // stored in the tool's own unit, like other lengths
     fusionPath: null,
-    proShopColumn: 'tipToFirstFullThread',
+    proShopColumn: 'tipTo1stFullThread',
     metadataOnly: true,
     appliesToTypes: ['tap'],
     required: false,

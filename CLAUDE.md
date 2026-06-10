@@ -270,8 +270,11 @@ Key fields — see `src/schema/toolSchema.js` for the complete list:
   "tool_type": "flat end mill",
   "description": "tool description",
   "vendor": "manufacturer name (metadata)",
-  "product_id": "manufacturer EDP/part number (metadata)",
-  "proshot_id": "ProShop ID = Fusion's product-id field (metadata + Fusion)",
+  "product_id": "manufacturer EDP/part number (metadata, no direct ProShop column)",
+  "proshot_id": "ProShop ID = Fusion's product-id field = ProShop 'Tool #' (metadata + Fusion)",
+  "purchasing": [
+    { "manufacturer": "", "distributor": "", "distributor_part_number": "", "cost": "", "lead_time": "" }
+  ],
   "diameter": 0.5,
   "flute_length": 1.0,
   "overall_length": 3.0,
@@ -309,20 +312,23 @@ The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/sche
 | `diameter`       | `geometry.DC`           | `Diameter`        |                                        |
 | `flute_length`   | `geometry.LCF`          | `Flute Length`    |                                        |
 | `overall_length` | `geometry.OAL`          | `Overall Length`  |                                        |
-| `number_of_flutes`| `geometry.NOF`         | `# Flutes`        |                                        |
+| `number_of_flutes`| `geometry.NOF`         | `No.ofFlutes` (export id `numberOfFlutes`) |                       |
 | `spindle_speed`  | `start-values.presets[0].n` | `RPM`        |                                        |
 | `cutting_feedrate`| `start-values.presets[0].v_f` | `Feed Rate` |                                       |
 | `vendor`         | — (metadata only)       | `Manufacturer`    | Manufacturer name — **never** written to Fusion |
-| `location`       | `expressions.tool_vendor` | (cabinet location) | Fusion's **"Vendor"** UI field is repurposed as the cabinet location (e.g. "LC-8") |
+| `location`       | `expressions.tool_vendor` | `Location`      | Fusion's **"Vendor"** UI field is repurposed as the cabinet location (e.g. "LC-8") |
 | `shoulder_length`| `geometry['shoulder-length']` | —          | Hyphenated key (not `LSCH`); normalization sets it = MIN OOH |
 | `tip_angle`      | `geometry.SIG`          | `tipAngle`        | Drill/spot/chamfer point (included) angle — **Fusion-native** (read+write both JSON and TSV paths) for `drill`, `center drill`, `spot drill`, `counter sink`, `chamfer mill`. Fusion wins; metadata is a transition fallback |
-| `cutting_direction`| `geometry.HAND`       | `cuttingDirection`| **Fusion-native** boolean (`true` = `Right Hand`, `false` = `Left Hand`). Read from / written to `geometry.HAND`; never hardcode `true`. Fusion wins; metadata fallback |
-| `thread_pitch`   | `geometry.TP`           | —                 | **Fusion-native** numeric pitch (tool's unit) for `thread mill`, `tap form`, `tap cut`; written with `expressions.tool_threadPitch`. Distinct from `pitch` (the human thread **designation** string, e.g. `"5/16-24"`, metadata-only) |
-| `min_ooh`        | — (metadata only)       | `MIN OOH` (`lengthBelowShankDiameter`) | Minimum stick-out floor — see the three-length-concepts table + ProShop Field Priority Rules |
-| `product_id`     | — (metadata only)       | `Part Number`     | Manufacturer EDP number                |
-| `proshot_id`     | `product-id`            | ProShop ID        | **Primary match key for Phase 2**      |
+| `cutting_direction`| `geometry.HAND`       | `Cutting Direction`| **Fusion-native** boolean (`true` = `Right Hand`, `false` = `Left Hand`). Read from / written to `geometry.HAND`; never hardcode `true`. Fusion wins; metadata fallback. Not imported from ProShop (ambiguous `CW`/`CCW` values) |
+| `thread_pitch`   | `geometry.TP`           | —                 | **Fusion-native** numeric pitch (tool's unit) for `thread mill`, `tap form`, `tap cut`; written with `expressions.tool_threadPitch`. Distinct from `pitch` (the human thread **designation** string, e.g. `"5/16-24"`, metadata-only, ProShop `Thread`/`Pitch`) |
+| `taper_angle`    | `geometry.TA`           | `Taper` (export id `taper`) | Written only when non-zero (or original Fusion entry already had a non-zero value) |
+| `tip_diameter`   | `geometry['tip-diameter']` | `Tip Diameter` (export id `tipDiameter`) | Written only when non-zero (or original Fusion entry already had a non-zero value) |
+| `min_ooh`        | — (metadata only)       | `Length Below Holder - MIN OOH` (export id `lengthBelowShankDiameter`) | Minimum stick-out floor — see the three-length-concepts table + ProShop Field Priority Rules |
+| `product_id`     | — (metadata only)       | — (no direct ProShop column) | Manufacturer EDP number — distinct from ProShop's per-vendor EDP#, which lives in `purchasing[].distributor_part_number` |
+| `proshot_id`     | `product-id`            | `Tool #` (export id `toolNumber`) | **Primary key in ProShop, primary match key for Phase 2** |
+| `purchasing[]`   | — (metadata only)       | `Approved Brand` / `Vendor` / `EDP#` / `Cost` / `Lead time` (sub-table) | One entry per Approved-Brand row in ProShop's multi-row export for a given `Tool #` — see ProShop Integration section |
 
-**Important**: `proshot_id` (our field) = Fusion's `product-id` field (shown as "Vendor Number" in Fusion UI). This is the ProShop-assigned ID and is the primary key for Phase 2 tool matching. It is stored in both the Fusion JSON and in metadata.
+**Important**: `proshot_id` (our field) = Fusion's `product-id` field (shown as "Vendor Number" in Fusion UI) = ProShop's `Tool #` (the ProShop primary key). It is the primary key for Phase 2 tool matching and for grouping ProShop CSV rows on import. It is stored in both the Fusion JSON and in metadata.
 
 **Assembly export**: When exporting a tool with an assembly selected, the assembly gauge length is written as `geometry.assemblyGaugeLength` (Fusion-native, nested in `geometry` — **not** a root-level `assembly-gauge-length`). Its value is **holder gauge length + OOH**, in the tool's unit. OOH is stored in the tool's unit (written raw to `geometry.LB`); only the holder's `gaugeLength` (in the holder's unit) is converted into the tool's unit via `convertLength` before adding the OOH.
 
@@ -335,6 +341,9 @@ Stored in a single file on Google Drive. The file contains an array of metadata 
   "id": "tracking_id (FTL-XXXXXX); falls back to Fusion guid for untracked tools",
   "vendor": "",
   "product_id": "",
+  "purchasing": [
+    { "manufacturer": "", "distributor": "", "distributor_part_number": "", "cost": "", "lead_time": "" }
+  ],
   "coating": "",
   "notes": "",
   "last_used_job": "",
@@ -587,6 +596,12 @@ ProShop manages inventory and purchasing. This app owns tool specifications. Rel
 
 ProShop export must never be removed even as the app evolves toward a future ERP.
 
+**Column header convention differs by direction**:
+- **Export** (`tool-extractor.tsx` `PS_MAIN_COLS`, `src/utils/proShopExport.js`) writes ProShop's **API attribute id** names (camelCase, e.g. `lengthBelowShankDiameter`, `numberOfFlutes`, `tipTo1stFullThread`) as column headers — ProShop's UI matches these on import regardless of display label, and extra/unmapped columns are harmless.
+- **Import** (`src/components/ImportFlow.jsx`) reads a real ProShop export, whose headers are the **UI display names** (e.g. `Length Below Holder - MIN OOH`, `No.ofFlutes`, `Tip to 1st Full Thread`) — these often but not always match the API id.
+
+**Multi-row groups (Approved Brands)**: ProShop exports one row per `Tool #` normally, but a tool with multiple Approved Brand / purchasing options spans **multiple rows sharing the same `Tool #`** — geometry/spec columns are populated only on the first row of the group, and each row contributes one `purchasing[]` entry (`Approved Brand` / `Vendor` / `EDP#` / `Cost` / `Lead time`). Import groups rows by `Tool #` before matching (`handleProShopFile`); export emits the same shape via `buildBrandRows`/`buildProShopCSV` (`tool-extractor.tsx`) and `exportFullLibrary` (`src/utils/proShopExport.js`).
+
 -----
 
 ## ProShop Field Priority Rules
@@ -596,13 +611,15 @@ These rules apply during the **initial ProShop CSV merge** and on any **subseque
 | Field | Rule | Notes |
 |---|---|---|
 | Tool description | PS wins | Always via the per-tool rename confirmation UI — see Description Rename Workflow |
-| `vendor` (manufacturer) | PS wins | Manufacturer name; metadata-only, **never** written to Fusion |
-| `location` (cabinet) | From PS + Fusion's "Vendor" field | Fusion's "Vendor" UI field (`expressions.tool_vendor`) holds the cabinet location → internal `location` |
-| `min_ooh` (MIN OOH floor) | PS wins | From `lengthBelowShankDiameter`; metadata-only, always overwrites |
+| `vendor` (manufacturer) | PS wins | From `Approved Brand`; metadata-only, **never** written to Fusion |
+| `proshot_id` | Fill gap only | From `Tool #` — only set if the tool doesn't already have one |
+| `location` (cabinet) | Fill gap only | From `Location`; Fusion's "Vendor" UI field (`expressions.tool_vendor`) holds the cabinet location → internal `location` |
+| `purchasing[]` (Approved Brands) | PS wins, replace when present | Built from every row sharing a `Tool #` via `buildPurchasingFromGroup` — see ProShop Integration |
+| `min_ooh` (MIN OOH floor) | PS wins | From `Length Below Holder - MIN OOH` (export id `lengthBelowShankDiameter`); metadata-only, always overwrites |
 | `geometry['shoulder-length']` (shoulder length) | Set to MIN OOH at normalization | See MIN OOH rule below |
 | per-assembly `ooh` → `geometry.LB` | Floored at MIN OOH | See MIN OOH rule below |
-| `tsc_capable` (through-spindle coolant) | PS wins | Boolean capability flag (not a text field) |
-| `tip_to_first_thread` (taps) | Fill gap only | Column name is a **guess** — see note below |
+| `tsc_capable` (through-spindle coolant) | PS wins | From `Through Coolant` (`true`/`false`); boolean capability flag |
+| `tip_to_first_thread` (taps) | Fill gap only | From `Tip to 1st Full Thread`, converted from the file unit — see note below |
 | All other differences | **Flag** to user | Do not auto-resolve |
 
 ### MIN OOH floor rule (read carefully)
@@ -625,9 +642,9 @@ assemblies = assemblies.map(a => ({
 
 After normalization, shoulder length and per-assembly OOH can be adjusted manually (rare). `AssemblyForm` continues to block any per-assembly OOH below `min_ooh`. Note the floor applies **per instance** — a multi-assembly tool keeps each proven stick-out, only correcting ones that fall below the minimum.
 
-### Tip to 1st Full Thread (taps) — column mapping unconfirmed
+### Tip to 1st Full Thread (taps)
 
-`tip_to_first_thread` (see Hole-Making Tool Presets → Tap & thread mill metadata fields) is wired into ProShop CSV import — `psRowToTool` (new tools, adopts the file unit) and `matchProShopToTools` (fill-gap merge onto existing tools, converted via `convertLength` from the file unit into the tool's own unit, same as `min_ooh`) — using a **placeholder column name**: `row['Tip to 1st Full Thread']` / `row.tipToFirstFullThread`. This is a guess pending the user's detailed ProShop column mapping ("coming next") — **update both functions in `ImportFlow.jsx`** once the real column name is confirmed.
+`tip_to_first_thread` (see Hole-Making Tool Presets → Tap & thread mill metadata fields) is wired into ProShop CSV import — `psRowToTool` (new tools, adopts the file unit) and `matchProShopToTools` (fill-gap merge onto existing tools, converted via `convertLength` from the file unit into the tool's own unit, same as `min_ooh`) — reading the confirmed ProShop column `row['Tip to 1st Full Thread']` (export id `tipTo1stFullThread`).
 
 ### Vendor / Location field mapping (Fusion repurposes "Vendor")
 
@@ -951,7 +968,7 @@ All metadata-only (never written to Fusion) — added to `tool_metadata.json` vi
 
 - **`tap_sub_type`** (`'cut' | 'form'`) — 2-way chip on the tap page. An independent **`is_sti`** boolean (STI/Helicoil thread-insert tap) sits alongside it — a tap can be both an STI tap and a cut or form tap, so this is no longer a 3-way cut/form/sti group. Boolean metadata fields like `is_sti` (and `tsc_capable`) automatically get correct Yes/No facet options — `searchEngine.js`'s boolean-facet handling is generalized to any `type: 'boolean'` registry field, not hardcoded.
 - **`point_type`** (`appliesToTypes: ['tap']`) — dropdown: Bottoming / Modified Bottoming / Plug / Taper / Spiral Point / Spiral Flute. **Tap-only** (previously also shown for drill/center drill/spot drill/counter sink — narrowed to taps only).
-- **`tip_to_first_thread`** — the Z distance from the tap's tip to where the first full thread starts (chamfer length). `canonicalUnit: 'native'` like other lengths — stored in the tool's own unit, no conversion needed within a tool. ProShop column mapping is a guess pending confirmation — see ProShop Field Priority Rules.
+- **`tip_to_first_thread`** — the Z distance from the tap's tip to where the first full thread starts (chamfer length). `canonicalUnit: 'native'` like other lengths — stored in the tool's own unit, no conversion needed within a tool. ProShop column: `Tip to 1st Full Thread` (export id `tipTo1stFullThread`) — see ProShop Field Priority Rules.
 - **Thread mill capability fields** (`appliesToTypes: ['thread mill']`): `tpi_min` / `tpi_max` — the TPI range the mill can cut, distinct from `pitch` (the specific thread designation it's set up for) — and `thread_profile_angle` (degrees).
 
 -----

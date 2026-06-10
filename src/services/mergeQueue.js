@@ -190,9 +190,7 @@ function parseFusionCsv(raw) {
       vendor: '',
       product_id: '',
       coating: '',
-      distributor: '',
-      distributor_stock_num: '',
-      cost: '',
+      purchasing: [],
       center_cutting: false,
       // Fusion-native: tool_hand → cutting_direction (anything matching "left" = Left Hand).
       cutting_direction: /left/i.test(csvStr(r.tool_hand)) ? 'Left Hand' : 'Right Hand',

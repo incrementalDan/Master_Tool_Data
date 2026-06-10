@@ -66,7 +66,16 @@ export default function ImportFlow() {
           header.forEach((h, i) => { obj[h.trim()] = (row[i] || '').trim(); });
           return obj;
         });
-        const matches = matchProShopToTools(data, fusionTools, psUnit);
+        // ProShop exports one row per "Tool #" normally, but multiple rows
+        // (sharing the same Tool #) when a tool has multiple purchasing/
+        // Approved Brand options — group them before matching.
+        const groupMap = new Map();
+        for (const row of data) {
+          const key = row['Tool #'] || `__row_${groupMap.size}`;
+          if (!groupMap.has(key)) groupMap.set(key, []);
+          groupMap.get(key).push(row);
+        }
+        const matches = matchProShopToTools([...groupMap.values()], fusionTools, psUnit);
         setProShopMatches(matches);
       } catch (err) {
         setParseError(`ProShop CSV parse error: ${err.message}`);
@@ -80,13 +89,13 @@ export default function ImportFlow() {
     markSetupStep('proshopMerged');
     const merged = [...fusionTools];
 
-    proShopMatches.matched.forEach(({ toolIdx, psRow, additions }) => {
+    proShopMatches.matched.forEach(({ toolIdx, additions }) => {
       merged[toolIdx] = { ...merged[toolIdx], ...additions };
     });
 
-    proShopMatches.unmatched.forEach(({ psRow, action }) => {
+    proShopMatches.unmatched.forEach(({ psGroup, action }) => {
       if (action === 'add') {
-        merged.push(psRowToTool(psRow, psUnit));
+        merged.push(psRowToTool(psGroup, psUnit));
       }
     });
 
@@ -173,8 +182,10 @@ export default function ImportFlow() {
         <div className="card">
           <h3 style={{ marginBottom: 8 }}>Merge ProShop Library</h3>
           <p className="text-sub text-sm mb-16">
-            Upload a ProShop CSV export. The app matches rows to existing tools by Part Number → description similarity.
-            Matched fields fill gaps — they don't overwrite existing values.
+            Upload a ProShop CSV export. Rows are grouped by ProShop's "Tool #" (multiple rows per tool
+            represent multiple Approved Brand / purchasing options) and matched to existing tools by
+            ProShop ID (Tool #) → description similarity. ProShop wins for vendor, MIN OOH, through-coolant,
+            and purchasing info; other fields fill gaps only.
           </p>
 
           <div className="field-group mb-16" style={{ maxWidth: 340 }}>
@@ -223,7 +234,7 @@ export default function ImportFlow() {
                     <thead>
                       <tr>
                         <th>Description</th>
-                        <th>Part #</th>
+                        <th>Tool #</th>
                         <th>Diameter</th>
                         <th>Action</th>
                       </tr>
@@ -231,9 +242,9 @@ export default function ImportFlow() {
                     <tbody>
                       {proShopMatches.unmatched.map((item, i) => (
                         <tr key={i}>
-                          <td className="truncate" style={{ maxWidth: 200 }}>{item.psRow.description || item.psRow['Tool Description'] || '—'}</td>
-                          <td className="font-mono text-xs">{item.psRow['Part Number'] || item.psRow['EDP#'] || '—'}</td>
-                          <td>{item.psRow.Diameter || item.psRow.cutDiameter || '—'}</td>
+                          <td className="truncate" style={{ maxWidth: 200 }}>{item.psGroup[0]['Description'] || '—'}</td>
+                          <td className="font-mono text-xs">{item.psGroup[0]['Tool #'] || '—'}</td>
+                          <td>{item.psGroup[0]['Cut Dia'] || '—'}</td>
                           <td>
                             <select
                               className="field-input"
@@ -440,87 +451,143 @@ function parseCSV(text) {
 }
 
 // ── ProShop row → internal tool ────────────────────────────────────────────
-// psUnit is the unit of the ProShop file; a tool created from a ProShop row
-// adopts that unit, so its lengths are taken as-is (no conversion).
-function psRowToTool(row, psUnit = 'inches') {
-  const desc = row['Tool Description'] || row.description || '';
-  const diam = parseFloat(row.Diameter || row.cutDiameter || '0') || null;
+// `group` is every CSV row sharing one "Tool #" (ProShop's primary key — see
+// buildPurchasingFromGroup for the multi-row purchasing case). Geometry/spec
+// columns are read from the first row using ProShop's real UI/display column
+// headers. psUnit is the unit of the ProShop file; a tool created from a
+// ProShop row adopts that unit, so its lengths are taken as-is (no conversion).
+const PS_MATERIAL_MAP = {
+  carbide: 'carbide', CARB: 'carbide', HSS: 'hss', 'HSS/CARB': 'hss', COBALT: 'cobalt', CERAMIC: 'ceramic',
+};
+function psMaterial(v) {
+  if (!v) return 'carbide';
+  return PS_MATERIAL_MAP[v] || v.toLowerCase();
+}
+function psNum(v) {
+  const n = parseFloat(v);
+  return isNaN(n) ? null : n;
+}
+
+function psRowToTool(group, psUnit = 'inches') {
+  const r = group[0];
   return {
     ...newTool('flat end mill'),
     unit: psUnit,
-    description: desc,
-    diameter: diam,
-    flute_length: parseFloat(row['Flute Length'] || row.lengthOfCut || '') || null,
-    overall_length: parseFloat(row['Overall Length'] || row.overallLength || '') || null,
-    number_of_flutes: parseInt(row['# Flutes'] || row['no. of flutes'] || '') || null,
-    vendor: row.Manufacturer || row.approvedBrand || '',
-    product_id: row['Part Number'] || row['EDP#'] || '',
-    coating: row.coating || '',
-    material: row.toolMaterial || row.material || 'carbide',
-    min_ooh: parseFloat(row.lengthBelowShankDiameter || '') || null,
-    // Tip to 1st Full Thread (taps) — column name guessed; confirm against
-    // an actual ProShop export and adjust if needed.
-    tip_to_first_thread: parseFloat(row['Tip to 1st Full Thread'] || row.tipToFirstFullThread || '') || null,
+    proshot_id: r['Tool #'] || '',
+    grouping: r['Tool Group'] || '',
+    description: r['Description'] || '',
+    diameter: psNum(r['Cut Dia']),
+    flute_length: psNum(r['LOC']),
+    overall_length: psNum(r['Overall Length']),
+    number_of_flutes: parseInt(r['No.ofFlutes']) || null,
+    shank_diameter: psNum(r['Shank Diameter']),
+    corner_radius: psNum(r['CornerRad']),
+    tip_angle: psNum(r['Tip Angle']),
+    tip_diameter: psNum(r['Tip Diameter']),
+    helix_angle: psNum(r['HelixAngle']),
+    taper_angle: psNum(r['Taper']),
+    coating: r['Coating'] || '',
+    material: psMaterial(r['Tool Material']),
+    pitch: r['Pitch'] || '',
+    tap_class: r['Tap class'] || '',
+    point_type: r['Point Type'] || '',
+    stub_jobber: r['(S)tub / (J)obber'] || '',
+    full_profile: r['Full Profile'] === 'true',
+    backside_capable: r['Backside Capable'] === 'true',
+    double_ended: r['Double Ended'] === 'Y',
+    tsc_capable: r['Through Coolant'] === 'true',
+    material_suitability: r['Recommended Workpiece Material']
+      ? r['Recommended Workpiece Material'].split(',').map(s => s.trim()).filter(Boolean)
+      : [],
+    min_ooh: psNum(r['Length Below Holder - MIN OOH']),
+    tip_to_first_thread: psNum(r['Tip to 1st Full Thread']),
+    location: r['Location'] || '',
+    vendor: r['Approved Brand'] || '',
+    purchasing: buildPurchasingFromGroup(group),
   };
 }
 
-// ── Match ProShop rows to existing tools ──────────────────────────────────
-// psUnit is the unit of the ProShop file; min_ooh (the only length merged onto
-// an existing tool) is converted from it into the matched tool's own unit.
-function matchProShopToTools(psRows, tools, psUnit = 'inches') {
+// One purchasing entry ("Approved Brand" sub-table row in ProShop) per CSV row
+// in the group that carries purchasing data — multiple rows share a Tool # but
+// differ only in manufacturer/distributor/part#/cost/lead time.
+function buildPurchasingFromGroup(group) {
+  return group
+    .filter(r => r['Approved Brand'] || r['Vendor'] || r['EDP#'] || r['Cost'] || r['Lead time'])
+    .map(r => ({
+      manufacturer: r['Approved Brand'] || '',
+      distributor: r['Vendor'] || '',
+      distributor_part_number: r['EDP#'] || '',
+      cost: r['Cost'] || '',
+      lead_time: r['Lead time'] || '',
+    }));
+}
+
+// ── Match ProShop row-groups to existing tools ────────────────────────────
+// psUnit is the unit of the ProShop file; lengths merged onto an existing tool
+// (min_ooh, tip_to_first_thread) are converted from it into the matched tool's
+// own unit.
+function matchProShopToTools(groups, tools, psUnit = 'inches') {
   const matched = [];
   const usedToolIdxs = new Set();
 
-  for (const psRow of psRows) {
-    const partNum = (psRow['Part Number'] || psRow['EDP#'] || '').trim();
-    const desc = (psRow['Tool Description'] || psRow.description || '').toLowerCase().trim();
-    const diam = parseFloat(psRow.Diameter || psRow.cutDiameter || '') || null;
+  for (const group of groups) {
+    const r = group[0];
+    const toolNum = (r['Tool #'] || '').trim();
+    const desc = (r['Description'] || '').toLowerCase().trim();
+    const diam = psNum(r['Cut Dia']);
 
     let toolIdx = -1;
 
-    // Match by product_id
-    if (partNum) {
-      toolIdx = tools.findIndex((t, i) => !usedToolIdxs.has(i) && (t.product_id === partNum || t.proshot_id === partNum));
+    // Primary match: ProShop "Tool #" is the Primary Key === our proshot_id
+    if (toolNum) {
+      toolIdx = tools.findIndex((t, i) => !usedToolIdxs.has(i) && t.proshot_id === toolNum);
     }
 
-    // Fall back: match by description similarity + diameter
+    // Fall back: match by description similarity + diameter (tools not yet ProShop-linked)
     if (toolIdx < 0 && desc) {
       toolIdx = tools.findIndex((t, i) => {
         if (usedToolIdxs.has(i)) return false;
         const tDesc = (t.description || '').toLowerCase();
         const descMatch = tDesc.includes(desc.slice(0, 20)) || desc.includes(tDesc.slice(0, 20));
-        const diamMatch = !diam || !t.diameter || Math.abs(parseFloat(t.diameter) - diam) < 0.001;
+        const diamMatch = diam == null || !t.diameter || Math.abs(parseFloat(t.diameter) - diam) < 0.001;
         return descMatch && diamMatch;
       });
     }
 
     if (toolIdx >= 0) {
       usedToolIdxs.add(toolIdx);
-      const additions = {};
       const tool = tools[toolIdx];
-      // Fill gaps — don't overwrite existing values
-      if (!tool.vendor && (psRow.Manufacturer || psRow.approvedBrand)) additions.vendor = psRow.Manufacturer || psRow.approvedBrand;
-      if (!tool.product_id && partNum) additions.product_id = partNum;
-      if (!tool.coating && psRow.coating) additions.coating = psRow.coating;
+      const additions = {};
+
+      // ProShop wins
+      if (r['Approved Brand']) additions.vendor = r['Approved Brand'];
+      if (toolNum && !tool.proshot_id) additions.proshot_id = toolNum;
+      const purchasing = buildPurchasingFromGroup(group);
+      if (purchasing.length) additions.purchasing = purchasing;
+      if (r['Through Coolant'] === 'true' || r['Through Coolant'] === 'false') {
+        additions.tsc_capable = r['Through Coolant'] === 'true';
+      }
       // min_ooh: ProShop is authoritative — always overwrite when present, after
       // converting from the ProShop file unit into the matched tool's own unit.
-      const psMinOoh = parseFloat(psRow.lengthBelowShankDiameter || '') || null;
+      const psMinOoh = psNum(r['Length Below Holder - MIN OOH']);
       if (psMinOoh != null) additions.min_ooh = convertLength(psMinOoh, psUnit, tool.unit);
-      // Tip to 1st Full Thread (taps) — fills a gap only; column name guessed
-      // ('Tip to 1st Full Thread' / tipToFirstFullThread) pending confirmation
-      // against an actual ProShop export.
+
+      // Fill gaps only — don't overwrite existing values
+      if (!tool.coating && r['Coating']) additions.coating = r['Coating'];
+      if (!tool.location && r['Location']) additions.location = r['Location'];
       if (tool.tip_to_first_thread == null) {
-        const psTipToFirstThread = parseFloat(psRow['Tip to 1st Full Thread'] || psRow.tipToFirstFullThread || '') || null;
-        if (psTipToFirstThread != null) additions.tip_to_first_thread = convertLength(psTipToFirstThread, psUnit, tool.unit);
+        const psTip = psNum(r['Tip to 1st Full Thread']);
+        if (psTip != null) additions.tip_to_first_thread = convertLength(psTip, psUnit, tool.unit);
       }
-      matched.push({ toolIdx, psRow, additions });
+
+      matched.push({ toolIdx, psGroup: group, additions });
     }
   }
 
-  const matchedPsRows = new Set(matched.map(m => m.psRow));
-  const unmatched = psRows
-    .filter(r => !matchedPsRows.has(r))
-    .map(r => ({ psRow: r, action: 'skip' }));
+  const matchedGroups = new Set(matched.map(m => m.psGroup));
+  const unmatched = groups
+    .filter(g => !matchedGroups.has(g))
+    .map(g => ({ psGroup: g, action: 'skip' }));
 
   return { matched, unmatched };
 }
