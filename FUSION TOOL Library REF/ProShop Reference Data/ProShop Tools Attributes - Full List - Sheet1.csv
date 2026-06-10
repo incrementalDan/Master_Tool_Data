@@ -1,0 +1,507 @@
+Attribute Prefs (Show All)
+Available Single Attributes
+expand_more
+ANSI Catalog Number (Id: ansicatalognumber) Indexed String Audit Log
+(API: ansiCatalogNumber)
+
+Backside Capable (Id: backsidecapable) Indexed Boolean Audit Log - This attribute means that this tool CAN be used for backside (Undercut) work.
+(API: backsideCapable)
+
+Body Dia (Id: bodyDiameter) Indexed Double Audit Log
+(API: bodyDiameter)
+
+Bottom Cut (Id: bottomFaceCut) Indexed Double Audit Log
+(API: bottomFaceCut)
+
+Bottom Relief (Id: bottomFaceRelief) Indexed Double Audit Log - Bottom Face Relief
+(API: bottomFaceRelief)
+
+"Bulk Import Id (Id: bulkimportid) Indexed String Audit Log - If a record was part of a bulk import, what import batch was it on"
+(API: bulkImportId)
+
+Center Cut (Id: centerCutting) Indexed Audit Log - Center Cutting
+(API: centerCutting)
+
+Coating (Id: coating) Indexed String Audit Log
+(API: coating)
+
+COGS Account (Id: cogsaccount) Indexed String Audit Log - COGS Account for Accounting
+(API: cogsAccount)
+
+Corner Rad (Id: cornerRadius) Indexed Double Audit Log
+(API: cornerRadius)
+
+Created At (Id: createdat) Indexed Date Audit Log
+(API: Not available)
+
+"Created by (Id: createdby, Foreign Key: Users) Indexed String Audit Log - What User created a record?"
+(API: createdBy)
+
+"Made Of (Id: customgrindmadeoutof, Foreign Key: Tools) Indexed Audit Log - Give the Tool # a custom ground tool is made out of."
+(API: customGrindMadeOutOf)
+
+Custom Grind (Id: customgrindtool) Indexed Boolean Audit Log - Is this tool a custom ground tool?
+(API: customGrindTool)
+
+Custom Ground Notes (Id: customgroundnotes) Indexed String Audit Log
+(API: customGroundNotes)
+
+Cut Dia (Id: cutDiameter) Indexed Double Audit Log - The Cut Dia listed by the manufacturer.
+(API: cutDiameter)
+
+Cutting Direction (Id: cuttingdirection) Indexed String Audit Log
+(API: cuttingDirection)
+
+Default Average Cost (Id: defaultaveragecost) Indexed Currency Audit Log
+(API: defaultAverageCost)
+
+Description (Id: description) Indexed String Audit Log - A brief description of a tool.
+(API: description)
+
+Diameter of Ball (DK) (Id: diameterofball) Indexed Double Audit Log
+(API: diameterOfBall)
+
+Diameter Range (Id: diameterrange) Indexed Audit Log
+(API: diameterRange)
+
+Diametral Knurl Value (Id: diametralknurlvalue) Indexed Audit Log
+(API: diametralKnurlValue)
+
+Double Ended (Id: doubleEnded) Indexed Audit Log
+(API: doubleEnded)
+
+"Edit Log Id (Id: editlogid, Foreign Key: Audit Log) Indexed String"
+(API: editLog)
+
+SK Size (Id: ersize) Indexed String Audit Log
+(API: erSize)
+
+Face to Tip Value (Id: facetotipvalue) Indexed Double Audit Log
+(API: faceToTipValue)
+
+Flute Type/Chipbreaker (Id: fluteType) Indexed Audit Log
+(API: fluteType)
+
+Full Profile (Id: fullprofile) Indexed Boolean Audit Log
+(API: fullProfile)
+
+Grooving Insert Width (Id: groovinginsertwidth) Indexed Double Audit Log
+(API: groovingInsertWidth)
+
+Quantity Verified (Id: groundzeroverified) Indexed Boolean Audit Log
+(API: groundZeroVerified)
+
+"Quantity Verified By (Id: groundzeroverifiedby, Foreign Key: Users) Indexed String"
+(API: groundZeroVerifiedBy)
+
+Quantity Verified Date (Id: groundzeroverifieddate) Indexed Date
+(API: groundZeroVerifiedDate)
+
+Helix Angle (Id: helixAngle) Indexed Double Audit Log
+(API: helixAngle)
+
+Insert Corner Radius (Id: insertcornerradius) Indexed Audit Log
+(API: insertCornerRadius)
+
+Insert Inscribed Circle (Id: insertinscribedcircle) Indexed Audit Log
+(API: insertInscribedCircle)
+
+Insert Relief Angle (Id: insertreliefangle) Indexed String Audit Log
+(API: insertReliefAngle)
+
+Insert Shape (Id: insertshape) Indexed String Audit Log
+(API: insertShape)
+
+Insert Thickness (Id: insertthickness) Indexed Double Audit Log
+(API: insertThickness)
+
+Insert Tip to Center Line of Shank (Id: inserttiptocenterlineofshank) Indexed Double Audit Log
+(API: insertTipToCenterLineofShank)
+
+Insert Tolerance (Id: inserttolerance) Indexed String Audit Log
+(API: insertTolerance)
+
+Insert Type (Id: inserttype) Indexed Audit Log
+(API: insertType)
+
+Inspection Certified (Id: inspectionCertified) Indexed Boolean Audit Log
+(API: inspectionCertified)
+
+Install Group (Id: installgroup) Indexed String Audit Log
+(API: installGroup)
+
+Inventory Account (Id: inventoryaccount) Indexed String Audit Log - Inventory Account for Accounting
+(API: inventoryAccount)
+
+ISO Catalog Number (Id: isocatalognumber) Indexed String Audit Log
+(API: isoCatalogNumber)
+
+Is Template? (Id: istemplate) Indexed Boolean Audit Log
+(API: isTemplate)
+
+Last Modified By (Id: lastModBy) Indexed
+(API: lastModifiedBy)
+
+Last Mod Time (Id: lastmodtime) Indexed Date
+(API: lastModifiedTime)
+
+Lead Angle (Id: leadangle) Indexed Audit Log
+(API: leadAngle)
+
+Least Amount to Order (Id: leastamounttoorder) Audit Log
+(API: leastAmountToOrder)
+
+Length Below Holder - MIN OOH  (Id: lengthBelowShankDiameter) Indexed Double Audit Log
+(API: lengthBelowShankDiameter)
+
+LOC (Id: lengthOfCut) Indexed Double Audit Log - Length of Cut
+(API: lengthOfCut)
+
+Length Under Ball (ML) (Id: lengthunderball) Indexed Double Audit Log
+(API: lengthUnderBall)
+
+Location (Id: location) Indexed String Audit Log
+(API: location)
+
+Max Back Angle (Id: maxbackangle) Indexed Audit Log
+(API: maxBackAngle)
+
+Max Offset Drill (Id: maxoffsetdrill) Indexed Double Audit Log
+(API: maxOffsetDrill)
+
+Max Z Depth (Id: maxzdepth) Indexed Double Audit Log
+(API: maxZDepth)
+
+Min Bore Diameter (Id: minborediameter) Indexed Double Audit Log
+(API: minBoreDiameter)
+
+Safety Stock (Id: minimumquantityonhand) Indexed Audit Log
+(API: minimumQuantityOnHand)
+
+Nomenclature (Id: nomenclature) Indexed String Audit Log - Old lathe tooling database name for a lathe Tool
+(API: nomenclature)
+
+No. of Cutting Corners (Id: noofcuttingcorners) Indexed Double Audit Log
+(API: numberOfCuttingCorners)
+
+No. of Flutes (Id: noOfFlutes) Indexed Double Audit Log
+(API: numberOfFlutes)
+
+Number (Id: number) Indexed Integer Audit Log - The ID number for this Tool (ie - B29's number would be 29)
+(API: number)
+
+Overall Length (Id: overallLength) Indexed Double Audit Log
+(API: overallLength)
+
+Pitch (Id: pitch) Indexed Audit Log
+(API: pitch)
+
+Pocket Geometry (Id: pocketgeometry) Indexed Audit Log
+(API: pocketGeometry)
+
+Point Type (Id: pointtype) Indexed Audit Log - The tip geometry used for both taps and drills
+(API: pointType)
+
+Purchasing Notes (Id: purchasingnotes) Audit Log
+(API: purchasingNotes)
+
+Qty in Bin (Id: qtyinbin) Audit Log
+(API: qtyInBin)
+
+Total in Shop (Id: quantity) Indexed Double Audit Log - Total number of a Tool we have in the shop.
+(API: quantity)
+
+"Recommended Pre-drill Size (Id: recommendedpredrillsize, Foreign Key: Tools) Indexed Audit Log - text field that might have a numeric value and a description of the drill (i.e. 0.0995""---#39 drill)"
+(API: recommendedPredrillSize)
+
+Recommended Workpiece Material (Id: recommendedworkpiecematerial) Indexed Audit Log - What material are you cutting?
+(API: recommendedWorkpieceMaterial)
+
+Relieved Shank Diameter (Id: relievedShankDiameter) Indexed Double Audit Log
+(API: relievedShankDiameter)
+
+Round Shank (Id: roundshank) Indexed Boolean Audit Log
+(API: roundShank)
+
+Sales Account (Id: salesaccount) Indexed String Audit Log - Sales Account for Accounting
+(API: salesAccount)
+
+Shaft Diameter (DS) (Id: shaftdiameter) Indexed Double Audit Log
+(API: shaftDiameter)
+
+Shaft Material (Id: shaftmaterial) Indexed String Audit Log
+(API: shaftMaterial)
+
+Shank Diameter (Id: shankDiameter) Indexed Double Audit Log
+(API: shankDiameter)
+
+Size Name (Id: size) Indexed String Audit Log
+(API: size)
+
+Sphere Material (Id: spherematerial) Indexed String Audit Log
+(API: sphereMaterial)
+
+Square Size (Id: squaresize) Indexed Double Audit Log
+(API: squareSize)
+
+Status (Id: status) Indexed String Audit Log
+(API: status)
+
+(S)tub / (J)obber (Id: stubjobber) Indexed Audit Log
+(API: stubJobber)
+
+Suggested Maximum Quantity (Id: suggestedmaximumquantity) Indexed Integer Audit Log
+(API: suggestedMaximumQuantity)
+
+"Tap class (Id: tapclass) Indexed Audit Log - Each tap has a class of thread that it produces. For standard threads it is an ""H"" value (H2-H6) and for metric threads it is a ""D"" value (D2-D6)"
+(API: tapClass)
+
+Taper (Id: taper) Indexed Double Audit Log
+(API: taper)
+
+Tax Type (Id: taxtype) Indexed String Audit Log
+(API: taxType)
+
+Template Group (Id: templategroup) Indexed String Audit Log
+(API: templateGroup)
+
+Thread (Id: thread) Indexed Audit Log
+(API: thread)
+
+Threaded Adapter Diameter (DG) (Id: threadedadapterdiameter) Indexed Double Audit Log
+(API: threadedAdapterDiameter)
+
+Threads Per Inch (Id: threadsperinch) Indexed Audit Log
+(API: threadsPerInch)
+
+Thread Type (Id: threadtype) Indexed Audit Log - Type of flutes for Tapping
+(API: threadType)
+
+Through Coolant (Id: throughcoolant) Indexed Boolean Audit Log
+(API: throughCoolant)
+
+Tip Angle (Id: tipangle) Indexed Audit Log - The total included angle of the tip (Not from tool centerline)
+(API: tipAngle)
+
+"Tip Diameter (Id: tipdiameter) Indexed Audit Log - Tip Flat Diameter for Taps, Drills, Centerdrills, Spot Drills, Chamfer Tools"
+(API: tipDiameter)
+
+Tip to 1st Full Thread (Id: tipto1stfullthread) Indexed Audit Log
+(API: tipTo1stFullThread)
+
+Drawer Location (Id: tmax) Indexed String Audit Log
+(API: tmax)
+
+Tool Group (Id: toolGroupLetter) Indexed String Audit Log - Tools are sub-grouped by group letter.
+(API: toolGroupLetter)
+
+Tool Material (Id: toolMaterial) Indexed String Audit Log
+(API: toolMaterial)
+
+Tool # (Id: toolNumber) Primary Key Indexed String Audit Log
+(API: toolNumber)
+
+Top Cut (Id: topFaceCut) Indexed Double Audit Log - Top Face Cut
+(API: topFaceCut)
+
+Top Relief (Id: topFaceRelief) Indexed Double Audit Log
+(API: topFaceRelief)
+
+TPI Circular Pitch (Id: tpicircularpitch) Indexed Audit Log
+(API: tpiCircularPitch)
+
+Type Straight or Diagonal (Id: typestraightordiagonal) Indexed String Audit Log
+(API: typeStraightOrDiagonal)
+
+Available Sub-tables and their Attributes
+expand_more
+"- Approved Brands (Id: approvedbrands, API: approvedBrands) Sub-Table"
+
+- Approved Brand (Id: approvedBrand) Indexed String Audit Log
+(API: approvedBrand)
+
+- approvedbrandsUID (Id: approvedbrandsUID) Audit Log
+(API: legacyId)
+
+- Cost (Id: cost) Indexed Currency Audit Log
+(API: cost)
+
+- Lead time (Id: leadtime) Indexed Audit Log - How long with it take to get this tool?
+(API: leadTime)
+
+"- Vendor (Id: vender, Foreign Key: Contacts) Indexed String Audit Log - The vendor of an approved brand."
+(API: vendor)
+
+- EDP# (Id: vendertoolid) Indexed String Audit Log
+(API: vendorToolId)
+
+"- Holders (Id: holders, API: holders) Sub-Table - Sub-table of allowed holders for a Tool."
+
+- Holder (Id: holder) Indexed Audit Log - An allowed holder for this tool.
+(API: holder)
+
+- holdersUID (Id: holdersUID) Audit Log
+(API: legacyId)
+
+"- Inserts Table (Id: insertstable, API: insertsTable) Sub-Table - Sub-table of Inserts that can be added any group designated as ""Holder"""
+
+"- Insert (Id: insert, Foreign Key: Tools) Audit Log - The Tool # for an Insert type tool"
+(API: insert)
+
+- insertstableUID (Id: insertstableUID) Audit Log
+(API: legacyId)
+
+"- Pictures (Id: pictures, API: pictures) Sub-Table - Sub-table of pictures of a tool"
+
+- picturesUID (Id: picturesUID) Audit Log
+(API: legacyId)
+
+- Tool Picture (Id: toolpicture) Picture Audit Log
+(API: picture)
+
+"- Resource Files (Id: resourcefiles, API: resourceFiles) Sub-Table"
+
+- Resource File (Id: resourcefile) File Audit Log
+(API: resourcefile)
+
+- resourcefilesUID (Id: resourcefilesUID) Audit Log
+(API: legacyId)
+
+"- Surface Grinder Setup Pictures (Id: surfacegrindersetuppictures, API: surfaceGrinderSetupPictures) Sub-Table"
+
+- Surface Grinder Setup Picture (Id: surfacegrindersetuppicture) Picture Audit Log
+(API: surfaceGrinderSetupPicture)
+
+- surfacegrindersetuppicturesUID (Id: surfacegrindersetuppicturesUID) Audit Log
+(API: legacyId)
+
+
+
+
+
+
+Grouping Prefs
+A - Square and Bull Endmill
+
+
+B - Ball Endmill and Drill Mill
+
+
+C - Taper End Mill
+
+
+D - Drill
+
+
+DRILL
+
+
+E - Center Drills
+
+
+F - Ream and Bore
+
+
+G - Insert
+
+
+H - Saws
+
+
+I - Insert Mills
+
+
+J - T-Slot
+
+
+K - Corner Rounding End Mills
+
+
+L - Chamfer Tool
+
+
+M - Special Tooling
+
+
+"N - Solid - Threading, Grooving, Threadmill"
+
+
+O - Spot Drill
+
+
+P - Broach
+
+
+Q - Arbour
+
+
+R - Taps
+
+
+S - CMM Styli
+
+
+T - Insert Tool Hardware
+
+
+TA - I.D. Threaders
+
+
+TB - O.D. Threaders
+
+
+TC - Indexable Drills
+
+
+TD - Boring Bars
+
+
+TE - Back Boring Bars
+
+
+TF - External Turning Holders
+
+
+TG - Knurling Tool Holders
+
+
+TH - O.D. Groovers
+
+
+TI - I.D. Groovers
+
+
+TJ - Face Groovers
+
+
+TK - Part Off Tools
+
+
+TL - Boring Bar Inserts
+
+
+TM - I.D. Threading Inserts
+
+
+TN - O.D. Threading Inserts
+
+
+TO - External Turning Inserts
+
+
+TP - O.D. Grooving Inserts
+
+
+TQ - I.D. Grooving Inserts
+
+
+TR - Part Off Inserts
+
+
+TS - Face Grooving Inserts
+
+
+TT - Drill Inserts
+
+
+TU - Knurling Inserts
