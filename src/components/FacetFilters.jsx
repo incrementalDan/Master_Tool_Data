@@ -14,6 +14,7 @@ const FACET_LABEL = {
   material_suitability: 'Cuts',
   corner_radius: 'Corner Radius',
   tap_sub_type: 'Sub-Type',
+  is_sti: 'STI',
   tap_thread_unit: 'Thread Unit',
   cutting_direction: 'Hand',
   pitch: 'Thread Size',

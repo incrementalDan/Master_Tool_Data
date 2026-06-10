@@ -83,9 +83,6 @@ function matchesFacet(tool, field, value) {
     const filterValues = Array.isArray(value) ? value : [value];
     return filterValues.some(v => String(v).toLowerCase() === String(tool.flute_design || '').toLowerCase());
   }
-  if (field === 'tsc_capable') {
-    return value === 'Yes' ? !!tool.tsc_capable : !tool.tsc_capable;
-  }
   // Numeric exact or close match (bare-value path — e.g. chip-selected small option sets)
   if (['diameter', 'flute_length', 'overall_length', 'number_of_flutes', 'corner_radius'].includes(field)) {
     const tv = parseFloat(tool[field]);
@@ -93,6 +90,10 @@ function matchesFacet(tool, field, value) {
     if (isNaN(tv) || isNaN(fv)) return false;
     if (field === 'number_of_flutes') return tv === fv;
     return Math.abs(tv - fv) < 0.00051;
+  }
+  // Boolean fields (e.g. tsc_capable, is_sti) are surfaced as Yes/No options.
+  if (typeof tool[field] === 'boolean') {
+    return value === 'Yes' ? tool[field] === true : tool[field] !== true;
   }
   return String(tool[field] || '').toLowerCase() === String(value).toLowerCase();
 }
@@ -115,11 +116,13 @@ export function getAvailableOptions(tools, activeFilters, targetField) {
       (tool.tags || []).forEach(v => v && values.add(v));
     } else if (targetField === 'material_suitability') {
       (tool.material_suitability || []).forEach(v => v && values.add(v));
-    } else if (targetField === 'tsc_capable') {
-      values.add(tool.tsc_capable ? 'Yes' : 'No');
     } else {
       const v = tool[targetField];
-      if (v !== null && v !== undefined && v !== '') values.add(v);
+      if (typeof v === 'boolean') {
+        values.add(v ? 'Yes' : 'No');
+      } else if (v !== null && v !== undefined && v !== '') {
+        values.add(v);
+      }
     }
   }
 
@@ -130,7 +133,7 @@ export function getAvailableOptions(tools, activeFilters, targetField) {
 
   return {
     options: sorted,
-    showAsChips: targetField === 'tsc_capable' || targetField === 'flute_design' || sorted.length <= 5,
+    showAsChips: targetField === 'flute_design' || sorted.length <= 5,
   };
 }
 

@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { THROUGH_COOLANT_VALUES, smartDiam, buildDesc } from "./src/utils/toolNaming.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const BLUE   = "#4a8fff";
@@ -45,7 +46,6 @@ const COOLANT_OPTS = [
   ["air through tool","Air through tool"],["suction","Suction"],
   ["flood and mist","Flood and mist"],["flood and through tool","Flood and through tool"],
 ];
-const THROUGH_COOLANT_VALUES = new Set(["through tool","air through tool","flood and through tool"]);
 
 const PS_GROUPS = [
   ["A","Square and Bull Endmill"],["B","Ball Endmill and Drill Mill"],
@@ -83,20 +83,6 @@ const ROUND_SHANK_TYPES = new Set([
   "drill","center drill","spot drill","reamer","counter bore","counter sink","tap",
 ]);
 const FLUTE_TYPE_OPTS = ["","Roughing","Semi-Finishing","Finishing","Yes","No"];
-
-const FRACS = {
-  0.015625:"1/64",0.046875:"3/64",0.078125:"5/64",0.109375:"7/64",0.140625:"9/64",0.171875:"11/64",0.203125:"13/64",0.234375:"15/64",
-  0.265625:"17/64",0.296875:"19/64",0.328125:"21/64",0.359375:"23/64",0.390625:"25/64",0.421875:"27/64",0.453125:"29/64",0.484375:"31/64",
-  0.515625:"33/64",0.546875:"35/64",0.578125:"37/64",0.609375:"39/64",0.640625:"41/64",0.671875:"43/64",0.703125:"45/64",0.734375:"47/64",
-  0.765625:"49/64",0.796875:"51/64",0.828125:"53/64",0.859375:"55/64",0.890625:"57/64",0.921875:"59/64",0.953125:"61/64",0.984375:"63/64",
-  0.03125:"1/32",0.09375:"3/32",0.15625:"5/32",0.21875:"7/32",0.28125:"9/32",0.34375:"11/32",0.40625:"13/32",0.46875:"15/32",
-  0.53125:"17/32",0.59375:"19/32",0.65625:"21/32",0.71875:"23/32",0.78125:"25/32",0.84375:"27/32",0.90625:"29/32",0.96875:"31/32",
-  0.0625:"1/16",0.1875:"3/16",0.3125:"5/16",0.4375:"7/16",0.5625:"9/16",0.6875:"11/16",0.8125:"13/16",0.9375:"15/16",
-  0.125:"1/8",0.375:"3/8",0.625:"5/8",0.875:"7/8",0.25:"1/4",0.75:"3/4",
-  0.5:"1/2",1:"1",1.25:"1-1/4",1.5:"1-1/2",1.75:"1-3/4",2:"2",2.5:"2-1/2",
-};
-const r4 = x => parseFloat(parseFloat(x).toFixed(4));
-const toFrac = d => FRACS[Math.round(d*64)/64] || null;
 
 function parseFieldVal(raw) {
   if (!raw && raw !== 0) return "";
@@ -139,69 +125,6 @@ function buildAdionUrl(psToolId){
 }
 // Extract prefix letter(s) from psToolId (everything before first '-')
 function psToolPrefix(psToolId){ return psToolId?(psToolId.split("-")[0]||""):"" }
-
-const NUM_DRILLS = {
-  80:0.0135,79:0.0145,78:0.016,77:0.018,76:0.02,75:0.021,74:0.0225,73:0.024,72:0.025,71:0.026,70:0.028,69:0.0292,68:0.031,67:0.032,66:0.033,65:0.035,
-  64:0.036,63:0.037,62:0.038,61:0.039,60:0.04,59:0.041,58:0.042,57:0.043,56:0.0465,55:0.052,54:0.055,53:0.0595,52:0.0635,51:0.067,50:0.07,49:0.073,
-  48:0.076,47:0.0785,46:0.081,45:0.082,44:0.086,43:0.089,42:0.0935,41:0.096,40:0.098,39:0.0995,38:0.1015,37:0.104,36:0.1065,35:0.11,34:0.111,33:0.113,
-  32:0.116,31:0.12,30:0.1285,29:0.136,28:0.1405,27:0.144,26:0.147,25:0.1495,24:0.152,23:0.154,22:0.157,21:0.159,20:0.161,19:0.166,18:0.1695,17:0.173,
-  16:0.177,15:0.18,14:0.182,13:0.185,12:0.189,11:0.191,10:0.1935,9:0.196,8:0.199,7:0.201,6:0.204,5:0.2055,4:0.209,3:0.213,2:0.221,1:0.228,
-};
-const LETTER_DRILLS = {
-  A:0.234,B:0.238,C:0.242,D:0.246,E:0.25,F:0.257,G:0.261,H:0.266,I:0.272,J:0.277,K:0.281,L:0.29,M:0.295,N:0.302,O:0.316,P:0.323,Q:0.332,R:0.339,S:0.348,T:0.358,U:0.368,V:0.377,W:0.386,X:0.397,Y:0.404,Z:0.413,
-};
-const descDec = x => { const s=String(r4(x)); return s.startsWith("0.")?s.slice(1):s; };
-// 3-decimal version for LOC in descriptions
-const descDec3 = x => { const s=String(parseFloat(parseFloat(x).toFixed(3))); return s.startsWith("0.")?s.slice(1):s; };
-
-function smartDiam(inches, inputWasMm){
-  if(!inches) return "";
-  const tol=0.0005;
-  for(const [n,d] of Object.entries(NUM_DRILLS)) if(Math.abs(inches-d)<=tol) return `#${n} (${descDec(d)})`;
-  for(const [l,d] of Object.entries(LETTER_DRILLS)) if(Math.abs(inches-d)<=tol) return `${l} (${descDec(d)})`;
-  if(inputWasMm){ const mm=parseFloat((inches*25.4).toFixed(3)); const mmStr=mm%1===0?String(mm):String(parseFloat(mm.toFixed(2))); return `${mmStr}mm (${descDec(inches)})`; }
-  const frac=toFrac(inches); if(frac) return `${frac} (${descDec(inches)})`;
-  return descDec(inches);
-}
-
-function buildDesc(f, inputWasMm=false){
-  const d=parseFloat(f.diameter)||0,loc=parseFloat(f.loc)||0,fl=f.flutes||"",
-    wm=(f.workpieceMats&&f.workpieceMats[0])||f.workpieceMat||"",cr=parseFloat(f.cornerRadius)||0,
-    ang=f.tipAngle||"",pitch=f.pitch||"",mat=f.material||"carbide",
-    sfx=[wm,f.coating||""].filter(Boolean).join(" "),
-    dStr=smartDiam(d,inputWasMm),loc3=descDec3(loc),
-    tsc=THROUGH_COOLANT_VALUES.has(f.coolant||"")?" TSC":"";
-  switch(f.toolType){
-    case"flat end mill":     return `${dStr} ${fl}FL EM ${loc3}LOC${sfx?" "+sfx:""}${tsc}`.trim();
-    case"ball end mill":     return `${dStr} BALL ${fl}FL ${loc3}LOC${wm?" "+wm:""}${tsc}`.trim();
-    case"bull nose end mill":return `${dStr} BULL R${descDec(cr)} ${fl}FL ${loc3}LOC${wm?" "+wm:""}${tsc}`.trim();
-    case"rough end mill":    return `${smartDiam(d,inputWasMm)} ROUGH EM ${loc3}LOC${tsc}`.trim();
-    case"drill":             return `${smartDiam(d,inputWasMm)} ${ang||"135"}DEG${mat==="carbide"?" CARB":""} DRILL${tsc}`.trim();
-    case"spot drill":        return `${smartDiam(d,inputWasMm)} SPOT DRILL ${ang||"90"}DEG${tsc}`.trim();
-    case"chamfer mill":      return `${smartDiam(d,inputWasMm)} CHAMFER ${ang||"90"}DEG${tsc}`.trim();
-    case"face mill":         return `${dStr} FACE MILL${tsc}`.trim();
-    case"tap":               { const stiPfx=f.tapSubType==="sti"?"STI ":"",subWord=f.tapSubType==="form"?"FORM":"CUT";
-                               return `${stiPfx}${pitch||r4(d)} ${subWord} TAP${f.tapClass?" "+f.tapClass:""}${tsc}`.trim(); }
-    case"thread mill":       return `${dStr} THREAD MILL${tsc}`.trim();
-    case"slot/key cutter":   return `${dStr} Slot${cr?" ."+descDec(cr)+"KERF":""}${tsc}`.trim();
-    case"dovetail":          return `${dStr} Dove ${ang||""}inc${tsc}`.trim();
-    case"boring head":case"boring bar": return `Boring Bar ${dStr}${tsc}`.trim();
-    case"tapered mill":      { const ta=f.taperAngle?` ${r4(parseFloat(f.taperAngle))}DEG`:""; return `${dStr} TAPERED${ta} ${fl}FL ${loc3}LOC${tsc}`.trim(); }
-    case"radius mill":       return `${dStr} RADIUS R${r4(cr)} ${fl}FL ${loc3}LOC${tsc}`.trim();
-    case"form mill":         return `${dStr} FORM ${fl}FL ${loc3}LOC${tsc}`.trim();
-    case"lollipop mill":     return `${dStr} LOLLIPOP R${r4(cr)} ${fl}FL ${loc3}LOC${tsc}`.trim();
-    case"circle segment barrel": return `${dStr} CIRC SEG BARREL${tsc}`.trim();
-    case"circle segment lens":   return `${dStr} CIRC SEG LENS${tsc}`.trim();
-    case"circle segment oval":   return `${dStr} CIRC SEG OVAL${tsc}`.trim();
-    case"circle segment taper":  return `${dStr} CIRC SEG TAPER${tsc}`.trim();
-    case"center drill":      return `${smartDiam(d,inputWasMm)} CENTER DRILL${ang?" "+ang+"DEG":""}${tsc}`.trim();
-    case"reamer":            return `${smartDiam(d,inputWasMm)} ${fl}FL REAMER${tsc}`.trim();
-    case"counter bore":      return `${smartDiam(d,inputWasMm)} CBORE${tsc}`.trim();
-    case"counter sink":      return `${smartDiam(d,inputWasMm)} CSINK${ang?" "+ang+"DEG":""}${tsc}`.trim();
-    case"turning general":   return `INSERT ${f.material?f.material.toUpperCase():""} ${dStr}${tsc}`.trim();
-    default:                 return `${dStr} ${(f.toolType||"").toUpperCase()}${tsc}`.trim();
-  }
-}
 
 const FT = {
   "flat end mill":"flat end mill","ball end mill":"ball end mill","bull nose end mill":"bull nose end mill","rough end mill":"flat end mill",
@@ -263,6 +186,7 @@ function buildFusionRow(f, outputUnit='inches'){
   if(f.toolType==="thread mill"){
     if(f.maxThreadPitch) S(106,num(parseFloat(f.maxThreadPitch)));
     if(f.minThreadPitch) S(107,num(parseFloat(f.minThreadPitch)));
+    if(f.threadProfileAngle) S(151,num(parseFloat(f.threadProfileAngle)));
   }
   const tp=calcThreadPitch(f.pitch);
   if(tp) S(150,num(tp));
@@ -280,7 +204,7 @@ const PS_MAIN_COLS=[
   ["roundShank",f=>ROUND_SHANK_TYPES.has(f.toolType)?"true":"false"],["toolGroupLetter",f=>f.grouping||AUTO_GROUP[f.toolType]||"M"],
   ["pitch",f=>f.pitch||""],["fluteType",f=>f.fluteType||""],["lengthBelowShankDiameter",f=>f.ooh?String(parseFloat(f.ooh)):""],
   ["tapClass",f=>f.tapClass||""],["threadsPerInch",f=>calcTPI(f.pitch)||""],["thread",f=>f.pitch||""],
-  ["threadType",f=>f.toolType!=="tap"?"":f.tapSubType==="form"?"Form":f.tapSubType==="sti"?"Form":"Cut"],  // STI is mechanically a form tap; TODO: confirm ProShop wants "Form" for STI rows["pointType",f=>f.pointType||""],
+  ["threadType",f=>f.toolType!=="tap"?"":f.tapSubType==="form"?"Form":"Cut"],
   ["fullProfile",f=>f.fullProfile?"true":""],["stubJobber",f=>f.stubJobber||""],["backsideCapable",f=>f.backsideCapable?"true":""],
   ["doubleEnded",f=>f.doubleEnded?"true":""],["cuttingDirection",f=>f.cuttingDirection||"Right Hand"],
   ["taperAngle",f=>f.taperAngle||""],["minThreadPitch",f=>f.minThreadPitch||""],["maxThreadPitch",f=>f.maxThreadPitch||""],
@@ -311,6 +235,7 @@ const BLANK={
   cuttingDirection:"Right Hand",tipDiameter:"",lowerRadius:"",upperRadius:"",profileRadius:"",axialDistance:"",
   psToolId:"",    // ProShop Tool # → Fusion tool_productId (col 126)
   location:"",    // e.g. LC-140 → Fusion tool_vendor (col 165)
+  tapSubType:"cut",isSTI:false,tpiMin:"",tpiMax:"",threadProfileAngle:"",
 };
 const TT=[
   "flat end mill","ball end mill","bull nose end mill","tapered mill","radius mill","form mill","lollipop mill",
@@ -341,7 +266,7 @@ const FIELD_VISIBILITY={
   diameter:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],loc:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
   oal:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],shankDia:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
   shoulderLen:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],ooh:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
-  cornerRadius:[0,0,1,1,1,0,0,0,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0],tipAngle:[0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,1,1,0,0,1,0,0,0],
+  cornerRadius:[0,0,1,1,1,0,0,0,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0],tipAngle:[0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,1,1,1,0,0,1,0,0,0],
   taperAngle:[0,0,0,1,0,0,1,1,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0],tipDiameter:[0,0,0,0,0,0,0,1,1,0,0,1,0,0,0,1,0,1,1,0,0,1,1,0,0],
   lowerRadius:[0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0],upperRadius:[0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0],
   profileRadius:[0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,1,0,0,0,0,0,0,0,0,0],axialDistance:[0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0],
@@ -354,6 +279,8 @@ const FIELD_VISIBILITY={
   stubJobber:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0],pitch:[0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0],
   tapClass:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0],minThreadPitch:[0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
   maxThreadPitch:[0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0],pointType:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,1,1,0,0],
+  tpiMin:[0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0],tpiMax:[0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  threadProfileAngle:[0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0],isSTI:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0],
   edpNumber:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],approvedBrand:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
   vendor:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],vendorStockNum:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
   cost:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],productLink:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
@@ -370,13 +297,13 @@ const VENDOR_LIST_STR=VENDOR_LIST.join(", ");
 const MANUFACTURER_LIST_STR=MANUFACTURER_LIST.join(", ");
 function buildSYS(){
   return `You are a machining expert. Extract tool data from product pages, spec sheets, or text. Return ONLY valid JSON — no markdown, no extra text:
-{"toolType":"flat end mill|ball end mill|bull nose end mill|tapered mill|radius mill|form mill|lollipop mill|slot/key cutter|dovetail|thread mill|face mill|chamfer mill|circle segment barrel|circle segment lens|circle segment oval|circle segment taper|drill|center drill|spot drill|reamer|counter bore|counter sink|tap|boring head|turning general","diameter":"cutting diameter decimal inches","loc":"flute/cutting length decimal inches","oal":"overall length decimal inches","flutes":"integer string","shankDia":"shank diameter decimal inches","cornerRadius":"0 for square, half-dia for ball, actual CR for bull nose","material":"carbide|hss|cobalt|ceramic","coating":"Normalize: Uncoated/Bright → UC. Otherwise copy verbatim. Empty if not stated.","workpieceMats":"Array ISO codes N=Al,M=SS,P=Steel,S=HTA,K=CI primary first","tipAngle":"included angle degrees for drills/chamfers/spot — else empty","helixAngle":"helix degrees if visible","pitch":"thread size x pitch (e.g. 1/4-20 or M6x1.0) for taps/thread mills — else empty","productLink":"url if visible","edpNumber":"Mfr# — NOT distributor stock#","approvedBrand":"manufacturer of the tool. Match to: ${MANUFACTURER_LIST_STR}. If the brand is not in the list but clearly a tool manufacturer, still return it exactly as shown on the page.","vendorStockNum":"distributor catalog#. Empty if not found.","vendor":"seller. Match: ${VENDOR_LIST_STR}. Empty if not confident.","coolant":"flood|disabled|mist|through tool|air|air through tool|suction|flood and mist|flood and through tool — default flood. If tool is described as through-coolant or through-spindle coolant, return \"flood and through tool\".","centerCutting":true,"fluteType":"Roughing|Semi-Finishing|Finishing|Yes|No or empty","tapClass":"Tolerance class, e.g. H3/6H or D2-D6. Empty if not tap.","tapSubType":"cut|form|sti — tap sub-type from description/markings (sti = STI/Helicoil thread insert tap). Empty if not tap.","threadUnit":"inch|metric — infer from the thread designation format (M-prefix or mm pitch = metric). Empty if not tap or thread mill.","pointType":"Bottoming|Modified Bottoming|Plug|Taper|Spiral Point|Spiral Flute|Forming. Empty if not tap.","shoulderLen":"shoulder length >= LOC decimal inches. Empty if unsure.","ooh":"Leave empty — user sets manually.","cost":"The best actual purchase price for this specific tool. Follow these rules in order:
+{"toolType":"flat end mill|ball end mill|bull nose end mill|tapered mill|radius mill|form mill|lollipop mill|slot/key cutter|dovetail|thread mill|face mill|chamfer mill|circle segment barrel|circle segment lens|circle segment oval|circle segment taper|drill|center drill|spot drill|reamer|counter bore|counter sink|tap|boring head|turning general","diameter":"cutting diameter decimal inches","loc":"flute/cutting length decimal inches","oal":"overall length decimal inches","flutes":"integer string","shankDia":"shank diameter decimal inches","cornerRadius":"0 for square, half-dia for ball, actual CR for bull nose","material":"carbide|hss|cobalt|ceramic","coating":"Normalize: Uncoated/Bright → UC. Otherwise copy verbatim. Empty if not stated.","workpieceMats":"Array ISO codes N=Al,M=SS,P=Steel,S=HTA,K=CI primary first","tipAngle":"included angle degrees for drills/chamfers/spot — else empty","helixAngle":"helix degrees if visible","pitch":"thread size x pitch (e.g. 1/4-20 or M6x1.0) for taps/thread mills — else empty","productLink":"url if visible","edpNumber":"Mfr# — NOT distributor stock#","approvedBrand":"manufacturer of the tool. Match to: ${MANUFACTURER_LIST_STR}. If the brand is not in the list but clearly a tool manufacturer, still return it exactly as shown on the page.","vendorStockNum":"distributor catalog#. Empty if not found.","vendor":"seller. Match: ${VENDOR_LIST_STR}. Empty if not confident.","coolant":"flood|disabled|mist|through tool|air|air through tool|suction|flood and mist|flood and through tool — default flood. If tool is described as through-coolant or through-spindle coolant, return \"flood and through tool\".","centerCutting":true,"fluteType":"Roughing|Semi-Finishing|Finishing|Yes|No or empty","tapClass":"Tolerance class, e.g. H3/6H or D2-D6. Empty if not tap.","tapSubType":"cut|form — tap sub-type from description/markings. Empty if not tap.","isSTI":"true if the tap is an STI/Helicoil thread insert tap, else false. Only relevant for taps.","threadUnit":"inch|metric — infer from the thread designation format (M-prefix or mm pitch = metric). Empty if not tap or thread mill.","pointType":"Bottoming|Modified Bottoming|Plug|Taper|Spiral Point|Spiral Flute|Forming. Empty if not tap.","shoulderLen":"shoulder length >= LOC decimal inches. Empty if unsure.","ooh":"Leave empty — user sets manually.","cost":"The best actual purchase price for this specific tool. Follow these rules in order:
   1. HAAS TOOLS ONLY: Use the Winner's Circle price if shown — ignore all other prices.
   2. DISCOUNTED PRICE: If a sale price, your price, web price, or discounted price is shown alongside a list/regular price, use the discounted one.
   3. PACK PRICING: If the item is only sold in a multi-pack (e.g. pkg of 10, box of 5), use the total pack price — not the per-unit breakdown price.
   4. SINGLE-TOOL PRICE: If multiple different tools are listed on the same page (e.g. a size chart or related products), only use the price for the specific tool being described — not the cheapest one on the page.
   5. FALLBACK: If only one price is shown with no pack or discount context, use it.
-  Return as a decimal string (e.g. \"28.28\"). Empty if no price found.","sourceUnits":"in|mm","taperAngle":"taper/lead angle degrees","minThreadPitch":"thread mill TPN decimal inches","maxThreadPitch":"thread mill TPX decimal inches","fullProfile":false,"stubJobber":"Stub or Jobber if specified","backsideCapable":false,"doubleEnded":false,"cuttingDirection":"Right Hand or Left Hand","notes":"brief note"}
+  Return as a decimal string (e.g. \"28.28\"). Empty if no price found.","sourceUnits":"in|mm","taperAngle":"taper/lead angle degrees","minThreadPitch":"thread mill TPN decimal inches","maxThreadPitch":"thread mill TPX decimal inches","tpiMin":"thread mill minimum TPI (threads per inch) capability — integer string. Empty if not thread mill.","tpiMax":"thread mill maximum TPI capability — integer string. Empty if not thread mill.","threadProfileAngle":"thread mill thread profile included angle in degrees (e.g. 60 for unified, 55 for Whitworth). Empty if not thread mill or unknown.","fullProfile":false,"stubJobber":"Stub or Jobber if specified","backsideCapable":false,"doubleEnded":false,"cuttingDirection":"Right Hand or Left Hand","notes":"brief note"}
 Rules: Convert metric to inches. Ball cornerRadius=dia/2. Drills tipAngle=full included angle (135 not 67.5). Return ONLY JSON.`;
 }
 
@@ -607,6 +534,8 @@ export default function App({ onExtract } = {}){
         centerCutting:!!p.centerCutting,fluteType:p.fluteType||"",cost:p.cost||"",
         tapClass:p.tapClass||"",pointType:p.pointType||"",shoulderLen:p.shoulderLen||"",ooh:p.ooh||"",
         taperAngle:p.taperAngle||"",minThreadPitch:p.minThreadPitch||"",maxThreadPitch:p.maxThreadPitch||"",
+        tapSubType:["cut","form"].includes(p.tapSubType)?p.tapSubType:"cut",isSTI:!!p.isSTI,
+        tpiMin:p.tpiMin||"",tpiMax:p.tpiMax||"",threadProfileAngle:p.threadProfileAngle||"",
         fullProfile:!!p.fullProfile,stubJobber:p.stubJobber||"",backsideCapable:!!p.backsideCapable,
         doubleEnded:!!p.doubleEnded,cuttingDirection:p.cuttingDirection||"Right Hand",
       }));
@@ -627,6 +556,8 @@ export default function App({ onExtract } = {}){
         coolant:"flood",tapClass:p.tapClass||"",pointType:p.pointType||"",
         shoulderLen:p.shoulderLen||"",ooh:p.ooh||"",taperAngle:p.taperAngle||"",
         minThreadPitch:p.minThreadPitch||"",maxThreadPitch:p.maxThreadPitch||"",
+        tapSubType:["cut","form"].includes(p.tapSubType)?p.tapSubType:"cut",isSTI:!!p.isSTI,
+        tpiMin:p.tpiMin||"",tpiMax:p.tpiMax||"",threadProfileAngle:p.threadProfileAngle||"",
         fullProfile:!!p.fullProfile,stubJobber:p.stubJobber||"",
         backsideCapable:!!p.backsideCapable,doubleEnded:!!p.doubleEnded,
         cuttingDirection:p.cuttingDirection||"Right Hand",
@@ -656,7 +587,7 @@ export default function App({ onExtract } = {}){
   const hasDim=["diameter","loc","oal","shankDia","shoulderLen","ooh","cornerRadius","tipAngle","taperAngle","tipDiameter","lowerRadius","upperRadius","profileRadius","axialDistance"].some(isVis);
   const hasMat=["material","coating","workpieceMats","coolant"].some(isVis);
   const hasCut=["flutes","helixAngle","fluteType","centerCutting","stubJobber","cuttingDirection","backsideCapable","doubleEnded"].some(isVis);
-  const hasThread=["pitch","tapClass","pointType","minThreadPitch","maxThreadPitch","fullProfile"].some(isVis);
+  const hasThread=["pitch","tapClass","pointType","minThreadPitch","maxThreadPitch","fullProfile","tpiMin","tpiMax","threadProfileAngle"].some(isVis);
   const hasPurch=["edpNumber","approvedBrand","vendor","vendorStockNum","cost","productLink"].some(isVis);
 
   return(
@@ -899,6 +830,9 @@ export default function App({ onExtract } = {}){
             </div>}
             {isVis("minThreadPitch")&&<div style={{...C(4),opacity:isOpt("minThreadPitch")?0.55:1}}><FL type="both" label="Min Thread Pitch (in)"/><input style={inp(hi("minThreadPitch"))} value={F.minThreadPitch} onChange={e=>sf("minThreadPitch",e.target.value)} placeholder="0.0313"/></div>}
             {isVis("maxThreadPitch")&&<div style={{...C(4),opacity:isOpt("maxThreadPitch")?0.55:1}}><FL type="both" label="Max Thread Pitch (in)"/><input style={inp(hi("maxThreadPitch"))} value={F.maxThreadPitch} onChange={e=>sf("maxThreadPitch",e.target.value)} placeholder="0.125"/></div>}
+            {isVis("tpiMin")&&<div style={{...C(4),opacity:isOpt("tpiMin")?0.55:1}}><FL type="proshop" label="TPI Min"/><input style={inp(hi("tpiMin"))} value={F.tpiMin} onChange={e=>sf("tpiMin",e.target.value)} placeholder="10"/></div>}
+            {isVis("tpiMax")&&<div style={{...C(4),opacity:isOpt("tpiMax")?0.55:1}}><FL type="proshop" label="TPI Max"/><input style={inp(hi("tpiMax"))} value={F.tpiMax} onChange={e=>sf("tpiMax",e.target.value)} placeholder="32"/></div>}
+            {isVis("threadProfileAngle")&&<div style={{...C(4),opacity:isOpt("threadProfileAngle")?0.55:1}}><FL type="fusion" label="Thread Profile Angle (°)"/><input style={inp(hi("threadProfileAngle"))} value={F.threadProfileAngle} onChange={e=>sf("threadProfileAngle",e.target.value)} placeholder="60"/></div>}
             {isVis("fullProfile")&&<div style={{...C(4),opacity:isOpt("fullProfile")?0.55:1}}>
               <FL type="proshop" label="Full Profile"/>
               <div style={{height:27,display:"flex",alignItems:"center",border:`1px solid ${T.border}`,borderRadius:"0 0 4px 4px",padding:"0 7px",background:T.inputBg}}>
