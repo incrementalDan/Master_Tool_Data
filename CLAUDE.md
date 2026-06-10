@@ -602,6 +602,7 @@ These rules apply during the **initial ProShop CSV merge** and on any **subseque
 | `geometry['shoulder-length']` (shoulder length) | Set to MIN OOH at normalization | See MIN OOH rule below |
 | per-assembly `ooh` → `geometry.LB` | Floored at MIN OOH | See MIN OOH rule below |
 | `tsc_capable` (through-spindle coolant) | PS wins | Boolean capability flag (not a text field) |
+| `tip_to_first_thread` (taps) | Fill gap only | Column name is a **guess** — see note below |
 | All other differences | **Flag** to user | Do not auto-resolve |
 
 ### MIN OOH floor rule (read carefully)
@@ -623,6 +624,10 @@ assemblies = assemblies.map(a => ({
 ```
 
 After normalization, shoulder length and per-assembly OOH can be adjusted manually (rare). `AssemblyForm` continues to block any per-assembly OOH below `min_ooh`. Note the floor applies **per instance** — a multi-assembly tool keeps each proven stick-out, only correcting ones that fall below the minimum.
+
+### Tip to 1st Full Thread (taps) — column mapping unconfirmed
+
+`tip_to_first_thread` (see Hole-Making Tool Presets → Tap & thread mill metadata fields) is wired into ProShop CSV import — `psRowToTool` (new tools, adopts the file unit) and `matchProShopToTools` (fill-gap merge onto existing tools, converted via `convertLength` from the file unit into the tool's own unit, same as `min_ooh`) — using a **placeholder column name**: `row['Tip to 1st Full Thread']` / `row.tipToFirstFullThread`. This is a guess pending the user's detailed ProShop column mapping ("coming next") — **update both functions in `ImportFlow.jsx`** once the real column name is confirmed.
 
 ### Vendor / Location field mapping (Fusion repurposes "Vendor")
 
@@ -648,7 +653,9 @@ This is a permanent convention and **already implemented** (`fusionToolToInterna
 
 During initial normalization, tool descriptions are rationalized. The ProShop description takes priority, but each tool passes through a per-tool confirmation UI — descriptions are **never** silently renamed.
 
-**Reuse the existing generator** — `buildDesc()` in `tool-extractor.tsx` composes a standardized description from a tool's structured fields (e.g. `0.5 4FL EM 1.000LOC`, `#80 135DEG CARB DRILL`). It is a **generator** (specs → description), not rename/diff detection — use it to produce the *suggested* new description; check that file before writing any new naming logic.
+**Reuse the existing generator** — `buildDesc()` lives in `src/utils/toolNaming.js` (re-exported from `tool-extractor.tsx` for the extraction UI) and composes a standardized description from a tool's structured fields (e.g. `0.5 4FL EM 1.000LOC`, `#80 135DEG CARB DRILL`). It is a **generator** (specs → description), not rename/diff detection — use it to produce the *suggested* new description; check that file before writing any new naming logic.
+
+For taps, `buildDesc` strips the UNC/UNF thread-series designation from `pitch` via `stripThreadSeries()` — it's implied for inch taps — but **keeps** NPT/NPTF (pipe threads change the tap's form and aren't implied). E.g. `1/4-20 UNC` → `1/4-20 CUT TAP`, but `1/8-27 NPT` → `1/8-27 CUT TAP NPT`.
 
 **Step-by-step UI** (a step in `NormalizeModal`, or a follow-on modal) — for each tool in sequence:
 
@@ -937,6 +944,15 @@ cutting_direction: rawType === 'tap left hand' ? 'Left Hand'
 - `use-feed-per-revolution` — boolean flag (drill-specific). Fusion uses feed/rev for drilling operations.
 
 These fields are **never written for milling tools** — `normalizePreset` strips them for non-drill-family types.
+
+### Tap & thread mill metadata fields
+
+All metadata-only (never written to Fusion) — added to `tool_metadata.json` via `buildMetadataTool` / `mergeFusionAndMetadata`:
+
+- **`tap_sub_type`** (`'cut' | 'form'`) — 2-way chip on the tap page. An independent **`is_sti`** boolean (STI/Helicoil thread-insert tap) sits alongside it — a tap can be both an STI tap and a cut or form tap, so this is no longer a 3-way cut/form/sti group. Boolean metadata fields like `is_sti` (and `tsc_capable`) automatically get correct Yes/No facet options — `searchEngine.js`'s boolean-facet handling is generalized to any `type: 'boolean'` registry field, not hardcoded.
+- **`point_type`** (`appliesToTypes: ['tap']`) — dropdown: Bottoming / Modified Bottoming / Plug / Taper / Spiral Point / Spiral Flute. **Tap-only** (previously also shown for drill/center drill/spot drill/counter sink — narrowed to taps only).
+- **`tip_to_first_thread`** — the Z distance from the tap's tip to where the first full thread starts (chamfer length). `canonicalUnit: 'native'` like other lengths — stored in the tool's own unit, no conversion needed within a tool. ProShop column mapping is a guess pending confirmation — see ProShop Field Priority Rules.
+- **Thread mill capability fields** (`appliesToTypes: ['thread mill']`): `tpi_min` / `tpi_max` — the TPI range the mill can cut, distinct from `pitch` (the specific thread designation it's set up for) — and `thread_profile_angle` (degrees).
 
 -----
 

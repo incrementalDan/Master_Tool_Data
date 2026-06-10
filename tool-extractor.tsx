@@ -208,6 +208,7 @@ const PS_MAIN_COLS=[
   ["fullProfile",f=>f.fullProfile?"true":""],["stubJobber",f=>f.stubJobber||""],["backsideCapable",f=>f.backsideCapable?"true":""],
   ["doubleEnded",f=>f.doubleEnded?"true":""],["cuttingDirection",f=>f.cuttingDirection||"Right Hand"],
   ["taperAngle",f=>f.taperAngle||""],["minThreadPitch",f=>f.minThreadPitch||""],["maxThreadPitch",f=>f.maxThreadPitch||""],
+  ["tipToFirstFullThread",f=>f.tipToFirstFullThread||""],
 ];
 
 function buildBrandRows(f){
@@ -235,7 +236,7 @@ const BLANK={
   cuttingDirection:"Right Hand",tipDiameter:"",lowerRadius:"",upperRadius:"",profileRadius:"",axialDistance:"",
   psToolId:"",    // ProShop Tool # → Fusion tool_productId (col 126)
   location:"",    // e.g. LC-140 → Fusion tool_vendor (col 165)
-  tapSubType:"cut",isSTI:false,tpiMin:"",tpiMax:"",threadProfileAngle:"",
+  tapSubType:"cut",isSTI:false,tpiMin:"",tpiMax:"",threadProfileAngle:"",tipToFirstFullThread:"",
 };
 const TT=[
   "flat end mill","ball end mill","bull nose end mill","tapered mill","radius mill","form mill","lollipop mill",
@@ -278,7 +279,7 @@ const FIELD_VISIBILITY={
   doubleEnded:[1,1,1,1,1,0,1,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0],fullProfile:[0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
   stubJobber:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0],pitch:[0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0],
   tapClass:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0],minThreadPitch:[0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
-  maxThreadPitch:[0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0],pointType:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,1,1,0,0],
+  maxThreadPitch:[0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0],pointType:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0],
   tpiMin:[0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0],tpiMax:[0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0],
   threadProfileAngle:[0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0],isSTI:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0],
   edpNumber:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],approvedBrand:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],

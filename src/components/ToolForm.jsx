@@ -23,7 +23,7 @@ const FIELD_STEP = {
   feed_per_tooth: '0.0001', feed_per_rev: '0.0001', cutting_speed: '1',
   depth_of_cut: '0.001', width_of_cut: '0.001', tip_angle: '0.5', taper_angle: '0.5',
   helix_angle: '0.5', min_thread_pitch: '0.0001', max_thread_pitch: '0.0001',
-  tpi_min: '1', tpi_max: '1', thread_profile_angle: '0.5', point_type_value: '0.5',
+  tpi_min: '1', tpi_max: '1', thread_profile_angle: '0.5', tip_to_first_thread: '0.001',
 };
 
 
@@ -301,7 +301,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
                       {threadSizeOptions.map(s => <option key={s} value={s}>{s}</option>)}
                     </select>
                   </div>
-                  {data.pitch && !threadSizeOptions.includes(data.pitch) && (
+                  {!threadSizeOptions.includes(data.pitch) && (
                     <input
                       className="field-input"
                       style={{ marginTop: 4 }}
@@ -336,30 +336,19 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
               {visibleFields.has('point_type') && (
                 <div className="field-group">
                   <label className="field-label">Point Type</label>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <select
-                      className="field-input"
-                      style={{ flex: 1 }}
-                      value={data.point_type || ''}
-                      onChange={e => setField('point_type', e.target.value)}
-                    >
-                      {['', 'Bottoming', 'Modified Bottoming', 'Plug', 'Taper', 'Spiral Point', 'Spiral Flute'].map(p => (
-                        <option key={p} value={p}>{p || 'Not specified'}</option>
-                      ))}
-                    </select>
-                    <input
-                      type="number"
-                      className="field-input"
-                      style={{ width: 80 }}
-                      value={data.point_type_value || ''}
-                      onChange={e => setField('point_type_value', e.target.value ? Number(e.target.value) : null)}
-                      placeholder="#"
-                      min="0"
-                      step="0.5"
-                      title="Number of chamfered threads at point"
-                    />
-                  </div>
+                  <select
+                    className="field-input"
+                    value={data.point_type || ''}
+                    onChange={e => setField('point_type', e.target.value)}
+                  >
+                    {['', 'Bottoming', 'Modified Bottoming', 'Plug', 'Taper', 'Spiral Point', 'Spiral Flute'].map(p => (
+                      <option key={p} value={p}>{p || 'Not specified'}</option>
+                    ))}
+                  </select>
                 </div>
+              )}
+              {visibleFields.has('tip_to_first_thread') && (
+                <NumField field="tip_to_first_thread" data={data} setField={setField} />
               )}
               {visibleFields.has('tap_class') && (
                 <div className="field-group">
