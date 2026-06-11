@@ -16,6 +16,7 @@ import { fetchFileBlob } from '../services/driveService.js';
 import InfoTip from './InfoTip.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS, validateGeometry, fusionToolToInternal, readOohFromFusion } from '../schema/toolSchema.js';
+import { INCLUSIVE_ANGLE_TYPES } from '../schema/fieldRegistry.js';
 import { convertLength, unitAbbr } from '../utils/units.js';
 import { hasReconcileWork } from '../services/reconcile.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
@@ -301,7 +302,11 @@ export default function ToolDetail() {
                 {(tool.corner_radius !== null && tool.corner_radius !== undefined) && <Field label="Corner Radius" value={round4(tool.corner_radius)} unit={lenUnit} />}
                 {tool.shoulder_length && <Field label="Shoulder Length" value={round4(tool.shoulder_length)} unit={lenUnit} />}
                 {tool.tip_angle && <Field label="Tip Angle" value={round4(tool.tip_angle)} unit="°" />}
-                {tool.taper_angle && <Field label="Taper Angle" value={round4(tool.taper_angle)} unit="°" />}
+                {tool.taper_angle && (
+                  INCLUSIVE_ANGLE_TYPES.has(tool.tool_type)
+                    ? <Field label="Included/Inclusive Tip Angle" value={round4(tool.taper_angle * 2)} unit="°" />
+                    : <Field label="Taper Angle" value={round4(tool.taper_angle)} unit="°" />
+                )}
                 {tool.tip_diameter && <Field label="Tip Diameter" value={round4(tool.tip_diameter)} unit={lenUnit} />}
                 {tool.lower_radius && <Field label="Lower Radius" value={round4(tool.lower_radius)} unit={lenUnit} />}
                 {tool.upper_radius && <Field label="Upper Radius" value={round4(tool.upper_radius)} unit={lenUnit} />}

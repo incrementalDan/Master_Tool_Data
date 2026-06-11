@@ -279,7 +279,7 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
     S(103, tsvStr(tool.material || 'carbide'));
 
     const taperTypes = new Set(['tapered mill','face mill','chamfer mill','dovetail','circle segment taper']);
-    const tipAngleTypes = new Set(['drill','center drill','spot drill','counter sink','chamfer mill']);
+    const tipAngleTypes = new Set(['drill','center drill','spot drill','counter sink']);
     const tipDiaTypes = new Set(['chamfer mill','dovetail','spot drill','thread mill','center drill','counter sink','tap']);
     const lrTypes = new Set(['circle segment barrel','circle segment lens','circle segment oval','circle segment taper']);
     const urTypes = new Set(['face mill','circle segment barrel','circle segment taper']);

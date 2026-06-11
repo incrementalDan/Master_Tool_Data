@@ -34,6 +34,12 @@ const NO_TURNING      = ALL_TYPES.filter(t => t !== 'turning general');
 const NO_BORING_TURN  = ALL_TYPES.filter(t => t !== 'boring head' && t !== 'turning general');
 const NO_BORING       = ALL_TYPES.filter(t => t !== 'boring head');
 
+// Tool types where the UI shows taper_angle as "Included/Inclusive Tip Angle (°)"
+// (= 2 × the stored geometry.TA, edited bidirectionally with a ÷2 on input).
+// Chamfer mill additionally writes expressions.tool_inclusiveAngle (Fusion-native,
+// chamfer-mill-only). Tapered mill has no such expression — UI-only transform.
+export const INCLUSIVE_ANGLE_TYPES = new Set(['chamfer mill', 'tapered mill']);
+
 export const FIELD_REGISTRY = {
 
   // ── Identity & System ─────────────────────────────────────────────────────
@@ -299,11 +305,11 @@ export const FIELD_REGISTRY = {
     label: 'Tip Angle (°)',
     type: 'number',
     unit: 'angle',
-    fusionPath: 'geometry.SIG',   // drill/spot/chamfer point (included) angle — Fusion-native
+    fusionPath: 'geometry.SIG',   // drill/spot/counter sink point (included) angle — Fusion-native
     proShopColumn: 'tipAngle',
     metadataOnly: false,
     appliesToTypes: [
-      'chamfer mill', 'drill', 'center drill', 'spot drill', 'counter sink',
+      'drill', 'center drill', 'spot drill', 'counter sink',
     ],
     required: false,
     precision: 4,

@@ -6,7 +6,7 @@ import {
   TAP_LIMIT_TOLERANCE_OPTIONS_INCH, TAP_LIMIT_TOLERANCE_DEFAULT_INCH, TAP_LIMIT_TOLERANCE_OPTIONS_METRIC, TAP_LIMIT_TOLERANCE_DEFAULT_METRIC,
   CLASS_OF_FIT_OPTIONS, CLASS_OF_FIT_DEFAULT,
 } from '../schema/toolSchema.js';
-import { fieldLabel } from '../schema/fieldRegistry.js';
+import { fieldLabel, INCLUSIVE_ANGLE_TYPES } from '../schema/fieldRegistry.js';
 import { unitAbbr } from '../utils/units.js';
 import InfoTip from './InfoTip.jsx';
 import { buildDesc } from '../utils/toolNaming.js';
@@ -389,7 +389,15 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
           {visibleFields.has('corner_radius') && <NumField field="corner_radius" data={data} setField={setField} warn={geoIssueFields.has('corner_radius')} />}
           {visibleFields.has('shoulder_length') && <NumField field="shoulder_length" data={data} setField={setField} warn={geoIssueFields.has('shoulder_length')} />}
           {visibleFields.has('tip_angle') && <NumField field="tip_angle" data={data} setField={setField} />}
-          {visibleFields.has('taper_angle') && <NumField field="taper_angle" data={data} setField={setField} />}
+          {visibleFields.has('taper_angle') && (
+            INCLUSIVE_ANGLE_TYPES.has(data.tool_type)
+              ? <NumField field="taper_angle" data={data} setField={setField}
+                  label="Included/Inclusive Tip Angle (°)"
+                  transformOut={v => v * 2}
+                  transformIn={v => v / 2}
+                />
+              : <NumField field="taper_angle" data={data} setField={setField} />
+          )}
           {visibleFields.has('tip_diameter') && <NumField field="tip_diameter" data={data} setField={setField} />}
           {visibleFields.has('lower_radius') && <NumField field="lower_radius" data={data} setField={setField} />}
           {visibleFields.has('upper_radius') && <NumField field="upper_radius" data={data} setField={setField} />}
@@ -594,19 +602,24 @@ function Section({ title, icon: Icon, children }) {
   );
 }
 
-function NumField({ field, data, setField, required }) {
+function NumField({ field, data, setField, required, label, transformOut, transformIn }) {
+  const rawValue = data[field];
+  const displayValue = (transformOut && rawValue != null) ? transformOut(rawValue) : rawValue;
   return (
     <div className="field-group">
       <label className="field-label">
-        {fieldLabel(field, data?.unit) || field}
+        {label || fieldLabel(field, data?.unit) || field}
         {required && <span className="required"> *</span>}
       </label>
       <input
         className="field-input"
         type="number"
         step={FIELD_STEP[field] || '0.001'}
-        value={data[field] ?? ''}
-        onChange={e => setField(field, e.target.value === '' ? null : parseFloat(e.target.value))}
+        value={displayValue ?? ''}
+        onChange={e => {
+          const v = e.target.value === '' ? null : parseFloat(e.target.value);
+          setField(field, (transformIn && v != null) ? transformIn(v) : v);
+        }}
         placeholder="—"
       />
     </div>

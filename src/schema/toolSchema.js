@@ -31,7 +31,7 @@ export function getFacetFields(toolType) {
   } else if (toolType === 'thread mill') {
     extras.push('pitch', 'tap_thread_unit', 'cutting_direction');
   }
-  if (toolType === 'drill' || toolType === 'chamfer mill' || toolType === 'spot drill' || toolType === 'center drill') {
+  if (toolType === 'drill' || toolType === 'spot drill' || toolType === 'center drill') {
     extras.push('tip_angle');
   }
   return [...COMMON_FACETS, ...extras];
@@ -665,10 +665,16 @@ export function fusionToolToInternal(fTool) {
 // toolType conditions which fields are emitted (milling vs. hole-making vs. turning).
 function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
   const isTap = toolType === 'tap';
-  const isDrillFamily = !isTap && HOLE_MAKING_TYPES.has(toolType);
+  // Spot drills get their own preset shape: a full milling-style cutting-feed
+  // set (cutting/lead-in/lead-out/transition/ramp feed + feed-per-tooth) PLUS
+  // drill-specific plunge/retract feedrates and the feed-per-revolution flag —
+  // but no ramp angle/spindle, no stepdown/stepover, and no f_n. This matches
+  // how Fusion 360 itself shapes a spot drill preset.
+  const isSpotDrill = toolType === 'spot drill';
+  const isDrillFamily = !isTap && !isSpotDrill && HOLE_MAKING_TYPES.has(toolType);
   const isHoleMaking = isTap || isDrillFamily;
   const isTurning = TURNING_TYPES.has(toolType);
-  const isMilling = !isHoleMaking && !isTurning;
+  const isMilling = !isHoleMaking && !isTurning && !isSpotDrill;
 
   // operation_type is an app-only field encoded in the preset name + metadata.
   // It must never be written into the Fusion JSON (Fusion validates strictly).
@@ -676,11 +682,15 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
   // leftover numeric key (Fusion omits the key entirely when disabled).
   const { operation_type, stepdown: _sd, stepover: _so, ...rest } = p;
 
-  // Strip milling-specific fields from hole-making and turning presets so they
-  // don't survive as stale keys in the Fusion JSON.
-  if (isHoleMaking || isTurning) {
+  // Strip milling-specific fields from hole-making, turning, and spot-drill
+  // presets so they don't survive as stale keys in the Fusion JSON.
+  if (isHoleMaking || isTurning || isSpotDrill) {
     delete rest['use-stepdown'];
     delete rest['use-stepover'];
+  }
+  if (isHoleMaking || isSpotDrill) {
+    delete rest['ramp-angle'];
+    delete rest.n_ramp;
   }
   if (isHoleMaking) {
     delete rest.v_f;
@@ -689,14 +699,14 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
     delete rest.v_f_leadOut;
     delete rest.v_f_transition;
     delete rest.v_f_ramp;
-    delete rest['ramp-angle'];
-    delete rest.n_ramp;
   }
   if (isTap) {
     delete rest.v_f_plunge;
     delete rest['v_f_retract'];
     delete rest.f_n;
     delete rest['use-feed-per-revolution'];
+  } else if (isSpotDrill) {
+    delete rest.f_n;
   }
 
   // Fusion's "Filter by Type" (material.category) must never be blank and only
@@ -763,6 +773,19 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
     out.v_f = p.v_f ?? 0;
     out.f_n = p.f_n ?? 0;
     out.v_f_plunge = p.v_f_plunge ?? 0;
+  } else if (isSpotDrill) {
+    // Spot drill: full cutting-feed set (cutting, lead-in/out, transition, ramp
+    // feed, feed/tooth) plus drill-specific plunge/retract feedrates and the
+    // feed-per-revolution flag. No ramp angle/spindle, no f_n, no stepdown/stepover.
+    out.v_f = p.v_f ?? 0;
+    out.v_f_leadIn = p.v_f_leadIn ?? 0;
+    out.v_f_leadOut = p.v_f_leadOut ?? 0;
+    out.v_f_ramp = p.v_f_ramp ?? 0;
+    out.v_f_transition = p.v_f_transition ?? 0;
+    out.f_z = p.f_z ?? 0;
+    out.v_f_plunge = p.v_f_plunge ?? 0;
+    out['v_f_retract'] = p['v_f_retract'] ?? 0;
+    out['use-feed-per-revolution'] = p['use-feed-per-revolution'] ?? false;
   } else if (isDrillFamily) {
     // Drills/reamers: plunge + retract feedrates and optional feed-per-revolution.
     out.v_f_plunge = p.v_f_plunge ?? 0;
@@ -777,8 +800,9 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
 
 // Tool types that carry a point (included) angle in geometry.SIG — kept in sync
 // with the TSV path's tipAngleTypes (fusionExport.js) and tip_angle's
-// appliesToTypes (fieldRegistry.js).
-const TIP_ANGLE_TYPES = new Set(['drill', 'center drill', 'spot drill', 'counter sink', 'chamfer mill']);
+// appliesToTypes (fieldRegistry.js). Chamfer mill is NOT in this set — its
+// included angle is geometry.TA × 2 (see INCLUSIVE_ANGLE_TYPES, fieldRegistry.js).
+const TIP_ANGLE_TYPES = new Set(['drill', 'center drill', 'spot drill', 'counter sink']);
 
 // Tool types that carry a thread pitch in geometry.TP (numeric, the tool's unit).
 // The human-readable thread designation lives separately in `pitch` (metadata).
@@ -898,6 +922,9 @@ export function internalToFusionTool(tool) {
     : [existing['start-values']?.presets?.[0] || {}];
   const isHoleMakingTool = HOLE_MAKING_TYPES.has(tool.tool_type);
   const isTapTool = tool.tool_type === 'tap';
+  // Spot drills get a milling-like cutting-feed set PLUS drill plunge/retract —
+  // see normalizePreset for the full field-shape rationale.
+  const isSpotDrillTool = tool.tool_type === 'spot drill';
 
   const outPresets = sourcePresets.map((p, i) => {
     const np = normalizePreset(p, tool.tsc_capable, tool.tool_type);
@@ -905,18 +932,24 @@ export function internalToFusionTool(tool) {
       // Speed fields apply to all tool types.
       np.n   = tool.spindle_speed ?? np.n;
       np.v_c = tool.cutting_speed ?? np.v_c;
-      // Milling-only flat fields — not written for hole-making tools.
-      if (!isHoleMakingTool) {
+      // Milling-only flat fields — not written for hole-making tools (spot
+      // drill excepted: it gets the same cutting-feed set as milling tools).
+      if (!isHoleMakingTool || isSpotDrillTool) {
         np.v_f        = tool.cutting_feedrate  ?? np.v_f;
         np.f_z        = tool.feed_per_tooth    ?? np.f_z;
         np.v_f_ramp   = tool.ramp_feedrate     ?? np.v_f_ramp;
         np.v_f_leadIn  = tool.lead_in_feedrate  ?? np.v_f_leadIn;
         np.v_f_leadOut = tool.lead_out_feedrate ?? np.v_f_leadOut;
       }
-      // Plunge + feed-per-rev apply to drills/reamers and turning, not taps.
-      if (!isTapTool) {
+      // Plunge applies to drills/reamers, turning, and spot drills, not taps.
+      // Feed-per-rev (f_n) applies to drills/reamers and turning only — spot
+      // drill has no f_n (normalizePreset already stripped it; keep it gone).
+      if (!isTapTool && !isSpotDrillTool) {
         np.v_f_plunge = tool.plunge_feedrate ?? np.v_f_plunge;
         np.f_n        = tool.feed_per_rev    ?? np.f_n;
+      } else if (isSpotDrillTool) {
+        np.v_f_plunge = tool.plunge_feedrate ?? np.v_f_plunge;
+        delete np.f_n;
       }
     }
     // Classify this tool's category for the preset expression logic below.
@@ -936,7 +969,7 @@ export function internalToFusionTool(tool) {
       // Surface speed companion (Fusion formula: diameter × π × n).
       const dia = tool.diameter || 0;
       np.v_c = isInch ? (dia * Math.PI * np.n / 12) : (dia * Math.PI * np.n / 1000);
-      if (isMillingTool) {
+      if (isMillingTool || isSpotDrillTool) {
         np.v_f           = 40;
         np.v_f_leadIn    = 40;
         np.v_f_leadOut   = 40;
@@ -945,7 +978,8 @@ export function internalToFusionTool(tool) {
         np.v_f_transition = 40;
         const nof = Math.max(tool.number_of_flutes || 1, 1);
         np.f_z = np.n > 0 ? np.v_f / (np.n * nof) : 0;
-        np.f_n = np.n > 0 ? np.v_f_plunge / np.n : 0;
+        if (isMillingTool) np.f_n = np.n > 0 ? np.v_f_plunge / np.n : 0;
+        if (isSpotDrillTool) np['v_f_retract'] = np.v_f_plunge;
       } else if (isDrillFamilyTool) {
         np.v_f_plunge        = 40;
         np['v_f_retract'] = 40;
@@ -984,12 +1018,12 @@ export function internalToFusionTool(tool) {
       ...(hasSurfaceSpeed
         ? { tool_surfaceSpeed: `${np.v_c ?? 0} ${speedUnit}` }
         : { tool_surfaceSpeed: SURFACE_FORMULA }),
-      // Cutting feed (milling only) — literal for the primary input mode.
-      ...(isMillingTool && (hasFeedCutting || !hasFeedPerTooth)
+      // Cutting feed (milling + spot drill) — literal for the primary input mode.
+      ...((isMillingTool || isSpotDrillTool) && (hasFeedCutting || !hasFeedPerTooth)
         ? { tool_feedCutting: `${np.v_f ?? 0} ${feedUnit}` } : {}),
       // Feed-per-tooth: literal when user is in fpt input mode; Fusion companion
       // formula otherwise (always written so Fusion can display it next to IPM).
-      ...(isMillingTool
+      ...((isMillingTool || isSpotDrillTool)
         ? (hasFeedPerTooth
             ? { tool_feedPerTooth: `${np.f_z ?? 0} ${fzUnit}` }
             : { tool_feedPerTooth: 'tool_spindleSpeed > 0 ? tool_feedCutting/(tool_spindleSpeed * tool_numberOfFlutes) : 0.0' })
@@ -998,10 +1032,10 @@ export function internalToFusionTool(tool) {
       // presets; Fusion's default ternary injected for new presets.
       ...(!isTapTool && !('tool_feedPlunge' in origExprs)
         ? { tool_feedPlunge: "(tool_type=='drill' || tool_type=='reamer' || tool_isDepositing)?(40inpm):(tool_feedCutting/3)" } : {}),
-      // Ramp and transition: milling only.
-      ...(isMillingTool && !('tool_feedRamp' in origExprs)
+      // Ramp and transition: milling + spot drill.
+      ...((isMillingTool || isSpotDrillTool) && !('tool_feedRamp' in origExprs)
         ? { tool_feedRamp: 'tool_feedPlunge' } : {}),
-      ...(isMillingTool && !('tool_feedTransition' in origExprs)
+      ...((isMillingTool || isSpotDrillTool) && !('tool_feedTransition' in origExprs)
         ? { tool_feedTransition: 'tool_feedCutting' } : {}),
       // Drill-specific companion formulas for retract and feed-per-revolution.
       ...(isDrillFamilyTool && !('tool_feedRetract' in origExprs)
@@ -1094,6 +1128,17 @@ export function internalToFusionTool(tool) {
       ...(hasMtn ? { number: mtnInt, 'length-offset': mtnInt, 'diameter-offset': mtnInt } : {}),
     },
   };
+  // tool_inclusiveAngle is a chamfer-mill-only Fusion expression = 2 × geometry.TA
+  // (the "Included/Inclusive Tip Angle" shown for chamfer mills — see
+  // INCLUSIVE_ANGLE_TYPES in fieldRegistry.js). Write it alongside TA, same
+  // condition as the TA write above; absent (not empty) for every other type —
+  // same "write native + expression together, delete when not applicable"
+  // pattern as the holder expression fields.
+  if (tool.tool_type === 'chamfer mill' && (tool.taper_angle > 0 || existing.geometry?.TA > 0)) {
+    fusionObj.expressions.tool_inclusiveAngle = `${(tool.taper_angle || 0) * 2} degrees`;
+  } else {
+    delete fusionObj.expressions.tool_inclusiveAngle;
+  }
   // Fusion writes a literal "<NEW TOOL GUID>" placeholder into reference_guid on
   // freshly-created/duplicated tools that haven't been saved into the library yet —
   // it tells Fusion to mint a brand-new guid for the entry on its next save,

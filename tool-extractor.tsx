@@ -148,7 +148,7 @@ function buildFusionRow(f, outputUnit='inches'){
   if(oohOut) S(33,num(toOutputUnit(oohOut,outputUnit)));
   const taperTypes=new Set(["tapered mill","face mill","chamfer mill","dovetail","circle segment taper"]);
   if(taperTypes.has(f.toolType)&&f.taperAngle) S(147,num(parseFloat(f.taperAngle)));
-  const tipTypes=new Set(["drill","center drill","spot drill","counter sink","chamfer mill"]);
+  const tipTypes=new Set(["drill","center drill","spot drill","counter sink"]);
   if(tipTypes.has(f.toolType)&&f.tipAngle) S(155,num(parseFloat(f.tipAngle)));
   const tipDiaTypes=new Set(["chamfer mill","dovetail","spot drill","thread mill","center drill","counter sink"]);
   if(tipDiaTypes.has(f.toolType)&&f.tipDiameter) S(156,num(parseFloat(f.tipDiameter)));
@@ -280,7 +280,7 @@ const FIELD_VISIBILITY={
   diameter:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],loc:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0],
   oal:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],shankDia:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
   shoulderLen:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],ooh:[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
-  cornerRadius:[0,0,1,1,1,0,0,0,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0],tipAngle:[0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,1,1,1,0,0,1,0,0,0],
+  cornerRadius:[0,0,1,1,1,0,0,0,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0],tipAngle:[0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,1,1,0,0,1,0,0,0],
   taperAngle:[0,0,0,1,0,0,1,1,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0],tipDiameter:[0,0,0,0,0,0,0,1,1,0,0,1,0,0,0,1,0,1,1,0,0,1,1,0,0],
   lowerRadius:[0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0],upperRadius:[0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0],
   profileRadius:[0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,1,0,0,0,0,0,0,0,0,0],axialDistance:[0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0],
