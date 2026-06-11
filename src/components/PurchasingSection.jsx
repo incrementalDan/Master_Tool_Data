@@ -1,7 +1,11 @@
 import { useState, useRef } from 'react';
-import { ShoppingCart, Plus, GripVertical, X, ExternalLink, Pencil } from 'lucide-react';
+import { ShoppingCart, Plus, GripVertical, X, ExternalLink, Pencil, RefreshCw } from 'lucide-react';
 import { generateId } from '../schema/toolSchema.js';
 import { MANUFACTURER_LIST, VENDOR_LIST, vendorHasOwnCatalogNumber } from '../schema/vendorRegistry.js';
+import {
+  generateManufacturerUrl, generateVendorUrl,
+  manufacturerHasUrlGenerator, vendorHasUrlGenerator,
+} from '../utils/urlGenerators.js';
 
 function blankManufacturer(order) {
   return { id: generateId(), name: '', edp: '', edp_url: '', mfg_num: '', mfg_num_url: '', order };
@@ -47,7 +51,7 @@ function byPriceAsc(a, b) {
 // A number field (EDP#, MFG#, Vendor#) — view mode shows the value as a link
 // (with an ExternalLink icon) when a URL is stored, plain text otherwise.
 // Edit mode shows the value input plus an optional URL input below it.
-function NumCell({ value, url, placeholder, editing, onChangeValue, onChangeUrl }) {
+function NumCell({ value, url, placeholder, editing, onChangeValue, onChangeUrl, canRegenerate, onRegenerate }) {
   if (editing) {
     return (
       <div className="purchasing-cell purchasing-cell--num">
@@ -57,12 +61,24 @@ function NumCell({ value, url, placeholder, editing, onChangeValue, onChangeUrl 
           placeholder={placeholder}
           onChange={e => onChangeValue(e.target.value)}
         />
-        <input
-          className="field-input purchasing-url-input"
-          value={url || ''}
-          placeholder="Link (optional)"
-          onChange={e => onChangeUrl(e.target.value)}
-        />
+        <div className="purchasing-url-row">
+          <input
+            className="field-input purchasing-url-input"
+            value={url || ''}
+            placeholder="Link (optional)"
+            onChange={e => onChangeUrl(e.target.value)}
+          />
+          {canRegenerate && (
+            <button
+              type="button"
+              className="purchasing-regen-btn"
+              title="Regenerate link from part number"
+              onClick={onRegenerate}
+            >
+              <RefreshCw size={11} />
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -114,7 +130,8 @@ function RowGrip({ editing, onRemove }) {
   );
 }
 
-function MfgRow({ mfg, editing, isDragOver, onChange, onRemove, dragHandlers }) {
+function MfgRow({ mfg, editing, isDragOver, onChange, onRemove, onRegenerateUrl, dragHandlers }) {
+  const hasGenerator = manufacturerHasUrlGenerator(mfg.name);
   return (
     <div className={`purchasing-row${isDragOver ? ' purchasing-row--drop' : ''}`} {...dragHandlers}>
       <RowGrip editing={editing} onRemove={onRemove} />
@@ -136,6 +153,8 @@ function MfgRow({ mfg, editing, isDragOver, onChange, onRemove, dragHandlers }) 
         editing={editing}
         onChangeValue={v => onChange({ mfg_num: v })}
         onChangeUrl={v => onChange({ mfg_num_url: v })}
+        canRegenerate={hasGenerator && !!mfg.mfg_num}
+        onRegenerate={() => onRegenerateUrl('mfg_num', 'mfg_num_url')}
       />
       <NumCell
         value={mfg.edp}
@@ -144,12 +163,14 @@ function MfgRow({ mfg, editing, isDragOver, onChange, onRemove, dragHandlers }) 
         editing={editing}
         onChangeValue={v => onChange({ edp: v })}
         onChangeUrl={v => onChange({ edp_url: v })}
+        canRegenerate={hasGenerator && !!mfg.edp}
+        onRegenerate={() => onRegenerateUrl('edp', 'edp_url')}
       />
     </div>
   );
 }
 
-function VendorRow({ vendor, editing, isDragOver, revealed, onChange, onRemove, onReveal, dragHandlers }) {
+function VendorRow({ vendor, editing, isDragOver, revealed, onChange, onRemove, onReveal, onRegenerateUrl, dragHandlers }) {
   const showNum = shouldShowVendorNum(vendor, revealed);
   return (
     <div className={`purchasing-row purchasing-row--vendor${isDragOver ? ' purchasing-row--drop' : ''}`} {...dragHandlers}>
@@ -174,6 +195,8 @@ function VendorRow({ vendor, editing, isDragOver, revealed, onChange, onRemove, 
           editing={editing}
           onChangeValue={v => onChange({ vendor_num: v })}
           onChangeUrl={v => onChange({ vendor_num_url: v })}
+          canRegenerate={vendorHasUrlGenerator(vendor.name) && !!vendor.vendor_num}
+          onRegenerate={() => onRegenerateUrl('vendor_num', 'vendor_num_url')}
         />
       ) : editing ? (
         <button type="button" className="btn btn-ghost btn-sm purchasing-addnum-btn" onClick={onReveal}>
@@ -222,11 +245,69 @@ export default function PurchasingSection({ tool, onSave, isSaving }) {
     await onSave({ ...tool, purchasing: normalized });
   };
 
+  // Auto-fill a generated URL when the field is currently empty and a
+  // generator matches the (possibly just-updated) manufacturer/vendor name.
+  // Never overwrites a URL the user already has set.
   const updateMfg = (id, patch) => {
-    setData(d => ({ ...d, manufacturers: d.manufacturers.map(m => m.id === id ? { ...m, ...patch } : m) }));
+    setData(d => ({
+      ...d,
+      manufacturers: d.manufacturers.map(m => {
+        if (m.id !== id) return m;
+        const next = { ...m, ...patch };
+        if (!next.edp_url && next.name && next.edp) {
+          const generated = generateManufacturerUrl(next.name, next.edp);
+          if (generated) next.edp_url = generated;
+        }
+        if (!next.mfg_num_url && next.name && next.mfg_num) {
+          const generated = generateManufacturerUrl(next.name, next.mfg_num);
+          if (generated) next.mfg_num_url = generated;
+        }
+        return next;
+      }),
+    }));
   };
   const updateVendor = (id, patch) => {
-    setData(d => ({ ...d, vendors: d.vendors.map(v => v.id === id ? { ...v, ...patch } : v) }));
+    setData(d => ({
+      ...d,
+      vendors: d.vendors.map(v => {
+        if (v.id !== id) return v;
+        const next = { ...v, ...patch };
+        if (!next.vendor_num_url && next.name && next.vendor_num) {
+          const generated = generateVendorUrl(next.name, next.vendor_num);
+          if (generated) next.vendor_num_url = generated;
+        }
+        return next;
+      }),
+    }));
+  };
+
+  // "Regenerate" button — runs the generator and overwrites the current URL,
+  // confirming first if a different link is already stored.
+  const regenerateMfgUrl = (id, field, urlField) => {
+    setData(d => ({
+      ...d,
+      manufacturers: d.manufacturers.map(m => {
+        if (m.id !== id) return m;
+        const generated = generateManufacturerUrl(m.name, m[field]);
+        if (!generated) return m;
+        if (m[urlField] && m[urlField] !== generated &&
+            !window.confirm('Replace the current link with the auto-generated one?')) return m;
+        return { ...m, [urlField]: generated };
+      }),
+    }));
+  };
+  const regenerateVendorUrl = (id, field, urlField) => {
+    setData(d => ({
+      ...d,
+      vendors: d.vendors.map(v => {
+        if (v.id !== id) return v;
+        const generated = generateVendorUrl(v.name, v[field]);
+        if (!generated) return v;
+        if (v[urlField] && v[urlField] !== generated &&
+            !window.confirm('Replace the current link with the auto-generated one?')) return v;
+        return { ...v, [urlField]: generated };
+      }),
+    }));
   };
   const addManufacturer = () => {
     setData(d => ({ ...d, manufacturers: [...d.manufacturers, blankManufacturer(d.manufacturers.length)] }));
@@ -332,6 +413,7 @@ export default function PurchasingSection({ tool, onSave, isSaving }) {
                   isDragOver={dragOverKey === `mfg-${mIdx}`}
                   onChange={patch => updateMfg(mfg.id, patch)}
                   onRemove={() => removeManufacturer(mfg.id)}
+                  onRegenerateUrl={(field, urlField) => regenerateMfgUrl(mfg.id, field, urlField)}
                   dragHandlers={editing ? {
                     draggable: true,
                     onDragStart: e => handleDragStart(e, `mfg-${mIdx}`),
@@ -360,6 +442,7 @@ export default function PurchasingSection({ tool, onSave, isSaving }) {
                           onChange={patch => updateVendor(vendor.id, patch)}
                           onRemove={() => removeVendor(vendor.id)}
                           onReveal={() => revealVendorNum(vendor.id)}
+                          onRegenerateUrl={(field, urlField) => regenerateVendorUrl(vendor.id, field, urlField)}
                           dragHandlers={editing ? {
                             draggable: true,
                             onDragStart: e => handleDragStart(e, `vendor-${mfg.id}-${vIdx}`),
