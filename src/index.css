@@ -2632,7 +2632,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .purchasing-header-row,
 .purchasing-row {
   display: grid;
-  grid-template-columns: 16px 1fr 90px 120px;
+  grid-template-columns: 16px 1fr 56px 90px;
   gap: 8px;
   align-items: center;
 }
@@ -2711,6 +2711,14 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   flex-direction: column;
   gap: 3px;
 }
+/* View-mode value cells aren't a stack of inputs — drop back to block so long
+   numbers (MFG#/EDP#/Vendor#) wrap onto a second line instead of overflowing
+   their (now narrower) column. */
+.purchasing-cell--num.purchasing-value {
+  display: block;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
 
 /* Indents displayed values under their column header, matching .detail-field-value */
 .purchasing-value { padding-left: 4px; }
@@ -2722,6 +2730,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  overflow-wrap: anywhere;
+  word-break: break-all;
 }
 
 .purchasing-add-vendor { margin: 6px 0 0; align-self: flex-start; }

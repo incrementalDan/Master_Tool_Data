@@ -866,10 +866,10 @@ The ToolDetail view uses a three-zone layout:
    - ProShop ID in an amber pill (`.proshot-pill`)
 
 3. **Scrollable main content** (`.tool-detail-main`): two-column layout (`.detail-layout`, ~65% / 35% via `grid-template-columns: 65fr 35fr`)
-   - Left column (`.detail-layout-left`): Geometry, Assemblies, Holder, Presets, Setup, Files & Attachments, History (incl. Merge History)
-   - Right column (`.detail-layout-right`): Identity (includes machine tool # T/H/D, top), Photo, Purchasing, Notes & Tags
+   - Left column (`.detail-layout-left`): Geometry, Setup, Assemblies, Holder, Presets, History (incl. Merge History)
+   - Right column (`.detail-layout-right`): Identity (Cabinet location + machine tool # T/H/D in one row), Photo, Purchasing, Notes & Tags, Files & Attachments
 
-Machine tool number is shown inside the Identity section (not as a standalone block). History and Merge History are combined in one panel at the bottom of the left column.
+Machine tool number is shown inside the Identity section, in the same row as the Cabinet/location chip (not as a standalone block). The Identity section no longer shows `Type` (redundant with the tool-type label in the sticky header) or `Manufacturer` (now covered by the Purchasing section) — it shows "No identity info yet." when neither location nor machine number is set. History and Merge History are combined in one panel at the bottom of the left column.
 
 **Mobile** (`max-width: 768px`): `.detail-layout` collapses to a single column and `.detail-layout-right` is reordered (`order: -1`) to appear **above** `.detail-layout-left` — Identity/Photo/Purchasing/Notes are seen first, before Geometry etc.
 
