@@ -721,6 +721,20 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
 }
+.setup-guide-banner-link {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.setup-guide-banner-link:hover,
+.setup-guide-banner-link:focus-visible {
+  background: var(--surface-3);
+  outline: none;
+}
+.setup-guide-banner-arrow {
+  color: var(--text-sub);
+  flex-shrink: 0;
+  margin-left: auto;
+}
 .setup-guide-banner-text {
   display: flex;
   flex-direction: column;

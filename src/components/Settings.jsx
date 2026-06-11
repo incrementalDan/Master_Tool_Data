@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, ListChecks } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, ListChecks, Download } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { generateMachineNumbers } from '../schema/toolSchema.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
@@ -8,11 +8,12 @@ import { FilePicker } from './LibrarySetup.jsx';
 import DescRenameModal from './DescRenameModal.jsx';
 import InfoTip from './InfoTip.jsx';
 import { SetupGuideSummary } from './SetupGuide.jsx';
+import { exportFullLibrary } from '../utils/proShopExport.js';
 
 export default function Settings() {
   const navigate = useNavigate();
   const {
-    tools, fetchRawLibrary, renumberLibrary, isSaving,
+    tools, fetchRawLibrary, renumberLibrary, isSaving, markSetupStep,
     libraryLocation, holderLibraryLocation, holderLibrarySetupComplete,
     setHolderLibraryLocation, clearHolderLibraryLocation, notify,
     googleAuthenticated, metadataSkipped, user: googleUser,
@@ -105,6 +106,12 @@ export default function Settings() {
     setError('');
   };
 
+  const handleExportProShop = () => {
+    exportFullLibrary(tools);
+    markSetupStep('proshopExported');
+    notify(`Exported ${tools.length} tools to ProShop CSV`, 'success');
+  };
+
   return (
     <div>
       <div className="flex items-center gap-8 mb-20">
@@ -148,6 +155,21 @@ export default function Settings() {
           Status of the one-time initial setup and ProShop import workflow.
         </p>
         <SetupGuideSummary />
+      </div>
+
+      {/* ProShop export */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Download size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>ProShop Export</h3>
+        </div>
+        <p className="text-sub text-sm mb-16">
+          Export the full tool library as a ProShop-compatible CSV — for the initial bulk
+          import, or anytime afterward to re-sync ProShop with the current library.
+        </p>
+        <button className="btn btn-secondary btn-sm" onClick={handleExportProShop} disabled={tools.length === 0}>
+          ↓ Export Full ProShop CSV ({tools.length} tools)
+        </button>
       </div>
 
       {/* Tool metadata (Google Drive) connection */}

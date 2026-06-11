@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
 
 // PICO-8-style retro palette for the completion fireworks.
@@ -40,17 +42,27 @@ export function SetupStepCircles({ progress, compact = false }) {
 // guide. Disappears for good once every step is checked off.
 export function SetupGuideBanner() {
   const { setupProgress } = useApp();
+  const navigate = useNavigate();
   if (SETUP_STEPS.every(s => setupProgress[s.key])) return null;
+  const goToSettings = () => navigate('/settings');
   return (
-    <div className="setup-guide-banner" role="status">
+    <div
+      className="setup-guide-banner setup-guide-banner-link"
+      role="button"
+      tabIndex={0}
+      onClick={goToSettings}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') goToSettings(); }}
+      title="Open Settings — includes the ProShop export"
+    >
       <div className="setup-guide-banner-text">
         <strong>Initial setup checklist</strong>
         <span className="text-sub text-xs">
           Connect the Fusion library, normalize it, merge in ProShop data, then export back —
-          each step checks off automatically as you do it.
+          each step checks off automatically as you do it. Click to open Settings.
         </span>
       </div>
       <SetupStepCircles progress={setupProgress} />
+      <ChevronRight size={18} className="setup-guide-banner-arrow" />
     </div>
   );
 }
