@@ -156,6 +156,7 @@ export default function ToolDetail() {
 
   const typeLabel = TOOL_TYPE_LABELS[tool.tool_type] || tool.tool_type;
   const assemblies = tool.assemblies || [];
+  const hasMachineNum = tool.machine_tool_number !== null && tool.machine_tool_number !== undefined && tool.machine_tool_number !== '';
 
   if (editing) {
     return (
@@ -303,30 +304,6 @@ export default function ToolDetail() {
               )}
             </Section>
 
-            <AssembliesSection
-              tool={tool}
-              holders={holders}
-              onSave={async (updatedTool) => {
-                try {
-                  await saveTool(updatedTool);
-                } catch { /* toast handled in context */ }
-              }}
-            />
-
-            <HolderSection
-              tool={tool}
-              holders={holders}
-              holderLibrarySetupComplete={!!holderLibraryLocation}
-              onSelectHolder={async (guid) => {
-                try {
-                  await saveTool({ ...tool, selected_holder_guid: guid });
-                  notify('Holder updated', 'success');
-                } catch { /* toast handled in context */ }
-              }}
-            />
-
-            <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving} />
-
             <Section title="Setup" icon={Settings2}>
               <div className="detail-fields">
                 <Field label="Tool Material" value={tool.material} />
@@ -354,18 +331,29 @@ export default function ToolDetail() {
               )}
             </Section>
 
-            <FilesSection
+            <AssembliesSection
               tool={tool}
-              googleAuthenticated={googleAuthenticated}
-              onUpload={async (file, fileName, fileType) => {
-                try { await uploadToolAttachment(tool, file, fileName, fileType); }
-                catch { throw new Error('Upload failed — check your Google Drive connection'); }
-              }}
-              onDelete={async (fileId) => {
-                try { await deleteToolAttachment(tool, fileId, false); }
-                catch { /* toast handled in context */ }
+              holders={holders}
+              onSave={async (updatedTool) => {
+                try {
+                  await saveTool(updatedTool);
+                } catch { /* toast handled in context */ }
               }}
             />
+
+            <HolderSection
+              tool={tool}
+              holders={holders}
+              holderLibrarySetupComplete={!!holderLibraryLocation}
+              onSelectHolder={async (guid) => {
+                try {
+                  await saveTool({ ...tool, selected_holder_guid: guid });
+                  notify('Holder updated', 'success');
+                } catch { /* toast handled in context */ }
+              }}
+            />
+
+            <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving} />
 
             <Section title="History" icon={Clock} defaultOpen={false}>
               <div className="detail-fields" style={{ marginBottom: (tool.merge_history || []).length > 0 ? 12 : 0 }}>
@@ -406,27 +394,28 @@ export default function ToolDetail() {
 
           <div className="detail-layout-right">
             <Section title="Identity" icon={Tag}>
-              {/* Location chip */}
-              {tool.location && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
-                  <span className="text-sub" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Cabinet</span>
-                  <span className="location-tag" style={{ fontSize: 15, padding: '4px 13px' }}>{tool.location}</span>
-                </div>
-              )}
-              <div className="detail-fields">
-                {(tool.machine_tool_number !== null && tool.machine_tool_number !== undefined && tool.machine_tool_number !== '') && (
-                  <div className="detail-field">
-                    <div className="detail-field-label">Machine #</div>
-                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                      <span className="machine-num-badge">T{tool.machine_tool_number}</span>
-                      <span className="machine-num-badge">H{tool.machine_tool_number}</span>
-                      <span className="machine-num-badge">D{tool.machine_tool_number}</span>
+              {(tool.location || hasMachineNum) ? (
+                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 20, padding: '4px 0' }}>
+                  {tool.location && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span className="text-sub" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cabinet</span>
+                      <span className="location-tag" style={{ fontSize: 15, padding: '4px 13px' }}>{tool.location}</span>
                     </div>
-                  </div>
-                )}
-                <Field label="Type" value={typeLabel} />
-                <Field label="Manufacturer" value={tool.vendor} />
-              </div>
+                  )}
+                  {hasMachineNum && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span className="text-sub" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Machine #</span>
+                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                        <span className="machine-num-badge">T{tool.machine_tool_number}</span>
+                        <span className="machine-num-badge">H{tool.machine_tool_number}</span>
+                        <span className="machine-num-badge">D{tool.machine_tool_number}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="detail-field-empty text-sm">No identity info yet.</div>
+              )}
             </Section>
 
             <Section title="Photo" icon={Camera}>
@@ -466,6 +455,19 @@ export default function ToolDetail() {
                 <span className="detail-field-empty text-sm">No notes yet.</span>
               )}
             </Section>
+
+            <FilesSection
+              tool={tool}
+              googleAuthenticated={googleAuthenticated}
+              onUpload={async (file, fileName, fileType) => {
+                try { await uploadToolAttachment(tool, file, fileName, fileType); }
+                catch { throw new Error('Upload failed — check your Google Drive connection'); }
+              }}
+              onDelete={async (fileId) => {
+                try { await deleteToolAttachment(tool, fileId, false); }
+                catch { /* toast handled in context */ }
+              }}
+            />
           </div>
         </div>
 
