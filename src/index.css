@@ -2632,7 +2632,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .purchasing-header-row,
 .purchasing-row {
   display: grid;
-  grid-template-columns: 16px 1fr 56px 90px;
+  grid-template-columns: 16px 1fr 64px 82px;
   gap: 8px;
   align-items: center;
 }
@@ -2724,6 +2724,15 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .purchasing-value { padding-left: 4px; }
 
 .purchasing-url-input { font-size: 11px; padding: 3px 8px; }
+
+/* The Cost column is too narrow for the default number-input spinner —
+   drop it entirely rather than let it crowd the digits. */
+.purchasing-price-input::-webkit-inner-spin-button,
+.purchasing-price-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.purchasing-price-input { -moz-appearance: textfield; }
 
 .purchasing-link {
   color: var(--blue);
