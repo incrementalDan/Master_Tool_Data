@@ -8,6 +8,18 @@ import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
 import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
 import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
 
+// Merge an uploaded Fusion JSON's tools into the already-loaded library —
+// tools sharing an `id` (Fusion guid) are updated in place; new ids are
+// appended. Used by the "Add to Current Library" path so an upload doesn't
+// discard the library already loaded via APS.
+function mergeImportedTools(current, imported) {
+  const byId = new Map(current.map(t => [t.id, t]));
+  for (const t of imported) {
+    byId.set(t.id, byId.has(t.id) ? { ...byId.get(t.id), ...t } : t);
+  }
+  return [...byId.values()];
+}
+
 export default function ImportFlow() {
   const navigate = useNavigate();
   const { tools, saveFullLibrary, isSaving, markSetupStep } = useApp();
@@ -49,6 +61,30 @@ export default function ImportFlow() {
       return mergeFusionAndMetadata(internal, null);
     });
     setFusionTools(imported);
+    setStep(2);
+  };
+
+  // Merge the uploaded JSON's tools into the already-loaded library instead
+  // of replacing it (e.g. adding a handful of tools from a job file on top
+  // of the full library already synced via APS).
+  const handleAddFusion = () => {
+    if (!fusionPreview) return;
+    const imported = fusionPreview.raw.map(fTool => {
+      const internal = fusionToolToInternal({
+        ...fTool,
+        guid: fTool.guid || generateId(),
+      });
+      return mergeFusionAndMetadata(internal, null);
+    });
+    setFusionTools(current => mergeImportedTools(current, imported));
+    setStep(2);
+  };
+
+  // Skip the Fusion JSON upload entirely — `fusionTools` already starts as
+  // the library currently loaded in the app (e.g. via the APS sync), so just
+  // move on to the ProShop merge step.
+  const useLoadedLibrary = () => {
+    setFusionTools(tools);
     setStep(2);
   };
 
@@ -147,11 +183,24 @@ export default function ImportFlow() {
       {step === 1 && (
         <div className="card">
           <h3 style={{ marginBottom: 8 }}>Import Fusion Tool Library</h3>
+
+          {tools.length > 0 && (
+            <div style={{ marginBottom: 16, padding: 14, background: 'var(--surface-2)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>Use the library already loaded</div>
+              <p className="text-sub text-sm mb-12">
+                {tools.length} tools are already loaded in the app (e.g. from your APS sync). Skip the
+                upload below and go straight to merging ProShop data into this library.
+              </p>
+              <button className="btn btn-primary" onClick={useLoadedLibrary}>
+                Continue with Loaded Library →
+              </button>
+            </div>
+          )}
+
           <p className="text-sub text-sm mb-16">
-            Upload your <code>fusion_tool_library.json</code> file. The app will parse all tools and assign stable IDs.
-            {tools.length > 0 && <strong style={{ color: 'var(--amber)', display: 'block', marginTop: 6 }}>
-              ⚠ This will replace your current library ({tools.length} tools). Save first if needed.
-            </strong>}
+            {tools.length > 0
+              ? <>Or upload a different <code>fusion_tool_library.json</code> file below.</>
+              : <>Upload your <code>fusion_tool_library.json</code> file. The app will parse all tools and assign stable IDs.</>}
           </p>
 
           <DropZone
@@ -164,15 +213,24 @@ export default function ImportFlow() {
           {fusionPreview && (
             <div style={{ marginTop: 16, padding: 14, background: 'var(--surface-2)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
               <div style={{ color: 'var(--green)', fontWeight: 600, marginBottom: 4 }}>✓ Parsed successfully</div>
-              <div className="text-sub text-sm">{fusionPreview.count} tools found</div>
-              <div className="flex gap-8 mt-12">
+              <div className="text-sub text-sm mb-12">{fusionPreview.count} tools found</div>
+              <div className="flex gap-8" style={{ flexWrap: 'wrap' }}>
                 <button className="btn btn-primary" onClick={handleLoadFusion}>
-                  Load into Library →
+                  {tools.length > 0 ? 'Replace Library →' : 'Load into Library →'}
                 </button>
-                <button className="btn btn-secondary" onClick={skipProShop} style={{ fontSize: 12 }}>
-                  Skip (use current library)
-                </button>
+                {tools.length > 0 && (
+                  <button className="btn btn-secondary" onClick={handleAddFusion}>
+                    Add to Current Library →
+                  </button>
+                )}
               </div>
+              {tools.length > 0 && (
+                <p className="text-sub text-xs mt-8">
+                  <strong>Replace</strong> discards the {tools.length} currently loaded tools and continues with only
+                  this file's {fusionPreview.count} tools. <strong>Add</strong> keeps your current library and adds or
+                  updates tools from this file (matched by tool ID).
+                </p>
+              )}
             </div>
           )}
         </div>
