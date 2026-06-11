@@ -514,6 +514,14 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
           <FieldInput field="updated_by" label="Updated By" data={data} setField={setField} />
         </div>
 
+        <div className="field-group mt-12">
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <input type="checkbox" checked={!!data.no_fusion_link} onChange={e => setField('no_fusion_link', e.target.checked)} />
+            <span className="text-sub text-sm">No Fusion Link — needs Fusion setup</span>
+            <InfoTip text={'Set automatically when this tool is added from a ProShop row with no Fusion match — its Fusion library entry is a placeholder. Uncheck once its Fusion entry has real geometry, presets, and holder/assembly setup.'} />
+          </label>
+        </div>
+
         {/* Tags */}
         <div className="field-group mt-12">
           <label className="field-label">Tags</label>

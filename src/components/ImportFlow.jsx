@@ -288,7 +288,25 @@ export default function ImportFlow() {
 
               {proShopMatches.unmatched.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <div className="section-header mb-8">Unmatched ProShop Rows</div>
+                  <div className="section-header mb-8" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                    <span>Unmatched ProShop Rows</span>
+                    <div className="flex gap-8">
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setProShopMatches({
+                          ...proShopMatches,
+                          unmatched: proShopMatches.unmatched.map(item => ({ ...item, action: 'add' })),
+                        })}
+                      >Add All as New Tools</button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setProShopMatches({
+                          ...proShopMatches,
+                          unmatched: proShopMatches.unmatched.map(item => ({ ...item, action: 'skip' })),
+                        })}
+                      >Skip All</button>
+                    </div>
+                  </div>
                   <table className="match-table">
                     <thead>
                       <tr>
@@ -563,6 +581,9 @@ function psRowToTool(group, psUnit = 'inches') {
     location: r['Location'] || '',
     vendor: resolveVendorName(r['Approved Brand'] || ''),
     purchasing: buildPurchasingFromGroup(group),
+    // No Fusion entry exists yet — flags this as a placeholder needing Fusion
+    // setup (geometry refinement, presets, holder/assembly) before use.
+    no_fusion_link: true,
   };
 }
 
