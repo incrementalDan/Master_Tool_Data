@@ -4,6 +4,7 @@ import { UploadCloud } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers } from '../schema/toolSchema.js';
 import { vendorHasOwnCatalogNumber, resolveVendorName } from '../schema/vendorRegistry.js';
+import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
 import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
 import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
@@ -628,6 +629,21 @@ function buildPurchasingFromGroup(group) {
         });
       }
     });
+
+  // ProShop doesn't export links — backfill from EDP#/Vendor# using known
+  // URL patterns wherever a generator matches.
+  manufacturers.forEach(mfg => {
+    if (!mfg.edp_url && mfg.edp) {
+      const generated = generateManufacturerUrl(mfg.name, mfg.edp);
+      if (generated) mfg.edp_url = generated;
+    }
+  });
+  vendors.forEach(vendor => {
+    if (!vendor.vendor_num_url && vendor.vendor_num) {
+      const generated = generateVendorUrl(vendor.name, vendor.vendor_num);
+      if (generated) vendor.vendor_num_url = generated;
+    }
+  });
 
   return { manufacturers, vendors };
 }

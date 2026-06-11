@@ -2788,6 +2788,28 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 .purchasing-url-input { font-size: 11px; padding: 3px 8px; }
 
+.purchasing-url-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.purchasing-url-row .purchasing-url-input { flex: 1; min-width: 0; }
+.purchasing-regen-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: background var(--ease), color var(--ease), border-color var(--ease);
+}
+.purchasing-regen-btn:hover { background: var(--surface-3); color: var(--text); border-color: var(--blue); }
+
 /* The Cost column is too narrow for the default number-input spinner —
    drop it entirely rather than let it crowd the digits. */
 .purchasing-price-input::-webkit-inner-spin-button,

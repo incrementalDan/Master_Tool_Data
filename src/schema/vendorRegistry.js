@@ -1,7 +1,7 @@
 // ─── MANUFACTURER / APPROVED BRAND LIST ──────────────────────────────────────
 export const MANUFACTURER_LIST = [
   // Tool manufacturers — from MSC approved brand list + existing suppliers
-  "Accupro","Cleveland","Emuge","HAIMER","Harvey Tool","Helical Solutions",
+  "Accupro","Cleveland","Emuge","GARR Tool","HAIMER","Harvey Tool","Helical Solutions",
   "Hertel","Ingersoll Cutting Tools","Internal Tool","Iscar","Kennametal",
   "Keo","LMT","M.A. Ford","Melin Tool","Micro 100","Mitsubishi","OSG",
   "RobbJack","SGS","Sandvik Coromant","Seco","Titan USA","Tungaloy",
