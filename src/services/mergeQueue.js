@@ -188,9 +188,8 @@ function parseFusionCsv(raw) {
       presets,
       // Metadata fields default empty
       vendor: '',
-      product_id: '',
       coating: '',
-      purchasing: [],
+      purchasing: { manufacturers: [], vendors: [] },
       center_cutting: false,
       // Fusion-native: tool_hand → cutting_direction (anything matching "left" = Left Hand).
       cutting_direction: /left/i.test(csvStr(r.tool_hand)) ? 'Left Hand' : 'Right Hand',

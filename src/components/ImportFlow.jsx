@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { UploadCloud } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers } from '../schema/toolSchema.js';
+import { vendorHasOwnCatalogNumber } from '../schema/vendorRegistry.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
 import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
 import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
@@ -507,19 +508,49 @@ function psRowToTool(group, psUnit = 'inches') {
   };
 }
 
-// One purchasing entry ("Approved Brand" sub-table row in ProShop) per CSV row
-// in the group that carries purchasing data — multiple rows share a Tool # but
-// differ only in manufacturer/distributor/part#/cost/lead time.
+// Build the normalized { manufacturers: [], vendors: [] } purchasing shape from
+// a group of ProShop CSV rows sharing a Tool # (one row per Approved Brand).
+// ProShop's single "EDP#" column is ambiguous — it's either the manufacturer's
+// part number or the vendor's own catalog number depending on the vendor. Route
+// it to vendors[].vendor_num when the vendor is known to assign its own catalog
+// numbers (VENDORS_WITH_OWN_NUMBERS), otherwise to manufacturers[].edp.
 function buildPurchasingFromGroup(group) {
-  return group
+  const manufacturers = [];
+  const vendors = [];
+  const mfgByName = new Map();
+
+  group
     .filter(r => r['Approved Brand'] || r['Vendor'] || r['EDP#'] || r['Cost'] || r['Lead time'])
-    .map(r => ({
-      manufacturer: r['Approved Brand'] || '',
-      distributor: r['Vendor'] || '',
-      distributor_part_number: r['EDP#'] || '',
-      cost: r['Cost'] || '',
-      lead_time: r['Lead time'] || '',
-    }));
+    .forEach(r => {
+      const mfgName = r['Approved Brand'] || '';
+      const vendorName = r['Vendor'] || '';
+      const edp = r['EDP#'] || '';
+      const cost = r['Cost'] || '';
+
+      let mfg = mfgByName.get(mfgName);
+      if (!mfg) {
+        mfg = { id: generateId(), name: mfgName, edp: '', edp_url: '', mfg_num: '', mfg_num_url: '', order: manufacturers.length };
+        manufacturers.push(mfg);
+        mfgByName.set(mfgName, mfg);
+      }
+
+      const vendorHasOwnNum = vendorHasOwnCatalogNumber(vendorName);
+      if (edp && !vendorHasOwnNum && !mfg.edp) mfg.edp = edp;
+
+      if (vendorName || edp || cost) {
+        vendors.push({
+          id: generateId(),
+          manufacturer_id: mfg.id,
+          name: vendorName,
+          vendor_num: vendorHasOwnNum ? edp : '',
+          vendor_num_url: '',
+          price: cost ? psNum(cost) : null,
+          order: vendors.length,
+        });
+      }
+    });
+
+  return { manufacturers, vendors };
 }
 
 // ── Match ProShop row-groups to existing tools ────────────────────────────
@@ -563,7 +594,7 @@ function matchProShopToTools(groups, tools, psUnit = 'inches') {
       if (r['Approved Brand']) additions.vendor = r['Approved Brand'];
       if (toolNum && !tool.proshot_id) additions.proshot_id = toolNum;
       const purchasing = buildPurchasingFromGroup(group);
-      if (purchasing.length) additions.purchasing = purchasing;
+      if (purchasing.manufacturers.length || purchasing.vendors.length) additions.purchasing = purchasing;
       if (r['Through Coolant'] === 'true' || r['Through Coolant'] === 'false') {
         additions.tsc_capable = r['Through Coolant'] === 'true';
       }

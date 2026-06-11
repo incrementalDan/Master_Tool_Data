@@ -56,7 +56,6 @@ function extractorKeyToAppKey(k) {
     flutes: 'number_of_flutes',
     shankDia: 'shank_diameter',
     cornerRadius: 'corner_radius',
-    edpNumber: 'product_id',
     approvedBrand: 'vendor',
     productLink: 'product_link',
     presetName: 'preset_name',
@@ -93,6 +92,47 @@ function extractorKeyToAppKey(k) {
     minOoh: 'min_ooh',
   };
   return map[k] || k;
+}
+
+// ─── Build normalized purchasing from the extractor's flat fields ──────────
+// The extractor form (AI extraction / AddToolFlow) captures one manufacturer
+// (approvedBrand + edpNumber, the manufacturer's own part #) and one vendor
+// (vendor + vendorStockNum + cost). The Purchasing section supports adding
+// more of each — see `purchasing` in the field registry.
+function buildPurchasingFromExtractor(f) {
+  const hasMfg = f.approvedBrand || f.edpNumber;
+  const hasVendor = f.vendor || f.vendorStockNum || f.cost;
+  if (!hasMfg && !hasVendor) return { manufacturers: [], vendors: [] };
+
+  const manufacturers = [];
+  let mfgId = null;
+  if (hasMfg || hasVendor) {
+    mfgId = generateId();
+    manufacturers.push({
+      id: mfgId,
+      name: f.approvedBrand || '',
+      edp: f.edpNumber || '',
+      edp_url: '',
+      mfg_num: '',
+      mfg_num_url: '',
+      order: 0,
+    });
+  }
+
+  const vendors = [];
+  if (hasVendor) {
+    vendors.push({
+      id: generateId(),
+      manufacturer_id: mfgId,
+      name: f.vendor || '',
+      vendor_num: f.vendorStockNum || '',
+      vendor_num_url: '',
+      price: f.cost ? (parseFloat(f.cost) || null) : null,
+      order: 0,
+    });
+  }
+
+  return { manufacturers, vendors };
 }
 
 // ─── Convert extractor BLANK format → our internal model ───────────────────
@@ -142,17 +182,10 @@ export function extractorToTool(f) {
     full_profile: f.fullProfile || false,
     backside_capable: f.backsideCapable || false,
     vendor: f.approvedBrand || '',
-    product_id: f.edpNumber || '',
-    // Single purchasing option from the extractor's vendor/cost fields, if any
-    // were filled in. ProShop's "Approved Brands" sub-table can hold several of
-    // these per tool — see `purchasing[]` in the field registry.
-    purchasing: (f.approvedBrand || f.vendor || f.vendorStockNum || f.cost) ? [{
-      manufacturer: f.approvedBrand || '',
-      distributor: f.vendor || '',
-      distributor_part_number: f.vendorStockNum || '',
-      cost: f.cost || '',
-      lead_time: '',
-    }] : [],
+    // One manufacturer + one vendor from the extractor's flat purchasing fields,
+    // if any were filled in. The Purchasing section supports adding more of each
+    // — see `purchasing` in the field registry.
+    purchasing: buildPurchasingFromExtractor(f),
     product_link: f.productLink || '',
     preset_name: f.presetName || '',
     machine_tool_number: (f.toolNumber === '' || f.toolNumber == null) ? null : Number(f.toolNumber),
@@ -177,7 +210,7 @@ export function toolToExtractor(tool) {
     workpieceMats: tool.material_suitability || [],
     tipAngle: String(tool.tip_angle ?? ''),
     pitch: tool.pitch || '',
-    edpNumber: tool.product_id || '',
+    edpNumber: tool.purchasing?.manufacturers?.[0]?.edp || '',
     productLink: tool.product_link || '',
     presetName: tool.preset_name || '',
     toolNumber: tool.machine_tool_number != null ? String(tool.machine_tool_number) : '',
@@ -187,10 +220,10 @@ export function toolToExtractor(tool) {
     fluteType: tool.flute_type || '',
     grouping: tool.grouping || AUTO_GROUP[tool.tool_type] || 'M',
     approvedBrand: tool.vendor || '',
-    vendor: tool.purchasing?.[0]?.distributor || '',
-    cost: tool.purchasing?.[0]?.cost || '',
-    vendorStockNum: tool.purchasing?.[0]?.distributor_part_number || '',
-    purchasing: tool.purchasing || [],
+    vendor: tool.purchasing?.vendors?.[0]?.name || '',
+    cost: tool.purchasing?.vendors?.[0]?.price != null ? String(tool.purchasing.vendors[0].price) : '',
+    vendorStockNum: tool.purchasing?.vendors?.[0]?.vendor_num || '',
+    purchasing: tool.purchasing || { manufacturers: [], vendors: [] },
     tapClass: tool.tap_class || '',
     tapSubType: tool.tap_sub_type || '',
     isSTI: tool.is_sti || false,
@@ -603,9 +636,8 @@ export function fusionToolToInternal(fTool) {
       : Number(fTool['post-process'].number),
     // Metadata fields default empty — filled from metadata file
     vendor: '',
-    product_id: '',
     coating: '',
-    purchasing: [],
+    purchasing: { manufacturers: [], vendors: [] },
     tsc_capable: false,
     center_cutting: false,
     flute_design: '',
@@ -1012,7 +1044,7 @@ export function internalToFusionTool(tool) {
       tool_fluteLength: `${tool.flute_length || 0} ${lenUnit}`,
       tool_overallLength: `${tool.overall_length || 0} ${lenUnit}`,
       tool_material: `'${tool.material || 'carbide'}'`,
-      tool_productId: `'${tool.proshot_id || tool.product_id || ''}'`,
+      tool_productId: `'${tool.proshot_id || ''}'`,
       tool_productLink: `'${tool.product_link || ''}'`,
       tool_shaftDiameter: `${tool.shank_diameter || tool.diameter || 0} ${lenUnit}`,
       tool_shoulderLength: `${tool.shoulder_length || tool.flute_length || 0} ${lenUnit}`,
@@ -1092,9 +1124,8 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
   return {
     ...fusionInternal,
     vendor: meta.vendor || '',
-    product_id: meta.product_id || '',
     coating: meta.coating || '',
-    purchasing: meta.purchasing || [],
+    purchasing: meta.purchasing || { manufacturers: [], vendors: [] },
     tsc_capable: Boolean(meta.tsc_capable),
     center_cutting: meta.center_cutting ?? false,
     // cutting_direction is Fusion-native (geometry.HAND); Fusion wins, metadata fallback.
@@ -1172,15 +1203,28 @@ export function buildMetadataTool(tool) {
   return {
     id: tool.tracking_id || tool.id,
     vendor: tool.vendor || '',
-    product_id: tool.product_id || '',
     coating: tool.coating || '',
-    purchasing: (tool.purchasing || []).map(p => ({
-      manufacturer: p.manufacturer || '',
-      distributor: p.distributor || '',
-      distributor_part_number: p.distributor_part_number || '',
-      cost: p.cost || '',
-      lead_time: p.lead_time || '',
-    })),
+    purchasing: {
+      manufacturers: (tool.purchasing?.manufacturers || []).map((m, i) => ({
+        id: m.id || generateId(),
+        name: m.name || '',
+        edp: m.edp || '',
+        edp_url: m.edp_url || '',
+        mfg_num: m.mfg_num || '',
+        mfg_num_url: m.mfg_num_url || '',
+        order: m.order ?? i,
+      })),
+      vendors: (tool.purchasing?.vendors || []).map((v, i) => ({
+        id: v.id || generateId(),
+        manufacturer_id: v.manufacturer_id || null,
+        name: v.name || '',
+        vendor_num: v.vendor_num || '',
+        vendor_num_url: v.vendor_num_url || '',
+        price: v.price ?? null,
+        // TODO: per-vendor lead_time field — not needed yet.
+        order: v.order ?? i,
+      })),
+    },
     tsc_capable: tool.tsc_capable ?? false,
     center_cutting: tool.center_cutting || false,
     cutting_direction: tool.cutting_direction || 'Right Hand',
@@ -1483,8 +1527,7 @@ export function newTool(toolType = 'flat end mill') {
     full_profile: false,
     backside_capable: false,
     vendor: '',
-    product_id: '',
-    purchasing: [],
+    purchasing: { manufacturers: [], vendors: [] },
     product_link: '',
     preset_name: '',
     grouping: '',

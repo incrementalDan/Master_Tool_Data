@@ -1,6 +1,6 @@
 // Pure search/filter functions — no React imports
 
-const TEXT_FIELDS = ['description', 'vendor', 'product_id', 'material', 'coating', 'notes', 'location', 'proshot_id', 'preferred_machine'];
+const TEXT_FIELDS = ['description', 'vendor', 'material', 'coating', 'notes', 'location', 'proshot_id', 'preferred_machine'];
 
 export function textSearch(tools, query) {
   if (!query?.trim()) return tools;

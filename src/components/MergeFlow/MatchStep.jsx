@@ -53,7 +53,6 @@ export default function MatchStep({ importedTool, presetCandidates, onSelect, on
         return (
           (t.description || '').toLowerCase().includes(q) ||
           (t.vendor || '').toLowerCase().includes(q) ||
-          (t.product_id || '').toLowerCase().includes(q) ||
           (t.proshot_id || '').toLowerCase().includes(q) ||
           (TOOL_TYPE_LABELS[t.tool_type] || '').toLowerCase().includes(q)
         );

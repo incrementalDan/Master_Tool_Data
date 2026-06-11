@@ -12,7 +12,7 @@ const DIFF_SECTIONS = [
     title: 'Identity',
     key: 'identity',
     icon: Tag,
-    fields: ['description', 'vendor', 'product_id', 'proshot_id'],
+    fields: ['description', 'vendor', 'proshot_id'],
   },
   {
     title: 'Geometry',
