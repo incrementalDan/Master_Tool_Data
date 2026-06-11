@@ -51,6 +51,7 @@ function loadSetupProgress() {
 }
 
 const initialState = {
+  localMode: false,           // browsing a locally-uploaded library file — read-only, no APS/Drive
   user: null,                 // Google user (metadata identity) or null
   apsAuthenticated: false,    // Autodesk signed in
   googleAuthenticated: false, // Google signed in (metadata)
@@ -100,6 +101,14 @@ function reducer(state, action) {
         libraryLocation: state.libraryLocation, // keep saved location across sign-out
         holderLibraryLocation: state.holderLibraryLocation,
       };
+    case 'ENTER_LOCAL_MODE':
+      return { ...state, localMode: true, tools: action.tools, needsNormalize: false, error: null };
+    case 'EXIT_LOCAL_MODE':
+      return {
+        ...initialState,
+        libraryLocation: state.libraryLocation,
+        holderLibraryLocation: state.holderLibraryLocation,
+      };
     case 'LOAD_START': return { ...state, isLoading: true, error: null };
     case 'LOAD_SUCCESS': return { ...state, isLoading: false, tools: action.tools, needsNormalize: !!action.needsNormalize };
     case 'LOAD_ERROR': return { ...state, isLoading: false, error: action.error };
@@ -135,6 +144,7 @@ export function AppProvider({ children }) {
   const googleRef = useRef(state.googleAuthenticated);
   const toolsRef = useRef(state.tools);
   const holdersRef = useRef(state.holders);
+  const localModeRef = useRef(state.localMode);
   // Caches wrapper-level fields (e.g. `version`) from the last-loaded Fusion
   // library file, other than `data` — see downloadFusionList/uploadFusionList.
   const libraryWrapperRef = useRef(null);
@@ -143,6 +153,7 @@ export function AppProvider({ children }) {
   googleRef.current = state.googleAuthenticated;
   toolsRef.current = state.tools;
   holdersRef.current = state.holders;
+  localModeRef.current = state.localMode;
   // Tracks whether we've already seeded setup-progress flags for an established
   // library this session — seeding should run at most once, and only when no
   // progress has been stored yet (a brand-new install).
@@ -214,6 +225,7 @@ export function AppProvider({ children }) {
 
   // ─── Drive-backed Fusion list helpers ─────────────────────────────────────
   const downloadFusionList = useCallback(async () => {
+    if (localModeRef.current) throw new Error('Local mode is read-only — connect to Autodesk to load or save the live library');
     const loc = locationRef.current;
     if (!loc) throw new Error('No tool library location selected');
     const json = await aps.loadToolLibrary(loc.projectId, loc.itemId);
@@ -230,6 +242,7 @@ export function AppProvider({ children }) {
   }, []);
 
   const uploadFusionList = useCallback(async (list) => {
+    if (localModeRef.current) throw new Error('Local mode is read-only — connect to Autodesk to save changes');
     const loc = locationRef.current;
     await aps.saveToolLibrary(loc.projectId, loc.folderId, loc.itemId, loc.fileName, { ...libraryWrapperRef.current, data: list });
   }, []);
@@ -291,6 +304,35 @@ export function AppProvider({ children }) {
     localStorage.removeItem('google_drive_connected');
     dispatch({ type: 'SIGN_OUT' });
   }, []);
+
+  // ─── Local (no-Autodesk) browse mode ──────────────────────────────────────
+  // Lets someone open a fusion_tool_library.json file directly — no APS/Google
+  // sign-in — to search, filter, view, and ProShop-export the library. Read-only:
+  // downloadFusionList/uploadFusionList both refuse while localModeRef is set, so
+  // every save path (writeLogicalTool, saveFullLibrary, reconcileTool, etc.) fails
+  // with a clear toast instead of attempting a network call.
+  const enterLocalMode = useCallback(async (file) => {
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      const fusionList = Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
+      if (fusionList.length === 0) throw new Error('No tools found in this file');
+
+      const metaByTracking = new Map();
+      const { groups, untracked } = groupByTrackingId(fusionList);
+      const built = [];
+      for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
+      for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
+      const tools = combineToolsByProshopId(built);
+
+      dispatch({ type: 'ENTER_LOCAL_MODE', tools });
+      notify(`Loaded ${tools.length} tool${tools.length === 1 ? '' : 's'} (local mode — read-only)`, 'success');
+    } catch (err) {
+      notify(`Could not load file: ${err.message}`, 'error', 7000);
+    }
+  }, [notify]);
+
+  const exitLocalMode = useCallback(() => dispatch({ type: 'EXIT_LOCAL_MODE' }), []);
 
   // ─── Tool data actions ────────────────────────────────────────────────────
   const loadTools = useCallback(async () => {
@@ -1134,6 +1176,8 @@ export function AppProvider({ children }) {
       clearHolderLibraryLocation,
       loadHolders,
       signOutAll,
+      enterLocalMode,
+      exitLocalMode,
       loadTools,
       fetchRawLibrary,
       saveTool,

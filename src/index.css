@@ -107,6 +107,20 @@ input[type=number]::-webkit-inner-spin-button { opacity: 0.3; }
   color: var(--text-sub);
 }
 
+.local-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--amber);
+  background: rgba(245,158,11,0.12);
+  border: 1px solid rgba(245,158,11,0.35);
+  border-radius: var(--radius-sm);
+  padding: 4px 9px;
+  white-space: nowrap;
+}
+
 .page-content {
   flex: 1;
   padding: 20px;
@@ -912,6 +926,24 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--text-sub);
   margin-bottom: 28px;
   line-height: 1.6;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: var(--text-sub);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }
 
 /* ─── Loading / error states ─────────────────────────────────────────────── */

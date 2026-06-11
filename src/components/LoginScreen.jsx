@@ -1,11 +1,13 @@
-import { useState } from 'react';
-import { Wrench } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Wrench, UploadCloud } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import * as aps from '../services/apsService.js';
 
 export default function LoginScreen() {
-  const { error } = useApp();
+  const { error, enterLocalMode } = useApp();
   const [redirecting, setRedirecting] = useState(false);
+  const [loadingFile, setLoadingFile] = useState(false);
+  const fileRef = useRef(null);
 
   const handleSignIn = async () => {
     setRedirecting(true);
@@ -13,6 +15,17 @@ export default function LoginScreen() {
       await aps.signIn(); // full-page redirect to Autodesk
     } catch (err) {
       setRedirecting(false);
+    }
+  };
+
+  const handleLocalFile = async (file) => {
+    if (!file) return;
+    setLoadingFile(true);
+    try {
+      await enterLocalMode(file);
+    } finally {
+      setLoadingFile(false);
+      if (fileRef.current) fileRef.current.value = '';
     }
   };
 
@@ -48,6 +61,40 @@ export default function LoginScreen() {
 
         <p className="text-sub text-sm" style={{ marginTop: 20 }}>
           Access requires the app to be provisioned in your Fusion hub.
+        </p>
+
+        <div className="login-divider"><span>or</span></div>
+
+        <button
+          className="btn btn-secondary"
+          onClick={() => fileRef.current?.click()}
+          disabled={loadingFile}
+          style={{ width: '100%', justifyContent: 'center' }}
+        >
+          {loadingFile ? (
+            <>
+              <span className="spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
+              Loading…
+            </>
+          ) : (
+            <>
+              <UploadCloud size={16} />
+              Browse a local library file
+            </>
+          )}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,application/json"
+          style={{ display: 'none' }}
+          onChange={e => handleLocalFile(e.target.files[0])}
+        />
+
+        <p className="text-sub text-sm" style={{ marginTop: 12 }}>
+          No Autodesk account needed — upload a <code>fusion_tool_library.json</code> file to
+          search, filter, and view the library and export it to ProShop. Editing and saving
+          requires signing in with Autodesk.
         </p>
       </div>
     </div>
