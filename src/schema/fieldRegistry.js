@@ -184,6 +184,22 @@ export const FIELD_REGISTRY = {
     precision: 0,
   },
 
+  // Set on tools created from an unmatched ProShop row during import (no Fusion
+  // match found) — flags that this tool's Fusion entry is an auto-generated
+  // placeholder still needing real geometry/presets/holder setup before use.
+  // Manually clearable once the Fusion side has been filled in.
+  no_fusion_link: {
+    label: 'No Fusion Link',
+    type: 'boolean',
+    unit: null,
+    fusionPath: null,
+    proShopColumn: null,
+    metadataOnly: true,
+    appliesToTypes: 'all',
+    required: false,
+    precision: null,
+  },
+
   // ── Geometry ──────────────────────────────────────────────────────────────
 
   diameter: {

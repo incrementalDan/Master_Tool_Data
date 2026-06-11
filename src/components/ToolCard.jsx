@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Pencil, Copy, FileDown } from 'lucide-react';
+import { Pencil, Copy, FileDown, AlertTriangle } from 'lucide-react';
 import { TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
 import { unitAbbr } from '../utils/units.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
@@ -65,6 +65,11 @@ export default function ToolCard({ tool, variant = 'grid' }) {
           onClick={e => e.stopPropagation()}
           style={{ fontSize: 10, padding: '1px 7px' }}
         >{tool.proshot_id}</a>
+      )}
+      {tool.no_fusion_link && (
+        <span className="no-fusion-pill" style={{ fontSize: 10, padding: '1px 7px' }} title="Added from ProShop with no Fusion match — Fusion entry is a placeholder and needs setup">
+          <AlertTriangle size={10} /> No Fusion Link
+        </span>
       )}
     </div>
   );

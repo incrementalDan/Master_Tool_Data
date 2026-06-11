@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { UploadCloud } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers } from '../schema/toolSchema.js';
-import { vendorHasOwnCatalogNumber } from '../schema/vendorRegistry.js';
+import { vendorHasOwnCatalogNumber, resolveVendorName } from '../schema/vendorRegistry.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
 import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
 import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
@@ -288,7 +288,25 @@ export default function ImportFlow() {
 
               {proShopMatches.unmatched.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <div className="section-header mb-8">Unmatched ProShop Rows</div>
+                  <div className="section-header mb-8" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                    <span>Unmatched ProShop Rows</span>
+                    <div className="flex gap-8">
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        onClick={() => setProShopMatches({
+                          ...proShopMatches,
+                          unmatched: proShopMatches.unmatched.map(item => ({ ...item, action: 'add' })),
+                        })}
+                      >Add All as New Tools</button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setProShopMatches({
+                          ...proShopMatches,
+                          unmatched: proShopMatches.unmatched.map(item => ({ ...item, action: 'skip' })),
+                        })}
+                      >Skip All</button>
+                    </div>
+                  </div>
                   <table className="match-table">
                     <thead>
                       <tr>
@@ -561,8 +579,11 @@ function psRowToTool(group, psUnit = 'inches') {
     min_ooh: psNum(r['Length Below Holder - MIN OOH']),
     tip_to_first_thread: psNum(r['Tip to 1st Full Thread']),
     location: r['Location'] || '',
-    vendor: r['Approved Brand'] || '',
+    vendor: resolveVendorName(r['Approved Brand'] || ''),
     purchasing: buildPurchasingFromGroup(group),
+    // No Fusion entry exists yet — flags this as a placeholder needing Fusion
+    // setup (geometry refinement, presets, holder/assembly) before use.
+    no_fusion_link: true,
   };
 }
 
@@ -580,8 +601,8 @@ function buildPurchasingFromGroup(group) {
   group
     .filter(r => r['Approved Brand'] || r['Vendor'] || r['EDP#'] || r['Cost'] || r['Lead time'])
     .forEach(r => {
-      const mfgName = r['Approved Brand'] || '';
-      const vendorName = r['Vendor'] || '';
+      const mfgName = resolveVendorName(r['Approved Brand'] || '');
+      const vendorName = resolveVendorName(r['Vendor'] || '');
       const edp = r['EDP#'] || '';
       const cost = r['Cost'] || '';
 
@@ -649,7 +670,7 @@ function matchProShopToTools(groups, tools, psUnit = 'inches') {
       const additions = {};
 
       // ProShop wins
-      if (r['Approved Brand']) additions.vendor = r['Approved Brand'];
+      if (r['Approved Brand']) additions.vendor = resolveVendorName(r['Approved Brand']);
       if (toolNum && !tool.proshot_id) additions.proshot_id = toolNum;
       const purchasing = buildPurchasingFromGroup(group);
       if (purchasing.manufacturers.length || purchasing.vendors.length) additions.purchasing = purchasing;

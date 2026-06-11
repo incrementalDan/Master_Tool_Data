@@ -13,6 +13,7 @@ import FilesSection from './FilesSection.jsx';
 import PurchasingSection from './PurchasingSection.jsx';
 import AttachmentUploadModal from './AttachmentUploadModal.jsx';
 import { fetchFileBlob } from '../services/driveService.js';
+import InfoTip from './InfoTip.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS, validateGeometry, fusionToolToInternal, readOohFromFusion } from '../schema/toolSchema.js';
 import { convertLength, unitAbbr } from '../utils/units.js';
@@ -246,6 +247,11 @@ export default function ToolDetail() {
               {tool.tool_type === 'tap' && tool.is_sti && (
                 <span className="sti-pill" title="STI / Helicoil — thread insert tap">STI / Helicoil</span>
               )}
+              {tool.no_fusion_link && (
+                <span className="no-fusion-pill">
+                  <AlertTriangle size={12} /> No Fusion Link
+                </span>
+              )}
             </div>
             {tool.proshot_id && (
               <a
@@ -260,6 +266,17 @@ export default function ToolDetail() {
             )}
           </div>
         </div>
+
+        {tool.no_fusion_link && (
+          <div className="warn-banner" style={{ margin: '12px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+              Added from ProShop with no matching Fusion entry — its Fusion library entry is a
+              placeholder and needs geometry, presets, and holder/assembly setup before use.
+              <InfoTip text={'Edit this tool and uncheck "No Fusion Link" in Setup & Notes once its Fusion entry has everything it needs (geometry, presets, holder/assembly).'} />
+            </div>
+          </div>
+        )}
 
         <div className="detail-layout">
           <div className="detail-layout-left">

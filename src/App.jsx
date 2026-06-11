@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useGoogleLogin } from '@react-oauth/google';
-import { Wrench, FolderOpen, LogOut, Library, Upload, Settings, GitMerge, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Wrench, FolderOpen, LogOut, Library, Upload, Settings, GitMerge, RefreshCw, AlertTriangle, Download } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import { setAccessToken, fetchUserInfo } from './services/driveService.js';
+import { exportFullLibrary } from './utils/proShopExport.js';
 import ToastStack from './components/Toast.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
 import LibrarySetup from './components/LibrarySetup.jsx';
@@ -42,10 +43,11 @@ function AppShell() {
   const {
     apsAuthenticated, libraryLocation, googleAuthenticated, metadataSkipped,
     processingAuth, user, loadTools, signOutAll, clearLibraryLocation,
+    localMode, exitLocalMode, tools,
     toasts, dismissToast,
   } = useApp();
 
-  const ready = apsAuthenticated && libraryLocation && (googleAuthenticated || metadataSkipped);
+  const ready = !localMode && apsAuthenticated && libraryLocation && (googleAuthenticated || metadataSkipped);
   const loadedRef = useRef(false);
 
   useEffect(() => {
@@ -63,6 +65,19 @@ function AppShell() {
       <div className="loading-screen" style={{ minHeight: '100vh' }}>
         <div className="spinner" />
         <span>Completing Autodesk sign-in…</span>
+      </div>
+    );
+  } else if (localMode) {
+    content = (
+      <div className="app-shell">
+        <LocalModeTopBar tools={tools} onExit={exitLocalMode} />
+        <main className="page-content">
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/tool/:id" element={<ToolDetail />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
       </div>
     );
   } else if (!apsAuthenticated) {
@@ -220,6 +235,40 @@ function TopBar({ user, googleAuthenticated, onSignOut, onChangeLibrary }) {
       </span>
       <button className="btn btn-ghost btn-sm" onClick={onSignOut}>
         <LogOut size={14} /> Sign out
+      </button>
+    </header>
+  );
+}
+
+// Simplified topbar shown in local (no-Autodesk) browse mode — search/view the
+// uploaded library and ProShop-export it; "Exit local mode" returns to LoginScreen.
+function LocalModeTopBar({ tools, onExit }) {
+  const { notify } = useApp();
+
+  const handleExport = () => {
+    exportFullLibrary(tools);
+    notify(`Exported ${tools.length} tool${tools.length === 1 ? '' : 's'} to ProShop CSV`, 'success');
+  };
+
+  return (
+    <header className="topbar">
+      <span className="topbar-brand">
+        <Wrench size={17} strokeWidth={2.2} />
+        Tool Library
+      </span>
+      <span className="local-mode-badge" title="Browsing an uploaded library file — view-only, not connected to Autodesk">
+        <FolderOpen size={13} /> Local mode (read-only)
+      </span>
+      <a href="#/" className="topbar-link">
+        <Library size={14} /> Library
+      </a>
+      <span className="topbar-spacer" />
+      <span className="topbar-user">{tools.length} tool{tools.length === 1 ? '' : 's'}</span>
+      <button className="btn btn-ghost btn-sm" onClick={handleExport} disabled={tools.length === 0} title="Export the loaded library as a ProShop-compatible CSV">
+        <Download size={14} /> ProShop CSV
+      </button>
+      <button className="btn btn-ghost btn-sm" onClick={onExit}>
+        <LogOut size={14} /> Exit local mode
       </button>
     </header>
   );

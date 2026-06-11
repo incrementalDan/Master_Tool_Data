@@ -171,6 +171,17 @@ The full tool list (~250 tools) is loaded once on login. All search and filterin
 
 -----
 
+## Local (No-Autodesk) Browse Mode
+
+`LoginScreen.jsx` offers a second path besides "Sign in with Autodesk": **"Browse a local library file"** — uploads a `fusion_tool_library.json` directly (no APS/Google sign-in). `enterLocalMode(file)` (`AppContext.jsx`) parses it with the same `groupByTrackingId` / `buildLogicalTool` / `combineToolsByProshopId` pipeline as `loadTools`, then dispatches `ENTER_LOCAL_MODE` (sets `localMode: true` + `tools`).
+
+- **Read-only by a single central guard**: `downloadFusionList` and `uploadFusionList` (`AppContext.jsx`) both throw immediately when `localModeRef.current` is true ("Local mode is read-only — connect to Autodesk to load or save changes"). Every save/sync/reconcile path already routes through these two functions and already surfaces errors as toasts, so this one guard makes editing fail gracefully everywhere with no per-screen changes.
+- **What works**: search/filter/view (`LandingPage`, `ToolDetail`), and ProShop CSV export (`exportFullLibrary`, available from the local-mode topbar).
+- **What doesn't**: any save — Edit/Save, Add Tool, Sync Job, Duplicate, Delete, reconcile-on-open, normalize, etc. all show the read-only toast (or fail silently where already wrapped in try/catch, e.g. reconcile-on-open).
+- **UI**: `App.jsx`'s `AppShell` renders a separate `LocalModeTopBar` (badge + ProShop CSV export + "Exit local mode") and a reduced route set (`/`, `/tool/:id` only) when `localMode` is true — bypasses the APS/Google onboarding gates entirely. `exitLocalMode()` resets to `initialState` (keeping saved library locations) and returns to `LoginScreen`.
+
+-----
+
 ## Tech Stack
 
 - **Frontend**: React + Vite (hosted on GitHub Pages — use HashRouter, not BrowserRouter)
@@ -1047,3 +1058,9 @@ All metadata-only (never written to Fusion) — added to `tool_metadata.json` vi
 - **Google Drive scope must be `drive`** — do not downgrade back to `drive.file`; it breaks shared drive browsing.
 - **Library wrapper preserves `version`** — the Fusion library file on disk is `{ "data": [...], "version": 36 }`. `downloadFusionList` / `uploadFusionList` in `AppContext.jsx` cache all wrapper-level fields (other than `data`) via `libraryWrapperRef` and write them back on every save. Never reconstruct the upload payload as bare `{ data: list }` — stripping `version` can make Fusion treat the file as incompatible and reassign GUIDs or lose holder links.
 - **Orphaned metadata is harmless but permanent** — when a tool is deleted directly from Fusion 360 (outside the app), its `tool_metadata.json` entry persists indefinitely; no prune/cleanup pass exists anywhere. Only `deleteTool` (via the app UI) removes the metadata record. This is safe because `generateTrackingId` (`FTL-` + random 6-hex-digit, ~16.7M values) and `generateId` (random UUID) have effectively zero collision probability — a brand-new tool will never accidentally inherit an old deleted tool's stale metadata. Orphaned entries accumulate silently but cause no functional harm.
+
+-----
+
+## TODO / Future Work
+
+- **Local mode, phase 2 — full edit with manual re-export.** Today's local browse mode (see above) is read-only. A bigger follow-up: allow editing/saving everything in-memory while in local mode (tools, presets, assemblies, metadata), plus a "Download updated library" button that produces a new `fusion_tool_library.json` (and `tool_metadata.json` if applicable) for the user to manually re-upload to Autodesk/Drive themselves. **This is a big ask** — `writeLogicalTool`, `saveFullLibrary`, `renumberLibrary`, `deleteTool`, `addTool`, `normalizeLibrary`, and the whole Phase 2 merge flow all currently assume `uploadFusionList`/`downloadFusionList` hit APS; each would need a local-mode branch that mutates `toolsRef`/state in place and marks the library "dirty" instead of calling APS, plus export/download plumbing for the edited JSON. Confirm scope before starting.

@@ -18,7 +18,7 @@ export const TOOL_TYPES = TT;
 export const TOOL_TYPE_LABELS = TL;
 
 // ─── Facet fields per tool type (search filter order) ─────────────────────
-const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'flute_design', 'material_suitability', 'tags'];
+const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'flute_design', 'material_suitability', 'tags', 'no_fusion_link'];
 
 export function getFacetFields(toolType) {
   if (!toolType) return COMMON_FACETS;
@@ -639,6 +639,7 @@ export function fusionToolToInternal(fTool) {
     coating: '',
     purchasing: { manufacturers: [], vendors: [] },
     tsc_capable: false,
+    no_fusion_link: false,
     center_cutting: false,
     flute_design: '',
     // cutting_direction: for taps, derived from the Fusion type string (tap left/right hand)
@@ -1175,6 +1176,7 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     machine_tool_number: (meta.machine_tool_number ?? fusionInternal.machine_tool_number ?? null) === null
       ? null
       : Number(meta.machine_tool_number ?? fusionInternal.machine_tool_number),
+    no_fusion_link: Boolean(meta.no_fusion_link),
     notes: meta.notes || '',
     last_used_job: meta.last_used_job || '',
     preferred_machine: meta.preferred_machine || '',
@@ -1262,6 +1264,7 @@ export function buildMetadataTool(tool) {
     // Machine tool number — persisted here as the source of truth, independent
     // of what gets written to the Fusion JSON.
     machine_tool_number: (tool.machine_tool_number ?? null) === null ? null : Number(tool.machine_tool_number),
+    no_fusion_link: tool.no_fusion_link || false,
     // Holder selection + proven assemblies. Each assembly carries instance_guid
     // (the Fusion entry it maps to); supplementary notes live here.
     selected_holder_guid: tool.selected_holder_guid || null,
@@ -1534,6 +1537,7 @@ export function newTool(toolType = 'flat end mill') {
     proshot_id: '',
     location: '',
     machine_tool_number: null,
+    no_fusion_link: false,
     spindle_speed: null,
     cutting_feedrate: null,
     plunge_feedrate: null,
