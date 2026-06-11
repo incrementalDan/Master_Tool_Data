@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
-  Tag, Ruler, Settings2, StickyNote, Clock, Package, Wrench, AlertTriangle, Camera,
+  Tag, Ruler, Settings2, StickyNote, Clock, Package, Wrench, AlertTriangle, Camera, X,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
 import HolderPicker from './HolderPicker.jsx';
@@ -10,6 +10,7 @@ import AssemblyCard, { holderColor } from './AssemblyCard.jsx';
 import AssemblyForm from './AssemblyForm.jsx';
 import ReconcileModal from './ReconcileModal.jsx';
 import FilesSection from './FilesSection.jsx';
+import PurchasingSection from './PurchasingSection.jsx';
 import AttachmentUploadModal from './AttachmentUploadModal.jsx';
 import { fetchFileBlob } from '../services/driveService.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -260,44 +261,7 @@ export default function ToolDetail() {
         </div>
 
         <div className="detail-layout">
-            <Section title="Identity" icon={Tag}>
-              <div className="identity-layout">
-                <div className="identity-fields">
-                  {/* Location chip */}
-                  {tool.location && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
-                      <span className="text-sub" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Cabinet</span>
-                      <span className="location-tag" style={{ fontSize: 15, padding: '4px 13px' }}>{tool.location}</span>
-                    </div>
-                  )}
-                  <div className="detail-fields">
-                    {(tool.machine_tool_number !== null && tool.machine_tool_number !== undefined && tool.machine_tool_number !== '') && (
-                      <div className="detail-field">
-                        <div className="detail-field-label">Machine #</div>
-                        <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                          <span className="machine-num-badge">T{tool.machine_tool_number}</span>
-                          <span className="machine-num-badge">H{tool.machine_tool_number}</span>
-                          <span className="machine-num-badge">D{tool.machine_tool_number}</span>
-                        </div>
-                      </div>
-                    )}
-                    <Field label="Type" value={typeLabel} />
-                    <Field label="Manufacturer" value={tool.vendor} />
-                    <Field label="Mfr Part # (EDP)" value={tool.product_id} mono />
-                  </div>
-                </div>
-                <PhotoSlot
-                  tool={tool}
-                  googleAuthenticated={googleAuthenticated}
-                  onChangePhoto={() => setShowPhotoUpload(true)}
-                  onDeletePhoto={async () => {
-                    try { await deleteToolAttachment(tool, tool.primary_photo_id, true); }
-                    catch { /* toast handled in context */ }
-                  }}
-                />
-              </div>
-            </Section>
-
+          <div className="detail-layout-left">
             <Section title="Geometry" icon={Ruler}>
               {tool.tool_type === 'tap' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
@@ -339,6 +303,30 @@ export default function ToolDetail() {
               )}
             </Section>
 
+            <AssembliesSection
+              tool={tool}
+              holders={holders}
+              onSave={async (updatedTool) => {
+                try {
+                  await saveTool(updatedTool);
+                } catch { /* toast handled in context */ }
+              }}
+            />
+
+            <HolderSection
+              tool={tool}
+              holders={holders}
+              holderLibrarySetupComplete={!!holderLibraryLocation}
+              onSelectHolder={async (guid) => {
+                try {
+                  await saveTool({ ...tool, selected_holder_guid: guid });
+                  notify('Holder updated', 'success');
+                } catch { /* toast handled in context */ }
+              }}
+            />
+
+            <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving} />
+
             <Section title="Setup" icon={Settings2}>
               <div className="detail-fields">
                 <Field label="Tool Material" value={tool.material} />
@@ -366,16 +354,6 @@ export default function ToolDetail() {
               )}
             </Section>
 
-            <AssembliesSection
-              tool={tool}
-              holders={holders}
-              onSave={async (updatedTool) => {
-                try {
-                  await saveTool(updatedTool);
-                } catch { /* toast handled in context */ }
-              }}
-            />
-
             <FilesSection
               tool={tool}
               googleAuthenticated={googleAuthenticated}
@@ -386,20 +364,6 @@ export default function ToolDetail() {
               onDelete={async (fileId) => {
                 try { await deleteToolAttachment(tool, fileId, false); }
                 catch { /* toast handled in context */ }
-              }}
-            />
-
-            <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving} />
-
-            <HolderSection
-              tool={tool}
-              holders={holders}
-              holderLibrarySetupComplete={!!holderLibraryLocation}
-              onSelectHolder={async (guid) => {
-                try {
-                  await saveTool({ ...tool, selected_holder_guid: guid });
-                  notify('Holder updated', 'success');
-                } catch { /* toast handled in context */ }
               }}
             />
 
@@ -438,6 +402,54 @@ export default function ToolDetail() {
                 </>
               )}
             </Section>
+          </div>
+
+          <div className="detail-layout-right">
+            <Section title="Identity" icon={Tag}>
+              {/* Location chip */}
+              {tool.location && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
+                  <span className="text-sub" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Cabinet</span>
+                  <span className="location-tag" style={{ fontSize: 15, padding: '4px 13px' }}>{tool.location}</span>
+                </div>
+              )}
+              <div className="detail-fields">
+                {(tool.machine_tool_number !== null && tool.machine_tool_number !== undefined && tool.machine_tool_number !== '') && (
+                  <div className="detail-field">
+                    <div className="detail-field-label">Machine #</div>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                      <span className="machine-num-badge">T{tool.machine_tool_number}</span>
+                      <span className="machine-num-badge">H{tool.machine_tool_number}</span>
+                      <span className="machine-num-badge">D{tool.machine_tool_number}</span>
+                    </div>
+                  </div>
+                )}
+                <Field label="Type" value={typeLabel} />
+                <Field label="Manufacturer" value={tool.vendor} />
+              </div>
+            </Section>
+
+            <Section title="Photo" icon={Camera}>
+              <PhotoSlot
+                tool={tool}
+                googleAuthenticated={googleAuthenticated}
+                onChangePhoto={() => setShowPhotoUpload(true)}
+                onDeletePhoto={async () => {
+                  try { await deleteToolAttachment(tool, tool.primary_photo_id, true); }
+                  catch { /* toast handled in context */ }
+                }}
+              />
+            </Section>
+
+            <PurchasingSection
+              tool={tool}
+              isSaving={isSaving}
+              onSave={async (updatedTool) => {
+                try {
+                  await saveTool(updatedTool);
+                } catch { /* toast handled in context */ }
+              }}
+            />
 
             <Section title="Notes & Tags" icon={StickyNote}>
               {tool.notes && (
@@ -454,6 +466,7 @@ export default function ToolDetail() {
                 <span className="detail-field-empty text-sm">No notes yet.</span>
               )}
             </Section>
+          </div>
         </div>
 
         {/* Primary photo upload modal */}
@@ -922,7 +935,7 @@ function PhotoSlot({ tool, googleAuthenticated, onChangePhoto, onDeletePhoto }) 
   const hasPhoto = !!photoUrl;
 
   return (
-    <div className="identity-photo-column">
+    <div>
       <div
         className="identity-photo-slot"
         onClick={!hasPhoto && googleAuthenticated ? onChangePhoto : undefined}
@@ -948,10 +961,10 @@ function PhotoSlot({ tool, googleAuthenticated, onChangePhoto, onDeletePhoto }) 
         <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
           <button
             className="btn btn-ghost btn-sm"
-            style={{ flex: 1, fontSize: 11 }}
+            style={{ flex: 1, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
             onClick={onChangePhoto}
           >
-            {hasPhoto ? '📷 Change' : '📷 Add photo'}
+            <Camera size={12} /> {hasPhoto ? 'Change' : 'Add photo'}
           </button>
           {hasPhoto && !confirmRemove && (
             <button
@@ -960,7 +973,7 @@ function PhotoSlot({ tool, googleAuthenticated, onChangePhoto, onDeletePhoto }) 
               title="Remove photo"
               onClick={() => setConfirmRemove(true)}
             >
-              ×
+              <X size={12} />
             </button>
           )}
           {hasPhoto && confirmRemove && (
@@ -977,7 +990,7 @@ function PhotoSlot({ tool, googleAuthenticated, onChangePhoto, onDeletePhoto }) 
                 style={{ fontSize: 11 }}
                 onClick={() => setConfirmRemove(false)}
               >
-                ✕
+                <X size={12} />
               </button>
             </>
           )}

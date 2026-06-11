@@ -242,7 +242,6 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
             </div>
           </div>
           <FieldInput field="vendor" label="Manufacturer" data={data} setField={setField} list={MANUFACTURER_LIST} />
-          <FieldInput field="product_id" label="Mfr Part # (EDP)" data={data} setField={setField} />
           <FieldInput field="proshot_id" label="ProShop ID" data={data} setField={setField} placeholder="e.g. A-3" />
           <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
         </div>

@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { THROUGH_COOLANT_VALUES, smartDiam, buildDesc } from "./src/utils/toolNaming.js";
+import { MANUFACTURER_LIST, VENDOR_LIST } from "./src/schema/vendorRegistry.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const BLUE   = "#4a8fff";
@@ -14,31 +15,6 @@ const T = {
   red:     "#d94f4f", redDim:   "#280d0d",
   inputBg: "#181818", mono: "#b8b8b8",
 };
-
-// ─── MANUFACTURER / APPROVED BRAND LIST ──────────────────────────────────────
-const MANUFACTURER_LIST = [
-  // Tool manufacturers — from MSC approved brand list + existing suppliers
-  "Accupro","Cleveland","Emuge","HAIMER","Harvey Tool","Helical Solutions",
-  "Hertel","Ingersoll Cutting Tools","Internal Tool","Iscar","Kennametal",
-  "Keo","LMT","M.A. Ford","Melin Tool","Micro 100","Mitsubishi","OSG",
-  "RobbJack","SGS","Sandvik Coromant","Seco","Titan USA","Tungaloy",
-  "Value Collection","Widia","YG-1","Guhring",
-  // Additional house brands / specialty
-  "Fraisa USA","Haas Automation","Lakeshore Carbide","Liberty Tool Co",
-].sort();
-
-// ─── VENDOR / DISTRIBUTOR LIST ────────────────────────────────────────────────
-const VENDOR_LIST = [
-  "Adion Systems","ALMCO","B&B Dynamic Machining","Boedeker Plastics, Inc.",
-  "Butler Bros Supply Division","Camden Tool Inc","Castle Metals","CMW Tech",
-  "Copper and Brass Sales","Evans Heat Treating","Finishing Innovations LLC",
-  "Hadco Metal Trading","Hard Chrome Specialists, Inc.",
-  "Hillock Anodizing","Industraplate","Jones Kinden","K&L Plating Company",
-  "Laser Source","Liberty Manufacturing",
-  "McMaster-Carr","Metropolitan Flag & Banner Co","MSC Industrial","NexGenSolutions",
-  "Online Metals","Orange Vise Company LLC","Pierson Workholding","Precision Finishing",
-  "PTSolutions","SK Industrial","Vibrant Finish LLC","Yamazen Inc","Yarde Metals",
-];
 
 const COOLANT_OPTS = [
   ["flood","Flood"],["disabled","Disabled"],["mist","Mist"],
@@ -213,20 +189,37 @@ const PS_MAIN_COLS=[
 ];
 
 // Each purchasing entry ("Approved Brands" sub-table row in ProShop) becomes one
-// CSV row: { approvedBrand (manufacturer), vendor (distributor), edp (distributor
-// part #), cost, leadTime }. Falls back to the flat extractor fields (used by the
-// AddToolFlow form, which hasn't built a `purchasing[]` array yet).
+// CSV row: { approvedBrand (manufacturer), vendor (distributor), edp, cost, leadTime }.
+// Built from the normalized `purchasing.{manufacturers,vendors}` — one row per vendor
+// (linked to its manufacturer via manufacturer_id), plus one row for any manufacturer
+// with no vendors yet (so its EDP# isn't lost). The "EDP#" column is the vendor's own
+// catalog number if it has one, else the manufacturer's part number — see CLAUDE.md
+// ProShop Field Priority Rules. Falls back to the flat extractor fields (used by the
+// AddToolFlow form before `purchasing` is built).
 function buildBrandRows(f){
-  if(f.purchasing&&f.purchasing.length){
-    return f.purchasing.map(p=>({
-      approvedBrand:p.manufacturer||f.approvedBrand||"",
-      vendor:p.distributor||"",
-      edp:p.distributor_part_number||"",
-      cost:p.cost||"",
-      leadTime:p.lead_time||"",
-    }));
+  const manufacturers=f.purchasing?.manufacturers||[];
+  const vendors=f.purchasing?.vendors||[];
+  if(manufacturers.length||vendors.length){
+    const rows=[];
+    const usedMfgIds=new Set();
+    for(const v of vendors){
+      const m=manufacturers.find(m=>m.id===v.manufacturer_id);
+      if(m) usedMfgIds.add(m.id);
+      rows.push({
+        approvedBrand:m?.name||"",
+        vendor:v.name||"",
+        edp:v.vendor_num||m?.edp||"",
+        cost:v.price!=null?String(v.price):"",
+        leadTime:"",
+      });
+    }
+    for(const m of manufacturers){
+      if(usedMfgIds.has(m.id)) continue;
+      rows.push({approvedBrand:m.name||"",vendor:"",edp:m.edp||"",cost:"",leadTime:""});
+    }
+    return rows;
   }
-  const approvedBrand=f.approvedBrand||"",vendor=f.vendor||"",edp=f.vendorStockNum||"",cost=f.cost||"";
+  const approvedBrand=f.approvedBrand||"",vendor=f.vendor||"",edp=f.vendorStockNum||f.edpNumber||"",cost=f.cost||"";
   if(!approvedBrand&&!vendor&&!edp&&!cost) return [];
   return [{approvedBrand,vendor,edp,cost,leadTime:""}];
 }
@@ -256,7 +249,7 @@ const BLANK={
   psToolId:"",    // ProShop Tool # → Fusion tool_productId (col 126)
   location:"",    // e.g. LC-140 → Fusion tool_vendor (col 165)
   tapSubType:"cut",isSTI:false,tpiMin:"",tpiMax:"",threadProfileAngle:"",tipToFirstFullThread:"",
-  purchasing:[],  // [{ manufacturer, distributor, distributor_part_number, cost, lead_time }]
+  purchasing:{manufacturers:[],vendors:[]},  // { manufacturers: [{id,name,edp,edp_url,mfg_num,mfg_num_url,order}], vendors: [{id,manufacturer_id,name,vendor_num,vendor_num_url,price,order}] }
 };
 const TT=[
   "flat end mill","ball end mill","bull nose end mill","tapered mill","radius mill","form mill","lollipop mill",

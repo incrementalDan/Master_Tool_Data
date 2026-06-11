@@ -88,20 +88,6 @@ export const FIELD_REGISTRY = {
     precision: null,
   },
 
-  product_id: {
-    label: 'Mfr Part # (EDP)',
-    type: 'string',
-    unit: null,
-    fusionPath: null,             // metadata only; proshot_id goes to Fusion product-id
-    // Real ProShop "EDP#" (Id: vendertoolid, API: vendorToolId) is a PER-PURCHASING-OPTION
-    // distributor part number, not a single manufacturer part number — see `purchasing[]`.
-    proShopColumn: null,
-    metadataOnly: true,
-    appliesToTypes: 'all',
-    required: false,
-    precision: null,
-  },
-
   proshot_id: {
     label: 'ProShop ID',
     type: 'string',
@@ -118,13 +104,15 @@ export const FIELD_REGISTRY = {
     precision: null,
   },
 
-  // Purchasing options ("Approved Brands" sub-table in ProShop). One logical
-  // tool can have multiple purchasing rows in the ProShop CSV, all sharing the
-  // same Tool # — they differ only in manufacturer/distributor/part#/cost/lead time.
-  // Entry shape: { manufacturer, distributor, distributor_part_number, cost, lead_time }
+  // Purchasing info — normalized manufacturer/vendor records for this tool.
+  // `manufacturers[]`: { id, name, edp, edp_url, mfg_num, mfg_num_url, order }
+  // `vendors[]`: { id, manufacturer_id, name, vendor_num, vendor_num_url, price, order }
+  // (vendors link to a manufacturer via manufacturer_id). One logical tool can have
+  // multiple ProShop "Approved Brands" rows — see ProShop Integration in CLAUDE.md
+  // for the EDP# routing rules between manufacturers[].edp and vendors[].vendor_num.
   purchasing: {
-    label: 'Purchasing Options',
-    type: 'array',
+    label: 'Purchasing',
+    type: 'object',
     unit: null,
     fusionPath: null,
     proShopColumn: null,           // multi-column/multi-row — handled directly by proShopExport.js

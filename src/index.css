@@ -568,9 +568,20 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 /* ─── Tool detail ─────────────────────────────────────────────────────────── */
 .detail-layout {
+  display: grid;
+  grid-template-columns: 65fr 35fr;
+  gap: 12px;
+  align-items: start;
+}
+.detail-layout-left,
+.detail-layout-right {
   display: flex;
   flex-direction: column;
-  max-width: 920px;
+  min-width: 0;
+}
+@media (max-width: 768px) {
+  .detail-layout { grid-template-columns: 1fr; }
+  .detail-layout-right { order: -1; }
 }
 
 /* ─── Panel cards (detail + form sections) ──────────────────────────────── */
@@ -2482,14 +2493,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   font-style: italic;
 }
 
-/* ─── Identity section — two-column with photo slot ──────────────────────── */
-.identity-layout {
-  display: flex;
-  gap: 20px;
-  align-items: flex-start;
-}
-.identity-fields { flex: 1; min-width: 0; }
-.identity-photo-column { width: 270px; flex-shrink: 0; }
+/* ─── Photo section ───────────────────────────────────────────────────────── */
 .identity-photo-slot {
   height: 220px;
   width: 100%;
@@ -2510,10 +2514,6 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--text-sub);
 }
 .identity-photo-slot:hover .identity-photo-placeholder { color: var(--text); }
-@media (max-width: 600px) {
-  .identity-layout { flex-direction: column; }
-  .identity-photo-column { width: 100%; }
-}
 
 /* ─── Files & Attachments section ────────────────────────────────────────── */
 .files-count-badge {
@@ -2618,6 +2618,97 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--red);
 }
 .files-spin { animation: spin 1s linear infinite; }
+
+/* ─── Purchasing section ─────────────────────────────────────────────────── */
+.purchasing-mfg-block {
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.purchasing-mfg-block:last-of-type { border-bottom: none; margin-bottom: 4px; }
+
+.purchasing-header-row,
+.purchasing-row {
+  display: grid;
+  grid-template-columns: 16px 1fr 90px 120px;
+  gap: 8px;
+  align-items: center;
+}
+.purchasing-header-row {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-sub);
+  padding: 0 0 4px;
+}
+.purchasing-row {
+  padding: 5px 0;
+  border-radius: var(--radius-sm);
+  transition: background var(--ease), box-shadow var(--ease);
+}
+.purchasing-row--vendor { padding-left: 4px; }
+.purchasing-row--drop {
+  box-shadow: 0 0 0 2px rgba(74,143,255,0.18);
+  background: var(--surface-2);
+}
+
+.purchasing-vendor-table {
+  margin: 2px 0 4px 22px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+
+.purchasing-row-grip {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  color: var(--text-sub);
+  opacity: 0.4;
+  cursor: grab;
+  line-height: 0;
+}
+.purchasing-row-grip:hover { opacity: 1; }
+.purchasing-row-grip:active { cursor: grabbing; }
+.purchasing-row-grip:empty { cursor: default; opacity: 0; }
+.purchasing-grip-icon, .purchasing-del-icon {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transition: opacity var(--ease);
+}
+.purchasing-del-icon { opacity: 0; color: var(--red); }
+.purchasing-row-grip:hover .purchasing-grip-icon { opacity: 0; }
+.purchasing-row-grip:hover .purchasing-del-icon { opacity: 1; }
+
+.purchasing-cell { min-width: 0; font-size: 12.5px; }
+.purchasing-cell--name { min-width: 0; }
+.purchasing-cell--num {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.purchasing-url-input { font-size: 11px; padding: 3px 8px; }
+
+.purchasing-link {
+  color: var(--blue);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.purchasing-add-vendor { margin: 2px 0 2px 22px; align-self: flex-start; }
+.purchasing-addnum-btn { font-size: 11px; padding: 3px 8px; justify-self: start; }
+
+.purchasing-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
 
 /* ─── Attachment upload drop zone ────────────────────────────────────────── */
 .upload-dropzone {

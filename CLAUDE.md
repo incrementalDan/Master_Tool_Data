@@ -270,11 +270,15 @@ Key fields — see `src/schema/toolSchema.js` for the complete list:
   "tool_type": "flat end mill",
   "description": "tool description",
   "vendor": "manufacturer name (metadata)",
-  "product_id": "manufacturer EDP/part number (metadata, no direct ProShop column)",
   "proshot_id": "ProShop ID = Fusion's product-id field = ProShop 'Tool #' (metadata + Fusion)",
-  "purchasing": [
-    { "manufacturer": "", "distributor": "", "distributor_part_number": "", "cost": "", "lead_time": "" }
-  ],
+  "purchasing": {
+    "manufacturers": [
+      { "id": "uuid", "name": "Helical", "edp": "12334", "edp_url": "", "mfg_num": "", "mfg_num_url": "", "order": 0 }
+    ],
+    "vendors": [
+      { "id": "uuid", "manufacturer_id": "uuid-of-helical", "name": "MSC Industrial", "vendor_num": "99377473", "vendor_num_url": "", "price": 34.76, "order": 0 }
+    ]
+  },
   "diameter": 0.5,
   "flute_length": 1.0,
   "overall_length": 3.0,
@@ -324,9 +328,8 @@ The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/sche
 | `taper_angle`    | `geometry.TA`           | `Taper` (export id `taper`) | Written only when non-zero (or original Fusion entry already had a non-zero value) |
 | `tip_diameter`   | `geometry['tip-diameter']` | `Tip Diameter` (export id `tipDiameter`) | Written only when non-zero (or original Fusion entry already had a non-zero value) |
 | `min_ooh`        | — (metadata only)       | `Length Below Holder - MIN OOH` (export id `lengthBelowShankDiameter`) | Minimum stick-out floor — see the three-length-concepts table + ProShop Field Priority Rules |
-| `product_id`     | — (metadata only)       | — (no direct ProShop column) | Manufacturer EDP number — distinct from ProShop's per-vendor EDP#, which lives in `purchasing[].distributor_part_number` |
 | `proshot_id`     | `product-id`            | `Tool #` (export id `toolNumber`) | **Primary key in ProShop, primary match key for Phase 2** |
-| `purchasing[]`   | — (metadata only)       | `Approved Brand` / `Vendor` / `EDP#` / `Cost` / `Lead time` (sub-table) | One entry per Approved-Brand row in ProShop's multi-row export for a given `Tool #` — see ProShop Integration section |
+| `purchasing.manufacturers[]` / `purchasing.vendors[]` | — (metadata only) | `Approved Brand` / `Vendor` / `EDP#` / `Cost` (sub-table) | Normalized purchasing model — see Purchasing / Vendor Data Model section |
 
 **Important**: `proshot_id` (our field) = Fusion's `product-id` field (shown as "Vendor Number" in Fusion UI) = ProShop's `Tool #` (the ProShop primary key). It is the primary key for Phase 2 tool matching and for grouping ProShop CSV rows on import. It is stored in both the Fusion JSON and in metadata.
 
@@ -340,10 +343,14 @@ Stored in a single file on Google Drive. The file contains an array of metadata 
 {
   "id": "tracking_id (FTL-XXXXXX); falls back to Fusion guid for untracked tools",
   "vendor": "",
-  "product_id": "",
-  "purchasing": [
-    { "manufacturer": "", "distributor": "", "distributor_part_number": "", "cost": "", "lead_time": "" }
-  ],
+  "purchasing": {
+    "manufacturers": [
+      { "id": "uuid", "name": "Helical", "edp": "12334", "edp_url": "", "mfg_num": "", "mfg_num_url": "", "order": 0 }
+    ],
+    "vendors": [
+      { "id": "uuid", "manufacturer_id": "uuid-of-helical", "name": "MSC Industrial", "vendor_num": "99377473", "vendor_num_url": "", "price": 34.76, "order": 0 }
+    ]
+  },
   "coating": "",
   "notes": "",
   "last_used_job": "",
@@ -600,7 +607,7 @@ ProShop export must never be removed even as the app evolves toward a future ERP
 - **Export** (`tool-extractor.tsx` `PS_MAIN_COLS`, `src/utils/proShopExport.js`) writes ProShop's **API attribute id** names (camelCase, e.g. `lengthBelowShankDiameter`, `numberOfFlutes`, `tipTo1stFullThread`) as column headers — ProShop's UI matches these on import regardless of display label, and extra/unmapped columns are harmless.
 - **Import** (`src/components/ImportFlow.jsx`) reads a real ProShop export, whose headers are the **UI display names** (e.g. `Length Below Holder - MIN OOH`, `No.ofFlutes`, `Tip to 1st Full Thread`) — these often but not always match the API id.
 
-**Multi-row groups (Approved Brands)**: ProShop exports one row per `Tool #` normally, but a tool with multiple Approved Brand / purchasing options spans **multiple rows sharing the same `Tool #`** — geometry/spec columns are populated only on the first row of the group, and each row contributes one `purchasing[]` entry (`Approved Brand` / `Vendor` / `EDP#` / `Cost` / `Lead time`). Import groups rows by `Tool #` before matching (`handleProShopFile`); export emits the same shape via `buildBrandRows`/`buildProShopCSV` (`tool-extractor.tsx`) and `exportFullLibrary` (`src/utils/proShopExport.js`).
+**Multi-row groups (Approved Brands)**: ProShop exports one row per `Tool #` normally, but a tool with multiple Approved Brand / purchasing options spans **multiple rows sharing the same `Tool #`** — geometry/spec columns are populated only on the first row of the group, and each row contributes one manufacturer/vendor pair (`Approved Brand` / `Vendor` / `EDP#` / `Cost`) to the normalized `purchasing.{manufacturers,vendors}` model — see Purchasing / Vendor Data Model. Import groups rows by `Tool #` before matching (`handleProShopFile`) and builds the normalized shape via `buildPurchasingFromGroup` (`src/components/ImportFlow.jsx`); export emits the same row shape via `buildBrandRows`/`buildProShopCSV` (`tool-extractor.tsx`) and `exportFullLibrary` (`src/utils/proShopExport.js`).
 
 -----
 
@@ -614,7 +621,7 @@ These rules apply during the **initial ProShop CSV merge** and on any **subseque
 | `vendor` (manufacturer) | PS wins | From `Approved Brand`; metadata-only, **never** written to Fusion |
 | `proshot_id` | Fill gap only | From `Tool #` — only set if the tool doesn't already have one |
 | `location` (cabinet) | Fill gap only | From `Location`; Fusion's "Vendor" UI field (`expressions.tool_vendor`) holds the cabinet location → internal `location` |
-| `purchasing[]` (Approved Brands) | PS wins, replace when present | Built from every row sharing a `Tool #` via `buildPurchasingFromGroup` — see ProShop Integration |
+| `purchasing` (Approved Brands → manufacturers/vendors) | PS wins, replace when present | Built from every row sharing a `Tool #` via `buildPurchasingFromGroup` — see Purchasing / Vendor Data Model |
 | `min_ooh` (MIN OOH floor) | PS wins | From `Length Below Holder - MIN OOH` (export id `lengthBelowShankDiameter`); metadata-only, always overwrites |
 | `geometry['shoulder-length']` (shoulder length) | Set to MIN OOH at normalization | See MIN OOH rule below |
 | per-assembly `ooh` → `geometry.LB` | Floored at MIN OOH | See MIN OOH rule below |
@@ -663,6 +670,48 @@ expressions.tool_vendor = `'${tool.location || ''}'`;   // write location back t
 This is a permanent convention and **already implemented** (`fusionToolToInternal` / `internalToFusionTool` in `src/schema/toolSchema.js`). Never write the manufacturer name into Fusion's vendor field — it would appear as the cabinet location in Fusion's UI.
 
 **Root-level `vendor` field**: Fusion also stores a plain-string `vendor` at the root level of the tool object (unquoted value of `expressions.tool_vendor` — Fusion re-derives one from the other, same expression/native pairing as all other fields). `internalToFusionTool` writes it as `fusionObj.vendor = tool.location || ''` **after** the `isMetadataOnly` guard — it cannot be set inside the `fusionObj = { ... }` literal because the field registry marks our internal `tool.vendor` (manufacturer) as `metadataOnly: true`, and the guard would strip it. The post-guard assignment bypasses this correctly. The value is always `tool.location` (the cabinet location), never the manufacturer.
+
+-----
+
+## Purchasing / Vendor Data Model
+
+Each tool's purchasing/sourcing info lives in metadata as `purchasing: { manufacturers: [], vendors: [] }` — a normalized two-table model (not a flat list). This replaced an earlier flat `purchasing[]` shape (one entry per ProShop Approved-Brand row), which couldn't represent "the same manufacturer's part sold by two different vendors at different prices" or give rows stable IDs for drag-reorder.
+
+```json
+"purchasing": {
+  "manufacturers": [
+    { "id": "uuid", "name": "Helical", "edp": "12334", "edp_url": "https://...", "mfg_num": "", "mfg_num_url": "", "order": 0 }
+  ],
+  "vendors": [
+    { "id": "uuid", "manufacturer_id": "uuid-of-helical", "name": "MSC Industrial", "vendor_num": "99377473", "vendor_num_url": "https://www.mscdirect.com/product/...", "price": 34.76, "order": 0 },
+    { "id": "uuid", "manufacturer_id": "uuid-of-helical", "name": "Butler Brothers", "vendor_num": "", "vendor_num_url": "", "price": 30.74, "order": 1 }
+  ]
+}
+```
+
+- `manufacturers[]` — one entry per manufacturer that makes this tool. `edp` is the manufacturer's part number. `mfg_num` is a separate manufacturer-assigned number with **no ProShop column** (purely internal).
+- `vendors[]` — one entry per vendor that sells this tool, linked to a manufacturer via `manufacturer_id`. `vendor_num` is the *vendor's own* catalog/stock number — distinct from the manufacturer's `edp`. `price` is a number.
+- `*_url` fields are optional strings; empty string = no link. When present, the corresponding number renders as a clickable link with a small `ExternalLink` icon.
+- `order` on both arrays drives drag-to-reorder position (manufacturers reorder among themselves; vendors reorder within their manufacturer group).
+- A per-vendor `lead_time` field is anticipated but not yet implemented — see the `// TODO` comment in `buildMetadataTool` (`src/schema/toolSchema.js`).
+
+### EDP# disambiguation (ProShop import/export)
+
+ProShop's CSV has a single `EDP#` column per Approved-Brand row, but it's ambiguous — sometimes the manufacturer's part number, sometimes the vendor's own stock number. `VENDORS_WITH_OWN_NUMBERS` (`src/schema/vendorRegistry.js`) resolves this:
+
+- **Import** (`buildPurchasingFromGroup`, `src/components/ImportFlow.jsx`): for each row, if `Vendor` is in `VENDORS_WITH_OWN_NUMBERS` → that row's `EDP#` becomes the vendor's `vendor_num`; otherwise it becomes the manufacturer's `edp` (first non-empty value per manufacturer wins).
+- **Export** (`buildBrandRows`, `tool-extractor.tsx`): for each manufacturer/vendor pair, the `EDP#` column = `vendors[].vendor_num || manufacturers[].edp`.
+- `mfg_num` has no ProShop column in either direction.
+
+### `vendorRegistry.js`
+
+`src/schema/vendorRegistry.js` holds:
+- `MANUFACTURER_LIST` / `VENDOR_LIST` — plain string arrays for `<datalist>` autocomplete (relocated from `tool-extractor.tsx`, which now imports and re-exports them unchanged).
+- `VENDORS_WITH_OWN_NUMBERS` (a `Set`) + `vendorHasOwnCatalogNumber(name)` — drives the Vendor# field's default visibility in the Purchasing UI: shown automatically for vendors in this set; hidden for other vendors unless a `vendor_num` is already stored (with a "+ Add vendor #" toggle to reveal manually).
+
+### Purchasing UI (`PurchasingSection.jsx`)
+
+A collapsible "Purchasing" panel in `ToolDetail`'s right column. Nested table: outer rows are manufacturers (Manufacturer / MFG# / EDP#), each with an inner table of its vendors (Vendor / Cost / Vendor#). `[+ Add manufacturer]` / `[+ Add vendor]` buttons. Drag-to-reorder follows the same pattern as `PresetPanel.jsx` (`GripVertical` handle, hover-to-reveal delete `×`) — manufacturers reorder among themselves, vendors reorder within their manufacturer group.
 
 -----
 
@@ -816,11 +865,13 @@ The ToolDetail view uses a three-zone layout:
    - Description in a violet rounded badge (`.description-badge`)
    - ProShop ID in an amber pill (`.proshot-pill`)
 
-3. **Scrollable main content** (`.tool-detail-main`): two-column layout
-   - Left column: Identity (includes machine tool # T/H/D), Geometry, Holder, Assemblies, Presets, Setup, History, Merge History
-   - Right sidebar: Notes & Tags only
+3. **Scrollable main content** (`.tool-detail-main`): two-column layout (`.detail-layout`, ~65% / 35% via `grid-template-columns: 65fr 35fr`)
+   - Left column (`.detail-layout-left`): Geometry, Assemblies, Holder, Presets, Setup, Files & Attachments, History (incl. Merge History)
+   - Right column (`.detail-layout-right`): Identity (includes machine tool # T/H/D, top), Photo, Purchasing, Notes & Tags
 
-Machine tool number is shown inside the Identity section (not as a standalone block). History and Merge History are at the bottom of the left column.
+Machine tool number is shown inside the Identity section (not as a standalone block). History and Merge History are combined in one panel at the bottom of the left column.
+
+**Mobile** (`max-width: 768px`): `.detail-layout` collapses to a single column and `.detail-layout-right` is reordered (`order: -1`) to appear **above** `.detail-layout-left` — Identity/Photo/Purchasing/Notes are seen first, before Geometry etc.
 
 ### Data-field visual token system
 
@@ -985,7 +1036,7 @@ All metadata-only (never written to Fusion) — added to `tool_metadata.json` vi
 - **APS token in memory only** — `window._apsToken`, never localStorage. The refresh token is stored in `sessionStorage` (`aps_refresh_token`) so the session survives page refreshes within the same browser tab.
 - **Always re-download before write** — call `downloadFusionList()` immediately before any `uploadFusionList()`.
 - **No extra fields in Fusion JSON** — Fusion validates strictly. Only Fusion-native fields go in the library file; everything else goes in `tool_metadata.json`. Exception: `geometry.assemblyGaugeLength` is a Fusion-native field (nested in `geometry`; = holder gauge length + OOH, not OOH alone), safe to write.
-- **`proshot_id` is the primary match key** — it is Fusion's `product-id` field (the ProShop-assigned number). Do not confuse with `product_id` (manufacturer EDP number, metadata-only).
+- **`proshot_id` is the primary match key** — it is Fusion's `product-id` field (the ProShop-assigned number). There is no separate `product_id` field — manufacturer part numbers live per-manufacturer in `purchasing.manufacturers[].edp` (see Purchasing / Vendor Data Model).
 - **Every length is stored in its record's own unit** (tool lengths in the tool's unit, holder gauge in the holder's unit) — OOH/min_ooh included. Convert only at cross-unit boundaries via `src/utils/units.js` (`convertLength`); never to a hidden inches canonical.
 - **Preset GUIDs are stable through the merge flow** — `presetsToAdd` GUIDs must not be regenerated after DiffStep. The assembly record in CommitStep uses them.
 - **Conflict presets must get a new GUID** — when a conflict preset is resolved as 'create', the incoming preset's GUID matches the master, so `generateId()` must produce a fresh one.
