@@ -35,6 +35,15 @@ function shouldShowVendorNum(vendor, revealedVendorNums) {
   return vendorHasOwnCatalogNumber(vendor.name) || !!vendor.vendor_num || revealedVendorNums.has(vendor.id);
 }
 
+// Cheapest-first comparator for the read-only vendor list. Vendors without a
+// price sort to the bottom, in their stored order.
+function byPriceAsc(a, b) {
+  if (a.price == null && b.price == null) return 0;
+  if (a.price == null) return 1;
+  if (b.price == null) return -1;
+  return a.price - b.price;
+}
+
 // A number field (EDP#, MFG#, Vendor#) — view mode shows the value as a link
 // (with an ExternalLink icon) when a URL is stored, plain text otherwise.
 // Edit mode shows the value input plus an optional URL input below it.
@@ -57,17 +66,17 @@ function NumCell({ value, url, placeholder, editing, onChangeValue, onChangeUrl 
       </div>
     );
   }
-  if (!value) return <div className="purchasing-cell purchasing-cell--num detail-field-empty">—</div>;
+  if (!value) return <div className="purchasing-cell purchasing-cell--num purchasing-value detail-field-empty">—</div>;
   if (url) {
     return (
-      <div className="purchasing-cell purchasing-cell--num">
+      <div className="purchasing-cell purchasing-cell--num purchasing-value">
         <a className="purchasing-link font-mono" href={url} target="_blank" rel="noopener noreferrer">
           {value}<ExternalLink size={12} />
         </a>
       </div>
     );
   }
-  return <div className="purchasing-cell purchasing-cell--num font-mono">{value}</div>;
+  return <div className="purchasing-cell purchasing-cell--num purchasing-value font-mono">{value}</div>;
 }
 
 function PriceCell({ value, editing, onChange }) {
@@ -87,7 +96,7 @@ function PriceCell({ value, editing, onChange }) {
     );
   }
   return (
-    <div className={`purchasing-cell purchasing-cell--num ${value == null ? 'detail-field-empty' : ''}`}>
+    <div className={`purchasing-cell purchasing-cell--num purchasing-value ${value == null ? 'detail-field-empty' : ''}`}>
       {value != null ? `$${Number(value).toFixed(2)}` : '—'}
     </div>
   );
@@ -111,14 +120,14 @@ function MfgRow({ mfg, editing, isDragOver, onChange, onRemove, dragHandlers }) 
       <RowGrip editing={editing} onRemove={onRemove} />
       {editing ? (
         <input
-          className="field-input purchasing-cell purchasing-cell--name"
+          className="field-input purchasing-cell purchasing-cell--name purchasing-mfg-name"
           list="purchasing-mfr-list"
           placeholder="Manufacturer"
           value={mfg.name}
           onChange={e => onChange({ name: e.target.value })}
         />
       ) : (
-        <div className="purchasing-cell purchasing-cell--name truncate" title={mfg.name}>{mfg.name || '—'}</div>
+        <div className="purchasing-cell purchasing-cell--name purchasing-value purchasing-mfg-name truncate" title={mfg.name}>{mfg.name || '—'}</div>
       )}
       <NumCell
         value={mfg.mfg_num}
@@ -154,7 +163,7 @@ function VendorRow({ vendor, editing, isDragOver, revealed, onChange, onRemove, 
           onChange={e => onChange({ name: e.target.value })}
         />
       ) : (
-        <div className="purchasing-cell purchasing-cell--name truncate" title={vendor.name}>{vendor.name || '—'}</div>
+        <div className="purchasing-cell purchasing-cell--name purchasing-value truncate" title={vendor.name}>{vendor.name || '—'}</div>
       )}
       <PriceCell value={vendor.price} editing={editing} onChange={v => onChange({ price: v })} />
       {showNum ? (
@@ -186,8 +195,15 @@ export default function PurchasingSection({ tool, onSave, isSaving }) {
   const dragSrc = useRef(null);
 
   const manufacturers = [...(data.manufacturers || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  // Order-based — used for drag-reorder bookkeeping (must match handleVendorDrop's view of the group).
   const vendorsFor = (mfgId) =>
     (data.vendors || []).filter(v => v.manufacturer_id === mfgId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  // Display order — while editing, vendors stay in their drag-ordered sequence;
+  // otherwise the cheapest vendor is shown first.
+  const displayVendorsFor = (mfgId) => {
+    const ordered = vendorsFor(mfgId);
+    return editing ? ordered : [...ordered].sort(byPriceAsc);
+  };
 
   const startEditing = () => {
     setData(tool.purchasing || emptyPurchasing());
@@ -300,19 +316,16 @@ export default function PurchasingSection({ tool, onSave, isSaving }) {
             <div className="detail-field-empty text-sm">No purchasing info yet.</div>
           )}
 
-          {(manufacturers.length > 0 || editing) && (
-            <div className="purchasing-header-row">
-              <div className="purchasing-cell" />
-              <div className="purchasing-cell purchasing-cell--name">Manufacturer</div>
-              <div className="purchasing-cell purchasing-cell--num">MFG#</div>
-              <div className="purchasing-cell purchasing-cell--num">EDP#</div>
-            </div>
-          )}
-
           {manufacturers.map((mfg, mIdx) => {
-            const vendors = vendorsFor(mfg.id);
+            const vendors = displayVendorsFor(mfg.id);
             return (
-              <div key={mfg.id} className="purchasing-mfg-block">
+              <div key={mfg.id} className="purchasing-mfg-card">
+                <div className="purchasing-header-row">
+                  <div className="purchasing-cell" />
+                  <div className="purchasing-cell purchasing-cell--name">Manufacturer</div>
+                  <div className="purchasing-cell purchasing-cell--num">MFG#</div>
+                  <div className="purchasing-cell purchasing-cell--num">EDP#</div>
+                </div>
                 <MfgRow
                   mfg={mfg}
                   editing={editing}
@@ -329,38 +342,40 @@ export default function PurchasingSection({ tool, onSave, isSaving }) {
                 />
 
                 {(vendors.length > 0 || editing) && (
-                  <div className="purchasing-vendor-table">
-                    <div className="purchasing-header-row">
-                      <div className="purchasing-cell" />
-                      <div className="purchasing-cell purchasing-cell--name">Vendor</div>
-                      <div className="purchasing-cell purchasing-cell--num">Cost</div>
-                      <div className="purchasing-cell purchasing-cell--num">Vendor#</div>
+                  <>
+                    <div className="purchasing-vendor-table">
+                      <div className="purchasing-header-row">
+                        <div className="purchasing-cell" />
+                        <div className="purchasing-cell purchasing-cell--name">Vendor</div>
+                        <div className="purchasing-cell purchasing-cell--num">Cost</div>
+                        <div className="purchasing-cell purchasing-cell--num">Vendor#</div>
+                      </div>
+                      {vendors.map((vendor, vIdx) => (
+                        <VendorRow
+                          key={vendor.id}
+                          vendor={vendor}
+                          editing={editing}
+                          revealed={revealedVendorNums}
+                          isDragOver={dragOverKey === `vendor-${mfg.id}-${vIdx}`}
+                          onChange={patch => updateVendor(vendor.id, patch)}
+                          onRemove={() => removeVendor(vendor.id)}
+                          onReveal={() => revealVendorNum(vendor.id)}
+                          dragHandlers={editing ? {
+                            draggable: true,
+                            onDragStart: e => handleDragStart(e, `vendor-${mfg.id}-${vIdx}`),
+                            onDragOver: e => handleDragOver(e, `vendor-${mfg.id}-${vIdx}`),
+                            onDrop: e => handleVendorDrop(e, mfg.id, vIdx),
+                            onDragEnd: handleDragEnd,
+                          } : {}}
+                        />
+                      ))}
                     </div>
-                    {vendors.map((vendor, vIdx) => (
-                      <VendorRow
-                        key={vendor.id}
-                        vendor={vendor}
-                        editing={editing}
-                        revealed={revealedVendorNums}
-                        isDragOver={dragOverKey === `vendor-${mfg.id}-${vIdx}`}
-                        onChange={patch => updateVendor(vendor.id, patch)}
-                        onRemove={() => removeVendor(vendor.id)}
-                        onReveal={() => revealVendorNum(vendor.id)}
-                        dragHandlers={editing ? {
-                          draggable: true,
-                          onDragStart: e => handleDragStart(e, `vendor-${mfg.id}-${vIdx}`),
-                          onDragOver: e => handleDragOver(e, `vendor-${mfg.id}-${vIdx}`),
-                          onDrop: e => handleVendorDrop(e, mfg.id, vIdx),
-                          onDragEnd: handleDragEnd,
-                        } : {}}
-                      />
-                    ))}
                     {editing && (
                       <button type="button" className="btn btn-ghost btn-sm purchasing-add-vendor" onClick={() => addVendor(mfg.id)}>
                         <Plus size={12} /> Add vendor
                       </button>
                     )}
-                  </div>
+                  </>
                 )}
               </div>
             );
