@@ -84,7 +84,7 @@ function PriceCell({ value, editing, onChange }) {
     return (
       <div className="purchasing-cell purchasing-cell--num">
         <input
-          className="field-input"
+          className="field-input purchasing-price-input"
           type="number"
           step="0.01"
           min="0"
