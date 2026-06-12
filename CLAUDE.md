@@ -67,6 +67,8 @@ A **logical tool** maps to **N Fusion library entries ("instances")** — one in
 
 `<MaterialCode> <OOH> <HolderShort> - <Operation>` — e.g. `SS 2.125 30-SK13-60 - Rough`. The name is the **durable source of truth** for the preset's assembly + operation. Helpers in `src/utils/presetNaming.js`: `composePresetName`, `parsePresetName`, `presetMatchesAssembly` (links a preset to an assembly by parsed holder short name + OOH within 0.0005"), `OP_TYPES`/`opTypeWord`/`matchOpType`. Holder short names (strip `NBT`, drop the `C` after `SK<n>`, + override map) come from `src/utils/holderNaming.js`. `operation_type` is stored on the in-memory preset and cached in metadata (`preset_meta`), but is **never written into the Fusion JSON** (Fusion validates strictly) — it lives in the name. On import, operation_type is parsed from the name; the name wins on conflict.
 
+**Auto-name builds incrementally**: `composePresetName` tolerates missing pieces — `materialQuery`, `ooh`, `holderShort`, and `opType` can each be `null`/absent, and the name is composed from whatever is filled in (blank pieces are filtered before joining; `materialToCode` falls back to `'GEN'`). `EditCard.composeName` (`PresetPanel.jsx`) no longer early-returns when there's no linked assembly or no operation type selected — the live preview updates as soon as *any* relevant field is set, instead of waiting until everything (incl. a holder) is filled in.
+
 ### Stepdown / stepover three-way sync (Fusion gotcha)
 
 Each Fusion preset stores stepdown and stepover in **three** places that must agree: the `use-stepdown`/`use-stepover` **boolean**, the **numeric** `stepdown`/`stepover`, and an **expression string** (`expressions.tool_stepdown` / `tool_stepover`, e.g. `".018 in"`). **Fusion re-derives the checkbox from the expression on load** — so if we write the boolean `false` but leave a leftover expression, Fusion flips the flag back to `true` on the next pull (the recurring "use stepdown/stepover became true" bug). `normalizePreset` (`src/schema/toolSchema.js`) is the single point that keeps all three consistent: the **boolean is the source of truth**, the numeric value is sourced from the field *or* parsed from the expression (the value sometimes lives only in the expression), and the step expression is **stripped whenever the flag is disabled**. Any new code that writes presets to Fusion must preserve this invariant — never set a step boolean without syncing its number and expression.
@@ -125,6 +127,10 @@ Only write geometry fields that the tool actually uses. `internalToFusionTool` w
 For **chamfer mill** only, `internalToFusionTool` additionally writes a chamfer-mill-only Fusion-native expression: `expressions.tool_inclusiveAngle = "${TA * 2} degrees"` — confirmed from a real Fusion export (chamfer mill `geometry.TA: 45` → `expressions.tool_inclusiveAngle: "90 degrees"`). Same write condition as `TA` (non-zero, or existing entry already had a non-zero `TA`); deleted (not left empty) for every other type — same "write native + expression together, delete when not applicable" pattern as the holder expression fields. **Tapered mill has no such expression** (confirmed absent from a real tapered-mill export even with `TA: 10`) — its ×2/÷2 is UI-only.
 
 Chamfer mill was removed from `tip_angle`'s `appliesToTypes`, `TIP_ANGLE_TYPES`, the TSV `tipAngleTypes` (`fusionExport.js`), and `tool-extractor.tsx`'s `tipTypes` / `FIELD_VISIBILITY.tipAngle` — confirmed via a real Fusion chamfer-mill CSV export, which has `Taper Angle (tool_taperAngle) = '45'` and an **empty** `Tip Angle (tool_tipAngle)`. Fusion itself never writes `tool_tipAngle`/`geometry.SIG` for chamfer mills; the included angle lives entirely in `TA`/`tool_inclusiveAngle`.
+
+**Chamfer mill naming**: `buildDesc` (`src/utils/toolNaming.js`) names chamfer mills from the Included/Inclusive Tip Angle (2 × `taper_angle`), not `tip_angle` (which chamfer mills don't have) — e.g. a 1/8" chamfer with a 90° included angle becomes `1/8 (.125) 90DEG CHAMFER`.
+
+**The `label` prop is a general per-type display-rename hook, not just for Included Tip Angle**: `ToolForm`'s diameter `NumField` and `ToolDetail`'s Diameter `Field` pass `label={fieldLabel('tip_diameter', unit)}` for **tapered mill**, showing "Tip Diameter" instead of "Diameter" — the underlying data is still `tool.diameter` / `geometry.DC`, unchanged. Same pattern (display label override only, no data/schema change) as the Included Tip Angle case above; reuse it for future per-type label tweaks rather than branching the field name itself.
 
 ### Holder gaugeLength — always from the library
 
@@ -606,7 +612,9 @@ The landing page IS the search page. All filtering runs in memory — no API cal
 
 **Cascading faceted search**: each filter narrows the available options for all subsequent filters based on the current result set. Select "Flat End Mill" → type "0.5" diameter → flute count filter shows only counts that exist among 0.5" flat end mills in the library.
 
-Filters: tool type (tile grid) → diameter → flutes → flute length → overall length → material → coating → vendor → preferred machine → material suitability → tags.
+**Tool type is multi-select**: clicking a tile in the type grid toggles it on/off (`ToolTypeGrid`'s `selected` is an array; `onSelect` toggles membership). `activeFilters.toolTypes` is an array of 0+ types — `applyFilters` (`searchEngine.js`) matches a tool if its `tool_type` is in that array (empty array = any type). This lets you search across types that could do the same job (e.g. "flat end mill" + "bull nose end mill" together). `getFacetFields(toolTypes)` (`toolSchema.js`) unions the extra per-type facets (e.g. Corner Radius, tap-only fields) across all selected types. The URL stores selected types as a comma-separated list (`?type=flat+end+mill,bull+nose+end+mill`).
+
+Filters: tool type (tile grid, multi-select) → diameter → flutes → flute length → overall length → material → coating → vendor → preferred machine → material suitability → tags.
 
 Sort options: recently updated, diameter ↑/↓, vendor A–Z, description A–Z. View modes: grid, list. Both persist in localStorage.
 
@@ -661,6 +669,7 @@ These rules apply during the **initial ProShop CSV merge** and on any **subseque
 | `geometry['shoulder-length']` (shoulder length) | Set to MIN OOH at normalization | See MIN OOH rule below |
 | per-assembly `ooh` → `geometry.LB` | Floored at MIN OOH | See MIN OOH rule below |
 | `tsc_capable` (through-spindle coolant) | PS wins | From `Through Coolant` (`true`/`false`); boolean capability flag |
+| `custom_grind` | PS wins | From `Custom Grind` (`true`/`false`, ProShop id `customgrindtool`); same PS-wins boolean pattern as `tsc_capable`. Metadata-only — appears in the Geometry section as "Custom Grind" |
 | `tip_to_first_thread` (taps) | Fill gap only | From `Tip to 1st Full Thread`, converted from the file unit — see note below |
 | All other differences | **Flag** to user | Do not auto-resolve |
 
@@ -757,6 +766,8 @@ During initial normalization, tool descriptions are rationalized. The ProShop de
 **Reuse the existing generator** — `buildDesc()` lives in `src/utils/toolNaming.js` (re-exported from `tool-extractor.tsx` for the extraction UI) and composes a standardized description from a tool's structured fields (e.g. `0.5 4FL EM 1.000LOC`, `#80 135DEG CARB DRILL`). It is a **generator** (specs → description), not rename/diff detection — use it to produce the *suggested* new description; check that file before writing any new naming logic.
 
 For taps, `buildDesc` strips the UNC/UNF thread-series designation from `pitch` via `stripThreadSeries()` — it's implied for inch taps — but **keeps** NPT/NPTF (pipe threads change the tap's form and aren't implied). E.g. `1/4-20 UNC` → `1/4-20 CUT TAP`, but `1/8-27 NPT` → `1/8-27 CUT TAP NPT`.
+
+`LETTER_DRILLS` (`src/utils/toolNaming.js`) deliberately **omits `E` (0.25")** — nobody in the shop calls a 1/4" drill an "E", even though it's technically on the letter-drill chart. `smartDiam` falls through to the fraction `1/4` for that size instead. Don't re-add `E` without re-confirming shop convention.
 
 **Step-by-step UI** (a step in `NormalizeModal`, or a follow-on modal) — for each tool in sequence:
 
