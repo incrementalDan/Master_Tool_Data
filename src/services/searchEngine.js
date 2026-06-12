@@ -139,7 +139,7 @@ export function getAvailableOptions(tools, activeFilters, targetField) {
 
 export function buildIndex(tools) {
   const fieldValues = new Map();
-  const allFacetFields = ['tool_type', 'diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'flute_design', 'material_suitability', 'tags', 'corner_radius'];
+  const allFacetFields = ['tool_type', 'diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'custom_grind', 'flute_design', 'material_suitability', 'tags', 'corner_radius'];
 
   for (const field of allFacetFields) {
     const values = new Set();
@@ -148,8 +148,8 @@ export function buildIndex(tools) {
         (tool.tags || []).forEach(v => v && values.add(v));
       } else if (field === 'material_suitability') {
         (tool.material_suitability || []).forEach(v => v && values.add(v));
-      } else if (field === 'tsc_capable') {
-        values.add(tool.tsc_capable ? 'Yes' : 'No');
+      } else if (typeof tool[field] === 'boolean') {
+        values.add(tool[field] ? 'Yes' : 'No');
       } else {
         const v = tool[field];
         if (v !== null && v !== undefined && v !== '') values.add(v);

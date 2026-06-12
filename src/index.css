@@ -84,6 +84,7 @@ input[type=number]::-webkit-inner-spin-button { opacity: 0.3; }
   font-size: 15px;
   color: var(--blue);
   white-space: nowrap;
+  text-decoration: none;
 }
 
 .topbar-spacer { flex: 1; }
@@ -382,7 +383,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
    drops its left border/radius (see FacetFilters.jsx). */
 .operator-dial {
   position: relative;
-  width: 36px;
+  width: 28px;
   flex-shrink: 0;
   background: var(--input-bg);
   border: 1px solid var(--border);
@@ -399,7 +400,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 18px;
+  width: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -413,8 +414,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 .operator-dial-faded {
   color: var(--text-sub);
-  opacity: 0.35;
-  font-size: 11px;
+  opacity: 0.45;
+  font-size: 12px;
 }
 
 .operator-dial-zone {

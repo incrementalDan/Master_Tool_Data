@@ -497,12 +497,10 @@ function EditCard({
   // milling tool has no op type selected yet.
   const composeName = (d, asmId, opType) => {
     const a = assemblies.find(x => x.assembly_id === asmId);
-    if (!a) return d.name;
-    if (!isHoleMaking && !opType) return d.name;
     return composePresetName({
       materialQuery: d.material?.query,
-      ooh: a.ooh,
-      holderShort: holderShortName(holderDescOf(a)),
+      ooh: a?.ooh,
+      holderShort: a ? holderShortName(holderDescOf(a)) : null,
       opType: isHoleMaking ? null : opType,
     });
   };

@@ -294,7 +294,7 @@ export default function ToolDetail() {
                 </div>
               )}
               <div className="detail-fields">
-                <Field label="Diameter" value={round4(tool.diameter)} unit={lenUnit} />
+                <Field label={tool.tool_type === 'tapered mill' ? 'Tip Diameter' : 'Diameter'} value={round4(tool.diameter)} unit={lenUnit} />
                 <Field label="Flute Length" value={round4(tool.flute_length)} unit={lenUnit} />
                 <Field label="Overall Length" value={round4(tool.overall_length)} unit={lenUnit} />
                 <Field label="# Flutes" value={tool.number_of_flutes} />
@@ -313,6 +313,7 @@ export default function ToolDetail() {
                 {tool.profile_radius && <Field label="Profile Radius" value={round4(tool.profile_radius)} unit={lenUnit} />}
                 {tool.axial_distance && <Field label="Axial Distance" value={round4(tool.axial_distance)} unit={lenUnit} />}
                 <Field label="Length Below Holder - MIN OOH" value={tool.min_ooh != null ? round4(tool.min_ooh) : null} unit={lenUnit} />
+                <Field label="Custom Grind" value={tool.custom_grind ? 'Yes' : 'No'} />
               </div>
               {geoIssues.length > 0 && (
                 <div className="warn-banner" style={{ marginTop: 8 }}>

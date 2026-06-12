@@ -381,7 +381,9 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
           </div>
         )}
         <div className="form-grid">
-          <NumField field="diameter" data={data} setField={setField} required warn={geoIssueFields.has('diameter')} />
+          <NumField field="diameter" data={data} setField={setField} required warn={geoIssueFields.has('diameter')}
+            label={data.tool_type === 'tapered mill' ? fieldLabel('tip_diameter', data.unit) : undefined}
+          />
           {visibleFields.has('number_of_flutes') && <NumField field="number_of_flutes" data={data} setField={setField} />}
           {visibleFields.has('flute_length') && <NumField field="flute_length" data={data} setField={setField} warn={geoIssueFields.has('flute_length')} />}
           {visibleFields.has('overall_length') && <NumField field="overall_length" data={data} setField={setField} warn={geoIssueFields.has('overall_length')} />}
@@ -404,6 +406,13 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
           {visibleFields.has('profile_radius') && <NumField field="profile_radius" data={data} setField={setField} />}
           {visibleFields.has('axial_distance') && <NumField field="axial_distance" data={data} setField={setField} />}
           <NumField field="min_ooh" data={data} setField={setField} warn={geoIssueFields.has('min_ooh')} />
+          <div className="field-group">
+            <label className="field-label">Custom Grind</label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6, cursor: 'pointer' }}>
+              <input type="checkbox" checked={!!data.custom_grind} onChange={e => setField('custom_grind', e.target.checked)} />
+              <span className="text-sub text-sm">Custom ground tool</span>
+            </label>
+          </div>
         </div>
         {visibleFields.has('cutting_direction') && (
           <div className="form-grid" style={{ marginTop: 10 }}>

@@ -593,6 +593,7 @@ function psRowToTool(group, psUnit = 'inches') {
     backside_capable: r['Backside Capable'] === 'true',
     double_ended: r['Double Ended'] === 'Y',
     tsc_capable: r['Through Coolant'] === 'true',
+    custom_grind: r['Custom Grind'] === 'true',
     material_suitability: r['Recommended Workpiece Material']
       ? r['Recommended Workpiece Material'].split(',').map(s => s.trim()).filter(Boolean)
       : [],
@@ -711,6 +712,9 @@ function matchProShopToTools(groups, tools, psUnit = 'inches') {
       if (purchasing.manufacturers.length || purchasing.vendors.length) additions.purchasing = purchasing;
       if (r['Through Coolant'] === 'true' || r['Through Coolant'] === 'false') {
         additions.tsc_capable = r['Through Coolant'] === 'true';
+      }
+      if (r['Custom Grind'] === 'true' || r['Custom Grind'] === 'false') {
+        additions.custom_grind = r['Custom Grind'] === 'true';
       }
       // min_ooh: ProShop is authoritative — always overwrite when present, after
       // converting from the ProShop file unit into the matched tool's own unit.

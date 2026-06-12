@@ -18,7 +18,7 @@ export const TOOL_TYPES = TT;
 export const TOOL_TYPE_LABELS = TL;
 
 // ─── Facet fields per tool type (search filter order) ─────────────────────
-const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'flute_design', 'material_suitability', 'tags', 'no_fusion_link'];
+const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'custom_grind', 'flute_design', 'material_suitability', 'tags', 'no_fusion_link'];
 
 export function getFacetFields(toolType) {
   if (!toolType) return COMMON_FACETS;
@@ -215,6 +215,7 @@ export function toolToExtractor(tool) {
     presetName: tool.preset_name || '',
     toolNumber: tool.machine_tool_number != null ? String(tool.machine_tool_number) : '',
     coolant: tool.tsc_capable ? 'flood tool' : 'flood',
+    customGrind: tool.custom_grind || false,
     helixAngle: String(tool.helix_angle ?? ''),
     centerCutting: tool.center_cutting || false,
     fluteType: tool.flute_type || '',
@@ -1173,6 +1174,7 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     coating: meta.coating || '',
     purchasing: meta.purchasing || { manufacturers: [], vendors: [] },
     tsc_capable: Boolean(meta.tsc_capable),
+    custom_grind: Boolean(meta.custom_grind),
     center_cutting: meta.center_cutting ?? false,
     // cutting_direction is Fusion-native (geometry.HAND); Fusion wins, metadata fallback.
     cutting_direction: fusionInternal.cutting_direction || meta.cutting_direction || 'Right Hand',
@@ -1273,6 +1275,7 @@ export function buildMetadataTool(tool) {
       })),
     },
     tsc_capable: tool.tsc_capable ?? false,
+    custom_grind: tool.custom_grind ?? false,
     center_cutting: tool.center_cutting || false,
     cutting_direction: tool.cutting_direction || 'Right Hand',
     helix_angle: tool.helix_angle ?? null,
@@ -1555,6 +1558,7 @@ export function newTool(toolType = 'flat end mill') {
     flute_type: '',
     flute_design: '',
     tsc_capable: false,
+    custom_grind: false,
     cutting_direction: 'Right Hand',
     pitch: '',
     thread_pitch: null,
