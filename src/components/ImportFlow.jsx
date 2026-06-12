@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud } from 'lucide-react';
+import { UploadCloud, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers, typeFromProShopGroup } from '../schema/toolSchema.js';
 import { vendorHasOwnCatalogNumber, resolveVendorName } from '../schema/vendorRegistry.js';
@@ -142,6 +142,11 @@ export default function ImportFlow() {
   };
 
   const skipProShop = () => setStep(3);
+
+  // Tools added from unmatched ProShop rows (no_fusion_link) get a brand-new
+  // placeholder entry created in the Fusion library on save — surfaced as a
+  // heads-up on the Review step so it isn't a surprise.
+  const newPlaceholderCount = fusionTools.filter(t => t.no_fusion_link).length;
 
   // ── Step 4: Assign machine numbers, then save ─────────────────────────
   // Numbers are assigned in current import (array) order, starting at #30 and
@@ -373,6 +378,17 @@ export default function ImportFlow() {
           <p className="text-sub text-sm mb-16">
             {fusionTools.length} tools ready to save. Export as needed, then save to Drive.
           </p>
+
+          {newPlaceholderCount > 0 && (
+            <div className="warn-banner mb-16">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+                {newPlaceholderCount} {newPlaceholderCount === 1 ? 'tool has' : 'tools have'} no matching
+                Fusion entry ("No Fusion Link"). Saving will create a placeholder entry in your Fusion
+                library for each one — they'll need geometry, presets, and holder/assembly setup before use.
+              </div>
+            </div>
+          )}
 
           <div className="flex gap-8 mb-20" style={{ flexWrap: 'wrap' }}>
             <button className="btn btn-secondary" onClick={() => { markSetupStep('proshopExported'); exportProShop(fusionTools); }}>
