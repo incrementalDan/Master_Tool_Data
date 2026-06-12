@@ -26,14 +26,14 @@ export default function LandingPage() {
   const searchRef = useRef(null);
 
   // Restore filters from URL hash params
-  const initType = searchParams.get('type') || null;
+  const initTypes = (searchParams.get('type') || '').split(',').filter(Boolean);
   const initQuery = searchParams.get('q') || '';
   const initFacets = (() => {
     try { return JSON.parse(searchParams.get('f') || '{}'); } catch { return {}; }
   })();
 
   const [textQuery, setTextQuery] = useState(initQuery);
-  const [selectedType, setSelectedType] = useState(initType);
+  const [selectedTypes, setSelectedTypes] = useState(initTypes);
   const [facets, setFacets] = useState(initFacets);
   const [displayQuery, setDisplayQuery] = useState(initQuery);
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'grid');
@@ -43,12 +43,12 @@ export default function LandingPage() {
   // Persist filters to URL
   useEffect(() => {
     const params = {};
-    if (selectedType) params.type = selectedType;
+    if (selectedTypes.length > 0) params.type = selectedTypes.join(',');
     if (textQuery) params.q = textQuery;
     const facetsStr = JSON.stringify(facets);
     if (facetsStr !== '{}') params.f = facetsStr;
     setSearchParams(params, { replace: true });
-  }, [selectedType, textQuery, facets, setSearchParams]);
+  }, [selectedTypes, textQuery, facets, setSearchParams]);
 
   useEffect(() => { localStorage.setItem(VIEW_KEY, view); }, [view]);
   useEffect(() => { localStorage.setItem(SORT_KEY, sort); }, [sort]);
@@ -65,11 +65,11 @@ export default function LandingPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const activeFilters = { toolType: selectedType, textQuery, facets };
+  const activeFilters = { toolTypes: selectedTypes, textQuery, facets };
   const filtered = useMemo(() => {
     const result = applyFilters(tools, activeFilters);
     return [...result].sort(SORTS[sort]?.fn || SORTS.updated.fn);
-  }, [tools, selectedType, textQuery, facets, sort]);
+  }, [tools, selectedTypes, textQuery, facets, sort]);
 
   const handleQueryChange = useCallback((val) => {
     setDisplayQuery(val);
@@ -77,17 +77,20 @@ export default function LandingPage() {
     debounceRef.current = setTimeout(() => setTextQuery(val), DEBOUNCE_MS);
   }, []);
 
+  // Toggles a tool type's membership in the multi-select — e.g. searching
+  // "bull nose end mill" and "flat end mill" together when either could do the job.
   const handleTypeSelect = (type) => {
-    setSelectedType(type);
-    if (!type) setFacets({});
+    const next = selectedTypes.includes(type) ? selectedTypes.filter(t => t !== type) : [...selectedTypes, type];
+    setSelectedTypes(next);
+    if (next.length === 0) setFacets({});
   };
 
   const handleFilterChange = (newFilters) => {
-    setSelectedType(newFilters.toolType);
+    setSelectedTypes(newFilters.toolTypes || []);
     setFacets(newFilters.facets || {});
   };
 
-  const hasFilters = selectedType || textQuery || Object.keys(facets).length > 0;
+  const hasFilters = selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0;
 
   if (isLoading) {
     return (
@@ -141,14 +144,22 @@ export default function LandingPage() {
         </button>
       </div>
 
-      {/* Tool type grid */}
+      {/* Tool type grid — multi-select: pick several types that could do the
+          same job (e.g. flat end mill + bull nose end mill) to search both at once */}
       <div className="mb-16">
-        <div className="section-header">Tool Type</div>
-        <ToolTypeGrid selected={selectedType} onSelect={handleTypeSelect} />
+        <div className="section-header">
+          Tool Type
+          {selectedTypes.length > 1 && (
+            <span className="text-sub text-xs" style={{ textTransform: 'none', letterSpacing: 'normal' }}>
+              {' '}· {selectedTypes.length} selected
+            </span>
+          )}
+        </div>
+        <ToolTypeGrid selected={selectedTypes} onSelect={handleTypeSelect} />
       </div>
 
-      {/* Facet filters (shown when type selected) */}
-      {selectedType && (
+      {/* Facet filters (shown when at least one type selected) */}
+      {selectedTypes.length > 0 && (
         <div className="mb-16">
           <FacetFilters
             tools={tools}
@@ -168,7 +179,7 @@ export default function LandingPage() {
         {hasFilters && (
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => { setSelectedType(null); setFacets({}); setTextQuery(''); setDisplayQuery(''); }}
+            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); }}
           >
             Reset
           </button>

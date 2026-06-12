@@ -20,19 +20,26 @@ export const TOOL_TYPE_LABELS = TL;
 // ─── Facet fields per tool type (search filter order) ─────────────────────
 const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'custom_grind', 'flute_design', 'material_suitability', 'tags', 'no_fusion_link'];
 
-export function getFacetFields(toolType) {
-  if (!toolType) return COMMON_FACETS;
+// toolTypes: array of selected tool types (0, 1, or many). With multiple types
+// selected, the extra per-type facets are unioned so e.g. picking "bull nose
+// end mill" + "flat end mill" still surfaces Corner Radius.
+export function getFacetFields(toolTypes) {
+  const types = Array.isArray(toolTypes) ? toolTypes : (toolTypes ? [toolTypes] : []);
+  if (types.length === 0) return COMMON_FACETS;
   const extras = [];
-  if (toolType === 'bull nose end mill' || toolType === 'radius mill' || toolType === 'lollipop mill') {
-    extras.push('corner_radius');
-  }
-  if (toolType === 'tap') {
-    extras.push('tap_sub_type', 'is_sti', 'pitch', 'tap_thread_unit', 'cutting_direction', 'tap_class', 'class_of_fit');
-  } else if (toolType === 'thread mill') {
-    extras.push('pitch', 'tap_thread_unit', 'cutting_direction');
-  }
-  if (toolType === 'drill' || toolType === 'spot drill' || toolType === 'center drill') {
-    extras.push('tip_angle');
+  const addExtra = (f) => { if (!extras.includes(f)) extras.push(f); };
+  for (const toolType of types) {
+    if (toolType === 'bull nose end mill' || toolType === 'radius mill' || toolType === 'lollipop mill') {
+      addExtra('corner_radius');
+    }
+    if (toolType === 'tap') {
+      ['tap_sub_type', 'is_sti', 'pitch', 'tap_thread_unit', 'cutting_direction', 'tap_class', 'class_of_fit'].forEach(addExtra);
+    } else if (toolType === 'thread mill') {
+      ['pitch', 'tap_thread_unit', 'cutting_direction'].forEach(addExtra);
+    }
+    if (toolType === 'drill' || toolType === 'spot drill' || toolType === 'center drill') {
+      addExtra('tip_angle');
+    }
   }
   return [...COMMON_FACETS, ...extras];
 }

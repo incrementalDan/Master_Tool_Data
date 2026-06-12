@@ -39,8 +39,9 @@ function matchesNumericFacet(toolValue, filter) {
 }
 
 // activeFilters shape:
-// { toolType, textQuery, facets: { diameter, number_of_flutes, flute_length, overall_length, material, coating, vendor, preferred_machine, material_suitability, tags, ... } }
-// Numeric facets are { value, op } objects (see isOperatorFilter); everything else is a bare string/array.
+// { toolTypes, textQuery, facets: { diameter, number_of_flutes, flute_length, overall_length, material, coating, vendor, preferred_machine, material_suitability, tags, ... } }
+// toolTypes is an array — empty/absent means "any type". Numeric facets are { value, op }
+// objects (see isOperatorFilter); everything else is a bare string/array.
 export function applyFilters(tools, activeFilters) {
   let result = tools;
 
@@ -48,8 +49,8 @@ export function applyFilters(tools, activeFilters) {
     result = textSearch(result, activeFilters.textQuery);
   }
 
-  if (activeFilters.toolType) {
-    result = result.filter(t => t.tool_type === activeFilters.toolType);
+  if (activeFilters.toolTypes?.length) {
+    result = result.filter(t => activeFilters.toolTypes.includes(t.tool_type));
   }
 
   const facets = activeFilters.facets || {};
