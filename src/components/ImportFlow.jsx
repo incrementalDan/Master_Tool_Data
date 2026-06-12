@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { UploadCloud } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers } from '../schema/toolSchema.js';
+import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers, typeFromProShopGroup } from '../schema/toolSchema.js';
 import { vendorHasOwnCatalogNumber, resolveVendorName } from '../schema/vendorRegistry.js';
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
@@ -548,18 +548,21 @@ function psNum(v) {
 
 function psRowToTool(group, psUnit = 'inches') {
   const r = group[0];
+  const grouping = r['Tool Group'] || '';
+  const cornerRadius = psNum(r['CornerRad']);
+  const toolType = typeFromProShopGroup(grouping, { description: r['Description'], cornerRadius }) || 'flat end mill';
   return {
-    ...newTool('flat end mill'),
+    ...newTool(toolType),
     unit: psUnit,
     proshot_id: r['Tool #'] || '',
-    grouping: r['Tool Group'] || '',
+    grouping,
     description: r['Description'] || '',
     diameter: psNum(r['Cut Dia']),
     flute_length: psNum(r['LOC']),
     overall_length: psNum(r['Overall Length']),
     number_of_flutes: parseInt(r['No.ofFlutes']) || null,
     shank_diameter: psNum(r['Shank Diameter']),
-    corner_radius: psNum(r['CornerRad']),
+    corner_radius: cornerRadius,
     tip_angle: psNum(r['Tip Angle']),
     tip_diameter: psNum(r['Tip Diameter']),
     helix_angle: psNum(r['HelixAngle']),

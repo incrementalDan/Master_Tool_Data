@@ -628,6 +628,22 @@ ProShop export must never be removed even as the app evolves toward a future ERP
 
 **Multi-row groups (Approved Brands)**: ProShop exports one row per `Tool #` normally, but a tool with multiple Approved Brand / purchasing options spans **multiple rows sharing the same `Tool #`** — geometry/spec columns are populated only on the first row of the group, and each row contributes one manufacturer/vendor pair (`Approved Brand` / `Vendor` / `EDP#` / `Cost`) to the normalized `purchasing.{manufacturers,vendors}` model — see Purchasing / Vendor Data Model. Import groups rows by `Tool #` before matching (`handleProShopFile`) and builds the normalized shape via `buildPurchasingFromGroup` (`src/components/ImportFlow.jsx`); export emits the same row shape via `buildBrandRows`/`buildProShopCSV` (`tool-extractor.tsx`) and `exportFullLibrary` (`src/utils/proShopExport.js`).
 
+### Tool Group letter ↔ tool_type classification
+
+ProShop's **Tool Group** column (`toolGroupLetter`, e.g. `A`, `B`, `L`, `R`, `TD`...) is this shop's own filing scheme for the physical tool cabinets — see `PS_GROUPS` (`tool-extractor.tsx`) for the full letter → meaning reference list. `AUTO_GROUP` maps our `tool_type` → group letter for **export** (`toolToExtractor`'s `grouping: tool.grouping || AUTO_GROUP[tool.tool_type] || 'M'`, written to the `toolGroupLetter` column via `PS_MAIN_COLS`).
+
+**Import** (`psRowToTool`, `src/components/ImportFlow.jsx`) needs the reverse — a brand-new tool created from an unmatched ProShop row has no Fusion entry to read `tool_type` from, so it must be inferred from the row. `typeFromProShopGroup(letter, { description, cornerRadius })` (`tool-extractor.tsx`, re-exported from `toolSchema.js`) is the reverse of `AUTO_GROUP`. Several letters cover more than one `tool_type` (`AUTO_GROUP` is many-to-one), so it disambiguates using cues from the row:
+
+- **A** (Square and Bull Endmill) → `bull nose end mill` if `CornerRad` is non-zero, else `flat end mill` — square end mills have no corner radius, bull nose end mills do.
+- **B** (Ball Endmill) → always `ball end mill`. ProShop's stock group-B label also mentions "Drill Mill", but this shop doesn't file drill mills under B (and "drill mill" isn't one of our tool types), so `typeFromProShopGroup` never returns it and the `PS_GROUPS` label was shortened to just "Ball Endmill" to stop suggesting it.
+- **F** (Ream and Bore) → `counter bore` if the description contains "bore", else `reamer`.
+- **L** (Chamfer Tool) → `counter sink` if the description contains "sink", else `chamfer mill`.
+- **M** (Special Tooling) → keyword match on the description (`dove`→`dovetail`, `lolli`→`lollipop mill`, `barrel`/`oval`/`taper`→the matching circle-segment type), else `form mill`.
+- All other letters with a single `AUTO_GROUP` entry (C, D, E, I, J, K, N, O, R, TD, TF) map straight across (e.g. `R`→`tap`, `TD`→`boring head`).
+- Letters with **no** corresponding `tool_type` (G/H/P/Q/S/T/TA-TU — inserts, saws, turning holders/inserts, CMM styli) return `null`; `psRowToTool` falls back to `flat end mill` for these — they're rare in this shop's data and already get `no_fusion_link: true`, flagging them for manual cleanup.
+
+The row's `Tool Group` value itself is always preserved as-is into `tool.grouping` (so export round-trips the original letter even if `typeFromProShopGroup` guessed differently than ProShop's own filing).
+
 -----
 
 ## ProShop Field Priority Rules
