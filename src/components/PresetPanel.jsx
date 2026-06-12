@@ -323,7 +323,8 @@ function CollapsedCard({
   onDragStart, onDragOver, onDrop, onDragEnd,
 }) {
   const isTap = toolType === 'tap';
-  const isDrillFamily = !isTap && HOLE_MAKING_TYPES.has(toolType);
+  const isSpotDrill = toolType === 'spot drill';
+  const isDrillFamily = !isTap && !isSpotDrill && HOLE_MAKING_TYPES.has(toolType);
   const isTurning = TURNING_TYPES.has(toolType);
 
   const mat = matchMaterial(preset.material?.query);
@@ -361,7 +362,14 @@ function CollapsedCard({
         <div className="preset-card-stats">
           <StatRow label="Spindle" value={r4(preset.n)} unit="rpm" />
           <StatRow label="Surface" value={r4(preset.v_c)} unit={sfcLabel} />
-          {isTap ? null : isDrillFamily ? (
+          {isTap ? null : isSpotDrill ? (
+            <>
+              <StatRow label="Cutting" value={r4(preset.v_f)} unit={feedUnit} />
+              <StatRow label="Feed/Tooth" value={r4(preset.f_z)} unit={lenUnit} />
+              <StatRow label="Plunge" value={r4(preset.v_f_plunge)} unit={feedUnit} />
+              <StatRow label="Retract" value={r4(preset['v_f_retract'])} unit={feedUnit} />
+            </>
+          ) : isDrillFamily ? (
             <>
               <StatRow label="Plunge" value={r4(preset.v_f_plunge)} unit={feedUnit} />
               <StatRow label="Retract" value={r4(preset['v_f_retract'])} unit={feedUnit} />
@@ -457,12 +465,17 @@ function EditCard({
   onSave, onCancel, isSaving,
 }) {
   const isTap = toolType === 'tap';
-  const isDrillFamily = !isTap && HOLE_MAKING_TYPES.has(toolType);
-  const isHoleMaking = isTap || isDrillFamily;
+  const isSpotDrill = toolType === 'spot drill';
+  const isDrillFamily = !isTap && !isSpotDrill && HOLE_MAKING_TYPES.has(toolType);
+  const isHoleMaking = isTap || isDrillFamily || isSpotDrill;
   const isTurning = TURNING_TYPES.has(toolType);
   const isMilling = !isHoleMaking && !isTurning;
 
-  const [fx, setFx] = useState(DEFAULT_FX);
+  // Spot drill loads v_f_plunge directly from the preset (no f_n field exists
+  // for this tool type — see normalizePreset's isSpotDrill branch). Without this
+  // override, DEFAULT_FX's v_f_plunge:'formula' would recompute it from the
+  // (nonexistent) f_n on mount, zeroing it out.
+  const [fx, setFx] = useState(() => isSpotDrill ? { ...DEFAULT_FX, v_f_plunge: 'manual' } : DEFAULT_FX);
   const [draft, setDraft] = useState(() => {
     const d = computeFormulaDraft({ ...preset }, DEFAULT_FX, diameter, numberOfFlutes);
     d.operation_type = preset.operation_type ?? parsePresetName(preset.name)?.opType ?? null;
@@ -752,6 +765,53 @@ function EditCard({
             />
             <NField label="Ramp feedrate" value={draft.v_f_ramp}      unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
             <NField label="Ramp angle"    value={draft['ramp-angle']} unit="°"        onChange={v => set('ramp-angle', v)} />
+          </div>
+        </div>
+      )}
+
+      {/* Feedrates — spot drill: milling-style cutting feed + plunge/retract,
+          no feed/rev or ramp angle (see normalizePreset's isSpotDrill branch) */}
+      {isSpotDrill && (
+        <div className="preset-edit-section">
+          <div className="preset-edit-section-label">FEEDRATES</div>
+          <div className="preset-edit-grid">
+            <NField
+              label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
+              formulaField="v_f" formulaState={fx.v_f}
+              warning={noSpeed ? 'Set spindle speed first' : undefined}
+              onChange={v => handleNumChange('v_f', v)}
+            />
+            <NField
+              label="Feed per tooth" value={draft.f_z} unit={lenUnit}
+              formulaField="f_z" formulaState={fx.f_z}
+              warning={noSpeed ? 'Set spindle speed first' : undefined}
+              onChange={v => handleNumChange('f_z', v)}
+            />
+            <NField
+              label="Lead-in feedrate" value={draft.v_f_leadIn} unit={feedUnit}
+              formulaField="v_f_leadIn" formulaState={fx.v_f_leadIn}
+              onChange={v => handleNumChange('v_f_leadIn', v)}
+            />
+            <NField
+              label="Lead-out feedrate" value={draft.v_f_leadOut} unit={feedUnit}
+              formulaField="v_f_leadOut" formulaState={fx.v_f_leadOut}
+              onChange={v => handleNumChange('v_f_leadOut', v)}
+            />
+            <NField
+              label="Transition feedrate" value={draft.v_f_transition} unit={feedUnit}
+              formulaField="v_f_transition" formulaState={fx.v_f_transition}
+              onChange={v => handleNumChange('v_f_transition', v)}
+            />
+            <NField label="Ramp feedrate" value={draft.v_f_ramp} unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
+            <NField
+              label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
+              warning={noSpeed ? 'Set spindle speed first' : undefined}
+              onChange={v => set('v_f_plunge', v)}
+            />
+            <NField
+              label="Retract feedrate" value={draft['v_f_retract']} unit={feedUnit}
+              onChange={v => set('v_f_retract', v)}
+            />
           </div>
         </div>
       )}
