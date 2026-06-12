@@ -38,8 +38,8 @@ function isFacetEmpty(value) {
 }
 
 export default function FacetFilters({ tools, activeFilters, onFilterChange }) {
-  const { toolType, facets = {} } = activeFilters;
-  const facetFields = getFacetFields(toolType);
+  const { toolTypes, facets = {} } = activeFilters;
+  const facetFields = getFacetFields(toolTypes);
 
   const setFacet = (field, value) => {
     const newFacets = { ...facets };

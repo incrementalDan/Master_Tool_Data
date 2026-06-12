@@ -197,10 +197,10 @@ function TopBar({ user, googleAuthenticated, onSignOut, onChangeLibrary }) {
   const onLanding = location.pathname === '/';
   return (
     <header className="topbar">
-      <span className="topbar-brand">
+      <a href="#/" className="topbar-brand" onClick={e => { if (onLanding) e.preventDefault(); }}>
         <Wrench size={17} strokeWidth={2.2} />
         Tool Library
-      </span>
+      </a>
       <span className="topbar-spacer" />
       <a
         href="#/"
@@ -252,10 +252,10 @@ function LocalModeTopBar({ tools, onExit }) {
 
   return (
     <header className="topbar">
-      <span className="topbar-brand">
+      <a href="#/" className="topbar-brand">
         <Wrench size={17} strokeWidth={2.2} />
         Tool Library
-      </span>
+      </a>
       <span className="local-mode-badge" title="Browsing an uploaded library file — view-only, not connected to Autodesk">
         <FolderOpen size={13} /> Local mode (read-only)
       </span>

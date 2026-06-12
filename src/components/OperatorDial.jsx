@@ -4,7 +4,9 @@ import { useRef, useState } from 'react';
 const SEQUENCE = ['<=', '=', '>='];
 export const OP_SYMBOLS = { '<=': '≤', '=': '=', '>=': '≥' };
 
-const SLOT = 18; // px — each neighbor's center sits exactly on a dial edge, half-clipped by overflow:hidden
+const SLOT = 14; // px — each neighbor's center sits exactly on a dial edge, half-clipped by overflow:hidden.
+                 // Kept tight so the faded neighbors read as "next/prev", not as
+                 // separate symbols far from the active one.
 const SETTLED = 'transform 120ms ease-out';
 
 function indexOf(value) {

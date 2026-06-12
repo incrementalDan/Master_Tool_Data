@@ -33,6 +33,9 @@ const GROUPED_TYPES = new Set(TYPE_GROUPS.flatMap(g => g.types));
 const LEFTOVER_TYPES = TOOL_TYPES.filter(t => !GROUPED_TYPES.has(t));
 const GROUPS = LEFTOVER_TYPES.length ? [...TYPE_GROUPS, { label: 'Other', types: LEFTOVER_TYPES }] : TYPE_GROUPS;
 
+// `selected` is an array of currently-selected tool types — clicking a tile
+// toggles its membership, so multiple types (e.g. "flat end mill" and "bull
+// nose end mill") can be searched at once.
 export default function ToolTypeGrid({ selected, onSelect }) {
   return (
     <div>
@@ -43,8 +46,8 @@ export default function ToolTypeGrid({ selected, onSelect }) {
             {group.types.map(type => (
               <button
                 key={type}
-                className={`type-tile ${selected === type ? 'selected' : ''}`}
-                onClick={() => onSelect(selected === type ? null : type)}
+                className={`type-tile ${selected.includes(type) ? 'selected' : ''}`}
+                onClick={() => onSelect(type)}
                 title={TOOL_TYPE_LABELS[type] || type}
               >
                 <span className="type-tile-icon"><ToolTypeIcon type={type} size={36} /></span>

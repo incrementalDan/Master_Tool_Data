@@ -1,8 +1,8 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud } from 'lucide-react';
+import { UploadCloud, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers } from '../schema/toolSchema.js';
+import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers, typeFromProShopGroup } from '../schema/toolSchema.js';
 import { vendorHasOwnCatalogNumber, resolveVendorName } from '../schema/vendorRegistry.js';
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
@@ -142,6 +142,11 @@ export default function ImportFlow() {
   };
 
   const skipProShop = () => setStep(3);
+
+  // Tools added from unmatched ProShop rows (no_fusion_link) get a brand-new
+  // placeholder entry created in the Fusion library on save — surfaced as a
+  // heads-up on the Review step so it isn't a surprise.
+  const newPlaceholderCount = fusionTools.filter(t => t.no_fusion_link).length;
 
   // ── Step 4: Assign machine numbers, then save ─────────────────────────
   // Numbers are assigned in current import (array) order, starting at #30 and
@@ -374,6 +379,17 @@ export default function ImportFlow() {
             {fusionTools.length} tools ready to save. Export as needed, then save to Drive.
           </p>
 
+          {newPlaceholderCount > 0 && (
+            <div className="warn-banner mb-16">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+                {newPlaceholderCount} {newPlaceholderCount === 1 ? 'tool has' : 'tools have'} no matching
+                Fusion entry ("No Fusion Link"). Saving will create a placeholder entry in your Fusion
+                library for each one — they'll need geometry, presets, and holder/assembly setup before use.
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-8 mb-20" style={{ flexWrap: 'wrap' }}>
             <button className="btn btn-secondary" onClick={() => { markSetupStep('proshopExported'); exportProShop(fusionTools); }}>
               ↓ Export Full ProShop CSV
@@ -548,18 +564,21 @@ function psNum(v) {
 
 function psRowToTool(group, psUnit = 'inches') {
   const r = group[0];
+  const grouping = r['Tool Group'] || '';
+  const cornerRadius = psNum(r['CornerRad']);
+  const toolType = typeFromProShopGroup(grouping, { description: r['Description'], cornerRadius }) || 'flat end mill';
   return {
-    ...newTool('flat end mill'),
+    ...newTool(toolType),
     unit: psUnit,
     proshot_id: r['Tool #'] || '',
-    grouping: r['Tool Group'] || '',
+    grouping,
     description: r['Description'] || '',
     diameter: psNum(r['Cut Dia']),
     flute_length: psNum(r['LOC']),
     overall_length: psNum(r['Overall Length']),
     number_of_flutes: parseInt(r['No.ofFlutes']) || null,
     shank_diameter: psNum(r['Shank Diameter']),
-    corner_radius: psNum(r['CornerRad']),
+    corner_radius: cornerRadius,
     tip_angle: psNum(r['Tip Angle']),
     tip_diameter: psNum(r['Tip Diameter']),
     helix_angle: psNum(r['HelixAngle']),
@@ -574,6 +593,7 @@ function psRowToTool(group, psUnit = 'inches') {
     backside_capable: r['Backside Capable'] === 'true',
     double_ended: r['Double Ended'] === 'Y',
     tsc_capable: r['Through Coolant'] === 'true',
+    custom_grind: r['Custom Grind'] === 'true',
     material_suitability: r['Recommended Workpiece Material']
       ? r['Recommended Workpiece Material'].split(',').map(s => s.trim()).filter(Boolean)
       : [],
@@ -692,6 +712,9 @@ function matchProShopToTools(groups, tools, psUnit = 'inches') {
       if (purchasing.manufacturers.length || purchasing.vendors.length) additions.purchasing = purchasing;
       if (r['Through Coolant'] === 'true' || r['Through Coolant'] === 'false') {
         additions.tsc_capable = r['Through Coolant'] === 'true';
+      }
+      if (r['Custom Grind'] === 'true' || r['Custom Grind'] === 'false') {
+        additions.custom_grind = r['Custom Grind'] === 'true';
       }
       // min_ooh: ProShop is authoritative — always overwrite when present, after
       // converting from the ProShop file unit into the matched tool's own unit.

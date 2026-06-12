@@ -431,6 +431,18 @@ export const FIELD_REGISTRY = {
     precision: 4,
   },
 
+  custom_grind: {
+    label: 'Custom Grind',
+    type: 'boolean',
+    unit: null,
+    fusionPath: null,
+    proShopColumn: 'customgrindtool', // ProShop "Custom Grind" (Id: customgrindtool)
+    metadataOnly: true,
+    appliesToTypes: 'all',
+    required: false,
+    precision: null,
+  },
+
   // ── Material & Coating ────────────────────────────────────────────────────
 
   material: {

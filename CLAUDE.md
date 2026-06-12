@@ -67,6 +67,10 @@ A **logical tool** maps to **N Fusion library entries ("instances")** — one in
 
 `<MaterialCode> <OOH> <HolderShort> - <Operation>` — e.g. `SS 2.125 30-SK13-60 - Rough`. The name is the **durable source of truth** for the preset's assembly + operation. Helpers in `src/utils/presetNaming.js`: `composePresetName`, `parsePresetName`, `presetMatchesAssembly` (links a preset to an assembly by parsed holder short name + OOH within 0.0005"), `OP_TYPES`/`opTypeWord`/`matchOpType`. Holder short names (strip `NBT`, drop the `C` after `SK<n>`, + override map) come from `src/utils/holderNaming.js`. `operation_type` is stored on the in-memory preset and cached in metadata (`preset_meta`), but is **never written into the Fusion JSON** (Fusion validates strictly) — it lives in the name. On import, operation_type is parsed from the name; the name wins on conflict.
 
+**Auto-name builds incrementally**: `composePresetName` tolerates missing pieces — `materialQuery`, `ooh`, `holderShort`, and `opType` can each be `null`/absent, and the name is composed from whatever is filled in (blank pieces are filtered before joining; `materialToCode` falls back to `'GEN'`). `EditCard.composeName` (`PresetPanel.jsx`) no longer early-returns when there's no linked assembly or no operation type selected — the live preview updates as soon as *any* relevant field is set, instead of waiting until everything (incl. a holder) is filled in.
+
+**Legacy bare-word preset names — whole-name fallback**: many pre-migration presets don't follow the convention at all; the entire name is just the operation word/abbreviation (e.g. `"Rough"`, `"R"`, `"Finsh"`, `"SM Bore"`). `parsePresetName` first tries `matchOpType` on the tail after `" - "` (the normal convention); if that yields nothing (no separator, or the tail doesn't match), it retries `matchOpType` against the **whole trimmed name**. This lets `normalizeLibrary` auto-assign `operation_type` for these bare names instead of prompting the user in `NormalizeModal`. `OP_TYPES`'s `finish` aliases include `'FINSH'` (a common misspelling) alongside `FINISH`/`FIN`/`F`. Covered aliases: Rough ← `R`/`Rough`; Finish ← `FIN`/`F`/`Finish`/`Finsh`; Small Bore ← `SM BORE`/`Small Bore`. Add new aliases to `OP_TYPES` (`src/utils/presetNaming.js`) rather than special-casing strings elsewhere.
+
 ### Stepdown / stepover three-way sync (Fusion gotcha)
 
 Each Fusion preset stores stepdown and stepover in **three** places that must agree: the `use-stepdown`/`use-stepover` **boolean**, the **numeric** `stepdown`/`stepover`, and an **expression string** (`expressions.tool_stepdown` / `tool_stepover`, e.g. `".018 in"`). **Fusion re-derives the checkbox from the expression on load** — so if we write the boolean `false` but leave a leftover expression, Fusion flips the flag back to `true` on the next pull (the recurring "use stepdown/stepover became true" bug). `normalizePreset` (`src/schema/toolSchema.js`) is the single point that keeps all three consistent: the **boolean is the source of truth**, the numeric value is sourced from the field *or* parsed from the expression (the value sometimes lives only in the expression), and the step expression is **stripped whenever the flag is disabled**. Any new code that writes presets to Fusion must preserve this invariant — never set a step boolean without syncing its number and expression.
@@ -125,6 +129,10 @@ Only write geometry fields that the tool actually uses. `internalToFusionTool` w
 For **chamfer mill** only, `internalToFusionTool` additionally writes a chamfer-mill-only Fusion-native expression: `expressions.tool_inclusiveAngle = "${TA * 2} degrees"` — confirmed from a real Fusion export (chamfer mill `geometry.TA: 45` → `expressions.tool_inclusiveAngle: "90 degrees"`). Same write condition as `TA` (non-zero, or existing entry already had a non-zero `TA`); deleted (not left empty) for every other type — same "write native + expression together, delete when not applicable" pattern as the holder expression fields. **Tapered mill has no such expression** (confirmed absent from a real tapered-mill export even with `TA: 10`) — its ×2/÷2 is UI-only.
 
 Chamfer mill was removed from `tip_angle`'s `appliesToTypes`, `TIP_ANGLE_TYPES`, the TSV `tipAngleTypes` (`fusionExport.js`), and `tool-extractor.tsx`'s `tipTypes` / `FIELD_VISIBILITY.tipAngle` — confirmed via a real Fusion chamfer-mill CSV export, which has `Taper Angle (tool_taperAngle) = '45'` and an **empty** `Tip Angle (tool_tipAngle)`. Fusion itself never writes `tool_tipAngle`/`geometry.SIG` for chamfer mills; the included angle lives entirely in `TA`/`tool_inclusiveAngle`.
+
+**Chamfer mill naming**: `buildDesc` (`src/utils/toolNaming.js`) names chamfer mills from the Included/Inclusive Tip Angle (2 × `taper_angle`), not `tip_angle` (which chamfer mills don't have) — e.g. a 1/8" chamfer with a 90° included angle becomes `1/8 (.125) 90DEG CHAMFER`.
+
+**The `label` prop is a general per-type display-rename hook, not just for Included Tip Angle**: `ToolForm`'s diameter `NumField` and `ToolDetail`'s Diameter `Field` pass `label={fieldLabel('tip_diameter', unit)}` for **tapered mill**, showing "Tip Diameter" instead of "Diameter" — the underlying data is still `tool.diameter` / `geometry.DC`, unchanged. Same pattern (display label override only, no data/schema change) as the Included Tip Angle case above; reuse it for future per-type label tweaks rather than branching the field name itself.
 
 ### Holder gaugeLength — always from the library
 
@@ -606,7 +614,9 @@ The landing page IS the search page. All filtering runs in memory — no API cal
 
 **Cascading faceted search**: each filter narrows the available options for all subsequent filters based on the current result set. Select "Flat End Mill" → type "0.5" diameter → flute count filter shows only counts that exist among 0.5" flat end mills in the library.
 
-Filters: tool type (tile grid) → diameter → flutes → flute length → overall length → material → coating → vendor → preferred machine → material suitability → tags.
+**Tool type is multi-select**: clicking a tile in the type grid toggles it on/off (`ToolTypeGrid`'s `selected` is an array; `onSelect` toggles membership). `activeFilters.toolTypes` is an array of 0+ types — `applyFilters` (`searchEngine.js`) matches a tool if its `tool_type` is in that array (empty array = any type). This lets you search across types that could do the same job (e.g. "flat end mill" + "bull nose end mill" together). `getFacetFields(toolTypes)` (`toolSchema.js`) unions the extra per-type facets (e.g. Corner Radius, tap-only fields) across all selected types. The URL stores selected types as a comma-separated list (`?type=flat+end+mill,bull+nose+end+mill`).
+
+Filters: tool type (tile grid, multi-select) → diameter → flutes → flute length → overall length → material → coating → vendor → preferred machine → material suitability → tags.
 
 Sort options: recently updated, diameter ↑/↓, vendor A–Z, description A–Z. View modes: grid, list. Both persist in localStorage.
 
@@ -628,6 +638,22 @@ ProShop export must never be removed even as the app evolves toward a future ERP
 
 **Multi-row groups (Approved Brands)**: ProShop exports one row per `Tool #` normally, but a tool with multiple Approved Brand / purchasing options spans **multiple rows sharing the same `Tool #`** — geometry/spec columns are populated only on the first row of the group, and each row contributes one manufacturer/vendor pair (`Approved Brand` / `Vendor` / `EDP#` / `Cost`) to the normalized `purchasing.{manufacturers,vendors}` model — see Purchasing / Vendor Data Model. Import groups rows by `Tool #` before matching (`handleProShopFile`) and builds the normalized shape via `buildPurchasingFromGroup` (`src/components/ImportFlow.jsx`); export emits the same row shape via `buildBrandRows`/`buildProShopCSV` (`tool-extractor.tsx`) and `exportFullLibrary` (`src/utils/proShopExport.js`).
 
+### Tool Group letter ↔ tool_type classification
+
+ProShop's **Tool Group** column (`toolGroupLetter`, e.g. `A`, `B`, `L`, `R`, `TD`...) is this shop's own filing scheme for the physical tool cabinets — see `PS_GROUPS` (`tool-extractor.tsx`) for the full letter → meaning reference list. `AUTO_GROUP` maps our `tool_type` → group letter for **export** (`toolToExtractor`'s `grouping: tool.grouping || AUTO_GROUP[tool.tool_type] || 'M'`, written to the `toolGroupLetter` column via `PS_MAIN_COLS`).
+
+**Import** (`psRowToTool`, `src/components/ImportFlow.jsx`) needs the reverse — a brand-new tool created from an unmatched ProShop row has no Fusion entry to read `tool_type` from, so it must be inferred from the row. `typeFromProShopGroup(letter, { description, cornerRadius })` (`tool-extractor.tsx`, re-exported from `toolSchema.js`) is the reverse of `AUTO_GROUP`. Several letters cover more than one `tool_type` (`AUTO_GROUP` is many-to-one), so it disambiguates using cues from the row:
+
+- **A** (Square and Bull Endmill) → `bull nose end mill` if `CornerRad` is non-zero, else `flat end mill` — square end mills have no corner radius, bull nose end mills do.
+- **B** (Ball Endmill) → always `ball end mill`. ProShop's stock group-B label also mentions "Drill Mill", but this shop doesn't file drill mills under B (and "drill mill" isn't one of our tool types), so `typeFromProShopGroup` never returns it and the `PS_GROUPS` label was shortened to just "Ball Endmill" to stop suggesting it.
+- **F** (Ream and Bore) → `counter bore` if the description contains "bore", else `reamer`.
+- **L** (Chamfer Tool) → `counter sink` if the description contains "sink", else `chamfer mill`.
+- **M** (Special Tooling) → keyword match on the description (`dove`→`dovetail`, `lolli`→`lollipop mill`, `barrel`/`oval`/`taper`→the matching circle-segment type), else `form mill`.
+- All other letters with a single `AUTO_GROUP` entry (C, D, E, I, J, K, N, O, R, TD, TF) map straight across (e.g. `R`→`tap`, `TD`→`boring head`).
+- Letters with **no** corresponding `tool_type` (G/H/P/Q/S/T/TA-TU — inserts, saws, turning holders/inserts, CMM styli) return `null`; `psRowToTool` falls back to `flat end mill` for these — they're rare in this shop's data and already get `no_fusion_link: true`, flagging them for manual cleanup.
+
+The row's `Tool Group` value itself is always preserved as-is into `tool.grouping` (so export round-trips the original letter even if `typeFromProShopGroup` guessed differently than ProShop's own filing).
+
 -----
 
 ## ProShop Field Priority Rules
@@ -645,6 +671,7 @@ These rules apply during the **initial ProShop CSV merge** and on any **subseque
 | `geometry['shoulder-length']` (shoulder length) | Set to MIN OOH at normalization | See MIN OOH rule below |
 | per-assembly `ooh` → `geometry.LB` | Floored at MIN OOH | See MIN OOH rule below |
 | `tsc_capable` (through-spindle coolant) | PS wins | From `Through Coolant` (`true`/`false`); boolean capability flag |
+| `custom_grind` | PS wins | From `Custom Grind` (`true`/`false`, ProShop id `customgrindtool`); same PS-wins boolean pattern as `tsc_capable`. Metadata-only — appears in the Geometry section as "Custom Grind" |
 | `tip_to_first_thread` (taps) | Fill gap only | From `Tip to 1st Full Thread`, converted from the file unit — see note below |
 | All other differences | **Flag** to user | Do not auto-resolve |
 
@@ -741,6 +768,8 @@ During initial normalization, tool descriptions are rationalized. The ProShop de
 **Reuse the existing generator** — `buildDesc()` lives in `src/utils/toolNaming.js` (re-exported from `tool-extractor.tsx` for the extraction UI) and composes a standardized description from a tool's structured fields (e.g. `0.5 4FL EM 1.000LOC`, `#80 135DEG CARB DRILL`). It is a **generator** (specs → description), not rename/diff detection — use it to produce the *suggested* new description; check that file before writing any new naming logic.
 
 For taps, `buildDesc` strips the UNC/UNF thread-series designation from `pitch` via `stripThreadSeries()` — it's implied for inch taps — but **keeps** NPT/NPTF (pipe threads change the tap's form and aren't implied). E.g. `1/4-20 UNC` → `1/4-20 CUT TAP`, but `1/8-27 NPT` → `1/8-27 CUT TAP NPT`.
+
+`LETTER_DRILLS` (`src/utils/toolNaming.js`) deliberately **omits `E` (0.25")** — nobody in the shop calls a 1/4" drill an "E", even though it's technically on the letter-drill chart. `smartDiam` falls through to the fraction `1/4` for that size instead. Don't re-add `E` without re-confirming shop convention.
 
 **Step-by-step UI** (a step in `NormalizeModal`, or a follow-on modal) — for each tool in sequence:
 
@@ -1085,3 +1114,5 @@ All metadata-only (never written to Fusion) — added to `tool_metadata.json` vi
 ## TODO / Future Work
 
 - **Local mode, phase 2 — full edit with manual re-export.** Today's local browse mode (see above) is read-only. A bigger follow-up: allow editing/saving everything in-memory while in local mode (tools, presets, assemblies, metadata), plus a "Download updated library" button that produces a new `fusion_tool_library.json` (and `tool_metadata.json` if applicable) for the user to manually re-upload to Autodesk/Drive themselves. **This is a big ask** — `writeLogicalTool`, `saveFullLibrary`, `renumberLibrary`, `deleteTool`, `addTool`, `normalizeLibrary`, and the whole Phase 2 merge flow all currently assume `uploadFusionList`/`downloadFusionList` hit APS; each would need a local-mode branch that mutates `toolsRef`/state in place and marks the library "dirty" instead of calling APS, plus export/download plumbing for the edited JSON. Confirm scope before starting.
+
+- **"No Fusion Link" tools shouldn't need a Fusion entry at all.** Currently `no_fusion_link: true` is just a reminder flag (`src/components/ImportFlow.jsx` `psRowToTool`) — every logical tool, flagged or not, still gets a real placeholder entry written into the Fusion library on save (`saveFullLibrary` → `splitToFusionInstances`, which always emits ≥1 instance). So a ProShop row with no Fusion match still creates a brand-new (mostly-empty) entry in the shared Fusion library immediately on import/normalize. ImportFlow's Review step now warns about this before saving (see `newPlaceholderCount`), but the underlying behavior is unchanged. **This is a big ask to fix properly** — it means supporting logical tools with **zero** Fusion instances (metadata-only, "not in Fusion yet"), which breaks the "every instance is a real Fusion tool entry, minimum 1" assumption used throughout `writeLogicalTool`, `saveFullLibrary`, `groupByTrackingId`/`buildLogicalTool` (which currently builds `tools` state *from* Fusion instances), and reconcile. Likely belongs alongside the local-mode/no-Fusion-connection work above — both need a "tool exists in our app but not in Fusion (yet)" state. Confirm scope before starting.

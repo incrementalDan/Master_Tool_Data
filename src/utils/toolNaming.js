@@ -30,8 +30,11 @@ export const NUM_DRILLS = {
   32:0.116,31:0.12,30:0.1285,29:0.136,28:0.1405,27:0.144,26:0.147,25:0.1495,24:0.152,23:0.154,22:0.157,21:0.159,20:0.161,19:0.166,18:0.1695,17:0.173,
   16:0.177,15:0.18,14:0.182,13:0.185,12:0.189,11:0.191,10:0.1935,9:0.196,8:0.199,7:0.201,6:0.204,5:0.2055,4:0.209,3:0.213,2:0.221,1:0.228,
 };
+// "E" (0.25") is omitted on purpose — it's technically on the drill chart but
+// nobody in the shop refers to a 1/4" drill as "E"; smartDiam should fall
+// through to the fraction "1/4" instead.
 export const LETTER_DRILLS = {
-  A:0.234,B:0.238,C:0.242,D:0.246,E:0.25,F:0.257,G:0.261,H:0.266,I:0.272,J:0.277,K:0.281,L:0.29,M:0.295,N:0.302,O:0.316,P:0.323,Q:0.332,R:0.339,S:0.348,T:0.358,U:0.368,V:0.377,W:0.386,X:0.397,Y:0.404,Z:0.413,
+  A:0.234,B:0.238,C:0.242,D:0.246,F:0.257,G:0.261,H:0.266,I:0.272,J:0.277,K:0.281,L:0.29,M:0.295,N:0.302,O:0.316,P:0.323,Q:0.332,R:0.339,S:0.348,T:0.358,U:0.368,V:0.377,W:0.386,X:0.397,Y:0.404,Z:0.413,
 };
 
 // Strip the UNC/UNF thread-series designation from a thread size for naming —
@@ -108,8 +111,14 @@ export function buildDesc(f, inputWasMm = false) {
     }
     case "spot drill":
       return `${dStr} SPOT DRILL${angStr}${tsc}`.trim();
-    case "chamfer mill":
-      return `${dStr} CHAMFER${angStr}${tsc}`.trim();
+    case "chamfer mill": {
+      // Chamfer mills have no tip_angle (geometry.SIG) — name from the
+      // Included/Inclusive Tip Angle instead (2 × geometry.TA), placed before
+      // "CHAMFER" per shop convention, e.g. "1/8 (.125) 90DEG CHAMFER".
+      const inclAngle = (parseFloat(f.taperAngle) || 0) * 2;
+      const caStr = inclAngle > 0 ? ` ${parseFloat(inclAngle.toFixed(2))}DEG` : "";
+      return `${dStr}${caStr} CHAMFER${tsc}`.trim();
+    }
     case "face mill":
       return `${dStr} FACE MILL${tsc}`.trim();
     case "tap": {

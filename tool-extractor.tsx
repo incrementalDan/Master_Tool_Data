@@ -24,7 +24,7 @@ const COOLANT_OPTS = [
 ];
 
 const PS_GROUPS = [
-  ["A","Square and Bull Endmill"],["B","Ball Endmill and Drill Mill"],
+  ["A","Square and Bull Endmill"],["B","Ball Endmill"],
   ["C","Taper End Mill"],["D","Drill"],["E","Center Drills"],
   ["F","Ream and Bore"],["G","Insert"],["H","Saws"],
   ["I","Insert Mills"],["J","T-Slot"],["K","Corner Rounding End Mills"],
@@ -52,6 +52,42 @@ const AUTO_GROUP = {
   "thread mill":"N","spot drill":"O","tap":"R",
   "boring head":"TD","boring bar":"TD","turning general":"TF",
 };
+// Reverse of AUTO_GROUP — ProShop "Tool Group" letter → our tool_type, used to
+// classify a brand-new tool created from a ProShop import row. Several letters
+// cover more than one of our types (e.g. A = square AND bull nose end mill);
+// `hints` (description text, corner radius) disambiguate the same way a
+// person reading the ProShop row would. Returns null for groups with no
+// corresponding tool type (inserts, saws, holders, etc.) — the caller falls
+// back to a default.
+function typeFromProShopGroup(letter, hints = {}) {
+  const desc = (hints.description || "").toLowerCase();
+  const cornerRadius = parseFloat(hints.cornerRadius) || 0;
+  switch ((letter || "").toUpperCase()) {
+    case "A": return cornerRadius > 0 ? "bull nose end mill" : "flat end mill";
+    case "B": return "ball end mill"; // not used for drill mills
+    case "C": return "tapered mill";
+    case "D": return "drill";
+    case "E": return "center drill";
+    case "F": return /bore/.test(desc) ? "counter bore" : "reamer";
+    case "I": return "face mill";
+    case "J": return "slot/key cutter";
+    case "K": return "radius mill";
+    case "L": return /sink/.test(desc) ? "counter sink" : "chamfer mill";
+    case "M":
+      if (/dove/.test(desc)) return "dovetail";
+      if (/lolli/.test(desc)) return "lollipop mill";
+      if (/barrel/.test(desc)) return "circle segment barrel";
+      if (/oval/.test(desc)) return "circle segment oval";
+      if (/taper/.test(desc)) return "circle segment taper";
+      return "form mill";
+    case "N": return "thread mill";
+    case "O": return "spot drill";
+    case "R": return "tap";
+    case "TD": return "boring head";
+    case "TF": return "turning general";
+    default: return null;
+  }
+}
 const ROUND_SHANK_TYPES = new Set([
   "flat end mill","ball end mill","bull nose end mill","tapered mill","radius mill","form mill","lollipop mill",
   "slot/key cutter","dovetail","thread mill","chamfer mill",
@@ -178,6 +214,7 @@ const PS_MAIN_COLS=[
   ["helixAngle",f=>f.helixAngle||""],["coating",f=>f.coating||""],["toolMaterial",f=>f.material||""],
   ["recommendedWorkpieceMaterial",f=>(f.workpieceMats&&f.workpieceMats.length?f.workpieceMats.join(", "):f.workpieceMat||"")],
   ["centerCutting",f=>f.centerCutting?"true":"false"],["throughCoolant",f=>THROUGH_COOLANT_VALUES.has(f.coolant||"")?"true":"false"],
+  ["customgrindtool",f=>f.customGrind?"true":"false"],
   ["roundShank",f=>ROUND_SHANK_TYPES.has(f.toolType)?"true":"false"],["toolGroupLetter",f=>f.grouping||AUTO_GROUP[f.toolType]||"M"],
   ["pitch",f=>f.pitch||""],["fluteType",f=>f.fluteType||""],["lengthBelowShankDiameter",f=>f.minOoh?String(parseFloat(f.minOoh)):""],
   ["tapClass",f=>f.tapClass||""],["threadsPerInch",f=>calcTPI(f.pitch)||""],["thread",f=>f.pitch||""],
@@ -242,7 +279,7 @@ function buildProShopCSV(f){
 const BLANK={
   toolType:"flat end mill",diameter:"",loc:"",oal:"",flutes:"",shankDia:"",cornerRadius:"0",material:"carbide",
   coating:"",workpieceMats:[],tipAngle:"",pitch:"",edpNumber:"",productLink:"",presetName:"",toolNumber:"",
-  coolant:"flood",helixAngle:"",centerCutting:false,fluteType:"",grouping:"",approvedBrand:"",vendor:"",
+  coolant:"flood",helixAngle:"",centerCutting:false,customGrind:false,fluteType:"",grouping:"",approvedBrand:"",vendor:"",
   cost:"",vendorStockNum:"",tapClass:"",pointType:"",shoulderLen:"",ooh:"",minOoh:"",taperAngle:"",
   minThreadPitch:"",maxThreadPitch:"",fullProfile:false,stubJobber:"",backsideCapable:false,doubleEnded:false,
   cuttingDirection:"Right Hand",tipDiameter:"",lowerRadius:"",upperRadius:"",profileRadius:"",axialDistance:"",
@@ -411,7 +448,7 @@ const sel=(hi,warn)=>({...base,border:`1px solid ${warn?T.amber:hi?T.green:T.bor
 export {
   TT, TL, BLANK, FIELD_VISIBILITY, _FV_KEYS,
   MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST,
-  PS_GROUPS, AUTO_GROUP, PS_MAIN_COLS,
+  PS_GROUPS, AUTO_GROUP, typeFromProShopGroup, PS_MAIN_COLS,
   COOLANT_OPTS, THROUGH_COOLANT_VALUES, ROUND_SHANK_TYPES,
   buildFusionRow, buildProShopCSV, buildDesc, buildBrandRows, buildAdionUrl,
   getVisibleFields, downloadCSV, smartDiam,

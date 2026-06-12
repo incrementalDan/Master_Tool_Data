@@ -15,7 +15,7 @@ export const VENDOR_LIST = [
   "Adion Systems","ALMCO","B&B Dynamic Machining","Boedeker Plastics, Inc.",
   "Butler Bros Supply Division","Camden Tool Inc","Castle Metals","CMW Tech",
   "Copper and Brass Sales","Evans Heat Treating","Finishing Innovations LLC",
-  "Hadco Metal Trading","Hard Chrome Specialists, Inc.",
+  "Haas Automation","Hadco Metal Trading","Hard Chrome Specialists, Inc.",
   "Hillock Anodizing","Industraplate","Jones Kinden","K&L Plating Company",
   "Laser Source","Liberty Manufacturing",
   "McMaster-Carr","Metropolitan Flag & Banner Co","MSC Industrial","NexGenSolutions",

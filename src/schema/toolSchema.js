@@ -1,14 +1,14 @@
 import {
   TT, TL, BLANK, FIELD_VISIBILITY, _FV_KEYS,
   MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST,
-  PS_GROUPS, AUTO_GROUP, COOLANT_OPTS, THROUGH_COOLANT_VALUES,
+  PS_GROUPS, AUTO_GROUP, typeFromProShopGroup, COOLANT_OPTS, THROUGH_COOLANT_VALUES,
   getVisibleFields,
 } from '../../tool-extractor.tsx';
 import { isMetadataOnly, FIELD_REGISTRY, fieldLabel } from './fieldRegistry.js';
 import { parsePresetName, materialCategory, HOLE_MAKING_TYPES, TURNING_TYPES } from '../utils/presetNaming.js';
 import { convertLength, unitAbbr, getDefaultUnit } from '../utils/units.js';
 
-export { TT, TL, MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST, PS_GROUPS, AUTO_GROUP, COOLANT_OPTS };
+export { TT, TL, MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST, PS_GROUPS, AUTO_GROUP, typeFromProShopGroup, COOLANT_OPTS };
 
 // ─── Icons ─────────────────────────────────────────────────────────────────
 // Tool-type icons are rendered by the <ToolTypeIcon> component
@@ -18,21 +18,28 @@ export const TOOL_TYPES = TT;
 export const TOOL_TYPE_LABELS = TL;
 
 // ─── Facet fields per tool type (search filter order) ─────────────────────
-const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'flute_design', 'material_suitability', 'tags', 'no_fusion_link'];
+const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'custom_grind', 'flute_design', 'material_suitability', 'tags', 'no_fusion_link'];
 
-export function getFacetFields(toolType) {
-  if (!toolType) return COMMON_FACETS;
+// toolTypes: array of selected tool types (0, 1, or many). With multiple types
+// selected, the extra per-type facets are unioned so e.g. picking "bull nose
+// end mill" + "flat end mill" still surfaces Corner Radius.
+export function getFacetFields(toolTypes) {
+  const types = Array.isArray(toolTypes) ? toolTypes : (toolTypes ? [toolTypes] : []);
+  if (types.length === 0) return COMMON_FACETS;
   const extras = [];
-  if (toolType === 'bull nose end mill' || toolType === 'radius mill' || toolType === 'lollipop mill') {
-    extras.push('corner_radius');
-  }
-  if (toolType === 'tap') {
-    extras.push('tap_sub_type', 'is_sti', 'pitch', 'tap_thread_unit', 'cutting_direction', 'tap_class', 'class_of_fit');
-  } else if (toolType === 'thread mill') {
-    extras.push('pitch', 'tap_thread_unit', 'cutting_direction');
-  }
-  if (toolType === 'drill' || toolType === 'spot drill' || toolType === 'center drill') {
-    extras.push('tip_angle');
+  const addExtra = (f) => { if (!extras.includes(f)) extras.push(f); };
+  for (const toolType of types) {
+    if (toolType === 'bull nose end mill' || toolType === 'radius mill' || toolType === 'lollipop mill') {
+      addExtra('corner_radius');
+    }
+    if (toolType === 'tap') {
+      ['tap_sub_type', 'is_sti', 'pitch', 'tap_thread_unit', 'cutting_direction', 'tap_class', 'class_of_fit'].forEach(addExtra);
+    } else if (toolType === 'thread mill') {
+      ['pitch', 'tap_thread_unit', 'cutting_direction'].forEach(addExtra);
+    }
+    if (toolType === 'drill' || toolType === 'spot drill' || toolType === 'center drill') {
+      addExtra('tip_angle');
+    }
   }
   return [...COMMON_FACETS, ...extras];
 }
@@ -215,6 +222,7 @@ export function toolToExtractor(tool) {
     presetName: tool.preset_name || '',
     toolNumber: tool.machine_tool_number != null ? String(tool.machine_tool_number) : '',
     coolant: tool.tsc_capable ? 'flood tool' : 'flood',
+    customGrind: tool.custom_grind || false,
     helixAngle: String(tool.helix_angle ?? ''),
     centerCutting: tool.center_cutting || false,
     fluteType: tool.flute_type || '',
@@ -1173,6 +1181,7 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     coating: meta.coating || '',
     purchasing: meta.purchasing || { manufacturers: [], vendors: [] },
     tsc_capable: Boolean(meta.tsc_capable),
+    custom_grind: Boolean(meta.custom_grind),
     center_cutting: meta.center_cutting ?? false,
     // cutting_direction is Fusion-native (geometry.HAND); Fusion wins, metadata fallback.
     cutting_direction: fusionInternal.cutting_direction || meta.cutting_direction || 'Right Hand',
@@ -1273,6 +1282,7 @@ export function buildMetadataTool(tool) {
       })),
     },
     tsc_capable: tool.tsc_capable ?? false,
+    custom_grind: tool.custom_grind ?? false,
     center_cutting: tool.center_cutting || false,
     cutting_direction: tool.cutting_direction || 'Right Hand',
     helix_angle: tool.helix_angle ?? null,
@@ -1555,6 +1565,7 @@ export function newTool(toolType = 'flat end mill') {
     flute_type: '',
     flute_design: '',
     tsc_capable: false,
+    custom_grind: false,
     cutting_direction: 'Right Hand',
     pitch: '',
     thread_pitch: null,
