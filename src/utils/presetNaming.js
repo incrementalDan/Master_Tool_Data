@@ -46,7 +46,7 @@ export function materialCategory(query) {
 // the preset name; `aliases` are accepted spellings when parsing a name.
 export const OP_TYPES = [
   { value: 'rough',       word: 'Rough',       aliases: ['ROUGH', 'R'] },
-  { value: 'finish',      word: 'Finish',      aliases: ['FINISH', 'FIN', 'F'] },
+  { value: 'finish',      word: 'Finish',      aliases: ['FINISH', 'FIN', 'F', 'FINSH'] },
   { value: 'rough_fast',  word: 'Rough Fast',  aliases: ['ROUGH FAST', 'RF'] },
   { value: 'fine_finish', word: 'Fine Finish', aliases: ['FINE FINISH', 'FF'] },
   { value: 'small_bore',  word: 'Small Bore',  aliases: ['SMALL BORE', 'SM BORE', 'SMBORE'] },
@@ -87,6 +87,13 @@ export function composePresetName({ materialQuery, ooh, holderShort, holderDescr
 
 // Parse a preset name back into its parts. Tolerant: returns null only for an
 // empty name; otherwise returns best-effort fields (any of which may be null).
+//
+// Legacy presets (pre-migration, not yet renamed to the convention above) are
+// often just the bare operation word/abbreviation with no " - " separator at
+// all, e.g. "Rough", "R", "Finsh", "SM Bore". If the " - " tail doesn't yield an
+// operation type (or there's no separator), fall back to matching the whole
+// name — this is what lets normalization auto-assign operation_type for those
+// without prompting the user.
 export function parsePresetName(name) {
   if (!name || !String(name).trim()) return null;
   const raw = String(name).trim();
@@ -95,7 +102,7 @@ export function parsePresetName(name) {
   const sepIdx = raw.lastIndexOf(' - ');
   const head = sepIdx >= 0 ? raw.slice(0, sepIdx).trim() : raw;
   const opStr = sepIdx >= 0 ? raw.slice(sepIdx + 3).trim() : '';
-  const opType = matchOpType(opStr);
+  const opType = matchOpType(opStr) ?? matchOpType(raw);
 
   const tokens = head.split(/\s+/).filter(Boolean);
   let materialCode = null;

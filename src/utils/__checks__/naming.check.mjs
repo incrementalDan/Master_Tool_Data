@@ -36,5 +36,17 @@ assert.equal(presetMatchesAssembly({ name }, { holder_description: 'NBT30-SK13C-
 assert.equal(matchOpType('Small Bore'), 'small_bore');
 assert.equal(matchOpType('FIN'), 'finish');
 assert.equal(matchOpType('R'), 'rough');
+assert.equal(matchOpType('Finsh'), 'finish');
+
+// Legacy bare-word preset names (no " - <Operation>" suffix) — whole-name
+// fallback so normalization can auto-detect operation_type without prompting.
+assert.equal(parsePresetName('Rough').opType, 'rough');
+assert.equal(parsePresetName('R').opType, 'rough');
+assert.equal(parsePresetName('Finish').opType, 'finish');
+assert.equal(parsePresetName('FIN').opType, 'finish');
+assert.equal(parsePresetName('F').opType, 'finish');
+assert.equal(parsePresetName('Finsh').opType, 'finish');
+assert.equal(parsePresetName('SM Bore').opType, 'small_bore');
+assert.equal(parsePresetName('Small Bore').opType, 'small_bore');
 
 console.log('naming.check.mjs: all assertions passed');
