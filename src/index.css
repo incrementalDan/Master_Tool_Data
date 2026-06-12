@@ -2740,7 +2740,11 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   background: var(--surface-3);
 }
 .purchasing-vendor-table > *:last-child { border-bottom: none; }
-.purchasing-vendor-table .purchasing-cell:not(:last-child) {
+/* nth-child (not :not(:last-child)) so the link-edit row appended after a
+   vendor row doesn't shift which cell is "last" and gain a stray border. */
+.purchasing-vendor-table .purchasing-row > .purchasing-cell:nth-child(2),
+.purchasing-vendor-table .purchasing-row > .purchasing-cell:nth-child(3),
+.purchasing-vendor-table .purchasing-header-row > .purchasing-cell:not(:last-child) {
   border-right: 1px solid var(--border);
   padding-right: 8px;
 }
@@ -2786,12 +2790,39 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /* Indents displayed values under their column header, matching .detail-field-value */
 .purchasing-value { padding-left: 4px; }
 
-.purchasing-url-input { font-size: 11px; padding: 3px 8px; }
+/* ── Full-width link-edit row (below a manufacturer/vendor row, edit mode) ── */
+.purchasing-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 6px 0 4px 24px;
+}
+.purchasing-vendor-table .purchasing-link-row {
+  padding: 6px 8px 8px 32px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.purchasing-link-field {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.purchasing-link-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-sub);
+}
+
+.purchasing-url-input { font-size: 12.5px; padding: 6px 8px; }
 
 .purchasing-url-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 .purchasing-url-row .purchasing-url-input { flex: 1; min-width: 0; }
 .purchasing-regen-btn {
@@ -2799,8 +2830,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: transparent;

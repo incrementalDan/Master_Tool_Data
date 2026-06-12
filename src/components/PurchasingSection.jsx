@@ -19,6 +19,25 @@ function emptyPurchasing() {
   return { manufacturers: [], vendors: [] };
 }
 
+// Persist any links that were only shown as a display-time fallback (no
+// stored URL, but a generator matches the part number) — so they become real
+// stored values the user can see/override afterward. Never overwrites a URL
+// the user already set.
+function backfillUrls(data) {
+  return {
+    ...data,
+    manufacturers: (data.manufacturers || []).map(m => ({
+      ...m,
+      mfg_num_url: m.mfg_num_url || generateManufacturerUrl(m.name, m.mfg_num) || m.mfg_num_url || '',
+      edp_url: m.edp_url || generateManufacturerUrl(m.name, m.edp) || m.edp_url || '',
+    })),
+    vendors: (data.vendors || []).map(v => ({
+      ...v,
+      vendor_num_url: v.vendor_num_url || generateVendorUrl(v.name, v.vendor_num) || v.vendor_num_url || '',
+    })),
+  };
+}
+
 // Re-sequence `order` fields: manufacturers by their own order, vendors by
 // order within their manufacturer group.
 function normalizePurchasing(data) {
@@ -49,9 +68,10 @@ function byPriceAsc(a, b) {
 }
 
 // A number field (EDP#, MFG#, Vendor#) — view mode shows the value as a link
-// (with an ExternalLink icon) when a URL is stored, plain text otherwise.
-// Edit mode shows the value input plus an optional URL input below it.
-function NumCell({ value, url, placeholder, editing, onChangeValue, onChangeUrl, canRegenerate, onRegenerate }) {
+// (with an ExternalLink icon) when a URL is stored or can be auto-generated,
+// plain text otherwise. Edit mode shows just the value input — the link
+// itself is edited in a full-width LinkEditor row below the main row.
+function NumCell({ value, url, placeholder, editing, onChangeValue }) {
   if (editing) {
     return (
       <div className="purchasing-cell purchasing-cell--num">
@@ -61,24 +81,6 @@ function NumCell({ value, url, placeholder, editing, onChangeValue, onChangeUrl,
           placeholder={placeholder}
           onChange={e => onChangeValue(e.target.value)}
         />
-        <div className="purchasing-url-row">
-          <input
-            className="field-input purchasing-url-input"
-            value={url || ''}
-            placeholder="Link (optional)"
-            onChange={e => onChangeUrl(e.target.value)}
-          />
-          {canRegenerate && (
-            <button
-              type="button"
-              className="purchasing-regen-btn"
-              title="Regenerate link from part number"
-              onClick={onRegenerate}
-            >
-              <RefreshCw size={11} />
-            </button>
-          )}
-        </div>
       </div>
     );
   }
@@ -93,6 +95,35 @@ function NumCell({ value, url, placeholder, editing, onChangeValue, onChangeUrl,
     );
   }
   return <div className="purchasing-cell purchasing-cell--num purchasing-value font-mono">{value}</div>;
+}
+
+// Full-width link-edit row shown below a manufacturer/vendor row in edit
+// mode — one per number field that can carry a URL (MFG#, EDP#, Vendor#).
+// Wider than the 82px number column so pasting/editing a URL is usable.
+function LinkEditor({ label, url, onChangeUrl, canRegenerate, onRegenerate }) {
+  return (
+    <div className="purchasing-link-field">
+      <span className="purchasing-link-label">{label} link</span>
+      <div className="purchasing-url-row">
+        <input
+          className="field-input purchasing-url-input"
+          value={url || ''}
+          placeholder="https://… (optional)"
+          onChange={e => onChangeUrl(e.target.value)}
+        />
+        {canRegenerate && (
+          <button
+            type="button"
+            className="purchasing-regen-btn"
+            title="Regenerate link from part number"
+            onClick={onRegenerate}
+          >
+            <RefreshCw size={11} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function PriceCell({ value, editing, onChange }) {
@@ -132,80 +163,111 @@ function RowGrip({ editing, onRemove }) {
 
 function MfgRow({ mfg, editing, isDragOver, onChange, onRemove, onRegenerateUrl, dragHandlers }) {
   const hasGenerator = manufacturerHasUrlGenerator(mfg.name);
+  // Display-time fallback: if no URL is stored but a generator matches this
+  // manufacturer + part number, show the generated link immediately — even
+  // for tools whose purchasing data predates the URL-generation feature.
+  const mfgNumUrl = mfg.mfg_num_url || generateManufacturerUrl(mfg.name, mfg.mfg_num);
+  const edpUrl = mfg.edp_url || generateManufacturerUrl(mfg.name, mfg.edp);
   return (
-    <div className={`purchasing-row${isDragOver ? ' purchasing-row--drop' : ''}`} {...dragHandlers}>
-      <RowGrip editing={editing} onRemove={onRemove} />
-      {editing ? (
-        <input
-          className="field-input purchasing-cell purchasing-cell--name purchasing-mfg-name"
-          list="purchasing-mfr-list"
-          placeholder="Manufacturer"
-          value={mfg.name}
-          onChange={e => onChange({ name: e.target.value })}
+    <>
+      <div className={`purchasing-row${isDragOver ? ' purchasing-row--drop' : ''}`} {...dragHandlers}>
+        <RowGrip editing={editing} onRemove={onRemove} />
+        {editing ? (
+          <input
+            className="field-input purchasing-cell purchasing-cell--name purchasing-mfg-name"
+            list="purchasing-mfr-list"
+            placeholder="Manufacturer"
+            value={mfg.name}
+            onChange={e => onChange({ name: e.target.value })}
+          />
+        ) : (
+          <div className="purchasing-cell purchasing-cell--name purchasing-value purchasing-mfg-name truncate" title={mfg.name}>{mfg.name || '—'}</div>
+        )}
+        <NumCell
+          value={mfg.mfg_num}
+          url={mfgNumUrl}
+          placeholder="MFG#"
+          editing={editing}
+          onChangeValue={v => onChange({ mfg_num: v })}
         />
-      ) : (
-        <div className="purchasing-cell purchasing-cell--name purchasing-value purchasing-mfg-name truncate" title={mfg.name}>{mfg.name || '—'}</div>
+        <NumCell
+          value={mfg.edp}
+          url={edpUrl}
+          placeholder="EDP#"
+          editing={editing}
+          onChangeValue={v => onChange({ edp: v })}
+        />
+      </div>
+      {editing && (
+        <div className="purchasing-link-row">
+          <LinkEditor
+            label="MFG#"
+            url={mfg.mfg_num_url}
+            onChangeUrl={v => onChange({ mfg_num_url: v })}
+            canRegenerate={hasGenerator && !!mfg.mfg_num}
+            onRegenerate={() => onRegenerateUrl('mfg_num', 'mfg_num_url')}
+          />
+          <LinkEditor
+            label="EDP#"
+            url={mfg.edp_url}
+            onChangeUrl={v => onChange({ edp_url: v })}
+            canRegenerate={hasGenerator && !!mfg.edp}
+            onRegenerate={() => onRegenerateUrl('edp', 'edp_url')}
+          />
+        </div>
       )}
-      <NumCell
-        value={mfg.mfg_num}
-        url={mfg.mfg_num_url}
-        placeholder="MFG#"
-        editing={editing}
-        onChangeValue={v => onChange({ mfg_num: v })}
-        onChangeUrl={v => onChange({ mfg_num_url: v })}
-        canRegenerate={hasGenerator && !!mfg.mfg_num}
-        onRegenerate={() => onRegenerateUrl('mfg_num', 'mfg_num_url')}
-      />
-      <NumCell
-        value={mfg.edp}
-        url={mfg.edp_url}
-        placeholder="EDP#"
-        editing={editing}
-        onChangeValue={v => onChange({ edp: v })}
-        onChangeUrl={v => onChange({ edp_url: v })}
-        canRegenerate={hasGenerator && !!mfg.edp}
-        onRegenerate={() => onRegenerateUrl('edp', 'edp_url')}
-      />
-    </div>
+    </>
   );
 }
 
 function VendorRow({ vendor, editing, isDragOver, revealed, onChange, onRemove, onReveal, onRegenerateUrl, dragHandlers }) {
   const showNum = shouldShowVendorNum(vendor, revealed);
+  // Display-time fallback — see MfgRow.
+  const vendorNumUrl = vendor.vendor_num_url || generateVendorUrl(vendor.name, vendor.vendor_num);
   return (
-    <div className={`purchasing-row purchasing-row--vendor${isDragOver ? ' purchasing-row--drop' : ''}`} {...dragHandlers}>
-      <RowGrip editing={editing} onRemove={onRemove} />
-      {editing ? (
-        <input
-          className="field-input purchasing-cell purchasing-cell--name"
-          list="purchasing-vendor-list"
-          placeholder="Vendor"
-          value={vendor.name}
-          onChange={e => onChange({ name: e.target.value })}
-        />
-      ) : (
-        <div className="purchasing-cell purchasing-cell--name purchasing-value truncate" title={vendor.name}>{vendor.name || '—'}</div>
+    <>
+      <div className={`purchasing-row purchasing-row--vendor${isDragOver ? ' purchasing-row--drop' : ''}`} {...dragHandlers}>
+        <RowGrip editing={editing} onRemove={onRemove} />
+        {editing ? (
+          <input
+            className="field-input purchasing-cell purchasing-cell--name"
+            list="purchasing-vendor-list"
+            placeholder="Vendor"
+            value={vendor.name}
+            onChange={e => onChange({ name: e.target.value })}
+          />
+        ) : (
+          <div className="purchasing-cell purchasing-cell--name purchasing-value truncate" title={vendor.name}>{vendor.name || '—'}</div>
+        )}
+        <PriceCell value={vendor.price} editing={editing} onChange={v => onChange({ price: v })} />
+        {showNum ? (
+          <NumCell
+            value={vendor.vendor_num}
+            url={vendorNumUrl}
+            placeholder="Vendor#"
+            editing={editing}
+            onChangeValue={v => onChange({ vendor_num: v })}
+          />
+        ) : editing ? (
+          <button type="button" className="btn btn-ghost btn-sm purchasing-addnum-btn" onClick={onReveal}>
+            + Add vendor #
+          </button>
+        ) : (
+          <div className="purchasing-cell purchasing-cell--num" />
+        )}
+      </div>
+      {editing && showNum && (
+        <div className="purchasing-link-row">
+          <LinkEditor
+            label="Vendor#"
+            url={vendor.vendor_num_url}
+            onChangeUrl={v => onChange({ vendor_num_url: v })}
+            canRegenerate={vendorHasUrlGenerator(vendor.name) && !!vendor.vendor_num}
+            onRegenerate={() => onRegenerateUrl('vendor_num', 'vendor_num_url')}
+          />
+        </div>
       )}
-      <PriceCell value={vendor.price} editing={editing} onChange={v => onChange({ price: v })} />
-      {showNum ? (
-        <NumCell
-          value={vendor.vendor_num}
-          url={vendor.vendor_num_url}
-          placeholder="Vendor#"
-          editing={editing}
-          onChangeValue={v => onChange({ vendor_num: v })}
-          onChangeUrl={v => onChange({ vendor_num_url: v })}
-          canRegenerate={vendorHasUrlGenerator(vendor.name) && !!vendor.vendor_num}
-          onRegenerate={() => onRegenerateUrl('vendor_num', 'vendor_num_url')}
-        />
-      ) : editing ? (
-        <button type="button" className="btn btn-ghost btn-sm purchasing-addnum-btn" onClick={onReveal}>
-          + Add vendor #
-        </button>
-      ) : (
-        <div className="purchasing-cell purchasing-cell--num" />
-      )}
-    </div>
+    </>
   );
 }
 
@@ -239,7 +301,7 @@ export default function PurchasingSection({ tool, onSave, isSaving }) {
     setEditing(false);
   };
   const handleSave = async () => {
-    const normalized = normalizePurchasing(data);
+    const normalized = normalizePurchasing(backfillUrls(data));
     setData(normalized);
     setEditing(false);
     await onSave({ ...tool, purchasing: normalized });

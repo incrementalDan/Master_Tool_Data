@@ -63,8 +63,10 @@ export const VENDOR_URL_GENERATORS = {
   'McMaster': (vendorNum) =>
     vendorNum ? `https://www.mcmaster.com/${vendorNum}/` : null,
 
-  // Haas Tooling as vendor (same URL as manufacturer)
+  // Haas Tooling / Haas Automation as vendor (same URL as manufacturer)
   'Haas Tooling': (vendorNum) =>
+    vendorNum ? `https://www.haastooling.com/p/${vendorNum}` : null,
+  'Haas Automation': (vendorNum) =>
     vendorNum ? `https://www.haastooling.com/p/${vendorNum}` : null,
 
   // Note: Grainger, Zoro, Fastenal, Butler Brothers URLs include product
