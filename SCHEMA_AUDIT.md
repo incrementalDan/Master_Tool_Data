@@ -79,7 +79,7 @@ Status legend: ☐ open · ☑ resolved.
 - **Schema says (§1d):** `shoulder-diameter` is present only on mills (absent on drills, taps, reamers, circle-segment oval, turning); `SFDM` is absent on circle-segment lens/oval/taper and turning; `HAND` is absent on most taps. Geometry should be minimal per type.
 - **App does:** `internalToFusionTool` writes `CSP`, `HAND:true`, `SFDM`, `shoulder-diameter`, `shoulder-length` **unconditionally** for every type (lines 745–753). For a drill this adds a `shoulder-diameter` Fusion never emits; for a tap it forces `HAND`.
 - **Impact:** extra geometry keys that differ from native Fusion output for those types; bloats diffs. Not corrupting (Fusion tolerates the extra geometry keys), and matches the long-standing CLAUDE.md "write the core set unconditionally" rule.
-- **Fix:** documented as a deliberate trade-off. Per-type geometry gating would align exactly with §1d but is a broader change touching the documented core-set behavior; **left as-is** to avoid regressions, recorded here as the source of truth for a future per-type pass.
+- **Fix:** ~~documented as a deliberate trade-off~~ **reopened and resolved by the round-trip audit (see §RT below)** — the reference exports showed this diverged from native output on every non-mill type and was the likely source of per-type validation flags. `internalToFusionTool` now gates the core set per type (turning skipped entirely; SFDM/shoulder-length presence-conditional; shoulder-diameter preserve-only; HAND synced-only for taps).
 
 ---
 
@@ -174,3 +174,46 @@ A second audit across four axes — flat field-mapping, CLAUDE.md-vs-code, units
 - **Docs:** CLAUDE.md Units section + OOH/MIN OOH/assembly-export/Key-Constraints rewritten to the native-everywhere model.
 - **Per-record unit picker:** `ToolForm` now shows a unit selector when **creating** a tool (defaults to the global default; geometry labels update live) — the chosen unit is written to Fusion (`internalToFusionTool` writes `tool.unit`, fixing a bug where new tools always wrote `inches`). When **editing** an existing tool the unit is shown read-only (pulled from Fusion). The extractor create path carries a unit through too (`extractorToTool`).
 - `computeGaugeLength` (returns inches) is now unused but kept as a utility.
+
+---
+
+# RT — Round-trip audit fixes (June 2026)
+
+`scripts/roundtrip-audit.mjs` runs every tool in `FUSION TOOL Library REF/` through
+`fusionToolToInternal` → `internalToFusionTool` and diffs against the original export.
+Baseline: **232/232 tools diverged (2,383 unexpected diffs)**; after the fixes below: **0**.
+Findings and per-type breakdown: `FUSION_SYNC_AUDIT_PLAN.md`. The harness exits non-zero on
+any unexpected diff — run it after touching the converters.
+
+## ☑ RT1 🔴 Default-formula expressions injected into presets with real values
+- Injecting Fusion's default formulas (`tool_feedPlunge` ternary → 40 inpm, `tool_feedRamp`,
+  `tool_feedTransition`, `tool_feedRetract`, `tool_feedPerRevolution`, surface-speed/fpt
+  companions) into presets that had numerics but no expression made Fusion replace stored,
+  proven feeds on the next load. **Fixed:** defaults are seeded only for blank app-created
+  presets; existing presets get sync-only treatment (preserve byte-for-byte when unchanged,
+  literal rewrite when the value changed, never add keys, "both absent" preserved).
+## ☑ RT2 🔴 `geometry.tip-diameter` zeroed on every write
+- The read half was never implemented (registry declared the path). **Fixed:**
+  `fusionToolToInternal` reads it; `mergeFusionAndMetadata` is Fusion-first (metadata fallback).
+## ☑ RT3 🔴 `geometry.shoulder-diameter` overwritten with the shank diameter
+- Real data on reduced-shank tools/thread mills. **Fixed:** preserve-only for existing tools;
+  seeded from the shank only for new tools of `SHOULDER_DIAMETER_TYPES`.
+## ☑ RT4 🟠 Per-type geometry/expression gating
+- Turning general no longer receives the mill core set; SFDM/shoulder-length only when the
+  tool has them; HAND synced-only for taps; tool-level expressions are sync-never-inject
+  (no more `"''"` / `"0 in"` adds); offset keys only touched when the entry uses them.
+## ☑ RT5 🟠 Hole-making preset stripping
+- `normalizePreset` no longer deletes real incoming feed fields from tap/drill presets
+  (native exports carry the full set when values were entered); only step flags, ramp
+  fields, and tap/spot `f_n` are stripped. Category branches seed presence-conditionally
+  (no more injected `f_n: 0` on 50 drill presets).
+## ☑ RT6 🟠 Cabinet location lost when only root `vendor` set
+- `fusionToolToInternal` now falls back to the root `vendor` field.
+## ☑ RT7/RT8 🟡 Injected preset defaults / formula-literal overwrites
+- `description: ''`, turning `n_ramp: 0`, empty `expressions` objects no longer injected;
+  unchanged expression strings (formulas like `"(.8/25.4) in"`, mixed-unit literals,
+  trailing-zero formats) preserved byte-for-byte via the value-changed sync.
+
+Remaining **expected** diffs (allowlisted in the harness, all intentional): `last_modified`,
+`<NEW TOOL GUID>` strip, root-vendor re-derivation, whitespace-only string normalization,
+offsets-follow-tool-number policy.

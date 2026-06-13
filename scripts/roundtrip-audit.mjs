@@ -102,6 +102,19 @@ function classifyExpected(d, raw) {
   if (kind === 'changed' && typeof before === 'number' && typeof after === 'number'
       && Math.abs(before - after) < 1e-9)
     return 'float formatting, numerically equal';
+  // Fusion itself re-derives the root vendor from expressions.tool_vendor; the app
+  // writes the derived value, making an inconsistent native pair consistent.
+  if (path === 'vendor' && kind === 'changed' && raw.expressions?.tool_vendor != null
+      && after === String(raw.expressions.tool_vendor).replace(/^'(.*)'$/, '$1'))
+    return 'root vendor re-derived from expressions.tool_vendor (matches Fusion behavior)';
+  if (kind === 'changed' && typeof before === 'string' && typeof after === 'string') {
+    const strip = (s) => s.replace(/^'(.*)'$/, '$1').trim();
+    if (strip(before) === strip(after))
+      return 'whitespace-only normalization of a quoted string expression';
+  }
+  if ((path === 'post-process.diameter-offset' || path === 'post-process.length-offset')
+      && kind === 'changed' && after === raw['post-process']?.number)
+    return 'offsets follow machine tool number (documented app policy)';
   return null;
 }
 
@@ -126,7 +139,9 @@ for (const f of files) {
     perType.set(raw.type, entry);
     let out;
     try {
-      out = internalToFusionTool(fusionToolToInternal(raw));
+      // JSON round-trip the output exactly as an upload would serialize it
+      // (drops undefined-valued keys etc.).
+      out = JSON.parse(JSON.stringify(internalToFusionTool(fusionToolToInternal(raw))));
     } catch (e) {
       errorCount++;
       const s = `THROWS: ${e.message}`;

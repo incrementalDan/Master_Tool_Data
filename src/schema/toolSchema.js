@@ -593,6 +593,13 @@ function stripQuotes(s) {
   return s.replace(/^'(.*)'$/, '$1').replace(/^"(.*)"$/, '$1');
 }
 
+// Loose numeric equality for "did this value actually change" checks when syncing
+// expression strings. The tolerance absorbs Fusion's float noise (it stores e.g.
+// v_c = 650.0000208 with the expression "650 fpm") without masking real edits.
+function approxEqual(a, b) {
+  return Math.abs(a - b) <= Math.max(1e-9, 1e-6 * Math.max(Math.abs(a), Math.abs(b)));
+}
+
 export function fusionToolToInternal(fTool) {
   const geo = fTool.geometry || {};
   const expr = fTool.expressions || {};
@@ -614,12 +621,16 @@ export function fusionToolToInternal(fTool) {
     shank_diameter: geo.SFDM || null,
     taper_angle: geo.TA || null,
     tip_angle: geo.SIG || null,
+    tip_diameter: geo['tip-diameter'] || null,
     thread_pitch: geo.TP || null,
     shoulder_length: geo['shoulder-length'] || null,
     material: fTool.BMC || 'carbide',
     proshot_id: fTool['product-id'] || stripQuotes(expr.tool_productId) || '',
     product_link: fTool['product-link'] || stripQuotes(expr.tool_productLink) || '',
-    location: stripQuotes(expr.tool_vendor) || '',
+    // Fusion re-derives the root `vendor` from expressions.tool_vendor, but some
+    // entries carry the cabinet location only in the root field — fall back to it
+    // so the location isn't silently erased on the next write.
+    location: stripQuotes(expr.tool_vendor) || fTool.vendor || '',
     // Speeds & feeds from presets
     spindle_speed: preset.n || null,
     cutting_feedrate: preset.v_f || null,
@@ -690,8 +701,14 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
   // leftover numeric key (Fusion omits the key entirely when disabled).
   const { operation_type, stepdown: _sd, stepover: _so, ...rest } = p;
 
-  // Strip milling-specific fields from hole-making, turning, and spot-drill
-  // presets so they don't survive as stale keys in the Fusion JSON.
+  // Strip step flags from non-milling presets (native Fusion never writes them
+  // there, and a flag with no numeric/expression triggers the three-way-sync
+  // bug), and ramp fields from hole-making/spot-drill presets (no ramp moves).
+  // Everything else an incoming Fusion preset carries is PRESERVED — real
+  // Fusion exports for taps/drills frequently include the full milling-style
+  // feed set (v_f, f_z, lead-in/out, plunge, retract, use-feed-per-revolution)
+  // whenever values were entered, and deleting them discards proven data.
+  // The per-category branches below only govern which fields the app *seeds*.
   if (isHoleMaking || isTurning || isSpotDrill) {
     delete rest['use-stepdown'];
     delete rest['use-stepover'];
@@ -700,20 +717,7 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
     delete rest['ramp-angle'];
     delete rest.n_ramp;
   }
-  if (isHoleMaking) {
-    delete rest.v_f;
-    delete rest.f_z;
-    delete rest.v_f_leadIn;
-    delete rest.v_f_leadOut;
-    delete rest.v_f_transition;
-    delete rest.v_f_ramp;
-  }
-  if (isTap) {
-    delete rest.v_f_plunge;
-    delete rest['v_f_retract'];
-    delete rest.f_n;
-    delete rest['use-feed-per-revolution'];
-  } else if (isSpotDrill) {
+  if (isTap || isSpotDrill) {
     delete rest.f_n;
   }
 
@@ -744,11 +748,12 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
   if (!useStepdown) delete presetExpr.tool_stepdown;
   if (!useStepover) delete presetExpr.tool_stepover;
 
-  // Base fields present for every tool category.
+  // Base fields present for every tool category. `description` is only written
+  // when the source preset has one — Fusion omits it on many native presets.
   const out = {
     ...rest,
     guid: p.guid || generateId(),
-    description: p.description || '',
+    ...(p.description != null ? { description: p.description } : {}),
     name: p.name || 'Default preset',
     material: { category, query: mat.query || '', 'use-hardness': mat['use-hardness'] || false },
     expressions: presetExpr,
@@ -776,11 +781,13 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
     if (useStepdown) out.stepdown = sdNum;
     if (useStepover) out.stepover = soNum;
   } else if (isTurning) {
-    // Turning/boring: cutting feed + feed-per-rev + plunge; no step fields or ramp.
-    out.n_ramp = p.n_ramp ?? 0;
-    out.v_f = p.v_f ?? 0;
-    out.f_n = p.f_n ?? 0;
-    out.v_f_plunge = p.v_f_plunge ?? 0;
+    // Turning/boring: cutting feed + feed-per-rev + plunge; no step fields.
+    // Each only when the source has it — native turning presets vary (turning
+    // general omits v_f/v_f_plunge and n_ramp; boring bar omits n_ramp).
+    if (p.n_ramp != null) out.n_ramp = p.n_ramp;
+    if (p.v_f != null) out.v_f = p.v_f;
+    if (p.f_n != null) out.f_n = p.f_n;
+    if (p.v_f_plunge != null) out.v_f_plunge = p.v_f_plunge;
   } else if (isSpotDrill) {
     // Spot drill: full cutting-feed set (cutting, lead-in/out, transition, ramp
     // feed, feed/tooth) plus drill-specific plunge/retract feedrates and the
@@ -795,10 +802,13 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
     out['v_f_retract'] = p['v_f_retract'] ?? 0;
     out['use-feed-per-revolution'] = p['use-feed-per-revolution'] ?? false;
   } else if (isDrillFamily) {
-    // Drills/reamers: plunge + retract feedrates and optional feed-per-revolution.
-    out.v_f_plunge = p.v_f_plunge ?? 0;
-    out['v_f_retract'] = p['v_f_retract'] ?? 0;
-    out.f_n = p.f_n ?? 0;
+    // Drills/reamers: plunge + retract feedrates and the feed-per-revolution
+    // flag. f_n (and plunge/retract) only when the source carries them — native
+    // drill presets almost never store f_n, so injecting f_n: 0 adds a field
+    // Fusion never wrote for the type.
+    if (p.v_f_plunge != null) out.v_f_plunge = p.v_f_plunge;
+    if (p['v_f_retract'] != null) out['v_f_retract'] = p['v_f_retract'];
+    if (p.f_n != null) out.f_n = p.f_n;
     out['use-feed-per-revolution'] = p['use-feed-per-revolution'] ?? false;
   }
   // Tap: only n, v_c, tool-coolant — already set in the base fields above.
@@ -811,6 +821,17 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
 // appliesToTypes (fieldRegistry.js). Chamfer mill is NOT in this set — its
 // included angle is geometry.TA × 2 (see INCLUSIVE_ANGLE_TYPES, fieldRegistry.js).
 const TIP_ANGLE_TYPES = new Set(['drill', 'center drill', 'spot drill', 'counter sink']);
+
+// Fusion types that natively carry geometry['shoulder-diameter'] (FUSION_SCHEMA
+// §1d). Used only to seed the field on NEW tools — for existing entries the
+// original value is preserved untouched (it is real data: reduced-shank tools
+// and thread mills store a shoulder diameter that differs from the shank).
+const SHOULDER_DIAMETER_TYPES = new Set([
+  'flat end mill', 'ball end mill', 'bull nose end mill', 'chamfer mill',
+  'radius mill', 'tapered mill', 'dovetail mill', 'lollipop mill', 'slot mill',
+  'thread mill', 'face mill',
+  'circle segment barrel', 'circle segment lens', 'circle segment taper',
+]);
 
 // Tool types that carry a thread pitch in geometry.TP (numeric, the tool's unit).
 // The human-readable thread designation lives separately in `pitch` (metadata).
@@ -934,6 +955,13 @@ export function internalToFusionTool(tool) {
   // see normalizePreset for the full field-shape rationale.
   const isSpotDrillTool = tool.tool_type === 'spot drill';
 
+  // Original raw presets by guid — lets the expression sync below detect whether
+  // a numeric actually changed (vs. just round-tripping) so unchanged expression
+  // strings (including formulas and native formats) are preserved byte-for-byte.
+  const existingPresetByGuid = new Map(
+    (existing['start-values']?.presets || []).map(rp => [rp.guid, rp])
+  );
+
   const outPresets = sourcePresets.map((p, i) => {
     const np = normalizePreset(p, tool.tsc_capable, tool.tool_type);
     if (i === 0) {
@@ -994,65 +1022,76 @@ export function internalToFusionTool(tool) {
       }
     }
 
-    // Regenerate preset-level expression strings to match the final numeric values.
-    // Fusion re-derives numeric values from expressions on every load, so a stale
-    // expression silently overrides the field we just wrote. Regenerate here so the
-    // stored number and its expression string are always in sync.
-    // normalizePreset already handled tool_stepdown / tool_stepover (deleted when
-    // the flag is off), so spread origExprs first to preserve those.
-    //
-    // Speed mode: ONE of tool_spindleSpeed or tool_surfaceSpeed is the user input;
-    // the other is a companion display formula. Feed mode: tool_feedCutting (IPM)
-    // or tool_feedPerTooth is the user input; the companion formula is always written.
-    const hasSurfaceSpeed = 'tool_surfaceSpeed' in origExprs;
-    const hasSpindleSpeed = 'tool_spindleSpeed'  in origExprs;
-    const hasFeedPerTooth = 'tool_feedPerTooth'  in origExprs;
-    const hasFeedCutting  = 'tool_feedCutting'   in origExprs;
-
-    // Fusion's universal spindle-speed formula (handles probe/tap/all other types).
-    const SPINDLE_FORMULA = "tool_type == 'probe' ? 0 : tool_type == 'tap right hand' || tool_type == 'tap left hand' ? 500rpm : 5000rpm";
-    // Surface-speed companion formula (always evaluated by Fusion alongside RPM).
-    const SURFACE_FORMULA = 'tool_diameter * Math.PI * tool_spindleSpeed';
-
-    np.expressions = {
-      ...origExprs,
-      // Speed: Fusion's universal formula for blank presets; literal for user-set values.
-      // The formula covers probe (0), tap (500 rpm), and all other tools (5000 rpm).
-      ...(hasSpindleSpeed || !hasSurfaceSpeed
-        ? { tool_spindleSpeed: isBlankPreset ? SPINDLE_FORMULA : `${np.n ?? 0} rpm` }
-        : {}),
-      // Surface speed: literal when user is in surface-speed input mode;
-      // companion formula otherwise (Fusion displays it alongside the RPM value).
-      ...(hasSurfaceSpeed
-        ? { tool_surfaceSpeed: `${np.v_c ?? 0} ${speedUnit}` }
-        : { tool_surfaceSpeed: SURFACE_FORMULA }),
-      // Cutting feed (milling + spot drill) — literal for the primary input mode.
-      ...((isMillingTool || isSpotDrillTool) && (hasFeedCutting || !hasFeedPerTooth)
-        ? { tool_feedCutting: `${np.v_f ?? 0} ${feedUnit}` } : {}),
-      // Feed-per-tooth: literal when user is in fpt input mode; Fusion companion
-      // formula otherwise (always written so Fusion can display it next to IPM).
-      ...((isMillingTool || isSpotDrillTool)
-        ? (hasFeedPerTooth
-            ? { tool_feedPerTooth: `${np.f_z ?? 0} ${fzUnit}` }
-            : { tool_feedPerTooth: 'tool_spindleSpeed > 0 ? tool_feedCutting/(tool_spindleSpeed * tool_numberOfFlutes) : 0.0' })
-        : {}),
-      // Plunge: applies to all non-tap tools. Preserved from origExprs on existing
-      // presets; Fusion's default ternary injected for new presets.
-      ...(!isTapTool && !('tool_feedPlunge' in origExprs)
-        ? { tool_feedPlunge: "(tool_type=='drill' || tool_type=='reamer' || tool_isDepositing)?(40inpm):(tool_feedCutting/3)" } : {}),
-      // Ramp and transition: milling + spot drill.
-      ...((isMillingTool || isSpotDrillTool) && !('tool_feedRamp' in origExprs)
-        ? { tool_feedRamp: 'tool_feedPlunge' } : {}),
-      ...((isMillingTool || isSpotDrillTool) && !('tool_feedTransition' in origExprs)
-        ? { tool_feedTransition: 'tool_feedCutting' } : {}),
-      // Drill-specific companion formulas for retract and feed-per-revolution.
-      ...(isDrillFamilyTool && !('tool_feedRetract' in origExprs)
-        ? { tool_feedRetract: 'tool_feedPlunge' } : {}),
-      ...(isDrillFamilyTool && !('tool_feedPerRevolution' in origExprs)
-        ? { tool_feedPerRevolution: 'tool_spindleSpeed > 0 ? tool_feedPlunge/tool_spindleSpeed : 0.0' } : {}),
-      ...(isDrillFamilyTool && !('tool_feedRetractPerRevolution' in origExprs)
-        ? { tool_feedRetractPerRevolution: 'tool_feedPerRevolution' } : {}),
-    };
+    // Preset expression strings. Fusion re-derives every numeric from its paired
+    // expression on load, so a stale expression silently overrides the number —
+    // and an *injected* expression overrides a real stored value just the same.
+    // Native Fusion presets frequently store numerics with NO expression at all
+    // (the numeric stands alone), so the rules are:
+    //   • BLANK presets (app-created, no values yet): seed Fusion's default
+    //     formula set so a new tool is immediately usable.
+    //   • Existing presets: never ADD an expression key. For keys that exist,
+    //     keep the original string byte-for-byte when the paired numeric is
+    //     unchanged (preserves formulas like "tool_feedCutting/3" and native
+    //     formats), and rewrite a literal only when the value actually changed.
+    if (isBlankPreset) {
+      // Fusion's universal spindle-speed formula (handles probe/tap/all other types).
+      const SPINDLE_FORMULA = "tool_type == 'probe' ? 0 : tool_type == 'tap right hand' || tool_type == 'tap left hand' ? 500rpm : 5000rpm";
+      // Surface-speed companion formula (always evaluated by Fusion alongside RPM).
+      const SURFACE_FORMULA = 'tool_diameter * Math.PI * tool_spindleSpeed';
+      np.expressions = {
+        ...origExprs,
+        tool_spindleSpeed: SPINDLE_FORMULA,
+        tool_surfaceSpeed: SURFACE_FORMULA,
+        ...((isMillingTool || isSpotDrillTool) ? {
+          tool_feedCutting: `${np.v_f ?? 0} ${feedUnit}`,
+          tool_feedPerTooth: 'tool_spindleSpeed > 0 ? tool_feedCutting/(tool_spindleSpeed * tool_numberOfFlutes) : 0.0',
+          tool_feedRamp: 'tool_feedPlunge',
+          tool_feedTransition: 'tool_feedCutting',
+        } : {}),
+        ...(!isTapTool
+          ? { tool_feedPlunge: "(tool_type=='drill' || tool_type=='reamer' || tool_isDepositing)?(40inpm):(tool_feedCutting/3)" } : {}),
+        ...(isDrillFamilyTool ? {
+          tool_feedRetract: 'tool_feedPlunge',
+          tool_feedPerRevolution: 'tool_spindleSpeed > 0 ? tool_feedPlunge/tool_spindleSpeed : 0.0',
+          tool_feedRetractPerRevolution: 'tool_feedPerRevolution',
+        } : {}),
+      };
+    } else {
+      // Original raw preset (pre-edit values) — the reference for "did it change".
+      const rawP = existingPresetByGuid.get(np.guid);
+      const ex = { ...origExprs };
+      // [expression key, preset numeric field, unit suffix]
+      const PRESET_EXPR_PAIRS = [
+        ['tool_spindleSpeed', 'n', 'rpm'],
+        ['tool_rampSpindleSpeed', 'n_ramp', 'rpm'],
+        ['tool_surfaceSpeed', 'v_c', speedUnit],
+        ['tool_feedCutting', 'v_f', feedUnit],
+        ['tool_feedPerTooth', 'f_z', fzUnit],
+        ['tool_feedPlunge', 'v_f_plunge', feedUnit],
+        ['tool_feedRamp', 'v_f_ramp', feedUnit],
+        ['tool_feedTransition', 'v_f_transition', feedUnit],
+        ['tool_feedRetract', 'v_f_retract', feedUnit],
+        ['tool_feedEntry', 'v_f_leadIn', feedUnit],
+        ['tool_feedExit', 'v_f_leadOut', feedUnit],
+        ['tool_feedPerRevolution', 'f_n', fzUnit],
+      ];
+      for (const [key, field, unit] of PRESET_EXPR_PAIRS) {
+        if (!(key in ex)) continue;                 // never add keys to an existing preset
+        const oldVal = rawP ? rawP[field] : undefined;
+        const newVal = np[field];
+        // Unchanged → keep the original string. "Both absent" is also unchanged:
+        // some native presets carry ONLY the expression (Fusion derives the
+        // numeric from it) — e.g. drill feed-per-rev — and rewriting it from a
+        // missing numeric would zero out the real value.
+        if (oldVal == null && newVal == null) continue;
+        if (oldVal != null && newVal != null && approxEqual(newVal, oldVal)) continue;
+        ex[key] = `${newVal ?? 0} ${unit}`;
+      }
+      np.expressions = ex;
+      // Native presets without an expressions object stay that way — an empty
+      // object we created ourselves carries no information.
+      if (Object.keys(ex).length === 0 && !(rawP && rawP.expressions)) delete np.expressions;
+    }
     return np;
   });
 
@@ -1063,6 +1102,86 @@ export function internalToFusionTool(tool) {
   const mtn = tool.machine_tool_number;
   const hasMtn = mtn !== null && mtn !== undefined && mtn !== '' && !isNaN(parseInt(mtn));
   const mtnInt = hasMtn ? parseInt(mtn) : null;
+
+  const hasExisting = Object.keys(existing).length > 0;
+  const isTurningGeneralTool = fusionType === 'turning general';
+
+  // ── Tool-level expression sync ──
+  // Fusion re-derives every numeric/string field from its paired expression on
+  // load, so present keys must always agree with the natives we write. But many
+  // native entries simply OMIT an expression (the field stands alone) — adding
+  // one (especially "''" or "0 in") changes the entry's shape and, for fields
+  // the type doesn't use, invites Fusion's per-type validation flags. Rules:
+  //   • existing tools: sync keys that are present (keeping the original string
+  //     byte-for-byte when the value is unchanged — preserves formulas like
+  //     "(.8/25.4) in" and native formats); ADD a key only when the value
+  //     actually changed in the app (so the new pair is written together).
+  //   • new tools (no existing entry): write the standard set, as before.
+  const exTool = { ...(existing.expressions || {}) };
+  const syncStrExpr = (key, val, oldVal) => {
+    const v = val || '';
+    if (!(key in exTool)) {
+      if (!hasExisting || v !== (oldVal || '')) exTool[key] = `'${v}'`;
+      return;
+    }
+    if (stripQuotes(exTool[key]) !== v) exTool[key] = `'${v}'`;
+  };
+  // addNew: 'always' | 'ifSet' | 'never' — what to do for a NEW tool (no existing
+  // entry). For existing tools the key is added only when the value changed.
+  const syncNumExpr = (key, val, oldVal, unit, addNew = 'always') => {
+    const unchanged = (oldVal != null && val != null && approxEqual(val, oldVal))
+      || ((oldVal == null || oldVal === 0) && (val == null || val === 0));
+    const literal = `${val || 0}${unit ? ` ${unit}` : ''}`;
+    if (!(key in exTool)) {
+      if (!hasExisting) {
+        if (addNew === 'always' || (addNew === 'ifSet' && val > 0)) exTool[key] = literal;
+      } else if (!unchanged && addNew !== 'never') {
+        exTool[key] = literal;
+      }
+      return;
+    }
+    if (!unchanged) exTool[key] = literal;
+  };
+  const exGeo = existing.geometry || {};
+  syncStrExpr('tool_description', tool.description, existing.description);
+  syncStrExpr('tool_material', tool.material || 'carbide', existing.BMC);
+  syncStrExpr('tool_productId', tool.proshot_id, existing['product-id']);
+  syncStrExpr('tool_productLink', tool.product_link, existing['product-link']);
+  syncStrExpr('tool_vendor', tool.location,
+    existing.expressions?.tool_vendor != null ? stripQuotes(existing.expressions.tool_vendor) : existing.vendor);
+  syncNumExpr('tool_diameter', tool.diameter, exGeo.DC, lenUnit);
+  syncNumExpr('tool_fluteLength', tool.flute_length, exGeo.LCF, lenUnit);
+  syncNumExpr('tool_overallLength', tool.overall_length, exGeo.OAL, lenUnit);
+  // Shaft diameter / shoulder length expressions mirror what the geometry block
+  // below actually writes: nothing when the tool has no SFDM/shoulder-length
+  // (circle segments, most form mills) — so no expression is added either.
+  syncNumExpr('tool_shaftDiameter',
+    (tool.shank_diameter != null || !hasExisting) ? (tool.shank_diameter ?? tool.diameter) : null,
+    exGeo.SFDM, lenUnit);
+  syncNumExpr('tool_shoulderLength',
+    (tool.shoulder_length != null || !hasExisting) ? (tool.shoulder_length ?? tool.flute_length) : null,
+    exGeo['shoulder-length'], lenUnit);
+  syncNumExpr('tool_cornerRadius', tool.corner_radius, exGeo.RE, lenUnit, 'ifSet');
+  if (THREAD_PITCH_TYPES.has(tool.tool_type)) {
+    syncNumExpr('tool_threadPitch', tool.thread_pitch, exGeo.TP, lenUnit, 'ifSet');
+  }
+  // Expression-only pairs the app never seeds (sync when present so an edited
+  // value can't be reverted by a stale string; never added otherwise).
+  syncNumExpr('tool_tipAngle', tool.tip_angle, exGeo.SIG, 'degrees', 'never');
+  syncNumExpr('tool_taperAngle', tool.taper_angle, exGeo.TA, 'degrees', 'never');
+  syncNumExpr('tool_tipDiameter', tool.tip_diameter, exGeo['tip-diameter'], lenUnit, 'never');
+  syncNumExpr('tool_numberOfFlutes', tool.number_of_flutes, exGeo.NOF, '', 'never');
+  if (tool.tracking_id) exTool.tool_comment = `'${tool.tracking_id}'`;
+  if (hasMtn) {
+    // Offsets follow the machine tool number (app policy). Preserve the existing
+    // strings when the number is unchanged; rewrite the linked pair otherwise.
+    const numChanged = parseInt(existing['post-process']?.number) !== mtnInt;
+    const exprStale = 'tool_number' in exTool && stripQuotes(exTool.tool_number) !== String(mtnInt);
+    if (!hasExisting || numChanged || exprStale) {
+      exTool.tool_number = String(mtnInt);
+      exTool.tool_lengthOffset = 'tool_number';
+    }
+  }
 
   const fusionObj = {
     ...existing,
@@ -1080,36 +1199,38 @@ export function internalToFusionTool(tool) {
     last_modified: Date.now(),
     'product-id': tool.proshot_id || '',
     'product-link': tool.product_link || '',
-    expressions: {
-      ...(existing.expressions || {}),
-      tool_description: `'${tool.description || ''}'`,
-      tool_diameter: `${tool.diameter || 0} ${lenUnit}`,
-      tool_fluteLength: `${tool.flute_length || 0} ${lenUnit}`,
-      tool_overallLength: `${tool.overall_length || 0} ${lenUnit}`,
-      tool_material: `'${tool.material || 'carbide'}'`,
-      tool_productId: `'${tool.proshot_id || ''}'`,
-      tool_productLink: `'${tool.product_link || ''}'`,
-      tool_shaftDiameter: `${tool.shank_diameter || tool.diameter || 0} ${lenUnit}`,
-      tool_shoulderLength: `${tool.shoulder_length || tool.flute_length || 0} ${lenUnit}`,
-      tool_vendor: `'${tool.location || ''}'`,
-      ...(tool.tracking_id ? { tool_comment: `'${tool.tracking_id}'` } : {}),
-      ...(tool.corner_radius ? { tool_cornerRadius: `${tool.corner_radius} ${lenUnit}` } : {}),
-      ...((THREAD_PITCH_TYPES.has(tool.tool_type) && (tool.thread_pitch > 0 || existing.geometry?.TP > 0)) ? { tool_threadPitch: `${tool.thread_pitch || 0} ${lenUnit}` } : {}),
-      ...(hasMtn ? { tool_number: String(mtnInt), tool_lengthOffset: 'tool_number' } : {}),
-    },
+    expressions: exTool,
     geometry: {
       ...(existing.geometry || {}),
+      // Turning tools use an entirely different (insert) geometry set — never
+      // force the mill core fields onto them; Fusion flags fields a type doesn't
+      // use. Their native geometry survives via the spread above.
+      ...(isTurningGeneralTool ? {} : {
       CSP: false,
       DC: tool.diameter || 0,
       // HAND from cutting_direction (true = right hand) — never hardcode true, or
-      // left-hand tools silently flip to right-hand on every write.
-      HAND: tool.cutting_direction !== 'Left Hand',
+      // left-hand tools silently flip to right-hand on every write. Taps carry
+      // handedness in the type string (tap left/right hand) and most native tap
+      // entries omit HAND entirely — only sync it when the entry already has it.
+      ...(fusionType.startsWith('tap ') && existing.geometry?.HAND === undefined
+        ? {} : { HAND: tool.cutting_direction !== 'Left Hand' }),
       LCF: tool.flute_length || 0,
       NOF: tool.number_of_flutes || 0,
       OAL: tool.overall_length || 0,
-      SFDM: tool.shank_diameter || tool.diameter || 0,
-      'shoulder-diameter': tool.shank_diameter || tool.diameter || 0,
-      'shoulder-length': tool.shoulder_length || tool.flute_length || 0,
+      // SFDM / shoulder-length only when the tool actually has them — several
+      // types (circle segments, most form mills) natively omit them, and writing
+      // a defaulted value adds a field Fusion never wrote for that entry.
+      ...(tool.shank_diameter != null || !hasExisting
+        ? { SFDM: tool.shank_diameter ?? tool.diameter ?? 0 } : {}),
+      ...(tool.shoulder_length != null || !hasExisting
+        ? { 'shoulder-length': tool.shoulder_length ?? tool.flute_length ?? 0 } : {}),
+      // shoulder-diameter is real data (reduced-shank tools, thread-mill minor
+      // diameters differ from the shank) — preserved from ...existing, never
+      // overwritten. Seeded from the shank only for NEW tools of the mill
+      // types that natively carry it (per the FUSION_SCHEMA §1d matrix).
+      ...(!hasExisting && SHOULDER_DIAMETER_TYPES.has(fusionType)
+        ? { 'shoulder-diameter': tool.shank_diameter ?? tool.diameter ?? 0 } : {}),
+      }),
       // Only write these when non-zero (or when existing had a non-zero value, to support clearing).
       // The ...existing spread above preserves them from the original Fusion entry.
       ...(tool.corner_radius > 0 || (existing.geometry?.RE > 0) ? { RE: tool.corner_radius || 0 } : {}),
@@ -1127,13 +1248,23 @@ export function internalToFusionTool(tool) {
       // preserved from ...existing if the original Fusion entry had them.
     },
     'start-values': {
+      ...(existing['start-values'] || {}),
       presets: outPresets,
     },
     ...(existing.holder ? { holder: existing.holder } : {}),
     'post-process': {
       ...(existing['post-process'] || {}),
       ...(tool.tracking_id ? { comment: tool.tracking_id } : {}),
-      ...(hasMtn ? { number: mtnInt, 'length-offset': mtnInt, 'diameter-offset': mtnInt } : {}),
+      // Offsets follow the machine tool number (app policy) — but only touch the
+      // offset keys the entry actually uses (one native variant stores
+      // compensation-offset instead of diameter-offset; don't add the others).
+      ...(hasMtn ? {
+        number: mtnInt,
+        ...(existing['post-process']?.['length-offset'] != null || !hasExisting
+          ? { 'length-offset': mtnInt } : {}),
+        ...(existing['post-process']?.['diameter-offset'] != null || !hasExisting
+          ? { 'diameter-offset': mtnInt } : {}),
+      } : {}),
     },
   };
   // tool_inclusiveAngle is a chamfer-mill-only Fusion expression = 2 × geometry.TA
@@ -1142,8 +1273,15 @@ export function internalToFusionTool(tool) {
   // condition as the TA write above; absent (not empty) for every other type —
   // same "write native + expression together, delete when not applicable"
   // pattern as the holder expression fields.
+  // Most native chamfer-mill exports do NOT carry the key, so it is only added
+  // when the included angle is new/changed (or the entry already has it) —
+  // never injected onto an unchanged tool.
   if (tool.tool_type === 'chamfer mill' && (tool.taper_angle > 0 || existing.geometry?.TA > 0)) {
-    fusionObj.expressions.tool_inclusiveAngle = `${(tool.taper_angle || 0) * 2} degrees`;
+    const taUnchanged = existing.geometry?.TA != null && tool.taper_angle != null
+      && approxEqual(tool.taper_angle, existing.geometry.TA);
+    if ('tool_inclusiveAngle' in fusionObj.expressions || !taUnchanged || !hasExisting) {
+      fusionObj.expressions.tool_inclusiveAngle = `${(tool.taper_angle || 0) * 2} degrees`;
+    }
   } else {
     delete fusionObj.expressions.tool_inclusiveAngle;
   }
@@ -1191,7 +1329,9 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     // tip_angle is now Fusion-native (geometry.SIG); Fusion wins, metadata is a
     // transition-only fallback for tools whose Fusion entry lacks SIG.
     tip_angle: fusionInternal.tip_angle ?? meta.tip_angle ?? null,
-    tip_diameter: meta.tip_diameter ?? fusionInternal.tip_diameter ?? null,
+    // tip_diameter is Fusion-native (geometry.tip-diameter); Fusion wins, metadata
+    // is a transition-only fallback — same pattern as tip_angle above.
+    tip_diameter: fusionInternal.tip_diameter ?? meta.tip_diameter ?? null,
     lower_radius: meta.lower_radius ?? null,
     upper_radius: meta.upper_radius ?? null,
     profile_radius: meta.profile_radius ?? null,

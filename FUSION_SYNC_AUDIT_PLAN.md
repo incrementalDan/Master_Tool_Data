@@ -1,5 +1,13 @@
 # FUSION_SYNC_AUDIT_PLAN.md — Round-Trip Audit Findings & Fix Plan
 
+> **STATUS: IMPLEMENTED ✅** — all root causes below (RC1–RC8) are fixed in
+> `src/schema/toolSchema.js`; the harness now reports **0 unexpected diffs across all 232
+> reference tools / 23 types** (only the documented expected diffs remain). The resolution
+> record lives in `SCHEMA_AUDIT.md` §RT; CLAUDE.md's Geometry-minimalism and Preset-expressions
+> sections were rewritten to match. This document is kept as the diagnosis record. Still open:
+> the coverage gaps (no counter bore / counter sink / center drill / boring head reference
+> exports) and one real-Fusion confirmation save per previously-affected type.
+
 **How this was produced:** a new harness (`scripts/roundtrip-audit.mjs`) runs every tool in
 `FUSION TOOL Library REF/` (`Full_Type_List Examples.json` + `Special Cases.json`, 232 tools)
 through `fusionToolToInternal()` → `internalToFusionTool()` and deep-diffs the output against the
