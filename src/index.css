@@ -16,6 +16,15 @@
   --input-bg: #1e1e1e;
   --blue-tint: #16263b;
   --blue-tint-2: #1a2a3a;
+  --accent: #6366f1;            /* indigo — selection highlight (pickers, confirm) */
+  /* Data-field token colors — RGB triplets so tints compose via rgba(var(--tok-*), a).
+     One per named data type; see the "Data-field visual tokens" block below. */
+  --tok-description: 124, 58, 237;   /* violet  — .description-badge */
+  --tok-proshot: 245, 158, 11;       /* amber   — .proshot-pill */
+  --tok-holder: 45, 212, 191;        /* teal    — .holder-pill */
+  --tok-machine: 74, 222, 128;       /* green   — .machine-num-badge */
+  --tok-location: 129, 140, 248;     /* indigo  — .location-tag */
+  --tok-preset: 52, 211, 153;        /* emerald — .preset-tag */
   --radius: 8px;
   --radius-sm: 5px;
   --radius-lg: 12px;
@@ -166,6 +175,27 @@ input[type=number]::-webkit-inner-spin-button { opacity: 0.3; }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
 .btn-lg { padding: 10px 20px; font-size: 15px; font-weight: 600; }
 
+/* Segmented toggle — a connected group of mutually-exclusive options
+   (unit pickers, mode switches). Mark the active option with .active. */
+.btn-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.btn-toggle button {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--surface-2);
+  color: var(--text-sub);
+  border: none;
+  transition: background var(--ease), color var(--ease);
+}
+.btn-toggle button + button { border-left: 1px solid var(--border); }
+.btn-toggle button:hover { background: var(--surface-3); color: var(--text); }
+.btn-toggle button.active { background: var(--blue-tint); color: var(--blue); font-weight: 600; }
+
 /* ─── Icon buttons ───────────────────────────────────────────────────────── */
 .icon-btn {
   display: inline-flex;
@@ -215,6 +245,20 @@ input[type=number]::-webkit-inner-spin-button { opacity: 0.3; }
 .field-input.error { border-color: var(--red); }
 
 select.field-input option { background: var(--surface); }
+
+/* Native select: replace the browser arrow with a theme chevron. */
+select.field-input {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23adadad' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  padding-right: 28px;
+}
+
+/* Native checkboxes/radios pick up the theme accent everywhere. */
+input[type='checkbox'],
+input[type='radio'] { accent-color: var(--blue); }
 
 textarea.field-input { resize: vertical; min-height: 70px; }
 
@@ -635,7 +679,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .panel.open .panel-header { border-bottom-color: var(--border); }
 .panel-header-icon { color: var(--blue); flex-shrink: 0; }
 .panel-header-title { flex: 1; }
-.panel-chevron { color: var(--text-sub); font-size: 11px; }
+.panel-chevron { color: var(--text-sub); font-size: 11px; display: inline-flex; align-items: center; }
 
 .panel-body { padding: 12px; }
 
@@ -978,6 +1022,42 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   font-size: 13px;
   margin-bottom: 12px;
 }
+
+/* Inline warning / info banners — use inside modals and panels instead of
+   hand-rolled rgba() blocks. Pair with an icon as the first child. */
+.banner-warn,
+.banner-info {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+}
+.banner-warn {
+  background: rgba(234, 179, 8, 0.12);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  color: #fde047;
+}
+.banner-info {
+  background: var(--blue-tint);
+  border: 1px solid rgba(74, 143, 255, 0.4);
+  color: var(--blue);
+}
+.banner-warn svg,
+.banner-info svg { flex-shrink: 0; margin-top: 1px; }
+
+/* Clickable list rows (pickers, result lists) — hover + selected treatment. */
+.picker-row {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  cursor: pointer;
+  transition: background var(--ease);
+}
+.picker-row:last-child { border-bottom: none; }
+.picker-row:hover { background: var(--surface-2); }
+.picker-row.selected { background: var(--surface-2); border-left-color: var(--blue); }
 
 .warn-banner {
   background: rgba(217, 120, 48, 0.10);
@@ -1642,6 +1722,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .flex { display: flex; }
 .flex-1 { flex: 1; }
 .items-center { align-items: center; }
+.flex-wrap { flex-wrap: wrap; }
 .gap-8 { gap: 8px; }
 .gap-12 { gap: 12px; }
 .gap-16 { gap: 16px; }
@@ -1701,8 +1782,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   padding-bottom: 8px;
 }
 
-.preset-scroll::-webkit-scrollbar { height: 5px; }
-.preset-scroll::-webkit-scrollbar-track { background: transparent; }
+.preset-scroll::-webkit-scrollbar { height: 6px; }
+.preset-scroll::-webkit-scrollbar-track { background: var(--bg); }
 .preset-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .preset-scroll::-webkit-scrollbar-thumb:hover { background: #555; }
 
@@ -2182,8 +2263,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /* When changing any class, update ALL usages across the codebase.            */
 
 .description-badge {
-  background: rgba(124, 58, 237, 0.10);
-  border: 1px solid rgba(124, 58, 237, 0.28);
+  background: rgba(var(--tok-description), 0.10);
+  border: 1px solid rgba(var(--tok-description), 0.28);
   border-radius: 7px;
   padding: 3px 10px 4px;
   color: var(--text);
@@ -2199,9 +2280,9 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   font-size: 12px;
   font-weight: 700;
   font-family: monospace;
-  background: rgba(245, 158, 11, 0.14);
-  border: 1px solid rgba(245, 158, 11, 0.42);
-  color: #f59e0b;
+  background: rgba(var(--tok-proshot), 0.14);
+  border: 1px solid rgba(var(--tok-proshot), 0.42);
+  color: rgb(var(--tok-proshot));
   white-space: nowrap;
   flex-shrink: 0;
   letter-spacing: 0.02em;
@@ -2248,9 +2329,9 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   display: inline-block;
   padding: 2px 7px;
   border-radius: 5px;
-  border: 1px solid rgba(74, 222, 128, 0.40);
-  background: rgba(74, 222, 128, 0.10);
-  color: #4ade80;
+  border: 1px solid rgba(var(--tok-machine), 0.40);
+  background: rgba(var(--tok-machine), 0.10);
+  color: rgb(var(--tok-machine));
   font-size: 11px;
   font-weight: 700;
   font-family: monospace;
@@ -2262,9 +2343,9 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   display: inline-block;
   padding: 2px 9px;
   border-radius: 7px;
-  border: 1px solid rgba(99, 102, 241, 0.40);
-  background: rgba(99, 102, 241, 0.10);
-  color: #818cf8;
+  border: 1px solid rgba(var(--tok-location), 0.40);
+  background: rgba(var(--tok-location), 0.10);
+  color: rgb(var(--tok-location));
   font-size: 11px;
   font-weight: 600;
   font-family: monospace;
@@ -2276,9 +2357,9 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   display: inline-block;
   padding: 1px 7px;
   border-radius: 999px;
-  border: 1px solid rgba(16, 185, 129, 0.35);
-  background: rgba(16, 185, 129, 0.10);
-  color: #34d399;
+  border: 1px solid rgba(var(--tok-preset), 0.35);
+  background: rgba(var(--tok-preset), 0.10);
+  color: rgb(var(--tok-preset));
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -2439,9 +2520,9 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   display: inline-block;
   padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(20, 184, 166, 0.40);
-  background: rgba(20, 184, 166, 0.15);
-  color: #2dd4bf;
+  border: 1px solid rgba(var(--tok-holder), 0.40);
+  background: rgba(var(--tok-holder), 0.15);
+  color: rgb(var(--tok-holder));
   font-size: 11px;
   font-weight: 600;
   white-space: normal;

@@ -131,11 +131,11 @@ export default function Settings() {
           The unit used for new tools you create. Existing tools keep their own unit
           (read from Fusion); lengths always display in each record&apos;s own unit.
         </p>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="btn-toggle">
           {[['inches', 'Inches (in)'], ['millimeters', 'Millimeters (mm)']].map(([val, label]) => (
             <button
               key={val}
-              className={`btn btn-sm ${defaultUnit === val ? 'btn-primary' : 'btn-secondary'}`}
+              className={defaultUnit === val ? 'active' : ''}
               onClick={() => changeDefaultUnit(val)}
             >
               {label}

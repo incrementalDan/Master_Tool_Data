@@ -380,7 +380,7 @@ Geometry-field presence per Fusion type (`Y` = present on all tools of that type
 | Field(s) | Inch tool stores | mm tool stores | Conversion needed? |
 |---|---|---|---|
 | `geometry.DC/LCF/OAL/SFDM/RE/shoulder-*/tip-*/TP/TPN/TPX/axial-distance/*-radius` | inches | mm | **Native to the tool's unit.** App reads/writes raw — no conversion. |
-| `geometry.LB` (OOH) | inches | mm | **App stores OOH canonically in inches** → ÷25.4 on read, ×25.4 on write for mm tools. |
+| `geometry.LB` (OOH) | inches | mm | **Native to the tool's unit** — read/written raw, exactly like the other geometry (the earlier inches-canonical model was retired in the C1 units pass; see SCHEMA_AUDIT.md). |
 | `geometry.assemblyGaugeLength` | inches | mm | = holder gauge (converted to tool unit) + LB; tool's unit. |
 | `geometry.SIG/TA/thread-profile-angle` | degrees | degrees | Angles — never converted. |
 | `geometry.NOF/NT` | count | count | Never converted. |
@@ -392,7 +392,7 @@ Geometry-field presence per Fusion type (`Y` = present on all tools of that type
 
 **Mixing within one tool:** confirmed — 72/222 embedded holders are `millimeters` inside `inches` tools. Therefore any code that combines holder dimensions with tool dimensions (assembly gauge length, holder segment CSV) **must convert via the holder's unit, not the tool's**.
 
-**Fields flagged for a unit-conversion multiplier in the field registry:** every `unit: 'length'` field is native EXCEPT `ooh`/`min_ooh`, which are inches-canonical and must convert to native at any boundary with native lengths. Feed (`unit: 'feed'`) and speed (`unit: 'speed'`) carry unit-dependent suffix strings in expressions. (The registry currently has no explicit "needs conversion" flag — see `SCHEMA_AUDIT.md`.)
+**Field registry:** every `unit: 'length'` field — `ooh`/`min_ooh` included — is `canonicalUnit: 'native'` (stored in its record's own unit; no hidden inches canonical). Convert only at genuine cross-unit boundaries (tool↔holder, ProShop file unit) via `src/utils/units.js` `convertLength`. Feed (`unit: 'feed'`) and speed (`unit: 'speed'`) carry unit-dependent suffix strings in expressions. Note: native exports use both `"in/min"` and `"inpm"` spellings in feed expressions — both are valid.
 
 ---
 

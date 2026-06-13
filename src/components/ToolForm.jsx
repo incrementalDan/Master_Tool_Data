@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Tag, Ruler, Layers, Settings2, Save, X, AlertTriangle, Wand2 } from 'lucide-react';
+import { Tag, Ruler, Layers, Settings2, Save, X, AlertTriangle, Wand2, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   TOOL_TYPES, TOOL_TYPE_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getNextMachineNumber, toolToExtractor,
   INCH_THREAD_SIZES, METRIC_THREAD_SIZES,
@@ -59,6 +59,9 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
   const [data, setData] = useState({ ...tool });
   const [errors, setErrors] = useState([]);
   const [tagInput, setTagInput] = useState('');
+  // Editing an existing tool: the 26-type grid starts collapsed (type changes
+  // are rare) and expands on demand. Always expanded for the create flow.
+  const [showTypeGrid, setShowTypeGrid] = useState(false);
 
   // Machine tool number is read-only here. For a new tool, preview the number
   // that will be assigned at save time (the real assignment happens on save —
@@ -155,39 +158,53 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
         </div>
       )}
 
-      {/* Tool type selector */}
+      {/* Tool type selector — full grid when creating; collapsed to the current
+          type with a "Change type…" expander when editing (type changes are
+          rare and the grid pushes the real fields below the fold). */}
       <div className="panel open mb-16">
         <div className="panel-header static">
           <Layers size={15} className="panel-header-icon" />
           <span className="panel-header-title">Tool Type *</span>
         </div>
         <div className="panel-body">
-          <div className="type-chip-row">
-            {TOOL_TYPES.map(type => (
-              <button
-                key={type}
-                onClick={() => setField('tool_type', type)}
-                className={`type-chip ${data.tool_type === type ? 'active' : ''}`}
-              >
-                <ToolTypeIcon type={type} size={16} />
-                {TOOL_TYPE_LABELS[type]}
+          {(isNew || showTypeGrid) ? (
+            <div className="type-chip-row">
+              {TOOL_TYPES.map(type => (
+                <button
+                  key={type}
+                  onClick={() => setField('tool_type', type)}
+                  className={`type-chip ${data.tool_type === type ? 'active' : ''}`}
+                >
+                  <ToolTypeIcon type={type} size={16} />
+                  {TOOL_TYPE_LABELS[type]}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="flex items-center gap-8 flex-wrap">
+              <span className="type-chip active" style={{ cursor: 'default' }}>
+                <ToolTypeIcon type={data.tool_type} size={16} />
+                {TOOL_TYPE_LABELS[data.tool_type] || data.tool_type}
+              </span>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowTypeGrid(true)}>
+                Change type…
               </button>
-            ))}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
       <Section title="Identity" icon={Tag}>
         {/* Machine tool number — read-only, managed by the app */}
         {isNew ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <div className="flex items-center gap-8 mb-12 flex-wrap">
             <span className="text-xs text-sub">Will be assigned:</span>
             <span className="machine-num-badge">T{previewMachineNumber}</span>
             <span className="machine-num-badge">H{previewMachineNumber}</span>
             <span className="machine-num-badge">D{previewMachineNumber}</span>
           </div>
         ) : (data.machine_tool_number !== null && data.machine_tool_number !== undefined && data.machine_tool_number !== '') ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <div className="flex items-center gap-8 mb-12 flex-wrap">
             <span className="text-xs text-sub">Machine #</span>
             <span className="machine-num-badge">T{data.machine_tool_number}</span>
             <span className="machine-num-badge">H{data.machine_tool_number}</span>
@@ -196,19 +213,21 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
           </div>
         ) : null}
         {/* Unit — selectable when creating a tool; pulled from Fusion (read-only) when editing. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="flex items-center gap-8 mb-12 flex-wrap">
           <span className="text-xs text-sub">Unit</span>
           {isNew ? (
-            [['inches', 'Inches (in)'], ['millimeters', 'Millimeters (mm)']].map(([val, label]) => (
-              <button
-                key={val}
-                type="button"
-                className={`btn btn-sm ${data.unit === val ? 'btn-primary' : 'btn-secondary'}`}
-                onClick={() => setField('unit', val)}
-              >
-                {label}
-              </button>
-            ))
+            <div className="btn-toggle">
+              {[['inches', 'Inches (in)'], ['millimeters', 'Millimeters (mm)']].map(([val, label]) => (
+                <button
+                  key={val}
+                  type="button"
+                  className={data.unit === val ? 'active' : ''}
+                  onClick={() => setField('unit', val)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           ) : (
             <>
               <span className="machine-num-badge">{unitAbbr(data.unit)}</span>
@@ -604,7 +623,7 @@ function Section({ title, icon: Icon, children }) {
       <button className="panel-header" onClick={() => setOpen(o => !o)}>
         {Icon && <Icon size={15} className="panel-header-icon" />}
         <span className="panel-header-title">{title}</span>
-        <span className="panel-chevron">{open ? '▾' : '▸'}</span>
+        <span className="panel-chevron">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
       </button>
       {open && <div className="panel-body">{children}</div>}
     </div>

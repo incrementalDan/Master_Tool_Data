@@ -47,12 +47,8 @@ export default function NormalizeModal({ onClose }) {
           <button className="icon-btn" onClick={onClose} disabled={isSaving}><X size={16} /></button>
         </div>
 
-        <div style={{
-          display: 'flex', gap: 8, padding: '10px 12px', marginBottom: 12,
-          background: 'rgba(234,179,8,0.12)', border: '1px solid rgba(234,179,8,0.4)',
-          borderRadius: 'var(--radius-sm)', color: '#fde047', fontSize: 12.5,
-        }}>
-          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 1 }} />
+        <div className="banner-warn mb-12">
+          <AlertTriangle size={16} />
           <span>
             This assigns tracking IDs, splits each tool into per-assembly instances, and
             renames presets to the standard convention. <strong>Back up your Fusion library
