@@ -1,11 +1,12 @@
 # UI_CONSISTENCY_AUDIT.md — UI Consistency Pass
 
-> **STATUS: Quick Wins + Mediums implemented ✅** (items 1–10 of the suggested order; see
-> per-item ✅/✏️ notes below). Two items turned out to already be fine on closer inspection:
-> DiffStep's row grid was already a CSS class (`.diff-row`), and QueuePanel items already
-> have hover/active states — both struck through below. Still open: item 11, the two-column
-> edit layout (Larger Redesign), and the long-tail inline-style cleanup which is being done
-> opportunistically as components get touched.
+> **STATUS: Quick Wins + Mediums + the Larger Redesign all implemented ✅.** Item 11 (the
+> two-column edit layout) shipped as part of a deeper change: view and edit now render the
+> Geometry/Setup fields through ONE shared component (`ToolFields`) driven by one shared
+> layout (`toolFieldLayout.js`), so they can't drift and field positions no longer shift
+> between two tools of the same type (all applicable fields always render; only an explicit
+> `VIEW_HIDE_WHEN_EMPTY` set collapses when empty). See the "Shared field layout" section at
+> the bottom. Remaining: long-tail inline-style cleanup, done opportunistically.
 
 Walkthrough of the main views against the design tokens in `src/index.css` (the `:root` block:
 surfaces, `--blue/--orange/--green/--red/--amber`, radii, shadows, plus the button/panel/modal/
@@ -155,3 +156,45 @@ button + a generic `<h2 style={{fontSize:16…}}>Edit Tool</h2>`, then a flat si
 | 9 | Utility classes + opportunistic inline-style cleanup | Medium ✏️ partial — `.flex-wrap` + `.picker-row` added; ToolForm rows and HolderPicker rows converted; remaining inline styles cleaned as components get touched |
 | 10 | ~~DiffStep `.diff-table` + shared `.list-item`~~ | Already fine — `.diff-row` grid and `.queue-item` hover/active were already CSS classes; original finding overstated |
 | 11 | Two-column edit layout mirroring view mode | Larger Redesign |
+
+---
+
+## Shared field layout (the larger redesign) ✅
+
+The biggest source of "why do the fields move around" was that the view
+(`ToolDetail`) and the edit form (`ToolForm`) each had their *own* list of which
+fields to show, with different visibility rules — view used `{tool.x && <Field/>}`
+(hide when empty), edit used `{visibleFields.has('x') && <input/>}` (gate by type).
+So a missing value shifted positions, and view/edit could silently disagree.
+
+**Fix — one source of truth that both modes render from:**
+
+- `src/schema/toolFieldLayout.js` — the field order for the Geometry and Setup
+  sections, the tool-type groups (shared with the landing grid), the select option
+  lists, and `VIEW_HIDE_WHEN_EMPTY` (the only fields allowed to collapse when empty,
+  currently just `custom_grind`). `getToolFieldSections(type)` returns the
+  type-applicable fields in fixed order.
+- `src/components/ToolFields.jsx` — a `mode="view"|"edit"` renderer. Both screens
+  drop in `<ToolFields tool=… mode=… />`. Same fields, same order, same positions;
+  edit just swaps the read-only value for an input. A field added to the layout
+  appears in both modes automatically — they cannot drift.
+
+**Behavior now:**
+
+- **Stable positions:** every field that applies to the tool type renders in both
+  modes regardless of whether it has a value (empty → "—" in view, empty box in
+  edit). Two tools of the same type line up field-for-field.
+- **Edit = view, unlocked:** `ToolForm` uses the same two-column `.detail-layout`
+  and the same sticky identity header as the view; the left column is
+  `<ToolFields mode="edit">`, the right is Identity + Notes.
+- **Opt-out, not opt-in:** to make a field disappear when empty, add it to
+  `VIEW_HIDE_WHEN_EMPTY` (view-only; edit always shows the box so you can fill it).
+  This is the one knob to refine.
+- **Tool-type picker:** `ToolTypeDropdown` — a dropdown of grouped icon cards
+  (Milling / Hole Making / Turning / Other), the same grouping as the search page
+  (now both read `TOOL_TYPE_GROUPS` from `toolFieldLayout.js`).
+
+**To add or move a tool field in future:** edit the field's entry in
+`fieldRegistry.js` (applies-to-types, label) and its position in
+`GEOMETRY_FIELDS` / `SETUP_FIELDS` / `THREAD_FIELDS` in `toolFieldLayout.js`.
+Both view and edit update together — there is no second list to keep in sync.

@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
-  Tag, Ruler, Settings2, StickyNote, Clock, Package, Wrench, AlertTriangle, Camera, X,
+  Tag, Ruler, StickyNote, Clock, Package, Wrench, AlertTriangle, Camera, X,
   ChevronDown, ChevronRight,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
@@ -17,8 +17,8 @@ import { fetchFileBlob } from '../services/driveService.js';
 import InfoTip from './InfoTip.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS, validateGeometry, fusionToolToInternal, readOohFromFusion } from '../schema/toolSchema.js';
-import { INCLUSIVE_ANGLE_TYPES } from '../schema/fieldRegistry.js';
 import { convertLength, unitAbbr } from '../utils/units.js';
+import ToolFields from './ToolFields.jsx';
 import { hasReconcileWork } from '../services/reconcile.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 import ToolForm from './ToolForm.jsx';
@@ -87,8 +87,6 @@ export default function ToolDetail() {
     setReconcileResults(null);
     navigate(`/merge/${tool.id}`, { state: { reconcileIncoming: incoming } });
   };
-  const isMetric = tool?.unit === 'millimeters';
-  const lenUnit = isMetric ? 'mm' : 'in';
   const geoIssues = useMemo(
     () => tool ? validateGeometry(tool) : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -298,40 +296,8 @@ export default function ToolDetail() {
 
         <div className="detail-layout">
           <div className="detail-layout-left">
-            <Section title="Geometry" icon={Ruler}>
-              {tool.tool_type === 'tap' && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', marginBottom: 10, borderBottom: '1px solid var(--border)' }}>
-                  <span className="text-sub" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>Sub-Type</span>
-                  <span className="machine-num-badge" style={{ textTransform: 'capitalize' }}>
-                    {tool.tap_sub_type === 'form' ? 'Form' : 'Cut'}
-                  </span>
-                  {tool.is_sti && (
-                    <span className="sti-pill" title="STI / Helicoil — thread insert tap">STI / Helicoil</span>
-                  )}
-                </div>
-              )}
-              <div className="detail-fields">
-                <Field label={tool.tool_type === 'tapered mill' ? 'Tip Diameter' : 'Diameter'} value={round4(tool.diameter)} unit={lenUnit} />
-                <Field label="Flute Length" value={round4(tool.flute_length)} unit={lenUnit} />
-                <Field label="Overall Length" value={round4(tool.overall_length)} unit={lenUnit} />
-                <Field label="# Flutes" value={tool.number_of_flutes} />
-                <Field label="Shank Ø" value={round4(tool.shank_diameter)} unit={lenUnit} />
-                {(tool.corner_radius !== null && tool.corner_radius !== undefined) && <Field label="Corner Radius" value={round4(tool.corner_radius)} unit={lenUnit} />}
-                {tool.shoulder_length && <Field label="Shoulder Length" value={round4(tool.shoulder_length)} unit={lenUnit} />}
-                {tool.tip_angle && <Field label="Tip Angle" value={round4(tool.tip_angle)} unit="°" />}
-                {tool.taper_angle && (
-                  INCLUSIVE_ANGLE_TYPES.has(tool.tool_type)
-                    ? <Field label="Included/Inclusive Tip Angle" value={round4(tool.taper_angle * 2)} unit="°" />
-                    : <Field label="Taper Angle" value={round4(tool.taper_angle)} unit="°" />
-                )}
-                {tool.tip_diameter && <Field label="Tip Diameter" value={round4(tool.tip_diameter)} unit={lenUnit} />}
-                {tool.lower_radius && <Field label="Lower Radius" value={round4(tool.lower_radius)} unit={lenUnit} />}
-                {tool.upper_radius && <Field label="Upper Radius" value={round4(tool.upper_radius)} unit={lenUnit} />}
-                {tool.profile_radius && <Field label="Profile Radius" value={round4(tool.profile_radius)} unit={lenUnit} />}
-                {tool.axial_distance && <Field label="Axial Distance" value={round4(tool.axial_distance)} unit={lenUnit} />}
-                <Field label="Length Below Holder - MIN OOH" value={tool.min_ooh != null ? round4(tool.min_ooh) : null} unit={lenUnit} />
-                <Field label="Custom Grind" value={tool.custom_grind ? 'Yes' : 'No'} />
-              </div>
+            <Section title="Geometry & Setup" icon={Ruler}>
+              <ToolFields tool={tool} mode="view" />
               {geoIssues.length > 0 && (
                 <div className="warn-banner" style={{ marginTop: 8 }}>
                   {geoIssues.map((issue, i) => (
@@ -340,33 +306,6 @@ export default function ToolDetail() {
                       {issue.message}
                     </div>
                   ))}
-                </div>
-              )}
-            </Section>
-
-            <Section title="Setup" icon={Settings2}>
-              <div className="detail-fields">
-                <Field label="Tool Material" value={tool.material} />
-                <Field label="Coating" value={tool.coating} />
-                <Field label="TSC Capable" value={tool.tsc_capable ? 'Yes' : 'No'} />
-                <Field label="Helix Angle" value={round4(tool.helix_angle)} unit="°" />
-                <Field label="Flute Type" value={tool.flute_type} />
-                <Field label="Flute Design" value={tool.flute_design || null} />
-                <Field label="Cutting Direction" value={tool.cutting_direction} />
-                <Field label="Center Cutting" value={tool.center_cutting != null ? (tool.center_cutting ? 'Yes' : 'No') : null} />
-                {tool.pitch && <Field label={tool.tool_type === 'tap' ? 'Thread Size' : 'Thread Pitch'} value={tool.pitch} />}
-                {tool.tap_thread_unit && <Field label="Thread Unit" value={tool.tap_thread_unit === 'metric' ? 'Metric' : 'Inch'} />}
-                {tool.tap_class && <Field label="Tap Limit Tolerance" value={tool.tap_class} />}
-                {tool.class_of_fit && <Field label="Class of Fit" value={tool.class_of_fit} />}
-                {tool.point_type && <Field label="Point Type" value={tool.point_type} />}
-                {tool.tip_to_first_thread != null && <Field label="Tip to 1st Full Thread" value={round4(tool.tip_to_first_thread)} unit={lenUnit} />}
-              </div>
-              {(tool.material_suitability || []).length > 0 && (
-                <div style={{ marginTop: 10 }}>
-                  <div className="detail-field-label">Material Suitability</div>
-                  <div className="tag-list" style={{ marginTop: 4 }}>
-                    {tool.material_suitability.map(m => <span key={m} className="tag">{m}</span>)}
-                  </div>
                 </div>
               )}
             </Section>
@@ -797,15 +736,6 @@ function Section({ title, icon: Icon, children, defaultOpen = true }) {
       {open && <div className="panel-body">{children}</div>}
     </div>
   );
-}
-
-// Round a numeric value to at most 4 decimal places (trailing zeros dropped).
-// Non-numeric / empty values pass through unchanged.
-function round4(v) {
-  if (v === null || v === undefined || v === '') return v;
-  const n = Number(v);
-  if (isNaN(n)) return v;
-  return Math.round(n * 10000) / 10000;
 }
 
 function AssemblyExportPicker({ tool, holders, onConfirm, onCancel }) {

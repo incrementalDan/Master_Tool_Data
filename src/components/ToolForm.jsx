@@ -1,38 +1,15 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Tag, Ruler, Layers, Settings2, Save, X, AlertTriangle, Wand2, ChevronDown, ChevronRight } from 'lucide-react';
+import { Tag, Ruler, Layers, Save, X, AlertTriangle, Wand2, ChevronDown, ChevronRight, StickyNote } from 'lucide-react';
 import {
-  TOOL_TYPES, TOOL_TYPE_LABELS, MA, CO, WM, MANUFACTURER_LIST, validateTool, validateGeometry, getNextMachineNumber, toolToExtractor,
-  INCH_THREAD_SIZES, METRIC_THREAD_SIZES,
-  TAP_LIMIT_TOLERANCE_OPTIONS_INCH, TAP_LIMIT_TOLERANCE_DEFAULT_INCH, TAP_LIMIT_TOLERANCE_OPTIONS_METRIC, TAP_LIMIT_TOLERANCE_DEFAULT_METRIC,
-  CLASS_OF_FIT_OPTIONS, CLASS_OF_FIT_DEFAULT,
+  MANUFACTURER_LIST, validateTool, validateGeometry, getNextMachineNumber, toolToExtractor,
 } from '../schema/toolSchema.js';
-import { fieldLabel, INCLUSIVE_ANGLE_TYPES } from '../schema/fieldRegistry.js';
+import { fieldLabel } from '../schema/fieldRegistry.js';
 import { unitAbbr } from '../utils/units.js';
 import InfoTip from './InfoTip.jsx';
 import { buildDesc } from '../utils/toolNaming.js';
-import { fieldsForType } from '../schema/fieldRegistry.js';
 import { useApp } from '../context/AppContext.jsx';
-import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
-
-const FIELD_STEP = {
-  diameter: '0.0001', flute_length: '0.001', overall_length: '0.001', shank_diameter: '0.0001',
-  corner_radius: '0.0001', tip_diameter: '0.0001', lower_radius: '0.0001', upper_radius: '0.0001',
-  profile_radius: '0.0001', axial_distance: '0.001', shoulder_length: '0.001', ooh: '0.001',
-  number_of_flutes: '1', spindle_speed: '1', cutting_feedrate: '0.1', plunge_feedrate: '0.1',
-  ramp_feedrate: '0.1', lead_in_feedrate: '0.1', lead_out_feedrate: '0.1',
-  feed_per_tooth: '0.0001', feed_per_rev: '0.0001', cutting_speed: '1',
-  depth_of_cut: '0.001', width_of_cut: '0.001', tip_angle: '0.5', taper_angle: '0.5',
-  helix_angle: '0.5', min_thread_pitch: '0.0001', max_thread_pitch: '0.0001',
-  tpi_min: '1', tpi_max: '1', thread_profile_angle: '0.5', tip_to_first_thread: '0.001',
-};
-
-
-const FLUTE_DESIGN_OPTS = ['Variable Index', 'Variable Flute', 'Variable Helix', 'Variable Pitch'];
-
-const TAP_SUB_TYPE_OPTS = [
-  { value: 'cut', label: 'Cut' },
-  { value: 'form', label: 'Form' },
-];
+import ToolTypeDropdown from './ToolTypeDropdown.jsx';
+import ToolFields from './ToolFields.jsx';
 
 function derivePitchFromThreadSize(pitchStr, toolUnit = 'inches') {
   const str = (pitchStr || '').trim();
@@ -59,9 +36,6 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
   const [data, setData] = useState({ ...tool });
   const [errors, setErrors] = useState([]);
   const [tagInput, setTagInput] = useState('');
-  // Editing an existing tool: the 26-type grid starts collapsed (type changes
-  // are rare) and expands on demand. Always expanded for the create flow.
-  const [showTypeGrid, setShowTypeGrid] = useState(false);
 
   // Machine tool number is read-only here. For a new tool, preview the number
   // that will be assigned at save time (the real assignment happens on save —
@@ -142,13 +116,14 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [dirty]);
 
-  const visibleFields = new Set(fieldsForType(data.tool_type));
-
   const geoIssues = useMemo(
     () => validateGeometry(data),
     [data.tool_type, data.diameter, data.flute_length, data.shoulder_length, data.min_ooh, data.overall_length, data.corner_radius]
   );
   const geoIssueFields = useMemo(() => new Set(geoIssues.flatMap(i => i.fields)), [geoIssues]);
+
+  const machineNum = isNew ? previewMachineNumber : data.machine_tool_number;
+  const hasMachineNum = machineNum !== null && machineNum !== undefined && machineNum !== '';
 
   return (
     <div className="tool-form">
@@ -158,446 +133,158 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
         </div>
       )}
 
-      {/* Tool type selector — full grid when creating; collapsed to the current
-          type with a "Change type…" expander when editing (type changes are
-          rare and the grid pushes the real fields below the fold). */}
+      {/* Tool type — a dropdown of grouped icon cards (Milling / Hole Making / …). */}
       <div className="panel open mb-16">
         <div className="panel-header static">
           <Layers size={15} className="panel-header-icon" />
           <span className="panel-header-title">Tool Type *</span>
         </div>
         <div className="panel-body">
-          {(isNew || showTypeGrid) ? (
-            <div className="type-chip-row">
-              {TOOL_TYPES.map(type => (
-                <button
-                  key={type}
-                  onClick={() => setField('tool_type', type)}
-                  className={`type-chip ${data.tool_type === type ? 'active' : ''}`}
-                >
-                  <ToolTypeIcon type={type} size={16} />
-                  {TOOL_TYPE_LABELS[type]}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center gap-8 flex-wrap">
-              <span className="type-chip active" style={{ cursor: 'default' }}>
-                <ToolTypeIcon type={data.tool_type} size={16} />
-                {TOOL_TYPE_LABELS[data.tool_type] || data.tool_type}
-              </span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowTypeGrid(true)}>
-                Change type…
-              </button>
-            </div>
-          )}
+          <ToolTypeDropdown value={data.tool_type} onChange={(t) => setField('tool_type', t)} />
         </div>
       </div>
 
-      <Section title="Identity" icon={Tag}>
-        {/* Machine tool number — read-only, managed by the app */}
-        {isNew ? (
-          <div className="flex items-center gap-8 mb-12 flex-wrap">
-            <span className="text-xs text-sub">Will be assigned:</span>
-            <span className="machine-num-badge">T{previewMachineNumber}</span>
-            <span className="machine-num-badge">H{previewMachineNumber}</span>
-            <span className="machine-num-badge">D{previewMachineNumber}</span>
-          </div>
-        ) : (data.machine_tool_number !== null && data.machine_tool_number !== undefined && data.machine_tool_number !== '') ? (
-          <div className="flex items-center gap-8 mb-12 flex-wrap">
-            <span className="text-xs text-sub">Machine #</span>
-            <span className="machine-num-badge">T{data.machine_tool_number}</span>
-            <span className="machine-num-badge">H{data.machine_tool_number}</span>
-            <span className="machine-num-badge">D{data.machine_tool_number}</span>
-            <span className="text-xs text-sub">— read-only</span>
-          </div>
-        ) : null}
-        {/* Unit — selectable when creating a tool; pulled from Fusion (read-only) when editing. */}
-        <div className="flex items-center gap-8 mb-12 flex-wrap">
-          <span className="text-xs text-sub">Unit</span>
-          {isNew ? (
-            <div className="btn-toggle">
-              {[['inches', 'Inches (in)'], ['millimeters', 'Millimeters (mm)']].map(([val, label]) => (
-                <button
-                  key={val}
-                  type="button"
-                  className={data.unit === val ? 'active' : ''}
-                  onClick={() => setField('unit', val)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <>
-              <span className="machine-num-badge">{unitAbbr(data.unit)}</span>
-              <span className="text-xs text-sub">— from Fusion (read-only)</span>
-            </>
-          )}
-        </div>
-        <div className="form-grid">
-          <div className="field-group form-grid-wide">
-            <label className="field-label">Description <span className="required">*</span></label>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input
-                className="field-input"
-                style={{ flex: 1 }}
-                value={data.description || ''}
-                onChange={e => setField('description', e.target.value)}
-                placeholder="e.g. 0.500 4FL EM 1.000LOC"
-              />
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                title="Suggest description from geometry"
-                onClick={() => {
-                  const suggested = buildDesc(toolToExtractor(data));
-                  if (suggested) setField('description', suggested);
-                }}
-                style={{ flexShrink: 0 }}
-              >
-                <Wand2 size={14} /> Suggest
-              </button>
-            </div>
-          </div>
-          <FieldInput field="vendor" label="Manufacturer" data={data} setField={setField} list={MANUFACTURER_LIST} />
-          <FieldInput field="proshot_id" label="ProShop ID" data={data} setField={setField} placeholder="e.g. A-3" />
-          <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
-        </div>
-      </Section>
-
-      <Section title="Geometry" icon={Ruler}>
-        {data.tool_type === 'tap' && (
-          <div style={{ marginBottom: 16 }}>
-            <div className="field-group" style={{ marginBottom: 12 }}>
-              <label className="field-label">Tap Sub-Type</label>
-              <div className="chip-group">
-                {TAP_SUB_TYPE_OPTS.map(opt => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    className={`btn btn-sm ${(data.tap_sub_type || 'cut') === opt.value ? 'btn-primary' : 'btn-secondary'}`}
-                    onClick={() => setField('tap_sub_type', opt.value)}
-                  >
-                    {opt.label}
-                  </button>
+      {/* Two-column layout mirroring the read-only tool view, so edit feels like
+          "view, unlocked": geometry/material on the left, identity/notes on the right. */}
+      <div className="detail-layout">
+        <div className="detail-layout-left">
+          <Section title="Geometry & Setup" icon={Ruler}>
+            <ToolFields tool={data} mode="edit" setField={setField} geoIssueFields={geoIssueFields} />
+            {geoIssues.length > 0 && (
+              <div className="warn-banner" style={{ marginTop: 12 }}>
+                {geoIssues.map((issue, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+                    {issue.message}
+                  </div>
                 ))}
+              </div>
+            )}
+          </Section>
+
+          <div className="warn-banner" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertTriangle size={13} style={{ flexShrink: 0 }} />
+            Speeds &amp; feeds are managed per preset. {isNew ? 'Add presets from the tool page after saving.' : 'Edit them in the Speeds & Feeds section on the tool page.'}
+          </div>
+        </div>
+
+        <div className="detail-layout-right">
+          <Section title="Identity" icon={Tag}>
+            {/* Machine tool number — read-only, managed by the app */}
+            {hasMachineNum && (
+              <div className="flex items-center gap-8 mb-12 flex-wrap">
+                <span className="text-xs text-sub">{isNew ? 'Will be assigned:' : 'Machine #'}</span>
+                <span className="machine-num-badge">T{machineNum}</span>
+                <span className="machine-num-badge">H{machineNum}</span>
+                <span className="machine-num-badge">D{machineNum}</span>
+                {!isNew && <span className="text-xs text-sub">— read-only</span>}
+              </div>
+            )}
+            {/* Unit — selectable when creating; pulled from Fusion (read-only) when editing. */}
+            <div className="flex items-center gap-8 mb-12 flex-wrap">
+              <span className="text-xs text-sub">Unit</span>
+              {isNew ? (
+                <div className="btn-toggle">
+                  {[['inches', 'Inches (in)'], ['millimeters', 'Millimeters (mm)']].map(([val, label]) => (
+                    <button key={val} type="button" className={data.unit === val ? 'active' : ''} onClick={() => setField('unit', val)}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <>
+                  <span className="machine-num-badge">{unitAbbr(data.unit)}</span>
+                  <span className="text-xs text-sub">— from Fusion (read-only)</span>
+                </>
+              )}
+            </div>
+            <div className="field-group mb-12">
+              <label className="field-label">Description <span className="required">*</span></label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input
+                  className="field-input"
+                  style={{ flex: 1 }}
+                  value={data.description || ''}
+                  onChange={e => setField('description', e.target.value)}
+                  placeholder="e.g. 0.500 4FL EM 1.000LOC"
+                />
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  title="Suggest description from geometry"
+                  onClick={() => {
+                    const suggested = buildDesc(toolToExtractor(data));
+                    if (suggested) setField('description', suggested);
+                  }}
+                  style={{ flexShrink: 0 }}
+                >
+                  <Wand2 size={14} /> Suggest
+                </button>
               </div>
             </div>
             <div className="form-grid">
-              {visibleFields.has('tap_thread_unit') && (
-                <div className="field-group">
-                  <label className="field-label">Thread Unit</label>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    {[['inch', 'Inch'], ['metric', 'Metric']].map(([val, label]) => (
-                      <button
-                        key={val}
-                        type="button"
-                        className={`btn btn-sm ${(data.tap_thread_unit || 'inch') === val ? 'btn-primary' : 'btn-secondary'}`}
-                        onClick={() => setField('tap_thread_unit', val)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {visibleFields.has('pitch') && (
-                <div className="field-group">
-                  <label className="field-label">Thread Size</label>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <select
-                      className="field-input"
-                      style={{ flex: 1 }}
-                      value={threadSizeOptions.includes(data.pitch) ? data.pitch : '__custom__'}
-                      onChange={e => {
-                        const v = e.target.value;
-                        if (v !== '__custom__') setField('pitch', v);
-                      }}
-                    >
-                      <option value="__custom__">{data.pitch && !threadSizeOptions.includes(data.pitch) ? data.pitch : 'Select…'}</option>
-                      {threadSizeOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                  {!threadSizeOptions.includes(data.pitch) && (
-                    <input
-                      className="field-input"
-                      style={{ marginTop: 4 }}
-                      value={data.pitch || ''}
-                      onChange={e => setField('pitch', e.target.value)}
-                      placeholder="e.g. 1/4-20 UNC or M6 x 1.0"
-                    />
-                  )}
-                  {visibleFields.has('is_sti') && (
-                    <>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={!!data.is_sti} onChange={e => setField('is_sti', e.target.checked)} />
-                        <span className="text-sub text-sm">STI / Helicoil</span>
-                      </label>
-                      {data.is_sti && (
-                        <p className="text-sub text-sm" style={{ marginTop: 4 }}>
-                          STI / Helicoil — thread size above is the <strong>parent</strong> thread, not the oversized tap size.
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-              {visibleFields.has('pitch') && data.thread_pitch > 0 && (
-                <div className="field-group">
-                  <label className="field-label">Thread Pitch</label>
-                  <div className="field-input" style={{ background: 'var(--bg-2)', cursor: 'default', color: 'var(--text-sub)' }}>
-                    {Number(data.thread_pitch).toFixed(6)} {unitAbbr(data.unit)}
-                  </div>
-                </div>
-              )}
-              {visibleFields.has('point_type') && (
-                <div className="field-group">
-                  <label className="field-label">Point Type</label>
-                  <select
-                    className="field-input"
-                    value={data.point_type || ''}
-                    onChange={e => setField('point_type', e.target.value)}
-                  >
-                    {['', 'Bottoming', 'Modified Bottoming', 'Plug', 'Taper', 'Spiral Point', 'Spiral Flute'].map(p => (
-                      <option key={p} value={p}>{p || 'Not specified'}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {visibleFields.has('tip_to_first_thread') && (
-                <NumField field="tip_to_first_thread" data={data} setField={setField} />
-              )}
-              {visibleFields.has('tap_class') && (
-                <div className="field-group">
-                  <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    {fieldLabel('tap_class', data?.unit)}
-                    <InfoTip text={`The tap's pitch-diameter limit tolerance (e.g. "${tapLimitToleranceDefault}") — set by the tap's grind. NOT "class of fit" which describes how the tapped hole mates with its mating part.`} />
-                  </label>
-                  <select className="field-input" value={data.tap_class || ''} onChange={e => setField('tap_class', e.target.value)}>
-                    <option value="">Not specified</option>
-                    {tapLimitToleranceOptions.map(t => (
-                      <option key={t} value={t}>{t}{t === tapLimitToleranceDefault ? ' — standard' : ''}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {visibleFields.has('class_of_fit') && (
-                <div className="field-group">
-                  <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    {fieldLabel('class_of_fit', data?.unit)}
-                    <InfoTip text="How the tapped hole fits its mating part — a thread-fit grade (1B loosest … 3B tightest). Reference only — not a property of the tap itself." />
-                  </label>
-                  <select className="field-input" value={data.class_of_fit || ''} onChange={e => setField('class_of_fit', e.target.value)}>
-                    <option value="">Not specified</option>
-                    {CLASS_OF_FIT_OPTIONS.map(c => (
-                      <option key={c} value={c}>{c}{c === CLASS_OF_FIT_DEFAULT ? ' — general purpose' : ''}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <FieldInput field="vendor" label="Manufacturer" data={data} setField={setField} list={MANUFACTURER_LIST} />
+              <FieldInput field="proshot_id" label="ProShop ID" data={data} setField={setField} placeholder="e.g. A-3" />
+              <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
             </div>
-          </div>
-        )}
-        <div className="form-grid">
-          <NumField field="diameter" data={data} setField={setField} required warn={geoIssueFields.has('diameter')}
-            label={data.tool_type === 'tapered mill' ? fieldLabel('tip_diameter', data.unit) : undefined}
-          />
-          {visibleFields.has('number_of_flutes') && <NumField field="number_of_flutes" data={data} setField={setField} />}
-          {visibleFields.has('flute_length') && <NumField field="flute_length" data={data} setField={setField} warn={geoIssueFields.has('flute_length')} />}
-          {visibleFields.has('overall_length') && <NumField field="overall_length" data={data} setField={setField} warn={geoIssueFields.has('overall_length')} />}
-          {visibleFields.has('shank_diameter') && <NumField field="shank_diameter" data={data} setField={setField} />}
-          {visibleFields.has('corner_radius') && <NumField field="corner_radius" data={data} setField={setField} warn={geoIssueFields.has('corner_radius')} />}
-          {visibleFields.has('shoulder_length') && <NumField field="shoulder_length" data={data} setField={setField} warn={geoIssueFields.has('shoulder_length')} />}
-          {visibleFields.has('tip_angle') && <NumField field="tip_angle" data={data} setField={setField} />}
-          {visibleFields.has('taper_angle') && (
-            INCLUSIVE_ANGLE_TYPES.has(data.tool_type)
-              ? <NumField field="taper_angle" data={data} setField={setField}
-                  label="Included/Inclusive Tip Angle (°)"
-                  transformOut={v => v * 2}
-                  transformIn={v => v / 2}
-                />
-              : <NumField field="taper_angle" data={data} setField={setField} />
-          )}
-          {visibleFields.has('tip_diameter') && <NumField field="tip_diameter" data={data} setField={setField} />}
-          {visibleFields.has('lower_radius') && <NumField field="lower_radius" data={data} setField={setField} />}
-          {visibleFields.has('upper_radius') && <NumField field="upper_radius" data={data} setField={setField} />}
-          {visibleFields.has('profile_radius') && <NumField field="profile_radius" data={data} setField={setField} />}
-          {visibleFields.has('axial_distance') && <NumField field="axial_distance" data={data} setField={setField} />}
-          <NumField field="min_ooh" data={data} setField={setField} warn={geoIssueFields.has('min_ooh')} />
-          <div className="field-group">
-            <label className="field-label">Custom Grind</label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6, cursor: 'pointer' }}>
-              <input type="checkbox" checked={!!data.custom_grind} onChange={e => setField('custom_grind', e.target.checked)} />
-              <span className="text-sub text-sm">Custom ground tool</span>
-            </label>
-          </div>
-        </div>
-        {visibleFields.has('cutting_direction') && (
-          <div className="form-grid" style={{ marginTop: 10 }}>
-            <div className="field-group">
-              <label className="field-label">Cutting Direction</label>
-              <select className="field-input" value={data.cutting_direction || 'Right Hand'} onChange={e => setField('cutting_direction', e.target.value)}>
-                <option value="Right Hand">Right Hand</option>
-                <option value="Left Hand">Left Hand</option>
-              </select>
-            </div>
-          </div>
-        )}
-        {geoIssues.length > 0 && (
-          <div className="warn-banner" style={{ marginTop: 12 }}>
-            {geoIssues.map((issue, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <AlertTriangle size={12} style={{ flexShrink: 0 }} />
-                {issue.message}
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
+          </Section>
 
-      <Section title="Material & Coating" icon={Layers}>
-        <div className="form-grid">
-          <div className="field-group">
-            <label className="field-label">Tool Material</label>
-            <select className="field-input" value={data.material || 'carbide'} onChange={e => setField('material', e.target.value)}>
-              {MA.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-          <div className="field-group">
-            <label className="field-label">Coating</label>
-            <select className="field-input" value={data.coating || ''} onChange={e => setField('coating', e.target.value)}>
-              {CO.map(c => <option key={c} value={c}>{c || 'None'}</option>)}
-            </select>
-          </div>
-          <div className="field-group">
-            <label className="field-label">Material Suitability (ISO)</label>
-            <div className="chip-group" style={{ marginBottom: 6 }}>
-              {WM.filter(w => w).map(w => (
-                <button
-                  key={w}
-                  className={`chip ${(data.material_suitability || []).includes(w) ? 'active' : ''}`}
-                  onClick={() => {
-                    const current = data.material_suitability || [];
-                    setField('material_suitability', current.includes(w) ? current.filter(x => x !== w) : [...current, w]);
-                  }}
-                >
-                  {w}
-                </button>
-              ))}
+          <Section title="Notes & Tags" icon={StickyNote}>
+            <div className="form-grid">
+              <FieldInput field="last_used_job" label="Last Used Job" data={data} setField={setField} />
+              <FieldInput field="updated_by" label="Updated By" data={data} setField={setField} />
             </div>
-          </div>
-          <div className="field-group">
-            <label className="field-label">TSC Capable</label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6, cursor: 'pointer' }}>
-              <input type="checkbox" checked={!!data.tsc_capable} onChange={e => setField('tsc_capable', e.target.checked)} />
-              <span className="text-sub text-sm">Through Spindle Coolant supported</span>
-            </label>
-          </div>
-          {visibleFields.has('helix_angle') && <NumField field="helix_angle" data={data} setField={setField} />}
-          {visibleFields.has('center_cutting') && (
-            <div className="field-group">
-              <label className="field-label">Center Cutting</label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6, cursor: 'pointer' }}>
-                <input type="checkbox" checked={!!data.center_cutting} onChange={e => setField('center_cutting', e.target.checked)} />
-                <span className="text-sub text-sm">Yes</span>
+
+            <div className="field-group mt-12">
+              <label className="checkbox-row">
+                <input type="checkbox" checked={!!data.no_fusion_link} onChange={e => setField('no_fusion_link', e.target.checked)} />
+                <span className="text-sub text-sm">No Fusion Link — needs Fusion setup</span>
+                <InfoTip text={'Set automatically when this tool is added from a ProShop row with no Fusion match — its Fusion library entry is a placeholder. Uncheck once its Fusion entry has real geometry, presets, and holder/assembly setup.'} />
               </label>
             </div>
-          )}
-          {visibleFields.has('flute_type') && (
-            <div className="field-group">
-              <label className="field-label">Flute Type</label>
-              <select className="field-input" value={data.flute_type || ''} onChange={e => setField('flute_type', e.target.value)}>
-                {['', 'Roughing', 'Semi-Finishing', 'Finishing', 'Yes', 'No'].map(f => <option key={f} value={f}>{f || 'Not specified'}</option>)}
-              </select>
-            </div>
-          )}
-          {data.tool_type !== 'tap' && (
-            <div className="field-group">
-              <label className="field-label">Flute Design</label>
-              <input
-                className="field-input"
-                list="flute-design-list"
-                value={data.flute_design || ''}
-                onChange={e => setField('flute_design', e.target.value)}
-                placeholder="None"
-              />
-              <datalist id="flute-design-list">
-                {FLUTE_DESIGN_OPTS.map(v => <option key={v} value={v} />)}
-              </datalist>
-            </div>
-          )}
-        </div>
-        {(visibleFields.has('min_thread_pitch') || visibleFields.has('tpi_min') || visibleFields.has('thread_profile_angle')) && (
-          <div className="form-grid" style={{ marginTop: 14 }}>
-            {visibleFields.has('min_thread_pitch') && <NumField field="min_thread_pitch" data={data} setField={setField} />}
-            {visibleFields.has('max_thread_pitch') && <NumField field="max_thread_pitch" data={data} setField={setField} />}
-            {visibleFields.has('tpi_min') && <NumField field="tpi_min" data={data} setField={setField} />}
-            {visibleFields.has('tpi_max') && <NumField field="tpi_max" data={data} setField={setField} />}
-            {visibleFields.has('thread_profile_angle') && <NumField field="thread_profile_angle" data={data} setField={setField} />}
-          </div>
-        )}
-      </Section>
 
-      <div className="warn-banner" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <AlertTriangle size={13} style={{ flexShrink: 0 }} />
-        Speeds &amp; feeds are managed per preset. {isNew ? 'Add presets from the tool page after saving.' : 'Edit them in the Speeds & Feeds section on the tool page.'}
+            {/* Tags */}
+            <div className="field-group mt-12">
+              <label className="field-label">Tags</label>
+              <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                <input
+                  className="field-input"
+                  style={{ flex: 1 }}
+                  value={tagInput}
+                  onChange={e => setTagInput(e.target.value)}
+                  placeholder="Add tag and press Enter"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && tagInput.trim()) {
+                      const existing = data.tags || [];
+                      if (!existing.includes(tagInput.trim())) {
+                        setField('tags', [...existing, tagInput.trim()]);
+                      }
+                      setTagInput('');
+                      e.preventDefault();
+                    }
+                  }}
+                />
+              </div>
+              <div className="tag-list">
+                {(data.tags || []).map(tag => (
+                  <span key={tag} className="tag removable" onClick={() => setField('tags', (data.tags || []).filter(t => t !== tag))}>
+                    {tag} <X size={11} />
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="field-group mt-12">
+              <label className="field-label">Notes</label>
+              <textarea className="field-input" value={data.notes || ''} onChange={e => setField('notes', e.target.value)} rows={3} />
+            </div>
+            <div className="field-group mt-12">
+              <label className="field-label">Revision Notes</label>
+              <input className="field-input" value={data.revision_notes || ''} onChange={e => setField('revision_notes', e.target.value)} placeholder="What changed and why" />
+            </div>
+          </Section>
+        </div>
       </div>
-
-      <Section title="Setup & Notes" icon={Settings2}>
-        <div className="form-grid">
-          <FieldInput field="last_used_job" label="Last Used Job" data={data} setField={setField} />
-          <FieldInput field="updated_by" label="Updated By" data={data} setField={setField} />
-        </div>
-
-        <div className="field-group mt-12">
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-            <input type="checkbox" checked={!!data.no_fusion_link} onChange={e => setField('no_fusion_link', e.target.checked)} />
-            <span className="text-sub text-sm">No Fusion Link — needs Fusion setup</span>
-            <InfoTip text={'Set automatically when this tool is added from a ProShop row with no Fusion match — its Fusion library entry is a placeholder. Uncheck once its Fusion entry has real geometry, presets, and holder/assembly setup.'} />
-          </label>
-        </div>
-
-        {/* Tags */}
-        <div className="field-group mt-12">
-          <label className="field-label">Tags</label>
-          <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-            <input
-              className="field-input"
-              style={{ flex: 1 }}
-              value={tagInput}
-              onChange={e => setTagInput(e.target.value)}
-              placeholder="Add tag and press Enter"
-              onKeyDown={e => {
-                if (e.key === 'Enter' && tagInput.trim()) {
-                  const existing = data.tags || [];
-                  if (!existing.includes(tagInput.trim())) {
-                    setField('tags', [...existing, tagInput.trim()]);
-                  }
-                  setTagInput('');
-                  e.preventDefault();
-                }
-              }}
-            />
-          </div>
-          <div className="tag-list">
-            {(data.tags || []).map(tag => (
-              <span key={tag} className="tag removable" onClick={() => setField('tags', (data.tags || []).filter(t => t !== tag))}>
-                {tag} <X size={11} />
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="field-group mt-12">
-          <label className="field-label">Notes</label>
-          <textarea className="field-input" value={data.notes || ''} onChange={e => setField('notes', e.target.value)} rows={3} />
-        </div>
-        <div className="field-group mt-12">
-          <label className="field-label">Revision Notes</label>
-          <input className="field-input" value={data.revision_notes || ''} onChange={e => setField('revision_notes', e.target.value)} placeholder="What changed and why" />
-        </div>
-      </Section>
 
       {/* Sticky save bar */}
       <div className="form-actions-bar">
@@ -626,30 +313,6 @@ function Section({ title, icon: Icon, children }) {
         <span className="panel-chevron">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
       </button>
       {open && <div className="panel-body">{children}</div>}
-    </div>
-  );
-}
-
-function NumField({ field, data, setField, required, label, transformOut, transformIn }) {
-  const rawValue = data[field];
-  const displayValue = (transformOut && rawValue != null) ? transformOut(rawValue) : rawValue;
-  return (
-    <div className="field-group">
-      <label className="field-label">
-        {label || fieldLabel(field, data?.unit) || field}
-        {required && <span className="required"> *</span>}
-      </label>
-      <input
-        className="field-input"
-        type="number"
-        step={FIELD_STEP[field] || '0.001'}
-        value={displayValue ?? ''}
-        onChange={e => {
-          const v = e.target.value === '' ? null : parseFloat(e.target.value);
-          setField(field, (transformIn && v != null) ? transformIn(v) : v);
-        }}
-        placeholder="—"
-      />
     </div>
   );
 }

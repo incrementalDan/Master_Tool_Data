@@ -1144,6 +1144,57 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .type-chip.active { border-color: var(--blue); background: var(--blue-tint); color: var(--blue); font-weight: 600; }
 .type-chip svg { flex-shrink: 0; }
 
+/* ─── Tool-type dropdown (edit form) ─────────────────────────────────────── */
+.type-dropdown { position: relative; max-width: 360px; }
+.type-dropdown-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--ease);
+}
+.type-dropdown-trigger:hover { border-color: var(--blue); }
+.type-dropdown-current { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.type-dropdown-panel {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(680px, 92vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Checkbox + inline label row (shared form control) */
+.checkbox-row { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.checkbox-row input[type='checkbox'] { flex-shrink: 0; }
+
+/* Sub-section grid titles inside the shared Geometry/Setup fields */
+.tool-fields-section + .tool-fields-section { margin-top: 18px; }
+.tool-fields-grid-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-sub);
+  margin-bottom: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border);
+}
+
 /* ─── Sticky form action bar ─────────────────────────────────────────────── */
 .tool-form { padding-bottom: 64px; }
 .form-actions-bar {
