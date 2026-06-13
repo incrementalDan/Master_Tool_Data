@@ -50,13 +50,7 @@ export default function HolderPicker({ currentGuid, onSelect, onClose }) {
                 <div
                   key={h.guid}
                   onClick={() => setPendingGuid(h.guid)}
-                  style={{
-                    padding: '10px 12px',
-                    borderBottom: '1px solid var(--border)',
-                    cursor: 'pointer',
-                    background: selected ? 'var(--surface-2)' : 'transparent',
-                    borderLeft: selected ? '3px solid var(--blue)' : '3px solid transparent',
-                  }}
+                  className={`picker-row${selected ? ' selected' : ''}`}
                 >
                   <div style={{ fontWeight: selected ? 600 : 400, fontSize: 13 }}>
                     {h.description || '—'}

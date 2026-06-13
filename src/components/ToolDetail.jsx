@@ -3,6 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
   Tag, Ruler, Settings2, StickyNote, Clock, Package, Wrench, AlertTriangle, Camera, X,
+  ChevronDown, ChevronRight,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
 import HolderPicker from './HolderPicker.jsx';
@@ -163,11 +164,27 @@ export default function ToolDetail() {
   if (editing) {
     return (
       <div>
-        <div className="flex items-center gap-8 mb-16">
-          <button className="btn btn-ghost btn-sm" onClick={() => { setEditing(false); clearEditParam(); }}>
+        {/* Same sticky identity header as view mode, so the tool you're editing
+            stays visible while scrolling a long form. */}
+        <div className="tool-sticky-header">
+          <button className="btn btn-ghost btn-sm tool-sticky-header-back" onClick={() => { setEditing(false); clearEditParam(); }}>
             <ArrowLeft size={14} /> Back
           </button>
-          <h2 style={{ fontSize: 16, fontWeight: 600 }}>Edit Tool</h2>
+          <span className="tool-sticky-header-icon">
+            <ToolTypeIcon type={tool.tool_type} size={30} />
+          </span>
+          <div className="tool-sticky-header-body">
+            <div className="flex items-center gap-10" style={{ minWidth: 0 }}>
+              <div className="detail-header-type" style={{ fontSize: 12, flexShrink: 0 }}>Editing · {typeLabel}</div>
+              <span
+                className="description-badge"
+                style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
+              >
+                {tool.description || '—'}
+              </span>
+              {tool.proshot_id && <span className="proshot-pill">{tool.proshot_id}</span>}
+            </div>
+          </div>
         </div>
         <ToolForm
           tool={tool}
@@ -775,7 +792,7 @@ function Section({ title, icon: Icon, children, defaultOpen = true }) {
       <button className="panel-header" onClick={() => setOpen(o => !o)}>
         {Icon && <Icon size={15} className="panel-header-icon" />}
         <span className="panel-header-title">{title}</span>
-        <span className="panel-chevron">{open ? '▾' : '▸'}</span>
+        <span className="panel-chevron">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
       </button>
       {open && <div className="panel-body">{children}</div>}
     </div>
@@ -896,7 +913,7 @@ function AssemblyExportPicker({ tool, holders, onConfirm, onCancel }) {
 
         <div className="modal-actions" style={{ marginTop: 16 }}>
           <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-          <button className="btn btn-secondary" disabled={!canConfirm} style={canConfirm ? { background: 'var(--accent)', color: '#fff', borderColor: 'var(--accent)' } : {}} onClick={handleConfirm}>
+          <button className={`btn ${canConfirm ? 'btn-primary' : 'btn-secondary'}`} disabled={!canConfirm} onClick={handleConfirm}>
             Confirm &amp; Export
           </button>
         </div>

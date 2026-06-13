@@ -204,7 +204,7 @@ export default function LandingPage() {
       {tools.length === 0 ? (
         <EmptyLibrary onImport={() => navigate('/import')} />
       ) : filtered.length === 0 ? (
-        <div className="loading-screen" style={{ minHeight: 120 }}>
+        <div className="empty-state" style={{ padding: 32 }}>
           <span className="text-sub">No tools match these filters.</span>
         </div>
       ) : view === 'list' ? (

@@ -1,5 +1,12 @@
 # UI_CONSISTENCY_AUDIT.md — UI Consistency Pass
 
+> **STATUS: Quick Wins + Mediums implemented ✅** (items 1–10 of the suggested order; see
+> per-item ✅/✏️ notes below). Two items turned out to already be fine on closer inspection:
+> DiffStep's row grid was already a CSS class (`.diff-row`), and QueuePanel items already
+> have hover/active states — both struck through below. Still open: item 11, the two-column
+> edit layout (Larger Redesign), and the long-tail inline-style cleanup which is being done
+> opportunistically as components get touched.
+
 Walkthrough of the main views against the design tokens in `src/index.css` (the `:root` block:
 surfaces, `--blue/--orange/--green/--red/--amber`, radii, shadows, plus the button/panel/modal/
 data-field-token classes). Every item below was verified in the code, with file:line references.
@@ -137,14 +144,14 @@ button + a generic `<h2 style={{fontSize:16…}}>Edit Tool</h2>`, then a flat si
 
 | # | Item | Tag |
 |---|---|---|
-| 1 | Define/replace `--accent` (live visual bug) | Quick Win |
-| 2 | `.banner-warn`/`.banner-info` + swap the two inline modal banners | Quick Win |
-| 3 | Tokenize the six data-field colors | Quick Win |
-| 4 | `.btn-toggle` segmented control → ToolForm unit picker + Settings | Quick Win |
-| 5 | Collapse type grid when editing an existing tool | Quick Win |
-| 6 | Shared `.empty-state`; scrollbar unification; lucide chevrons | Quick Win |
-| 7 | Sticky identity header in edit mode | Medium |
-| 8 | Custom checkbox/select styling | Medium |
-| 9 | Utility classes + opportunistic inline-style cleanup (ToolDetail, Settings, ImportFlow first) | Medium |
-| 10 | DiffStep `.diff-table` + shared `.list-item` | Medium |
+| 1 | Define/replace `--accent` (live visual bug) | Quick Win ✅ — `--accent: #6366f1` added to `:root`; the export-modal Confirm button now switches to `btn-primary` when enabled |
+| 2 | `.banner-warn`/`.banner-info` + swap the two inline modal banners | Quick Win ✅ — classes added; ReconcileModal + NormalizeModal converted |
+| 3 | Tokenize the six data-field colors | Quick Win ✅ — `--tok-*` RGB-triplet vars in `:root`; all six token classes compose tints via `rgba(var(--tok-*), a)` |
+| 4 | `.btn-toggle` segmented control → ToolForm unit picker + Settings | Quick Win ✅ |
+| 5 | Collapse type grid when editing an existing tool | Quick Win ✅ — current type chip + “Change type…” expander; full grid kept for the create flow |
+| 6 | Shared `.empty-state`; scrollbar unification; lucide chevrons | Quick Win ✅ — LandingPage no-results uses `.empty-state`; `.preset-scroll` matches the global scrollbar; panel chevrons are lucide `ChevronDown/Right` |
+| 7 | Sticky identity header in edit mode | Medium ✅ — edit mode reuses `.tool-sticky-header` (icon, “Editing · type”, description badge, ProShop pill) |
+| 8 | Custom checkbox/select styling | Medium ✅ — `accent-color: var(--blue)` on all checkboxes/radios; `select.field-input` gets a theme chevron (`appearance: none` + inline SVG) |
+| 9 | Utility classes + opportunistic inline-style cleanup | Medium ✏️ partial — `.flex-wrap` + `.picker-row` added; ToolForm rows and HolderPicker rows converted; remaining inline styles cleaned as components get touched |
+| 10 | ~~DiffStep `.diff-table` + shared `.list-item`~~ | Already fine — `.diff-row` grid and `.queue-item` hover/active were already CSS classes; original finding overstated |
 | 11 | Two-column edit layout mirroring view mode | Larger Redesign |
