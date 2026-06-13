@@ -1,37 +1,11 @@
 import { TOOL_TYPES, TOOL_TYPE_LABELS } from '../schema/toolSchema.js';
+import { groupedToolTypes } from '../schema/toolFieldLayout.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 
-// Grouped the way Fusion's tool-type picker groups (Milling / Hole Making / Turning),
-// but ordered within each group by how often the shop actually reaches for them —
-// not Fusion's internal order. Tap is a single tile (left/right hand is a metadata
-// field on the unified `tap` type, not a separate tool type — see toolSchema.js).
-// Anything missing from a group below falls into "Other" so a newly-added TOOL_TYPES
-// entry never silently disappears from the grid.
-const TYPE_GROUPS = [
-  {
-    label: 'Milling',
-    types: [
-      'flat end mill', 'ball end mill', 'bull nose end mill', 'chamfer mill', 'face mill',
-      'radius mill', 'tapered mill', 'thread mill', 'slot/key cutter', 'lollipop mill',
-      'dovetail', 'form mill',
-      'circle segment barrel', 'circle segment lens', 'circle segment oval', 'circle segment taper',
-    ],
-  },
-  {
-    label: 'Hole Making',
-    // boring head is a milling-machine hole-making tool (bores an existing hole on
-    // the mill) — distinct from a turning boring bar (a lathe tool, not in TOOL_TYPES).
-    types: ['drill', 'tap', 'spot drill', 'center drill', 'counter sink', 'counter bore', 'reamer', 'boring head'],
-  },
-  {
-    label: 'Turning',
-    types: ['turning general'],
-  },
-];
-
-const GROUPED_TYPES = new Set(TYPE_GROUPS.flatMap(g => g.types));
-const LEFTOVER_TYPES = TOOL_TYPES.filter(t => !GROUPED_TYPES.has(t));
-const GROUPS = LEFTOVER_TYPES.length ? [...TYPE_GROUPS, { label: 'Other', types: LEFTOVER_TYPES }] : TYPE_GROUPS;
+// Tool-type groups (Milling / Hole Making / Turning) live in toolFieldLayout.js so
+// the landing-page grid and the edit-form type dropdown stay in sync. "Other"
+// catches any newly-added TOOL_TYPES entry so it never silently disappears.
+const GROUPS = groupedToolTypes(TOOL_TYPES);
 
 // `selected` is an array of currently-selected tool types — clicking a tile
 // toggles its membership, so multiple types (e.g. "flat end mill" and "bull
