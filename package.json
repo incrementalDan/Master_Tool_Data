@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node scripts/roundtrip-audit.mjs",
+    "test": "vitest run && node scripts/roundtrip-audit.mjs",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "test:audit": "node scripts/roundtrip-audit.mjs",
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
@@ -21,6 +24,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "gh-pages": "^6.1.1",
     "typescript": "^5.5.3",
-    "vite": "^5.4.1"
+    "vite": "^5.4.1",
+    "vitest": "^4.1.8"
   }
 }
