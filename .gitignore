@@ -4,4 +4,9 @@ dist/
 .env.local
 .DS_Store
 *.log
-.claude/
+# Ignore local/per-user Claude settings, but commit the shared session-start
+# hook + settings so all sessions (incl. Claude Code on the web) get them.
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+.claude/settings.local.json
