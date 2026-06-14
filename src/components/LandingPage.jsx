@@ -77,10 +77,20 @@ export default function LandingPage() {
     debounceRef.current = setTimeout(() => setTextQuery(val), DEBOUNCE_MS);
   }, []);
 
-  // Toggles a tool type's membership in the multi-select — e.g. searching
-  // "bull nose end mill" and "flat end mill" together when either could do the job.
-  const handleTypeSelect = (type) => {
-    const next = selectedTypes.includes(type) ? selectedTypes.filter(t => t !== type) : [...selectedTypes, type];
+  // Single-select by default: clicking a type replaces the current selection
+  // (clicking the already-selected sole type clears it). Shift-click is additive —
+  // toggles membership in a multi-select so several types that could do the same
+  // job (e.g. "flat end mill" + "bull nose end mill") can be searched at once.
+  const handleTypeSelect = (type, additive = false) => {
+    let next;
+    if (additive) {
+      next = selectedTypes.includes(type)
+        ? selectedTypes.filter(t => t !== type)
+        : [...selectedTypes, type];
+    } else {
+      // Plain click: select just this type, or clear if it's already the only one.
+      next = selectedTypes.length === 1 && selectedTypes[0] === type ? [] : [type];
+    }
     setSelectedTypes(next);
     if (next.length === 0) setFacets({});
   };
@@ -144,14 +154,18 @@ export default function LandingPage() {
         </button>
       </div>
 
-      {/* Tool type grid — multi-select: pick several types that could do the
-          same job (e.g. flat end mill + bull nose end mill) to search both at once */}
+      {/* Tool type grid — single-select by default; shift-click adds more types
+          that could do the same job (e.g. flat end mill + bull nose end mill) */}
       <div className="mb-16">
         <div className="section-header">
           Tool Type
-          {selectedTypes.length > 1 && (
+          {selectedTypes.length > 1 ? (
             <span className="text-sub text-xs" style={{ textTransform: 'none', letterSpacing: 'normal' }}>
               {' '}· {selectedTypes.length} selected
+            </span>
+          ) : (
+            <span className="text-sub text-xs" style={{ textTransform: 'none', letterSpacing: 'normal' }}>
+              {' '}· shift-click to select multiple
             </span>
           )}
         </div>
