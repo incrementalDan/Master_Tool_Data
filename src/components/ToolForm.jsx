@@ -70,15 +70,6 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.tool_type]);
 
-  // Thread-size / tolerance option lists for Tap & Thread Mill — driven by
-  // tap_thread_unit (independent of the tool's overall unit). The combobox input
-  // is already freeform (datalist), so the verbatim 'Custom...' sentinel is dropped
-  // from the suggestion list — typing any size already works without selecting it.
-  const isMetricThread = data.tap_thread_unit === 'metric';
-  const threadSizeOptions = (isMetricThread ? METRIC_THREAD_SIZES : INCH_THREAD_SIZES).filter(s => s !== 'Custom...');
-  const tapLimitToleranceOptions = isMetricThread ? TAP_LIMIT_TOLERANCE_OPTIONS_METRIC : TAP_LIMIT_TOLERANCE_OPTIONS_INCH;
-  const tapLimitToleranceDefault = isMetricThread ? TAP_LIMIT_TOLERANCE_DEFAULT_METRIC : TAP_LIMIT_TOLERANCE_DEFAULT_INCH;
-
   const handleSave = async () => {
     const { valid, errors: errs } = validateTool(data);
     if (!valid) { setErrors(errs); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
