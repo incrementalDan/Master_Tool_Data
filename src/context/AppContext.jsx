@@ -931,6 +931,7 @@ export function AppProvider({ children }) {
     }
 
     if (updatedTools.length > 0) {
+      onProgress?.({ phase: 'saving', done: photos.length, total: photos.length, current: '' });
       await driveService.saveAllMetadata([...metaById.values()]);
       for (const t of updatedTools) dispatch({ type: 'UPDATE_TOOL', tool: t });
     }

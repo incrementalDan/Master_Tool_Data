@@ -225,31 +225,40 @@ export default function ImportPhotosModal({ onClose }) {
         )}
 
         {/* ── Running ───────────────────────────────────────────────────── */}
-        {view === 'running' && (
-          <div style={{ padding: '8px 0' }}>
-            <div className="flex items-center gap-10 mb-12">
-              <span className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
-              <span>
-                Matched {progress.done} of {progress.total} photos…
-              </span>
+        {view === 'running' && (() => {
+          const saving = progress.phase === 'saving';
+          const scanning = !saving && progress.total === 0;
+          const label = saving ? 'Saving photos to the library…'
+            : scanning ? 'Scanning folder for photos…'
+            : `Copying photos — ${progress.done} of ${progress.total}…`;
+          const showBar = progress.total > 0;
+          return (
+            <div style={{ padding: '8px 0' }}>
+              <div className="flex items-center gap-10 mb-12">
+                <span className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
+                <span>{label}</span>
+              </div>
+              {showBar && (
+                <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${Math.round((progress.done / progress.total) * 100)}%`,
+                    background: 'var(--blue)',
+                    transition: 'width 0.2s ease',
+                  }} />
+                </div>
+              )}
+              {!saving && progress.current && (
+                <div className="text-sub text-sm" style={{ marginTop: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {progress.current}
+                </div>
+              )}
+              <p className="text-sub text-sm" style={{ marginTop: 12 }}>
+                This can take a while for a large folder — keep this window open until it finishes.
+              </p>
             </div>
-            {progress.total > 0 && (
-              <div style={{ height: 8, background: 'var(--surface-2)', borderRadius: 4, overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%',
-                  width: `${Math.round((progress.done / progress.total) * 100)}%`,
-                  background: 'var(--blue)',
-                  transition: 'width 0.2s ease',
-                }} />
-              </div>
-            )}
-            {progress.current && (
-              <div className="text-sub text-sm" style={{ marginTop: 8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {progress.current}
-              </div>
-            )}
-          </div>
-        )}
+          );
+        })()}
 
         {/* ── Done / summary ────────────────────────────────────────────── */}
         {view === 'done' && summary && (
