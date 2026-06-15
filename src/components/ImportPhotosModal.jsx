@@ -137,10 +137,15 @@ export default function ImportPhotosModal({ onClose }) {
         {/* ── Folder picker ─────────────────────────────────────────────── */}
         {googleAuthenticated && view === 'picker' && (
           <>
-            <p className="text-sub text-sm mb-12">
-              Browse to the folder that holds the ProShop photo subfolders (named
-              <code> tools_&#123;ProShop ID&#125;_…</code>). The main photo in each is copied to the
+            <p className="text-sub text-sm mb-8">
+              Browse to the folder that holds the ProShop photo files (named
+              <code> tools_&#123;ProShop ID&#125;_….png/jpg</code>) at its top level. Each is copied to the
               matching tool as its primary photo. Tools that already have a photo are skipped.
+            </p>
+            <p className="text-sub text-sm mb-12" style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+              <AlertTriangle size={13} style={{ color: 'var(--amber)', flexShrink: 0, marginTop: 2 }} />
+              The photos folder must live in <strong>Google Drive</strong> (My Drive or a shared drive
+              this account can open). Move it into Drive first if it isn't there.
             </p>
 
             {sharedDrives.length > 0 && (
@@ -225,7 +230,7 @@ export default function ImportPhotosModal({ onClose }) {
             <div className="flex items-center gap-10 mb-12">
               <span className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
               <span>
-                Matched {progress.done} of {progress.total} folders…
+                Matched {progress.done} of {progress.total} photos…
               </span>
             </div>
             {progress.total > 0 && (
@@ -261,7 +266,7 @@ function SummaryView({ summary, onClose, onAgain }) {
     <div>
       <div className="flex items-center gap-8 mb-12">
         <CheckCircle size={18} style={{ color: 'var(--green)' }} />
-        <strong>Done — scanned {total} folder{total === 1 ? '' : 's'}</strong>
+        <strong>Done — scanned {total} photo{total === 1 ? '' : 's'}</strong>
       </div>
 
       <div className="flex gap-8 flex-wrap mb-14">

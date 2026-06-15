@@ -862,12 +862,13 @@ export function AppProvider({ children }) {
   }, [writeLogicalTool, notify]);
 
   // ─── One-time: import ProShop tool photos from a Drive folder ─────────────
-  // The source folder holds one subfolder per tool, named "tools_{proshot_id}_…".
-  // Each subfolder's main photo (skipping the 300/600/900w resized variants) is
-  // copied into that tool's tool_files folder and set as its primary photo.
-  // Read-only on the source; skips tools with no match or an existing photo;
-  // changes only metadata (primary_photo_id/name), so it writes metadata once at
-  // the end rather than rewriting the Fusion library per tool. Returns a summary.
+  // The picked folder holds one main photo file PER TOOL at its top level, named
+  // "tools_{proshot_id}_….{png|jpg}". (Same-named subfolders hold only the
+  // 300/600/900w resized variants — ignored; we never descend into them.) Each
+  // main photo is copied into the matching tool's tool_files folder and set as
+  // its primary photo. Read-only on the source; skips tools with no match or an
+  // existing photo; changes only metadata (primary_photo_id/name), so it writes
+  // metadata once at the end rather than rewriting the Fusion library per tool.
   const importProShopPhotos = useCallback(async (sourceFolderId, { onProgress } = {}) => {
     if (!googleRef.current) {
       notify('Connect Google Drive to import photos', 'error');
@@ -875,6 +876,7 @@ export function AppProvider({ children }) {
     }
     const SKIP_FILES = new Set(['300w.png', '600w.png', '900w.png']);
     const FOLDER_MIME = 'application/vnd.google-apps.folder';
+    const isImage = (name) => /\.(png|jpe?g)$/i.test(String(name));
     // ProShop ID is the segment between the first and second underscore.
     const extractProshopId = (name) => {
       const parts = String(name).split('_');
@@ -884,33 +886,33 @@ export function AppProvider({ children }) {
     // "D241", "D-241" and "d 241" all compare equal.
     const normId = (id) => String(id || '').replace(/[\s-]/g, '').toUpperCase();
 
+    // Top-level photo files only — skip subfolders entirely and the resized variants.
     const children = await driveService.listFolderChildren(sourceFolderId);
-    const subfolders = children.filter(f => f.mimeType === FOLDER_MIME);
-    const summary = { total: subfolders.length, imported: [], skippedHasPhoto: [], noMatch: [], errors: [] };
-    if (subfolders.length === 0) return summary;
+    const photos = children.filter(c =>
+      c.mimeType !== FOLDER_MIME && !SKIP_FILES.has(c.name) && isImage(c.name));
+    const summary = { total: photos.length, imported: [], skippedHasPhoto: [], noMatch: [], errors: [] };
+    if (photos.length === 0) return summary;
 
     // Load metadata once; modify in place; write once at the end.
     const metaList = await driveService.loadMetadata();
     const metaById = new Map(metaList.map(m => [m.id, m]));
     const updatedTools = [];
+    const importedToolIds = new Set(); // guard against two photos for one tool in a run
 
     let done = 0;
-    for (const sub of subfolders) {
+    for (const photo of photos) {
       done += 1;
-      onProgress?.({ done, total: subfolders.length, current: sub.name });
+      onProgress?.({ done, total: photos.length, current: photo.name });
       try {
-        const pid = extractProshopId(sub.name);
-        if (!pid) { summary.noMatch.push({ folder: sub.name, reason: 'No ProShop ID in folder name' }); continue; }
+        const pid = extractProshopId(photo.name);
+        if (!pid) { summary.noMatch.push({ folder: photo.name, reason: 'No ProShop ID in file name' }); continue; }
         const wantId = normId(pid);
         const tool = toolsRef.current.find(t => normId(t.proshot_id) === wantId);
-        if (!tool) { summary.noMatch.push({ folder: sub.name, proshopId: pid, reason: 'No tool with this ProShop ID' }); continue; }
-        if (tool.primary_photo_id) {
-          summary.skippedHasPhoto.push({ folder: sub.name, proshopId: pid, description: tool.description });
+        if (!tool) { summary.noMatch.push({ folder: photo.name, proshopId: pid, reason: 'No tool with this ProShop ID' }); continue; }
+        if (tool.primary_photo_id || importedToolIds.has(tool.id)) {
+          summary.skippedHasPhoto.push({ folder: photo.name, proshopId: pid, description: tool.description });
           continue;
         }
-        const subChildren = await driveService.listFolderChildren(sub.id);
-        const photo = subChildren.find(c => c.mimeType !== FOLDER_MIME && !SKIP_FILES.has(c.name));
-        if (!photo) { summary.noMatch.push({ folder: sub.name, proshopId: pid, reason: 'No main photo file in subfolder' }); continue; }
 
         const trackingId = tool.tracking_id || tool.id;
         const toolFolderId = await driveService.ensureToolFolder(trackingId);
@@ -918,12 +920,13 @@ export function AppProvider({ children }) {
 
         const updatedTool = { ...tool, primary_photo_id: copied.id, primary_photo_name: photo.name };
         updatedTools.push(updatedTool);
+        importedToolIds.add(tool.id);
         const metaRec = buildMetadataTool(updatedTool);
         metaById.set(metaRec.id, metaRec);
-        summary.imported.push({ folder: sub.name, proshopId: pid, description: tool.description, photo: photo.name });
+        summary.imported.push({ folder: photo.name, proshopId: pid, description: tool.description, photo: photo.name });
       } catch (err) {
         if (err.code === 'TOKEN_EXPIRED') { dispatch({ type: 'GOOGLE_EXPIRED' }); throw err; }
-        summary.errors.push({ folder: sub.name, error: err.message });
+        summary.errors.push({ folder: photo.name, error: err.message });
       }
     }
 
