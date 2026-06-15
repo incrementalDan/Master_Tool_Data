@@ -45,8 +45,8 @@ export function materialCategory(query) {
 // Operation types. `value` is the canonical stored value; `word` is what goes in
 // the preset name; `aliases` are accepted spellings when parsing a name.
 export const OP_TYPES = [
-  { value: 'rough',       word: 'Rough',       aliases: ['ROUGH', 'R'] },
-  { value: 'finish',      word: 'Finish',      aliases: ['FINISH', 'FIN', 'F', 'FINSH'] },
+  { value: 'rough',       word: 'Rough',       aliases: ['ROUGH', 'ROUGHING', 'R'] },
+  { value: 'finish',      word: 'Finish',      aliases: ['FINISH', 'FINISHING', 'FIN', 'F', 'FINSH'] },
   { value: 'rough_fast',  word: 'Rough Fast',  aliases: ['ROUGH FAST', 'RF'] },
   { value: 'fine_finish', word: 'Fine Finish', aliases: ['FINE FINISH', 'FF'] },
   { value: 'small_bore',  word: 'Small Bore',  aliases: ['SMALL BORE', 'SM BORE', 'SMBORE'] },
@@ -63,6 +63,31 @@ export function matchOpType(str) {
   for (const o of OP_TYPES) {
     if (o.word.toUpperCase() === s) return o.value;
     if (o.aliases.includes(s)) return o.value;
+  }
+  return null;
+}
+
+// Scan a FULL preset name for an operation word appearing anywhere in it as a
+// token — not just as the whole name or the " - " tail. Real Fusion presets
+// embed the op among other tokens: "AL FIN", "BRZ ROUGH", "AL SM BORE",
+// "GF Nylon Fine Finish", "AL-150-FIN". Tokens are split on spaces AND dashes;
+// multi-word ops (e.g. "Fine Finish", "SM Bore") are checked before single-word
+// ones so the more specific one wins. Single-letter aliases (R/F) match only as
+// a standalone token, never inside another word (so "BRZ" never reads as "R").
+export function scanOpTypeInName(name) {
+  if (!name) return null;
+  const norm = String(name).toUpperCase().split(/[\s-]+/).filter(Boolean).join(' ');
+  if (!norm) return null;
+  const candidates = [];
+  for (const o of OP_TYPES) {
+    for (const a of [o.word.toUpperCase(), ...o.aliases]) {
+      candidates.push({ value: o.value, alias: a, len: a.trim().split(/\s+/).length });
+    }
+  }
+  candidates.sort((x, y) => y.len - x.len); // longest (most tokens) first
+  for (const c of candidates) {
+    const esc = c.alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`(?:^| )${esc}(?: |$)`).test(norm)) return c.value;
   }
   return null;
 }
@@ -102,7 +127,10 @@ export function parsePresetName(name) {
   const sepIdx = raw.lastIndexOf(' - ');
   const head = sepIdx >= 0 ? raw.slice(0, sepIdx).trim() : raw;
   const opStr = sepIdx >= 0 ? raw.slice(sepIdx + 3).trim() : '';
-  const opType = matchOpType(opStr) ?? matchOpType(raw);
+  // Operation type: the " - " tail (the convention), then the whole name (legacy
+  // bare names like "Rough"/"R"), then a token scan of the whole name (op word
+  // embedded among others, e.g. "AL FIN", "BRZ ROUGH").
+  const opType = matchOpType(opStr) ?? matchOpType(raw) ?? scanOpTypeInName(raw);
 
   const tokens = head.split(/\s+/).filter(Boolean);
   let materialCode = null;

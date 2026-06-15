@@ -103,6 +103,27 @@ describe('parsePresetName', () => {
     expect(parsePresetName('SM Bore').opType).toBe('small_bore');
   });
 
+  it('detects an op word embedded among other tokens (real Fusion names)', () => {
+    expect(parsePresetName('AL FIN').opType).toBe('finish');
+    expect(parsePresetName('BRZ ROUGH').opType).toBe('rough');
+    expect(parsePresetName('AL SM BORE').opType).toBe('small_bore');
+    expect(parsePresetName('GF Nylon Fine Finish').opType).toBe('fine_finish');
+    expect(parsePresetName('AL-150-FIN').opType).toBe('finish');      // dash-separated
+    expect(parsePresetName('SS Rough 150-316').opType).toBe('rough');
+    expect(parsePresetName('GF Nylon Finish').opType).toBe('finish');
+  });
+
+  it('prefers the more specific multi-word op (Fine Finish over Finish)', () => {
+    expect(parsePresetName('GF Nylon Fine Finish').opType).toBe('fine_finish');
+  });
+
+  it('does not false-match a single letter inside another word', () => {
+    // "BRZ" must not read as "R"; material-only names have no op.
+    expect(parsePresetName('BRZ').opType).toBe(null);
+    expect(parsePresetName('AL').opType).toBe(null);
+    expect(parsePresetName('AL RAMP').opType).toBe(null); // RAMP is not an op
+  });
+
   it('returns null only for empty names', () => {
     expect(parsePresetName('')).toBe(null);
     expect(parsePresetName('   ')).toBe(null);
