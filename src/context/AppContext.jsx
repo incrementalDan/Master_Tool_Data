@@ -880,6 +880,9 @@ export function AppProvider({ children }) {
       const parts = String(name).split('_');
       return parts.length >= 2 ? parts[1].trim() : '';
     };
+    // Match ProShop IDs interchangeably regardless of dashes/spaces/case:
+    // "D241", "D-241" and "d 241" all compare equal.
+    const normId = (id) => String(id || '').replace(/[\s-]/g, '').toUpperCase();
 
     const children = await driveService.listFolderChildren(sourceFolderId);
     const subfolders = children.filter(f => f.mimeType === FOLDER_MIME);
@@ -898,7 +901,8 @@ export function AppProvider({ children }) {
       try {
         const pid = extractProshopId(sub.name);
         if (!pid) { summary.noMatch.push({ folder: sub.name, reason: 'No ProShop ID in folder name' }); continue; }
-        const tool = toolsRef.current.find(t => String(t.proshot_id || '').trim() === pid);
+        const wantId = normId(pid);
+        const tool = toolsRef.current.find(t => normId(t.proshot_id) === wantId);
         if (!tool) { summary.noMatch.push({ folder: sub.name, proshopId: pid, reason: 'No tool with this ProShop ID' }); continue; }
         if (tool.primary_photo_id) {
           summary.skippedHasPhoto.push({ folder: sub.name, proshopId: pid, description: tool.description });
