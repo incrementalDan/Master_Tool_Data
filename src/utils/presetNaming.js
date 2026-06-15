@@ -30,6 +30,51 @@ export function materialToCode(query) {
   return q;
 }
 
+// Human-readable label per canonical material code.
+export const MATERIAL_LABELS = {
+  AL: 'Aluminum', SS: 'Stainless Steel', STEEL: 'Alloy Steel', MILD: 'Mild Steel',
+  BRONZE: 'Bronze', BRASS: 'Brass', TI: 'Titanium', CI: 'Cast Iron', PLASTIC: 'Plastic',
+};
+
+// Best-effort: recognize the material from any string (a preset name or a bare
+// code) and return a canonical MATERIAL_CODES value, or null if nothing matches.
+// Handles the real shop codes seen in preset names — "AL", "SS316", "SS-316",
+// "ST", "STEEL", "BRZ", "GF Nylon", "low carbon steel", etc. — via keyword
+// substrings first, then token-level code matches (so "SS316"/"AL-150" work).
+// NOTE: "BZN" is deliberately NOT mapped — it's ambiguous (brass vs a bronze
+// alloy); confirm the intended material before adding it here.
+export function matchMaterial(str) {
+  if (!str) return null;
+  const s = String(str).toUpperCase();
+  // Keyword substrings (strongest signal).
+  if (s.includes('STAINLESS')) return 'SS';
+  if (s.includes('ALUM')) return 'AL';
+  if (s.includes('TITAN')) return 'TI';
+  if (s.includes('BRONZE')) return 'BRONZE';
+  if (s.includes('BRASS')) return 'BRASS';
+  if (/NYLON|PLASTIC|PEEK|DELRIN|ACETAL|UHMW|\bPVC\b|\bABS\b/.test(s)) return 'PLASTIC';
+  if (s.includes('CAST') || (s.includes('IRON') && !s.includes('STEEL'))) return 'CI';
+  if (s.includes('MILD') || s.includes('LOW CARBON')) return 'MILD';
+  // Token-level codes (split on spaces/dashes). "SS316" → SS, "AL-150" → AL.
+  const tokens = s.split(/[\s-]+/).filter(Boolean);
+  for (const t of tokens) {
+    if (t === 'SS' || /^SS\d/.test(t)) return 'SS';
+    if (t === 'AL' || /^AL\d/.test(t)) return 'AL';
+    if (t === 'TI' || /^TI\d/.test(t)) return 'TI';
+    if (t === 'CI') return 'CI';
+    if (t === 'BRZ') return 'BRONZE';
+    if (t === 'BRS') return 'BRASS';
+    if (t === 'ST' || t === 'STEEL') return 'STEEL';
+  }
+  return null;
+}
+
+// Display label for a material query/name ('Other' when unrecognized).
+export function materialLabel(query) {
+  const code = matchMaterial(query);
+  return code ? MATERIAL_LABELS[code] : 'Other';
+}
+
 // Fusion's `tool_presetMaterialCategory` ("Filter by Type") must never be blank.
 // Derive it from the preset material: a plastic material -> "plastic", any other
 // (metal) material -> "metal", and no/blank material -> "all".
@@ -49,7 +94,7 @@ export const OP_TYPES = [
   { value: 'finish',      word: 'Finish',      aliases: ['FINISH', 'FINISHING', 'FIN', 'F', 'FINSH'] },
   { value: 'rough_fast',  word: 'Rough Fast',  aliases: ['ROUGH FAST', 'RF'] },
   { value: 'fine_finish', word: 'Fine Finish', aliases: ['FINE FINISH', 'FF'] },
-  { value: 'small_bore',  word: 'Small Bore',  aliases: ['SMALL BORE', 'SM BORE', 'SMBORE'] },
+  { value: 'small_bore',  word: 'Small Bore',  aliases: ['SMALL BORE', 'SM BORE', 'SMBORE', 'SMALL HOLE', 'SM HOLE', 'SMHOLE'] },
 ];
 
 export function opTypeWord(value) {
