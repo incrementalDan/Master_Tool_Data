@@ -343,6 +343,43 @@ export async function deleteToolFile(fileId) {
   if (!res.ok) throw new Error(`File delete failed (${res.status})`);
 }
 
+// List all non-trashed children (files AND folders) of a Drive folder.
+// Returns [{ id, name, mimeType }]. Used by the one-time ProShop-photo import
+// to scan a source folder's per-tool subfolders and their photo files.
+export async function listFolderChildren(parentId) {
+  const q = `'${parentId}' in parents and trashed=false`;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=name&fields=files(id,name,mimeType)&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+    { headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`Failed to list folder contents (${res.status}): ${txt.slice(0, 100)}`);
+  }
+  const data = await res.json();
+  return data.files || [];
+}
+
+// Server-side copy a Drive file into a target folder (no byte transfer through
+// the browser). Returns { id, name }. The source file is never modified.
+export async function copyDriveFile(fileId, name, parentFolderId) {
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}/copy?supportsAllDrives=true&fields=id,name`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${_accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, parents: [parentFolderId] }),
+    }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`File copy failed (${res.status}): ${txt.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
 // Fetch a Drive file as a Blob (authenticated, works for team/shared files).
 export async function fetchFileBlob(fileId) {
   const res = await fetch(

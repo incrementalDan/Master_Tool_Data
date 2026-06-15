@@ -6,7 +6,7 @@ import {
   groupByTrackingId, buildLogicalTool, splitToFusionInstances, readTrackingId,
   getNextMachineNumber, generateMachineNumbers, applyMachineNumberToFusion,
   fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
-  combineToolsByProshopId,
+  combineToolsByProshopId, buildMetadataTool,
 } from '../schema/toolSchema.js';
 import { composePresetName, opTypeWord, parsePresetName, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
@@ -861,6 +861,83 @@ export function AppProvider({ children }) {
     }
   }, [writeLogicalTool, notify]);
 
+  // ─── One-time: import ProShop tool photos from a Drive folder ─────────────
+  // The picked folder holds one main photo file PER TOOL at its top level, named
+  // "tools_{proshot_id}_….{png|jpg}". (Same-named subfolders hold only the
+  // 300/600/900w resized variants — ignored; we never descend into them.) Each
+  // main photo is copied into the matching tool's tool_files folder and set as
+  // its primary photo. Read-only on the source; skips tools with no match or an
+  // existing photo; changes only metadata (primary_photo_id/name), so it writes
+  // metadata once at the end rather than rewriting the Fusion library per tool.
+  const importProShopPhotos = useCallback(async (sourceFolderId, { onProgress } = {}) => {
+    if (!googleRef.current) {
+      notify('Connect Google Drive to import photos', 'error');
+      throw new Error('Google Drive not connected');
+    }
+    const SKIP_FILES = new Set(['300w.png', '600w.png', '900w.png']);
+    const FOLDER_MIME = 'application/vnd.google-apps.folder';
+    const isImage = (name) => /\.(png|jpe?g)$/i.test(String(name));
+    // ProShop ID is the segment between the first and second underscore.
+    const extractProshopId = (name) => {
+      const parts = String(name).split('_');
+      return parts.length >= 2 ? parts[1].trim() : '';
+    };
+    // Match ProShop IDs interchangeably regardless of dashes/spaces/case:
+    // "D241", "D-241" and "d 241" all compare equal.
+    const normId = (id) => String(id || '').replace(/[\s-]/g, '').toUpperCase();
+
+    // Top-level photo files only — skip subfolders entirely and the resized variants.
+    const children = await driveService.listFolderChildren(sourceFolderId);
+    const photos = children.filter(c =>
+      c.mimeType !== FOLDER_MIME && !SKIP_FILES.has(c.name) && isImage(c.name));
+    const summary = { total: photos.length, imported: [], skippedHasPhoto: [], noMatch: [], errors: [] };
+    if (photos.length === 0) return summary;
+
+    // Load metadata once; modify in place; write once at the end.
+    const metaList = await driveService.loadMetadata();
+    const metaById = new Map(metaList.map(m => [m.id, m]));
+    const updatedTools = [];
+    const importedToolIds = new Set(); // guard against two photos for one tool in a run
+
+    let done = 0;
+    for (const photo of photos) {
+      done += 1;
+      onProgress?.({ done, total: photos.length, current: photo.name });
+      try {
+        const pid = extractProshopId(photo.name);
+        if (!pid) { summary.noMatch.push({ folder: photo.name, reason: 'No ProShop ID in file name' }); continue; }
+        const wantId = normId(pid);
+        const tool = toolsRef.current.find(t => normId(t.proshot_id) === wantId);
+        if (!tool) { summary.noMatch.push({ folder: photo.name, proshopId: pid, reason: 'No tool with this ProShop ID' }); continue; }
+        if (tool.primary_photo_id || importedToolIds.has(tool.id)) {
+          summary.skippedHasPhoto.push({ folder: photo.name, proshopId: pid, description: tool.description });
+          continue;
+        }
+
+        const trackingId = tool.tracking_id || tool.id;
+        const toolFolderId = await driveService.ensureToolFolder(trackingId);
+        const copied = await driveService.copyDriveFile(photo.id, photo.name, toolFolderId);
+
+        const updatedTool = { ...tool, primary_photo_id: copied.id, primary_photo_name: photo.name };
+        updatedTools.push(updatedTool);
+        importedToolIds.add(tool.id);
+        const metaRec = buildMetadataTool(updatedTool);
+        metaById.set(metaRec.id, metaRec);
+        summary.imported.push({ folder: photo.name, proshopId: pid, description: tool.description, photo: photo.name });
+      } catch (err) {
+        if (err.code === 'TOKEN_EXPIRED') { dispatch({ type: 'GOOGLE_EXPIRED' }); throw err; }
+        summary.errors.push({ folder: photo.name, error: err.message });
+      }
+    }
+
+    if (updatedTools.length > 0) {
+      onProgress?.({ phase: 'saving', done: photos.length, total: photos.length, current: '' });
+      await driveService.saveAllMetadata([...metaById.values()]);
+      for (const t of updatedTools) dispatch({ type: 'UPDATE_TOOL', tool: t });
+    }
+    return summary;
+  }, [notify]);
+
   // ─── Reconcile a tool against the live Fusion library ─────────────────────
   // Detects entries that were dumped straight into the Fusion library (sharing
   // this tool's tracking ID or ProShop number) instead of going through Sync
@@ -1191,6 +1268,7 @@ export function AppProvider({ children }) {
       uploadToolPhoto,
       uploadToolAttachment,
       deleteToolAttachment,
+      importProShopPhotos,
       reconcileTool,
       applyReconcile,
       saveFullLibrary,

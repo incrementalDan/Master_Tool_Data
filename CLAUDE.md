@@ -552,6 +552,7 @@ src/
     driveService.js               # Google Drive API (metadata only)
                                   # OAuth scope: drive (not drive.file — required for shared drives)
                                   # All API calls include supportsAllDrives=true
+                                  # listFolderChildren + copyDriveFile back the ProShop photo import
     searchEngine.js               # In-memory faceted search + filter logic
     duplicateDetector.js          # Weighted similarity scoring for Phase 2 matching
     mergeQueue.js                 # Phase 2 queue state: parseIncoming, buildQueue
@@ -582,6 +583,9 @@ src/
     FacetFilters.jsx              # Cascading facet filter UI
     AddToolFlow.jsx               # New tool flow (extractor or manual)
     ImportFlow.jsx                # Bulk Fusion JSON / ProShop CSV import
+                                  # Also hosts the "Import ProShop Photos" button → ImportPhotosModal
+    ImportPhotosModal.jsx         # One-time ProShop photo import: Drive folder browser +
+                                  # progress/summary (see ProShop Integration → ProShop photo import)
     MetadataConnect.jsx           # Google Drive connect flow + shared-drive-aware folder picker
     HolderPicker.jsx              # Modal for selecting a holder from the holder library
     ReconcileModal.jsx            # Reconcile-on-open prompt: delete duplicates, add/delete
@@ -663,6 +667,19 @@ ProShop's **Tool Group** column (`toolGroupLetter`, e.g. `A`, `B`, `L`, `R`, `TD
 - Letters with **no** corresponding `tool_type` (G/H/P/Q/S/T/TA-TU — inserts, saws, turning holders/inserts, CMM styli) return `null`; `psRowToTool` falls back to `flat end mill` for these — they're rare in this shop's data and already get `no_fusion_link: true`, flagging them for manual cleanup.
 
 The row's `Tool Group` value itself is always preserved as-is into `tool.grouping` (so export round-trips the original letter even if `typeFromProShopGroup` guessed differently than ProShop's own filing).
+
+### ProShop photo import (one-time)
+
+A one-time bulk action that copies the shop's existing ProShop tool photos into the app's attachment system as each tool's **primary photo**. Launched from the **"Import ProShop Photos"** button in the Import flow (`ImportFlow.jsx`), which opens `ImportPhotosModal.jsx` (a Drive folder browser reusing `MetadataConnect`'s picker pattern — My Drive + shared drives, nothing saved, picked fresh each run). The work lives in `AppContext.importProShopPhotos(sourceFolderId, { onProgress })`.
+
+- **Source must be in Google Drive** (My Drive or a shared drive the connected account can open) — the importer uses the Drive API to browse and copy; there is no local-disk path. The modal shows an amber note saying so.
+- **Folder layout (confirmed against real data)**: the **main photo is a top-level file** in the picked folder, named `tools_{proshot_id}_….{png|jpg}`. Same-named **subfolders** hold only the `300w.png` / `600w.png` / `900w.png` resized variants and are **ignored** — the importer scans top-level image files only and never descends into subfolders. (The original task spec had this backwards — main photo "in a subfolder" — it is not.)
+- **ProShop ID** is the segment between the **first and second underscore** of the file name (`tools_A242_… → A242`). Matching to `tool.proshot_id` is **dash/space/case-insensitive** (`normId` strips `[\s-]` and uppercases) so `D241`, `D-241`, and `d 241` all match the same tool.
+- **Skips**: files with no extractable ID, no matching tool (logged), tools that already have a `primary_photo_id` (never overwrites), and a second photo for a tool already imported in the same run.
+- **Copy is server-side** (`driveService.copyDriveFile` → Drive `files.copy`, no byte transfer through the browser); the source folder is never modified. The photo is copied into the tool's `tool_files/{trackingId}/` folder (`ensureToolFolder`) and set as `primary_photo_id` / `primary_photo_name` — see **Tool File Attachments & Photos**.
+- **Metadata-only write**: a primary photo is metadata, not a Fusion field, so the action loads `tool_metadata.json` once, sets the photo on each matched tool's record (`buildMetadataTool`), and calls `saveAllMetadata` **once** at the end — it does **not** route through `writeLogicalTool` per tool (which would re-download/re-upload the whole Fusion library hundreds of times). In-memory tools are updated via `UPDATE_TOOL`.
+- **Re-runnable**: safe to run again; already-photographed tools are skipped. Returns a summary (`imported` / `skippedHasPhoto` / `noMatch` / `errors`) the modal renders with live progress.
+- New Drive helpers: `listFolderChildren(parentId)` (files **and** folders, with `mimeType`) and `copyDriveFile(fileId, name, parentFolderId)` in `driveService.js`.
 
 -----
 

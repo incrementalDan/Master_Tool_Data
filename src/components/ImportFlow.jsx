@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { UploadCloud, AlertTriangle } from 'lucide-react';
+import { UploadCloud, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
+import ImportPhotosModal from './ImportPhotosModal.jsx';
 import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers, typeFromProShopGroup } from '../schema/toolSchema.js';
 import { vendorHasOwnCatalogNumber, resolveVendorName } from '../schema/vendorRegistry.js';
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
@@ -31,6 +32,7 @@ export default function ImportFlow() {
   const [proShopMatches, setProShopMatches] = useState(null);
   const [psUnit, setPsUnit] = useState(getDefaultUnit());
   const [saving, setSaving] = useState(false);
+  const [showPhotos, setShowPhotos] = useState(false);
   const fusionFileRef = useRef(null);
   const proShopFileRef = useRef(null);
 
@@ -171,7 +173,13 @@ export default function ImportFlow() {
       <div className="flex items-center gap-8 mb-20">
         <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')}>← Back</button>
         <h2 style={{ fontSize: 16, fontWeight: 600 }}>Import Library</h2>
+        <div style={{ flex: 1 }} />
+        <button className="btn btn-secondary btn-sm" onClick={() => setShowPhotos(true)} title="One-time: copy ProShop tool photos from a Drive folder">
+          <ImageIcon size={14} /> Import ProShop Photos
+        </button>
       </div>
+
+      {showPhotos && <ImportPhotosModal onClose={() => setShowPhotos(false)} />}
 
       {/* Step indicators */}
       <div className="import-steps mb-20">
