@@ -217,3 +217,46 @@ any unexpected diff — run it after touching the converters.
 Remaining **expected** diffs (allowlisted in the harness, all intentional): `last_modified`,
 `<NEW TOOL GUID>` strip, root-vendor re-derivation, whitespace-only string normalization,
 offsets-follow-tool-number policy.
+
+---
+
+# FR — Field-registry centralization audit (June 2026)
+
+Goal (future "later thing"): **no field definition hardcoded anywhere outside
+`fieldRegistry.js`.** This section maps the current state — what is genuinely
+registry-driven vs. what the registry only *documents* while the real definition
+lives (and can silently drift) in the conversion/export/extractor code. No code
+was changed for this audit; it is a map for a later, deliberately-scoped refactor.
+
+## ✅ Already centralized (registry is the source AND is consumed)
+- **Labels** — `FIELD_LABELS` (`toolSchema.js`) is generated via `Object.fromEntries(... fieldLabel(name))` from `FIELD_REGISTRY`. Consumed by `FacetFilters.jsx`, `NewToolStep.jsx`, `ToolFields.jsx`. Linear-unit suffix derived centrally by `fieldLabel(field, unit)`.
+- **Type / unit / precision** — `FIELD_REGISTRY[field]` read directly by `ToolFields.jsx`, `toolFieldLayout.js`, `FacetFilters.jsx` (e.g. `.type === 'number'`).
+- **Form applicability** — `fieldsForType()` consumed by `toolFieldLayout.js`.
+- **Metadata-only write guard** — `isMetadataOnly()` consumed by `internalToFusionTool` (`toolSchema.js:1303`) to strip non-Fusion keys before write. This is the one place a registry flag actually gates the Fusion JSON.
+
+## ☐ FR1 🟠 Fusion JSON paths — registry `fusionPath` is documentation only
+- `fusionNativeFields()` has **zero callers**; the registry's `fusionPath` values are never read programmatically.
+- Real read/write paths are **hardcoded literals**: `toolSchema.js` `fusionToolToInternal` / `internalToFusionTool` (~17 distinct `geometry.*` / `expressions.*` / `BMC` paths), `fusionExport.js`, `reconcile.js` (signature keys), `mergeQueue.js` (CSV parse).
+- Drift risk: a path can disagree between the registry and the converter with no error or audit failure (the round-trip audit checks converter↔Fusion, not converter↔registry).
+
+## ☐ FR2 🟠 ProShop columns — registry `proShopColumn` is documentation only
+- `proShopFields()` has **zero callers**; `proShopColumn` values are never read programmatically.
+- Real definitions: `tool-extractor.tsx` `PS_MAIN_COLS` (header + extractor fn pairs — the actual export source), `proShopExport.js`, and `ImportFlow.jsx` (reads PS header **strings** directly, e.g. `row['Tip to 1st Full Thread']`).
+
+## ☐ FR3 🟠 Per-type applicability duplicated from the extractor
+- Registry `appliesToTypes` is **manually duplicated** from `FIELD_VISIBILITY` in `tool-extractor.tsx` (the registry comment says "derived from tool-extractor.tsx FIELD_VISIBILITY").
+- `FIELD_VISIBILITY` is the real source for `getRequiredFields()` (`toolSchema.js`) and the extractor UI. Two places that can drift on every new field / type-visibility change.
+
+## ☐ FR4 🟡 Tool-type list duplicated
+- Registry `ALL_TYPES` is "duplicated to avoid circular dep" from `TT` in `tool-extractor.tsx`. Two hand-maintained lists of the 25 types.
+
+## ☐ FR5 🟡 Field-label maps outside the registry (mostly different concerns — verify, don't assume)
+- `PRESET_FIELD_LABELS` (`DiffStep.jsx`) — preset sub-field labels (`v_f`, `f_z`…), not tool fields; out of registry scope today.
+- `MATERIAL_LABELS` (`presetNaming.js`), `TYPE_LABELS` (`FilesSection.jsx`, attachment types), `STEP_LABELS` / `FACET_LABEL` overrides — non-tool-field label maps. Catalog them when scoping, but they are not the `FIELD_REGISTRY` field set.
+
+## Suggested refactor staging (when the "later thing" starts — confirm scope first)
+1. **FR1 paths** behind the round-trip audit: drive `fusionToolToInternal` / `internalToFusionTool` off `registry.fusionPath`, proving byte-identical output at each step.
+2. **FR2 ProShop**: generate `PS_MAIN_COLS` / import lookups from `registry.proShopColumn`.
+3. **FR3/FR4**: make the registry the single source for applicability + the type list (generate `FIELD_VISIBILITY` / `TT` from it, or vice-versa), removing the duplicate.
+
+This is a **big, cross-cutting change** to the most audit-critical code (the converter). Scope and stage deliberately; do not start as a tidy-up.
