@@ -67,6 +67,7 @@ const initialState = {
   tools: [],
   holders: [],                // loaded from Master-Holder library
   needsNormalize: false,      // true when any tool lacks a tracking ID (pre-migration)
+  metadataFileWarning: null,  // null | 'missing' | 'trashed' — linked metadata file is gone
   isLoading: false,
   isSaving: false,
   error: null,
@@ -121,6 +122,7 @@ function reducer(state, action) {
     case 'DELETE_TOOL':
       return { ...state, tools: state.tools.filter(t => t.id !== action.id) };
     case 'SET_TOOLS': return { ...state, tools: action.tools, ...(action.needsNormalize !== undefined ? { needsNormalize: action.needsNormalize } : {}) };
+    case 'METADATA_FILE_WARNING': return { ...state, metadataFileWarning: action.warning };
     case 'CLEAR_ERROR': return { ...state, error: null };
     case 'ADD_TOAST': return { ...state, toasts: [...state.toasts, action.toast] };
     case 'DISMISS_TOAST': return { ...state, toasts: state.toasts.filter(t => t.id !== action.id) };
@@ -277,6 +279,7 @@ export function AppProvider({ children }) {
 
   // Resolves the linked metadata file's name + folder/drive location for display in Settings.
   const fetchMetadataLocation = useCallback(() => driveService.getMetadataFileLocation(), []);
+  const dismissMetadataWarning = useCallback(() => dispatch({ type: 'METADATA_FILE_WARNING', warning: null }), []);
 
   // Marks one step of the setup guide as complete (idempotent — see MARK_SETUP_STEP).
   // Called at each of the 4 trigger points: connecting the Fusion library,
@@ -353,6 +356,21 @@ export function AppProvider({ children }) {
         }
       }
       const metaByTracking = new Map(metaList.map(m => [m.id, m]));
+
+      // Warn if the linked metadata file is gone. A deleted file 404s; a TRASHED
+      // file still reads/writes via the API, so without this check the app would
+      // silently keep saving notes/photos into a file sitting in the trash. The
+      // check is best-effort — never block the library load on it.
+      if (googleRef.current) {
+        try {
+          const health = await driveService.getMetadataFileHealth();
+          dispatch({
+            type: 'METADATA_FILE_WARNING',
+            warning: health.configured && health.missing ? 'missing'
+              : health.configured && health.trashed ? 'trashed' : null,
+          });
+        } catch { /* inconclusive — leave any existing warning as-is */ }
+      }
 
       // Group Fusion entries into logical tools by tracking ID. Entries without
       // a tracking ID are each their own single-instance tool until normalized.
@@ -1244,6 +1262,7 @@ export function AppProvider({ children }) {
       reconnectMetadata,
       disconnectMetadata,
       fetchMetadataLocation,
+      dismissMetadataWarning,
       markSetupStep,
       setupCelebrated,
       markSetupCelebrated,

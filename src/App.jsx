@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useGoogleLogin } from '@react-oauth/google';
-import { Wrench, FolderOpen, LogOut, Library, Upload, Settings, GitMerge, RefreshCw, AlertTriangle, Download } from 'lucide-react';
+import { Wrench, FolderOpen, LogOut, Library, Upload, Settings, GitMerge, RefreshCw, AlertTriangle, Download, X } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import { setAccessToken, fetchUserInfo } from './services/driveService.js';
 import { exportFullLibrary } from './utils/proShopExport.js';
@@ -92,6 +92,7 @@ function AppShell() {
         <TopBar user={user} googleAuthenticated={googleAuthenticated} onSignOut={signOutAll} onChangeLibrary={clearLibraryLocation} />
         <NormalizeBanner />
         <GoogleReconnectBanner />
+        <MetadataFileBanner />
         <SetupGuideBanner />
         <SetupCompleteModal />
         <main className="page-content">
@@ -139,6 +140,31 @@ function NormalizeBanner() {
       </span>
       <button className="btn btn-secondary btn-sm" onClick={() => setShowModal(true)}>Review &amp; normalize</button>
       {showModal && <NormalizeModal onClose={() => setShowModal(false)} />}
+    </div>
+  );
+}
+
+// Shown when the linked tool_metadata.json file is gone — deleted (404) or sitting
+// in the Drive trash. Without this, the app silently treats a missing file as
+// "no metadata" (and can keep writing into a trashed file), quietly losing notes,
+// tags, and photos. Points the user to Settings to relink or create a new file.
+function MetadataFileBanner() {
+  const { metadataFileWarning, dismissMetadataWarning } = useApp();
+  const navigate = useNavigate();
+  if (!metadataFileWarning) return null;
+  const msg = metadataFileWarning === 'trashed'
+    ? 'Your metadata file (notes, tags, photos) is in the Drive trash — changes are being saved into a trashed file and may be lost. Restore it in Drive, or relink/create a new one in Settings.'
+    : "Your metadata file (notes, tags, photos) couldn't be found — it may have been deleted or moved out of reach. Relink it or create a new one in Settings.";
+  return (
+    <div role="alert" style={{
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      padding: '10px 16px', background: 'rgba(239,68,68,0.1)',
+      borderBottom: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5', fontSize: 13,
+    }}>
+      <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 220 }}>{msg}</span>
+      <button className="btn btn-secondary btn-sm" onClick={() => navigate('/settings')}>Open Settings</button>
+      <button className="icon-btn" onClick={dismissMetadataWarning} title="Dismiss"><X size={15} /></button>
     </div>
   );
 }
