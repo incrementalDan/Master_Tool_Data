@@ -67,6 +67,7 @@ const initialState = {
   tools: [],
   holders: [],                // loaded from Master-Holder library
   needsNormalize: false,      // true when any tool lacks a tracking ID (pre-migration)
+  metadataFileWarning: null,  // null | 'missing' | 'trashed' — linked metadata file is gone
   isLoading: false,
   isSaving: false,
   error: null,
@@ -121,6 +122,7 @@ function reducer(state, action) {
     case 'DELETE_TOOL':
       return { ...state, tools: state.tools.filter(t => t.id !== action.id) };
     case 'SET_TOOLS': return { ...state, tools: action.tools, ...(action.needsNormalize !== undefined ? { needsNormalize: action.needsNormalize } : {}) };
+    case 'METADATA_FILE_WARNING': return { ...state, metadataFileWarning: action.warning };
     case 'CLEAR_ERROR': return { ...state, error: null };
     case 'ADD_TOAST': return { ...state, toasts: [...state.toasts, action.toast] };
     case 'DISMISS_TOAST': return { ...state, toasts: state.toasts.filter(t => t.id !== action.id) };
@@ -277,6 +279,7 @@ export function AppProvider({ children }) {
 
   // Resolves the linked metadata file's name + folder/drive location for display in Settings.
   const fetchMetadataLocation = useCallback(() => driveService.getMetadataFileLocation(), []);
+  const dismissMetadataWarning = useCallback(() => dispatch({ type: 'METADATA_FILE_WARNING', warning: null }), []);
 
   // Marks one step of the setup guide as complete (idempotent — see MARK_SETUP_STEP).
   // Called at each of the 4 trigger points: connecting the Fusion library,
@@ -353,6 +356,21 @@ export function AppProvider({ children }) {
         }
       }
       const metaByTracking = new Map(metaList.map(m => [m.id, m]));
+
+      // Warn if the linked metadata file is gone. A deleted file 404s; a TRASHED
+      // file still reads/writes via the API, so without this check the app would
+      // silently keep saving notes/photos into a file sitting in the trash. The
+      // check is best-effort — never block the library load on it.
+      if (googleRef.current) {
+        try {
+          const health = await driveService.getMetadataFileHealth();
+          dispatch({
+            type: 'METADATA_FILE_WARNING',
+            warning: health.configured && health.missing ? 'missing'
+              : health.configured && health.trashed ? 'trashed' : null,
+          });
+        } catch { /* inconclusive — leave any existing warning as-is */ }
+      }
 
       // Group Fusion entries into logical tools by tracking ID. Entries without
       // a tracking ID are each their own single-instance tool until normalized.
@@ -863,7 +881,7 @@ export function AppProvider({ children }) {
 
   // ─── One-time: import ProShop tool photos from a Drive folder ─────────────
   // The picked folder holds one main photo file PER TOOL at its top level, named
-  // "tools_{proshot_id}_….{png|jpg}". (Same-named subfolders hold only the
+  // "tools_{proshot_id}_….{png|jpg|gif|webp|avif}". (Same-named subfolders hold only the
   // 300/600/900w resized variants — ignored; we never descend into them.) Each
   // main photo is copied into the matching tool's tool_files folder and set as
   // its primary photo. Read-only on the source; skips tools with no match or an
@@ -876,7 +894,10 @@ export function AppProvider({ children }) {
     }
     const SKIP_FILES = new Set(['300w.png', '600w.png', '900w.png']);
     const FOLDER_MIME = 'application/vnd.google-apps.folder';
-    const isImage = (name) => /\.(png|jpe?g)$/i.test(String(name));
+    // Accept any image: match common extensions OR fall back to Drive's mimeType
+    // (covers png/jpg/gif/webp/avif and anything else Drive tags as an image).
+    const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif)$/i;
+    const isImage = (c) => (c.mimeType || '').startsWith('image/') || IMAGE_EXT.test(c.name || '');
     // ProShop ID is the segment between the first and second underscore.
     const extractProshopId = (name) => {
       const parts = String(name).split('_');
@@ -889,7 +910,7 @@ export function AppProvider({ children }) {
     // Top-level photo files only — skip subfolders entirely and the resized variants.
     const children = await driveService.listFolderChildren(sourceFolderId);
     const photos = children.filter(c =>
-      c.mimeType !== FOLDER_MIME && !SKIP_FILES.has(c.name) && isImage(c.name));
+      c.mimeType !== FOLDER_MIME && !SKIP_FILES.has(c.name) && isImage(c));
     const summary = { total: photos.length, imported: [], skippedHasPhoto: [], noMatch: [], errors: [] };
     if (photos.length === 0) return summary;
 
@@ -1244,6 +1265,7 @@ export function AppProvider({ children }) {
       reconnectMetadata,
       disconnectMetadata,
       fetchMetadataLocation,
+      dismissMetadataWarning,
       markSetupStep,
       setupCelebrated,
       markSetupCelebrated,

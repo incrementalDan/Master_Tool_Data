@@ -158,6 +158,27 @@ export async function saveAllMetadata(metaList) {
 
 // ─── Folder picker helpers ────────────────────────────────────────────────────
 
+// Reports whether the configured metadata file is actually usable. Returns
+// { configured, missing, trashed }. This is stricter than checkMetadataFile:
+// a TRASHED file still reads and writes through the Drive API (so the app can
+// silently save into a file sitting in the trash — the exact failure that loses
+// notes/photos), and a deleted file 404s. Both mean the metadata is effectively
+// gone and the user should be warned. An inconclusive error (network/permission)
+// reports healthy so we never raise a false alarm.
+export async function getMetadataFileHealth() {
+  const id = getMetaFileId();
+  if (!id) return { configured: false, missing: false, trashed: false };
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${id}?fields=id,trashed&supportsAllDrives=true`,
+    { headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (res.status === 404) return { configured: true, missing: true, trashed: false };
+  if (!res.ok) return { configured: true, missing: false, trashed: false };
+  const file = await res.json();
+  return { configured: true, missing: false, trashed: !!file.trashed };
+}
+
 // Returns true if the configured metadata file actually exists.
 export async function checkMetadataFile() {
   const id = getMetaFileId();
