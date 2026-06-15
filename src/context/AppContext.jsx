@@ -881,7 +881,7 @@ export function AppProvider({ children }) {
 
   // ─── One-time: import ProShop tool photos from a Drive folder ─────────────
   // The picked folder holds one main photo file PER TOOL at its top level, named
-  // "tools_{proshot_id}_….{png|jpg}". (Same-named subfolders hold only the
+  // "tools_{proshot_id}_….{png|jpg|gif|webp|avif}". (Same-named subfolders hold only the
   // 300/600/900w resized variants — ignored; we never descend into them.) Each
   // main photo is copied into the matching tool's tool_files folder and set as
   // its primary photo. Read-only on the source; skips tools with no match or an
@@ -894,7 +894,10 @@ export function AppProvider({ children }) {
     }
     const SKIP_FILES = new Set(['300w.png', '600w.png', '900w.png']);
     const FOLDER_MIME = 'application/vnd.google-apps.folder';
-    const isImage = (name) => /\.(png|jpe?g)$/i.test(String(name));
+    // Accept any image: match common extensions OR fall back to Drive's mimeType
+    // (covers png/jpg/gif/webp/avif and anything else Drive tags as an image).
+    const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif)$/i;
+    const isImage = (c) => (c.mimeType || '').startsWith('image/') || IMAGE_EXT.test(c.name || '');
     // ProShop ID is the segment between the first and second underscore.
     const extractProshopId = (name) => {
       const parts = String(name).split('_');
@@ -907,7 +910,7 @@ export function AppProvider({ children }) {
     // Top-level photo files only — skip subfolders entirely and the resized variants.
     const children = await driveService.listFolderChildren(sourceFolderId);
     const photos = children.filter(c =>
-      c.mimeType !== FOLDER_MIME && !SKIP_FILES.has(c.name) && isImage(c.name));
+      c.mimeType !== FOLDER_MIME && !SKIP_FILES.has(c.name) && isImage(c));
     const summary = { total: photos.length, imported: [], skippedHasPhoto: [], noMatch: [], errors: [] };
     if (photos.length === 0) return summary;
 

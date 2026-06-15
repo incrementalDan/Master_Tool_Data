@@ -139,8 +139,8 @@ export default function ImportPhotosModal({ onClose }) {
           <>
             <p className="text-sub text-sm mb-8">
               Browse to the folder that holds the ProShop photo files (named
-              <code> tools_&#123;ProShop ID&#125;_….png/jpg</code>) at its top level. Each is copied to the
-              matching tool as its primary photo. Tools that already have a photo are skipped.
+              <code> tools_&#123;ProShop ID&#125;_…</code>, any image: png/jpg/gif/webp/avif) at its top level.
+              Each is copied to the matching tool as its primary photo. Tools that already have a photo are skipped.
             </p>
             <p className="text-sub text-sm mb-12" style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
               <AlertTriangle size={13} style={{ color: 'var(--amber)', flexShrink: 0, marginTop: 2 }} />
