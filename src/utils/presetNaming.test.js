@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   materialToCode,
   materialCategory,
+  matchMaterial,
+  materialLabel,
   matchOpType,
   opTypeWord,
   formatOoh,
@@ -28,6 +30,35 @@ describe('materialCategory', () => {
     expect(materialCategory('PL')).toBe('plastic');
     expect(materialCategory('SS')).toBe('metal');
     expect(materialCategory('')).toBe('all');
+  });
+});
+
+describe('matchMaterial', () => {
+  it('maps real shop codes to canonical materials', () => {
+    expect(matchMaterial('AL')).toBe('AL');
+    expect(matchMaterial('AL FIN')).toBe('AL');
+    expect(matchMaterial('SS')).toBe('SS');
+    expect(matchMaterial('SS316')).toBe('SS');
+    expect(matchMaterial('SS-316 FIN')).toBe('SS');
+    expect(matchMaterial('SS316 SM HOLE FIN')).toBe('SS');
+    expect(matchMaterial('ST')).toBe('STEEL');
+    expect(matchMaterial('STEEL')).toBe('STEEL');
+    expect(matchMaterial('BRZ ROUGH')).toBe('BRONZE');
+    expect(matchMaterial('GF Nylon Finish')).toBe('PLASTIC');
+    expect(matchMaterial('low carbon steel')).toBe('MILD');
+  });
+
+  it('returns null when no material is recognizable', () => {
+    expect(matchMaterial('Default preset')).toBe(null);
+    expect(matchMaterial('')).toBe(null);
+    expect(matchMaterial('Engrave')).toBe(null);
+    expect(matchMaterial('BZN ROUGH')).toBe(null); // ambiguous — intentionally unmapped
+  });
+
+  it('materialLabel gives a human label or Other', () => {
+    expect(materialLabel('SS316')).toBe('Stainless Steel');
+    expect(materialLabel('AL')).toBe('Aluminum');
+    expect(materialLabel('Default preset')).toBe('Other');
   });
 });
 
@@ -101,6 +132,32 @@ describe('parsePresetName', () => {
     expect(parsePresetName('Rough').opType).toBe('rough');
     expect(parsePresetName('Finsh').opType).toBe('finish');
     expect(parsePresetName('SM Bore').opType).toBe('small_bore');
+  });
+
+  it('detects an op word embedded among other tokens (real Fusion names)', () => {
+    expect(parsePresetName('AL FIN').opType).toBe('finish');
+    expect(parsePresetName('BRZ ROUGH').opType).toBe('rough');
+    expect(parsePresetName('AL SM BORE').opType).toBe('small_bore');
+    expect(parsePresetName('GF Nylon Fine Finish').opType).toBe('fine_finish');
+    expect(parsePresetName('AL-150-FIN').opType).toBe('finish');      // dash-separated
+    expect(parsePresetName('SS Rough 150-316').opType).toBe('rough');
+    expect(parsePresetName('GF Nylon Finish').opType).toBe('finish');
+  });
+
+  it('treats SM HOLE the same as SM BORE (small bore), winning over a plain FIN', () => {
+    expect(parsePresetName('AL SM HOLE').opType).toBe('small_bore');
+    expect(parsePresetName('SS316 SM HOLE FIN').opType).toBe('small_bore');
+  });
+
+  it('prefers the more specific multi-word op (Fine Finish over Finish)', () => {
+    expect(parsePresetName('GF Nylon Fine Finish').opType).toBe('fine_finish');
+  });
+
+  it('does not false-match a single letter inside another word', () => {
+    // "BRZ" must not read as "R"; material-only names have no op.
+    expect(parsePresetName('BRZ').opType).toBe(null);
+    expect(parsePresetName('AL').opType).toBe(null);
+    expect(parsePresetName('AL RAMP').opType).toBe(null); // RAMP is not an op
   });
 
   it('returns null only for empty names', () => {

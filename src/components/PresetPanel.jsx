@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { holderColor } from './AssemblyCard.jsx';
 import {
   composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
-  HOLE_MAKING_TYPES, TURNING_TYPES,
+  materialLabel, HOLE_MAKING_TYPES, TURNING_TYPES,
 } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import {
@@ -47,20 +47,9 @@ function r4(v) {
   return isNaN(n) ? v : parseFloat(n.toFixed(4));
 }
 
-function matchMaterial(query) {
-  if (!query) return 'Other';
-  const q = query.toUpperCase();
-  if (q === 'SS' || q.includes('STAINLESS')) return 'Stainless Steel';
-  if (q === 'AL' || q.includes('ALUM')) return 'Aluminum';
-  if (q === 'TI' || q.includes('TITAN')) return 'Titanium';
-  if (q.includes('MILD')) return 'Mild Steel';
-  if (q.includes('BRONZE')) return 'Bronze';
-  if (q.includes('BRASS')) return 'Brass';
-  if (q === 'CI' || q.includes('CAST') || (q.includes('IRON') && !q.includes('STEEL'))) return 'Cast Iron';
-  if (q.includes('PLASTIC')) return 'Plastic';
-  if (q.includes('STEEL') || q.includes('ALLOY')) return 'Alloy Steel';
-  return 'Other';
-}
+// Display label for a preset's material query — delegates to the shared matcher
+// (handles SS316/BRZ/etc.) so the UI and the naming/import logic agree.
+const matchMaterial = materialLabel;
 
 function blankPreset() {
   return {

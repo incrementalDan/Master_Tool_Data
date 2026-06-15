@@ -5,7 +5,7 @@ import {
   getVisibleFields,
 } from '../../tool-extractor.tsx';
 import { isMetadataOnly, FIELD_REGISTRY, fieldLabel } from './fieldRegistry.js';
-import { parsePresetName, materialCategory, HOLE_MAKING_TYPES, TURNING_TYPES } from '../utils/presetNaming.js';
+import { parsePresetName, materialCategory, matchMaterial, HOLE_MAKING_TYPES, TURNING_TYPES } from '../utils/presetNaming.js';
 import { convertLength, unitAbbr, getDefaultUnit } from '../utils/units.js';
 
 export { TT, TL, MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST, PS_GROUPS, AUTO_GROUP, typeFromProShopGroup, COOLANT_OPTS };
@@ -1526,12 +1526,21 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
     };
   });
 
-  // Overlay operation_type onto each preset: name wins, metadata cache is fallback.
+  // Overlay operation_type onto each preset (name wins, metadata cache is
+  // fallback), and infer the material from the name when Fusion left material.query
+  // blank — the shop's presets encode the material only in the name ("AL FIN",
+  // "SS316 SM HOLE FIN"), so without this the material would be lost on rename.
   const presetMeta = meta?.preset_meta || {};
-  const presets = (merged.presets || []).map(p => ({
-    ...p,
-    operation_type: parsePresetName(p.name)?.opType ?? presetMeta[p.guid]?.operation_type ?? null,
-  }));
+  const presets = (merged.presets || []).map(p => {
+    const inferredMat = !p.material?.query ? matchMaterial(p.name) : null;
+    return {
+      ...p,
+      operation_type: parsePresetName(p.name)?.opType ?? presetMeta[p.guid]?.operation_type ?? null,
+      material: inferredMat
+        ? { ...(p.material || {}), query: inferredMat, category: materialCategory(inferredMat) }
+        : p.material,
+    };
+  });
 
   const mtn = meta?.machine_tool_number ?? canonical['post-process']?.number ?? null;
 
