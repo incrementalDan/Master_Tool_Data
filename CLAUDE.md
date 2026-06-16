@@ -1122,6 +1122,12 @@ All metadata-only (never written to Fusion) — added to `tool_metadata.json` vi
 
 -----
 
+## Code Standards
+
+- **Pretty-print all JSON written to Google Drive.** Every JSON file persisted to Drive (`tool_metadata.json`, and any future Drive JSON) must be serialized with `JSON.stringify(data, null, 2)` — never compact/single-line. These files need to be human-readable for debugging directly in Drive. All metadata writes route through `driveCreate` / `driveUpdate` in `src/services/driveService.js`, which already do this; keep it that way and apply the same to any new Drive-file write. (This applies to **file content** only — Drive API request bodies like upload metadata or folder-create payloads can stay compact.)
+
+-----
+
 ## Key Constraints
 
 - **Tool IDs are permanent** — they are the Fusion `guid`, link the two JSON files, and are referenced in merge history. Never reassign them.

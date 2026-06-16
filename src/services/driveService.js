@@ -69,7 +69,7 @@ async function driveCreate(content, folderId = null) {
     `--${boundary}`,
     'Content-Type: application/json',
     '',
-    JSON.stringify(content),
+    JSON.stringify(content, null, 2),
     `--${boundary}--`,
   ].join('\r\n');
 
@@ -103,7 +103,7 @@ async function driveUpdate(fileId, content) {
         Authorization: `Bearer ${_accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(content),
+      body: JSON.stringify(content, null, 2),
     }
   );
   if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
