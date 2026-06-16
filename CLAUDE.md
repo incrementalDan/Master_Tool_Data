@@ -806,7 +806,15 @@ Three shop-wide JSON files live in the **same Drive root as `tool_metadata.json`
 
 - **`vendor_registry.json`** (default = `DEFAULT_VENDOR_REGISTRY` in `vendorRegistry.js`) — the unified entity list (see `vendorRegistry.js` above). Each tool's `purchasing.manufacturers[]` / `vendors[]` are intended to reference entity IDs from this list; the `is_manufacturer` / `is_vendor` flags determine which picker an entity appears in.
 
-- **`shop_settings.json`** (default in `sharedDefaults.js`) — `{ shop_name, default_units, machine_number:{start,skip}, import:{last_proshop_import,last_photo_import_folder_id}, aps:{last_used_hub_id,last_used_project_id} }`. **Loaded/exposed/saved only — NOT yet wired into existing behavior** (default unit still comes from localStorage, renumber start/skip still hardcoded, APS picker + import-folder memory unchanged). Wiring those consumers to read/write `shop_settings.json` is a deliberate later step.
+- **`shop_settings.json`** (default in `sharedDefaults.js`) — `{ shop_name, default_units, machine_number:{start,skip}, import:{last_proshop_import,last_photo_import_folder_id}, aps:{last_used_hub_id,last_used_project_id} }`. **Wired into behavior** for `default_units` and `machine_number`: on load, `default_units` is mirrored into the localStorage cache the pure units helper reads (`setDefaultUnit`), so the shared file is the source of truth for the default unit; `generateMachineNumbers` / `getNextMachineNumber` take optional `(start, skip)` and `AppContext` passes `machine_number.{start,skip}` from `shopSettingsRef` on renumber/add. **Still NOT wired**: the `import` and `aps` sub-objects are display-only in Settings (the import/APS flows don't write them back yet).
+
+### Editor UIs (`/materials`, `/vendors`, Settings)
+
+Three editor pages, reached from new top-bar nav (**Materials**, **Vendors** — **Settings** already existed). Inline editing, no modals; drag-to-reorder via the shared `useDragReorder` hook (`src/components/useDragReorder.js`, HTML5 DnD that renumbers `order`).
+
+- **`MaterialsEditor.jsx`** (`/materials`) — ISO Groups (editable color swatch / label, ISO groups not deletable, `+ Add Group` for custom) + Sub-materials (group-filter tabs, inline label/notes, `+ Add Material`). Autosaves to `materials.json` on each change via `saveMaterials`. **Group colors are stored but not yet wired into preset rendering** — see TODO.
+- **`VendorsEditor.jsx`** (`/vendors`) — one list over `vendorRegistry.entities`; per row: name, **MFG**/**VENDOR** toggle pills (both can be active), **Has Own #** (vendor only), expand-to-edit URL patterns with a live preview. Autosaves to `vendor_registry.json` via `saveVendorRegistry` (which also refreshes the active registry).
+- **`Settings.jsx`** — added **Shop** (name + default-unit toggle), **Machine Numbers** (start + skip-list tag input), **Import History** (read-only). The "Save Shop Settings" button writes `shop_settings.json`; the unit toggle also takes effect immediately. See `shop_settings.json` above for what's wired.
 
 -----
 
@@ -1178,6 +1186,8 @@ All metadata-only (never written to Fusion) — added to `tool_metadata.json` vi
 -----
 
 ## TODO / Future Work
+
+- **Preset color coding from `materials.json` group colors.** The Materials editor (`/materials`) lets the shop set a `color` per ISO group (P/M/K/N/S/H) and those are stored in `materials.json`, but nothing renders presets in those colors yet — there is still **no preset→material color system**. To wire it: map each preset's material (via `matchMaterial(p.material?.query)` → a canonical `MATERIAL_CODES` value) to an ISO group (e.g. `AL`→N, `SS`→M, `STEEL`→P, `CI`→K, `TI`→S, hardened→H), look up that group's `color` in `state.materials.groups`, and apply it as the preset accent in `PresetPanel.jsx` (and anywhere preset chips render). Deferred deliberately when the editor was built.
 
 - **Local mode, phase 2 — full edit with manual re-export.** Today's local browse mode (see above) is read-only. A bigger follow-up: allow editing/saving everything in-memory while in local mode (tools, presets, assemblies, metadata), plus a "Download updated library" button that produces a new `fusion_tool_library.json` (and `tool_metadata.json` if applicable) for the user to manually re-upload to Autodesk/Drive themselves. **This is a big ask** — `writeLogicalTool`, `saveFullLibrary`, `renumberLibrary`, `deleteTool`, `addTool`, `normalizeLibrary`, and the whole Phase 2 merge flow all currently assume `uploadFusionList`/`downloadFusionList` hit APS; each would need a local-mode branch that mutates `toolsRef`/state in place and marks the library "dirty" instead of calling APS, plus export/download plumbing for the edited JSON. Confirm scope before starting.
 

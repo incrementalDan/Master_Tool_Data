@@ -18,6 +18,7 @@ export default function Settings() {
     setHolderLibraryLocation, clearHolderLibraryLocation, notify,
     googleAuthenticated, metadataSkipped, user: googleUser,
     fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
+    shopSettings, saveShopSettings,
   } = useApp();
 
   const [showHolderPicker, setShowHolderPicker] = useState(false);
@@ -43,10 +44,47 @@ export default function Settings() {
   }, [googleAuthenticated, fetchMetadataLocation]);
 
   const changeDefaultUnit = (unit) => {
-    setDefaultUnit(unit);
+    setDefaultUnit(unit);                 // immediate effect (localStorage cache)
     setDefaultUnitState(unit);
-    notify(`Default unit set to ${unit === 'millimeters' ? 'millimeters (mm)' : 'inches (in)'}`, 'success');
   };
+
+  // ── Shop settings (shop_settings.json) ─────────────────────────────────────
+  const [shopName, setShopName] = useState(shopSettings?.shop_name || '');
+  const [machineStart, setMachineStart] = useState(shopSettings?.machine_number?.start ?? 30);
+  const [skipList, setSkipList] = useState(shopSettings?.machine_number?.skip ?? [98, 99, 100]);
+  const [skipInput, setSkipInput] = useState('');
+  const [savingShop, setSavingShop] = useState(false);
+
+  // Re-sync the form when the shared file finishes loading (or changes elsewhere).
+  useEffect(() => {
+    setShopName(shopSettings?.shop_name || '');
+    setMachineStart(shopSettings?.machine_number?.start ?? 30);
+    setSkipList(shopSettings?.machine_number?.skip ?? [98, 99, 100]);
+  }, [shopSettings]);
+
+  const addSkip = () => {
+    const n = parseInt(skipInput, 10);
+    if (!isNaN(n) && !skipList.includes(n)) setSkipList([...skipList, n].sort((a, b) => a - b));
+    setSkipInput('');
+  };
+  const removeSkip = (n) => setSkipList(skipList.filter(x => x !== n));
+
+  const saveShop = async () => {
+    setSavingShop(true);
+    try {
+      await saveShopSettings({
+        ...(shopSettings || {}),
+        shop_name: shopName,
+        default_units: defaultUnit,
+        machine_number: { start: Number(machineStart) || 30, skip: skipList },
+      });
+      setDefaultUnit(defaultUnit);
+      notify('Shop settings saved', 'success');
+    } catch { /* notify handled in saveShopSettings */ }
+    finally { setSavingShop(false); }
+  };
+
+  const fmtDate = (v) => v ? new Date(v).toLocaleString() : 'Never';
 
   // 'idle' → warning, 'preview' → table + confirm input, 'done' → success
   const [stage, setStage] = useState('idle');
@@ -121,27 +159,71 @@ export default function Settings() {
         </h2>
       </div>
 
-      {/* Default unit */}
+      {/* Shop (name + default unit) — saved to shop_settings.json */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <Ruler size={16} style={{ color: 'var(--blue)' }} />
-          <h3 style={{ margin: 0 }}>Default Unit</h3>
+          <h3 style={{ margin: 0 }}>Shop</h3>
+          {!googleAuthenticated && <InfoTip text="Connect Google Drive to persist these shop-wide settings." alignRight />}
         </div>
-        <p className="text-sub text-sm mb-16">
-          The unit used for new tools you create. Existing tools keep their own unit
-          (read from Fusion); lengths always display in each record&apos;s own unit.
-        </p>
+        <p className="text-sub text-sm mb-16">Shop-wide settings shared by everyone (stored in <code>shop_settings.json</code> on Drive).</p>
+
+        <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Shop name</label>
+        <input className="field-input" style={{ maxWidth: 360, marginBottom: 16 }} value={shopName} placeholder="e.g. Acme Machining" onChange={e => setShopName(e.target.value)} />
+
+        <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 6 }}>
+          Default unit <span style={{ opacity: 0.7 }}>— for new tools; existing tools keep their own unit</span>
+        </label>
         <div className="btn-toggle">
-          {[['inches', 'Inches (in)'], ['millimeters', 'Millimeters (mm)']].map(([val, label]) => (
-            <button
-              key={val}
-              className={defaultUnit === val ? 'active' : ''}
-              onClick={() => changeDefaultUnit(val)}
-            >
-              {label}
-            </button>
+          {[['inches', 'Inch (in)'], ['millimeters', 'Metric (mm)']].map(([val, label]) => (
+            <button key={val} className={defaultUnit === val ? 'active' : ''} onClick={() => changeDefaultUnit(val)}>{label}</button>
           ))}
         </div>
+      </div>
+
+      {/* Machine numbers — saved to shop_settings.json, drives renumber/add */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Hash size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Machine Numbers</h3>
+          <InfoTip text="Machine tool numbers are assigned starting at this number, skipping the reserved list. Used by Renumber Library and when adding a new tool." alignRight />
+        </div>
+        <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Start number</label>
+        <input className="field-input" type="number" style={{ maxWidth: 140, marginBottom: 16 }} value={machineStart} onChange={e => setMachineStart(e.target.value)} />
+
+        <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 6 }}>Skip / reserved numbers</label>
+        <div className="flex items-center gap-6 flex-wrap" style={{ marginBottom: 8 }}>
+          {skipList.map(n => (
+            <span key={n} className="chip" style={{ gap: 6 }}>
+              {n}
+              <button className="icon-btn" style={{ width: 16, height: 16 }} title="Remove" onClick={() => removeSkip(n)}><X size={12} /></button>
+            </span>
+          ))}
+          {skipList.length === 0 && <span className="text-sub text-sm">None</span>}
+        </div>
+        <div className="flex items-center gap-6">
+          <input className="field-input" type="number" style={{ maxWidth: 110 }} placeholder="Add #" value={skipInput}
+            onChange={e => setSkipInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSkip()} />
+          <button className="btn btn-secondary btn-sm" onClick={addSkip}>Add</button>
+        </div>
+      </div>
+
+      {/* Import history — read-only display from shop_settings.json */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <FileJson size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Import History</h3>
+        </div>
+        <p className="text-sub text-sm mb-12">Read-only — captured by the import flows (wiring pending).</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 14px', fontSize: 13 }}>
+          <span className="text-sub">Last ProShop import</span><span>{fmtDate(shopSettings?.import?.last_proshop_import)}</span>
+          <span className="text-sub">Last photo import folder</span><span style={{ wordBreak: 'break-all' }}>{shopSettings?.import?.last_photo_import_folder_id || '—'}</span>
+          <span className="text-sub">Last Fusion hub</span><span style={{ wordBreak: 'break-all' }}>{shopSettings?.aps?.last_used_hub_id || '—'}</span>
+          <span className="text-sub">Last Fusion project</span><span style={{ wordBreak: 'break-all' }}>{shopSettings?.aps?.last_used_project_id || '—'}</span>
+        </div>
+        <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={saveShop} disabled={savingShop || !googleAuthenticated}>
+          {savingShop ? 'Saving…' : 'Save Shop Settings'}
+        </button>
       </div>
 
       {/* Setup checklist — sanity-check summary of the initial workflow */}

@@ -13,6 +13,7 @@ import { holderShortName } from '../utils/holderNaming.js';
 import { classifyStrays } from '../services/reconcile.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry } from '../schema/vendorRegistry.js';
+import { setDefaultUnit } from '../utils/units.js';
 
 const AppContext = createContext(null);
 
@@ -158,6 +159,7 @@ export function AppProvider({ children }) {
   const toolsRef = useRef(state.tools);
   const holdersRef = useRef(state.holders);
   const localModeRef = useRef(state.localMode);
+  const shopSettingsRef = useRef(state.shopSettings);
   // Caches wrapper-level fields (e.g. `version`) from the last-loaded Fusion
   // library file, other than `data` — see downloadFusionList/uploadFusionList.
   const libraryWrapperRef = useRef(null);
@@ -167,6 +169,14 @@ export function AppProvider({ children }) {
   toolsRef.current = state.tools;
   holdersRef.current = state.holders;
   localModeRef.current = state.localMode;
+  shopSettingsRef.current = state.shopSettings;
+
+  // Machine-number start/skip come from shop_settings.json (falling back to the
+  // built-in defaults baked into the schema functions when unset).
+  const machineNumberArgs = () => {
+    const mn = shopSettingsRef.current?.machine_number;
+    return [mn?.start ?? undefined, mn?.skip ?? undefined];
+  };
   // Tracks whether we've already seeded setup-progress flags for an established
   // library this session — seeding should run at most once, and only when no
   // progress has been stored yet (a brand-new install).
@@ -397,6 +407,9 @@ export function AppProvider({ children }) {
           ]);
           metaList = meta;
           setActiveVendorRegistry(vendorRegistry);
+          // shop_settings.json is the source of truth for the default unit —
+          // mirror it into the localStorage cache the pure units helper reads.
+          if (shopSettings?.default_units) setDefaultUnit(shopSettings.default_units);
           dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings });
         } catch (err) {
           if (err.code === 'TOKEN_EXPIRED') {
@@ -603,7 +616,7 @@ export function AppProvider({ children }) {
         ...tool,
         id: tracking_id,
         tracking_id,
-        machine_tool_number: getNextMachineNumber([...usedNumbers]),
+        machine_tool_number: getNextMachineNumber([...usedNumbers], ...machineNumberArgs()),
         created_at: tool.created_at || now,
         updated_at: now,
       };
@@ -1159,7 +1172,7 @@ export function AppProvider({ children }) {
       // first, then each untracked entry as its own group.
       const { groups, untracked } = groupByTrackingId(fusionList);
       const orderedGroups = [...groups.values(), ...untracked.map(r => [r])];
-      const numbers = generateMachineNumbers(orderedGroups.length);
+      const numbers = generateMachineNumbers(orderedGroups.length, ...machineNumberArgs());
 
       orderedGroups.forEach((raws, i) => {
         const num = numbers[i];
