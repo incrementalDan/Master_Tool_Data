@@ -102,7 +102,7 @@ export default function MaterialsEditor() {
           <h3 style={{ margin: 0 }}>Material Groups</h3>
         </div>
         <p className="text-sub text-sm mb-12">
-          The six ISO turning groups (P/M/K/N/S/H) — editable but not deletable. Colors will drive preset color coding (coming soon). Add custom groups below.
+          The six ISO turning groups (P/M/K/N/S/H) — editable but not deletable. Group colors tint presets by material. Add custom groups below.
         </p>
         <div>
           {doc.groups.map((g, i) => (

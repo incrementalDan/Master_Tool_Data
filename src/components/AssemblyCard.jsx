@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Pencil, X } from 'lucide-react';
 import { presetMatchesAssembly } from '../utils/presetNaming.js';
 import { unitAbbr } from '../utils/units.js';
+import { useApp } from '../context/AppContext.jsx';
+import { PresetDot } from './PresetDot.jsx';
 
 // ── Holder color system ───────────────────────────────────────────────────────
 const NAMED_COLORS = {
@@ -36,6 +38,7 @@ export function holderColor(description) {
 
 export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const { materials } = useApp();
 
   const holder = holders.find(h => h.guid === assembly.holder_guid);
   const holderDescription = assembly.holder_description || holder?.description || '—';
@@ -68,7 +71,7 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
       {linkedPresets.length > 0 && (
         <div className="assembly-presets">
           {linkedPresets.map((p) => (
-            <span key={p.guid} className="preset-tag">{p.name || 'Unnamed'}</span>
+            <span key={p.guid} className="preset-tag"><PresetDot query={p.material?.query} groups={materials?.groups} />{p.name || 'Unnamed'}</span>
           ))}
         </div>
       )}

@@ -3,6 +3,7 @@ import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle, Ref
 import { generateId, generateAssemblyId } from '../../schema/toolSchema.js';
 import { fieldLabel } from '../../schema/fieldRegistry.js';
 import { composePresetName, parsePresetName, presetMatchesAssembly, HOLE_MAKING_TYPES } from '../../utils/presetNaming.js';
+import { PresetDot } from '../PresetDot.jsx';
 import { lengthEps, unitAbbr } from '../../utils/units.js';
 import { useApp } from '../../context/AppContext.jsx';
 import InfoTip from '../InfoTip.jsx';
@@ -177,6 +178,7 @@ function PresetsDiff({
   assemblyAction, onSetAssemblyAction,
   linkTargetId, onSetLinkTargetId,
 }) {
+  const { materials } = useApp();
   const { unchanged, blocked, conflicts, newPresets, masterOnly } = presetMatch;
 
   const selectedNewCount = newPresets.filter(p => addedPresets.has(p.guid)).length;
@@ -234,7 +236,7 @@ function PresetsDiff({
                   checked={addedPresets.has(preset.guid)}
                   onChange={() => onToggleAddedPreset(preset.guid)}
                 />
-                <span className="preset-tag">{preset.name || 'Unnamed'}</span>
+                <span className="preset-tag"><PresetDot query={preset.material?.query} groups={materials?.groups} />{preset.name || 'Unnamed'}</span>
               </label>
             ))}
           </div>
