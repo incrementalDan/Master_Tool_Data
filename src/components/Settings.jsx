@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, ListChecks, Download, X } from 'lucide-react';
+import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, ListChecks, Download, X, FolderOpen } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { generateMachineNumbers } from '../schema/toolSchema.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
@@ -18,7 +18,7 @@ export default function Settings() {
     setHolderLibraryLocation, clearHolderLibraryLocation, notify,
     googleAuthenticated, metadataSkipped, user: googleUser,
     fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
-    shopSettings, saveShopSettings,
+    shopSettings, saveShopSettings, beginChangeLibrary,
   } = useApp();
 
   const [showHolderPicker, setShowHolderPicker] = useState(false);
@@ -157,6 +157,21 @@ export default function Settings() {
         <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
           <SettingsIcon size={16} /> Settings
         </h2>
+      </div>
+
+      {/* Tool library (APS) — change which Fusion library file is loaded */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <HardDrive size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Tool Library (Autodesk)</h3>
+        </div>
+        <p className="text-sub text-sm mb-16">
+          The Fusion 360 cloud <code>.json</code> file this app reads and writes. Changing it opens the
+          file picker; you can cancel to keep the current library.
+        </p>
+        <button className="btn btn-secondary" onClick={beginChangeLibrary}>
+          <FolderOpen size={14} /> Change Tool Library…
+        </button>
       </div>
 
       {/* Shop (name + default unit) — saved to shop_settings.json */}

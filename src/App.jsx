@@ -44,7 +44,8 @@ export default function App() {
 function AppShell() {
   const {
     apsAuthenticated, libraryLocation, googleAuthenticated, metadataSkipped,
-    processingAuth, user, loadTools, signOutAll, clearLibraryLocation,
+    processingAuth, user, loadTools, signOutAll,
+    changingLibrary, cancelChangeLibrary,
     localMode, exitLocalMode, tools,
     toasts, dismissToast,
   } = useApp();
@@ -84,14 +85,14 @@ function AppShell() {
     );
   } else if (!apsAuthenticated) {
     content = <LoginScreen />;
-  } else if (!libraryLocation) {
-    content = <LibrarySetup />;
+  } else if (!libraryLocation || changingLibrary) {
+    content = <LibrarySetup canCancel={!!libraryLocation} onCancel={cancelChangeLibrary} />;
   } else if (!googleAuthenticated && !metadataSkipped) {
     content = <MetadataConnect />;
   } else {
     content = (
       <div className="app-shell">
-        <TopBar user={user} googleAuthenticated={googleAuthenticated} onSignOut={signOutAll} onChangeLibrary={clearLibraryLocation} />
+        <TopBar user={user} googleAuthenticated={googleAuthenticated} onSignOut={signOutAll} />
         <NormalizeBanner />
         <GoogleReconnectBanner />
         <MetadataFileBanner />
@@ -221,7 +222,7 @@ function GoogleReconnectBanner() {
   );
 }
 
-function TopBar({ user, googleAuthenticated, onSignOut, onChangeLibrary }) {
+function TopBar({ user, googleAuthenticated, onSignOut }) {
   const location = useLocation();
   const { loadTools, isLoading } = useApp();
   const onLanding = location.pathname === '/';
@@ -262,9 +263,6 @@ function TopBar({ user, googleAuthenticated, onSignOut, onChangeLibrary }) {
       >
         <RefreshCw size={14} style={isLoading ? { animation: 'spin 1s linear infinite' } : {}} />
         {isLoading ? 'Refreshing…' : 'Refresh'}
-      </button>
-      <button className="btn btn-ghost btn-sm" onClick={onChangeLibrary} title="Pick a different tool library file">
-        <FolderOpen size={14} /> Change library
       </button>
       <span className="topbar-user">
         {googleAuthenticated ? (user?.email || user?.name || '') : 'Autodesk · metadata off'}

@@ -64,6 +64,7 @@ const initialState = {
                               // skip the "does a file already exist" check and go straight
                               // to the folder picker (e.g. after deleting the old file in Drive)
   libraryLocation: loadStoredLocation(), // { hubId, projectId, folderId, itemId, fileName }
+  changingLibrary: false,     // transient: showing the library picker to switch, with Cancel
   holderLibraryLocation: loadStoredHolderLocation(), // same shape, optional
   setupProgress: loadSetupProgress() || {}, // { fusionConnected, normalized, proshopMerged, proshopExported }
   processingAuth: false,      // exchanging APS callback code
@@ -94,8 +95,10 @@ function reducer(state, action) {
     case 'RECONNECT_METADATA': return { ...state, metadataSkipped: false };
     case 'DISCONNECT_METADATA':
       return { ...state, user: null, googleAuthenticated: false, googleExpired: false, metadataSkipped: false, metadataForceNew: true };
-    case 'SET_LIBRARY_LOCATION': return { ...state, libraryLocation: action.location };
+    case 'SET_LIBRARY_LOCATION': return { ...state, libraryLocation: action.location, changingLibrary: false };
     case 'CLEAR_LIBRARY_LOCATION': return { ...state, libraryLocation: null, tools: [] };
+    case 'START_CHANGE_LIBRARY': return { ...state, changingLibrary: true };
+    case 'CANCEL_CHANGE_LIBRARY': return { ...state, changingLibrary: false };
     case 'SET_HOLDER_LOCATION': return { ...state, holderLibraryLocation: action.location };
     case 'CLEAR_HOLDER_LOCATION': return { ...state, holderLibraryLocation: null, holders: [] };
     case 'SET_HOLDERS': return { ...state, holders: action.holders };
@@ -346,6 +349,12 @@ export function AppProvider({ children }) {
     localStorage.removeItem(LOCATION_KEY);
     dispatch({ type: 'CLEAR_LIBRARY_LOCATION' });
   }, []);
+
+  // Switch libraries without losing the current one until a new pick is made:
+  // beginChangeLibrary shows the picker (Cancel returns to the current library);
+  // setLibraryLocation clears the flag automatically on a successful pick.
+  const beginChangeLibrary = useCallback(() => dispatch({ type: 'START_CHANGE_LIBRARY' }), []);
+  const cancelChangeLibrary = useCallback(() => dispatch({ type: 'CANCEL_CHANGE_LIBRARY' }), []);
 
   const signOutAll = useCallback(() => {
     aps.signOut();
@@ -1339,6 +1348,8 @@ export function AppProvider({ children }) {
       markSetupCelebrated,
       setLibraryLocation,
       clearLibraryLocation,
+      beginChangeLibrary,
+      cancelChangeLibrary,
       setHolderLibraryLocation,
       clearHolderLibraryLocation,
       loadHolders,

@@ -204,7 +204,7 @@ export function FilePicker({ onSelect, onCancel, cancelLabel = 'Skip for now' })
 // Lets the user navigate hub → project → folders → pick the tool library .json file.
 // On selection, saves { hubId, projectId, folderId, itemId, fileName } via context.
 // Step 2: optionally pick the Master-Holder library before the app loads.
-export default function LibrarySetup() {
+export default function LibrarySetup({ canCancel = false, onCancel }) {
   const { setLibraryLocation, setHolderLibraryLocation, signOutAll } = useApp();
   const [phase, setPhase] = useState('tool'); // 'tool' | 'holder'
   const [pendingToolLocation, setPendingToolLocation] = useState(null);
@@ -235,9 +235,11 @@ export default function LibrarySetup() {
   return (
     <div className="page-content" style={{ maxWidth: 760 }}>
       <div className="flex items-center gap-8 mb-16">
-        <h2 style={{ fontSize: 18, fontWeight: 700 }}>Select Your Tool Library File</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 700 }}>{canCancel ? 'Change Tool Library File' : 'Select Your Tool Library File'}</h2>
         <span className="topbar-spacer" style={{ flex: 1 }} />
-        <button className="btn btn-ghost btn-sm" onClick={signOutAll}>Sign out</button>
+        {canCancel
+          ? <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel — keep current library</button>
+          : <button className="btn btn-ghost btn-sm" onClick={signOutAll}>Sign out</button>}
       </div>
       <p className="text-sub text-sm mb-16">
         Navigate to the Fusion 360 cloud folder containing your tool library and pick the <code>.json</code> file.
@@ -248,6 +250,8 @@ export default function LibrarySetup() {
           setPendingToolLocation(loc);
           setPhase('holder');
         }}
+        onCancel={canCancel ? onCancel : undefined}
+        cancelLabel={canCancel ? 'Cancel — keep current library' : undefined}
       />
     </div>
   );
