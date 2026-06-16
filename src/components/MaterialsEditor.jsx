@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { FlaskConical, GripVertical, Plus, X, Trash2 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { useDragReorder } from './useDragReorder.js';
@@ -11,7 +10,6 @@ function uid() {
 }
 
 export default function MaterialsEditor() {
-  const navigate = useNavigate();
   const { materials, saveMaterials, googleAuthenticated } = useApp();
 
   // Local editing copy (seeded from context once). commit() persists + keeps it.
@@ -85,7 +83,6 @@ export default function MaterialsEditor() {
   return (
     <div>
       <div className="flex items-center gap-8 mb-20">
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')}>← Back</button>
         <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
           <FlaskConical size={16} /> Materials
         </h2>

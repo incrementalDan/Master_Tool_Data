@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Building2, GripVertical, Plus, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { useDragReorder } from './useDragReorder.js';
@@ -34,7 +33,6 @@ function RolePill({ active, label, onToggle }) {
 }
 
 export default function VendorsEditor() {
-  const navigate = useNavigate();
   const { vendorRegistry, saveVendorRegistry, googleAuthenticated } = useApp();
 
   const [doc, setDoc] = useState(() => ({
@@ -72,7 +70,6 @@ export default function VendorsEditor() {
   return (
     <div>
       <div className="flex items-center gap-8 mb-20">
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')}>← Back</button>
         <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
           <Building2 size={16} /> Vendors &amp; Manufacturers
         </h2>

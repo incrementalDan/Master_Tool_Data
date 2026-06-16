@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, ListChecks, Download, X, FolderOpen } from 'lucide-react';
+import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, ListChecks, Download, X, FolderOpen } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { generateMachineNumbers } from '../schema/toolSchema.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
@@ -11,7 +10,6 @@ import { SetupGuideSummary } from './SetupGuide.jsx';
 import { exportFullLibrary } from '../utils/proShopExport.js';
 
 export default function Settings() {
-  const navigate = useNavigate();
   const {
     tools, fetchRawLibrary, renumberLibrary, isSaving, markSetupStep,
     libraryLocation, holderLibraryLocation, holderLibrarySetupComplete,
@@ -153,7 +151,6 @@ export default function Settings() {
   return (
     <div>
       <div className="flex items-center gap-8 mb-20">
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')}><ArrowLeft size={14} /> Back</button>
         <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
           <SettingsIcon size={16} /> Settings
         </h2>
