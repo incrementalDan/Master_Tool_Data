@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS } from '../../schema/toolSchema.js';
 import { fieldLabel } from '../../schema/fieldRegistry.js';
 import { unitAbbr } from '../../utils/units.js';
+import { PresetDot } from '../PresetDot.jsx';
 import ToolTypeIcon from '../icons/ToolTypeIcon.jsx';
 
 function formatValue(v) {
@@ -23,7 +24,7 @@ export default function CommitStep({
   onCommitted, onBack,
   isLastItem = false,
 }) {
-  const { mergeTool, isSaving, user } = useApp();
+  const { mergeTool, isSaving, user, materials } = useApp();
   const [revisionNote, setRevisionNote] = useState('');
   const [mergedBy, setMergedBy] = useState(user?.email || user?.name || '');
   const [commitError, setCommitError] = useState('');
@@ -104,7 +105,7 @@ export default function CommitStep({
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {newPresetList.map(p => (
-                  <span key={p.guid} className="preset-tag">{p.name || 'Unnamed'}</span>
+                  <span key={p.guid} className="preset-tag"><PresetDot query={p.material?.query} groups={materials?.groups} />{p.name || 'Unnamed'}</span>
                 ))}
               </div>
             </div>

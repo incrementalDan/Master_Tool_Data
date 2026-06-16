@@ -94,6 +94,16 @@ export function materialIsoGroup(query) {
   return code ? (MATERIAL_CODE_TO_ISO_GROUP[code] ?? null) : null;
 }
 
+// Resolve a material query/name directly to its ISO-group color from a
+// materials.json `groups` array, or null (unknown material / no color set).
+// Single source for preset color coding across PresetPanel, AssemblyCard, and
+// the Sync Job preset chips.
+export function isoGroupColor(query, groups) {
+  const iso = materialIsoGroup(query);
+  if (!iso) return null;
+  return (groups || []).find(g => g.id === iso)?.color || null;
+}
+
 // Fusion's `tool_presetMaterialCategory` ("Filter by Type") must never be blank.
 // Derive it from the preset material: a plastic material -> "plastic", any other
 // (metal) material -> "metal", and no/blank material -> "all".

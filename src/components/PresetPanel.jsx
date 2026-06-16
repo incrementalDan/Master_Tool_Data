@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { holderColor } from './AssemblyCard.jsx';
 import {
   composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
-  materialLabel, materialIsoGroup, HOLE_MAKING_TYPES, TURNING_TYPES,
+  materialLabel, isoGroupColor, HOLE_MAKING_TYPES, TURNING_TYPES,
 } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import {
@@ -69,12 +69,7 @@ function blankPreset() {
 export default function PresetPanel({ tool, onSave, isSaving }) {
   const { holders, materials } = useApp();
   // Resolve a preset's material to its ISO-group color (from materials.json).
-  // Returns null when the material is unknown or its group has no color set.
-  const groupColorOf = (query) => {
-    const iso = materialIsoGroup(query);
-    if (!iso) return null;
-    return (materials?.groups || []).find(g => g.id === iso)?.color || null;
-  };
+  const groupColorOf = (query) => isoGroupColor(query, materials?.groups);
   const isMetric = tool.unit === 'millimeters';
   const lenUnit = isMetric ? 'mm' : 'in';
   const feedUnit = isMetric ? 'mm/min' : 'in/min';
