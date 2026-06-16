@@ -21,6 +21,7 @@ export function signOut() {
   _expiresAt = null;
   localStorage.removeItem(TOOL_FILES_FOLDER_CACHE_KEY);
   localStorage.removeItem(CACHED_FILE_ID_KEY);
+  for (const f of Object.values(SHARED_FILES)) localStorage.removeItem(f.cacheKey);
 }
 export function hasToken() { return !!_accessToken; }
 export function isTokenExpired() {
@@ -31,6 +32,13 @@ export function isTokenExpired() {
 
 const CACHED_FILE_ID_KEY = 'drive_metadata_file_id';
 const TOOL_FILES_FOLDER_CACHE_KEY = 'drive_tool_files_folder_id';
+
+// Shared-file (same Drive root as tool_metadata.json) cached IDs.
+export const SHARED_FILES = {
+  materials:       { name: 'materials.json',       cacheKey: 'drive_materials_file_id' },
+  vendorRegistry:  { name: 'vendor_registry.json', cacheKey: 'drive_vendor_registry_file_id' },
+  shopSettings:    { name: 'shop_settings.json',   cacheKey: 'drive_shop_settings_file_id' },
+};
 
 // Use localStorage-cached ID first (set after auto-create), then env var.
 function getMetaFileId() {
@@ -69,7 +77,7 @@ async function driveCreate(content, folderId = null) {
     `--${boundary}`,
     'Content-Type: application/json',
     '',
-    JSON.stringify(content),
+    JSON.stringify(content, null, 2),
     `--${boundary}--`,
   ].join('\r\n');
 
@@ -103,7 +111,7 @@ async function driveUpdate(fileId, content) {
         Authorization: `Bearer ${_accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(content),
+      body: JSON.stringify(content, null, 2),
     }
   );
   if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
@@ -154,6 +162,86 @@ export async function deleteMetadata(id) {
 // Replace the entire metadata file (used by the import flow)
 export async function saveAllMetadata(metaList) {
   await driveUpdate(getMetaFileId(), metaList);
+}
+
+// ─── Shared JSON files (same Drive root as tool_metadata.json) ───────────────
+// materials.json, vendor_registry.json, shop_settings.json live alongside the
+// metadata file. Each is loaded-or-created at startup and saved back on change.
+// Content is pretty-printed like tool_metadata.json (see Code Standards).
+
+async function findFileInFolder(parentId, name) {
+  const q = `'${parentId}' in parents and name=${JSON.stringify(name)} and trashed=false`;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+    { headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.files?.[0]?.id || null;
+}
+
+async function createSharedJson(name, parentId, content) {
+  const meta = { name, mimeType: 'application/json', parents: [parentId] };
+  const boundary = 'drive_shared_json_boundary';
+  const body = [
+    `--${boundary}`, 'Content-Type: application/json', '', JSON.stringify(meta),
+    `--${boundary}`, 'Content-Type: application/json', '', JSON.stringify(content, null, 2),
+    `--${boundary}--`,
+  ].join('\r\n');
+  const res = await fetch(
+    'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true',
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${_accessToken}`, 'Content-Type': `multipart/related; boundary="${boundary}"` },
+      body,
+    }
+  );
+  if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`Drive create ${name} failed (${res.status}): ${t.slice(0, 200)}`); }
+  return res.json();
+}
+
+// Load a shared JSON file by name; create it with `defaultContent` if it doesn't
+// exist yet. Caches the file ID under `cacheKey`. Returns the parsed content.
+export async function loadOrCreateSharedJson(name, cacheKey, defaultContent) {
+  let id = localStorage.getItem(cacheKey);
+  if (id) {
+    const data = await driveGet(id);
+    if (data !== null) return data;
+    localStorage.removeItem(cacheKey); // stale/deleted — fall through to find/create
+  }
+  const parentId = await getMetaParentFolderId();
+  id = await findFileInFolder(parentId, name);
+  if (id) {
+    localStorage.setItem(cacheKey, id);
+    const data = await driveGet(id);
+    if (data !== null) return data;
+  }
+  const file = await createSharedJson(name, parentId, defaultContent);
+  localStorage.setItem(cacheKey, file.id);
+  return defaultContent;
+}
+
+// Save a shared JSON file by name (re-find/create if the cached ID is stale).
+export async function saveSharedJson(name, cacheKey, content) {
+  let id = localStorage.getItem(cacheKey);
+  if (!id) {
+    const parentId = await getMetaParentFolderId();
+    id = await findFileInFolder(parentId, name);
+    if (!id) { id = (await createSharedJson(name, parentId, content)).id; localStorage.setItem(cacheKey, id); return; }
+    localStorage.setItem(cacheKey, id);
+  }
+  const res = await fetch(
+    `https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media&supportsAllDrives=true`,
+    {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${_accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(content, null, 2),
+    }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (res.status === 404) { localStorage.removeItem(cacheKey); return saveSharedJson(name, cacheKey, content); }
+  if (!res.ok) { const t = await res.text().catch(() => ''); throw new Error(`Drive save ${name} failed (${res.status}): ${t.slice(0, 200)}`); }
 }
 
 // ─── Folder picker helpers ────────────────────────────────────────────────────

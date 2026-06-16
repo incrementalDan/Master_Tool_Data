@@ -1,6 +1,6 @@
 import {
   TT, TL, BLANK, FIELD_VISIBILITY, _FV_KEYS,
-  MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST,
+  MA, CO, WM,
   PS_GROUPS, AUTO_GROUP, typeFromProShopGroup, COOLANT_OPTS, THROUGH_COOLANT_VALUES,
   getVisibleFields,
 } from '../../tool-extractor.tsx';
@@ -8,7 +8,7 @@ import { isMetadataOnly, FIELD_REGISTRY, fieldLabel } from './fieldRegistry.js';
 import { parsePresetName, materialCategory, matchMaterial, HOLE_MAKING_TYPES, TURNING_TYPES } from '../utils/presetNaming.js';
 import { convertLength, unitAbbr, getDefaultUnit } from '../utils/units.js';
 
-export { TT, TL, MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST, PS_GROUPS, AUTO_GROUP, typeFromProShopGroup, COOLANT_OPTS };
+export { TT, TL, MA, CO, WM, PS_GROUPS, AUTO_GROUP, typeFromProShopGroup, COOLANT_OPTS };
 
 // ─── Icons ─────────────────────────────────────────────────────────────────
 // Tool-type icons are rendered by the <ToolTypeIcon> component
@@ -509,28 +509,31 @@ export function buildHolderObject(holderEntry) {
 // (`post-process.number` in the Fusion JSON). It is completely separate from
 // the internal `id` and the ProShop `product-id`. Numbers start at 30 and skip
 // the reserved set below, which is held back for machine-specific use.
+// `start`/`skip` default to these but can be overridden from shop_settings.json.
 export const RESERVED_MACHINE_NUMBERS = [98, 99, 100];
-const RESERVED_SET = new Set(RESERVED_MACHINE_NUMBERS);
+const DEFAULT_MACHINE_START = 30;
 
 // Generate a full sequence of machine tool numbers for a renumber/import.
-// Starts at 30, increments by 1, skips the reserved numbers entirely.
+// Starts at `start`, increments by 1, skips the `skip` numbers entirely.
 // e.g. 250 tools → [30, 31, ..., 97, 101, 102, ...]
-export function generateMachineNumbers(toolCount) {
+export function generateMachineNumbers(toolCount, start = DEFAULT_MACHINE_START, skip = RESERVED_MACHINE_NUMBERS) {
+  const skipSet = new Set(skip);
   const numbers = [];
-  let next = 30;
+  let next = start;
   while (numbers.length < toolCount) {
-    if (!RESERVED_SET.has(next)) numbers.push(next);
+    if (!skipSet.has(next)) numbers.push(next);
     next++;
   }
   return numbers;
 }
 
 // Find the next available machine tool number given the numbers already in use.
-// Skips both used numbers and the reserved set.
-export function getNextMachineNumber(existingNumbers) {
+// Skips both used numbers and the `skip` set.
+export function getNextMachineNumber(existingNumbers, start = DEFAULT_MACHINE_START, skip = RESERVED_MACHINE_NUMBERS) {
   const used = new Set((existingNumbers || []).map(Number).filter(n => !isNaN(n)));
-  let next = 30;
-  while (used.has(next) || RESERVED_SET.has(next)) next++;
+  const skipSet = new Set(skip);
+  let next = start;
+  while (used.has(next) || skipSet.has(next)) next++;
   return next;
 }
 

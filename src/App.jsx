@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useGoogleLogin } from '@react-oauth/google';
-import { Wrench, FolderOpen, LogOut, Library, Upload, Settings, GitMerge, RefreshCw, AlertTriangle, Download, X } from 'lucide-react';
+import { Wrench, FolderOpen, LogOut, Library, Upload, Settings, GitMerge, RefreshCw, AlertTriangle, Download, X, FlaskConical, Building2 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import { setAccessToken, fetchUserInfo } from './services/driveService.js';
 import { exportFullLibrary } from './utils/proShopExport.js';
@@ -16,6 +16,8 @@ import AddToolFlow from './components/AddToolFlow.jsx';
 import ImportFlow from './components/ImportFlow.jsx';
 import MergeFlow from './components/MergeFlow/index.jsx';
 import SettingsPage from './components/Settings.jsx';
+import MaterialsEditor from './components/MaterialsEditor.jsx';
+import VendorsEditor from './components/VendorsEditor.jsx';
 import NormalizeModal from './components/NormalizeModal.jsx';
 import { SetupGuideBanner, SetupCompleteModal } from './components/SetupGuide.jsx';
 
@@ -103,6 +105,8 @@ function AppShell() {
             <Route path="/import" element={<ImportFlow />} />
             <Route path="/merge" element={<MergeFlow />} />
             <Route path="/merge/:id" element={<MergeFlow />} />
+            <Route path="/materials" element={<MaterialsEditor />} />
+            <Route path="/vendors" element={<VendorsEditor />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -240,6 +244,12 @@ function TopBar({ user, googleAuthenticated, onSignOut, onChangeLibrary }) {
       </a>
       <a href="#/merge" className={`topbar-link ${location.pathname.startsWith('/merge') ? 'active' : ''}`}>
         <GitMerge size={14} /> Sync Job
+      </a>
+      <a href="#/materials" className={`topbar-link ${location.pathname === '/materials' ? 'active' : ''}`}>
+        <FlaskConical size={14} /> Materials
+      </a>
+      <a href="#/vendors" className={`topbar-link ${location.pathname === '/vendors' ? 'active' : ''}`}>
+        <Building2 size={14} /> Vendors
       </a>
       <a href="#/settings" className={`topbar-link ${location.pathname === '/settings' ? 'active' : ''}`}>
         <Settings size={14} /> Settings

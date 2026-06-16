@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Tag, Ruler, Layers, Save, X, AlertTriangle, Wand2, ChevronDown, ChevronRight, StickyNote } from 'lucide-react';
 import {
-  MANUFACTURER_LIST, validateTool, validateGeometry, getNextMachineNumber, toolToExtractor,
+  validateTool, validateGeometry, getNextMachineNumber, toolToExtractor,
 } from '../schema/toolSchema.js';
+import { getManufacturerNames } from '../schema/vendorRegistry.js';
 import { fieldLabel } from '../schema/fieldRegistry.js';
 import { unitAbbr } from '../utils/units.js';
 import InfoTip from './InfoTip.jsx';
@@ -214,7 +215,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
               </div>
             </div>
             <div className="form-grid">
-              <FieldInput field="vendor" label="Manufacturer" data={data} setField={setField} list={MANUFACTURER_LIST} />
+              <FieldInput field="vendor" label="Manufacturer" data={data} setField={setField} list={getManufacturerNames()} />
               <FieldInput field="proshot_id" label="ProShop ID" data={data} setField={setField} placeholder="e.g. A-3" />
               <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
             </div>

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { THROUGH_COOLANT_VALUES, smartDiam, buildDesc } from "./src/utils/toolNaming.js";
-import { MANUFACTURER_LIST, VENDOR_LIST } from "./src/schema/vendorRegistry.js";
+import { getManufacturerNames, getVendorNames } from "./src/schema/vendorRegistry.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const BLUE   = "#4a8fff";
@@ -344,8 +344,10 @@ function getVisibleFields(toolType){
   return Object.entries(FIELD_VISIBILITY).filter(([,v])=>v[idx]!==0&&v[idx]!==false).map(([key,v])=>({key,optional:v[idx]==="o"||v[idx]==="optional"}));
 }
 
-const VENDOR_LIST_STR=VENDOR_LIST.join(", ");
-const MANUFACTURER_LIST_STR=MANUFACTURER_LIST.join(", ");
+// Advisory hint lists for the extraction prompt — the seed names are fine here
+// (the prompt also tells the model to return brands not in the list).
+const VENDOR_LIST_STR=getVendorNames().join(", ");
+const MANUFACTURER_LIST_STR=getManufacturerNames().join(", ");
 function buildSYS(){
   return `You are a machining expert. Extract tool data from product pages, spec sheets, or text. Return ONLY valid JSON — no markdown, no extra text:
 {"toolType":"flat end mill|ball end mill|bull nose end mill|tapered mill|radius mill|form mill|lollipop mill|slot/key cutter|dovetail|thread mill|face mill|chamfer mill|circle segment barrel|circle segment lens|circle segment oval|circle segment taper|drill|center drill|spot drill|reamer|counter bore|counter sink|tap|boring head|turning general","diameter":"cutting diameter decimal inches","loc":"flute/cutting length decimal inches","oal":"overall length decimal inches","flutes":"integer string","shankDia":"shank diameter decimal inches","cornerRadius":"0 for square, half-dia for ball, actual CR for bull nose","material":"carbide|hss|cobalt|ceramic","coating":"Normalize: Uncoated/Bright → UC. Otherwise copy verbatim. Empty if not stated.","workpieceMats":"Array ISO codes N=Al,M=SS,P=Steel,S=HTA,K=CI primary first","tipAngle":"included angle degrees for drills/chamfers/spot — else empty","helixAngle":"helix degrees if visible","pitch":"thread size x pitch (e.g. 1/4-20 or M6x1.0) for taps/thread mills — else empty","productLink":"url if visible","edpNumber":"Mfr# — NOT distributor stock#","approvedBrand":"manufacturer of the tool. Match to: ${MANUFACTURER_LIST_STR}. If the brand is not in the list but clearly a tool manufacturer, still return it exactly as shown on the page.","vendorStockNum":"distributor catalog#. Empty if not found.","vendor":"seller. Match: ${VENDOR_LIST_STR}. Empty if not confident.","coolant":"flood|disabled|mist|through tool|air|air through tool|suction|flood and mist|flood and through tool — default flood. If tool is described as through-coolant or through-spindle coolant, return \"flood and through tool\".","centerCutting":true,"fluteType":"Roughing|Semi-Finishing|Finishing|Yes|No or empty","tapClass":"Tolerance class, e.g. H3/6H or D2-D6. Empty if not tap.","tapSubType":"cut|form — tap sub-type from description/markings. Empty if not tap.","isSTI":"true if the tap is an STI/Helicoil thread insert tap, else false. Only relevant for taps.","threadUnit":"inch|metric — infer from the thread designation format (M-prefix or mm pitch = metric). Empty if not tap or thread mill.","pointType":"Bottoming|Modified Bottoming|Plug|Taper|Spiral Point|Spiral Flute|Forming. Empty if not tap.","shoulderLen":"shoulder length >= LOC decimal inches. Empty if unsure.","ooh":"Leave empty — user sets manually.","cost":"The best actual purchase price for this specific tool. Follow these rules in order:
@@ -447,7 +449,7 @@ const sel=(hi,warn)=>({...base,border:`1px solid ${warn?T.amber:hi?T.green:T.bor
 
 export {
   TT, TL, BLANK, FIELD_VISIBILITY, _FV_KEYS,
-  MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST,
+  MA, CO, WM,
   PS_GROUPS, AUTO_GROUP, typeFromProShopGroup, PS_MAIN_COLS,
   COOLANT_OPTS, THROUGH_COOLANT_VALUES, ROUND_SHANK_TYPES,
   buildFusionRow, buildProShopCSV, buildDesc, buildBrandRows, buildAdionUrl,
@@ -573,7 +575,7 @@ export default function App({ onExtract } = {}){
         tipAngle:p.tipAngle||"",helixAngle:p.helixAngle||"",pitch:p.pitch||"",productLink:p.productLink||"",
         edpNumber:p.edpNumber||"",
         approvedBrand:p.approvedBrand||"",  // allow any manufacturer, not just list
-        vendor:VENDOR_LIST.includes(p.vendor)?p.vendor:"",
+        vendor:getVendorNames().includes(p.vendor)?p.vendor:"",
         vendorStockNum:p.vendorStockNum||"",
         coolant:(()=>{
           const raw=p.coolant||"";
@@ -602,7 +604,7 @@ export default function App({ onExtract } = {}){
         material:MA.includes(p.material)?p.material:"carbide",coating:p.coating||"",
         workpieceMats:Array.isArray(p.workpieceMats)?p.workpieceMats.filter(x=>WM.includes(x)):[],
         tipAngle:p.tipAngle||"",pitch:p.pitch||"",edpNumber:p.edpNumber||"",
-        approvedBrand:p.approvedBrand||"",vendor:VENDOR_LIST.includes(p.vendor)?p.vendor:"",
+        approvedBrand:p.approvedBrand||"",vendor:getVendorNames().includes(p.vendor)?p.vendor:"",
         vendorStockNum:p.vendorStockNum||"",cost:p.cost||"",productLink:p.productLink||"",
         coolant:"flood",tapClass:p.tapClass||"",pointType:p.pointType||"",
         shoulderLen:p.shoulderLen||"",ooh:p.ooh||"",taperAngle:p.taperAngle||"",
@@ -899,13 +901,13 @@ export default function App({ onExtract } = {}){
               <FL type="proshop" label="Manufacturer / Brand"/>
               <input style={inp(hi("approvedBrand"))} list="mfr-list" value={F.approvedBrand}
                 onChange={e=>sf("approvedBrand",e.target.value)} placeholder="e.g. OSG, Helical Solutions"/>
-              <datalist id="mfr-list">{MANUFACTURER_LIST.map(v=><option key={v} value={v}/>)}</datalist>
+              <datalist id="mfr-list">{getManufacturerNames().map(v=><option key={v} value={v}/>)}</datalist>
             </div>}
             {isVis("vendor")&&<div style={{...C(4),opacity:isOpt("vendor")?0.55:1}}>
               <FL type="proshop" label="Vendor / Distributor"/>
               <input style={inp(hi("vendor"))} list="vendor-list" value={F.vendor}
                 onChange={e=>sf("vendor",e.target.value)} placeholder="e.g. MSC Industrial"/>
-              <datalist id="vendor-list">{VENDOR_LIST.map(v=><option key={v} value={v}/>)}</datalist>
+              <datalist id="vendor-list">{getVendorNames().map(v=><option key={v} value={v}/>)}</datalist>
             </div>}
             {isVis("vendorStockNum")&&<div style={{...C(4),opacity:isOpt("vendorStockNum")?0.55:1}}><FL type="proshop" label="Vendor Stock #"/><input style={inp(hi("vendorStockNum"))} value={F.vendorStockNum} onChange={e=>sf("vendorStockNum",e.target.value)} placeholder="e.g. 48667943"/></div>}
             {isVis("cost")&&<div style={{...C(4),opacity:isOpt("cost")?0.55:1}}><FL type="proshop" label="Cost / Price ($)"/><input style={inp(hi("cost"))} value={F.cost} onChange={e=>sf("cost",e.target.value)} placeholder="48.99" type="number" step="0.01" min="0"/></div>}

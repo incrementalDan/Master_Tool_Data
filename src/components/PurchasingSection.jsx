@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { ShoppingCart, Plus, GripVertical, X, ExternalLink, Pencil, RefreshCw } from 'lucide-react';
 import { generateId } from '../schema/toolSchema.js';
-import { MANUFACTURER_LIST, VENDOR_LIST, vendorHasOwnCatalogNumber } from '../schema/vendorRegistry.js';
+import { getManufacturerNames, getVendorNames, vendorHasOwnCatalogNumber } from '../schema/vendorRegistry.js';
 import {
   generateManufacturerUrl, generateVendorUrl,
   manufacturerHasUrlGenerator, vendorHasUrlGenerator,
@@ -544,10 +544,10 @@ export default function PurchasingSection({ tool, onSave, isSaving }) {
           {editing && (
             <>
               <datalist id="purchasing-mfr-list">
-                {MANUFACTURER_LIST.map(m => <option key={m} value={m} />)}
+                {getManufacturerNames().map(m => <option key={m} value={m} />)}
               </datalist>
               <datalist id="purchasing-vendor-list">
-                {VENDOR_LIST.map(v => <option key={v} value={v} />)}
+                {getVendorNames().map(v => <option key={v} value={v} />)}
               </datalist>
             </>
           )}

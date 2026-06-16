@@ -87,7 +87,9 @@ export function buildDesc(f, inputWasMm = false) {
     fl = f.flutes || "",
     cr = parseFloat(f.cornerRadius) || 0,
     ang = f.tipAngle || "",
-    mat = f.material || "carbide",
+    // Never assume a material when it's missing — an unset material must not
+    // print "CARB" on the description (see Code Standards in CLAUDE.md).
+    mat = f.material || "",
     dStr = smartDiam(d, inputWasMm),
     loc3 = descDec3(loc),
     tsc = THROUGH_COOLANT_VALUES.has(f.coolant || "") ? " TSC" : "";

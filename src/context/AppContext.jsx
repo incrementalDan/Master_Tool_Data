@@ -11,6 +11,9 @@ import {
 import { composePresetName, opTypeWord, parsePresetName, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import { classifyStrays } from '../services/reconcile.js';
+import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS } from '../schema/sharedDefaults.js';
+import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry } from '../schema/vendorRegistry.js';
+import { setDefaultUnit } from '../utils/units.js';
 
 const AppContext = createContext(null);
 
@@ -68,6 +71,10 @@ const initialState = {
   holders: [],                // loaded from Master-Holder library
   needsNormalize: false,      // true when any tool lacks a tracking ID (pre-migration)
   metadataFileWarning: null,  // null | 'missing' | 'trashed' — linked metadata file is gone
+  // Shared Drive files (loaded at startup; default to the seeds until then).
+  materials: DEFAULT_MATERIALS,
+  vendorRegistry: DEFAULT_VENDOR_REGISTRY,
+  shopSettings: DEFAULT_SHOP_SETTINGS,
   isLoading: false,
   isSaving: false,
   error: null,
@@ -123,6 +130,11 @@ function reducer(state, action) {
       return { ...state, tools: state.tools.filter(t => t.id !== action.id) };
     case 'SET_TOOLS': return { ...state, tools: action.tools, ...(action.needsNormalize !== undefined ? { needsNormalize: action.needsNormalize } : {}) };
     case 'METADATA_FILE_WARNING': return { ...state, metadataFileWarning: action.warning };
+    case 'SET_SHARED_FILES':
+      return { ...state, materials: action.materials, vendorRegistry: action.vendorRegistry, shopSettings: action.shopSettings };
+    case 'SET_MATERIALS': return { ...state, materials: action.materials };
+    case 'SET_VENDOR_REGISTRY': return { ...state, vendorRegistry: action.vendorRegistry };
+    case 'SET_SHOP_SETTINGS': return { ...state, shopSettings: action.shopSettings };
     case 'CLEAR_ERROR': return { ...state, error: null };
     case 'ADD_TOAST': return { ...state, toasts: [...state.toasts, action.toast] };
     case 'DISMISS_TOAST': return { ...state, toasts: state.toasts.filter(t => t.id !== action.id) };
@@ -147,6 +159,7 @@ export function AppProvider({ children }) {
   const toolsRef = useRef(state.tools);
   const holdersRef = useRef(state.holders);
   const localModeRef = useRef(state.localMode);
+  const shopSettingsRef = useRef(state.shopSettings);
   // Caches wrapper-level fields (e.g. `version`) from the last-loaded Fusion
   // library file, other than `data` — see downloadFusionList/uploadFusionList.
   const libraryWrapperRef = useRef(null);
@@ -156,6 +169,14 @@ export function AppProvider({ children }) {
   toolsRef.current = state.tools;
   holdersRef.current = state.holders;
   localModeRef.current = state.localMode;
+  shopSettingsRef.current = state.shopSettings;
+
+  // Machine-number start/skip come from shop_settings.json (falling back to the
+  // built-in defaults baked into the schema functions when unset).
+  const machineNumberArgs = () => {
+    const mn = shopSettingsRef.current?.machine_number;
+    return [mn?.start ?? undefined, mn?.skip ?? undefined];
+  };
   // Tracks whether we've already seeded setup-progress flags for an established
   // library this session — seeding should run at most once, and only when no
   // progress has been stored yet (a brand-new install).
@@ -281,6 +302,31 @@ export function AppProvider({ children }) {
   const fetchMetadataLocation = useCallback(() => driveService.getMetadataFileLocation(), []);
   const dismissMetadataWarning = useCallback(() => dispatch({ type: 'METADATA_FILE_WARNING', warning: null }), []);
 
+  // ─── Shared Drive files (materials / vendor registry / shop settings) ─────
+  // Save back to Drive and update in-memory state. Foundation: no UI yet, but
+  // any component can read state.{materials,vendorRegistry,shopSettings} and
+  // call these to persist edits.
+  const saveSharedFile = useCallback(async (key, data, dispatchType, onSaved) => {
+    const { SHARED_FILES } = driveService;
+    if (!googleRef.current) { notify('Connect Google Drive to save', 'error'); throw new Error('Google Drive not connected'); }
+    try {
+      await driveService.saveSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, data);
+      onSaved?.(data);
+      dispatch({ type: dispatchType, [key === 'shopSettings' ? 'shopSettings' : key === 'vendorRegistry' ? 'vendorRegistry' : 'materials']: data });
+    } catch (err) {
+      if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
+      notify(`Save failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  }, [notify]);
+
+  const saveMaterials = useCallback((materials) =>
+    saveSharedFile('materials', materials, 'SET_MATERIALS'), [saveSharedFile]);
+  const saveVendorRegistry = useCallback((vendorRegistry) =>
+    saveSharedFile('vendorRegistry', vendorRegistry, 'SET_VENDOR_REGISTRY', setActiveVendorRegistry), [saveSharedFile]);
+  const saveShopSettings = useCallback((shopSettings) =>
+    saveSharedFile('shopSettings', shopSettings, 'SET_SHOP_SETTINGS'), [saveSharedFile]);
+
   // Marks one step of the setup guide as complete (idempotent — see MARK_SETUP_STEP).
   // Called at each of the 4 trigger points: connecting the Fusion library,
   // normalizing, merging ProShop data, and exporting to ProShop.
@@ -344,8 +390,27 @@ export function AppProvider({ children }) {
       const fusionList = await downloadFusionList();
       let metaList = [];
       if (googleRef.current) {
+        // Load metadata + the three shared Drive files (materials, vendor
+        // registry, shop settings) in parallel. Each shared file is created with
+        // its default content if it doesn't exist yet. A shared-file error never
+        // blocks the library load — it falls back to the default.
+        const { SHARED_FILES } = driveService;
+        const sharedSafe = (key, def) =>
+          driveService.loadOrCreateSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, def)
+            .catch(e => { if (e.code === 'TOKEN_EXPIRED') throw e; return def; });
         try {
-          metaList = await driveService.loadMetadata();
+          const [meta, materials, vendorRegistry, shopSettings] = await Promise.all([
+            driveService.loadMetadata(),
+            sharedSafe('materials', DEFAULT_MATERIALS),
+            sharedSafe('vendorRegistry', DEFAULT_VENDOR_REGISTRY),
+            sharedSafe('shopSettings', DEFAULT_SHOP_SETTINGS),
+          ]);
+          metaList = meta;
+          setActiveVendorRegistry(vendorRegistry);
+          // shop_settings.json is the source of truth for the default unit —
+          // mirror it into the localStorage cache the pure units helper reads.
+          if (shopSettings?.default_units) setDefaultUnit(shopSettings.default_units);
+          dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings });
         } catch (err) {
           if (err.code === 'TOKEN_EXPIRED') {
             dispatch({ type: 'GOOGLE_EXPIRED' });
@@ -551,7 +616,7 @@ export function AppProvider({ children }) {
         ...tool,
         id: tracking_id,
         tracking_id,
-        machine_tool_number: getNextMachineNumber([...usedNumbers]),
+        machine_tool_number: getNextMachineNumber([...usedNumbers], ...machineNumberArgs()),
         created_at: tool.created_at || now,
         updated_at: now,
       };
@@ -1107,7 +1172,7 @@ export function AppProvider({ children }) {
       // first, then each untracked entry as its own group.
       const { groups, untracked } = groupByTrackingId(fusionList);
       const orderedGroups = [...groups.values(), ...untracked.map(r => [r])];
-      const numbers = generateMachineNumbers(orderedGroups.length);
+      const numbers = generateMachineNumbers(orderedGroups.length, ...machineNumberArgs());
 
       orderedGroups.forEach((raws, i) => {
         const num = numbers[i];
@@ -1266,6 +1331,9 @@ export function AppProvider({ children }) {
       disconnectMetadata,
       fetchMetadataLocation,
       dismissMetadataWarning,
+      saveMaterials,
+      saveVendorRegistry,
+      saveShopSettings,
       markSetupStep,
       setupCelebrated,
       markSetupCelebrated,
