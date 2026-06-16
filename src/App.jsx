@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useGoogleLogin } from '@react-oauth/google';
-import { Wrench, FolderOpen, LogOut, Library, Upload, Settings, GitMerge, RefreshCw, AlertTriangle, Download, X, FlaskConical, Building2 } from 'lucide-react';
+import { Wrench, FolderOpen, LogOut, Library, Settings, RefreshCw, AlertTriangle, Download, X, FlaskConical, Building2 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import { setAccessToken, fetchUserInfo } from './services/driveService.js';
 import { exportFullLibrary } from './utils/proShopExport.js';
@@ -92,7 +92,7 @@ function AppShell() {
   } else {
     content = (
       <div className="app-shell">
-        <TopBar user={user} googleAuthenticated={googleAuthenticated} onSignOut={signOutAll} />
+        <TopBar />
         <NormalizeBanner />
         <GoogleReconnectBanner />
         <MetadataFileBanner />
@@ -222,7 +222,7 @@ function GoogleReconnectBanner() {
   );
 }
 
-function TopBar({ user, googleAuthenticated, onSignOut }) {
+function TopBar() {
   const location = useLocation();
   const { loadTools, isLoading } = useApp();
   const onLanding = location.pathname === '/';
@@ -232,44 +232,43 @@ function TopBar({ user, googleAuthenticated, onSignOut }) {
         <Wrench size={17} strokeWidth={2.2} />
         Tool Library
       </a>
-      <span className="topbar-spacer" />
-      <a
-        href="#/"
-        className={`topbar-link ${onLanding ? 'active' : ''}`}
-        onClick={e => { if (onLanding) e.preventDefault(); }}
-      >
-        <Library size={14} /> Library
-      </a>
-      <a href="#/import" className={`topbar-link ${location.pathname === '/import' ? 'active' : ''}`}>
-        <Upload size={14} /> Import
-      </a>
-      <a href="#/merge" className={`topbar-link ${location.pathname.startsWith('/merge') ? 'active' : ''}`}>
-        <GitMerge size={14} /> Sync Job
-      </a>
-      <a href="#/materials" className={`topbar-link ${location.pathname === '/materials' ? 'active' : ''}`}>
-        <FlaskConical size={14} /> Materials
-      </a>
-      <a href="#/vendors" className={`topbar-link ${location.pathname === '/vendors' ? 'active' : ''}`}>
-        <Building2 size={14} /> Vendors
-      </a>
-      <a href="#/settings" className={`topbar-link ${location.pathname === '/settings' ? 'active' : ''}`}>
-        <Settings size={14} /> Settings
-      </a>
-      <button
-        className="btn btn-ghost btn-sm"
-        onClick={() => loadTools()}
-        disabled={isLoading}
-        title="Re-download the library from Autodesk to pick up changes made in Fusion 360"
-      >
-        <RefreshCw size={14} style={isLoading ? { animation: 'spin 1s linear infinite' } : {}} />
-        {isLoading ? 'Refreshing…' : 'Refresh'}
-      </button>
-      <span className="topbar-user">
-        {googleAuthenticated ? (user?.email || user?.name || '') : 'Autodesk · metadata off'}
-      </span>
-      <button className="btn btn-ghost btn-sm" onClick={onSignOut}>
-        <LogOut size={14} /> Sign out
-      </button>
+      <nav className="topbar-tabs">
+        <a
+          href="#/"
+          className={`topbar-tab${onLanding ? ' active' : ''}`}
+          onClick={e => { if (onLanding) e.preventDefault(); }}
+        >
+          <Library size={14} /> Library
+        </a>
+        <a
+          href="#/materials"
+          className={`topbar-tab${location.pathname === '/materials' ? ' active' : ''}`}
+        >
+          <FlaskConical size={14} /> Materials
+        </a>
+        <a
+          href="#/vendors"
+          className={`topbar-tab${location.pathname === '/vendors' ? ' active' : ''}`}
+        >
+          <Building2 size={14} /> Vendors
+        </a>
+        <a
+          href="#/settings"
+          className={`topbar-tab${location.pathname === '/settings' ? ' active' : ''}`}
+        >
+          <Settings size={14} /> Settings
+        </a>
+      </nav>
+      <div className="topbar-actions">
+        <button
+          className="icon-btn"
+          onClick={() => loadTools()}
+          disabled={isLoading}
+          title="Re-download the library from Autodesk to pick up changes made in Fusion 360"
+        >
+          <RefreshCw size={15} style={isLoading ? { animation: 'spin 1s linear infinite' } : {}} />
+        </button>
+      </div>
     </header>
   );
 }
