@@ -4,6 +4,7 @@ import {
   materialCategory,
   matchMaterial,
   materialLabel,
+  materialIsoGroup,
   matchOpType,
   opTypeWord,
   formatOoh,
@@ -59,6 +60,15 @@ describe('matchMaterial', () => {
     expect(materialLabel('SS316')).toBe('Stainless Steel');
     expect(materialLabel('AL')).toBe('Aluminum');
     expect(materialLabel('Default preset')).toBe('Other');
+  });
+
+  it('materialIsoGroup maps materials to ISO turning groups for preset coloring', () => {
+    expect(materialIsoGroup('AL FIN')).toBe('N');     // aluminum → non-ferrous
+    expect(materialIsoGroup('SS316')).toBe('M');      // stainless
+    expect(materialIsoGroup('STEEL')).toBe('P');      // steel
+    expect(materialIsoGroup('BRZ ROUGH')).toBe('N');  // bronze → non-ferrous
+    expect(materialIsoGroup('GF Nylon')).toBe(null);  // plastic → no ISO group
+    expect(materialIsoGroup('Default preset')).toBe(null); // unknown
   });
 });
 

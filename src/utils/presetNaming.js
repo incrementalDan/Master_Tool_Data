@@ -75,6 +75,25 @@ export function materialLabel(query) {
   return code ? MATERIAL_LABELS[code] : 'Other';
 }
 
+// Map a canonical material code to its ISO turning group (P/M/K/N/S/H), used to
+// color-code presets from materials.json group colors. Plastics have no ISO
+// group (null → no group color). Hardened steel (H) isn't produced by
+// matchMaterial, so it's never auto-assigned here.
+export const MATERIAL_CODE_TO_ISO_GROUP = {
+  AL: 'N', BRONZE: 'N', BRASS: 'N',   // Non-ferrous
+  SS: 'M',                            // Stainless
+  STEEL: 'P', MILD: 'P',              // Steel
+  CI: 'K',                            // Cast iron
+  TI: 'S',                            // High-temp alloys
+  PLASTIC: null,
+};
+
+// Resolve any material query/name to its ISO group id, or null.
+export function materialIsoGroup(query) {
+  const code = matchMaterial(query);
+  return code ? (MATERIAL_CODE_TO_ISO_GROUP[code] ?? null) : null;
+}
+
 // Fusion's `tool_presetMaterialCategory` ("Filter by Type") must never be blank.
 // Derive it from the preset material: a plastic material -> "plastic", any other
 // (metal) material -> "metal", and no/blank material -> "all".

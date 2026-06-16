@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { holderColor } from './AssemblyCard.jsx';
 import {
   composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
-  materialLabel, HOLE_MAKING_TYPES, TURNING_TYPES,
+  materialLabel, materialIsoGroup, HOLE_MAKING_TYPES, TURNING_TYPES,
 } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import {
@@ -67,7 +67,14 @@ function blankPreset() {
 }
 
 export default function PresetPanel({ tool, onSave, isSaving }) {
-  const { holders } = useApp();
+  const { holders, materials } = useApp();
+  // Resolve a preset's material to its ISO-group color (from materials.json).
+  // Returns null when the material is unknown or its group has no color set.
+  const groupColorOf = (query) => {
+    const iso = materialIsoGroup(query);
+    if (!iso) return null;
+    return (materials?.groups || []).find(g => g.id === iso)?.color || null;
+  };
   const isMetric = tool.unit === 'millimeters';
   const lenUnit = isMetric ? 'mm' : 'in';
   const feedUnit = isMetric ? 'mm/min' : 'in/min';
@@ -245,6 +252,9 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
               <React.Fragment key={preset.guid}>
                 {showDivider && (
                   <div className="preset-group-sep">
+                    {groupColorOf(preset.material?.query) && (
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: groupColorOf(preset.material?.query), display: 'inline-block', marginRight: 6 }} />
+                    )}
                     <span>{matchMaterial(preset.material?.query)}</span>
                   </div>
                 )}
@@ -252,6 +262,7 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
                   <EditCard
                     preset={preset}
                     toolType={toolType}
+                    accentColor={groupColorOf(preset.material?.query)}
                     lenUnit={lenUnit}
                     feedUnit={feedUnit}
                     speedUnit={speedUnit}
@@ -268,6 +279,7 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
                   <CollapsedCard
                     preset={preset}
                     toolType={toolType}
+                    accentColor={groupColorOf(preset.material?.query)}
                     lenUnit={lenUnit}
                     feedUnit={feedUnit}
                     speedUnit={speedUnit}
@@ -305,7 +317,7 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
 
 // ── Collapsed card ───────────────────────────────────────────────────────────
 function CollapsedCard({
-  preset, toolType, lenUnit, feedUnit, speedUnit,
+  preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
   isDragOver, dragEnabled,
   linkedAssemblies, holders,
   onEdit, onDelete,
@@ -332,6 +344,7 @@ function CollapsedCard({
   return (
     <div
       className={`preset-card${isDragOver ? ' preset-card--drop' : ''}`}
+      style={accentColor ? { borderLeft: `3px solid ${accentColor}` } : undefined}
       draggable={dragEnabled}
       onDragStart={dragEnabled ? onDragStart : undefined}
       onDragOver={dragEnabled ? onDragOver : undefined}
@@ -347,7 +360,7 @@ function CollapsedCard({
         <div className="preset-card-name">
           <span className="preset-tag" title={preset.name}>{preset.name || 'Unnamed'}</span>
         </div>
-        <div className="preset-card-mat">{mat}</div>
+        <div className="preset-card-mat" style={accentColor ? { color: accentColor } : undefined}>{mat}</div>
         <div className="preset-card-stats">
           <StatRow label="Spindle" value={r4(preset.n)} unit="rpm" />
           <StatRow label="Surface" value={r4(preset.v_c)} unit={sfcLabel} />
@@ -448,7 +461,7 @@ function computeFormulaDraft(draft, fx, diameter, numberOfFlutes) {
 
 // ── Edit card ────────────────────────────────────────────────────────────────
 function EditCard({
-  preset, toolType, lenUnit, feedUnit, speedUnit,
+  preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
   diameter, fluteLength, numberOfFlutes,
   assemblies = [], holders = [],
   onSave, onCancel, isSaving,
@@ -595,7 +608,7 @@ function EditCard({
   const noSpeed = !(draft.n);
 
   return (
-    <div className="preset-card preset-card--edit">
+    <div className="preset-card preset-card--edit" style={accentColor ? { borderLeft: `3px solid ${accentColor}` } : undefined}>
       {/* Header */}
       <div className="preset-edit-header">
         <input

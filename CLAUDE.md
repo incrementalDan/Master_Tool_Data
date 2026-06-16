@@ -812,9 +812,13 @@ Three shop-wide JSON files live in the **same Drive root as `tool_metadata.json`
 
 Three editor pages, reached from new top-bar nav (**Materials**, **Vendors** — **Settings** already existed). Inline editing, no modals; drag-to-reorder via the shared `useDragReorder` hook (`src/components/useDragReorder.js`, HTML5 DnD that renumbers `order`).
 
-- **`MaterialsEditor.jsx`** (`/materials`) — ISO Groups (editable color swatch / label, ISO groups not deletable, `+ Add Group` for custom) + Sub-materials (group-filter tabs, inline label/notes, `+ Add Material`). Autosaves to `materials.json` on each change via `saveMaterials`. **Group colors are stored but not yet wired into preset rendering** — see TODO.
+- **`MaterialsEditor.jsx`** (`/materials`) — ISO Groups (editable color swatch / label, ISO groups not deletable, `+ Add Group` for custom) + Sub-materials (group-filter tabs, inline label/notes, `+ Add Material`). Autosaves to `materials.json` on each change via `saveMaterials`. **Group colors drive preset color coding** — see Preset color coding below.
 - **`VendorsEditor.jsx`** (`/vendors`) — one list over `vendorRegistry.entities`; per row: name, **MFG**/**VENDOR** toggle pills (both can be active), **Has Own #** (vendor only), expand-to-edit URL patterns with a live preview. Autosaves to `vendor_registry.json` via `saveVendorRegistry` (which also refreshes the active registry).
 - **`Settings.jsx`** — added **Shop** (name + default-unit toggle), **Machine Numbers** (start + skip-list tag input), **Import History** (read-only). The "Save Shop Settings" button writes `shop_settings.json`; the unit toggle also takes effect immediately. See `shop_settings.json` above for what's wired.
+
+### Preset color coding (from `materials.json` group colors)
+
+Presets are tinted by their material's **ISO group color**. `materialIsoGroup(query)` (`src/utils/presetNaming.js`) maps a preset's material (`matchMaterial` → canonical code) to an ISO group via `MATERIAL_CODE_TO_ISO_GROUP` (`AL`/`BRONZE`/`BRASS`→N, `SS`→M, `STEEL`/`MILD`→P, `CI`→K, `TI`→S; plastics → null/no color; hardened `H` isn't produced by `matchMaterial`, so it's never auto-assigned). `PresetPanel.jsx` looks up that group's `color` in `state.materials.groups` (`groupColorOf`) and applies it as a left-border accent on each preset card (collapsed + edit) and on the material label / group-divider dot. Unknown materials or groups with no color → no accent (silent fallback). The `.preset-tag` emerald token (the preset-name chip) is left unchanged — it stays a per-data-type token, not a per-material color.
 
 -----
 
@@ -1186,8 +1190,6 @@ All metadata-only (never written to Fusion) — added to `tool_metadata.json` vi
 -----
 
 ## TODO / Future Work
-
-- **Preset color coding from `materials.json` group colors.** The Materials editor (`/materials`) lets the shop set a `color` per ISO group (P/M/K/N/S/H) and those are stored in `materials.json`, but nothing renders presets in those colors yet — there is still **no preset→material color system**. To wire it: map each preset's material (via `matchMaterial(p.material?.query)` → a canonical `MATERIAL_CODES` value) to an ISO group (e.g. `AL`→N, `SS`→M, `STEEL`→P, `CI`→K, `TI`→S, hardened→H), look up that group's `color` in `state.materials.groups`, and apply it as the preset accent in `PresetPanel.jsx` (and anywhere preset chips render). Deferred deliberately when the editor was built.
 
 - **Local mode, phase 2 — full edit with manual re-export.** Today's local browse mode (see above) is read-only. A bigger follow-up: allow editing/saving everything in-memory while in local mode (tools, presets, assemblies, metadata), plus a "Download updated library" button that produces a new `fusion_tool_library.json` (and `tool_metadata.json` if applicable) for the user to manually re-upload to Autodesk/Drive themselves. **This is a big ask** — `writeLogicalTool`, `saveFullLibrary`, `renumberLibrary`, `deleteTool`, `addTool`, `normalizeLibrary`, and the whole Phase 2 merge flow all currently assume `uploadFusionList`/`downloadFusionList` hit APS; each would need a local-mode branch that mutates `toolsRef`/state in place and marks the library "dirty" instead of calling APS, plus export/download plumbing for the edited JSON. Confirm scope before starting.
 
