@@ -1126,6 +1126,10 @@ All metadata-only (never written to Fusion) — added to `tool_metadata.json` vi
 
 - **Pretty-print all JSON written to Google Drive.** Every JSON file persisted to Drive (`tool_metadata.json`, and any future Drive JSON) must be serialized with `JSON.stringify(data, null, 2)` — never compact/single-line. These files need to be human-readable for debugging directly in Drive. All metadata writes route through `driveCreate` / `driveUpdate` in `src/services/driveService.js`, which already do this; keep it that way and apply the same to any new Drive-file write. (This applies to **file content** only — Drive API request bodies like upload metadata or folder-create payloads can stay compact.)
 
+- **Never hardcode field paths outside `fieldRegistry.js`.** New code must reference a field's Fusion path / ProShop column / type / applicability through `FIELD_REGISTRY` (and its helpers) — do not introduce new hardcoded `geometry.*` / `expressions.*` / ProShop-column literals elsewhere. The registry is the single source of truth for field metadata. **Known existing exceptions** (the Fusion converter in `toolSchema.js`, the ProShop export in `tool-extractor.tsx`/`proShopExport.js`, and `FIELD_VISIBILITY`) predate this rule and are tracked in `SCHEMA_AUDIT.md` (FR1–FR4) for a deliberate, audit-guarded refactor — don't add to them.
+
+- **Never substitute default values for missing fields in descriptions.** `buildDesc` (`src/utils/toolNaming.js`) and any description/name generator must **omit** an absent field, not invent a value — e.g. a tool with no material set must not print `CARB` (don't fall back to `"carbide"`); a missing angle/corner-radius/LOC is left out, not zero-filled. A blank field means "unknown," and the description must not claim otherwise. (This is distinct from the **preset-name** convention's documented `GEN` material fallback in `composePresetName`, which is intentional — see Preset naming convention.)
+
 -----
 
 ## Key Constraints
