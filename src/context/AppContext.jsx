@@ -8,7 +8,7 @@ import {
   fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
   combineToolsByProshopId, buildMetadataTool,
 } from '../schema/toolSchema.js';
-import { composePresetName, opTypeWord, parsePresetName, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
+import { composePresetName, opTypeWord, parsePresetName, materialNameCode, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import { classifyStrays } from '../services/reconcile.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS } from '../schema/sharedDefaults.js';
@@ -163,6 +163,7 @@ export function AppProvider({ children }) {
   const holdersRef = useRef(state.holders);
   const localModeRef = useRef(state.localMode);
   const shopSettingsRef = useRef(state.shopSettings);
+  const materialsRef = useRef(state.materials);
   // Caches wrapper-level fields (e.g. `version`) from the last-loaded Fusion
   // library file, other than `data` — see downloadFusionList/uploadFusionList.
   const libraryWrapperRef = useRef(null);
@@ -173,6 +174,7 @@ export function AppProvider({ children }) {
   holdersRef.current = state.holders;
   localModeRef.current = state.localMode;
   shopSettingsRef.current = state.shopSettings;
+  materialsRef.current = state.materials;
 
   // Machine-number start/skip come from shop_settings.json (falling back to the
   // built-in defaults baked into the schema functions when unset).
@@ -1287,7 +1289,7 @@ export function AppProvider({ children }) {
             : (parsePresetName(p.name)?.opType ?? opOverrides[p.guid] ?? p.operation_type ?? null);
           const name = (!isHoleMakingTool && opTypeWord(opType))
             ? composePresetName({
-                materialQuery: p.material?.query,
+                materialQuery: materialNameCode(p.material?.query, materialsRef.current),
                 ooh: primary.ooh,
                 holderShort: primaryHolderShort,
                 opType,

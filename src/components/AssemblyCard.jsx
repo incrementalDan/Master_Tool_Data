@@ -71,7 +71,7 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
       {linkedPresets.length > 0 && (
         <div className="assembly-presets">
           {linkedPresets.map((p) => (
-            <span key={p.guid} className="preset-tag"><PresetDot query={p.material?.query} groups={materials?.groups} />{p.name || 'Unnamed'}</span>
+            <span key={p.guid} className="preset-tag"><PresetDot query={p.material?.query} materials={materials} />{p.name || 'Unnamed'}</span>
           ))}
         </div>
       )}

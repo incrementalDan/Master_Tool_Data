@@ -104,6 +104,45 @@ export function isoGroupColor(query, groups) {
   return (groups || []).find(g => g.id === iso)?.color || null;
 }
 
+// ─── Materials library resolution (the single source of material) ────────────
+// A preset stores its material as `material.query` — the sub-material label if
+// one was picked, else the group label. These helpers resolve that stored value
+// back against materials.json (`{ groups:[{id,label,code,color}], materials:[{group_id,label,code}] }`).
+
+// Find the { group, sub } a stored query refers to: sub-material label first
+// (more specific), then group label, then group id. Returns {} if no match.
+export function findMaterialInLibrary(query, materials) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q || !materials) return {};
+  const sub = (materials.materials || []).find(m => String(m.label || '').trim().toLowerCase() === q);
+  if (sub) {
+    const group = (materials.groups || []).find(g => g.id === sub.group_id) || null;
+    return { group, sub };
+  }
+  const group = (materials.groups || []).find(g =>
+    String(g.label || '').trim().toLowerCase() === q || String(g.id || '').toLowerCase() === q) || null;
+  return group ? { group, sub: null } : {};
+}
+
+// Short code for a preset name token: the sub-material's code, else the group's
+// code, else the group id. Falls back to the legacy keyword code (matchMaterial)
+// for material strings not in the library (e.g. imported "AL FIN"). '' when blank.
+export function materialNameCode(query, materials) {
+  const { group, sub } = findMaterialInLibrary(query, materials);
+  if (sub?.code) return sub.code;
+  if (group?.code) return group.code;
+  if (group?.id) return group.id;
+  return matchMaterial(query) || '';
+}
+
+// ISO-group color for a preset's stored material, resolved via the library
+// first, then the legacy keyword map. null when unknown / no color.
+export function presetMaterialColor(query, materials) {
+  const { group } = findMaterialInLibrary(query, materials);
+  if (group?.color) return group.color;
+  return isoGroupColor(query, materials?.groups);
+}
+
 // Fusion's `tool_presetMaterialCategory` ("Filter by Type") must never be blank.
 // Derive it from the preset material: a plastic material -> "plastic", any other
 // (metal) material -> "metal", and no/blank material -> "all".

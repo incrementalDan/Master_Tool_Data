@@ -5,6 +5,9 @@ import {
   matchMaterial,
   materialLabel,
   materialIsoGroup,
+  findMaterialInLibrary,
+  materialNameCode,
+  presetMaterialColor,
   matchOpType,
   opTypeWord,
   formatOoh,
@@ -69,6 +72,45 @@ describe('matchMaterial', () => {
     expect(materialIsoGroup('BRZ ROUGH')).toBe('N');  // bronze → non-ferrous
     expect(materialIsoGroup('GF Nylon')).toBe(null);  // plastic → no ISO group
     expect(materialIsoGroup('Default preset')).toBe(null); // unknown
+  });
+});
+
+describe('Materials library resolution', () => {
+  const MATS = {
+    groups: [
+      { id: 'M', label: 'Stainless Steel', code: 'SS', color: '#f5c842' },
+      { id: 'N', label: 'Non-Ferrous', code: 'AL', color: '#5bad6f' },
+    ],
+    materials: [
+      { id: 's1', group_id: 'M', label: '316L Stainless', code: 'SS316' },
+    ],
+  };
+
+  it('findMaterialInLibrary resolves group and sub-material by label', () => {
+    expect(findMaterialInLibrary('Stainless Steel', MATS).group.id).toBe('M');
+    expect(findMaterialInLibrary('Stainless Steel', MATS).sub).toBe(null);
+    const r = findMaterialInLibrary('316L Stainless', MATS);
+    expect(r.sub.id).toBe('s1');
+    expect(r.group.id).toBe('M');
+    expect(findMaterialInLibrary('Nope', MATS)).toEqual({});
+  });
+
+  it('materialNameCode prefers sub code, then group code, then group id', () => {
+    expect(materialNameCode('316L Stainless', MATS)).toBe('SS316'); // sub code
+    expect(materialNameCode('Stainless Steel', MATS)).toBe('SS');   // group code
+    expect(materialNameCode('Non-Ferrous', MATS)).toBe('AL');
+    expect(materialNameCode('', MATS)).toBe('');
+  });
+
+  it('materialNameCode falls back to the legacy keyword code for non-library strings', () => {
+    expect(materialNameCode('AL FIN', MATS)).toBe('AL'); // imported name → matchMaterial
+  });
+
+  it('presetMaterialColor resolves the group color via the library, then legacy', () => {
+    expect(presetMaterialColor('Stainless Steel', MATS)).toBe('#f5c842');
+    expect(presetMaterialColor('316L Stainless', MATS)).toBe('#f5c842'); // sub → its group color
+    expect(presetMaterialColor('AL FIN', MATS)).toBe('#5bad6f');         // legacy AL → N group color
+    expect(presetMaterialColor('Wood', MATS)).toBe(null);
   });
 });
 

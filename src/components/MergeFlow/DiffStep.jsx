@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle, RefreshCw, Plus, CheckCircle, Wrench } from 'lucide-react';
 import { generateId, generateAssemblyId } from '../../schema/toolSchema.js';
 import { fieldLabel } from '../../schema/fieldRegistry.js';
-import { composePresetName, parsePresetName, presetMatchesAssembly, HOLE_MAKING_TYPES } from '../../utils/presetNaming.js';
+import { composePresetName, parsePresetName, presetMatchesAssembly, materialNameCode, HOLE_MAKING_TYPES } from '../../utils/presetNaming.js';
 import { PresetDot } from '../PresetDot.jsx';
 import { lengthEps, unitAbbr } from '../../utils/units.js';
 import { useApp } from '../../context/AppContext.jsx';
@@ -236,7 +236,7 @@ function PresetsDiff({
                   checked={addedPresets.has(preset.guid)}
                   onChange={() => onToggleAddedPreset(preset.guid)}
                 />
-                <span className="preset-tag"><PresetDot query={preset.material?.query} groups={materials?.groups} />{preset.name || 'Unnamed'}</span>
+                <span className="preset-tag"><PresetDot query={preset.material?.query} materials={materials} />{preset.name || 'Unnamed'}</span>
               </label>
             ))}
           </div>
@@ -425,7 +425,7 @@ export default function DiffStep({
   masterUpdated = false, isFetchingLive = false,
   queuePosition = null,
 }) {
-  const { holders } = useApp();
+  const { holders, materials } = useApp();
 
   const incomingOoh = importedTool.incoming_ooh ?? null;
   const incomingHolderGuid = importedTool.incoming_holder_guid || '';
@@ -525,7 +525,7 @@ export default function DiffStep({
           guid: generateId(),
           operation_type: opType,
           name: composePresetName({
-            materialQuery: incoming.material?.query,
+            materialQuery: materialNameCode(incoming.material?.query, materials),
             ooh: incomingOoh,
             holderDescription: incomingHolderDesc,
             opType,

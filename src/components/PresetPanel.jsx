@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { holderColor } from './AssemblyCard.jsx';
 import {
   composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
-  materialLabel, isoGroupColor, HOLE_MAKING_TYPES, TURNING_TYPES,
+  materialNameCode, presetMaterialColor, findMaterialInLibrary, HOLE_MAKING_TYPES, TURNING_TYPES,
 } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import {
@@ -14,17 +14,6 @@ import {
   iprToIPM, ipmToIPR,
   FORMULAS, FIELD_PRECISION, roundForField,
 } from '../utils/speedsAndFeedsCalc.js';
-
-const MATERIALS = [
-  'Aluminum', 'Stainless Steel', 'Alloy Steel', 'Mild Steel',
-  'Bronze', 'Brass', 'Titanium', 'Cast Iron', 'Plastic', 'Other',
-];
-
-const MATERIAL_QUERY_MAP = {
-  Aluminum: 'AL', 'Stainless Steel': 'SS', 'Alloy Steel': 'STEEL',
-  'Mild Steel': 'MILD', Bronze: 'BRONZE', Brass: 'BRASS',
-  Titanium: 'TI', 'Cast Iron': 'CI', Plastic: 'PLASTIC', Other: '',
-};
 
 // Default formula states when opening any preset for editing.
 // 'manual' = user owns this value; 'formula' = calculated from partner.
@@ -47,9 +36,10 @@ function r4(v) {
   return isNaN(n) ? v : parseFloat(n.toFixed(4));
 }
 
-// Display label for a preset's material query — delegates to the shared matcher
-// (handles SS316/BRZ/etc.) so the UI and the naming/import logic agree.
-const matchMaterial = materialLabel;
+// Display label for a preset's material query. The query now holds the Materials
+// library label directly (sub-material or group), so show it verbatim; blank ->
+// "Other" (used for the material grouping/filter in the collapsed list).
+const matchMaterial = (query) => (query && String(query).trim()) ? String(query).trim() : 'Other';
 
 function blankPreset() {
   return {
@@ -68,8 +58,8 @@ function blankPreset() {
 
 export default function PresetPanel({ tool, onSave, isSaving }) {
   const { holders, materials } = useApp();
-  // Resolve a preset's material to its ISO-group color (from materials.json).
-  const groupColorOf = (query) => isoGroupColor(query, materials?.groups);
+  // Resolve a preset's material to its group color (from the Materials library).
+  const groupColorOf = (query) => presetMaterialColor(query, materials);
   const isMetric = tool.unit === 'millimeters';
   const lenUnit = isMetric ? 'mm' : 'in';
   const feedUnit = isMetric ? 'mm/min' : 'in/min';
@@ -266,6 +256,7 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
                     numberOfFlutes={numberOfFlutes}
                     assemblies={tool.assemblies || []}
                     holders={holders}
+                    materials={materials}
                     onSave={handlePresetSave}
                     onCancel={() => setEditingId(null)}
                     isSaving={isSaving}
@@ -458,7 +449,7 @@ function computeFormulaDraft(draft, fx, diameter, numberOfFlutes) {
 function EditCard({
   preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
   diameter, fluteLength, numberOfFlutes,
-  assemblies = [], holders = [],
+  assemblies = [], holders = [], materials,
   onSave, onCancel, isSaving,
 }) {
   const isTap = toolType === 'tap';
@@ -495,7 +486,8 @@ function EditCard({
   const composeName = (d, asmId, opType) => {
     const a = assemblies.find(x => x.assembly_id === asmId);
     return composePresetName({
-      materialQuery: d.material?.query,
+      // Material token comes from the Materials library code for the stored query.
+      materialQuery: materialNameCode(d.material?.query, materials),
       ooh: a?.ooh,
       holderShort: a ? holderShortName(holderDescOf(a)) : null,
       opType: isHoleMaking ? null : opType,
@@ -517,8 +509,6 @@ function EditCard({
   // and the independent feedrate fields that have no formula linkage).
   const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
   const setMat = (k, v) => setDraft(d => ({ ...d, material: { ...(d.material || {}), [k]: v } }));
-
-  const selectedMat = matchMaterial(draft.material?.query);
 
   // ── Bidirectional calculation ──────────────────────────────────────────────
   // Called for every formula-linked field on each keystroke.
@@ -624,27 +614,56 @@ function EditCard({
         </button>
       </div>
 
-      {/* Material */}
+      {/* Material — from the Materials library (Group → optional Sub-material).
+          Stored as material.query = sub-material label, else group label. */}
       <div className="preset-edit-section">
         <div className="preset-edit-section-label">MATERIAL</div>
         <div className="preset-edit-grid">
-          <FGroup label="Material">
+          <FGroup label="Group">
             <select
               className="field-input"
-              value={selectedMat}
+              value={findMaterialInLibrary(draft.material?.query, materials).group?.id || ''}
               onChange={e => {
-                const q = MATERIAL_QUERY_MAP[e.target.value] ?? '';
+                const g = (materials?.groups || []).find(x => x.id === e.target.value);
+                const query = g ? g.label : '';
                 setDraft(d => {
-                  // Derive Fusion's "Filter by Type" from the material so it's
-                  // never blank (all/metal/plastic).
-                  const nd = { ...d, material: { ...(d.material || {}), query: q, category: materialCategory(q) } };
+                  const nd = { ...d, material: { ...(d.material || {}), query, category: materialCategory(query) } };
                   nd.name = composeName(nd, assemblyId, nd.operation_type);
                   return nd;
                 });
               }}
             >
-              {MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
+              <option value="">—</option>
+              {(materials?.groups || []).map(g => (
+                <option key={g.id} value={g.id}>{g.id} · {g.label}</option>
+              ))}
             </select>
+          </FGroup>
+          <FGroup label="Sub-material">
+            {(() => {
+              const cur = findMaterialInLibrary(draft.material?.query, materials);
+              const gid = cur.group?.id || '';
+              const subs = (materials?.materials || []).filter(m => m.group_id === gid);
+              return (
+                <select
+                  className="field-input"
+                  value={cur.sub?.id || ''}
+                  disabled={!gid || subs.length === 0}
+                  onChange={e => {
+                    const s = subs.find(x => x.id === e.target.value);
+                    const query = s ? s.label : (cur.group?.label || '');
+                    setDraft(d => {
+                      const nd = { ...d, material: { ...(d.material || {}), query, category: materialCategory(query) } };
+                      nd.name = composeName(nd, assemblyId, nd.operation_type);
+                      return nd;
+                    });
+                  }}
+                >
+                  <option value="">{subs.length === 0 ? '— none defined —' : '— none —'}</option>
+                  {subs.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                </select>
+              );
+            })()}
           </FGroup>
           <FGroup label="Filter by type">
             <select

@@ -46,7 +46,7 @@ export default function MaterialsEditor() {
     const id = prompt('Short code for the new group (e.g. "X"):')?.trim().toUpperCase();
     if (!id) return;
     if (doc.groups.some(g => g.id === id)) { alert(`Group "${id}" already exists.`); return; }
-    commit({ ...doc, groups: [...doc.groups, { id, label: '', color: '#888888', iso: false, order: doc.groups.length }] });
+    commit({ ...doc, groups: [...doc.groups, { id, label: '', code: '', color: '#888888', iso: false, order: doc.groups.length }] });
   };
   const deleteGroup = (id) => {
     if (doc.materials.some(m => m.group_id === id)) { alert('Move or delete this group’s sub-materials first.'); return; }
@@ -68,7 +68,7 @@ export default function MaterialsEditor() {
     if (!adding?.label?.trim() || !adding?.group_id) return;
     commit({
       ...doc,
-      materials: [...doc.materials, { id: uid(), group_id: adding.group_id, label: adding.label.trim(), notes: adding.notes || '', order: doc.materials.length }],
+      materials: [...doc.materials, { id: uid(), group_id: adding.group_id, label: adding.label.trim(), code: (adding.code || '').trim(), notes: adding.notes || '', order: doc.materials.length }],
     });
     setAdding(null);
   };
@@ -128,6 +128,14 @@ export default function MaterialsEditor() {
                 placeholder={g.iso ? 'ISO group label' : 'Custom group label'}
                 onChange={e => setGroup(g.id, { label: e.target.value })}
               />
+              <input
+                className="field-input"
+                style={{ width: 90 }}
+                value={g.code || ''}
+                placeholder="Code"
+                title="Short code used in preset names (e.g. SS, AL)"
+                onChange={e => setGroup(g.id, { code: e.target.value })}
+              />
               {g.iso
                 ? <span className="text-sub text-xs" style={{ width: 70, textAlign: 'right' }}>ISO</span>
                 : <button className="icon-btn" title="Delete group" onClick={() => deleteGroup(g.id)}><Trash2 size={15} /></button>}
@@ -175,6 +183,7 @@ export default function MaterialsEditor() {
             <GripVertical size={14} className="text-sub" style={{ cursor: 'grab', flexShrink: 0 }} />
             <GroupBadge id={m.group_id} />
             <input className="field-input" style={{ flex: 1 }} value={m.label} onChange={e => setMat(m.id, { label: e.target.value })} placeholder="Material" />
+            <input className="field-input" style={{ width: 80 }} value={m.code || ''} title="Preset-name code (optional; falls back to the group code)" onChange={e => setMat(m.id, { code: e.target.value })} placeholder="Code" />
             <input className="field-input" style={{ flex: 1.4 }} value={m.notes || ''} onChange={e => setMat(m.id, { notes: e.target.value })} placeholder="Notes" />
             <button className="icon-btn" title="Delete" onClick={() => deleteMat(m.id)}><X size={15} /></button>
           </div>
@@ -187,13 +196,14 @@ export default function MaterialsEditor() {
               {doc.groups.map(g => <option key={g.id} value={g.id}>{g.id}</option>)}
             </select>
             <input className="field-input" style={{ flex: 1 }} autoFocus value={adding.label} placeholder="Material label" onChange={e => setAdding(a => ({ ...a, label: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addMat()} />
+            <input className="field-input" style={{ width: 80 }} value={adding.code} placeholder="Code" onChange={e => setAdding(a => ({ ...a, code: e.target.value }))} />
             <input className="field-input" style={{ flex: 1.4 }} value={adding.notes} placeholder="Notes" onChange={e => setAdding(a => ({ ...a, notes: e.target.value }))} />
             <button className="btn btn-primary btn-sm" onClick={addMat}>Add</button>
             <button className="btn btn-ghost btn-sm" onClick={() => setAdding(null)}>Cancel</button>
           </div>
         ) : (
           <button className="btn btn-secondary btn-sm" style={{ marginTop: 12 }}
-            onClick={() => setAdding({ group_id: groupFilter === 'All' ? doc.groups[0]?.id : groupFilter, label: '', notes: '' })}>
+            onClick={() => setAdding({ group_id: groupFilter === 'All' ? doc.groups[0]?.id : groupFilter, label: '', code: '', notes: '' })}>
             <Plus size={14} /> Add Material
           </button>
         )}
