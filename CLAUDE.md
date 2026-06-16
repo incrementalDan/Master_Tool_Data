@@ -269,6 +269,8 @@ Deployment is **fully automated via GitHub Actions** — see `.github/workflows/
 
 **To get changes live**: merge to `main`. That's it — Actions builds and deploys automatically.
 
+**Linting (catches the blank-screen class of bug)**: `npm run lint` runs ESLint (flat config in `eslint.config.js`). It's intentionally **minimal** — only `no-undef` + `react/jsx-no-undef` (used-but-not-imported symbols, e.g. `<X>` without importing `X`, which the Vite build does NOT catch — it's a runtime `ReferenceError` → blank page) plus `react-hooks/rules-of-hooks`. Not a style gate. The **Tests** CI workflow (`.github/workflows/test.yml`) runs `npm run lint` before `npm test`, so a missing import fails the PR check instead of reaching the browser. `.tsx` uses the typescript-eslint parser (with `no-undef` off — TS checks references itself).
+
 **⛔ Do NOT run `npm run deploy` from an agent, cloud, or CI session.** That command bakes env vars from a local `.env`, which does not exist in those environments — it will publish a credential-less build and break the live site (shows "Configuration Required"). `npm run deploy` is only valid as a manual fallback on a developer machine that has a complete local `.env`. The normal, preferred path is always GitHub Actions.
 
 -----

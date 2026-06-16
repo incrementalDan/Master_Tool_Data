@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { Tag, Ruler, Layers, Save, X, AlertTriangle, Wand2, ChevronDown, ChevronRight, StickyNote } from 'lucide-react';
 import {
   validateTool, validateGeometry, getNextMachineNumber, toolToExtractor,
+  INCH_THREAD_SIZES, METRIC_THREAD_SIZES,
+  TAP_LIMIT_TOLERANCE_OPTIONS_INCH, TAP_LIMIT_TOLERANCE_OPTIONS_METRIC,
+  TAP_LIMIT_TOLERANCE_DEFAULT_INCH, TAP_LIMIT_TOLERANCE_DEFAULT_METRIC,
 } from '../schema/toolSchema.js';
 import { getManufacturerNames } from '../schema/vendorRegistry.js';
 import { fieldLabel } from '../schema/fieldRegistry.js';

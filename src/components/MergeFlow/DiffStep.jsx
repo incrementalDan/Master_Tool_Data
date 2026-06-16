@@ -174,7 +174,7 @@ function PresetsDiff({
   presetMatch, incomingOoh, incomingHolderDesc,
   addedPresets, conflictResolutions,
   onToggleAddedPreset, onSetConflictResolution,
-  masterAssemblies,
+  masterAssemblies, unit,
   assemblyAction, onSetAssemblyAction,
   linkTargetId, onSetLinkTargetId,
 }) {
@@ -253,7 +253,7 @@ function PresetsDiff({
             <div className="preset-assembly-context-line">
               Proven at:
               {incomingHolderDesc ? <strong> {incomingHolderDesc}</strong> : ''}
-              {incomingOoh != null ? <> · OOH <strong>{incomingOoh.toFixed(3)} {unitAbbr(masterTool.unit)}</strong></> : ''}
+              {incomingOoh != null ? <> · OOH <strong>{incomingOoh.toFixed(3)} {unitAbbr(unit)}</strong></> : ''}
             </div>
             <div className="preset-assembly-options">
               <label>
@@ -383,7 +383,7 @@ function PresetsDiff({
                   Save as new preset variant
                   {incomingOoh != null && (
                     <span className="text-sub text-xs" style={{ marginLeft: 5 }}>
-                      (at OOH {incomingOoh.toFixed(3)} {unitAbbr(masterTool.unit)})
+                      (at OOH {incomingOoh.toFixed(3)} {unitAbbr(unit)})
                     </span>
                   )}
                 </label>
@@ -686,6 +686,7 @@ export default function DiffStep({
           onToggleAddedPreset={toggleAddedPreset}
           onSetConflictResolution={setConflictResolution}
           masterAssemblies={masterTool.assemblies}
+          unit={masterTool.unit}
           assemblyAction={assemblyAction}
           onSetAssemblyAction={setAssemblyAction}
           linkTargetId={linkTargetId}
