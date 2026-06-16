@@ -105,7 +105,7 @@ export default function CommitStep({
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {newPresetList.map(p => (
-                  <span key={p.guid} className="preset-tag"><PresetDot query={p.material?.query} groups={materials?.groups} />{p.name || 'Unnamed'}</span>
+                  <span key={p.guid} className="preset-tag"><PresetDot query={p.material?.query} materials={materials} />{p.name || 'Unnamed'}</span>
                 ))}
               </div>
             </div>

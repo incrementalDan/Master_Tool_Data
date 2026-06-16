@@ -1,10 +1,10 @@
-import { isoGroupColor } from '../utils/presetNaming.js';
+import { presetMaterialColor } from '../utils/presetNaming.js';
 
-// A small colored dot for a preset, tinted by its material's ISO group color
-// (from materials.json). Renders nothing when the material is unknown or its
-// group has no color — so it's safe to drop in front of any preset chip.
-export function PresetDot({ query, groups }) {
-  const color = isoGroupColor(query, groups);
+// A small colored dot for a preset, tinted by its material's group color from
+// the Materials library (materials.json). Renders nothing when the material is
+// unknown or its group has no color — safe to drop in front of any preset chip.
+export function PresetDot({ query, materials }) {
+  const color = presetMaterialColor(query, materials);
   if (!color) return null;
   return (
     <span
