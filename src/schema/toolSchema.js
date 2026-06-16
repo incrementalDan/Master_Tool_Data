@@ -1,6 +1,6 @@
 import {
   TT, TL, BLANK, FIELD_VISIBILITY, _FV_KEYS,
-  MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST,
+  MA, CO, WM,
   PS_GROUPS, AUTO_GROUP, typeFromProShopGroup, COOLANT_OPTS, THROUGH_COOLANT_VALUES,
   getVisibleFields,
 } from '../../tool-extractor.tsx';
@@ -8,7 +8,7 @@ import { isMetadataOnly, FIELD_REGISTRY, fieldLabel } from './fieldRegistry.js';
 import { parsePresetName, materialCategory, matchMaterial, HOLE_MAKING_TYPES, TURNING_TYPES } from '../utils/presetNaming.js';
 import { convertLength, unitAbbr, getDefaultUnit } from '../utils/units.js';
 
-export { TT, TL, MA, CO, WM, MANUFACTURER_LIST, VENDOR_LIST, PS_GROUPS, AUTO_GROUP, typeFromProShopGroup, COOLANT_OPTS };
+export { TT, TL, MA, CO, WM, PS_GROUPS, AUTO_GROUP, typeFromProShopGroup, COOLANT_OPTS };
 
 // ─── Icons ─────────────────────────────────────────────────────────────────
 // Tool-type icons are rendered by the <ToolTypeIcon> component

@@ -186,7 +186,10 @@ Autodesk cloud (BIM 360 / ACC)
 └── holder_library.json          ← Read-only holder/toolholder library; app reads via APS
 
 Google Drive (shared team folder)
-└── tool_metadata.json           ← Extra fields Fusion doesn't support (optional, can be skipped)
+├── tool_metadata.json           ← Extra fields Fusion doesn't support (optional, can be skipped)
+├── materials.json               ← Shop material groups/sub-materials + colors (shared)
+├── vendor_registry.json         ← Unified manufacturer/vendor entity list (shared)
+└── shop_settings.json           ← Shop-wide settings (shared)
 
 Web App (GitHub Pages, client-side only)
 ├── APS PKCE OAuth login (required — gates all library access)
@@ -780,15 +783,30 @@ ProShop's CSV has a single `EDP#` column per Approved-Brand row, but it's ambigu
 - **Export** (`buildBrandRows`, `tool-extractor.tsx`): for each manufacturer/vendor pair, the `EDP#` column = `vendors[].vendor_num || manufacturers[].edp`.
 - `mfg_num` has no ProShop column in either direction.
 
-### `vendorRegistry.js`
+### `vendorRegistry.js` (data-driven)
 
-`src/schema/vendorRegistry.js` holds:
-- `MANUFACTURER_LIST` / `VENDOR_LIST` — plain string arrays for `<datalist>` autocomplete (relocated from `tool-extractor.tsx`, which now imports and re-exports them unchanged).
-- `VENDORS_WITH_OWN_NUMBERS` (a `Set`) + `vendorHasOwnCatalogNumber(name)` — drives the Vendor# field's default visibility in the Purchasing UI: shown automatically for vendors in this set; hidden for other vendors unless a `vendor_num` is already stored (with a "+ Add vendor #" toggle to reveal manually).
+`src/schema/vendorRegistry.js` is now **data-driven** — the live list of entities comes from `vendor_registry.json` on Drive (see **Shared Drive Files**), not hardcoded arrays. The module holds:
+- `DEFAULT_VENDOR_REGISTRY` — the migration seed used to create the Drive file on first run, assembled from the data that used to be hardcoded here + in `urlGenerators.js` (manufacturer/vendor names, URL patterns, own-catalog-number flags, and the ProShop unique-id map as each entity's `proshop_id`). **No entries were lost in the migration.**
+- An **active registry** (`setActiveVendorRegistry` / `getActiveVendorRegistry`) — `AppContext` sets it after the Drive file loads, so the pure helpers below resolve against live data even when called from non-React modules (`urlGenerators.js`, `tool-extractor.tsx`, the ProShop import).
+- Helpers (read the active registry, or an explicitly passed one): `getManufacturerNames()` / `getVendorNames()` (replace the old `MANUFACTURER_LIST` / `VENDOR_LIST` arrays — call them in render so datalists reflect live data), `entityByName(name)`, `vendorHasOwnCatalogNumber(name)` (drives the Vendor# field's default visibility in the Purchasing UI), and `resolveVendorName(value)` (maps a ProShop `MSC1`-style unique id back to the company name). `urlGenerators.js` reads each entity's `edp_url_pattern` / `vendor_num_url_pattern` and substitutes `{edp}` / `{edp_lower}` / `{vendor_num}` — the token-substitution logic stays in `urlGenerators.js`.
 
 ### Purchasing UI (`PurchasingSection.jsx`)
 
 A collapsible "Purchasing" panel in `ToolDetail`'s right column. Nested table: outer rows are manufacturers (Manufacturer / MFG# / EDP#), each with an inner table of its vendors (Vendor / Cost / Vendor#). `[+ Add manufacturer]` / `[+ Add vendor]` buttons. Drag-to-reorder follows the same pattern as `PresetPanel.jsx` (`GripVertical` handle, hover-to-reveal delete `×`) — manufacturers reorder among themselves, vendors reorder within their manufacturer group.
+
+-----
+
+## Shared Drive Files (materials / vendor registry / shop settings)
+
+Three shop-wide JSON files live in the **same Drive root as `tool_metadata.json`** and are loaded at startup **in parallel** with the metadata (in `loadTools`, when Google is connected). Each is **created from its default content if it doesn't exist yet**; a load failure on any one falls back to its default and never blocks the library load. All three are exposed via `useApp()` as `state.materials` / `state.vendorRegistry` / `state.shopSettings` (defaulting to their seeds before load), with save functions `saveMaterials` / `saveVendorRegistry` / `saveShopSettings`. **Foundation only — no UI yet.**
+
+- **Generic Drive-file plumbing** lives in `driveService.js`: `loadOrCreateSharedJson(name, cacheKey, default)` and `saveSharedJson(name, cacheKey, content)`, with the file names + localStorage cache keys in `SHARED_FILES`. Content is pretty-printed (`JSON.stringify(data, null, 2)`) like all Drive JSON. Cache keys are cleared on `signOut()`.
+
+- **`materials.json`** (default in `src/schema/sharedDefaults.js`) — shop-editable material database. `groups[]` = the standard ISO turning groups (`P` Steel, `M` Stainless, `K` Cast Iron, `N` Non-Ferrous, `S` High-Temp Alloys, `H` Hardened Steel), each with a `color` (the canonical per-group token for preset color coding — there was **no prior material→color map**, so these seed it) and an `iso` flag. `materials[]` = user-defined sub-materials (`{ id, group_id, label, notes, order }`), empty to start. The ISO group IDs are the canonical material identifiers.
+
+- **`vendor_registry.json`** (default = `DEFAULT_VENDOR_REGISTRY` in `vendorRegistry.js`) — the unified entity list (see `vendorRegistry.js` above). Each tool's `purchasing.manufacturers[]` / `vendors[]` are intended to reference entity IDs from this list; the `is_manufacturer` / `is_vendor` flags determine which picker an entity appears in.
+
+- **`shop_settings.json`** (default in `sharedDefaults.js`) — `{ shop_name, default_units, machine_number:{start,skip}, import:{last_proshop_import,last_photo_import_folder_id}, aps:{last_used_hub_id,last_used_project_id} }`. **Loaded/exposed/saved only — NOT yet wired into existing behavior** (default unit still comes from localStorage, renumber start/skip still hardcoded, APS picker + import-folder memory unchanged). Wiring those consumers to read/write `shop_settings.json` is a deliberate later step.
 
 -----
 
@@ -1129,6 +1147,12 @@ All metadata-only (never written to Fusion) — added to `tool_metadata.json` vi
 - **Never hardcode field paths outside `fieldRegistry.js`.** New code must reference a field's Fusion path / ProShop column / type / applicability through `FIELD_REGISTRY` (and its helpers) — do not introduce new hardcoded `geometry.*` / `expressions.*` / ProShop-column literals elsewhere. The registry is the single source of truth for field metadata. **Known existing exceptions** (the Fusion converter in `toolSchema.js`, the ProShop export in `tool-extractor.tsx`/`proShopExport.js`, and `FIELD_VISIBILITY`) predate this rule and are tracked in `SCHEMA_AUDIT.md` (FR1–FR4) for a deliberate, audit-guarded refactor — don't add to them.
 
 - **Never substitute default values for missing fields in descriptions.** `buildDesc` (`src/utils/toolNaming.js`) and any description/name generator must **omit** an absent field, not invent a value — e.g. a tool with no material set must not print `CARB` (don't fall back to `"carbide"`); a missing angle/corner-radius/LOC is left out, not zero-filled. A blank field means "unknown," and the description must not claim otherwise. (This is distinct from the **preset-name** convention's documented `GEN` material fallback in `composePresetName`, which is intentional — see Preset naming convention.)
+
+- **`materials.json`, `vendor_registry.json`, `shop_settings.json`** live in the same Drive root as `tool_metadata.json` and are loaded at startup (in parallel, created from their defaults if missing). See **Shared Drive Files** below.
+
+- **ISO material group IDs (P, M, K, N, S, H)** are the canonical material identifiers used in preset color coding (`materials.json`).
+
+- **`vendor_registry.json` uses a single unified entity list** — `is_manufacturer` and `is_vendor` flags determine an entity's role, not separate manufacturer/vendor arrays.
 
 -----
 
