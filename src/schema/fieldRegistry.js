@@ -33,6 +33,7 @@ const ALL_TYPES = [
 const NO_TURNING      = ALL_TYPES.filter(t => t !== 'turning general');
 const NO_BORING_TURN  = ALL_TYPES.filter(t => t !== 'boring head' && t !== 'turning general');
 const NO_BORING       = ALL_TYPES.filter(t => t !== 'boring head');
+const NO_TAP          = ALL_TYPES.filter(t => t !== 'tap');
 
 // Tool types where the UI shows taper_angle as "Included/Inclusive Tip Angle (°)"
 // (= 2 × the stored geometry.TA, edited bidirectionally with a ÷2 on input).
@@ -547,7 +548,7 @@ export const FIELD_REGISTRY = {
     fusionPath: null,
     proShopColumn: null,
     metadataOnly: true,
-    appliesToTypes: 'all',
+    appliesToTypes: NO_TAP,   // taps don't have a flute design
     required: false,
     precision: null,
   },

@@ -2598,12 +2598,25 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .tool-sticky-identity {
   flex-shrink: 0;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 5px;
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
   border-left: 1px solid var(--border);
   padding-left: 14px;
   margin-left: 4px;
+}
+.sticky-identity-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sticky-identity-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-sub);
+  white-space: nowrap;
 }
 
 /* Narrow screens: stack sidebar above content */

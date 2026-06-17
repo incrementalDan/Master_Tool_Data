@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { UploadCloud, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import ImportPhotosModal from './ImportPhotosModal.jsx';
-import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers, typeFromProShopGroup } from '../schema/toolSchema.js';
+import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers, typeFromProShopGroup, resolveThreadSize } from '../schema/toolSchema.js';
 import { vendorHasOwnCatalogNumber, resolveVendorName } from '../schema/vendorRegistry.js';
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
@@ -601,7 +601,7 @@ function psRowToTool(group, psUnit = 'inches') {
     taper_angle: psNum(r['Taper']),
     coating: r['Coating'] || '',
     material: psMaterial(r['Tool Material']),
-    pitch: r['Pitch'] || '',
+    ...resolveThreadSize(r['Thread'] || r['Pitch'] || ''),
     tap_class: r['Tap class'] || '',
     point_type: r['Point Type'] || '',
     stub_jobber: r['(S)tub / (J)obber'] || '',
@@ -740,6 +740,12 @@ function matchProShopToTools(groups, tools, psUnit = 'inches') {
       // Fill gaps only — don't overwrite existing values
       if (!tool.coating && r['Coating']) additions.coating = r['Coating'];
       if (!tool.location && r['Location']) additions.location = r['Location'];
+      if (!tool.pitch && (r['Thread'] || r['Pitch'])) {
+        const resolved = resolveThreadSize(r['Thread'] || r['Pitch'] || '');
+        if (resolved.pitch) additions.pitch = resolved.pitch;
+        if (resolved.is_sti && !tool.is_sti) additions.is_sti = true;
+        if (resolved.thread_unit && !tool.tap_thread_unit) additions.tap_thread_unit = resolved.thread_unit;
+      }
       if (tool.tip_to_first_thread == null) {
         const psTip = psNum(r['Tip to 1st Full Thread']);
         if (psTip != null) additions.tip_to_first_thread = convertLength(psTip, psUnit, tool.unit);

@@ -188,9 +188,15 @@ export default function ToolDetail() {
           </div>
           {(tool.location || hasMachineNum) && (
             <div className="tool-sticky-identity">
-              {tool.location && <span className="location-tag">{tool.location}</span>}
+              {tool.location && (
+                <div className="sticky-identity-group">
+                  <span className="sticky-identity-label">Location</span>
+                  <span className="location-tag">{tool.location}</span>
+                </div>
+              )}
               {hasMachineNum && (
-                <div className="flex items-center gap-5">
+                <div className="sticky-identity-group">
+                  <span className="sticky-identity-label">Machine&nbsp;#</span>
                   <span className="machine-num-badge">T{tool.machine_tool_number}</span>
                   <span className="machine-num-badge">H{tool.machine_tool_number}</span>
                   <span className="machine-num-badge">D{tool.machine_tool_number}</span>
@@ -298,9 +304,15 @@ export default function ToolDetail() {
           </div>
           {(tool.location || hasMachineNum) && (
             <div className="tool-sticky-identity">
-              {tool.location && <span className="location-tag">{tool.location}</span>}
+              {tool.location && (
+                <div className="sticky-identity-group">
+                  <span className="sticky-identity-label">Location</span>
+                  <span className="location-tag">{tool.location}</span>
+                </div>
+              )}
               {hasMachineNum && (
-                <div className="flex items-center gap-5">
+                <div className="sticky-identity-group">
+                  <span className="sticky-identity-label">Machine&nbsp;#</span>
                   <span className="machine-num-badge">T{tool.machine_tool_number}</span>
                   <span className="machine-num-badge">H{tool.machine_tool_number}</span>
                   <span className="machine-num-badge">D{tool.machine_tool_number}</span>
