@@ -2920,6 +2920,18 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .purchasing-row--drop {
   box-shadow: 0 0 0 2px rgba(74,143,255,0.18);
 }
+.purchasing-mfg-card--drop {
+  box-shadow: 0 0 0 2px rgba(74,143,255,0.35);
+}
+/* Card-level grip in the manufacturer header — always shows the grip icon (no hover-swap to X). */
+.purchasing-card-grip {
+  cursor: grab;
+}
+.purchasing-card-grip:hover .purchasing-grip-icon { opacity: 1; }
+/* Delete-only grip (manufacturer row) — always shows the X. */
+.purchasing-del-only {
+  cursor: pointer;
+}
 
 .purchasing-mfg-name {
   font-size: 14px;
