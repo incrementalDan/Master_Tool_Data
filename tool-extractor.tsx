@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { THROUGH_COOLANT_VALUES, smartDiam, buildDesc } from "./src/utils/toolNaming.js";
-import { getManufacturerNames, getVendorNames } from "./src/schema/vendorRegistry.js";
+import { getManufacturerNames, getVendorNames, resolveVendorName } from "./src/schema/vendorRegistry.js";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const BLUE   = "#4a8fff";
@@ -574,8 +574,8 @@ export default function App({ onExtract } = {}){
         workpieceMats:Array.isArray(p.workpieceMats)?p.workpieceMats.filter(x=>WM.includes(x)):(WM.includes(p.workpieceMat)?[p.workpieceMat]:[]),
         tipAngle:p.tipAngle||"",helixAngle:p.helixAngle||"",pitch:p.pitch||"",productLink:p.productLink||"",
         edpNumber:p.edpNumber||"",
-        approvedBrand:p.approvedBrand||"",  // allow any manufacturer, not just list
-        vendor:getVendorNames().includes(p.vendor)?p.vendor:"",
+        approvedBrand:resolveVendorName(p.approvedBrand||""),  // canonicalize alias→preferred; unknown free text passes through
+        vendor:(()=>{const r=resolveVendorName(p.vendor||"");return getVendorNames().includes(r)?r:"";})(),
         vendorStockNum:p.vendorStockNum||"",
         coolant:(()=>{
           const raw=p.coolant||"";
@@ -604,7 +604,7 @@ export default function App({ onExtract } = {}){
         material:MA.includes(p.material)?p.material:"carbide",coating:p.coating||"",
         workpieceMats:Array.isArray(p.workpieceMats)?p.workpieceMats.filter(x=>WM.includes(x)):[],
         tipAngle:p.tipAngle||"",pitch:p.pitch||"",edpNumber:p.edpNumber||"",
-        approvedBrand:p.approvedBrand||"",vendor:getVendorNames().includes(p.vendor)?p.vendor:"",
+        approvedBrand:resolveVendorName(p.approvedBrand||""),vendor:(()=>{const r=resolveVendorName(p.vendor||"");return getVendorNames().includes(r)?r:"";})(),
         vendorStockNum:p.vendorStockNum||"",cost:p.cost||"",productLink:p.productLink||"",
         coolant:"flood",tapClass:p.tapClass||"",pointType:p.pointType||"",
         shoulderLen:p.shoulderLen||"",ooh:p.ooh||"",taperAngle:p.taperAngle||"",
