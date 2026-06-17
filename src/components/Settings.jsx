@@ -271,19 +271,78 @@ export default function Settings() {
 
       {showPhotos && <ImportPhotosModal onClose={() => setShowPhotos(false)} />}
 
-      {/* Tool library (APS) */}
+      {/* Fusion Libraries (APS) — tool + holder, the two distinct Autodesk cloud files */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <HardDrive size={16} style={{ color: 'var(--blue)' }} />
-          <h3 style={{ margin: 0 }}>Tool Library (Autodesk)</h3>
+          <h3 style={{ margin: 0 }}>Fusion Libraries (Autodesk)</h3>
+          <InfoTip text="Two separate Fusion 360 cloud .json files. The tool library is the one this app reads and writes; the holder library is read-only and only enables holder selection. They must be two different files — never point both at the same one, or saving tools will overwrite the holder file." />
         </div>
         <p className="text-sub text-sm mb-16">
-          The Fusion 360 cloud <code>.json</code> file this app reads and writes. Changing it opens the
-          file picker; you can cancel to keep the current library.
+          The Autodesk cloud files this app links to. These are <strong>two distinct files</strong> — pick the right one for each.
         </p>
-        <button className="btn btn-secondary" onClick={beginChangeLibrary}>
-          <FolderOpen size={14} /> Change Tool Library…
-        </button>
+
+        {/* Tool library */}
+        <div style={{ paddingBottom: 14, marginBottom: 14, borderBottom: '1px solid var(--border)' }}>
+          <div className="flex items-center gap-8" style={{ marginBottom: 6 }}>
+            <FileJson size={14} style={{ color: 'var(--green)', flexShrink: 0 }} />
+            <span className="text-sm" style={{ fontWeight: 600, minWidth: 96 }}>Tool library</span>
+            {libraryLocation?.fileName
+              ? <span className="font-mono text-xs">{libraryLocation.fileName}</span>
+              : <span className="text-sub text-xs">Not linked</span>}
+          </div>
+          <div className="text-sub text-xs" style={{ marginBottom: 8, paddingLeft: 22 }}>
+            Read &amp; written by the app. Changing it opens the file picker; cancel keeps the current one.
+          </div>
+          <div style={{ paddingLeft: 22 }}>
+            <button className="btn btn-secondary btn-sm" onClick={beginChangeLibrary}>
+              <FolderOpen size={14} /> Change Tool Library…
+            </button>
+          </div>
+        </div>
+
+        {/* Holder library */}
+        <div>
+          <div className="flex items-center gap-8" style={{ marginBottom: 6 }}>
+            <Package size={14} style={{ color: 'var(--blue)', flexShrink: 0 }} />
+            <span className="text-sm" style={{ fontWeight: 600, minWidth: 96 }}>Holder library</span>
+            {holderLibrarySetupComplete
+              ? <span className="font-mono text-xs">{holderLibraryLocation?.fileName}</span>
+              : <span className="text-sub text-xs">Not linked (optional)</span>}
+          </div>
+          <div className="text-sub text-xs" style={{ marginBottom: 8, paddingLeft: 22 }}>
+            Read-only. Enables browsing and assigning holders to each tool.
+          </div>
+          <div className="flex gap-8" style={{ paddingLeft: 22 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowHolderPicker(p => !p)}>
+              {showHolderPicker ? 'Cancel' : holderLibrarySetupComplete ? 'Change Holder Library…' : 'Set Up Holder Library…'}
+            </button>
+            {holderLibrarySetupComplete && (
+              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }}
+                onClick={() => { clearHolderLibraryLocation(); setShowHolderPicker(false); notify('Holder library removed', 'info'); }}>
+                <Trash2 size={13} /> Remove
+              </button>
+            )}
+          </div>
+          {showHolderPicker && (
+            <div style={{ marginTop: 16, paddingLeft: 22 }}>
+              <FilePicker
+                onSelect={async (loc) => {
+                  // Guard: the holder library must be a different file than the tool
+                  // library. Pointing both at the same item makes tool saves overwrite
+                  // the holder file (the "holders disappear in Fusion" symptom).
+                  if (libraryLocation && loc.itemId === libraryLocation.itemId) {
+                    notify('That is the tool library file — pick the separate holder library file instead.', 'error', 7000);
+                    return;
+                  }
+                  await setHolderLibraryLocation(loc);
+                  setShowHolderPicker(false);
+                  notify(`Holder library set to ${loc.fileName}`, 'success');
+                }}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Shop (name + default unit) — saved to shop_settings.json */}
@@ -440,54 +499,6 @@ export default function Settings() {
             </>
           )}
         </div>
-      </div>
-
-      {/* Holder library setup */}
-      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <Package size={16} style={{ color: 'var(--blue)' }} />
-          <h3 style={{ margin: 0 }}>Master-Holder Library</h3>
-        </div>
-        <p className="text-sub text-sm mb-16">
-          Link the Fusion 360 holder library so you can browse and assign holders to tools.
-        </p>
-
-        {holderLibrarySetupComplete ? (
-          <div>
-            <div className="flex items-center gap-8 mb-12">
-              <span className="text-sm" style={{ color: 'var(--green)' }}>✓ Configured</span>
-              <span className="text-sub text-xs font-mono">{holderLibraryLocation?.fileName}</span>
-            </div>
-            <div className="flex gap-8">
-              <button className="btn btn-secondary btn-sm" onClick={() => setShowHolderPicker(p => !p)}>
-                {showHolderPicker ? 'Cancel' : 'Change Holder Library'}
-              </button>
-              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }}
-                onClick={() => { clearHolderLibraryLocation(); setShowHolderPicker(false); notify('Holder library removed', 'info'); }}>
-                <Trash2 size={13} /> Remove
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div>
-            <div className="text-sub text-sm mb-12">No holder library configured.</div>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowHolderPicker(p => !p)}>
-              {showHolderPicker ? 'Cancel' : 'Set Up Holder Library'}
-            </button>
-          </div>
-        )}
-
-        {showHolderPicker && (
-          <div style={{ marginTop: 16 }}>
-            <FilePicker
-              onSelect={async (loc) => {
-                await setHolderLibraryLocation(loc);
-                setShowHolderPicker(false);
-                notify(`Holder library set to ${loc.fileName}`, 'success');
-              }}
-            />
-          </div>
-        )}
       </div>
 
       {/* Description rename */}

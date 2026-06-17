@@ -205,7 +205,7 @@ export function FilePicker({ onSelect, onCancel, cancelLabel = 'Skip for now' })
 // On selection, saves { hubId, projectId, folderId, itemId, fileName } via context.
 // Step 2: optionally pick the Master-Holder library before the app loads.
 export default function LibrarySetup({ canCancel = false, onCancel }) {
-  const { setLibraryLocation, setHolderLibraryLocation, signOutAll } = useApp();
+  const { setLibraryLocation, setHolderLibraryLocation, holderLibraryLocation, notify, signOutAll } = useApp();
   const [phase, setPhase] = useState('tool'); // 'tool' | 'holder'
   const [pendingToolLocation, setPendingToolLocation] = useState(null);
 
@@ -247,6 +247,12 @@ export default function LibrarySetup({ canCancel = false, onCancel }) {
       </p>
       <FilePicker
         onSelect={(loc) => {
+          // Guard: the tool library must be a different file than the holder
+          // library — otherwise tool saves overwrite the holder file.
+          if (holderLibraryLocation && loc.itemId === holderLibraryLocation.itemId) {
+            notify('That is the holder library file — pick the separate tool library file instead.', 'error', 7000);
+            return;
+          }
           setPendingToolLocation(loc);
           setPhase('holder');
         }}
