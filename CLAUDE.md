@@ -460,7 +460,9 @@ Key holder object fields:
 }
 ```
 
-`holders` and `holderLibraryLocation` are available via `useApp()`. The holder library location is stored in localStorage (`aps_holder_library_location`). If not configured, holders are unavailable in AssemblyForm (picker disabled) and a prompt in Settings guides setup.
+`holders` and `holderLibraryLocation` are available via `useApp()`. The holder library location is stored in localStorage (`aps_holder_library_location`). If not configured, holders are unavailable in AssemblyForm (picker disabled).
+
+**Linking the tool and holder libraries** — both are linked from Settings via inline `FilePicker` components (same flow as the holder picker; no full-page takeover). The "Fusion Libraries (Autodesk)" card in Settings holds both pickers. `beginChangeLibrary` / `changingLibrary` still exist in AppContext/App.jsx and still trigger the full-page `LibrarySetup` flow when there is **no** library location yet (first-time setup only) — but they are **not used from Settings** for changing an already-linked library. Do not re-add `beginChangeLibrary` calls to Settings.jsx. A same-file guard blocks linking the same physical file (by `itemId`) as both tool and holder library — this is applied in both the Settings inline picker and in `LibrarySetup` (first-run tool picker).
 
 -----
 
@@ -617,9 +619,11 @@ src/
     LibrarySetup.jsx              # First-run APS library location picker
     LoginScreen.jsx               # APS PKCE login gate (unauthorized visitors)
     Settings.jsx                  # Settings — one of 4 top-bar chrome-style tabs
-                                  # Sections: Account (sign-out), Setup & Import (5-step tracker),
-                                  # Tool Library, Shop (+ Save button), Machine Numbers, ProShop
-                                  # Export, Tool Metadata, Holder Library, Rename, Advanced
+                                  # Sections: Account (sign-out), Setup & Import (6-step tracker —
+                                  # the Fusion Libraries (tool + holder pickers) and Tool Metadata
+                                  # (Google Drive) config panels are embedded INSIDE their steps,
+                                  # not separate cards), Shop (+ Save button), Machine Numbers,
+                                  # ProShop Export, Rename, Advanced
     ToolExtractorTab.jsx          # Hosts the tool-extractor image/spec extraction UI
     Toast.jsx                     # Fixed bottom-right toast stack
 
@@ -819,7 +823,7 @@ Three shop-wide JSON files live in the **same Drive root as `tool_metadata.json`
 
 - **`vendor_registry.json`** (default = `DEFAULT_VENDOR_REGISTRY` in `vendorRegistry.js`) — the unified entity list (see `vendorRegistry.js` above). Each tool's `purchasing.manufacturers[]` / `vendors[]` are intended to reference entity IDs from this list; the `is_manufacturer` / `is_vendor` flags determine which picker an entity appears in.
 
-- **`shop_settings.json`** (default in `sharedDefaults.js`) — `{ shop_name, default_units, machine_number:{start,skip}, import:{...}, aps:{...}, setup_steps:{fusionConnected,normalized,proshopMerged,proshopPhotos,machineNumbers,proshopExported} }`. **Wired into behavior**: `default_units` is mirrored to `setDefaultUnit` on load; `machine_number.{start,skip}` drives renumber/add-tool. `setup_steps` holds ISO timestamps written by `markSetupStepInSettings()` (AppContext) each time a setup step completes — shared across devices via Drive. The 5 canonical `SETUP_STEPS` (exported from AppContext) are: `fusionConnected`, `normalized`, `proshopMerged`, `machineNumbers`, `proshopExported`; `proshopPhotos` is a sub-step tracked in `setup_steps` but not in `SETUP_STEPS`. **Still NOT wired**: the `import` and `aps` sub-objects (the import/APS flows don't write them back yet).
+- **`shop_settings.json`** (default in `sharedDefaults.js`) — `{ shop_name, default_units, machine_number:{start,skip}, import:{...}, aps:{...}, setup_steps:{fusionConnected,metadataConnected,normalized,proshopMerged,proshopPhotos,machineNumbers,proshopExported} }`. **Wired into behavior**: `default_units` is mirrored to `setDefaultUnit` on load; `machine_number.{start,skip}` drives renumber/add-tool. `setup_steps` holds ISO timestamps written by `markSetupStepInSettings()` (AppContext) each time a setup step completes — shared across devices via Drive. The **6 canonical `SETUP_STEPS`** (exported from AppContext, in order) are: `fusionConnected`, `metadataConnected`, `normalized`, `proshopMerged`, `machineNumbers`, `proshopExported`; `proshopPhotos` is a sub-step tracked in `setup_steps` but not in `SETUP_STEPS`. **`metadataConnected` is step 2** — it completes the moment Google Drive connects (a declarative effect in AppContext marks it for both live sign-in and a restored session); seeding derives it from `googleRef.current`, and `loadSetupProgress`'s migration back-fills it (and `machineNumbers`) on an established library (`proshopExported` true). **Still NOT wired**: the `import` and `aps` sub-objects (the import/APS flows don't write them back yet).
 
 ### Editor UIs (`/materials`, `/vendors`, Settings)
 
@@ -827,7 +831,7 @@ Three editor pages, reached from the top-bar chrome-style tabs (**Library**, **M
 
 - **`MaterialsEditor.jsx`** (`/materials`) — ISO Groups (editable color swatch / label / **code**, ISO groups not deletable, `+ Add Group` for custom) + Sub-materials (group-filter tabs, inline label / **code** / notes, `+ Add Material`). The `code` is the short token used in preset names. Autosaves to `materials.json` on each change via `saveMaterials`. **This library is the only source of material** in the app (the preset picker + naming + coloring all read it) and **group colors drive preset color coding** — see Preset color coding below.
 - **`VendorsEditor.jsx`** (`/vendors`) — one list over `vendorRegistry.entities`; per row: name, **MFG**/**VENDOR** toggle pills (both can be active), **Has Own #** (vendor only), expand-to-edit URL patterns with a live preview. Autosaves to `vendor_registry.json` via `saveVendorRegistry` (which also refreshes the active registry).
-- **`Settings.jsx`** — 4 sections around the 5-step workflow: **Account** (sign-out), **Setup & Import** (unified checklist with live-data warnings + Drive timestamps), **Tool Library**, **Shop** (name + default-unit + Save button), **Machine Numbers**, **ProShop Export**, **Tool Metadata**, **Holder Library**, **Rename**, **Advanced**. The "Save Shop Settings" button is inside the Shop card and writes `shop_settings.json` (unit toggle takes effect immediately). The Setup & Import tracker reads `setupProgress` (localStorage flags) + `shopSettings.setup_steps` (Drive timestamps) and calls `markSetupStepInSettings` to write both.
+- **`Settings.jsx`** — sections around the 6-step workflow: **Account** (sign-out), **Setup & Import** (unified checklist with live-data warnings + Drive timestamps), **Shop** (name + default-unit + Save button), **Machine Numbers**, **ProShop Export**, **Rename**, **Advanced**. The Setup & Import checklist **embeds two config panels inline under their steps** (not as separate cards): the **Fusion Libraries** panel (tool + holder inline pickers) under step 1 `fusionConnected`, and the **Tool Metadata (Google Drive)** panel under step 2 `metadataConnected` — both are plain `render*Panel()` functions (NOT components) so the `FilePicker`'s navigation state survives re-renders. Steps with an embedded panel render no `StepAction` button (they self-serve). The Tool Metadata panel deliberately does **not** show the Fusion library file name (that's the Fusion Libraries step's job). The "Save Shop Settings" button is inside the Shop card and writes `shop_settings.json` (unit toggle takes effect immediately). The Setup & Import tracker reads `setupProgress` (localStorage flags) + `shopSettings.setup_steps` (Drive timestamps) and calls `markSetupStepInSettings` to write both.
 
 ### Preset color coding (from `materials.json` group colors)
 

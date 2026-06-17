@@ -38,6 +38,7 @@ export const DEFAULT_SHOP_SETTINGS = {
   // used for the in-app banner). proshopPhotos is a sub-step of proshopMerged.
   setup_steps: {
     fusionConnected: null,
+    metadataConnected: null,
     normalized: null,
     proshopMerged: null,
     proshopPhotos: null,
