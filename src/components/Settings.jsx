@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, ListChecks, Download, X, FolderOpen } from 'lucide-react';
+import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, ListChecks, Download, X, FolderOpen, Upload, LogOut, User } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { generateMachineNumbers } from '../schema/toolSchema.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
@@ -11,14 +10,13 @@ import { SetupGuideSummary } from './SetupGuide.jsx';
 import { exportFullLibrary } from '../utils/proShopExport.js';
 
 export default function Settings() {
-  const navigate = useNavigate();
   const {
     tools, fetchRawLibrary, renumberLibrary, isSaving, markSetupStep,
     libraryLocation, holderLibraryLocation, holderLibrarySetupComplete,
     setHolderLibraryLocation, clearHolderLibraryLocation, notify,
     googleAuthenticated, metadataSkipped, user: googleUser,
     fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
-    shopSettings, saveShopSettings, beginChangeLibrary,
+    shopSettings, saveShopSettings, beginChangeLibrary, signOutAll,
   } = useApp();
 
   const [showHolderPicker, setShowHolderPicker] = useState(false);
@@ -153,10 +151,51 @@ export default function Settings() {
   return (
     <div>
       <div className="flex items-center gap-8 mb-20">
-        <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')}><ArrowLeft size={14} /> Back</button>
         <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
           <SettingsIcon size={16} /> Settings
         </h2>
+      </div>
+
+      {/* Account */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <User size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Account</h3>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <div className="text-sm" style={{ fontWeight: 500 }}>
+              Autodesk authentication active
+            </div>
+            {googleAuthenticated && googleUser?.email && (
+              <div className="text-sub text-sm" style={{ marginTop: 2 }}>
+                Google: {googleUser.email}
+              </div>
+            )}
+            {!googleAuthenticated && (
+              <div className="text-sub text-sm" style={{ marginTop: 2 }}>
+                Google Drive not connected (metadata off)
+              </div>
+            )}
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={signOutAll}>
+            <LogOut size={14} /> Sign out
+          </button>
+        </div>
+      </div>
+
+      {/* Import — one-time library / ProShop CSV import */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Upload size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Import</h3>
+        </div>
+        <p className="text-sub text-sm mb-16">
+          One-time import of a Fusion 360 JSON library or ProShop CSV to populate the tool library.
+        </p>
+        <a href="#/import" className="btn btn-secondary" style={{ display: 'inline-flex' }}>
+          <Upload size={14} /> Open Import…
+        </a>
       </div>
 
       {/* Tool library (APS) — change which Fusion library file is loaded */}

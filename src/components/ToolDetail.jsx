@@ -2,11 +2,10 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
-  Tag, Ruler, StickyNote, Clock, Package, Wrench, AlertTriangle, Camera, X,
+  Tag, Ruler, StickyNote, Clock, Wrench, AlertTriangle, Camera, X,
   ChevronDown, ChevronRight,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
-import HolderPicker from './HolderPicker.jsx';
 import AssemblyCard, { holderColor } from './AssemblyCard.jsx';
 import AssemblyForm from './AssemblyForm.jsx';
 import ReconcileModal from './ReconcileModal.jsx';
@@ -166,7 +165,7 @@ export default function ToolDetail() {
             stays visible while scrolling a long form. */}
         <div className="tool-sticky-header">
           <button className="btn btn-ghost btn-sm tool-sticky-header-back" onClick={() => { setEditing(false); clearEditParam(); }}>
-            <ArrowLeft size={14} /> Back
+            <ArrowLeft size={14} /> Cancel
           </button>
           <span className="tool-sticky-header-icon">
             <ToolTypeIcon type={tool.tool_type} size={30} />
@@ -316,18 +315,6 @@ export default function ToolDetail() {
               onSave={async (updatedTool) => {
                 try {
                   await saveTool(updatedTool);
-                } catch { /* toast handled in context */ }
-              }}
-            />
-
-            <HolderSection
-              tool={tool}
-              holders={holders}
-              holderLibrarySetupComplete={!!holderLibraryLocation}
-              onSelectHolder={async (guid) => {
-                try {
-                  await saveTool({ ...tool, selected_holder_guid: guid });
-                  notify('Holder updated', 'success');
                 } catch { /* toast handled in context */ }
               }}
             />
@@ -534,67 +521,6 @@ function SidebarBtn({ icon: Icon, label, tip, onClick, style, className = '' }) 
   );
 }
 
-function HolderSection({ tool, holders, holderLibrarySetupComplete, onSelectHolder }) {
-  const navigate = useNavigate();
-  const [showPicker, setShowPicker] = useState(false);
-
-  const selectedHolder = tool.selected_holder_guid
-    ? holders.find(h => h.guid === tool.selected_holder_guid)
-    : null;
-
-  if (!holderLibrarySetupComplete) {
-    return (
-      <Section title="Holder" icon={Package}>
-        <span className="text-sub text-sm">
-          Holder library not configured —{' '}
-          <button
-            className="btn btn-ghost btn-sm"
-            style={{ padding: 0, textDecoration: 'underline', fontWeight: 400, fontSize: 13 }}
-            onClick={() => navigate('/settings')}
-          >
-            set up in Settings
-          </button>
-        </span>
-      </Section>
-    );
-  }
-
-  const hColor = selectedHolder ? holderColor(selectedHolder.description) : null;
-
-  return (
-    <Section title="Holder" icon={Package}>
-      {selectedHolder ? (
-        <div style={{ marginBottom: 8 }}>
-          <span className="holder-pill" style={hColor ? { background: hColor.bg, borderColor: hColor.border, color: hColor.text } : {}}>
-            {selectedHolder.description}
-          </span>
-          <div className="text-sub text-sm" style={{ marginTop: 4 }}>
-            Gauge Length: {convertLength(selectedHolder.gaugeLength ?? 0, selectedHolder.unit, tool.unit).toFixed(3)} {unitAbbr(tool.unit)}
-            {selectedHolder.vendor ? ` · ${selectedHolder.vendor}` : ''}
-          </div>
-        </div>
-      ) : (
-        <div className="detail-field-empty text-sm" style={{ marginBottom: 8 }}>
-          No holder selected
-        </div>
-      )}
-      <button className="btn btn-secondary btn-sm" onClick={() => setShowPicker(true)}>
-        {selectedHolder ? 'Change Holder' : 'Select Holder'}
-      </button>
-
-      {showPicker && (
-        <HolderPicker
-          currentGuid={tool.selected_holder_guid || null}
-          onSelect={async (guid) => {
-            setShowPicker(false);
-            await onSelectHolder(guid);
-          }}
-          onClose={() => setShowPicker(false)}
-        />
-      )}
-    </Section>
-  );
-}
 
 function AssembliesSection({ tool, holders, onSave }) {
   const [showForm, setShowForm] = useState(false);

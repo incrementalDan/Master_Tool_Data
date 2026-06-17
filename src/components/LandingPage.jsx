@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, X, Plus, LayoutGrid, List, PackageOpen, FolderOpen } from 'lucide-react';
+import { Search, X, Plus, LayoutGrid, List, PackageOpen, FolderOpen, GitMerge } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { applyFilters } from '../services/searchEngine.js';
 import ToolTypeGrid from './ToolTypeGrid.jsx';
@@ -112,7 +112,18 @@ export default function LandingPage() {
   }
 
   return (
-    <div>
+    <div className="landing-layout">
+      <aside className="landing-sidebar">
+        <button
+          className="tool-sidebar-btn"
+          onClick={() => navigate('/merge')}
+          title="Sync proven speeds & feeds from a job back to the master library"
+        >
+          <GitMerge size={22} />
+          <span>Sync Job</span>
+        </button>
+      </aside>
+      <div className="landing-main">
       {error && (
         <div className="error-banner" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <span>{error}</span>
@@ -230,6 +241,7 @@ export default function LandingPage() {
           {filtered.map(tool => <ToolCard key={tool.id} tool={tool} />)}
         </div>
       )}
+      </div>
     </div>
   );
 }
