@@ -244,12 +244,14 @@ function ThreadBlock({ tool, mode, setField, fields }) {
             {edit ? (
               <div className="btn-toggle">
                 {[['cut', 'Cut'], ['form', 'Form']].map(([v, l]) => (
-                  <button key={v} type="button" className={(tool.tap_sub_type || 'cut') === v ? 'active' : ''}
+                  <button key={v} type="button" className={tool.tap_sub_type === v ? 'active' : ''}
                     onClick={() => setField('tap_sub_type', v)}>{l}</button>
                 ))}
               </div>
             ) : (
-              <span className="machine-num-badge" style={{ textTransform: 'capitalize' }}>{tool.tap_sub_type === 'form' ? 'Form' : 'Cut'}</span>
+              <span className={tool.tap_sub_type ? 'machine-num-badge' : 'detail-field-value detail-field-empty'} style={tool.tap_sub_type ? { textTransform: 'capitalize' } : {}}>
+                {tool.tap_sub_type ? (tool.tap_sub_type === 'form' ? 'Form' : 'Cut') : '—'}
+              </span>
             )}
           </div>
           <div className="field-group" style={{ flex: '0 0 auto' }}>

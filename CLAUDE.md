@@ -1156,10 +1156,23 @@ These fields are **never written for milling tools** — `normalizePreset` strip
 
 All metadata-only (never written to Fusion) — added to `tool_metadata.json` via `buildMetadataTool` / `mergeFusionAndMetadata`:
 
-- **`tap_sub_type`** (`'cut' | 'form'`) — 2-way chip on the tap page. An independent **`is_sti`** boolean (STI/Helicoil thread-insert tap) sits alongside it — a tap can be both an STI tap and a cut or form tap, so this is no longer a 3-way cut/form/sti group. Boolean metadata fields like `is_sti` (and `tsc_capable`) automatically get correct Yes/No facet options — `searchEngine.js`'s boolean-facet handling is generalized to any `type: 'boolean'` registry field, not hardcoded.
+- **`tap_sub_type`** (`'cut' | 'form'`, **no default** — stored as `''` when unset) — 2-way chip on the tap page. The view renders "—" when empty; the edit toggle has no pre-selected state. **Never default to `'cut'`** — a form tap imported before this field was set would be mis-labelled. An independent **`is_sti`** boolean (STI/Helicoil thread-insert tap) sits alongside it — a tap can be both an STI tap and a cut or form tap, so this is no longer a 3-way cut/form/sti group. Boolean metadata fields like `is_sti` (and `tsc_capable`) automatically get correct Yes/No facet options — `searchEngine.js`'s boolean-facet handling is generalized to any `type: 'boolean'` registry field, not hardcoded.
 - **`point_type`** (`appliesToTypes: ['tap']`) — dropdown: Bottoming / Modified Bottoming / Plug / Taper / Spiral Point / Spiral Flute. **Tap-only** (previously also shown for drill/center drill/spot drill/counter sink — narrowed to taps only).
 - **`tip_to_first_thread`** — the Z distance from the tap's tip to where the first full thread starts (chamfer length). `canonicalUnit: 'native'` like other lengths — stored in the tool's own unit, no conversion needed within a tool. ProShop column: `Tip to 1st Full Thread` (export id `tipTo1stFullThread`) — see ProShop Field Priority Rules.
 - **Thread mill capability fields** (`appliesToTypes: ['thread mill']`): `tpi_min` / `tpi_max` — the TPI range the mill can cut, distinct from `pitch` (the specific thread designation it's set up for) — and `thread_profile_angle` (degrees).
+
+### ProShop Thread column parsing (`resolveThreadSize` / `threadKey`)
+
+ProShop exports thread designations without UN-series suffixes and encodes STI/Helicoil as an inline token. The app normalizes both sides so they match:
+
+- **`threadKey(s)`** (`src/schema/toolSchema.js`) — strips `unc`/`unf`/`unef`/`uns`/`un` and whitespace/`#` to produce a comparison key. Used on both sides of any thread match (ProShop import and any future lookup).
+- **`resolveThreadSize(raw)`** (`src/schema/toolSchema.js`) — parses a raw ProShop Thread value:
+  - Detects and strips `STI` / `Helicoil` tokens → sets `is_sti: true`
+  - Detects metric threads (`M<n>` prefix) → sets `thread_unit: 'metric'`
+  - Normalizes via `threadKey` and matches against `INCH_THREAD_SIZES` / `METRIC_THREAD_SIZES` to find the canonical list entry (restoring the UNF/UNC suffix we store)
+  - Returns `{ pitch, is_sti, thread_unit }` — spread directly onto the tool object
+  - Called with `r['Thread'] || r['Pitch'] || ''` (ProShop uses the `Thread` column; some exports use `Pitch`)
+- **`flute_design`** (`fieldRegistry.js`) — `appliesToTypes` excludes `tap` (`NO_TAP` constant). Taps don't have a flute design field.
 
 -----
 

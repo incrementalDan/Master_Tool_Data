@@ -175,7 +175,7 @@ export function extractorToTool(f) {
     cutting_direction: f.cuttingDirection || 'Right Hand',
     pitch: f.pitch || '',
     tap_class: f.tapClass || '',
-    tap_sub_type: f.tapSubType || 'cut',
+    tap_sub_type: f.tapSubType || '',   // no default — cut/form must be set explicitly (form taps differ)
     is_sti: f.isSTI || false,
     tap_thread_unit: f.threadUnit || '',
     min_thread_pitch: parseFloat(f.minThreadPitch) || null,
@@ -876,6 +876,43 @@ export const METRIC_THREAD_SIZES = [
   'Custom...',
 ];
 
+// Normalize a thread designation to a comparison key so ProShop's bare strings
+// match our canonical list. Lowercases, drops the UN-series suffix (UNC/UNF/UNEF/
+// UNS/UN — implied for inch threads, which is why ProShop omits it), and strips
+// '#' and spaces. NPT/NPTF are intentionally NOT stripped (pipe threads change
+// the form and are always spelled out). E.g. "5/16-24 UNF", "5/16-24", and
+// "#10-32 UNF" vs "10-32" all collapse to a stable key.
+export function threadKey(s) {
+  return (s || '')
+    .toLowerCase()
+    .trim()
+    .replace(/\bun[cfse]*\b/g, '')   // unc / unf / unef / uns / un
+    .replace(/[#\s]/g, '');
+}
+
+// Resolve a raw ProShop "Thread" value to our internal thread fields. ProShop
+// stores the bare designation ("5/16-24") with no UN-series suffix, and encodes
+// STI/Helicoil taps by appending "STI" to the same field ("5/16-24 STI"). This
+// maps that to our canonical "5/16-24 UNF", flags STI, and detects inch vs metric.
+//   → { pitch, is_sti, thread_unit }   (thread_unit: 'inch' | 'metric' | '')
+export function resolveThreadSize(raw) {
+  const s0 = (raw || '').trim();
+  if (!s0) return { pitch: '', is_sti: false, thread_unit: '' };
+
+  // STI / Helicoil is carried as a token in the same field — pull it out and
+  // resolve against the PARENT thread (the oversized tap size is not stored).
+  const is_sti = /\bsti\b/i.test(s0) || /\bhelicoil\b/i.test(s0);
+  const cleaned = s0.replace(/\bsti\b/ig, '').replace(/\bhelicoil\b/ig, '').replace(/\s+/g, ' ').trim();
+
+  const metric = /^m\s*\d/i.test(cleaned);
+  const thread_unit = metric ? 'metric' : 'inch';
+  const list = (metric ? METRIC_THREAD_SIZES : INCH_THREAD_SIZES).filter(x => x !== 'Custom...');
+
+  const key = threadKey(cleaned);
+  const canonical = list.find(x => threadKey(x) === key);
+  return { pitch: canonical || cleaned, is_sti, thread_unit };
+}
+
 // Tap LIMIT TOLERANCE ("tap_class") option lists — H1-H6 / 4H-7G are pitch-diameter
 // limit tolerances (how loose/tight the thread is cut), set by the tap manufacturer.
 // H3 / 6H are the standard/most-common defaults for inch and metric machine taps.
@@ -1341,9 +1378,9 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     axial_distance: meta.axial_distance ?? null,
     pitch: meta.pitch || '',
     tap_class: meta.tap_class || '',
-    // New unified-tap fields — defaulting absent metadata to 'cut'/'' is the migration:
-    // pre-unification tap form/cut tools simply pick up these defaults on first load.
-    tap_sub_type: meta.tap_sub_type || 'cut',
+    // Unified-tap fields — sub-type has NO default (cut vs form must be set
+    // explicitly; assuming 'cut' would mis-spec a form tap).
+    tap_sub_type: meta.tap_sub_type || '',
     is_sti: meta.is_sti || false,
     tap_thread_unit: meta.tap_thread_unit || '',
     // class_of_fit (1B/2B/3B) is distinct from tap_class/tap_class limit tolerance —
@@ -1442,7 +1479,7 @@ export function buildMetadataTool(tool) {
     min_ooh: tool.min_ooh ?? null,
     pitch: tool.pitch || '',
     tap_class: tool.tap_class || '',
-    tap_sub_type: tool.tap_sub_type || 'cut',
+    tap_sub_type: tool.tap_sub_type || '',
     is_sti: tool.is_sti || false,
     tap_thread_unit: tool.tap_thread_unit || '',
     class_of_fit: tool.class_of_fit || '',
@@ -1722,7 +1759,7 @@ export function newTool(toolType = 'flat end mill') {
     pitch: '',
     thread_pitch: null,
     tap_class: '',
-    tap_sub_type: 'cut',
+    tap_sub_type: '',
     is_sti: false,
     tap_thread_unit: '',
     class_of_fit: '',

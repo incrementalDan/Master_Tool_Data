@@ -218,7 +218,7 @@ const PS_MAIN_COLS=[
   ["roundShank",f=>ROUND_SHANK_TYPES.has(f.toolType)?"true":"false"],["toolGroupLetter",f=>f.grouping||AUTO_GROUP[f.toolType]||"M"],
   ["pitch",f=>f.pitch||""],["fluteType",f=>f.fluteType||""],["lengthBelowShankDiameter",f=>f.minOoh?String(parseFloat(f.minOoh)):""],
   ["tapClass",f=>f.tapClass||""],["threadsPerInch",f=>calcTPI(f.pitch)||""],["thread",f=>f.pitch||""],
-  ["threadType",f=>f.toolType!=="tap"?"":f.tapSubType==="form"?"Form":"Cut"],
+  ["threadType",f=>f.toolType!=="tap"?"":f.tapSubType==="form"?"Form":f.tapSubType==="cut"?"Cut":""],
   ["fullProfile",f=>f.fullProfile?"true":""],["stubJobber",f=>f.stubJobber||""],["backsideCapable",f=>f.backsideCapable?"true":""],
   ["doubleEnded",f=>f.doubleEnded?"true":""],["cuttingDirection",f=>f.cuttingDirection||"Right Hand"],
   ["taper",f=>f.taperAngle||""],["tipDiameter",f=>f.tipDiameter||""],
@@ -285,7 +285,7 @@ const BLANK={
   cuttingDirection:"Right Hand",tipDiameter:"",lowerRadius:"",upperRadius:"",profileRadius:"",axialDistance:"",
   psToolId:"",    // ProShop Tool # → Fusion tool_productId (col 126)
   location:"",    // e.g. LC-140 → Fusion tool_vendor (col 165)
-  tapSubType:"cut",isSTI:false,tpiMin:"",tpiMax:"",threadProfileAngle:"",tipToFirstFullThread:"",
+  tapSubType:"",isSTI:false,tpiMin:"",tpiMax:"",threadProfileAngle:"",tipToFirstFullThread:"",
   purchasing:{manufacturers:[],vendors:[]},  // { manufacturers: [{id,name,edp,edp_url,mfg_num,mfg_num_url,order}], vendors: [{id,manufacturer_id,name,vendor_num,vendor_num_url,price,order}] }
 };
 const TT=[
@@ -587,7 +587,7 @@ export default function App({ onExtract } = {}){
         centerCutting:!!p.centerCutting,fluteType:p.fluteType||"",cost:p.cost||"",
         tapClass:p.tapClass||"",pointType:p.pointType||"",shoulderLen:p.shoulderLen||"",ooh:p.ooh||"",
         taperAngle:p.taperAngle||"",minThreadPitch:p.minThreadPitch||"",maxThreadPitch:p.maxThreadPitch||"",
-        tapSubType:["cut","form"].includes(p.tapSubType)?p.tapSubType:"cut",isSTI:!!p.isSTI,
+        tapSubType:["cut","form"].includes(p.tapSubType)?p.tapSubType:"",isSTI:!!p.isSTI,
         tpiMin:p.tpiMin||"",tpiMax:p.tpiMax||"",threadProfileAngle:p.threadProfileAngle||"",
         fullProfile:!!p.fullProfile,stubJobber:p.stubJobber||"",backsideCapable:!!p.backsideCapable,
         doubleEnded:!!p.doubleEnded,cuttingDirection:p.cuttingDirection||"Right Hand",
@@ -609,7 +609,7 @@ export default function App({ onExtract } = {}){
         coolant:"flood",tapClass:p.tapClass||"",pointType:p.pointType||"",
         shoulderLen:p.shoulderLen||"",ooh:p.ooh||"",taperAngle:p.taperAngle||"",
         minThreadPitch:p.minThreadPitch||"",maxThreadPitch:p.maxThreadPitch||"",
-        tapSubType:["cut","form"].includes(p.tapSubType)?p.tapSubType:"cut",isSTI:!!p.isSTI,
+        tapSubType:["cut","form"].includes(p.tapSubType)?p.tapSubType:"",isSTI:!!p.isSTI,
         tpiMin:p.tpiMin||"",tpiMax:p.tpiMax||"",threadProfileAngle:p.threadProfileAngle||"",
         fullProfile:!!p.fullProfile,stubJobber:p.stubJobber||"",
         backsideCapable:!!p.backsideCapable,doubleEnded:!!p.doubleEnded,
