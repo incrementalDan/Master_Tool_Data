@@ -50,7 +50,16 @@ function loadStoredHolderLocation() {
 function loadSetupProgress() {
   try {
     const raw = localStorage.getItem(SETUP_PROGRESS_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const progress = raw ? JSON.parse(raw) : null;
+    // Migration: shops that completed the old 4-step workflow before the
+    // 'machineNumbers' step was added have all 4 old flags true but no
+    // machineNumbers key. Back-fill it so the banner goes away and the
+    // celebration modal fires correctly on upgrade.
+    if (progress && progress.proshopExported && progress.machineNumbers === undefined) {
+      progress.machineNumbers = true;
+      localStorage.setItem(SETUP_PROGRESS_KEY, JSON.stringify(progress));
+    }
+    return progress;
   } catch { return null; }
 }
 
@@ -346,10 +355,13 @@ export function AppProvider({ children }) {
       ...current,
       setup_steps: { ...(current.setup_steps || {}), [key]: new Date().toISOString() },
     };
+    // Optimistic dispatch so shopSettings state is immediately current — prevents
+    // a concurrent saveShop() read racing against the in-flight Drive write and
+    // overwriting the timestamp with a stale shopSettings value.
+    dispatch({ type: 'SET_SHOP_SETTINGS', shopSettings: updated });
     const { SHARED_FILES } = driveService;
     driveService.saveSharedJson(SHARED_FILES.shopSettings.name, SHARED_FILES.shopSettings.cacheKey, updated)
-      .then(() => dispatch({ type: 'SET_SHOP_SETTINGS', shopSettings: updated }))
-      .catch(() => {}); // silently ignore — localStorage flag already set
+      .catch(() => {}); // silently ignore — localStorage flag + optimistic state already set
   }, []);
 
   // One-time-ever flag so the congratulations popup doesn't fire again after dismissal.
@@ -359,8 +371,8 @@ export function AppProvider({ children }) {
   const setLibraryLocation = useCallback((location) => {
     localStorage.setItem(LOCATION_KEY, JSON.stringify(location));
     dispatch({ type: 'SET_LIBRARY_LOCATION', location });
-    dispatch({ type: 'MARK_SETUP_STEP', key: 'fusionConnected' });
-  }, []);
+    markSetupStepInSettings('fusionConnected');
+  }, [markSetupStepInSettings]);
 
   const clearLibraryLocation = useCallback(() => {
     localStorage.removeItem(LOCATION_KEY);
@@ -1048,20 +1060,10 @@ export function AppProvider({ children }) {
       onProgress?.({ phase: 'saving', done: photos.length, total: photos.length, current: '' });
       await driveService.saveAllMetadata([...metaById.values()]);
       for (const t of updatedTools) dispatch({ type: 'UPDATE_TOOL', tool: t });
-      // Stamp the proshopPhotos setup step (localStorage + Drive timestamp)
-      dispatch({ type: 'MARK_SETUP_STEP', key: 'proshopPhotos' });
-      const current = shopSettingsRef.current || {};
-      const updated = {
-        ...current,
-        setup_steps: { ...(current.setup_steps || {}), proshopPhotos: new Date().toISOString() },
-      };
-      const { SHARED_FILES } = driveService;
-      driveService.saveSharedJson(SHARED_FILES.shopSettings.name, SHARED_FILES.shopSettings.cacheKey, updated)
-        .then(() => dispatch({ type: 'SET_SHOP_SETTINGS', shopSettings: updated }))
-        .catch(() => {});
+      markSetupStepInSettings('proshopPhotos');
     }
     return summary;
-  }, [notify]);
+  }, [notify, markSetupStepInSettings]);
 
   // ─── Reconcile a tool against the live Fusion library ─────────────────────
   // Detects entries that were dumped straight into the Fusion library (sharing
@@ -1345,7 +1347,7 @@ export function AppProvider({ children }) {
       const dupCount = logicalTools.length - combined.length;
 
       await saveFullLibrary(combined);
-      dispatch({ type: 'MARK_SETUP_STEP', key: 'normalized' });
+      markSetupStepInSettings('normalized');
       const base = `Normalized ${untracked.length} tool${untracked.length === 1 ? '' : 's'} to the multi-instance model`;
       notify(dupCount > 0
         ? `${base}; combined ${dupCount} ProShop-number duplicate${dupCount === 1 ? '' : 's'}`
@@ -1356,7 +1358,7 @@ export function AppProvider({ children }) {
       notify(`Normalize failed: ${err.message}`, 'error', 7000);
       throw err;
     }
-  }, [downloadFusionList, saveFullLibrary, notify]);
+  }, [downloadFusionList, saveFullLibrary, notify, markSetupStepInSettings]);
 
   const clearError = useCallback(() => dispatch({ type: 'CLEAR_ERROR' }), []);
 

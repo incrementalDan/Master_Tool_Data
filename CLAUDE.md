@@ -460,7 +460,7 @@ Key holder object fields:
 }
 ```
 
-`holders` and `holderLibraryLocation` are available via `useApp()`. The holder library location is stored in localStorage (`aps_holder_library_location`). If not configured, the Holder section in ToolDetail shows a "set up in Settings" prompt.
+`holders` and `holderLibraryLocation` are available via `useApp()`. The holder library location is stored in localStorage (`aps_holder_library_location`). If not configured, holders are unavailable in AssemblyForm (picker disabled) and a prompt in Settings guides setup.
 
 -----
 
@@ -548,7 +548,8 @@ src/
   context/
     AppContext.jsx                 # Global state + all async actions (saveTool, mergeTool, etc.)
                                   # Exposes: tools, holders, holderLibraryLocation, isSaving,
-                                  #          user, notify, mergeTool, saveTool, deleteTool, etc.
+                                  #          user, notify, mergeTool, saveTool, deleteTool,
+                                  #          markSetupStep, markSetupStepInSettings, etc.
 
   schema/
     fieldRegistry.js              # Central field registry — source of truth for
@@ -584,10 +585,12 @@ src/
 
   components/
     LandingPage.jsx               # Search + facets + sort + grid/list toggle
+                                  # Uses .landing-layout (flex): .landing-sidebar (72px, Sync Job btn)
+                                  # + .landing-main (flex:1, all search/results content)
     ToolDetail.jsx                # Detail view with frozen left action sidebar + sticky header
-                                  # Sections: Identity (incl. machine tool#), Geometry, Holder,
+                                  # Sections: Identity (incl. machine tool#), Geometry,
                                   #           Assemblies, Presets, Setup, History, Merge History
-                                  # Right sidebar: Notes & Tags only
+                                  # Right sidebar: Identity, Photo, Purchasing, Notes & Tags, Files
     ToolForm.jsx                  # Edit form with sticky action bar + dirty guard
     ToolCard.jsx                  # Grid and list card variants with hover actions
                                   # Uses data-field tokens: .description-badge, .proshot-pill,
@@ -596,7 +599,8 @@ src/
     FacetFilters.jsx              # Cascading facet filter UI
     AddToolFlow.jsx               # New tool flow (extractor or manual)
     ImportFlow.jsx                # Bulk Fusion JSON / ProShop CSV import
-                                  # Also hosts the "Import ProShop Photos" button → ImportPhotosModal
+                                  # Reached via Settings → Import. Step 2 hosts Import ProShop Photos
+                                  # as a sub-section (button → ImportPhotosModal)
     ImportPhotosModal.jsx         # One-time ProShop photo import: Drive folder browser +
                                   # progress/summary (see ProShop Integration → ProShop photo import)
     MetadataConnect.jsx           # Google Drive connect flow + shared-drive-aware folder picker
@@ -612,7 +616,10 @@ src/
     PresetPanel.jsx               # Preset editor panel (speeds/feeds per preset)
     LibrarySetup.jsx              # First-run APS library location picker
     LoginScreen.jsx               # APS PKCE login gate (unauthorized visitors)
-    Settings.jsx                  # Settings (library/holder locations, Google Drive connect)
+    Settings.jsx                  # Settings — one of 4 top-bar chrome-style tabs
+                                  # Sections: Account (sign-out), Setup & Import (5-step tracker),
+                                  # Tool Library, Shop (+ Save button), Machine Numbers, ProShop
+                                  # Export, Tool Metadata, Holder Library, Rename, Advanced
     ToolExtractorTab.jsx          # Hosts the tool-extractor image/spec extraction UI
     Toast.jsx                     # Fixed bottom-right toast stack
 
@@ -812,15 +819,15 @@ Three shop-wide JSON files live in the **same Drive root as `tool_metadata.json`
 
 - **`vendor_registry.json`** (default = `DEFAULT_VENDOR_REGISTRY` in `vendorRegistry.js`) — the unified entity list (see `vendorRegistry.js` above). Each tool's `purchasing.manufacturers[]` / `vendors[]` are intended to reference entity IDs from this list; the `is_manufacturer` / `is_vendor` flags determine which picker an entity appears in.
 
-- **`shop_settings.json`** (default in `sharedDefaults.js`) — `{ shop_name, default_units, machine_number:{start,skip}, import:{last_proshop_import,last_photo_import_folder_id}, aps:{last_used_hub_id,last_used_project_id} }`. **Wired into behavior** for `default_units` and `machine_number`: on load, `default_units` is mirrored into the localStorage cache the pure units helper reads (`setDefaultUnit`), so the shared file is the source of truth for the default unit; `generateMachineNumbers` / `getNextMachineNumber` take optional `(start, skip)` and `AppContext` passes `machine_number.{start,skip}` from `shopSettingsRef` on renumber/add. **Still NOT wired**: the `import` and `aps` sub-objects are display-only in Settings (the import/APS flows don't write them back yet).
+- **`shop_settings.json`** (default in `sharedDefaults.js`) — `{ shop_name, default_units, machine_number:{start,skip}, import:{...}, aps:{...}, setup_steps:{fusionConnected,normalized,proshopMerged,proshopPhotos,machineNumbers,proshopExported} }`. **Wired into behavior**: `default_units` is mirrored to `setDefaultUnit` on load; `machine_number.{start,skip}` drives renumber/add-tool. `setup_steps` holds ISO timestamps written by `markSetupStepInSettings()` (AppContext) each time a setup step completes — shared across devices via Drive. The 5 canonical `SETUP_STEPS` (exported from AppContext) are: `fusionConnected`, `normalized`, `proshopMerged`, `machineNumbers`, `proshopExported`; `proshopPhotos` is a sub-step tracked in `setup_steps` but not in `SETUP_STEPS`. **Still NOT wired**: the `import` and `aps` sub-objects (the import/APS flows don't write them back yet).
 
 ### Editor UIs (`/materials`, `/vendors`, Settings)
 
-Three editor pages, reached from new top-bar nav (**Materials**, **Vendors** — **Settings** already existed). Inline editing, no modals; drag-to-reorder via the shared `useDragReorder` hook (`src/components/useDragReorder.js`, HTML5 DnD that renumbers `order`).
+Three editor pages, reached from the top-bar chrome-style tabs (**Library**, **Materials**, **Vendors**, **Settings**). Inline editing, no modals; drag-to-reorder via the shared `useDragReorder` hook (`src/components/useDragReorder.js`, HTML5 DnD that renumbers `order`).
 
 - **`MaterialsEditor.jsx`** (`/materials`) — ISO Groups (editable color swatch / label / **code**, ISO groups not deletable, `+ Add Group` for custom) + Sub-materials (group-filter tabs, inline label / **code** / notes, `+ Add Material`). The `code` is the short token used in preset names. Autosaves to `materials.json` on each change via `saveMaterials`. **This library is the only source of material** in the app (the preset picker + naming + coloring all read it) and **group colors drive preset color coding** — see Preset color coding below.
 - **`VendorsEditor.jsx`** (`/vendors`) — one list over `vendorRegistry.entities`; per row: name, **MFG**/**VENDOR** toggle pills (both can be active), **Has Own #** (vendor only), expand-to-edit URL patterns with a live preview. Autosaves to `vendor_registry.json` via `saveVendorRegistry` (which also refreshes the active registry).
-- **`Settings.jsx`** — added **Shop** (name + default-unit toggle), **Machine Numbers** (start + skip-list tag input), **Import History** (read-only). The "Save Shop Settings" button writes `shop_settings.json`; the unit toggle also takes effect immediately. See `shop_settings.json` above for what's wired.
+- **`Settings.jsx`** — 4 sections around the 5-step workflow: **Account** (sign-out), **Setup & Import** (unified checklist with live-data warnings + Drive timestamps), **Tool Library**, **Shop** (name + default-unit + Save button), **Machine Numbers**, **ProShop Export**, **Tool Metadata**, **Holder Library**, **Rename**, **Advanced**. The "Save Shop Settings" button is inside the Shop card and writes `shop_settings.json` (unit toggle takes effect immediately). The Setup & Import tracker reads `setupProgress` (localStorage flags) + `shopSettings.setup_steps` (Drive timestamps) and calls `markSetupStepInSettings` to write both.
 
 ### Preset color coding (from `materials.json` group colors)
 
@@ -857,7 +864,7 @@ This is, alongside the preset operation-type assignment, one of the few normaliz
 When a programmer proves better speeds/feeds in a job, they can sync those values back to master:
 
 1. Copy tool(s) from Fusion 360 — Fusion's right-click copy puts tool data on the clipboard as **TSV** (tab-separated, a CSV-family format), not JSON
-2. Go to "Sync Job" in the app → paste (Ctrl+V anywhere on the import screen)
+2. Go to "Sync Job" in the app (left sidebar on the Library page) → paste (Ctrl+V anywhere on the import screen)
 3. App builds a batch queue — auto-matches each tool by priority:
    - **`proshot_id` exact match** — primary (Fusion's `product-id` field)
    - **GUID exact match** — secondary
@@ -981,7 +988,7 @@ The ToolDetail view uses a three-zone layout:
    - ProShop ID in an amber pill (`.proshot-pill`)
 
 3. **Scrollable main content** (`.tool-detail-main`): two-column layout (`.detail-layout`, ~65% / 35% via `grid-template-columns: 65fr 35fr`)
-   - Left column (`.detail-layout-left`): Geometry, Setup, Assemblies, Holder, Presets, History (incl. Merge History)
+   - Left column (`.detail-layout-left`): Geometry, Setup, Assemblies, Presets, History (incl. Merge History)
    - Right column (`.detail-layout-right`): Identity (Cabinet location + machine tool # T/H/D in one row), Photo, Purchasing, Notes & Tags, Files & Attachments
 
 Machine tool number is shown inside the Identity section, in the same row as the Cabinet/location chip (not as a standalone block). The Identity section no longer shows `Type` (redundant with the tool-type label in the sticky header) or `Manufacturer` (now covered by the Purchasing section) — it shows "No identity info yet." when neither location nor machine number is set. History and Merge History are combined in one panel at the bottom of the left column.
@@ -1008,7 +1015,7 @@ All six classes are defined in `src/index.css` in the "Data-field visual tokens"
 **Current usages:**
 - `.description-badge` — `ToolCard` (grid + list), `ToolDetail` sticky header
 - `.proshot-pill` — `ToolCard`, `ToolDetail` sticky header, `AssemblyCard` operator tag (as `.tag-proshot-oval` — physical tag format exception)
-- `.holder-pill` — `ToolCard` badge, `ToolDetail` HolderSection, `ToolDetail` export picker
+- `.holder-pill` — `ToolCard` badge, `ToolDetail` export picker
 - `.machine-num-badge` — `ToolCard` badge, `ToolDetail` Identity section (T/H/D)
 - `.location-tag` — `ToolCard` badge (when location is set)
 - `.preset-tag` — `AssemblyCard` linked presets list, `DiffStep` new-preset rows, `CommitStep` new-preset rows

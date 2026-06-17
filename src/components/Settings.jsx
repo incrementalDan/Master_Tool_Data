@@ -625,7 +625,11 @@ function StepAction({ stepKey, done, warn, onExport, onImport, onChangeLibrary, 
         </button>
       );
     case 'machineNumbers':
-      return null; // handled inline — Machine Numbers section is below
+      return (
+        <span className="text-sub" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+          See Machine Numbers ↓
+        </span>
+      );
     case 'proshopExported':
       return (
         <button className="btn btn-secondary btn-sm" onClick={onExport} disabled={tools.length === 0}>
