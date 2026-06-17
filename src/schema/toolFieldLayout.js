@@ -63,7 +63,7 @@ export const SETUP_FIELDS = [
 
 // The tap / thread-mill cluster — rendered by ThreadBlock (see ToolFields.jsx).
 export const THREAD_FIELDS = [
-  'pitch', 'thread_pitch', 'tap_class', 'class_of_fit', 'point_type', 'tip_to_first_thread',
+  'tap_thread_unit', 'pitch', 'thread_pitch', 'tap_class', 'class_of_fit', 'point_type', 'tip_to_first_thread',
   'min_thread_pitch', 'max_thread_pitch', 'tpi_min', 'tpi_max', 'thread_profile_angle',
 ];
 
