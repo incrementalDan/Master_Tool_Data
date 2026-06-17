@@ -172,6 +172,175 @@ export default function Settings() {
   // Drive timestamps for each step (ISO string or null)
   const stepTimestamp = (key) => shopSettings?.setup_steps?.[key] ?? null;
 
+  // ── Embedded setup-step panels ─────────────────────────────────────────────
+  // These are folded into the Setup & Import checklist (under their step), not
+  // rendered as separate cards. Plain functions returning JSX (NOT components),
+  // so the FilePicker's internal navigation state survives re-renders.
+  const renderFusionLibrariesPanel = () => (
+    <div style={{ marginTop: 10, paddingLeft: 12, borderLeft: '2px solid var(--border)' }}>
+      <p className="text-sub text-xs" style={{ marginBottom: 12 }}>
+        Two distinct Autodesk cloud files — the <strong>tool library</strong> (read &amp; written) and the
+        <strong> holder library</strong> (read-only). Never point both at the same file, or saving tools overwrites the holder file.
+      </p>
+
+      {/* Tool library */}
+      <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px solid var(--border)' }}>
+        <div className="flex items-center gap-8" style={{ marginBottom: 6 }}>
+          <FileJson size={14} style={{ color: 'var(--green)', flexShrink: 0 }} />
+          <span className="text-sm" style={{ fontWeight: 600, minWidth: 96 }}>Tool library</span>
+          {libraryLocation?.fileName
+            ? <span className="font-mono text-xs">{libraryLocation.fileName}</span>
+            : <span className="text-sub text-xs">Not linked</span>}
+        </div>
+        <div className="text-sub text-xs" style={{ marginBottom: 8, paddingLeft: 22 }}>
+          Read &amp; written by the app. This must be the tool library, not the holder library.
+        </div>
+        <div style={{ paddingLeft: 22 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowToolPicker(p => !p)}>
+            <FolderOpen size={14} /> {showToolPicker ? 'Cancel' : libraryLocation ? 'Change Tool Library…' : 'Link Tool Library…'}
+          </button>
+        </div>
+        {showToolPicker && (
+          <div style={{ marginTop: 16, paddingLeft: 22 }}>
+            <FilePicker
+              onSelect={(loc) => {
+                if (holderLibraryLocation && loc.itemId === holderLibraryLocation.itemId) {
+                  notify('That is the holder library file — pick the separate tool library file instead.', 'error', 7000);
+                  return;
+                }
+                setLibraryLocation(loc);
+                setShowToolPicker(false);
+                notify(`Tool library set to ${loc.fileName}`, 'success');
+              }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Holder library */}
+      <div>
+        <div className="flex items-center gap-8" style={{ marginBottom: 6 }}>
+          <Package size={14} style={{ color: 'var(--blue)', flexShrink: 0 }} />
+          <span className="text-sm" style={{ fontWeight: 600, minWidth: 96 }}>Holder library</span>
+          {holderLibrarySetupComplete
+            ? <span className="font-mono text-xs">{holderLibraryLocation?.fileName}</span>
+            : <span className="text-sub text-xs">Not linked (optional)</span>}
+        </div>
+        <div className="text-sub text-xs" style={{ marginBottom: 8, paddingLeft: 22 }}>
+          Read-only. Enables browsing and assigning holders to each tool.
+        </div>
+        <div className="flex gap-8" style={{ paddingLeft: 22 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowHolderPicker(p => !p)}>
+            {showHolderPicker ? 'Cancel' : holderLibrarySetupComplete ? 'Change Holder Library…' : 'Set Up Holder Library…'}
+          </button>
+          {holderLibrarySetupComplete && (
+            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }}
+              onClick={() => { clearHolderLibraryLocation(); setShowHolderPicker(false); notify('Holder library removed', 'info'); }}>
+              <Trash2 size={13} /> Remove
+            </button>
+          )}
+        </div>
+        {showHolderPicker && (
+          <div style={{ marginTop: 16, paddingLeft: 22 }}>
+            <FilePicker
+              onSelect={async (loc) => {
+                // Guard: the holder library must be a different file than the tool
+                // library. Pointing both at the same item makes tool saves overwrite
+                // the holder file (the "holders disappear in Fusion" symptom).
+                if (libraryLocation && loc.itemId === libraryLocation.itemId) {
+                  notify('That is the tool library file — pick the separate holder library file instead.', 'error', 7000);
+                  return;
+                }
+                await setHolderLibraryLocation(loc);
+                setShowHolderPicker(false);
+                notify(`Holder library set to ${loc.fileName}`, 'success');
+              }}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderToolMetadataPanel = () => (
+    <div style={{ marginTop: 10, paddingLeft: 12, borderLeft: '2px solid var(--border)' }}>
+      <p className="text-sub text-xs" style={{ marginBottom: 12 }}>
+        Notes, tags, ProShop IDs, assemblies, and other fields Fusion can&apos;t store live in one
+        <code> tool_metadata.json</code> file on Google Drive, linked one-to-one with this Fusion tool library.
+      </p>
+
+      <div className="text-sm" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {googleAuthenticated ? (
+          <>
+            <div className="flex items-center gap-8">
+              <HardDrive size={14} className="text-sub" style={{ flexShrink: 0 }} />
+              <span className="text-sub" style={{ minWidth: 100 }}>Metadata file</span>
+              {metaLocLoading ? (
+                <span className="text-sub text-xs">Loading…</span>
+              ) : metaLocation ? (
+                <span className="flex items-center gap-8">
+                  <span className="font-mono text-xs">{metaLocation.fileName}</span>
+                  {metaLocation.webViewLink && (
+                    <a href={metaLocation.webViewLink} target="_blank" rel="noreferrer"
+                      className="text-xs" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--blue)' }}>
+                      <ExternalLink size={11} /> Open in Drive
+                    </a>
+                  )}
+                </span>
+              ) : (
+                <span className="text-sub text-xs">{metaLocError || '✓ Connected'}</span>
+              )}
+            </div>
+
+            {metaLocation && (
+              <div className="flex items-center gap-8">
+                <span style={{ width: 14, flexShrink: 0 }} />
+                <span className="text-sub flex items-center" style={{ minWidth: 100, gap: 4 }}>
+                  Location
+                  <InfoTip text="The app always re-reads this exact file by its Drive ID, so this isn't an in-app setting — it's just informational. To actually relocate the file, drag it to a new folder in Google Drive's own UI; Drive keeps the file's ID, so the app keeps working with no reconfiguration needed." />
+                </span>
+                <span className="text-xs">
+                  {[metaLocation.driveName, metaLocation.folderName].filter(Boolean).join(' / ') || 'My Drive (root)'}
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center gap-8">
+              <span style={{ width: 14, flexShrink: 0 }} />
+              <span className="text-sub" style={{ minWidth: 100 }}>Signed in as</span>
+              <span className="text-xs">{googleUser?.email || googleUser?.name || '—'}</span>
+            </div>
+
+            <div className="flex items-center gap-8">
+              <span style={{ width: 14, flexShrink: 0 }} />
+              <button className="btn btn-secondary btn-sm" onClick={handleDisconnectMetadata}>
+                Disconnect &amp; set up a new file…
+              </button>
+              <InfoTip text="Use this if the linked file was deleted in Drive (or you just want a fresh start). It only changes which file the app links to — nothing in Drive is deleted by this. You'll go back through the connect screen, sign in, and pick a folder for a brand-new tool_metadata.json; none of the old file's notes, tags, or assemblies carry over." />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-8">
+              <HardDrive size={14} className="text-sub" style={{ flexShrink: 0 }} />
+              <span className="text-sub" style={{ minWidth: 100 }}>Metadata file</span>
+              <span className="text-sub text-xs">
+                {metadataSkipped ? 'Not connected — metadata is being skipped' : 'Not connected'}
+              </span>
+            </div>
+            <div className="flex items-center gap-8">
+              <span style={{ width: 14, flexShrink: 0 }} />
+              <button className="btn btn-secondary btn-sm" onClick={reconnectMetadata}>
+                Connect Google Drive…
+              </button>
+              <InfoTip text="This opens the setup flow, where you pick the Drive folder tool_metadata.json is created in. Choose carefully — once the file exists, the app always re-reads that exact file by its Drive ID, so this isn't something you change in-app afterward (though you can still drag the file to a new folder in Drive's own UI later; Drive keeps the ID, so the app keeps working)." />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <div className="flex items-center gap-8 mb-20">
@@ -217,6 +386,7 @@ export default function Settings() {
           const done = !!setupProgress[step.key];
           const warn = stepWarning(step.key);
           const ts = fmtDate(stepTimestamp(step.key));
+          const hasPanel = step.key === 'fusionConnected' || step.key === 'metadataConnected';
           return (
             <div key={step.key} style={{
               display: 'flex', alignItems: 'flex-start', gap: 12,
@@ -238,6 +408,12 @@ export default function Settings() {
                     <AlertTriangle size={12} /> {warn}
                   </div>
                 )}
+                {/* Fusion tool + holder library pickers, embedded under their step */}
+                {step.key === 'fusionConnected' && renderFusionLibrariesPanel()}
+
+                {/* Google Drive metadata connection, embedded under its step */}
+                {step.key === 'metadataConnected' && renderToolMetadataPanel()}
+
                 {/* ProShop photos sub-step under proshopMerged */}
                 {step.key === 'proshopMerged' && (
                   <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -256,110 +432,23 @@ export default function Settings() {
                   </div>
                 )}
               </div>
-              <div style={{ flexShrink: 0 }}>
-                <StepAction stepKey={step.key} done={done} warn={warn}
-                  onExport={handleExportProShop}
-                  onImport={() => navigate('/import')}
-                  onChangeLibrary={() => { setShowToolPicker(true); setTimeout(() => document.getElementById('fusion-libraries-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }}
-                  onGoToLanding={() => navigate('/')}
-                  tools={tools}
-                />
-              </div>
+              {/* Steps with an embedded config panel handle their own actions inline */}
+              {!hasPanel && (
+                <div style={{ flexShrink: 0 }}>
+                  <StepAction stepKey={step.key} done={done} warn={warn}
+                    onExport={handleExportProShop}
+                    onImport={() => navigate('/import')}
+                    onGoToLanding={() => navigate('/')}
+                    tools={tools}
+                  />
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
       {showPhotos && <ImportPhotosModal onClose={() => setShowPhotos(false)} />}
-
-      {/* Fusion Libraries (APS) — tool + holder, the two distinct Autodesk cloud files */}
-      <div id="fusion-libraries-card" className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <HardDrive size={16} style={{ color: 'var(--blue)' }} />
-          <h3 style={{ margin: 0 }}>Fusion Libraries (Autodesk)</h3>
-          <InfoTip text="Two separate Fusion 360 cloud .json files. The tool library is the one this app reads and writes; the holder library is read-only and only enables holder selection. They must be two different files — never point both at the same one, or saving tools will overwrite the holder file." />
-        </div>
-        <p className="text-sub text-sm mb-16">
-          The Autodesk cloud files this app links to. These are <strong>two distinct files</strong> — pick the right one for each.
-        </p>
-
-        {/* Tool library */}
-        <div style={{ paddingBottom: 14, marginBottom: 14, borderBottom: '1px solid var(--border)' }}>
-          <div className="flex items-center gap-8" style={{ marginBottom: 6 }}>
-            <FileJson size={14} style={{ color: 'var(--green)', flexShrink: 0 }} />
-            <span className="text-sm" style={{ fontWeight: 600, minWidth: 96 }}>Tool library</span>
-            {libraryLocation?.fileName
-              ? <span className="font-mono text-xs">{libraryLocation.fileName}</span>
-              : <span className="text-sub text-xs">Not linked</span>}
-          </div>
-          <div className="text-sub text-xs" style={{ marginBottom: 8, paddingLeft: 22 }}>
-            Read &amp; written by the app. This must be the tool library, not the holder library.
-          </div>
-          <div style={{ paddingLeft: 22 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowToolPicker(p => !p)}>
-              <FolderOpen size={14} /> {showToolPicker ? 'Cancel' : libraryLocation ? 'Change Tool Library…' : 'Link Tool Library…'}
-            </button>
-          </div>
-          {showToolPicker && (
-            <div style={{ marginTop: 16, paddingLeft: 22 }}>
-              <FilePicker
-                onSelect={(loc) => {
-                  if (holderLibraryLocation && loc.itemId === holderLibraryLocation.itemId) {
-                    notify('That is the holder library file — pick the separate tool library file instead.', 'error', 7000);
-                    return;
-                  }
-                  setLibraryLocation(loc);
-                  setShowToolPicker(false);
-                  notify(`Tool library set to ${loc.fileName}`, 'success');
-                }}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Holder library */}
-        <div>
-          <div className="flex items-center gap-8" style={{ marginBottom: 6 }}>
-            <Package size={14} style={{ color: 'var(--blue)', flexShrink: 0 }} />
-            <span className="text-sm" style={{ fontWeight: 600, minWidth: 96 }}>Holder library</span>
-            {holderLibrarySetupComplete
-              ? <span className="font-mono text-xs">{holderLibraryLocation?.fileName}</span>
-              : <span className="text-sub text-xs">Not linked (optional)</span>}
-          </div>
-          <div className="text-sub text-xs" style={{ marginBottom: 8, paddingLeft: 22 }}>
-            Read-only. Enables browsing and assigning holders to each tool.
-          </div>
-          <div className="flex gap-8" style={{ paddingLeft: 22 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowHolderPicker(p => !p)}>
-              {showHolderPicker ? 'Cancel' : holderLibrarySetupComplete ? 'Change Holder Library…' : 'Set Up Holder Library…'}
-            </button>
-            {holderLibrarySetupComplete && (
-              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }}
-                onClick={() => { clearHolderLibraryLocation(); setShowHolderPicker(false); notify('Holder library removed', 'info'); }}>
-                <Trash2 size={13} /> Remove
-              </button>
-            )}
-          </div>
-          {showHolderPicker && (
-            <div style={{ marginTop: 16, paddingLeft: 22 }}>
-              <FilePicker
-                onSelect={async (loc) => {
-                  // Guard: the holder library must be a different file than the tool
-                  // library. Pointing both at the same item makes tool saves overwrite
-                  // the holder file (the "holders disappear in Fusion" symptom).
-                  if (libraryLocation && loc.itemId === libraryLocation.itemId) {
-                    notify('That is the tool library file — pick the separate holder library file instead.', 'error', 7000);
-                    return;
-                  }
-                  await setHolderLibraryLocation(loc);
-                  setShowHolderPicker(false);
-                  notify(`Holder library set to ${loc.fileName}`, 'success');
-                }}
-              />
-            </div>
-          )}
-        </div>
-      </div>
 
       {/* Shop (name + default unit) — saved to shop_settings.json */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
@@ -427,94 +516,6 @@ export default function Settings() {
         <button className="btn btn-secondary btn-sm" onClick={handleExportProShop} disabled={tools.length === 0}>
           ↓ Export Full ProShop CSV ({tools.length} tools)
         </button>
-      </div>
-
-      {/* Tool metadata (Google Drive) connection */}
-      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <HardDrive size={16} style={{ color: 'var(--blue)' }} />
-          <h3 style={{ margin: 0 }}>Tool Metadata (Google Drive)</h3>
-        </div>
-        <p className="text-sub text-sm mb-16">
-          Notes, tags, ProShop IDs, assemblies, and other fields Fusion can&apos;t store live in
-          one <code>tool_metadata.json</code> file, linked one-to-one with this Fusion tool library.
-        </p>
-
-        <div className="text-sm" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div className="flex items-center gap-8">
-            <FileJson size={14} className="text-sub" style={{ flexShrink: 0 }} />
-            <span className="text-sub" style={{ minWidth: 100 }}>Fusion library</span>
-            <span className="font-mono text-xs">{libraryLocation?.fileName || '—'}</span>
-          </div>
-
-          {googleAuthenticated ? (
-            <>
-              <div className="flex items-center gap-8">
-                <HardDrive size={14} className="text-sub" style={{ flexShrink: 0 }} />
-                <span className="text-sub" style={{ minWidth: 100 }}>Metadata file</span>
-                {metaLocLoading ? (
-                  <span className="text-sub text-xs">Loading…</span>
-                ) : metaLocation ? (
-                  <span className="flex items-center gap-8">
-                    <span className="font-mono text-xs">{metaLocation.fileName}</span>
-                    {metaLocation.webViewLink && (
-                      <a href={metaLocation.webViewLink} target="_blank" rel="noreferrer"
-                        className="text-xs" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--blue)' }}>
-                        <ExternalLink size={11} /> Open in Drive
-                      </a>
-                    )}
-                  </span>
-                ) : (
-                  <span className="text-sub text-xs">{metaLocError || '✓ Connected'}</span>
-                )}
-              </div>
-
-              {metaLocation && (
-                <div className="flex items-center gap-8">
-                  <span style={{ width: 14, flexShrink: 0 }} />
-                  <span className="text-sub flex items-center" style={{ minWidth: 100, gap: 4 }}>
-                    Location
-                    <InfoTip text="The app always re-reads this exact file by its Drive ID, so this isn't an in-app setting — it's just informational. To actually relocate the file, drag it to a new folder in Google Drive's own UI; Drive keeps the file's ID, so the app keeps working with no reconfiguration needed." />
-                  </span>
-                  <span className="text-xs">
-                    {[metaLocation.driveName, metaLocation.folderName].filter(Boolean).join(' / ') || 'My Drive (root)'}
-                  </span>
-                </div>
-              )}
-
-              <div className="flex items-center gap-8">
-                <span style={{ width: 14, flexShrink: 0 }} />
-                <span className="text-sub" style={{ minWidth: 100 }}>Signed in as</span>
-                <span className="text-xs">{googleUser?.email || googleUser?.name || '—'}</span>
-              </div>
-
-              <div className="flex items-center gap-8">
-                <span style={{ width: 14, flexShrink: 0 }} />
-                <button className="btn btn-secondary btn-sm" onClick={handleDisconnectMetadata}>
-                  Disconnect &amp; set up a new file…
-                </button>
-                <InfoTip text="Use this if the linked file was deleted in Drive (or you just want a fresh start). It only changes which file the app links to — nothing in Drive is deleted by this. You'll go back through the connect screen, sign in, and pick a folder for a brand-new tool_metadata.json; none of the old file's notes, tags, or assemblies carry over." />
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="flex items-center gap-8">
-                <HardDrive size={14} className="text-sub" style={{ flexShrink: 0 }} />
-                <span className="text-sub" style={{ minWidth: 100 }}>Metadata file</span>
-                <span className="text-sub text-xs">
-                  {metadataSkipped ? 'Not connected — metadata is being skipped' : 'Not connected'}
-                </span>
-              </div>
-              <div className="flex items-center gap-8">
-                <span style={{ width: 14, flexShrink: 0 }} />
-                <button className="btn btn-secondary btn-sm" onClick={reconnectMetadata}>
-                  Connect Google Drive…
-                </button>
-                <InfoTip text="This opens the setup flow, where you pick the Drive folder tool_metadata.json is created in. Choose carefully — once the file exists, the app always re-reads that exact file by its Drive ID, so this isn't something you change in-app afterward (though you can still drag the file to a new folder in Drive's own UI later; Drive keeps the ID, so the app keeps working)." />
-              </div>
-            </>
-          )}
-        </div>
       </div>
 
       {/* Description rename */}
@@ -631,14 +632,10 @@ export default function Settings() {
 }
 
 // Action button for each setup step — shows the right CTA depending on step state.
-function StepAction({ stepKey, done, warn, onExport, onImport, onChangeLibrary, onGoToLanding, tools }) {
+// fusionConnected and metadataConnected render their own embedded config panels
+// (see renderFusionLibrariesPanel / renderToolMetadataPanel) instead of a button.
+function StepAction({ stepKey, done, warn, onExport, onImport, onGoToLanding, tools }) {
   switch (stepKey) {
-    case 'fusionConnected':
-      return (
-        <button className="btn btn-secondary btn-sm" onClick={onChangeLibrary}>
-          {done && !warn ? 'Change Library' : 'Connect Library'}
-        </button>
-      );
     case 'normalized':
       return (
         <button className="btn btn-secondary btn-sm" onClick={onGoToLanding}>

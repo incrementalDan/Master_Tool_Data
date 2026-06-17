@@ -37,9 +37,9 @@ export function SetupStepCircles({ progress, compact = false }) {
   );
 }
 
-// Reference banner shown on the main view until all 4 setup steps are done —
-// a quick "where am I in the initial Fusion → normalize → ProShop workflow"
-// guide. Disappears for good once every step is checked off.
+// Reference banner shown on the main view until all setup steps are done —
+// a quick "where am I in the initial Fusion → metadata → normalize → ProShop
+// workflow" guide. Disappears for good once every step is checked off.
 export function SetupGuideBanner() {
   const { setupProgress } = useApp();
   const navigate = useNavigate();
@@ -75,7 +75,7 @@ export function SetupGuideSummary() {
 }
 
 // ─── Congratulations popup ─────────────────────────────────────────────────
-// Fires once, the moment the 4th step completes in a live session — gated by
+// Fires once, the moment the final step completes in a live session — gated by
 // a permanent localStorage flag so it never appears again (including for
 // libraries seeded as already-established, which are marked celebrated upfront).
 export function SetupCompleteModal() {

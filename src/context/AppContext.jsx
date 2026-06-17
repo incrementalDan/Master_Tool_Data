@@ -27,6 +27,7 @@ const SETUP_CELEBRATED_KEY = 'tms_setup_celebrated';
 // setLibraryLocation, normalizeLibrary, and ImportFlow's merge/export buttons.
 export const SETUP_STEPS = [
   { key: 'fusionConnected', label: 'Connect Fusion library' },
+  { key: 'metadataConnected', label: 'Connect tool metadata (Google Drive)' },
   { key: 'normalized', label: 'Normalize the library' },
   { key: 'proshopMerged', label: 'Merge ProShop data' },
   { key: 'machineNumbers', label: 'Configure machine numbers' },
@@ -51,13 +52,17 @@ function loadSetupProgress() {
   try {
     const raw = localStorage.getItem(SETUP_PROGRESS_KEY);
     const progress = raw ? JSON.parse(raw) : null;
-    // Migration: shops that completed the old 4-step workflow before the
-    // 'machineNumbers' step was added have all 4 old flags true but no
-    // machineNumbers key. Back-fill it so the banner goes away and the
-    // celebration modal fires correctly on upgrade.
-    if (progress && progress.proshopExported && progress.machineNumbers === undefined) {
-      progress.machineNumbers = true;
-      localStorage.setItem(SETUP_PROGRESS_KEY, JSON.stringify(progress));
+    // Migration: a shop that finished the workflow before later steps were added
+    // has all its old flags true but is missing the newer keys. Back-fill them on
+    // an established library (proshopExported true) so the banner goes away and the
+    // celebration modal fires correctly on upgrade. Covers 'machineNumbers' (4→5
+    // step upgrade) and 'metadataConnected' (5→6 step upgrade — if they got to
+    // export they had a metadata file).
+    if (progress && progress.proshopExported) {
+      let changed = false;
+      if (progress.machineNumbers === undefined) { progress.machineNumbers = true; changed = true; }
+      if (progress.metadataConnected === undefined) { progress.metadataConnected = true; changed = true; }
+      if (changed) localStorage.setItem(SETUP_PROGRESS_KEY, JSON.stringify(progress));
     }
     return progress;
   } catch { return null; }
@@ -364,6 +369,15 @@ export function AppProvider({ children }) {
       .catch(() => {}); // silently ignore — localStorage flag + optimistic state already set
   }, []);
 
+  // The metadataConnected setup step completes the moment Google Drive is
+  // connected (live sign-in or a restored session). Declarative so it fires
+  // for both paths without threading a call through every Google entry point.
+  useEffect(() => {
+    if (state.googleAuthenticated && !state.setupProgress.metadataConnected) {
+      markSetupStepInSettings('metadataConnected');
+    }
+  }, [state.googleAuthenticated, state.setupProgress.metadataConnected, markSetupStepInSettings]);
+
   // One-time-ever flag so the congratulations popup doesn't fire again after dismissal.
   const setupCelebrated = useCallback(() => localStorage.getItem(SETUP_CELEBRATED_KEY) === '1', []);
   const markSetupCelebrated = useCallback(() => localStorage.setItem(SETUP_CELEBRATED_KEY, '1'), []);
@@ -495,9 +509,11 @@ export function AppProvider({ children }) {
         const normalized = !needsNormalize && tools.length > 0;
         const proshopMerged = tools.some(t => t.min_ooh != null && t.min_ooh > 0);
         const machineNumbers = tools.some(t => t.machine_tool_number != null && t.machine_tool_number > 0);
+        const metadataConnected = googleRef.current;
         const established = normalized && proshopMerged;
         dispatch({ type: 'SET_SETUP_PROGRESS', progress: {
           fusionConnected: true,
+          metadataConnected,
           normalized,
           proshopMerged,
           machineNumbers,
