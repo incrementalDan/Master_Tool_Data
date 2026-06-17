@@ -24,7 +24,7 @@ function mergeImportedTools(current, imported) {
 
 export default function ImportFlow() {
   const navigate = useNavigate();
-  const { tools, saveFullLibrary, isSaving, markSetupStep } = useApp();
+  const { tools, saveFullLibrary, isSaving, markSetupStepInSettings } = useApp();
   const [step, setStep] = useState(1);
   const [fusionTools, setFusionTools] = useState(tools);
   const [parseError, setParseError] = useState('');
@@ -126,7 +126,7 @@ export default function ImportFlow() {
 
   const handleApplyMerge = () => {
     if (!proShopMatches) return;
-    markSetupStep('proshopMerged');
+    markSetupStepInSettings('proshopMerged');
     const merged = [...fusionTools];
 
     proShopMatches.matched.forEach(({ toolIdx, additions }) => {
@@ -173,10 +173,6 @@ export default function ImportFlow() {
       <div className="flex items-center gap-8 mb-20">
         <button className="btn btn-ghost btn-sm" onClick={() => navigate('/')}>← Back</button>
         <h2 style={{ fontSize: 16, fontWeight: 600 }}>Import Library</h2>
-        <div style={{ flex: 1 }} />
-        <button className="btn btn-secondary btn-sm" onClick={() => setShowPhotos(true)} title="One-time: copy ProShop tool photos from a Drive folder">
-          <ImageIcon size={14} /> Import ProShop Photos
-        </button>
       </div>
 
       {showPhotos && <ImportPhotosModal onClose={() => setShowPhotos(false)} />}
@@ -376,6 +372,18 @@ export default function ImportFlow() {
               </button>
             </div>
           )}
+
+          {/* Photo import sub-step — one-time bulk copy of ProShop tool photos */}
+          <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid var(--border)' }}>
+            <div style={{ fontWeight: 600, marginBottom: 4, fontSize: 13 }}>Import ProShop Photos (optional)</div>
+            <p className="text-sub text-sm mb-12">
+              One-time: copy existing ProShop tool photos from a Google Drive folder into the tool library.
+              Each top-level photo must be named <code>tools_&#123;ProShopID&#125;_….png/jpg</code>.
+            </p>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowPhotos(true)}>
+              <ImageIcon size={14} /> Import ProShop Photos…
+            </button>
+          </div>
         </div>
       )}
 
@@ -399,7 +407,7 @@ export default function ImportFlow() {
           )}
 
           <div className="flex gap-8 mb-20" style={{ flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary" onClick={() => { markSetupStep('proshopExported'); exportProShop(fusionTools); }}>
+            <button className="btn btn-secondary" onClick={() => { markSetupStepInSettings('proshopExported'); exportProShop(fusionTools); }}>
               ↓ Export Full ProShop CSV
             </button>
             <button className="btn btn-secondary" onClick={() => exportFusion(fusionTools)}>
