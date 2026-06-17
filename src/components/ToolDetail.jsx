@@ -164,9 +164,6 @@ export default function ToolDetail() {
         {/* Same sticky identity header as view mode, so the tool you're editing
             stays visible while scrolling a long form. */}
         <div className="tool-sticky-header">
-          <button className="btn btn-ghost btn-sm tool-sticky-header-back" onClick={() => { setEditing(false); clearEditParam(); }}>
-            <ArrowLeft size={14} /> Cancel
-          </button>
           <span className="tool-sticky-header-icon">
             <ToolTypeIcon type={tool.tool_type} size={30} />
           </span>
