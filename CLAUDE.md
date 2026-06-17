@@ -460,7 +460,9 @@ Key holder object fields:
 }
 ```
 
-`holders` and `holderLibraryLocation` are available via `useApp()`. The holder library location is stored in localStorage (`aps_holder_library_location`). If not configured, holders are unavailable in AssemblyForm (picker disabled) and a prompt in Settings guides setup.
+`holders` and `holderLibraryLocation` are available via `useApp()`. The holder library location is stored in localStorage (`aps_holder_library_location`). If not configured, holders are unavailable in AssemblyForm (picker disabled).
+
+**Linking the tool and holder libraries** — both are linked from Settings via inline `FilePicker` components (same flow as the holder picker; no full-page takeover). The "Fusion Libraries (Autodesk)" card in Settings holds both pickers. `beginChangeLibrary` / `changingLibrary` still exist in AppContext/App.jsx and still trigger the full-page `LibrarySetup` flow when there is **no** library location yet (first-time setup only) — but they are **not used from Settings** for changing an already-linked library. Do not re-add `beginChangeLibrary` calls to Settings.jsx. A same-file guard blocks linking the same physical file (by `itemId`) as both tool and holder library — this is applied in both the Settings inline picker and in `LibrarySetup` (first-run tool picker).
 
 -----
 
@@ -618,8 +620,9 @@ src/
     LoginScreen.jsx               # APS PKCE login gate (unauthorized visitors)
     Settings.jsx                  # Settings — one of 4 top-bar chrome-style tabs
                                   # Sections: Account (sign-out), Setup & Import (5-step tracker),
-                                  # Tool Library, Shop (+ Save button), Machine Numbers, ProShop
-                                  # Export, Tool Metadata, Holder Library, Rename, Advanced
+                                  # Fusion Libraries (tool + holder — BOTH inline pickers, no page nav),
+                                  # Shop (+ Save button), Machine Numbers, ProShop Export,
+                                  # Tool Metadata, Rename, Advanced
     ToolExtractorTab.jsx          # Hosts the tool-extractor image/spec extraction UI
     Toast.jsx                     # Fixed bottom-right toast stack
 

@@ -16,13 +16,14 @@ export default function Settings() {
     tools, needsNormalize, fetchRawLibrary, renumberLibrary, isSaving,
     markSetupStepInSettings,
     libraryLocation, holderLibraryLocation, holderLibrarySetupComplete,
-    setHolderLibraryLocation, clearHolderLibraryLocation, notify,
+    setLibraryLocation, setHolderLibraryLocation, clearHolderLibraryLocation, notify,
     googleAuthenticated, metadataSkipped, user: googleUser,
     fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
-    shopSettings, saveShopSettings, beginChangeLibrary, signOutAll,
+    shopSettings, saveShopSettings, signOutAll,
     setupProgress,
   } = useApp();
 
+  const [showToolPicker, setShowToolPicker] = useState(false);
   const [showHolderPicker, setShowHolderPicker] = useState(false);
   const [showDescRename, setShowDescRename] = useState(false);
   const [showPhotos, setShowPhotos] = useState(false);
@@ -259,7 +260,7 @@ export default function Settings() {
                 <StepAction stepKey={step.key} done={done} warn={warn}
                   onExport={handleExportProShop}
                   onImport={() => navigate('/import')}
-                  onChangeLibrary={beginChangeLibrary}
+                  onChangeLibrary={() => { setShowToolPicker(true); setTimeout(() => document.getElementById('fusion-libraries-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }}
                   onGoToLanding={() => navigate('/')}
                   tools={tools}
                 />
@@ -272,7 +273,7 @@ export default function Settings() {
       {showPhotos && <ImportPhotosModal onClose={() => setShowPhotos(false)} />}
 
       {/* Fusion Libraries (APS) — tool + holder, the two distinct Autodesk cloud files */}
-      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+      <div id="fusion-libraries-card" className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <HardDrive size={16} style={{ color: 'var(--blue)' }} />
           <h3 style={{ margin: 0 }}>Fusion Libraries (Autodesk)</h3>
@@ -292,13 +293,28 @@ export default function Settings() {
               : <span className="text-sub text-xs">Not linked</span>}
           </div>
           <div className="text-sub text-xs" style={{ marginBottom: 8, paddingLeft: 22 }}>
-            Read &amp; written by the app. Changing it opens the file picker; cancel keeps the current one.
+            Read &amp; written by the app. This must be the tool library, not the holder library.
           </div>
           <div style={{ paddingLeft: 22 }}>
-            <button className="btn btn-secondary btn-sm" onClick={beginChangeLibrary}>
-              <FolderOpen size={14} /> Change Tool Library…
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowToolPicker(p => !p)}>
+              <FolderOpen size={14} /> {showToolPicker ? 'Cancel' : libraryLocation ? 'Change Tool Library…' : 'Link Tool Library…'}
             </button>
           </div>
+          {showToolPicker && (
+            <div style={{ marginTop: 16, paddingLeft: 22 }}>
+              <FilePicker
+                onSelect={(loc) => {
+                  if (holderLibraryLocation && loc.itemId === holderLibraryLocation.itemId) {
+                    notify('That is the holder library file — pick the separate tool library file instead.', 'error', 7000);
+                    return;
+                  }
+                  setLibraryLocation(loc);
+                  setShowToolPicker(false);
+                  notify(`Tool library set to ${loc.fileName}`, 'success');
+                }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Holder library */}
