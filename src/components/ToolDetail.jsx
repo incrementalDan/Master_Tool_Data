@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
-  Tag, Ruler, StickyNote, Clock, Wrench, AlertTriangle, Camera, X,
+  Ruler, StickyNote, Clock, Wrench, AlertTriangle, Camera, X,
   ChevronDown, ChevronRight,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
@@ -92,6 +92,13 @@ export default function ToolDetail() {
     [tool?.tool_type, tool?.diameter, tool?.flute_length, tool?.shoulder_length, tool?.min_ooh, tool?.overall_length, tool?.corner_radius]
   );
 
+  useEffect(() => {
+    if (!tool) return;
+    const parts = [tool.proshot_id, tool.description].filter(Boolean);
+    document.title = parts.length ? parts.join(' · ') : 'Fusion Tool Library';
+    return () => { document.title = 'Fusion Tool Library'; };
+  }, [tool?.proshot_id, tool?.description]);
+
   if (!tool) {
     return (
       <div className="loading-screen">
@@ -179,6 +186,18 @@ export default function ToolDetail() {
               {tool.proshot_id && <span className="proshot-pill">{tool.proshot_id}</span>}
             </div>
           </div>
+          {(tool.location || hasMachineNum) && (
+            <div className="tool-sticky-identity">
+              {tool.location && <span className="location-tag">{tool.location}</span>}
+              {hasMachineNum && (
+                <div className="flex items-center gap-5">
+                  <span className="machine-num-badge">T{tool.machine_tool_number}</span>
+                  <span className="machine-num-badge">H{tool.machine_tool_number}</span>
+                  <span className="machine-num-badge">D{tool.machine_tool_number}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
         <ToolForm
           tool={tool}
@@ -233,7 +252,7 @@ export default function ToolDetail() {
 
       {/* Main content */}
       <div className="tool-detail-main">
-        {/* Sticky header — shows type icon, ProShop ID (left), description (right) */}
+        {/* Sticky header — type icon + description left, identity (cabinet/machine#) right */}
         <div className="tool-sticky-header">
           <span className="tool-sticky-header-icon">
             <ToolTypeIcon type={tool.tool_type} size={30} />
@@ -277,6 +296,18 @@ export default function ToolDetail() {
               >{tool.proshot_id}</a>
             )}
           </div>
+          {(tool.location || hasMachineNum) && (
+            <div className="tool-sticky-identity">
+              {tool.location && <span className="location-tag">{tool.location}</span>}
+              {hasMachineNum && (
+                <div className="flex items-center gap-5">
+                  <span className="machine-num-badge">T{tool.machine_tool_number}</span>
+                  <span className="machine-num-badge">H{tool.machine_tool_number}</span>
+                  <span className="machine-num-badge">D{tool.machine_tool_number}</span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {tool.no_fusion_link && (
@@ -356,31 +387,6 @@ export default function ToolDetail() {
           </div>
 
           <div className="detail-layout-right">
-            <Section title="Identity" icon={Tag}>
-              {(tool.location || hasMachineNum) ? (
-                <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 20, padding: '4px 0' }}>
-                  {tool.location && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span className="text-sub" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Cabinet</span>
-                      <span className="location-tag" style={{ fontSize: 15, padding: '4px 13px' }}>{tool.location}</span>
-                    </div>
-                  )}
-                  {hasMachineNum && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span className="text-sub" style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Machine #</span>
-                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                        <span className="machine-num-badge">T{tool.machine_tool_number}</span>
-                        <span className="machine-num-badge">H{tool.machine_tool_number}</span>
-                        <span className="machine-num-badge">D{tool.machine_tool_number}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="detail-field-empty text-sm">No identity info yet.</div>
-              )}
-            </Section>
-
             <Section title="Photo" icon={Camera}>
               <PhotoSlot
                 tool={tool}

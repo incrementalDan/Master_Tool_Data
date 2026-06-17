@@ -2594,6 +2594,18 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   gap: 2px;
 }
 
+/* Cabinet + machine # chips pinned to the right of the sticky header */
+.tool-sticky-identity {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  border-left: 1px solid var(--border);
+  padding-left: 14px;
+  margin-left: 4px;
+}
+
 /* Narrow screens: stack sidebar above content */
 @media (max-width: 768px) {
   .tool-detail-wrap { flex-direction: column; }
