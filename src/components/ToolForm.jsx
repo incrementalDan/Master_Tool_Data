@@ -128,7 +128,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
       )}
 
       {/* Tool type — a dropdown of grouped icon cards (Milling / Hole Making / …). */}
-      <div className="panel open mb-16">
+      <div className="panel open mb-16" style={{ overflow: 'visible' }}>
         <div className="panel-header static">
           <Layers size={15} className="panel-header-icon" />
           <span className="panel-header-title">Tool Type *</span>

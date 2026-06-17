@@ -2463,14 +2463,15 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 /* ─── Library landing page — left sidebar + main content ────────────────── */
 .landing-layout {
-  display: flex;
   min-height: calc(100vh - 54px);
-  margin: -20px; /* escape page-content padding */
 }
 
 .landing-sidebar {
+  position: fixed;
+  left: 0;
+  top: 54px;
   width: 72px;
-  flex-shrink: 0;
+  height: calc(100vh - 54px);
   padding: 14px 0;
   display: flex;
   flex-direction: column;
@@ -2478,16 +2479,13 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   gap: 4px;
   border-right: 1px solid var(--border);
   background: var(--surface);
-  position: sticky;
-  top: 54px;
-  height: calc(100vh - 54px);
   overflow-y: auto;
+  z-index: 10;
 }
 
 .landing-main {
-  flex: 1;
-  min-width: 0;
   padding: 20px;
+  padding-left: calc(72px + 20px);
 }
 
 /* ─── Tool detail page — frozen left sidebar + sticky header ─────────────── */
