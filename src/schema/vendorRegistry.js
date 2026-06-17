@@ -14,8 +14,14 @@
 //     live data even when called from non-React modules.
 //
 // Entity shape:
-//   { id, name, is_manufacturer, is_vendor, has_own_catalog_number,
+//   { id, name, aliases[], is_manufacturer, is_vendor, has_own_catalog_number,
 //     edp_url_pattern, vendor_num_url_pattern, proshop_id, order }
+//
+// `name` is the preferred/canonical name — the only one shown on tools and
+// exported. `aliases[]` are alternate spellings ("GARR" for "GARR Tool",
+// "Helical" for "Helical Solutions", misspellings, etc.) used ONLY to match
+// inconsistent free-text entries from ProShop import and AI extraction back to
+// the canonical entity. Aliases are never shown or exported.
 
 function rid() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
@@ -28,13 +34,21 @@ function rid() {
 // ── Seed inputs (migrated — no longer the public API) ────────────────────────
 
 const SEED_MANUFACTURERS = [
-  'Accupro', 'Cleveland', 'Emuge', 'GARR', 'GARR Tool', 'HAIMER', 'Harvey Tool', 'Helical Solutions',
+  'Accupro', 'Cleveland', 'Emuge', 'GARR Tool', 'HAIMER', 'Harvey Tool', 'Helical Solutions',
   'Hertel', 'Ingersoll Cutting Tools', 'Internal Tool', 'Iscar', 'Kennametal',
   'Keo', 'LMT', 'M.A. Ford', 'Melin Tool', 'Micro 100', 'Mitsubishi', 'OSG',
   'RobbJack', 'SGS', 'Sandvik Coromant', 'Seco', 'Titan USA', 'Tungaloy',
   'Value Collection', 'Widia', 'YG-1', 'Guhring',
   'Fraisa USA', 'Haas Automation', 'Lakeshore Carbide', 'Liberty Tool Co',
 ];
+
+// Alternate names for the canonical entity above. ProShop's free-text Brand
+// field has no consistency (we'd type "GARR" or "Helical" instead of the full
+// name), so these let import/extraction map the variants back to one entity.
+const SEED_ALIASES = {
+  'GARR Tool': ['GARR'],
+  'Helical Solutions': ['Helical'],
+};
 
 const SEED_VENDORS = [
   'Adion Systems', 'ALMCO', 'B&B Dynamic Machining', 'Boedeker Plastics, Inc.',
@@ -61,7 +75,6 @@ const SEED_EDP_PATTERNS = {
   'Helical Solutions': 'https://www.helicaltool.com/products/tool-details-{edp}',
   'Micro 100': 'https://www.micro100.com/products/tool-details-{edp_lower}',
   'GARR Tool': 'https://www.garrtool.com/product-details/?EDP={edp}',
-  'GARR': 'https://www.garrtool.com/product-details/?EDP={edp}',
   'OSG': 'https://osgtool.com/{edp_lower}/',
   'Haas Automation': 'https://www.haastooling.com/p/{edp}',
 };
@@ -92,7 +105,7 @@ function buildDefaultEntities() {
   const ensure = (name) => {
     if (!byName.has(name)) {
       byName.set(name, {
-        id: rid(), name, is_manufacturer: false, is_vendor: false,
+        id: rid(), name, aliases: [], is_manufacturer: false, is_vendor: false,
         has_own_catalog_number: false, edp_url_pattern: null, vendor_num_url_pattern: null,
         proshop_id: null, order: 0,
       });
@@ -113,6 +126,10 @@ function buildDefaultEntities() {
   for (const [pid, name] of Object.entries(SEED_PROSHOP_IDS)) {
     const e = byName.get(name);
     if (e) e.proshop_id = pid;
+  }
+  for (const [name, aliases] of Object.entries(SEED_ALIASES)) {
+    const e = byName.get(name);
+    if (e) e.aliases = [...aliases];
   }
   const entities = [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
   entities.forEach((e, i) => { e.order = i; });
@@ -141,22 +158,36 @@ export function getVendorNames(reg) {
   return entitiesOf(reg).filter(e => e.is_vendor).map(e => e.name).sort((a, b) => a.localeCompare(b));
 }
 
+// Match a free-text name to an entity by its canonical name OR any of its
+// aliases (case-insensitive). This is what makes "GARR" resolve to the "GARR
+// Tool" entity for URL generation, has-own-number lookups, etc.
 export function entityByName(name, reg) {
   if (!name) return null;
   const n = String(name).toLowerCase().trim();
-  return entitiesOf(reg).find(e => e.name.toLowerCase().trim() === n) || null;
+  return entitiesOf(reg).find(e =>
+    e.name.toLowerCase().trim() === n ||
+    (e.aliases || []).some(a => a.toLowerCase().trim() === n)
+  ) || null;
 }
 
 export function vendorHasOwnCatalogNumber(name, reg) {
   return !!entityByName(name, reg)?.has_own_catalog_number;
 }
 
-// Resolve a ProShop "Approved Brand"/"Vendor" cell (may be a Unique Id like
-// "MSC1" or the company name) to a company name. Unknown values pass through.
+// Resolve a ProShop "Approved Brand"/"Vendor" cell — which may be a Unique Id
+// (e.g. "MSC1"), the canonical company name, or an alias/variant ("GARR",
+// "Helical") — to the canonical company name. Unknown values pass through
+// unchanged so free-text we don't know yet is preserved.
 export function resolveVendorName(value, reg) {
   if (!value) return value;
   const trimmed = String(value).trim();
   const up = trimmed.toUpperCase();
+  // 1. ProShop unique-id (e.g. "MSC1")
   const byId = entitiesOf(reg).find(e => e.proshop_id && e.proshop_id.toUpperCase() === up);
-  return byId ? byId.name : trimmed;
+  if (byId) return byId.name;
+  // 2. Canonical name or alias → preferred name
+  const byName = entityByName(trimmed, reg);
+  if (byName) return byName.name;
+  // 3. Unknown — pass through
+  return trimmed;
 }

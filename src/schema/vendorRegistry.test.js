@@ -40,6 +40,19 @@ describe('DEFAULT_VENDOR_REGISTRY (migration seed)', () => {
     expect(resolveVendorName('msc1')).toBe('MSC Industrial'); // case-insensitive
     expect(resolveVendorName('Some Unknown Co')).toBe('Some Unknown Co'); // passthrough
   });
+
+  it('merges alias variants into one canonical entity', () => {
+    // "GARR" and "Helical" are aliases, not separate entities.
+    expect(getManufacturerNames()).toContain('GARR Tool');
+    expect(getManufacturerNames()).not.toContain('GARR');
+    expect(getManufacturerNames()).not.toContain('Helical');
+  });
+
+  it('resolves aliases to the preferred name (resolveVendorName / entityByName)', () => {
+    expect(resolveVendorName('GARR')).toBe('GARR Tool');
+    expect(resolveVendorName('helical')).toBe('Helical Solutions'); // case-insensitive
+    expect(entityByName('GARR').name).toBe('GARR Tool');
+  });
 });
 
 describe('urlGenerators (patterns sourced from the registry)', () => {

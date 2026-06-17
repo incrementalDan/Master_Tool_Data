@@ -2964,6 +2964,68 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--text);
 }
 
+/* ── Vendors editor page (/vendors) — filter/sort toolbar + aligned rows ──
+   Scoped here (not in the shared chip/pill tokens) per the request that the
+   colored MFG/VENDOR pills appear only on this page. */
+.vendor-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+.vendor-search .field-input {
+  border: none;
+  background: transparent;
+  padding: 6px 0;
+  flex: 1;
+}
+.vendor-search .field-input:focus { outline: none; box-shadow: none; }
+
+/* Fixed columns so MFG / VENDOR / Has Own # line up vertically across every
+   row, whether or not "Has Own #" is shown. */
+.vendor-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 64px 84px 104px 28px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 4px;
+}
+.vendor-name { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.vendor-ownnum {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+/* Keep the grid column reserved (alignment) but hide the control when the row
+   isn't a vendor. */
+.vendor-ownnum.is-hidden { visibility: hidden; pointer-events: none; }
+
+/* Colored role pills — background only fills when active (true). */
+.vendor-role-pill {
+  font-weight: 600;
+  justify-content: center;
+  background: var(--surface-2);
+  color: var(--text-sub);
+  border-color: var(--border);
+}
+.vendor-role-pill.mfg.active {
+  background: rgba(99, 102, 241, 0.18);   /* indigo */
+  color: #a5b4fc;
+  border-color: rgba(99, 102, 241, 0.55);
+}
+.vendor-role-pill.vendor.active {
+  background: rgba(45, 212, 191, 0.16);   /* teal */
+  color: #5eead4;
+  border-color: rgba(45, 212, 191, 0.5);
+}
+
 /* ── Vendor table — table-like grid with thin cell borders, rounded outer corners ── */
 .purchasing-vendor-table {
   margin-top: 8px;
