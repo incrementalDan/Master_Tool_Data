@@ -1173,6 +1173,7 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
   - Returns `{ pitch, is_sti, thread_unit }` — spread directly onto the tool object
   - Called with `r['Thread'] || r['Pitch'] || ''` (ProShop uses the `Thread` column; some exports use `Pitch`)
 - **`flute_design`** (`fieldRegistry.js`) — `appliesToTypes` excludes `tap` (`NO_TAP` constant). Taps don't have a flute design field.
+- **`tap_thread_unit`** controls which thread-size list the UI shows (inch or metric). It is **independent of the tool's overall Fusion unit** — the tool's geometry stays in whatever unit it was created in; this field only determines which thread-designation dropdown appears (`INCH_THREAD_SIZES` vs. `METRIC_THREAD_SIZES`). **It must be present in `THREAD_FIELDS`** (`src/schema/toolFieldLayout.js`) — `ThreadBlock` in `ToolFields.jsx` gates the Inch/Metric toggle on `has('tap_thread_unit')`, where `has` checks that list. If it gets dropped from `THREAD_FIELDS` the toggle silently disappears and the metric thread list becomes inaccessible.
 
 -----
 
