@@ -1,26 +1,31 @@
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, ListChecks, Download, X, FolderOpen, Upload, LogOut, User } from 'lucide-react';
-import { useApp } from '../context/AppContext.jsx';
+import { useNavigate } from 'react-router-dom';
+import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon } from 'lucide-react';
+import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
 import { generateMachineNumbers } from '../schema/toolSchema.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
 import { FilePicker } from './LibrarySetup.jsx';
 import DescRenameModal from './DescRenameModal.jsx';
 import InfoTip from './InfoTip.jsx';
-import { SetupGuideSummary } from './SetupGuide.jsx';
+import ImportPhotosModal from './ImportPhotosModal.jsx';
 import { exportFullLibrary } from '../utils/proShopExport.js';
 
 export default function Settings() {
+  const navigate = useNavigate();
   const {
-    tools, fetchRawLibrary, renumberLibrary, isSaving, markSetupStep,
+    tools, needsNormalize, fetchRawLibrary, renumberLibrary, isSaving,
+    markSetupStepInSettings,
     libraryLocation, holderLibraryLocation, holderLibrarySetupComplete,
     setHolderLibraryLocation, clearHolderLibraryLocation, notify,
     googleAuthenticated, metadataSkipped, user: googleUser,
     fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
     shopSettings, saveShopSettings, beginChangeLibrary, signOutAll,
+    setupProgress,
   } = useApp();
 
   const [showHolderPicker, setShowHolderPicker] = useState(false);
   const [showDescRename, setShowDescRename] = useState(false);
+  const [showPhotos, setShowPhotos] = useState(false);
   const [defaultUnit, setDefaultUnitState] = useState(getDefaultUnit());
 
   // Metadata file location — fetched lazily so Settings doesn't add a Drive
@@ -42,7 +47,7 @@ export default function Settings() {
   }, [googleAuthenticated, fetchMetadataLocation]);
 
   const changeDefaultUnit = (unit) => {
-    setDefaultUnit(unit);                 // immediate effect (localStorage cache)
+    setDefaultUnit(unit);
     setDefaultUnitState(unit);
   };
 
@@ -53,7 +58,6 @@ export default function Settings() {
   const [skipInput, setSkipInput] = useState('');
   const [savingShop, setSavingShop] = useState(false);
 
-  // Re-sync the form when the shared file finishes loading (or changes elsewhere).
   useEffect(() => {
     setShopName(shopSettings?.shop_name || '');
     setMachineStart(shopSettings?.machine_number?.start ?? 30);
@@ -82,9 +86,13 @@ export default function Settings() {
     finally { setSavingShop(false); }
   };
 
-  const fmtDate = (v) => v ? new Date(v).toLocaleString() : 'Never';
+  const fmtDate = (v) => {
+    if (!v) return null;
+    try { return new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+    catch { return null; }
+  };
 
-  // 'idle' → warning, 'preview' → table + confirm input, 'done' → success
+  // ── Renumber ───────────────────────────────────────────────────────────────
   const [stage, setStage] = useState('idle');
   const [previewRows, setPreviewRows] = useState([]);
   const [loadingPreview, setLoadingPreview] = useState(false);
@@ -92,8 +100,6 @@ export default function Settings() {
   const [error, setError] = useState('');
   const [resultCount, setResultCount] = useState(0);
 
-  // Build the before/after preview from a FRESH read of the library, in the
-  // exact array order the commit will use, so what's shown matches what's done.
   const startPreview = async () => {
     setError('');
     setLoadingPreview(true);
@@ -131,6 +137,7 @@ export default function Settings() {
       const count = await renumberLibrary();
       setResultCount(count);
       setStage('done');
+      markSetupStepInSettings('machineNumbers');
     } catch (err) {
       setError(err.message);
     }
@@ -144,9 +151,25 @@ export default function Settings() {
 
   const handleExportProShop = () => {
     exportFullLibrary(tools);
-    markSetupStep('proshopExported');
+    markSetupStepInSettings('proshopExported');
     notify(`Exported ${tools.length} tools to ProShop CSV`, 'success');
   };
+
+  // ── Setup step derivation (live-data warnings) ─────────────────────────────
+  // Returns a warning string if the step's stored flag says "done" but the
+  // current live data suggests it may not actually be complete.
+  const stepWarning = (key) => {
+    if (!setupProgress[key]) return null; // not done — no warning
+    switch (key) {
+      case 'fusionConnected': return tools.length === 0 ? 'Library appears empty — re-check the connected file.' : null;
+      case 'normalized': return needsNormalize ? 'Some tools are not yet normalized.' : null;
+      case 'proshopMerged': return !tools.some(t => t.min_ooh != null && t.min_ooh > 0) ? 'No tools have MIN OOH data — ProShop CSV may not have merged.' : null;
+      default: return null;
+    }
+  };
+
+  // Drive timestamps for each step (ISO string or null)
+  const stepTimestamp = (key) => shopSettings?.setup_steps?.[key] ?? null;
 
   return (
     <div>
@@ -164,18 +187,12 @@ export default function Settings() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <div className="text-sm" style={{ fontWeight: 500 }}>
-              Autodesk authentication active
-            </div>
+            <div className="text-sm" style={{ fontWeight: 500 }}>Autodesk authentication active</div>
             {googleAuthenticated && googleUser?.email && (
-              <div className="text-sub text-sm" style={{ marginTop: 2 }}>
-                Google: {googleUser.email}
-              </div>
+              <div className="text-sub text-sm" style={{ marginTop: 2 }}>Google: {googleUser.email}</div>
             )}
             {!googleAuthenticated && (
-              <div className="text-sub text-sm" style={{ marginTop: 2 }}>
-                Google Drive not connected (metadata off)
-              </div>
+              <div className="text-sub text-sm" style={{ marginTop: 2 }}>Google Drive not connected (metadata off)</div>
             )}
           </div>
           <button className="btn btn-secondary btn-sm" onClick={signOutAll}>
@@ -184,21 +201,77 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Import — one-time library / ProShop CSV import */}
+      {/* Setup & Import — unified initial-workflow tracker */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <Upload size={16} style={{ color: 'var(--blue)' }} />
-          <h3 style={{ margin: 0 }}>Import</h3>
+          <CheckCircle2 size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Setup &amp; Import</h3>
+          <InfoTip text="The one-time initial workflow: connect the Fusion library, normalize it, merge in ProShop data, configure machine numbers, then export back. Each step checks off automatically when you complete it. Warnings appear here if the stored flag says 'done' but the live library suggests otherwise — you can re-run a step or ignore the warning." />
         </div>
-        <p className="text-sub text-sm mb-16">
-          One-time import of a Fusion 360 JSON library or ProShop CSV to populate the tool library.
+        <p className="text-sub text-sm" style={{ marginBottom: 16 }}>
+          One-time setup checklist. Use the action buttons to run or re-run each step.
         </p>
-        <a href="#/import" className="btn btn-secondary" style={{ display: 'inline-flex' }}>
-          <Upload size={14} /> Open Import…
-        </a>
+
+        {SETUP_STEPS.map((step, i) => {
+          const done = !!setupProgress[step.key];
+          const warn = stepWarning(step.key);
+          const ts = fmtDate(stepTimestamp(step.key));
+          return (
+            <div key={step.key} style={{
+              display: 'flex', alignItems: 'flex-start', gap: 12,
+              padding: '10px 0',
+              borderBottom: i < SETUP_STEPS.length - 1 ? '1px solid var(--border)' : 'none',
+            }}>
+              <div style={{ paddingTop: 1, flexShrink: 0 }}>
+                {warn
+                  ? <AlertCircle size={16} style={{ color: 'var(--orange)' }} />
+                  : done
+                    ? <CheckCircle2 size={16} style={{ color: 'var(--green)' }} />
+                    : <Circle size={16} style={{ color: 'var(--text-sub)' }} />}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{step.label}</div>
+                {done && ts && <div className="text-sub" style={{ fontSize: 11, marginTop: 2 }}>Done {ts}</div>}
+                {warn && (
+                  <div style={{ color: 'var(--orange)', fontSize: 12, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <AlertTriangle size={12} /> {warn}
+                  </div>
+                )}
+                {/* ProShop photos sub-step under proshopMerged */}
+                {step.key === 'proshopMerged' && (
+                  <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {setupProgress.proshopPhotos
+                      ? <CheckCircle2 size={13} style={{ color: 'var(--green)', flexShrink: 0 }} />
+                      : <Circle size={13} style={{ color: 'var(--text-sub)', flexShrink: 0 }} />}
+                    <span className="text-sub" style={{ fontSize: 12 }}>
+                      Import ProShop photos
+                      {setupProgress.proshopPhotos && fmtDate(stepTimestamp('proshopPhotos'))
+                        ? ` — done ${fmtDate(stepTimestamp('proshopPhotos'))}`
+                        : ''}
+                    </span>
+                    <button className="btn btn-ghost btn-sm" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => setShowPhotos(true)}>
+                      <ImageIcon size={11} /> {setupProgress.proshopPhotos ? 'Re-import' : 'Import photos…'}
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div style={{ flexShrink: 0 }}>
+                <StepAction stepKey={step.key} done={done} warn={warn}
+                  onExport={handleExportProShop}
+                  onImport={() => navigate('/import')}
+                  onChangeLibrary={beginChangeLibrary}
+                  onGoToLanding={() => navigate('/')}
+                  tools={tools}
+                />
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Tool library (APS) — change which Fusion library file is loaded */}
+      {showPhotos && <ImportPhotosModal onClose={() => setShowPhotos(false)} />}
+
+      {/* Tool library (APS) */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <HardDrive size={16} style={{ color: 'var(--blue)' }} />
@@ -228,11 +301,15 @@ export default function Settings() {
         <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 6 }}>
           Default unit <span style={{ opacity: 0.7 }}>— for new tools; existing tools keep their own unit</span>
         </label>
-        <div className="btn-toggle">
+        <div className="btn-toggle" style={{ marginBottom: 16 }}>
           {[['inches', 'Inch (in)'], ['millimeters', 'Metric (mm)']].map(([val, label]) => (
             <button key={val} className={defaultUnit === val ? 'active' : ''} onClick={() => changeDefaultUnit(val)}>{label}</button>
           ))}
         </div>
+
+        <button className="btn btn-primary" onClick={saveShop} disabled={savingShop || !googleAuthenticated}>
+          {savingShop ? 'Saving…' : 'Save Shop Settings'}
+        </button>
       </div>
 
       {/* Machine numbers — saved to shop_settings.json, drives renumber/add */}
@@ -260,37 +337,6 @@ export default function Settings() {
             onChange={e => setSkipInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSkip()} />
           <button className="btn btn-secondary btn-sm" onClick={addSkip}>Add</button>
         </div>
-      </div>
-
-      {/* Import history — read-only display from shop_settings.json */}
-      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <FileJson size={16} style={{ color: 'var(--blue)' }} />
-          <h3 style={{ margin: 0 }}>Import History</h3>
-        </div>
-        <p className="text-sub text-sm mb-12">Read-only — captured by the import flows (wiring pending).</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 14px', fontSize: 13 }}>
-          <span className="text-sub">Last ProShop import</span><span>{fmtDate(shopSettings?.import?.last_proshop_import)}</span>
-          <span className="text-sub">Last photo import folder</span><span style={{ wordBreak: 'break-all' }}>{shopSettings?.import?.last_photo_import_folder_id || '—'}</span>
-          <span className="text-sub">Last Fusion hub</span><span style={{ wordBreak: 'break-all' }}>{shopSettings?.aps?.last_used_hub_id || '—'}</span>
-          <span className="text-sub">Last Fusion project</span><span style={{ wordBreak: 'break-all' }}>{shopSettings?.aps?.last_used_project_id || '—'}</span>
-        </div>
-        <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={saveShop} disabled={savingShop || !googleAuthenticated}>
-          {savingShop ? 'Saving…' : 'Save Shop Settings'}
-        </button>
-      </div>
-
-      {/* Setup checklist — sanity-check summary of the initial workflow */}
-      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <ListChecks size={16} style={{ color: 'var(--blue)' }} />
-          <h3 style={{ margin: 0 }}>Setup Checklist</h3>
-          <InfoTip text="Reference for the initial Fusion → normalize → ProShop workflow: connect the Fusion library, normalize it, merge in ProShop data, then export back. Each step checks itself off as you complete it — this is just a sanity check that it ran, not something you manage here." />
-        </div>
-        <p className="text-sub text-sm mb-16">
-          Status of the one-time initial setup and ProShop import workflow.
-        </p>
-        <SetupGuideSummary />
       </div>
 
       {/* ProShop export */}
@@ -337,13 +383,8 @@ export default function Settings() {
                   <span className="flex items-center gap-8">
                     <span className="font-mono text-xs">{metaLocation.fileName}</span>
                     {metaLocation.webViewLink && (
-                      <a
-                        href={metaLocation.webViewLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs"
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--blue)' }}
-                      >
+                      <a href={metaLocation.webViewLink} target="_blank" rel="noreferrer"
+                        className="text-xs" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: 'var(--blue)' }}>
                         <ExternalLink size={11} /> Open in Drive
                       </a>
                     )}
@@ -421,11 +462,8 @@ export default function Settings() {
               <button className="btn btn-secondary btn-sm" onClick={() => setShowHolderPicker(p => !p)}>
                 {showHolderPicker ? 'Cancel' : 'Change Holder Library'}
               </button>
-              <button
-                className="btn btn-ghost btn-sm"
-                style={{ color: 'var(--red)' }}
-                onClick={() => { clearHolderLibraryLocation(); setShowHolderPicker(false); notify('Holder library removed', 'info'); }}
-              >
+              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }}
+                onClick={() => { clearHolderLibraryLocation(); setShowHolderPicker(false); notify('Holder library removed', 'info'); }}>
                 <Trash2 size={13} /> Remove
               </button>
             </div>
@@ -463,11 +501,7 @@ export default function Settings() {
           Each tool shows its current description next to the generated suggestion — uncheck
           any you want to skip or edit the text before applying.
         </p>
-        <button
-          className="btn btn-secondary btn-sm"
-          onClick={() => setShowDescRename(true)}
-          disabled={tools.length === 0}
-        >
+        <button className="btn btn-secondary btn-sm" onClick={() => setShowDescRename(true)} disabled={tools.length === 0}>
           <Wand2 size={13} /> Review &amp; rename descriptions…
         </button>
         {showDescRename && <DescRenameModal onClose={() => setShowDescRename(false)} />}
@@ -477,13 +511,11 @@ export default function Settings() {
         <h3 style={{ marginBottom: 4 }}>Advanced</h3>
         <p className="text-sub text-sm mb-16">Destructive maintenance actions. Use with care.</p>
 
-        <div
-          style={{
-            padding: 16, borderRadius: 'var(--radius-sm)',
-            border: '1px solid var(--border)', borderLeft: '3px solid var(--red)',
-            background: 'var(--surface-2)',
-          }}
-        >
+        <div style={{
+          padding: 16, borderRadius: 'var(--radius-sm)',
+          border: '1px solid var(--border)', borderLeft: '3px solid var(--red)',
+          background: 'var(--surface-2)',
+        }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <Hash size={16} style={{ color: 'var(--orange)' }} />
             <strong>Renumber Tool Library</strong>
@@ -552,16 +584,10 @@ export default function Settings() {
                 autoFocus
               />
               <div className="flex gap-8">
-                <button
-                  className="btn btn-danger"
-                  onClick={handleRenumber}
-                  disabled={confirmText !== 'RENUMBER' || isSaving}
-                >
+                <button className="btn btn-danger" onClick={handleRenumber} disabled={confirmText !== 'RENUMBER' || isSaving}>
                   {isSaving ? 'Renumbering…' : 'Renumber Library'}
                 </button>
-                <button className="btn btn-secondary" onClick={cancelPreview} disabled={isSaving}>
-                  Cancel
-                </button>
+                <button className="btn btn-secondary" onClick={cancelPreview} disabled={isSaving}>Cancel</button>
               </div>
             </>
           )}
@@ -575,4 +601,38 @@ export default function Settings() {
       </div>
     </div>
   );
+}
+
+// Action button for each setup step — shows the right CTA depending on step state.
+function StepAction({ stepKey, done, warn, onExport, onImport, onChangeLibrary, onGoToLanding, tools }) {
+  switch (stepKey) {
+    case 'fusionConnected':
+      return (
+        <button className="btn btn-secondary btn-sm" onClick={onChangeLibrary}>
+          {done && !warn ? 'Change Library' : 'Connect Library'}
+        </button>
+      );
+    case 'normalized':
+      return (
+        <button className="btn btn-secondary btn-sm" onClick={onGoToLanding}>
+          {warn ? 'Go to Library' : done ? 'View Library' : 'Open Library'}
+        </button>
+      );
+    case 'proshopMerged':
+      return (
+        <button className="btn btn-secondary btn-sm" onClick={onImport}>
+          {done && !warn ? 'Re-run Import' : 'Open Import'}
+        </button>
+      );
+    case 'machineNumbers':
+      return null; // handled inline — Machine Numbers section is below
+    case 'proshopExported':
+      return (
+        <button className="btn btn-secondary btn-sm" onClick={onExport} disabled={tools.length === 0}>
+          ↓ Export CSV
+        </button>
+      );
+    default:
+      return null;
+  }
 }

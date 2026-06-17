@@ -22,13 +22,14 @@ const HOLDER_LOCATION_KEY = 'aps_holder_library_location';
 const SETUP_PROGRESS_KEY = 'tms_setup_progress';
 const SETUP_CELEBRATED_KEY = 'tms_setup_celebrated';
 
-// The 4 steps of the initial setup/normalization/ProShop workflow, in order.
+// The 5 steps of the initial setup/normalization/ProShop workflow, in order.
 // Each is toggled on at the moment its triggering action happens — see
 // setLibraryLocation, normalizeLibrary, and ImportFlow's merge/export buttons.
 export const SETUP_STEPS = [
   { key: 'fusionConnected', label: 'Connect Fusion library' },
   { key: 'normalized', label: 'Normalize the library' },
   { key: 'proshopMerged', label: 'Merge ProShop data' },
+  { key: 'machineNumbers', label: 'Configure machine numbers' },
   { key: 'proshopExported', label: 'Export to ProShop' },
 ];
 
@@ -333,9 +334,23 @@ export function AppProvider({ children }) {
     saveSharedFile('shopSettings', shopSettings, 'SET_SHOP_SETTINGS'), [saveSharedFile]);
 
   // Marks one step of the setup guide as complete (idempotent — see MARK_SETUP_STEP).
-  // Called at each of the 4 trigger points: connecting the Fusion library,
-  // normalizing, merging ProShop data, and exporting to ProShop.
   const markSetupStep = useCallback((key) => dispatch({ type: 'MARK_SETUP_STEP', key }), []);
+
+  // Like markSetupStep but also stamps a timestamp in shop_settings.json on Drive
+  // (shared across devices). Falls back gracefully if Google Drive is not connected.
+  const markSetupStepInSettings = useCallback((key) => {
+    dispatch({ type: 'MARK_SETUP_STEP', key });
+    if (!googleRef.current) return;
+    const current = shopSettingsRef.current || {};
+    const updated = {
+      ...current,
+      setup_steps: { ...(current.setup_steps || {}), [key]: new Date().toISOString() },
+    };
+    const { SHARED_FILES } = driveService;
+    driveService.saveSharedJson(SHARED_FILES.shopSettings.name, SHARED_FILES.shopSettings.cacheKey, updated)
+      .then(() => dispatch({ type: 'SET_SHOP_SETTINGS', shopSettings: updated }))
+      .catch(() => {}); // silently ignore — localStorage flag already set
+  }, []);
 
   // One-time-ever flag so the congratulations popup doesn't fire again after dismissal.
   const setupCelebrated = useCallback(() => localStorage.getItem(SETUP_CELEBRATED_KEY) === '1', []);
@@ -467,11 +482,13 @@ export function AppProvider({ children }) {
         setupSeededRef.current = true;
         const normalized = !needsNormalize && tools.length > 0;
         const proshopMerged = tools.some(t => t.min_ooh != null && t.min_ooh > 0);
+        const machineNumbers = tools.some(t => t.machine_tool_number != null && t.machine_tool_number > 0);
         const established = normalized && proshopMerged;
         dispatch({ type: 'SET_SETUP_PROGRESS', progress: {
           fusionConnected: true,
           normalized,
           proshopMerged,
+          machineNumbers,
           proshopExported: established,
         }});
         if (established) localStorage.setItem(SETUP_CELEBRATED_KEY, '1');
@@ -1031,6 +1048,17 @@ export function AppProvider({ children }) {
       onProgress?.({ phase: 'saving', done: photos.length, total: photos.length, current: '' });
       await driveService.saveAllMetadata([...metaById.values()]);
       for (const t of updatedTools) dispatch({ type: 'UPDATE_TOOL', tool: t });
+      // Stamp the proshopPhotos setup step (localStorage + Drive timestamp)
+      dispatch({ type: 'MARK_SETUP_STEP', key: 'proshopPhotos' });
+      const current = shopSettingsRef.current || {};
+      const updated = {
+        ...current,
+        setup_steps: { ...(current.setup_steps || {}), proshopPhotos: new Date().toISOString() },
+      };
+      const { SHARED_FILES } = driveService;
+      driveService.saveSharedJson(SHARED_FILES.shopSettings.name, SHARED_FILES.shopSettings.cacheKey, updated)
+        .then(() => dispatch({ type: 'SET_SHOP_SETTINGS', shopSettings: updated }))
+        .catch(() => {});
     }
     return summary;
   }, [notify]);
@@ -1346,6 +1374,7 @@ export function AppProvider({ children }) {
       saveVendorRegistry,
       saveShopSettings,
       markSetupStep,
+      markSetupStepInSettings,
       setupCelebrated,
       markSetupCelebrated,
       setLibraryLocation,
