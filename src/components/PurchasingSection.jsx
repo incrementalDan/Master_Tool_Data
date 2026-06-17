@@ -151,8 +151,16 @@ function PriceCell({ value, editing, onChange }) {
 
 // Drag handle (left side of every row). In edit mode it doubles as a delete
 // button — hover reveals an X over the grip; click removes the row.
-function RowGrip({ editing, onRemove }) {
+// Pass deleteOnly for manufacturer rows where the card-level grip is in the header.
+function RowGrip({ editing, onRemove, deleteOnly = false }) {
   if (!editing) return <div className="purchasing-row-grip" />;
+  if (deleteOnly) {
+    return (
+      <div className="purchasing-row-grip purchasing-del-only" title="Remove" onClick={onRemove}>
+        <X size={13} className="purchasing-del-icon" style={{ opacity: 1, color: 'var(--red)' }} />
+      </div>
+    );
+  }
   return (
     <div className="purchasing-row-grip" title="Drag to reorder · click to remove" onClick={onRemove}>
       <GripVertical size={13} className="purchasing-grip-icon" />
@@ -161,7 +169,7 @@ function RowGrip({ editing, onRemove }) {
   );
 }
 
-function MfgRow({ mfg, editing, isDragOver, onChange, onRemove, onRegenerateUrl, dragHandlers }) {
+function MfgRow({ mfg, editing, onChange, onRemove, onRegenerateUrl }) {
   const hasGenerator = manufacturerHasUrlGenerator(mfg.name);
   // Display-time fallback: if no URL is stored but a generator matches this
   // manufacturer + part number, show the generated link immediately — even
@@ -170,8 +178,8 @@ function MfgRow({ mfg, editing, isDragOver, onChange, onRemove, onRegenerateUrl,
   const edpUrl = mfg.edp_url || generateManufacturerUrl(mfg.name, mfg.edp);
   return (
     <>
-      <div className={`purchasing-row${isDragOver ? ' purchasing-row--drop' : ''}`} {...dragHandlers}>
-        <RowGrip editing={editing} onRemove={onRemove} />
+      <div className="purchasing-row">
+        <RowGrip editing={editing} onRemove={onRemove} deleteOnly />
         {editing ? (
           <input
             className="field-input purchasing-cell purchasing-cell--name purchasing-mfg-name"
@@ -462,9 +470,26 @@ export default function PurchasingSection({ tool, onSave, isSaving }) {
           {manufacturers.map((mfg, mIdx) => {
             const vendors = displayVendorsFor(mfg.id);
             return (
-              <div key={mfg.id} className="purchasing-mfg-card">
+              <div
+                key={mfg.id}
+                className={`purchasing-mfg-card${dragOverKey === `mfg-${mIdx}` ? ' purchasing-mfg-card--drop' : ''}`}
+                onDragOver={editing ? e => handleDragOver(e, `mfg-${mIdx}`) : undefined}
+                onDrop={editing ? e => handleMfgDrop(e, mIdx) : undefined}
+              >
                 <div className="purchasing-header-row">
-                  <div className="purchasing-cell" />
+                  {editing ? (
+                    <div
+                      className="purchasing-row-grip purchasing-card-grip"
+                      draggable
+                      onDragStart={e => handleDragStart(e, `mfg-${mIdx}`)}
+                      onDragEnd={handleDragEnd}
+                      title="Drag to reorder manufacturer"
+                    >
+                      <GripVertical size={13} className="purchasing-grip-icon" style={{ position: 'relative', opacity: 1 }} />
+                    </div>
+                  ) : (
+                    <div className="purchasing-cell" />
+                  )}
                   <div className="purchasing-cell purchasing-cell--name">Manufacturer</div>
                   <div className="purchasing-cell purchasing-cell--num">MFG#</div>
                   <div className="purchasing-cell purchasing-cell--num">EDP#</div>
@@ -472,17 +497,9 @@ export default function PurchasingSection({ tool, onSave, isSaving }) {
                 <MfgRow
                   mfg={mfg}
                   editing={editing}
-                  isDragOver={dragOverKey === `mfg-${mIdx}`}
                   onChange={patch => updateMfg(mfg.id, patch)}
                   onRemove={() => removeManufacturer(mfg.id)}
                   onRegenerateUrl={(field, urlField) => regenerateMfgUrl(mfg.id, field, urlField)}
-                  dragHandlers={editing ? {
-                    draggable: true,
-                    onDragStart: e => handleDragStart(e, `mfg-${mIdx}`),
-                    onDragOver: e => handleDragOver(e, `mfg-${mIdx}`),
-                    onDrop: e => handleMfgDrop(e, mIdx),
-                    onDragEnd: handleDragEnd,
-                  } : {}}
                 />
 
                 {(vendors.length > 0 || editing) && (
