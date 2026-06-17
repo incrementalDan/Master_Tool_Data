@@ -92,6 +92,13 @@ export default function ToolDetail() {
     [tool?.tool_type, tool?.diameter, tool?.flute_length, tool?.shoulder_length, tool?.min_ooh, tool?.overall_length, tool?.corner_radius]
   );
 
+  useEffect(() => {
+    if (!tool) return;
+    const parts = [tool.proshot_id, tool.description].filter(Boolean);
+    document.title = parts.length ? parts.join(' · ') : 'Fusion Tool Library';
+    return () => { document.title = 'Fusion Tool Library'; };
+  }, [tool?.proshot_id, tool?.description]);
+
   if (!tool) {
     return (
       <div className="loading-screen">
