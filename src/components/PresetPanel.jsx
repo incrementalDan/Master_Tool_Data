@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, Check, GripVertical, Trash2 } from 'lucide-react';
+import { Plus, X, Check, GripVertical, Trash2, ChevronDown } from 'lucide-react';
 import { generateId, COOLANT_OPTS } from '../schema/toolSchema.js';
 import { useApp } from '../context/AppContext.jsx';
 import { holderColor } from './AssemblyCard.jsx';
+import CamPresetPicker from './CamPresetPicker.jsx';
 import {
   composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
   materialNameCode, presetMaterialColor, findMaterialInLibrary, HOLE_MAKING_TYPES, TURNING_TYPES,
@@ -464,6 +465,7 @@ function EditCard({
   // override, DEFAULT_FX's v_f_plunge:'formula' would recompute it from the
   // (nonexistent) f_n on mount, zeroing it out.
   const [fx, setFx] = useState(() => isSpotDrill ? { ...DEFAULT_FX, v_f_plunge: 'manual' } : DEFAULT_FX);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [draft, setDraft] = useState(() => {
     const d = computeFormulaDraft({ ...preset }, DEFAULT_FX, diameter, numberOfFlutes);
     d.operation_type = preset.operation_type ?? parsePresetName(preset.name)?.opType ?? null;
@@ -614,55 +616,48 @@ function EditCard({
         </button>
       </div>
 
-      {/* Material — from the Materials library (Group → optional CAM Preset).
+      {/* Material — picked from the Materials library via the CAM Preset picker
+          (search "6061"/"1018" → its CAM preset, or browse the group pills).
           Stored as material.query = CAM preset name, else group label. The CAM
           preset name is the Fusion speed/feed preset group this maps to. */}
       <div className="preset-edit-section">
         <div className="preset-edit-section-label">MATERIAL</div>
         <div className="preset-edit-grid">
-          <FGroup label="Group">
-            <select
-              className="field-input"
-              value={findMaterialInLibrary(draft.material?.query, materials).group?.id || ''}
-              onChange={e => {
-                const g = (materials?.groups || []).find(x => x.id === e.target.value);
-                const query = g ? g.label : '';
-                setDraft(d => {
-                  const nd = { ...d, material: { ...(d.material || {}), query, category: materialCategory(query) } };
-                  nd.name = composeName(nd, assemblyId, nd.operation_type);
-                  return nd;
-                });
-              }}
-            >
-              <option value="">—</option>
-              {(materials?.groups || []).map(g => (
-                <option key={g.id} value={g.id}>{g.id} · {g.label}</option>
-              ))}
-            </select>
-          </FGroup>
           <FGroup label="CAM Preset">
             {(() => {
               const cur = findMaterialInLibrary(draft.material?.query, materials);
-              const gid = cur.group?.id || '';
-              const camPresets = (materials?.presets || []).filter(p => p.group_id === gid);
+              const sel = cur.preset || cur.group;
+              const color = presetMaterialColor(draft.material?.query, materials);
+              const clearMat = () => setDraft(d => {
+                const nd = { ...d, material: { ...(d.material || {}), query: '', category: 'all' } };
+                nd.name = composeName(nd, assemblyId, nd.operation_type);
+                return nd;
+              });
               return (
-                <select
-                  className="field-input"
-                  value={cur.preset?.id || ''}
-                  disabled={!gid || camPresets.length === 0}
-                  onChange={e => {
-                    const cp = camPresets.find(x => x.id === e.target.value);
-                    const query = cp ? cp.name : (cur.group?.label || '');
-                    setDraft(d => {
-                      const nd = { ...d, material: { ...(d.material || {}), query, category: materialCategory(query) } };
-                      nd.name = composeName(nd, assemblyId, nd.operation_type);
-                      return nd;
-                    });
-                  }}
+                <div
+                  className="preset-mat-field"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setPickerOpen(true)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPickerOpen(true); } }}
                 >
-                  <option value="">{camPresets.length === 0 ? '— none defined —' : '— none —'}</option>
-                  {camPresets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                </select>
+                  {sel ? (
+                    <span className="preset-mat-sel">
+                      <span className="cam-dot" style={{ background: color || '#888' }} />
+                      {cur.preset ? cur.preset.name : cur.group.label}
+                    </span>
+                  ) : (
+                    <span className="text-sub">Choose material…</span>
+                  )}
+                  <span className="preset-mat-actions">
+                    {sel && (
+                      <span className="preset-mat-clear" title="Clear" onClick={e => { e.stopPropagation(); clearMat(); }}>
+                        <X size={13} />
+                      </span>
+                    )}
+                    <ChevronDown size={14} className="text-sub" />
+                  </span>
+                </div>
               );
             })()}
           </FGroup>
@@ -679,6 +674,20 @@ function EditCard({
           </FGroup>
         </div>
       </div>
+
+      {pickerOpen && (
+        <CamPresetPicker
+          materials={materials}
+          currentQuery={draft.material?.query}
+          onClose={() => setPickerOpen(false)}
+          onSelect={(cp) => setDraft(d => {
+            const query = cp.name;
+            const nd = { ...d, material: { ...(d.material || {}), query, category: materialCategory(query) } };
+            nd.name = composeName(nd, assemblyId, nd.operation_type);
+            return nd;
+          })}
+        />
+      )}
 
       {/* Operation & Assembly — drive the convention preset name */}
       <div className="preset-edit-section">
