@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import {
   FlaskConical, Layers, GripVertical, Plus, X, Trash2, ChevronDown, ChevronRight,
-  Search, Copy, Check, RotateCcw, ArrowRight, Pencil,
+  Search, RotateCcw, ArrowRight, Pencil,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { useDragReorder } from './useDragReorder.js';
@@ -32,7 +32,6 @@ export default function MaterialsEditor() {
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState(null);   // `${kind}:${id}` of the open row
   const [aliasDraft, setAliasDraft] = useState({});  // alloy id → raw comma string while editing
-  const [copied, setCopied] = useState(false);
 
   const commit = async (next) => {
     setDoc(next);
@@ -118,12 +117,6 @@ export default function MaterialsEditor() {
     () => doc.materials.filter(m => matchGroup(m.group_id) && (!q || alloyHay(m).includes(q))),
     [doc.materials, groupFilter, q]);
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(JSON.stringify(doc, null, 2))
-      .then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); })
-      .catch(() => alert('Copy failed — try a different browser'));
-  };
-
   const GroupBadge = ({ id, size = 'sm' }) => {
     const c = groupColor(id);
     return (
@@ -140,17 +133,27 @@ export default function MaterialsEditor() {
           <FlaskConical size={16} /> Materials
         </h2>
         <span className="text-sub text-sm">{savingMsg}</span>
-        <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto' }} onClick={handleCopy} title="Copy the full material taxonomy as JSON">
-          {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy JSON'}
-        </button>
       </div>
-      <p className="text-sub text-xs mb-16">
+      <p className="text-sub text-xs mb-12">
         {doc.presets.length} CAM presets · {doc.materials.length} alloys · 3 code systems: ISO 513 · Kennametal · Haas/VDI 3323
       </p>
 
       {!googleAuthenticated && (
         <div className="error-banner mb-16">Connect Google Drive to save changes — edits won&apos;t persist.</div>
       )}
+
+      {/* Search — top of the page, drives both the CAM Presets and Alloys lists */}
+      <div className="vendor-search mb-16" style={{ width: '100%' }}>
+        <Search size={14} className="text-sub" />
+        <input
+          className="field-input"
+          placeholder={view === 'presets'
+            ? 'Search CAM presets or alloys: Al Wrought · SS 316 · Gray Iron · Inconel…'
+            : 'Search alloys: 6061 · 316L · 4140 · Ti64 · duplex…'}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+        />
+      </div>
 
       <div className="mat-layout">
         {/* ════ LEFT / MAIN ════ */}
@@ -193,19 +196,6 @@ export default function MaterialsEditor() {
                 </button>
               );
             })}
-          </div>
-
-          {/* Search */}
-          <div className="vendor-search mb-12" style={{ width: '100%' }}>
-            <Search size={14} className="text-sub" />
-            <input
-              className="field-input"
-              placeholder={view === 'presets'
-                ? 'Search CAM presets or alloys: Al Wrought · SS 316 · Inconel…'
-                : 'Search alloys: 6061 · 316L · 4140 · Ti64 · duplex…'}
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
           </div>
 
           {/* ── CAM PRESETS view ── */}
