@@ -25,6 +25,7 @@ const DEFAULT_FX = {
   v_f:            'formula',
   f_z:            'manual',
   v_f_plunge:     'formula',
+  v_f_retract:    'formula',
   f_n:            'manual',
   v_f_leadIn:     'formula',
   v_f_leadOut:    'formula',
@@ -438,6 +439,10 @@ function computeFormulaDraft(draft, fx, diameter, numberOfFlutes) {
   else if (fx.f_n === 'formula')
     d.f_n = roundForField('f_n', ipmToIPR(d.v_f_plunge ?? 0, n));
 
+  // Retract follows plunge (one-directional) unless overridden.
+  if (fx.v_f_retract === 'formula')
+    d.v_f_retract = roundForField('v_f_retract', d.v_f_plunge ?? 0);
+
   const vf = d.v_f ?? 0;
   if (fx.v_f_leadIn     === 'formula') d.v_f_leadIn     = roundForField('v_f_leadIn',     vf);
   if (fx.v_f_leadOut    === 'formula') d.v_f_leadOut    = roundForField('v_f_leadOut',    vf);
@@ -460,14 +465,36 @@ function EditCard({
   const isTurning = TURNING_TYPES.has(toolType);
   const isMilling = !isHoleMaking && !isTurning;
 
-  // Spot drill loads v_f_plunge directly from the preset (no f_n field exists
-  // for this tool type — see normalizePreset's isSpotDrill branch). Without this
-  // override, DEFAULT_FX's v_f_plunge:'formula' would recompute it from the
-  // (nonexistent) f_n on mount, zeroing it out.
-  const [fx, setFx] = useState(() => isSpotDrill ? { ...DEFAULT_FX, v_f_plunge: 'manual' } : DEFAULT_FX);
+  // Milling and spot drill enter plunge feed as an independent value: neither
+  // shows a feed-per-rev (f_n) field, so v_f_plunge is the source of truth and
+  // f_n is derived from it. Without this, DEFAULT_FX (v_f_plunge:'formula',
+  // f_n:'manual') would recompute plunge from the (nonexistent, zero) f_n — on
+  // mount AND whenever spindle speed changes — silently zeroing a proven plunge
+  // feed. Drill-family tools keep the drilling convention (f_n manual, plunge
+  // derived). The draft init must use this same fx, not DEFAULT_FX.
+  const initialFx = { ...DEFAULT_FX };
+  if (isMilling || isSpotDrill) { initialFx.v_f_plunge = 'manual'; initialFx.f_n = 'formula'; }
+  // Turning/boring enter cutting feed and plunge directly — feed-per-tooth (f_z)
+  // doesn't apply — so keep them manual. Otherwise the milling formula (v_f =
+  // f_z × n × flutes, with f_z = 0) would zero the cutting feed on open and on
+  // every spindle-speed change. The n/v_c cascades below are also skipped for it.
+  if (isTurning) { initialFx.v_f = 'manual'; initialFx.v_f_plunge = 'manual'; }
+  // Retract feedrate defaults to the plunge feedrate (Fusion's native
+  // tool_feedRetract = tool_feedPlunge) and follows it as plunge changes — but
+  // only on the tools that have a retract field (drill family + spot drill), and
+  // only until the user overrides it. A stored value that already differs from
+  // plunge is treated as an override (manual) so it's preserved on open. For
+  // every other tool type retract isn't shown, so keep it manual (not computed).
+  if (isDrillFamily || isSpotDrill) {
+    const r = preset['v_f_retract'], pl = preset.v_f_plunge ?? 0;
+    initialFx.v_f_retract = (r == null || Math.abs(Number(r) - Number(pl)) < 1e-6) ? 'formula' : 'manual';
+  } else {
+    initialFx.v_f_retract = 'manual';
+  }
+  const [fx, setFx] = useState(initialFx);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [draft, setDraft] = useState(() => {
-    const d = computeFormulaDraft({ ...preset }, DEFAULT_FX, diameter, numberOfFlutes);
+    const d = computeFormulaDraft({ ...preset }, initialFx, diameter, numberOfFlutes);
     d.operation_type = preset.operation_type ?? parsePresetName(preset.name)?.opType ?? null;
     return d;
   });
@@ -511,6 +538,13 @@ function EditCard({
   // and the independent feedrate fields that have no formula linkage).
   const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
   const setMat = (k, v) => setDraft(d => ({ ...d, material: { ...(d.material || {}), [k]: v } }));
+  // Plunge for milling / spot drill is a plain value (no f_n field), but retract
+  // still follows it unless overridden — so cascade retract here too.
+  const setPlunge = (v) => setDraft(d => {
+    const nd = { ...d, v_f_plunge: v };
+    if (fx.v_f_retract !== 'manual') nd.v_f_retract = v;
+    return nd;
+  });
 
   // ── Bidirectional calculation ──────────────────────────────────────────────
   // Called for every formula-linked field on each keystroke.
@@ -551,8 +585,8 @@ function EditCard({
     } else if (field === 'v_f') {
       newDraft.f_z = roundForField('f_z', ipmToFPT(value ?? 0, n, numberOfFlutes));
       newFx.f_z    = 'formula';
-    } else if (field === 'n' || field === 'v_c') {
-      // n changed — cascade whichever side is manual
+    } else if ((field === 'n' || field === 'v_c') && !isTurning) {
+      // n changed — cascade whichever side is manual (turning's v_f is manual)
       if (fx.f_z === 'manual') {
         newDraft.v_f = roundForField('v_f', fptToIPM(draft.f_z ?? 0, n, numberOfFlutes));
         newFx.v_f    = 'formula';
@@ -569,7 +603,7 @@ function EditCard({
     } else if (field === 'v_f_plunge') {
       newDraft.f_n = roundForField('f_n', ipmToIPR(value ?? 0, n));
       newFx.f_n    = 'formula';
-    } else if (field === 'n' || field === 'v_c') {
+    } else if ((field === 'n' || field === 'v_c') && !isTurning) {
       if (fx.f_n === 'manual') {
         newDraft.v_f_plunge = roundForField('v_f_plunge', iprToIPM(draft.f_n ?? 0, n));
         newFx.v_f_plunge    = 'formula';
@@ -578,6 +612,9 @@ function EditCard({
         newFx.f_n    = 'formula';
       }
     }
+
+    // ── Retract follows plunge (one-directional) unless overridden ───────────
+    if (newFx.v_f_retract !== 'manual') newDraft.v_f_retract = newDraft.v_f_plunge ?? 0;
 
     // ── Lead-in / lead-out / transition linkage ─────────────────────────────
     // One-directional: v_f drives them; they never drive v_f back.
@@ -787,6 +824,7 @@ function EditCard({
               formulaField="v_f_transition" formulaState={fx.v_f_transition}
               onChange={v => handleNumChange('v_f_transition', v)}
             />
+            <NField label="Plunge feedrate" value={draft.v_f_plunge}   unit={feedUnit} onChange={v => setPlunge(v)} />
             <NField label="Ramp feedrate" value={draft.v_f_ramp}      unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
             <NField label="Ramp angle"    value={draft['ramp-angle']} unit="°"        onChange={v => set('ramp-angle', v)} />
           </div>
@@ -830,11 +868,12 @@ function EditCard({
             <NField
               label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
               warning={noSpeed ? 'Set spindle speed first' : undefined}
-              onChange={v => set('v_f_plunge', v)}
+              onChange={v => setPlunge(v)}
             />
             <NField
               label="Retract feedrate" value={draft['v_f_retract']} unit={feedUnit}
-              onChange={v => set('v_f_retract', v)}
+              formulaField="v_f_retract" formulaState={fx.v_f_retract}
+              onChange={v => handleNumChange('v_f_retract', v)}
             />
           </div>
         </div>
@@ -878,7 +917,8 @@ function EditCard({
             />
             <NField
               label="Retract feedrate" value={draft['v_f_retract']} unit={feedUnit}
-              onChange={v => set('v_f_retract', v)}
+              formulaField="v_f_retract" formulaState={fx.v_f_retract}
+              onChange={v => handleNumChange('v_f_retract', v)}
             />
             <NField
               label="Feed per rev" value={draft.f_n} unit={`${lenUnit}/rev`}

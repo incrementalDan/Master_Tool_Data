@@ -41,6 +41,7 @@ export const FORMULAS = {
   v_f:            { expr: 'f_z × n × flutes',        vars: ['f_z', 'n'] },
   f_z:            { expr: 'v_f / (n × flutes)',       vars: ['v_f', 'n'] },
   v_f_plunge:     { expr: 'f_n × n',                  vars: ['f_n', 'n'] },
+  v_f_retract:    { expr: 'v_f_plunge',               vars: ['v_f_plunge'] },
   f_n:            { expr: 'v_f_plunge / n',            vars: ['v_f_plunge', 'n'] },
   v_f_leadIn:     { expr: 'v_f',                       vars: ['v_f'] },
   v_f_leadOut:    { expr: 'v_f',                       vars: ['v_f'] },
@@ -51,7 +52,7 @@ export const FORMULAS = {
 export const FIELD_PRECISION = {
   n: 0, n_ramp: 0,
   v_c: 1,
-  v_f: 2, v_f_plunge: 2,
+  v_f: 2, v_f_plunge: 2, v_f_retract: 2,
   v_f_leadIn: 2, v_f_leadOut: 2, v_f_transition: 2,
   f_z: 5, f_n: 5,
 };
