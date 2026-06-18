@@ -143,7 +143,7 @@ export default function MaterialsEditor() {
       )}
 
       {/* Search — top of the page, drives both the CAM Presets and Alloys lists */}
-      <div className="vendor-search mb-16" style={{ width: '100%' }}>
+      <div className="search-bar mb-16">
         <Search size={14} className="text-sub" />
         <input
           className="field-input"
