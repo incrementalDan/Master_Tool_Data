@@ -50,7 +50,7 @@ export default function CamPresetPicker({ materials, currentQuery, onSelect, onC
         </div>
 
         {/* Search — matches CAM presets and their alloy names/aliases */}
-        <div className="vendor-search mb-12" style={{ width: '100%' }}>
+        <div className="search-bar mb-12">
           <Search size={14} className="text-sub" />
           <input
             className="field-input"

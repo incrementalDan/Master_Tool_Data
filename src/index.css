@@ -3176,6 +3176,21 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 
 /* ─── Materials page (groups → CAM presets → alloys) ─────────────────────── */
+/* Standalone search field (Materials page + CAM preset picker). Unlike
+   .vendor-search (a flex-grow toolbar item) this is plain full-width — it never
+   stretches vertically inside a column-flex modal. */
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.search-bar .field-input { border: none; background: transparent; padding: 6px 0; flex: 1; }
+.search-bar .field-input:focus { outline: none; box-shadow: none; }
+
 .mat-layout {
   display: grid;
   grid-template-columns: 65fr 35fr;
@@ -3279,7 +3294,9 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 /* CAM preset picker modal (mini Materials page for a tool's preset) */
 .cam-picker { width: 100%; max-width: 620px; display: flex; flex-direction: column; max-height: 82vh; }
-.cam-picker-list { overflow-y: auto; margin: 4px -4px 0; padding: 2px 4px; }
+/* Top section (header, search, pills) stays a fixed height; only the list grows/shrinks. */
+.cam-picker > * { flex: 0 0 auto; }
+.cam-picker-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 4px -4px 0; padding: 2px 4px; }
 .cam-card--pick {
   display: block;
   width: 100%;
