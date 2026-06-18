@@ -36,9 +36,9 @@ function r4(v) {
   return isNaN(n) ? v : parseFloat(n.toFixed(4));
 }
 
-// Display label for a preset's material query. The query now holds the Materials
-// library label directly (sub-material or group), so show it verbatim; blank ->
-// "Other" (used for the material grouping/filter in the collapsed list).
+// Display label for a preset's material query. The query holds the Materials
+// library name directly (CAM preset name or group label), so show it verbatim;
+// blank -> "Other" (used for the material grouping/filter in the collapsed list).
 const matchMaterial = (query) => (query && String(query).trim()) ? String(query).trim() : 'Other';
 
 function blankPreset() {
@@ -614,8 +614,9 @@ function EditCard({
         </button>
       </div>
 
-      {/* Material — from the Materials library (Group → optional Sub-material).
-          Stored as material.query = sub-material label, else group label. */}
+      {/* Material — from the Materials library (Group → optional CAM Preset).
+          Stored as material.query = CAM preset name, else group label. The CAM
+          preset name is the Fusion speed/feed preset group this maps to. */}
       <div className="preset-edit-section">
         <div className="preset-edit-section-label">MATERIAL</div>
         <div className="preset-edit-grid">
@@ -639,19 +640,19 @@ function EditCard({
               ))}
             </select>
           </FGroup>
-          <FGroup label="Sub-material">
+          <FGroup label="CAM Preset">
             {(() => {
               const cur = findMaterialInLibrary(draft.material?.query, materials);
               const gid = cur.group?.id || '';
-              const subs = (materials?.materials || []).filter(m => m.group_id === gid);
+              const camPresets = (materials?.presets || []).filter(p => p.group_id === gid);
               return (
                 <select
                   className="field-input"
-                  value={cur.sub?.id || ''}
-                  disabled={!gid || subs.length === 0}
+                  value={cur.preset?.id || ''}
+                  disabled={!gid || camPresets.length === 0}
                   onChange={e => {
-                    const s = subs.find(x => x.id === e.target.value);
-                    const query = s ? s.label : (cur.group?.label || '');
+                    const cp = camPresets.find(x => x.id === e.target.value);
+                    const query = cp ? cp.name : (cur.group?.label || '');
                     setDraft(d => {
                       const nd = { ...d, material: { ...(d.material || {}), query, category: materialCategory(query) } };
                       nd.name = composeName(nd, assemblyId, nd.operation_type);
@@ -659,8 +660,8 @@ function EditCard({
                     });
                   }}
                 >
-                  <option value="">{subs.length === 0 ? '— none defined —' : '— none —'}</option>
-                  {subs.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                  <option value="">{camPresets.length === 0 ? '— none defined —' : '— none —'}</option>
+                  {camPresets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               );
             })()}
