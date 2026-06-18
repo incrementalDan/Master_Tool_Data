@@ -1,0 +1,10 @@
+{
+  "category": "Metal",
+  "description": "AL 6061",
+  "designators": [],
+  "physicalMaterials": [
+    "PrismMaterial-126"
+  ],
+  "uuid": "0ef0ec18-2d64-4cb5-89bb-e81f49f89229",
+  "version": 1
+}
