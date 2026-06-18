@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { Gauge, Plus, X, Pencil } from 'lucide-react';
+import { Gauge, Plus, X, Pencil, ChevronDown } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { unitAbbr } from '../utils/units.js';
+import { OP_TYPES, opTypeWord } from '../utils/presetNaming.js';
+import CamPresetPicker from './CamPresetPicker.jsx';
 
 // Per-CAM-preset SFM + chip-load starting-point reference. Metadata-only —
-// stored on the tool as speed_feed_refs[] = { preset_id, sfm, chip_load }. This
-// is a manual lookup the programmer seeds speeds/feeds from per material; the
-// derived RPM/feed shown per row turns it into a real starting point for THIS
-// tool (uses its own diameter + flute count). The "% relative to stepdown /
-// stepover" linkage is a deliberate later step (see TODO / Future Work).
+// stored on the tool as speed_feed_refs[] = { preset_id, operation_type, sfm,
+// chip_load }. A manual lookup the programmer seeds speeds/feeds from per
+// material + operation; the derived RPM/feed shown per row turns it into a real
+// starting point for THIS tool (uses its own diameter + flute count). The "%
+// relative to stepdown / stepover" linkage is a deliberate later step (TODO).
 
 // RPM from surface speed, generic over the tool's unit. SFM (surface feet/min)
 // for inch tools, SMM (surface metres/min) for mm tools; diameter is in the
@@ -19,11 +21,13 @@ function deriveRPM(surfaceSpeed, diameter, unit) {
   return (surfaceSpeed * factor) / (Math.PI * diameter);
 }
 
-export default function SpeedFeedSection({ tool, onSave, isSaving }) {
+export default function SpeedFeedSection({ tool, onSave }) {
   const { materials } = useApp();
   const [open, setOpen] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [rows, setRows] = useState(() => tool.speed_feed_refs || []);
+  const [pickingRow, setPickingRow] = useState(null);   // row index whose picker is open
 
   const unit = tool.unit || 'inches';
   const isInch = unit !== 'millimeters';
@@ -38,15 +42,18 @@ export default function SpeedFeedSection({ tool, onSave, isSaving }) {
   const startEditing = () => { setRows(tool.speed_feed_refs || []); setEditing(true); };
   const handleCancel = () => { setRows(tool.speed_feed_refs || []); setEditing(false); };
   const handleSave = async () => {
-    // Drop blank rows (no material picked).
-    const cleaned = rows.filter(r => r.preset_id);
-    setRows(cleaned);
-    setEditing(false);
-    await onSave({ ...tool, speed_feed_refs: cleaned });
+    const cleaned = rows.filter(r => r.preset_id);   // drop blank rows
+    setSaving(true);
+    try {
+      await onSave({ ...tool, speed_feed_refs: cleaned });
+      setRows(cleaned);
+      setEditing(false);
+    } catch { /* toast handled in context */ }
+    finally { setSaving(false); }
   };
 
   const setRow = (i, patch) => setRows(rs => rs.map((r, idx) => idx === i ? { ...r, ...patch } : r));
-  const addRow = () => setRows(rs => [...rs, { preset_id: '', sfm: null, chip_load: null }]);
+  const addRow = () => setRows(rs => [...rs, { preset_id: '', operation_type: null, sfm: null, chip_load: null }]);
   const removeRow = (i) => setRows(rs => rs.filter((_, idx) => idx !== i));
 
   // Derived RPM + feed for a row, using THIS tool's diameter + flute count.
@@ -82,6 +89,7 @@ export default function SpeedFeedSection({ tool, onSave, isSaving }) {
               <div className="sf-ref-table">
                 <div className="sf-ref-head">
                   <span>Material (CAM Preset)</span>
+                  <span>Operation</span>
                   <span className="sf-ref-num">{surfaceLabel}</span>
                   <span className="sf-ref-num">Chip Load</span>
                   <span className="sf-ref-derived">Starting point</span>
@@ -95,6 +103,7 @@ export default function SpeedFeedSection({ tool, onSave, isSaving }) {
                         <span className="sf-ref-dot" style={{ background: groupColor(p?.group_id) }} />
                         {p ? p.name : <span className="text-sub">(unknown preset)</span>}
                       </span>
+                      <span className="text-sub" style={{ fontSize: 12 }}>{opTypeWord(r.operation_type) || '—'}</span>
                       <span className="sf-ref-num font-mono">{r.sfm ?? '—'}</span>
                       <span className="sf-ref-num font-mono">{r.chip_load ?? '—'}</span>
                       <span className="sf-ref-derived text-sub text-xs">
@@ -114,60 +123,84 @@ export default function SpeedFeedSection({ tool, onSave, isSaving }) {
               <div className="sf-ref-table">
                 <div className="sf-ref-head sf-ref-head--edit">
                   <span>Material (CAM Preset)</span>
+                  <span>Operation</span>
                   <span className="sf-ref-num">{surfaceLabel}</span>
                   <span className="sf-ref-num">{chipUnit}</span>
                   <span />
                 </div>
-                {rows.map((r, i) => (
-                  <div className="sf-ref-row sf-ref-row--edit" key={i}>
-                    <select
-                      className="field-input"
-                      value={r.preset_id || ''}
-                      onChange={e => setRow(i, { preset_id: e.target.value })}
-                    >
-                      <option value="">— material —</option>
-                      {groups.map(g => {
-                        const gp = presets.filter(p => p.group_id === g.id);
-                        if (gp.length === 0) return null;
-                        return (
-                          <optgroup key={g.id} label={`${g.id} · ${g.label}`}>
-                            {gp.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                          </optgroup>
-                        );
-                      })}
-                    </select>
-                    <input
-                      className="field-input sf-ref-num font-mono"
-                      type="number" step="1" min="0" placeholder={surfaceLabel}
-                      value={r.sfm ?? ''}
-                      onChange={e => setRow(i, { sfm: e.target.value === '' ? null : parseFloat(e.target.value) })}
-                    />
-                    <input
-                      className="field-input sf-ref-num font-mono"
-                      type="number" step="0.0001" min="0" placeholder="0.000"
-                      value={r.chip_load ?? ''}
-                      onChange={e => setRow(i, { chip_load: e.target.value === '' ? null : parseFloat(e.target.value) })}
-                    />
-                    <button type="button" className="icon-btn" title="Remove" onClick={() => removeRow(i)}>
-                      <X size={14} />
-                    </button>
-                  </div>
-                ))}
+                {rows.map((r, i) => {
+                  const p = presetById(r.preset_id);
+                  return (
+                    <div className="sf-ref-row sf-ref-row--edit" key={i}>
+                      <div
+                        className="preset-mat-field"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setPickingRow(i)}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPickingRow(i); } }}
+                      >
+                        {p ? (
+                          <span className="preset-mat-sel">
+                            <span className="cam-dot" style={{ background: groupColor(p.group_id) }} />
+                            {p.name}
+                          </span>
+                        ) : (
+                          <span className="text-sub">Choose material…</span>
+                        )}
+                        <ChevronDown size={14} className="text-sub" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+                      </div>
+                      <select
+                        className="field-input"
+                        value={r.operation_type || ''}
+                        onChange={e => setRow(i, { operation_type: e.target.value || null })}
+                      >
+                        <option value="">— any —</option>
+                        {OP_TYPES.map(o => <option key={o.value} value={o.value}>{o.word}</option>)}
+                      </select>
+                      <input
+                        className="field-input sf-ref-num font-mono"
+                        type="number" step="1" min="0" placeholder={surfaceLabel}
+                        value={r.sfm ?? ''}
+                        onChange={e => setRow(i, { sfm: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                      />
+                      <input
+                        className="field-input sf-ref-num font-mono"
+                        type="number" step="0.0001" min="0" placeholder="0.000"
+                        value={r.chip_load ?? ''}
+                        onChange={e => setRow(i, { chip_load: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                      />
+                      <button type="button" className="icon-btn" title="Remove" onClick={() => removeRow(i)} disabled={saving}>
+                        <X size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
 
-              <button type="button" className="btn btn-ghost btn-sm" onClick={addRow}>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={addRow} disabled={saving}>
                 <Plus size={13} /> Add material
               </button>
 
               <div className="purchasing-actions">
-                <button type="button" className="btn btn-secondary btn-sm" onClick={handleCancel} disabled={isSaving}>Cancel</button>
-                <button type="button" className="btn btn-primary btn-sm" onClick={handleSave} disabled={isSaving}>
-                  {isSaving ? 'Saving…' : 'Save'}
+                <button type="button" className="btn btn-secondary btn-sm" onClick={handleCancel} disabled={saving}>Cancel</button>
+                <button type="button" className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
+                  {saving
+                    ? <><span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} /> Saving…</>
+                    : 'Save'}
                 </button>
               </div>
             </>
           )}
         </div>
+      )}
+
+      {pickingRow !== null && (
+        <CamPresetPicker
+          materials={materials}
+          currentQuery={presetById(rows[pickingRow]?.preset_id)?.name}
+          onClose={() => setPickingRow(null)}
+          onSelect={(cp) => setRow(pickingRow, { preset_id: cp.id })}
+        />
       )}
     </div>
   );

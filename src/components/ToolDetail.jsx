@@ -364,7 +364,6 @@ export default function ToolDetail() {
 
             <SpeedFeedSection
               tool={tool}
-              isSaving={isSaving}
               onSave={async (updatedTool) => {
                 try {
                   await saveTool(updatedTool);

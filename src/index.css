@@ -3334,7 +3334,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .sf-ref-table { display: flex; flex-direction: column; gap: 2px; }
 .sf-ref-head {
   display: grid;
-  grid-template-columns: 1fr 64px 80px 1.4fr;
+  grid-template-columns: minmax(120px, 1.3fr) 92px 56px 70px 1.1fr;
   gap: 8px;
   align-items: center;
   padding: 0 4px 6px;
@@ -3344,17 +3344,17 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--text-sub);
   border-bottom: 1px solid var(--border);
 }
-.sf-ref-head--edit { grid-template-columns: 1fr 64px 80px 26px; }
+.sf-ref-head--edit { grid-template-columns: minmax(120px, 1.3fr) 104px 64px 74px 26px; }
 .sf-ref-row {
   display: grid;
-  grid-template-columns: 1fr 64px 80px 1.4fr;
+  grid-template-columns: minmax(120px, 1.3fr) 92px 56px 70px 1.1fr;
   gap: 8px;
   align-items: center;
   padding: 6px 4px;
   border-bottom: 1px solid var(--border);
   font-size: 13px;
 }
-.sf-ref-row--edit { grid-template-columns: 1fr 64px 80px 26px; }
+.sf-ref-row--edit { grid-template-columns: minmax(120px, 1.3fr) 104px 64px 74px 26px; }
 .sf-ref-row:last-child { border-bottom: none; }
 .sf-ref-num { text-align: right; }
 .sf-ref-head .sf-ref-num { text-align: right; }
