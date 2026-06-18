@@ -206,7 +206,13 @@ export default function MaterialsEditor() {
         </p>
 
         {visiblePresets.length === 0 && (
-          <p className="text-sub text-sm" style={{ padding: '8px 0' }}>{q || groupFilter !== 'All' ? 'No CAM presets match.' : 'No CAM presets yet.'}</p>
+          <p className="text-sub text-sm" style={{ padding: '8px 0' }}>
+            {q || groupFilter !== 'All'
+              ? 'No CAM presets match.'
+              : (doc.presets.length === 0
+                  ? 'No CAM presets yet — click “Load reference data” below to seed the standards, or add your own.'
+                  : 'No CAM presets yet.')}
+          </p>
         )}
 
         {visiblePresets.map((p) => {

@@ -406,6 +406,9 @@ Stored in a single file on Google Drive. The file contains an array of metadata 
   "last_used_job": "",
   "preferred_machine": "",
   "material_suitability": [],
+  "speed_feed_refs": [
+    { "preset_id": "pre_M_aus_316", "sfm": 350, "chip_load": 0.002 }
+  ],
   "tags": [],
   "updated_by": "",
   "revision_notes": "",
@@ -616,6 +619,9 @@ src/
     NormalizeModal.jsx            # One-time normalization: preset operation-type assignment
     DescRenameModal.jsx           # Per-tool description rename confirmation (buildDesc suggestions)
     PresetPanel.jsx               # Preset editor panel (speeds/feeds per preset)
+    SpeedFeedSection.jsx          # ToolDetail panel: per-CAM-preset SFM + chip-load
+                                  # reference (metadata speed_feed_refs[]); shows
+                                  # derived RPM + feed from the tool's own dia/flutes
     LibrarySetup.jsx              # First-run APS library location picker
     LoginScreen.jsx               # APS PKCE login gate (unauthorized visitors)
     Settings.jsx                  # Settings — one of 4 top-bar chrome-style tabs
