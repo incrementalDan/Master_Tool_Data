@@ -3279,7 +3279,11 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 /* CAM preset picker modal (mini Materials page for a tool's preset) */
 .cam-picker { width: 100%; max-width: 620px; display: flex; flex-direction: column; max-height: 82vh; }
-.cam-picker-list { overflow-y: auto; margin: 4px -4px 0; padding: 2px 4px; }
+/* Top section (header, search, pills) stays a fixed height; only the list grows/shrinks. */
+.cam-picker > * { flex: 0 0 auto; }
+.cam-picker .vendor-search { flex: 0 0 auto; width: 100%; }
+.cam-picker .mat-gpills { flex: 0 0 auto; }
+.cam-picker-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 4px -4px 0; padding: 2px 4px; }
 .cam-card--pick {
   display: block;
   width: 100%;
