@@ -3175,6 +3175,40 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   border-top: 1px solid var(--border);
 }
 
+/* ─── Speeds & Feeds Reference (SFM / chip load per CAM preset) ───────────── */
+.sf-ref-table { display: flex; flex-direction: column; gap: 2px; }
+.sf-ref-head {
+  display: grid;
+  grid-template-columns: 1fr 64px 80px 1.4fr;
+  gap: 8px;
+  align-items: center;
+  padding: 0 4px 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-sub);
+  border-bottom: 1px solid var(--border);
+}
+.sf-ref-head--edit { grid-template-columns: 1fr 64px 80px 26px; }
+.sf-ref-row {
+  display: grid;
+  grid-template-columns: 1fr 64px 80px 1.4fr;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.sf-ref-row--edit { grid-template-columns: 1fr 64px 80px 26px; }
+.sf-ref-row:last-child { border-bottom: none; }
+.sf-ref-num { text-align: right; }
+.sf-ref-head .sf-ref-num { text-align: right; }
+.sf-ref-mat { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.sf-ref-mat > :last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sf-ref-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.sf-ref-derived { text-align: right; }
+input.sf-ref-num { text-align: right; }
+
 /* ─── Attachment upload drop zone ────────────────────────────────────────── */
 .upload-dropzone {
   border: 2px dashed var(--border);

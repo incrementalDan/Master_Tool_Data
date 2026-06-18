@@ -1415,6 +1415,7 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     last_used_job: meta.last_used_job || '',
     preferred_machine: meta.preferred_machine || '',
     material_suitability: meta.material_suitability || [],
+    speed_feed_refs: meta.speed_feed_refs || [],
     tags: meta.tags || [],
     updated_by: meta.updated_by || '',
     revision_notes: meta.revision_notes || '',
@@ -1519,6 +1520,14 @@ export function buildMetadataTool(tool) {
     last_used_job: tool.last_used_job || '',
     preferred_machine: tool.preferred_machine || '',
     material_suitability: tool.material_suitability || [],
+    // Per-CAM-preset SFM + chip-load starting-point reference (metadata-only).
+    // Each entry: { preset_id (→ materials.presets), sfm, chip_load }. A manual
+    // lookup table the programmer seeds speeds/feeds from per material.
+    speed_feed_refs: (tool.speed_feed_refs || []).map(r => ({
+      preset_id: r.preset_id || null,
+      sfm: r.sfm ?? null,
+      chip_load: r.chip_load ?? null,
+    })),
     tags: tool.tags || [],
     updated_by: tool.updated_by || '',
     revision_notes: tool.revision_notes || '',
