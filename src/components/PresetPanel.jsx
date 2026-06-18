@@ -460,14 +460,20 @@ function EditCard({
   const isTurning = TURNING_TYPES.has(toolType);
   const isMilling = !isHoleMaking && !isTurning;
 
-  // Spot drill loads v_f_plunge directly from the preset (no f_n field exists
-  // for this tool type — see normalizePreset's isSpotDrill branch). Without this
-  // override, DEFAULT_FX's v_f_plunge:'formula' would recompute it from the
-  // (nonexistent) f_n on mount, zeroing it out.
-  const [fx, setFx] = useState(() => isSpotDrill ? { ...DEFAULT_FX, v_f_plunge: 'manual' } : DEFAULT_FX);
+  // Milling and spot drill enter plunge feed as an independent value: neither
+  // shows a feed-per-rev (f_n) field, so v_f_plunge is the source of truth and
+  // f_n is derived from it. Without this, DEFAULT_FX (v_f_plunge:'formula',
+  // f_n:'manual') would recompute plunge from the (nonexistent, zero) f_n — on
+  // mount AND whenever spindle speed changes — silently zeroing a proven plunge
+  // feed. Drill-family tools keep the drilling convention (f_n manual, plunge
+  // derived). The draft init must use this same fx, not DEFAULT_FX.
+  const initialFx = (isMilling || isSpotDrill)
+    ? { ...DEFAULT_FX, v_f_plunge: 'manual', f_n: 'formula' }
+    : DEFAULT_FX;
+  const [fx, setFx] = useState(initialFx);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [draft, setDraft] = useState(() => {
-    const d = computeFormulaDraft({ ...preset }, DEFAULT_FX, diameter, numberOfFlutes);
+    const d = computeFormulaDraft({ ...preset }, initialFx, diameter, numberOfFlutes);
     d.operation_type = preset.operation_type ?? parsePresetName(preset.name)?.opType ?? null;
     return d;
   });
@@ -787,6 +793,7 @@ function EditCard({
               formulaField="v_f_transition" formulaState={fx.v_f_transition}
               onChange={v => handleNumChange('v_f_transition', v)}
             />
+            <NField label="Plunge feedrate" value={draft.v_f_plunge}   unit={feedUnit} onChange={v => set('v_f_plunge', v)} />
             <NField label="Ramp feedrate" value={draft.v_f_ramp}      unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
             <NField label="Ramp angle"    value={draft['ramp-angle']} unit="°"        onChange={v => set('ramp-angle', v)} />
           </div>
