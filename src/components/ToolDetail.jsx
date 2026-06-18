@@ -11,6 +11,7 @@ import AssemblyForm from './AssemblyForm.jsx';
 import ReconcileModal from './ReconcileModal.jsx';
 import FilesSection from './FilesSection.jsx';
 import PurchasingSection from './PurchasingSection.jsx';
+import SpeedFeedSection from './SpeedFeedSection.jsx';
 import AttachmentUploadModal from './AttachmentUploadModal.jsx';
 import { fetchFileBlob } from '../services/driveService.js';
 import InfoTip from './InfoTip.jsx';
@@ -360,6 +361,16 @@ export default function ToolDetail() {
             />
 
             <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving} />
+
+            <SpeedFeedSection
+              tool={tool}
+              isSaving={isSaving}
+              onSave={async (updatedTool) => {
+                try {
+                  await saveTool(updatedTool);
+                } catch { /* toast handled in context */ }
+              }}
+            />
 
             <Section title="History" icon={Clock} defaultOpen={false}>
               <div className="detail-fields" style={{ marginBottom: (tool.merge_history || []).length > 0 ? 12 : 0 }}>

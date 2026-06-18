@@ -105,31 +105,53 @@ export function isoGroupColor(query, groups) {
 }
 
 // ─── Materials library resolution (the single source of material) ────────────
-// A preset stores its material as `material.query` — the sub-material label if
-// one was picked, else the group label. These helpers resolve that stored value
-// back against materials.json (`{ groups:[{id,label,code,color}], materials:[{group_id,label,code}] }`).
+// materials.json is a 3-tier taxonomy:
+//   groups[]    — { id, label, code, color }  (P/M/K/N/S/H + custom)
+//   presets[]   — CAM presets: { id, group_id, name, code }  (the Fusion name layer)
+//   materials[] — alloys: { id, group_id, preset_id, label, aliases[], code }
+// A tool preset stores its material as `material.query` — normally the CAM
+// preset name, but it may also be a group label or a known alloy name/alias.
+// These helpers resolve that stored value back to the records it refers to.
 
-// Find the { group, sub } a stored query refers to: sub-material label first
-// (more specific), then group label, then group id. Returns {} if no match.
+// Find the { group, preset, alloy } a stored query refers to, most-specific
+// first: alloy (label or alias) → CAM preset name → group label/id. Each level
+// fills in the levels above it (an alloy yields its preset + group). Returns {}
+// if nothing matches.
 export function findMaterialInLibrary(query, materials) {
   const q = String(query || '').trim().toLowerCase();
   if (!q || !materials) return {};
-  const sub = (materials.materials || []).find(m => String(m.label || '').trim().toLowerCase() === q);
-  if (sub) {
-    const group = (materials.groups || []).find(g => g.id === sub.group_id) || null;
-    return { group, sub };
+  const groups = materials.groups || [];
+  const presets = materials.presets || [];
+  const alloys = materials.materials || [];
+  const groupById = (id) => groups.find(g => g.id === id) || null;
+  const presetById = (id) => presets.find(p => p.id === id) || null;
+
+  // 1. Alloy by label or alias (most specific).
+  const alloy = alloys.find(m =>
+    String(m.label || '').trim().toLowerCase() === q ||
+    (m.aliases || []).some(a => String(a).trim().toLowerCase() === q));
+  if (alloy) {
+    const preset = presetById(alloy.preset_id);
+    const group = groupById(alloy.group_id) || (preset ? groupById(preset.group_id) : null);
+    return { group, preset, alloy };
   }
-  const group = (materials.groups || []).find(g =>
+  // 2. CAM preset by name.
+  const preset = presets.find(p => String(p.name || '').trim().toLowerCase() === q);
+  if (preset) return { group: groupById(preset.group_id), preset, alloy: null };
+  // 3. Group by label or id.
+  const group = groups.find(g =>
     String(g.label || '').trim().toLowerCase() === q || String(g.id || '').toLowerCase() === q) || null;
-  return group ? { group, sub: null } : {};
+  return group ? { group, preset: null, alloy: null } : {};
 }
 
-// Short code for a preset name token: the sub-material's code, else the group's
-// code, else the group id. Falls back to the legacy keyword code (matchMaterial)
-// for material strings not in the library (e.g. imported "AL FIN"). '' when blank.
+// Short code for a preset name token, most-specific first: alloy code → CAM
+// preset code → group code → group id. Falls back to the legacy keyword code
+// (matchMaterial) for material strings not in the library (e.g. imported
+// "AL FIN"). '' when blank.
 export function materialNameCode(query, materials) {
-  const { group, sub } = findMaterialInLibrary(query, materials);
-  if (sub?.code) return sub.code;
+  const { group, preset, alloy } = findMaterialInLibrary(query, materials);
+  if (alloy?.code) return alloy.code;
+  if (preset?.code) return preset.code;
   if (group?.code) return group.code;
   if (group?.id) return group.id;
   return matchMaterial(query) || '';

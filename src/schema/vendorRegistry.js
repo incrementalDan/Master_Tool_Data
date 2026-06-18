@@ -15,7 +15,13 @@
 //
 // Entity shape:
 //   { id, name, aliases[], is_manufacturer, is_vendor, has_own_catalog_number,
-//     edp_url_pattern, vendor_num_url_pattern, proshop_id, order }
+//     edp_url_pattern, vendor_num_url_pattern, proshop_id, material_code_system, order }
+//
+// `material_code_system` (manufacturers only) names which material-classification
+// standard that manufacturer publishes — an id from MATERIAL_CODE_SYSTEMS
+// (sharedDefaults.js): 'iso_513' | 'kennametal' | 'vdi_3323' | null. It lets the
+// manufacturer's catalog material codes cross-reference our CAM presets, which
+// carry the equivalent code in each standard.
 //
 // `name` is the preferred/canonical name — the only one shown on tools and
 // exported. `aliases[]` are alternate spellings ("GARR" for "GARR Tool",
@@ -107,7 +113,7 @@ function buildDefaultEntities() {
       byName.set(name, {
         id: rid(), name, aliases: [], is_manufacturer: false, is_vendor: false,
         has_own_catalog_number: false, edp_url_pattern: null, vendor_num_url_pattern: null,
-        proshop_id: null, order: 0,
+        proshop_id: null, material_code_system: null, order: 0,
       });
     }
     return byName.get(name);

@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Building2, Plus, X, ChevronDown, ChevronRight, Search, ArrowDownAZ, ArrowUpAZ } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
+import { MATERIAL_CODE_SYSTEMS } from '../schema/sharedDefaults.js';
 
 function uid() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
@@ -60,7 +61,7 @@ export default function VendorsEditor() {
     commit({ ...doc, entities: doc.entities.filter(e => e.id !== id) });
   };
   const addEntity = () => {
-    const e = { id: uid(), name: '', aliases: [], is_manufacturer: true, is_vendor: false, has_own_catalog_number: false, edp_url_pattern: null, vendor_num_url_pattern: null, proshop_id: null, order: doc.entities.length };
+    const e = { id: uid(), name: '', aliases: [], is_manufacturer: true, is_vendor: false, has_own_catalog_number: false, edp_url_pattern: null, vendor_num_url_pattern: null, proshop_id: null, material_code_system: null, order: doc.entities.length };
     commit({ ...doc, entities: [...doc.entities, e] });
     setExpanded(e.id);
     setSearch('');
@@ -176,6 +177,19 @@ export default function VendorsEditor() {
                       }}
                     />
                   </Field>
+                  {e.is_manufacturer && (
+                    <Field label="Material code system" hint="which classification standard this manufacturer's catalog uses — maps their material codes to CAM presets">
+                      <select
+                        className="field-input"
+                        style={{ width: '100%' }}
+                        value={e.material_code_system || ''}
+                        onChange={ev => setEntity(e.id, { material_code_system: ev.target.value || null })}
+                      >
+                        <option value="">— none —</option>
+                        {MATERIAL_CODE_SYSTEMS.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+                      </select>
+                    </Field>
+                  )}
                   {e.is_manufacturer && (
                     <Field label="EDP URL Pattern" hint="Tokens: {edp}, {edp_lower}">
                       <input className="field-input" style={{ width: '100%' }} value={e.edp_url_pattern || ''} placeholder="https://example.com/tool-{edp_lower}" onChange={ev => setEntity(e.id, { edp_url_pattern: ev.target.value || null })} />

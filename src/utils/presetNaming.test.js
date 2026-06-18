@@ -81,22 +81,39 @@ describe('Materials library resolution', () => {
       { id: 'M', label: 'Stainless Steel', code: 'SS', color: '#f5c842' },
       { id: 'N', label: 'Non-Ferrous', code: 'AL', color: '#5bad6f' },
     ],
+    presets: [
+      { id: 'pre_m_316', group_id: 'M', name: 'SS Austenitic 316', code: '' },
+      { id: 'pre_n_al', group_id: 'N', name: 'Al Wrought', code: 'ALW' },
+    ],
     materials: [
-      { id: 's1', group_id: 'M', label: '316L Stainless', code: 'SS316' },
+      { id: 's1', group_id: 'M', preset_id: 'pre_m_316', label: '316 / 316L', aliases: ['316L', 'SS316'], code: 'SS316' },
+      { id: 'a1', group_id: 'N', preset_id: 'pre_n_al', label: '6061', aliases: ['6061-T6'], code: '' },
     ],
   };
 
-  it('findMaterialInLibrary resolves group and sub-material by label', () => {
+  it('findMaterialInLibrary resolves alloy (by label or alias), CAM preset, and group', () => {
+    // Group by label
     expect(findMaterialInLibrary('Stainless Steel', MATS).group.id).toBe('M');
-    expect(findMaterialInLibrary('Stainless Steel', MATS).sub).toBe(null);
-    const r = findMaterialInLibrary('316L Stainless', MATS);
-    expect(r.sub.id).toBe('s1');
+    expect(findMaterialInLibrary('Stainless Steel', MATS).preset).toBe(null);
+    expect(findMaterialInLibrary('Stainless Steel', MATS).alloy).toBe(null);
+    // CAM preset by name → fills in its group
+    const p = findMaterialInLibrary('SS Austenitic 316', MATS);
+    expect(p.preset.id).toBe('pre_m_316');
+    expect(p.group.id).toBe('M');
+    // Alloy by label → fills in preset + group
+    const r = findMaterialInLibrary('316 / 316L', MATS);
+    expect(r.alloy.id).toBe('s1');
+    expect(r.preset.id).toBe('pre_m_316');
     expect(r.group.id).toBe('M');
+    // Alloy by alias
+    expect(findMaterialInLibrary('SS316', MATS).alloy.id).toBe('s1');
     expect(findMaterialInLibrary('Nope', MATS)).toEqual({});
   });
 
-  it('materialNameCode prefers sub code, then group code, then group id', () => {
-    expect(materialNameCode('316L Stainless', MATS)).toBe('SS316'); // sub code
+  it('materialNameCode prefers alloy code, then preset code, then group code, then group id', () => {
+    expect(materialNameCode('316 / 316L', MATS)).toBe('SS316');     // alloy code
+    expect(materialNameCode('Al Wrought', MATS)).toBe('ALW');       // preset code
+    expect(materialNameCode('SS Austenitic 316', MATS)).toBe('SS'); // preset has no code → group code
     expect(materialNameCode('Stainless Steel', MATS)).toBe('SS');   // group code
     expect(materialNameCode('Non-Ferrous', MATS)).toBe('AL');
     expect(materialNameCode('', MATS)).toBe('');
@@ -108,7 +125,8 @@ describe('Materials library resolution', () => {
 
   it('presetMaterialColor resolves the group color via the library, then legacy', () => {
     expect(presetMaterialColor('Stainless Steel', MATS)).toBe('#f5c842');
-    expect(presetMaterialColor('316L Stainless', MATS)).toBe('#f5c842'); // sub → its group color
+    expect(presetMaterialColor('316 / 316L', MATS)).toBe('#f5c842');     // alloy → its group color
+    expect(presetMaterialColor('SS Austenitic 316', MATS)).toBe('#f5c842'); // preset → its group color
     expect(presetMaterialColor('AL FIN', MATS)).toBe('#5bad6f');         // legacy AL → N group color
     expect(presetMaterialColor('Wood', MATS)).toBe(null);
   });
