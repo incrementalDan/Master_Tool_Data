@@ -1173,6 +1173,18 @@ cutting_direction: rawType === 'tap left hand' ? 'Left Hand'
 
 These fields are **never written for milling tools** — `normalizePreset` strips them for non-drill-family types.
 
+### Preset editor formula links (`PresetPanel` `EditCard` `fx`) — never derive a field from an inapplicable source
+
+The preset editor links paired speed/feed fields with a per-field `fx` state (`'formula' | 'manual'`): editing one field marks it manual and recomputes its partner (`computeFormulaDraft` on mount + on diameter/flute change; `handleNumChange` on each keystroke). The paired relationships are `v_c↔n`, `v_f↔f_z`, `v_f_plunge↔f_n`, and one-directional followers `v_f_leadIn/leadOut/transition = v_f` and **`v_f_retract = v_f_plunge`**.
+
+**The trap:** a field defaulting to `'formula'` is recomputed from its source on open — so if that source isn't shown/used for the tool type (and is therefore 0), opening the preset **silently zeroes a real value**. `DEFAULT_FX` is the milling convention; other tool types need per-type overrides in `initialFx` (which the draft init must also use — not raw `DEFAULT_FX`). Current overrides:
+
+- **Milling & spot drill** — plunge has no feed-per-rev (`f_n`) field, so `v_f_plunge:'manual'` (source of truth) + `f_n:'formula'` (derived). Without this, plunge was recomputed from the absent `f_n` (=0) on open **and** on every spindle-speed change, zeroing a proven plunge feed.
+- **Turning/boring** — no feed-per-tooth (`f_z`), so `v_f:'manual'` + `v_f_plunge:'manual'`; the `n`/`v_c` cutting- and plunge-feed cascades in `handleNumChange` are skipped (`&& !isTurning`). Otherwise `v_f` was zeroed from `f_z`(=0) on open and on speed changes.
+- **Retract feedrate** (`v_f_retract`, drill family + spot drill) — **defaults to the plunge feedrate and follows it** as plunge changes (mirrors Fusion's native `tool_feedRetract = tool_feedPlunge`), a one-directional follower like lead-in/out. A stored retract that already **differs** from plunge is treated as an override → `'manual'` on open so it's preserved; typing in the field overrides it. `setPlunge` cascades retract for the milling/spot-drill plunge fields (which use a plain setter, not `handleNumChange`). Added to `FORMULAS` + `FIELD_PRECISION` (`speedsAndFeedsCalc.js`). Not shown on other tool types (`v_f_retract:'manual'` there).
+
+When adding a feed field or tool type, ask: *does this field's formula source exist for this tool type?* If not, default it `'manual'` in `initialFx` and skip its `n`/`v_c` cascade. These are **UI-only** functions — the round-trip audit doesn't exercise them, so `normalizePreset`/`internalToFusionTool` remain the authority on what's actually written per type.
+
 ### Tap & thread mill metadata fields
 
 All metadata-only (never written to Fusion) — added to `tool_metadata.json` via `buildMetadataTool` / `mergeFusionAndMetadata`:
