@@ -225,12 +225,6 @@ export function AppProvider({ children }) {
     localStorage.setItem(SETUP_PROGRESS_KEY, JSON.stringify(state.setupProgress));
   }, [state.setupProgress]);
 
-  // ─── Demo mode bootstrap (?demo=true) ─────────────────────────────────────
-  // Short-circuits all auth and loads bundled sample data on mount.
-  useEffect(() => {
-    if (isDemoRequested()) enterDemoMode();
-  }, [enterDemoMode]);
-
   // ─── Handle APS OAuth callback on mount ───────────────────────────────────
   useEffect(() => {
     if (isDemoRequested()) return; // demo mode skips Autodesk entirely
@@ -492,6 +486,13 @@ export function AppProvider({ children }) {
     } catch { /* ignore */ }
     dispatch({ type: 'EXIT_LOCAL_MODE' }); // resets to initialState (same as local mode)
   }, []);
+
+  // Demo mode bootstrap: on mount, if ?demo=true, load bundled sample data.
+  // Declared after enterDemoMode so its dependency isn't read before init (a
+  // temporal-dead-zone ReferenceError here blanks the whole app on every load).
+  useEffect(() => {
+    if (isDemoRequested()) enterDemoMode();
+  }, [enterDemoMode]);
 
   // ─── Tool data actions ────────────────────────────────────────────────────
   const loadTools = useCallback(async () => {
