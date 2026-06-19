@@ -14,6 +14,7 @@ import { classifyStrays } from '../services/reconcile.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry } from '../schema/vendorRegistry.js';
 import { setDefaultUnit } from '../utils/units.js';
+import { getDemoData, isDemoRequested } from '../demo/index.js';
 
 const AppContext = createContext(null);
 
@@ -69,6 +70,7 @@ function loadSetupProgress() {
 }
 
 const initialState = {
+  demoMode: false,            // ?demo=true — bundled sample data, no auth, read-only
   localMode: false,           // browsing a locally-uploaded library file — read-only, no APS/Drive
   user: null,                 // Google user (metadata identity) or null
   apsAuthenticated: false,    // Autodesk signed in
@@ -129,6 +131,20 @@ function reducer(state, action) {
       };
     case 'ENTER_LOCAL_MODE':
       return { ...state, localMode: true, tools: action.tools, needsNormalize: false, error: null };
+    case 'ENTER_DEMO_MODE':
+      return {
+        ...state,
+        demoMode: true,
+        tools: action.tools,
+        holders: action.holders,
+        materials: action.materials,
+        vendorRegistry: action.vendorRegistry,
+        shopSettings: action.shopSettings,
+        needsNormalize: false,
+        metadataFileWarning: null,
+        isLoading: false,
+        error: null,
+      };
     case 'EXIT_LOCAL_MODE':
       return {
         ...initialState,
@@ -177,6 +193,7 @@ export function AppProvider({ children }) {
   const toolsRef = useRef(state.tools);
   const holdersRef = useRef(state.holders);
   const localModeRef = useRef(state.localMode);
+  const demoModeRef = useRef(state.demoMode);
   const shopSettingsRef = useRef(state.shopSettings);
   const materialsRef = useRef(state.materials);
   // Caches wrapper-level fields (e.g. `version`) from the last-loaded Fusion
@@ -188,6 +205,7 @@ export function AppProvider({ children }) {
   toolsRef.current = state.tools;
   holdersRef.current = state.holders;
   localModeRef.current = state.localMode;
+  demoModeRef.current = state.demoMode;
   shopSettingsRef.current = state.shopSettings;
   materialsRef.current = state.materials;
 
@@ -207,8 +225,15 @@ export function AppProvider({ children }) {
     localStorage.setItem(SETUP_PROGRESS_KEY, JSON.stringify(state.setupProgress));
   }, [state.setupProgress]);
 
+  // ─── Demo mode bootstrap (?demo=true) ─────────────────────────────────────
+  // Short-circuits all auth and loads bundled sample data on mount.
+  useEffect(() => {
+    if (isDemoRequested()) enterDemoMode();
+  }, [enterDemoMode]);
+
   // ─── Handle APS OAuth callback on mount ───────────────────────────────────
   useEffect(() => {
+    if (isDemoRequested()) return; // demo mode skips Autodesk entirely
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     const authErr = params.get('error');
@@ -268,6 +293,7 @@ export function AppProvider({ children }) {
 
   // ─── Drive-backed Fusion list helpers ─────────────────────────────────────
   const downloadFusionList = useCallback(async () => {
+    if (demoModeRef.current) throw new Error('Demo mode is read-only — changes are not saved');
     if (localModeRef.current) throw new Error('Local mode is read-only — connect to Autodesk to load or save the live library');
     const loc = locationRef.current;
     if (!loc) throw new Error('No tool library location selected');
@@ -285,6 +311,7 @@ export function AppProvider({ children }) {
   }, []);
 
   const uploadFusionList = useCallback(async (list) => {
+    if (demoModeRef.current) throw new Error('Demo mode is read-only — changes are not saved');
     if (localModeRef.current) throw new Error('Local mode is read-only — connect to Autodesk to save changes');
     const loc = locationRef.current;
     await aps.saveToolLibrary(loc.projectId, loc.folderId, loc.itemId, loc.fileName, { ...libraryWrapperRef.current, data: list });
@@ -435,8 +462,42 @@ export function AppProvider({ children }) {
 
   const exitLocalMode = useCallback(() => dispatch({ type: 'EXIT_LOCAL_MODE' }), []);
 
+  // ─── Demo mode (?demo=true) ───────────────────────────────────────────────
+  // Loads bundled sample data with no Autodesk/Google sign-in so the full app UI
+  // can be browsed and demoed. Read-only: the demoModeRef guards in
+  // downloadFusionList/uploadFusionList make every save path fail gracefully
+  // (the "Demo Mode — changes are not saved" banner sets the expectation).
+  const enterDemoMode = useCallback(() => {
+    const { fusionList, metaList, holders, materials, vendorRegistry, shopSettings } = getDemoData();
+    // Build logical tools through the exact same pipeline as a live load.
+    const metaByTracking = new Map(metaList.map(m => [m.id, m]));
+    const { groups, untracked } = groupByTrackingId(fusionList);
+    const built = [];
+    for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
+    for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
+    const tools = combineToolsByProshopId(built);
+
+    // Make the shared-file-backed helpers (vendor registry, default unit) resolve
+    // against the demo data, just like loadTools does after a Drive load.
+    setActiveVendorRegistry(vendorRegistry);
+    if (shopSettings?.default_units) setDefaultUnit(shopSettings.default_units);
+
+    dispatch({ type: 'ENTER_DEMO_MODE', tools, holders, materials, vendorRegistry, shopSettings });
+  }, []);
+
+  const exitDemoMode = useCallback(() => {
+    // Drop the ?demo=true query param so a reload returns to the normal app.
+    try {
+      window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+    } catch { /* ignore */ }
+    dispatch({ type: 'EXIT_LOCAL_MODE' }); // resets to initialState (same as local mode)
+  }, []);
+
   // ─── Tool data actions ────────────────────────────────────────────────────
   const loadTools = useCallback(async () => {
+    // In demo mode there's nothing to fetch — re-seed the bundled sample data so
+    // the TopBar refresh button is a harmless reload rather than a network error.
+    if (demoModeRef.current) { enterDemoMode(); return; }
     dispatch({ type: 'LOAD_START' });
     try {
       const fusionList = await downloadFusionList();
@@ -536,7 +597,7 @@ export function AppProvider({ children }) {
     } catch (err) {
       dispatch({ type: 'LOAD_ERROR', error: err.message });
     }
-  }, [downloadFusionList]);
+  }, [downloadFusionList, enterDemoMode]);
 
   // ─── Core write: reconcile a logical tool's instances into the library ────
   // A logical tool maps to N Fusion entries (one per assembly). This drops every
@@ -1405,6 +1466,8 @@ export function AppProvider({ children }) {
       signOutAll,
       enterLocalMode,
       exitLocalMode,
+      enterDemoMode,
+      exitDemoMode,
       loadTools,
       fetchRawLibrary,
       saveTool,

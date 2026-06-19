@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "shop_name": "Demo Machine Shop",
+  "default_units": "inches",
+  "machine_number": {
+    "start": 30,
+    "skip": [
+      98,
+      99,
+      100
+    ]
+  },
+  "import": {
+    "last_proshop_import": null,
+    "last_photo_import_folder_id": null
+  },
+  "aps": {
+    "last_used_hub_id": null,
+    "last_used_project_id": null
+  },
+  "setup_steps": {
+    "fusionConnected": "2026-05-01T12:00:00.000Z",
+    "metadataConnected": "2026-05-01T12:00:00.000Z",
+    "normalized": "2026-05-01T12:00:00.000Z",
+    "proshopMerged": "2026-05-01T12:00:00.000Z",
+    "proshopPhotos": null,
+    "machineNumbers": "2026-05-01T12:00:00.000Z",
+    "proshopExported": "2026-05-01T12:00:00.000Z"
+  }
+}

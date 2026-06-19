@@ -1,0 +1,226 @@
+{
+  "version": 2,
+  "groups": [
+    {
+      "id": "P",
+      "label": "Steel",
+      "code": "STEEL",
+      "color": "#4A90D9",
+      "iso": true,
+      "order": 0
+    },
+    {
+      "id": "M",
+      "label": "Stainless Steel",
+      "code": "SS",
+      "color": "#F5C842",
+      "iso": true,
+      "order": 1
+    },
+    {
+      "id": "K",
+      "label": "Cast Iron",
+      "code": "CI",
+      "color": "#E05252",
+      "iso": true,
+      "order": 2
+    },
+    {
+      "id": "N",
+      "label": "Non-Ferrous",
+      "code": "AL",
+      "color": "#5BAD6F",
+      "iso": true,
+      "order": 3
+    },
+    {
+      "id": "S",
+      "label": "High Temp Alloys",
+      "code": "TI",
+      "color": "#C4956A",
+      "iso": true,
+      "order": 4
+    },
+    {
+      "id": "H",
+      "label": "Hardened Steel",
+      "code": "HARD",
+      "color": "#888888",
+      "iso": true,
+      "order": 5
+    }
+  ],
+  "presets": [
+    {
+      "id": "pre_N_al_wrought",
+      "group_id": "N",
+      "name": "Al Wrought",
+      "code": "",
+      "description": "Wrought Al alloys (6061, 7075)",
+      "iso_513": "N1.2",
+      "kennametal": "N2",
+      "vdi_3323": "22",
+      "order": 0
+    },
+    {
+      "id": "pre_P_low_c",
+      "group_id": "P",
+      "name": "Steel Low Carbon",
+      "code": "",
+      "description": "Low-carbon bar steel (1018, A36)",
+      "iso_513": "P2.1",
+      "kennametal": "P0",
+      "vdi_3323": "1",
+      "order": 1
+    },
+    {
+      "id": "pre_P_alloy_soft",
+      "group_id": "P",
+      "name": "Alloy Steel Soft",
+      "code": "",
+      "description": "Annealed alloy/tool steel (4140, 4340)",
+      "iso_513": "P3.1",
+      "kennametal": "P3",
+      "vdi_3323": "6",
+      "order": 2
+    },
+    {
+      "id": "pre_M_aus_316",
+      "group_id": "M",
+      "name": "SS Austenitic 316",
+      "code": "",
+      "description": "316/316L Mo-bearing stainless",
+      "iso_513": "M3.1",
+      "kennametal": "M2",
+      "vdi_3323": "14",
+      "order": 3
+    },
+    {
+      "id": "pre_K_gray",
+      "group_id": "K",
+      "name": "Gray Iron",
+      "code": "",
+      "description": "Gray cast iron, all classes",
+      "iso_513": "K1.1",
+      "kennametal": "K1",
+      "vdi_3323": "15",
+      "order": 4
+    },
+    {
+      "id": "pre_S_titan",
+      "group_id": "S",
+      "name": "Titanium",
+      "code": "",
+      "description": "CP Ti and Ti-6Al-4V",
+      "iso_513": "S1.2",
+      "kennametal": "S4",
+      "vdi_3323": "37",
+      "order": 5
+    }
+  ],
+  "materials": [
+    {
+      "id": "N_6061",
+      "group_id": "N",
+      "preset_id": "pre_N_al_wrought",
+      "label": "6061",
+      "aliases": [
+        "6061-T6",
+        "6061-T651"
+      ],
+      "category": "Aluminum \u2013 Wrought",
+      "condition": "T6",
+      "code": "",
+      "iso_513": "N1.2",
+      "kennametal": "N2",
+      "notes": "Most common structural Al",
+      "order": 0
+    },
+    {
+      "id": "N_7075",
+      "group_id": "N",
+      "preset_id": "pre_N_al_wrought",
+      "label": "7075",
+      "aliases": [
+        "7075-T6"
+      ],
+      "category": "Aluminum \u2013 Wrought",
+      "condition": "T6",
+      "code": "",
+      "iso_513": "N1.3",
+      "kennametal": "N2",
+      "notes": "High strength Al",
+      "order": 1
+    },
+    {
+      "id": "P_1018",
+      "group_id": "P",
+      "preset_id": "pre_P_low_c",
+      "label": "1018",
+      "aliases": [
+        "1018 CRS",
+        "cold rolled steel"
+      ],
+      "category": "Steel \u2013 Low Carbon",
+      "condition": "cold drawn",
+      "code": "",
+      "iso_513": "P2.1",
+      "kennametal": "P0",
+      "notes": "Common CRS bar stock",
+      "order": 2
+    },
+    {
+      "id": "P_4140",
+      "group_id": "P",
+      "preset_id": "pre_P_alloy_soft",
+      "label": "4140 Annealed",
+      "aliases": [
+        "4140",
+        "chromoly"
+      ],
+      "category": "Steel \u2013 Alloy",
+      "condition": "annealed",
+      "code": "",
+      "iso_513": "P3.1",
+      "kennametal": "P3",
+      "notes": "Versatile alloy steel",
+      "order": 3
+    },
+    {
+      "id": "M_316",
+      "group_id": "M",
+      "preset_id": "pre_M_aus_316",
+      "label": "316 / 316L",
+      "aliases": [
+        "SS316",
+        "316L",
+        "18-8"
+      ],
+      "category": "Stainless \u2013 Austenitic",
+      "condition": "annealed",
+      "code": "",
+      "iso_513": "M3.1",
+      "kennametal": "M2",
+      "notes": "Mo-bearing stainless",
+      "order": 4
+    },
+    {
+      "id": "S_Ti64",
+      "group_id": "S",
+      "preset_id": "pre_S_titan",
+      "label": "Ti-6Al-4V",
+      "aliases": [
+        "Ti 6-4",
+        "Grade 5",
+        "6AL4V"
+      ],
+      "category": "Titanium",
+      "condition": "annealed",
+      "code": "",
+      "iso_513": "S1.2",
+      "kennametal": "S4",
+      "notes": "Most common Ti alloy",
+      "order": 5
+    }
+  ]
+}

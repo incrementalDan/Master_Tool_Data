@@ -1,0 +1,189 @@
+{
+  "version": 1,
+  "entities": [
+    {
+      "name": "Helical Solutions",
+      "aliases": [
+        "Helical"
+      ],
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "material_code_system": null,
+      "id": "ent_000",
+      "order": 0
+    },
+    {
+      "name": "Harvey Tool",
+      "aliases": [
+        "Harvey"
+      ],
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "material_code_system": null,
+      "id": "ent_001",
+      "order": 1
+    },
+    {
+      "name": "OSG",
+      "aliases": [],
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "material_code_system": "iso_513",
+      "id": "ent_002",
+      "order": 2
+    },
+    {
+      "name": "Guhring",
+      "aliases": [
+        "Guehring"
+      ],
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "material_code_system": null,
+      "id": "ent_003",
+      "order": 3
+    },
+    {
+      "name": "Vargus",
+      "aliases": [],
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "material_code_system": null,
+      "id": "ent_004",
+      "order": 4
+    },
+    {
+      "name": "Kennametal",
+      "aliases": [],
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "material_code_system": "kennametal",
+      "id": "ent_005",
+      "order": 5
+    },
+    {
+      "name": "Sandvik Coromant",
+      "aliases": [
+        "Sandvik"
+      ],
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "material_code_system": "iso_513",
+      "id": "ent_006",
+      "order": 6
+    },
+    {
+      "name": "Haas",
+      "aliases": [],
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "material_code_system": null,
+      "id": "ent_007",
+      "order": 7
+    },
+    {
+      "name": "MSC Industrial",
+      "aliases": [
+        "MSC",
+        "MSC1"
+      ],
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": true,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "material_code_system": null,
+      "id": "ent_008",
+      "order": 8
+    },
+    {
+      "name": "McMaster-Carr",
+      "aliases": [
+        "McMaster"
+      ],
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": true,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "material_code_system": null,
+      "id": "ent_009",
+      "order": 9
+    },
+    {
+      "name": "Butler Brothers",
+      "aliases": [],
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "material_code_system": null,
+      "id": "ent_010",
+      "order": 10
+    },
+    {
+      "name": "Harvey Performance",
+      "aliases": [
+        "Harvey Performance Company"
+      ],
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": true,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "material_code_system": null,
+      "id": "ent_011",
+      "order": 11
+    },
+    {
+      "name": "Vargus USA",
+      "aliases": [],
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": true,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "material_code_system": null,
+      "id": "ent_012",
+      "order": 12
+    }
+  ]
+}

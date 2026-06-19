@@ -1,0 +1,804 @@
+[
+  {
+    "id": "FTL-000001",
+    "vendor": "Helical Solutions",
+    "coating": "AlTiN",
+    "purchasing": {
+      "manufacturers": [
+        {
+          "id": "667121eb-ac31-4034-8a72-1619266b696c",
+          "name": "Helical Solutions",
+          "edp": "59424",
+          "edp_url": "",
+          "mfg_num": "",
+          "mfg_num_url": "",
+          "order": 0
+        }
+      ],
+      "vendors": [
+        {
+          "id": "0d04f8ee-3cb4-4330-8cf1-d508e11891ae",
+          "manufacturer_id": "667121eb-ac31-4034-8a72-1619266b696c",
+          "name": "MSC Industrial",
+          "vendor_num": "09876543",
+          "vendor_num_url": "",
+          "price": 42.5,
+          "order": 0
+        },
+        {
+          "id": "6a0f28b4-1a11-49b1-a5d6-6f9b29eb773d",
+          "manufacturer_id": "667121eb-ac31-4034-8a72-1619266b696c",
+          "name": "Butler Brothers",
+          "vendor_num": "",
+          "vendor_num_url": "",
+          "price": 38.9,
+          "order": 1
+        }
+      ]
+    },
+    "tsc_capable": false,
+    "custom_grind": false,
+    "min_ooh": 0.9,
+    "shoulder_length": 0.9,
+    "machine_tool_number": null,
+    "selected_holder_guid": "82b79d9b-5c50-43f9-b35b-354ae2df7bbf",
+    "assemblies": [
+      {
+        "assembly_id": "c3e7e28a-7078-428a-9ff9-7957e0178ece",
+        "instance_guid": "a1c4a03a-0609-4ad2-9861-561d4a467170",
+        "holder_guid": "82b79d9b-5c50-43f9-b35b-354ae2df7bbf",
+        "holder_description": "NBT30-SK13C-90 (85mm)",
+        "ooh": 1.12,
+        "linked_preset_guids": [],
+        "notes": "Primary proven setup",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      },
+      {
+        "assembly_id": "b9d00882-711b-40bd-85ec-ec4163ccaeab",
+        "instance_guid": "a1c4a03a-0609-4ad2-9861-561d4a467199",
+        "holder_guid": "82b79d9b-5c50-43f9-b35b-354ae2df7bbf",
+        "holder_description": "NBT30-SK13C-90 (85mm)",
+        "ooh": 1.62,
+        "linked_preset_guids": [],
+        "notes": "Extended stickout for deeper features",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      }
+    ],
+    "notes": "Workhorse 3/8 4-flute. Proven for 6061 roughing at 12k rpm and 316L at reduced feed.",
+    "last_used_job": "",
+    "preferred_machine": "M300",
+    "material_suitability": [],
+    "tags": [
+      "roughing",
+      "aluminum",
+      "stainless"
+    ],
+    "tap_sub_type": "",
+    "point_type": "",
+    "updated_by": "demo",
+    "revision_notes": "",
+    "merge_history": [],
+    "created_at": "2026-05-01T12:00:00.000Z",
+    "updated_at": "2026-05-01T12:00:00.000Z"
+  },
+  {
+    "id": "FTL-000002",
+    "vendor": "Harvey Tool",
+    "coating": "AlTiN",
+    "purchasing": {
+      "manufacturers": [
+        {
+          "id": "70c41773-dbc5-463c-99a4-cfc7be71ffd0",
+          "name": "Harvey Tool",
+          "edp": "822500",
+          "edp_url": "",
+          "mfg_num": "",
+          "mfg_num_url": "",
+          "order": 0
+        }
+      ],
+      "vendors": [
+        {
+          "id": "5df9204d-4db5-4125-8592-d995f5653eee",
+          "manufacturer_id": "70c41773-dbc5-463c-99a4-cfc7be71ffd0",
+          "name": "Harvey Performance",
+          "vendor_num": "822500",
+          "vendor_num_url": "",
+          "price": 61.0,
+          "order": 0
+        }
+      ]
+    },
+    "tsc_capable": false,
+    "custom_grind": false,
+    "min_ooh": 1.2,
+    "shoulder_length": 1.2,
+    "machine_tool_number": null,
+    "selected_holder_guid": "8c278b74-52e9-4d4e-affa-b1eaa6c58c15",
+    "assemblies": [
+      {
+        "assembly_id": "af0d6dc3-b4a1-4da9-8d9d-8ea476231741",
+        "instance_guid": "2b20a485-56dd-411d-8955-9b893e76aad9",
+        "holder_guid": "8c278b74-52e9-4d4e-affa-b1eaa6c58c15",
+        "holder_description": "NBT30-SK20C-90",
+        "ooh": 2.4,
+        "linked_preset_guids": [],
+        "notes": "Primary proven setup",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      }
+    ],
+    "notes": "3-flute ball for aluminum 3D finishing. Watch stickout on deep cavities.",
+    "last_used_job": "",
+    "preferred_machine": "M300",
+    "material_suitability": [],
+    "tags": [
+      "ball",
+      "3d-profiling",
+      "aluminum"
+    ],
+    "tap_sub_type": "",
+    "point_type": "",
+    "updated_by": "demo",
+    "revision_notes": "",
+    "merge_history": [],
+    "created_at": "2026-05-01T12:00:00.000Z",
+    "updated_at": "2026-05-01T12:00:00.000Z"
+  },
+  {
+    "id": "FTL-000003",
+    "vendor": "Helical Solutions",
+    "coating": "ZrN",
+    "purchasing": {
+      "manufacturers": [
+        {
+          "id": "93bbdb5e-622a-4dbc-ae00-b1cc379370e9",
+          "name": "Helical Solutions",
+          "edp": "59410",
+          "edp_url": "",
+          "mfg_num": "",
+          "mfg_num_url": "",
+          "order": 0
+        }
+      ],
+      "vendors": [
+        {
+          "id": "70f1124a-1035-4ed8-a454-7d023a13ec5d",
+          "manufacturer_id": "93bbdb5e-622a-4dbc-ae00-b1cc379370e9",
+          "name": "MSC Industrial",
+          "vendor_num": "09811222",
+          "vendor_num_url": "",
+          "price": 34.2,
+          "order": 0
+        }
+      ]
+    },
+    "tsc_capable": false,
+    "custom_grind": false,
+    "min_ooh": 0.8,
+    "shoulder_length": 0.8,
+    "machine_tool_number": null,
+    "selected_holder_guid": "8f0b0e81-b5eb-4cbd-b3ea-d880f03c1d4e",
+    "assemblies": [
+      {
+        "assembly_id": "2e7fc10b-94ef-4df2-8782-a4a0ec902710",
+        "instance_guid": "215e30a4-a94e-40b5-8f6e-edf606aa0cb6",
+        "holder_guid": "8f0b0e81-b5eb-4cbd-b3ea-d880f03c1d4e",
+        "holder_description": "NBT30-SK13C-120",
+        "ooh": 1.24,
+        "linked_preset_guids": [],
+        "notes": "Primary proven setup",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      }
+    ],
+    "notes": ".03 corner radius bull nose, runs hot in aluminum \u2014 flood recommended.",
+    "last_used_job": "",
+    "preferred_machine": "Haas",
+    "material_suitability": [],
+    "tags": [
+      "bull nose",
+      "aluminum",
+      "roughing"
+    ],
+    "tap_sub_type": "",
+    "point_type": "",
+    "updated_by": "demo",
+    "revision_notes": "",
+    "merge_history": [],
+    "created_at": "2026-05-01T12:00:00.000Z",
+    "updated_at": "2026-05-01T12:00:00.000Z"
+  },
+  {
+    "id": "FTL-000004",
+    "vendor": "Harvey Tool",
+    "coating": "AlTiN",
+    "purchasing": {
+      "manufacturers": [
+        {
+          "id": "7766eb02-c4f7-4de6-8274-75345939120c",
+          "name": "Harvey Tool",
+          "edp": "998125",
+          "edp_url": "",
+          "mfg_num": "",
+          "mfg_num_url": "",
+          "order": 0
+        }
+      ],
+      "vendors": [
+        {
+          "id": "d9a85305-40b5-4093-97e1-22c4f0ec6e81",
+          "manufacturer_id": "7766eb02-c4f7-4de6-8274-75345939120c",
+          "name": "Harvey Performance",
+          "vendor_num": "998125",
+          "vendor_num_url": "",
+          "price": 29.75,
+          "order": 0
+        }
+      ]
+    },
+    "tsc_capable": false,
+    "custom_grind": false,
+    "min_ooh": 0.55,
+    "shoulder_length": 0.55,
+    "machine_tool_number": null,
+    "selected_holder_guid": "0bb67e22-1d3e-4ae4-b729-30d71c7f880d",
+    "assemblies": [
+      {
+        "assembly_id": "7e7cea7b-5bcf-4196-a0cf-993175008980",
+        "instance_guid": "9c32b2bc-f109-4a73-848e-ffa88656cf23",
+        "holder_guid": "0bb67e22-1d3e-4ae4-b729-30d71c7f880d",
+        "holder_description": "NBT30-SK13C-150",
+        "ooh": 0.7,
+        "linked_preset_guids": [],
+        "notes": "Primary proven setup",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      }
+    ],
+    "notes": "1/8 90\u00b0 chamfer. Also used for light spotting on small holes.",
+    "last_used_job": "",
+    "preferred_machine": "Haas",
+    "material_suitability": [],
+    "tags": [
+      "chamfer",
+      "deburr"
+    ],
+    "tap_sub_type": "",
+    "point_type": "",
+    "updated_by": "demo",
+    "revision_notes": "",
+    "merge_history": [],
+    "created_at": "2026-05-01T12:00:00.000Z",
+    "updated_at": "2026-05-01T12:00:00.000Z"
+  },
+  {
+    "id": "FTL-000005",
+    "vendor": "Guhring",
+    "coating": "TiN",
+    "purchasing": {
+      "manufacturers": [
+        {
+          "id": "4def0d95-98cd-4596-aaec-ad0f1021c10f",
+          "name": "Guhring",
+          "edp": "GH305-3906",
+          "edp_url": "",
+          "mfg_num": "",
+          "mfg_num_url": "",
+          "order": 0
+        }
+      ],
+      "vendors": [
+        {
+          "id": "e8eee715-1eeb-4d50-b131-c1a3df809f29",
+          "manufacturer_id": "4def0d95-98cd-4596-aaec-ad0f1021c10f",
+          "name": "MSC Industrial",
+          "vendor_num": "05544332",
+          "vendor_num_url": "",
+          "price": 18.4,
+          "order": 0
+        },
+        {
+          "id": "3e505ef4-d03f-497b-b55f-52db6d00acc4",
+          "manufacturer_id": "4def0d95-98cd-4596-aaec-ad0f1021c10f",
+          "name": "McMaster-Carr",
+          "vendor_num": "2903A",
+          "vendor_num_url": "",
+          "price": 21.1,
+          "order": 1
+        }
+      ]
+    },
+    "tsc_capable": true,
+    "custom_grind": false,
+    "min_ooh": 2.5,
+    "shoulder_length": 2.5,
+    "machine_tool_number": null,
+    "selected_holder_guid": "420a54c7-ed6a-429f-92aa-281028199826",
+    "assemblies": [
+      {
+        "assembly_id": "f3f67cc5-992e-4a46-b42a-e964f64c2a02",
+        "instance_guid": "8ebd8d4b-0fc8-45e3-8841-9c548a9890e5",
+        "holder_guid": "420a54c7-ed6a-429f-92aa-281028199826",
+        "holder_description": "DRILL CHUCK - BT30",
+        "ooh": 4.0,
+        "linked_preset_guids": [],
+        "notes": "Primary proven setup",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      },
+      {
+        "assembly_id": "81f6ed5e-f60a-432d-919b-eb14b61ad59d",
+        "instance_guid": "8ebd8d4b-0fc8-45e3-8841-9c548a989099",
+        "holder_guid": "420a54c7-ed6a-429f-92aa-281028199826",
+        "holder_description": "DRILL CHUCK - BT30",
+        "ooh": 4.5,
+        "linked_preset_guids": [],
+        "notes": "Extended stickout for deeper features",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      }
+    ],
+    "notes": "25/64 jobber drill. TSC capable \u2014 favor peck cycle in stainless.",
+    "last_used_job": "",
+    "preferred_machine": "M300",
+    "material_suitability": [],
+    "tags": [
+      "drill",
+      "hss",
+      "through-coolant"
+    ],
+    "tap_sub_type": "",
+    "point_type": "",
+    "updated_by": "demo",
+    "revision_notes": "",
+    "merge_history": [],
+    "created_at": "2026-05-01T12:00:00.000Z",
+    "updated_at": "2026-05-01T12:00:00.000Z"
+  },
+  {
+    "id": "FTL-000006",
+    "vendor": "OSG",
+    "coating": "TiCN",
+    "purchasing": {
+      "manufacturers": [
+        {
+          "id": "91c65ee1-4fb8-450e-a274-c5a42c7b7eca",
+          "name": "OSG",
+          "edp": "OSG-5001",
+          "edp_url": "",
+          "mfg_num": "",
+          "mfg_num_url": "",
+          "order": 0
+        }
+      ],
+      "vendors": [
+        {
+          "id": "6d4feec1-5a83-4c0d-977f-1e4ff586aa62",
+          "manufacturer_id": "91c65ee1-4fb8-450e-a274-c5a42c7b7eca",
+          "name": "MSC Industrial",
+          "vendor_num": "07733221",
+          "vendor_num_url": "",
+          "price": 16.8,
+          "order": 0
+        }
+      ]
+    },
+    "tsc_capable": false,
+    "custom_grind": false,
+    "min_ooh": 0.8,
+    "shoulder_length": 0.8,
+    "machine_tool_number": null,
+    "selected_holder_guid": "0330cb19-c7eb-4668-8ba8-ecdccfde500b",
+    "assemblies": [
+      {
+        "assembly_id": "47111352-85c4-4b79-89f0-7e8d3aba73dd",
+        "instance_guid": "78e527ab-f46d-4bfe-8731-2c0990d5469e",
+        "holder_guid": "0330cb19-c7eb-4668-8ba8-ecdccfde500b",
+        "holder_description": "NBT30-SK13C-120",
+        "ooh": 1.5,
+        "linked_preset_guids": [],
+        "notes": "Primary proven setup",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      }
+    ],
+    "notes": "1/2 90\u00b0 spot/chamfer drill. Spot before all drilled holes.",
+    "last_used_job": "",
+    "preferred_machine": "Haas",
+    "material_suitability": [],
+    "tags": [
+      "spot drill",
+      "90deg"
+    ],
+    "tap_sub_type": "",
+    "point_type": "",
+    "updated_by": "demo",
+    "revision_notes": "",
+    "merge_history": [],
+    "created_at": "2026-05-01T12:00:00.000Z",
+    "updated_at": "2026-05-01T12:00:00.000Z"
+  },
+  {
+    "id": "FTL-000007",
+    "vendor": "Guhring",
+    "coating": "None",
+    "purchasing": {
+      "manufacturers": [
+        {
+          "id": "d351da17-80ff-49f2-9320-785483a011d2",
+          "name": "Guhring",
+          "edp": "GH-RM194",
+          "edp_url": "",
+          "mfg_num": "",
+          "mfg_num_url": "",
+          "order": 0
+        }
+      ],
+      "vendors": [
+        {
+          "id": "2bbd4518-6f5f-48f9-9208-4db73d834d6a",
+          "manufacturer_id": "d351da17-80ff-49f2-9320-785483a011d2",
+          "name": "MSC Industrial",
+          "vendor_num": "04422110",
+          "vendor_num_url": "",
+          "price": 27.3,
+          "order": 0
+        }
+      ]
+    },
+    "tsc_capable": true,
+    "custom_grind": false,
+    "min_ooh": 1.5,
+    "shoulder_length": 1.5,
+    "machine_tool_number": null,
+    "selected_holder_guid": "420a54c7-ed6a-429f-92aa-281028199826",
+    "assemblies": [
+      {
+        "assembly_id": "d7c7fea9-f115-429d-b311-c00173ed12f4",
+        "instance_guid": "87ac2b05-7fe1-493a-9a65-9654b1e7e37c",
+        "holder_guid": "420a54c7-ed6a-429f-92aa-281028199826",
+        "holder_description": "DRILL CHUCK - BT30",
+        "ooh": 2.5,
+        "linked_preset_guids": [],
+        "notes": "Primary proven setup",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      }
+    ],
+    "notes": ".194 HSS reamer for dowel-pin holes. Light feed, flood coolant.",
+    "last_used_job": "",
+    "preferred_machine": "M300",
+    "material_suitability": [],
+    "tags": [
+      "reamer",
+      "hss",
+      "H7"
+    ],
+    "tap_sub_type": "",
+    "point_type": "",
+    "updated_by": "demo",
+    "revision_notes": "",
+    "merge_history": [],
+    "created_at": "2026-05-01T12:00:00.000Z",
+    "updated_at": "2026-05-01T12:00:00.000Z"
+  },
+  {
+    "id": "FTL-000008",
+    "vendor": "OSG",
+    "coating": "None",
+    "purchasing": {
+      "manufacturers": [
+        {
+          "id": "a5944bad-e75d-4005-b659-3fc6f2b8a5fa",
+          "name": "OSG",
+          "edp": "OSG-M5X08",
+          "edp_url": "",
+          "mfg_num": "",
+          "mfg_num_url": "",
+          "order": 0
+        }
+      ],
+      "vendors": [
+        {
+          "id": "ce6fe0fa-4ed9-46aa-9bf1-d0b1048b8404",
+          "manufacturer_id": "a5944bad-e75d-4005-b659-3fc6f2b8a5fa",
+          "name": "MSC Industrial",
+          "vendor_num": "06655443",
+          "vendor_num_url": "",
+          "price": 12.9,
+          "order": 0
+        }
+      ]
+    },
+    "tsc_capable": false,
+    "custom_grind": false,
+    "min_ooh": 0.7,
+    "shoulder_length": 0.7,
+    "machine_tool_number": null,
+    "selected_holder_guid": "8f0b0e81-b5eb-4cbd-b3ea-d880f03c1d4e",
+    "assemblies": [
+      {
+        "assembly_id": "164ca755-f6f9-4649-a6e9-203ed8f67fd7",
+        "instance_guid": "1f27e3eb-10e5-4644-9f1e-c69cc32c6aa8",
+        "holder_guid": "8f0b0e81-b5eb-4cbd-b3ea-d880f03c1d4e",
+        "holder_description": "NBT30-SK13C-120",
+        "ooh": 1.1,
+        "linked_preset_guids": [],
+        "notes": "Primary proven setup",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      }
+    ],
+    "notes": "M5x0.8 form (roll) tap, 4H. No chips \u2014 needs proper drill size hole.",
+    "last_used_job": "",
+    "preferred_machine": "Haas",
+    "material_suitability": [],
+    "tags": [
+      "tap",
+      "form",
+      "metric"
+    ],
+    "tap_sub_type": "form",
+    "point_type": "Bottoming",
+    "updated_by": "demo",
+    "revision_notes": "",
+    "merge_history": [],
+    "created_at": "2026-05-01T12:00:00.000Z",
+    "updated_at": "2026-05-01T12:00:00.000Z"
+  },
+  {
+    "id": "FTL-000009",
+    "vendor": "Vargus",
+    "coating": "TiCN",
+    "purchasing": {
+      "manufacturers": [
+        {
+          "id": "bab35ba1-d2fb-45d3-9477-7d0e3c361220",
+          "name": "Vargus",
+          "edp": "VG-TM488",
+          "edp_url": "",
+          "mfg_num": "",
+          "mfg_num_url": "",
+          "order": 0
+        }
+      ],
+      "vendors": [
+        {
+          "id": "6e3be11a-ef39-490c-854d-068d5212ed6a",
+          "manufacturer_id": "bab35ba1-d2fb-45d3-9477-7d0e3c361220",
+          "name": "Vargus USA",
+          "vendor_num": "VG-TM488",
+          "vendor_num_url": "",
+          "price": 73.4,
+          "order": 0
+        }
+      ]
+    },
+    "tsc_capable": false,
+    "custom_grind": false,
+    "min_ooh": 0.9,
+    "shoulder_length": 0.9,
+    "machine_tool_number": null,
+    "selected_holder_guid": "5f52f738-7099-4cdc-8bf7-a93859237490",
+    "assemblies": [
+      {
+        "assembly_id": "d3c714aa-4976-4d80-8678-c772dfe4410c",
+        "instance_guid": "64a3493f-fce3-457e-b7f8-8863a397ff7b",
+        "holder_guid": "5f52f738-7099-4cdc-8bf7-a93859237490",
+        "holder_description": "NBT30-SK13C-60",
+        "ooh": 1.25,
+        "linked_preset_guids": [],
+        "notes": "Primary proven setup",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      }
+    ],
+    "notes": ".488 thread mill, 11-32 TPI range. Single-point, climb-mill threads.",
+    "last_used_job": "",
+    "preferred_machine": "M300",
+    "material_suitability": [],
+    "tags": [
+      "thread mill",
+      "internal"
+    ],
+    "tap_sub_type": "",
+    "point_type": "",
+    "updated_by": "demo",
+    "revision_notes": "",
+    "merge_history": [],
+    "created_at": "2026-05-01T12:00:00.000Z",
+    "updated_at": "2026-05-01T12:00:00.000Z"
+  },
+  {
+    "id": "FTL-00000A",
+    "vendor": "Kennametal",
+    "coating": "None",
+    "purchasing": {
+      "manufacturers": [
+        {
+          "id": "a2df227c-3315-4385-a5a5-f63da1aad224",
+          "name": "Kennametal",
+          "edp": "KM-RTA21",
+          "edp_url": "",
+          "mfg_num": "",
+          "mfg_num_url": "",
+          "order": 0
+        }
+      ],
+      "vendors": [
+        {
+          "id": "9610d222-9b13-4720-b432-34b6966cc5da",
+          "manufacturer_id": "a2df227c-3315-4385-a5a5-f63da1aad224",
+          "name": "MSC Industrial",
+          "vendor_num": "08899001",
+          "vendor_num_url": "",
+          "price": 312.0,
+          "order": 0
+        }
+      ]
+    },
+    "tsc_capable": false,
+    "custom_grind": false,
+    "min_ooh": 1.2,
+    "shoulder_length": 1.2,
+    "machine_tool_number": null,
+    "selected_holder_guid": "c0fc0f9e-5d07-4b2c-a993-1958c17195ab",
+    "assemblies": [
+      {
+        "assembly_id": "657f334e-5447-4a10-9c1d-5a8e21fdeaaa",
+        "instance_guid": "f55d0b81-fcf9-4e26-b120-afa48c5a8ce4",
+        "holder_guid": "c0fc0f9e-5d07-4b2c-a993-1958c17195ab",
+        "holder_description": "BBT30-CKB3-79 (For  EWN Boring Heads)",
+        "ooh": 1.56,
+        "linked_preset_guids": [],
+        "notes": "Primary proven setup",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      }
+    ],
+    "notes": "RTA21 boring head w/ TPGP080204 insert. Fine bore finishing to size.",
+    "last_used_job": "",
+    "preferred_machine": "M300",
+    "material_suitability": [],
+    "tags": [
+      "boring head",
+      "finishing"
+    ],
+    "tap_sub_type": "",
+    "point_type": "",
+    "updated_by": "demo",
+    "revision_notes": "",
+    "merge_history": [],
+    "created_at": "2026-05-01T12:00:00.000Z",
+    "updated_at": "2026-05-01T12:00:00.000Z"
+  },
+  {
+    "id": "FTL-00000B",
+    "vendor": "Haas",
+    "coating": "None",
+    "purchasing": {
+      "manufacturers": [
+        {
+          "id": "b667a8e8-8889-40b9-8db3-e8e6739da48c",
+          "name": "Sandvik Coromant",
+          "edp": "SC-FM250",
+          "edp_url": "",
+          "mfg_num": "",
+          "mfg_num_url": "",
+          "order": 0
+        }
+      ],
+      "vendors": [
+        {
+          "id": "9c443106-e396-44d9-b564-c3faaa7ab241",
+          "manufacturer_id": "b667a8e8-8889-40b9-8db3-e8e6739da48c",
+          "name": "MSC Industrial",
+          "vendor_num": "03311009",
+          "vendor_num_url": "",
+          "price": 184.5,
+          "order": 0
+        }
+      ]
+    },
+    "tsc_capable": false,
+    "custom_grind": false,
+    "min_ooh": 1.0,
+    "shoulder_length": 1.0,
+    "machine_tool_number": null,
+    "selected_holder_guid": "4f62c999-f24d-403d-9a0e-b52595aaed98",
+    "assemblies": [
+      {
+        "assembly_id": "0d05260c-e6e2-410f-a31a-cccad4b3f4f6",
+        "instance_guid": "2c698bb1-ff97-4f83-81a0-a9a9cb7f4e2f",
+        "holder_guid": "4f62c999-f24d-403d-9a0e-b52595aaed98",
+        "holder_description": "NBT30 Holder for hass 2.5\" shell mill ",
+        "ooh": 1.74,
+        "linked_preset_guids": [],
+        "notes": "Primary proven setup",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      }
+    ],
+    "notes": "2.5 45\u00b0 face mill, 5 inserts. Aluminum and steel facing presets.",
+    "last_used_job": "",
+    "preferred_machine": "Haas",
+    "material_suitability": [],
+    "tags": [
+      "face mill",
+      "45deg"
+    ],
+    "tap_sub_type": "",
+    "point_type": "",
+    "updated_by": "demo",
+    "revision_notes": "",
+    "merge_history": [],
+    "created_at": "2026-05-01T12:00:00.000Z",
+    "updated_at": "2026-05-01T12:00:00.000Z"
+  },
+  {
+    "id": "FTL-00000C",
+    "vendor": "Helical Solutions",
+    "coating": "AlTiN",
+    "purchasing": {
+      "manufacturers": [
+        {
+          "id": "7404efab-3bdd-42c8-b04a-18659083e4e5",
+          "name": "Helical Solutions",
+          "edp": "HF-3163",
+          "edp_url": "",
+          "mfg_num": "",
+          "mfg_num_url": "",
+          "order": 0
+        }
+      ],
+      "vendors": [
+        {
+          "id": "15a685c2-eee9-4281-a937-33e7b652de88",
+          "manufacturer_id": "7404efab-3bdd-42c8-b04a-18659083e4e5",
+          "name": "MSC Industrial",
+          "vendor_num": "02200887",
+          "vendor_num_url": "",
+          "price": 47.6,
+          "order": 0
+        }
+      ]
+    },
+    "tsc_capable": false,
+    "custom_grind": false,
+    "min_ooh": 0.6,
+    "shoulder_length": 0.6,
+    "machine_tool_number": null,
+    "selected_holder_guid": "8f0b0e81-b5eb-4cbd-b3ea-d880f03c1d4e",
+    "assemblies": [
+      {
+        "assembly_id": "2a56300e-39e6-4dbe-889c-4f6f55c92c00",
+        "instance_guid": "19d00a3d-8bac-4095-b4a1-b95f0f9185cd",
+        "holder_guid": "8f0b0e81-b5eb-4cbd-b3ea-d880f03c1d4e",
+        "holder_description": "NBT30-SK13C-120",
+        "ooh": 0.86,
+        "linked_preset_guids": [],
+        "notes": "Primary proven setup",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      }
+    ],
+    "notes": "3/16 high-feed mill. Shallow DOC, very high feedrate roughing.",
+    "last_used_job": "",
+    "preferred_machine": "M300",
+    "material_suitability": [],
+    "tags": [
+      "high-feed",
+      "form mill"
+    ],
+    "tap_sub_type": "",
+    "point_type": "",
+    "updated_by": "demo",
+    "revision_notes": "",
+    "merge_history": [],
+    "created_at": "2026-05-01T12:00:00.000Z",
+    "updated_at": "2026-05-01T12:00:00.000Z"
+  }
+]

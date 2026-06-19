@@ -1,0 +1,2584 @@
+{
+ "data": [
+  {
+   "BMC": "carbide",
+   "GRADE": "Mill Generic",
+   "description": "3/8 AiTin EM 4FL 7/8 LOC",
+   "expressions": {
+    "holder_description": "'NBT30-SK13C-90 (85mm)'",
+    "tool_bodyLength": "1.12 in",
+    "tool_description": "'3/8 AiTin EM 4FL 7/8 LOC'",
+    "tool_diameter": ".375 in",
+    "tool_fluteLength": ".875 in",
+    "tool_material": "'carbide'",
+    "tool_number": "50",
+    "tool_overallLength": "2.500000000 in",
+    "tool_productId": "'A-25'",
+    "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-25$'",
+    "tool_shoulderLength": ".95 in",
+    "tool_vendor": "'LC-14'",
+    "tool_comment": "'FTL-000001'"
+   },
+   "geometry": {
+    "CSP": false,
+    "DC": 0.375,
+    "HAND": true,
+    "LB": 1.12,
+    "LCF": 0.875,
+    "NOF": 4,
+    "NT": 1,
+    "OAL": 2.5,
+    "RE": 0,
+    "SFDM": 0.375,
+    "TA": 0,
+    "TP": 0,
+    "assemblyGaugeLength": 4.466417,
+    "shoulder-diameter": 0.375,
+    "shoulder-length": 0.95,
+    "thread-profile-angle": 60,
+    "tip-diameter": 0,
+    "tip-length": 0,
+    "tip-offset": 0
+   },
+   "guid": "a1c4a03a-0609-4ad2-9861-561d4a467170",
+   "holder": {
+    "description": "NBT30-SK13C-90 (85mm)",
+    "gaugeLength": 3.346417,
+    "guid": "82b79d9b-5c50-43f9-b35b-354ae2df7bbf",
+    "product-id": "",
+    "product-link": "",
+    "segments": [
+     {
+      "height": 2.5590551181102,
+      "lower-diameter": 1.2992125984252,
+      "upper-diameter": 1.2992125984252
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.7322834645669,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.13385826771654,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.13311023622047,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.25984251968504,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.7322834645669
+     },
+     {
+      "height": 0.078740157480315,
+      "lower-diameter": 1.25,
+      "upper-diameter": 1.25
+     }
+    ],
+    "type": "holder",
+    "unit": "inches",
+    "vendor": ""
+   },
+   "last_modified": 1780673247472,
+   "post-process": {
+    "break-control": false,
+    "comment": "FTL-000001",
+    "diameter-offset": 50,
+    "length-offset": 50,
+    "live": true,
+    "manual-tool-change": false,
+    "number": 50,
+    "turret": 0
+   },
+   "product-id": "A-25",
+   "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-25$",
+   "reference_guid": "86b21e97-a5e0-4bb2-bf18-06fd58e6576b",
+   "start-values": {
+    "presets": [
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerTooth": ".002 in",
+       "tool_feedPlunge": "50 inpm",
+       "tool_feedRamp": "30 inpm",
+       "tool_surfaceSpeed": "525 fpm"
+      },
+      "f_n": 0.009349978135683903,
+      "f_z": 0.002,
+      "guid": "a91e80ea-a826-447e-bad1-5a010253e3a3",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 5347.606087887685,
+      "n_ramp": 5347.606087887685,
+      "name": "ST",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 525,
+      "v_f": 42.78084870310147,
+      "v_f_leadIn": 42.78084870310147,
+      "v_f_leadOut": 42.78084870310147,
+      "v_f_plunge": 50,
+      "v_f_ramp": 30,
+      "v_f_transition": 42.78084870310147
+     },
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerTooth": ".001 in",
+       "tool_feedPlunge": "50 inpm",
+       "tool_feedRamp": "20 inpm",
+       "tool_surfaceSpeed": "525 fpm"
+      },
+      "f_n": 0.009349978135683903,
+      "f_z": 0.001,
+      "guid": "71cd26da-f7b2-447d-8c07-107c4953669e",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 5347.606087887685,
+      "n_ramp": 5347.606087887685,
+      "name": "ST FIN",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 525,
+      "v_f": 21.390424351550735,
+      "v_f_leadIn": 21.390424351550735,
+      "v_f_leadOut": 21.390424351550735,
+      "v_f_plunge": 50,
+      "v_f_ramp": 20,
+      "v_f_transition": 21.390424351550735
+     },
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerTooth": ".003 in",
+       "tool_feedPlunge": "50 inpm",
+       "tool_feedRamp": "12 inpm",
+       "tool_stepdown": "tool_fluteLength * 0.9",
+       "tool_stepover": "tool_diameter * 0.08",
+       "tool_surfaceSpeed": "240 fpm"
+      },
+      "f_n": 0.020453077171808543,
+      "f_z": 0.003,
+      "guid": "86cd9b47-fd0f-44c2-8208-be121d1e1500",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 2444.619925891513,
+      "n_ramp": 2444.619925891513,
+      "name": "SS-316",
+      "ramp-angle": 2,
+      "stepdown": 0.7874999999999998,
+      "stepover": 0.029999999999999992,
+      "tool-coolant": "flood",
+      "use-stepdown": true,
+      "use-stepover": true,
+      "v_c": 240.00000000000009,
+      "v_f": 29.33543911069815,
+      "v_f_leadIn": 29.33543911069815,
+      "v_f_leadOut": 29.33543911069815,
+      "v_f_plunge": 50,
+      "v_f_ramp": 12,
+      "v_f_transition": 29.33543911069815
+     }
+    ]
+   },
+   "type": "flat end mill",
+   "unit": "inches",
+   "vendor": "LC-14"
+  },
+  {
+   "BMC": "carbide",
+   "GRADE": "Mill Generic",
+   "description": "3/8 AiTin EM 4FL 7/8 LOC",
+   "expressions": {
+    "holder_description": "'NBT30-SK13C-90 (85mm)'",
+    "tool_bodyLength": "1.62 in",
+    "tool_description": "'3/8 AiTin EM 4FL 7/8 LOC'",
+    "tool_diameter": ".375 in",
+    "tool_fluteLength": ".875 in",
+    "tool_material": "'carbide'",
+    "tool_number": "50",
+    "tool_overallLength": "2.500000000 in",
+    "tool_productId": "'A-25'",
+    "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-25$'",
+    "tool_shoulderLength": ".95 in",
+    "tool_vendor": "'LC-14'",
+    "tool_comment": "'FTL-000001'"
+   },
+   "geometry": {
+    "CSP": false,
+    "DC": 0.375,
+    "HAND": true,
+    "LB": 1.62,
+    "LCF": 0.875,
+    "NOF": 4,
+    "NT": 1,
+    "OAL": 2.5,
+    "RE": 0,
+    "SFDM": 0.375,
+    "TA": 0,
+    "TP": 0,
+    "assemblyGaugeLength": 4.966417,
+    "shoulder-diameter": 0.375,
+    "shoulder-length": 0.95,
+    "thread-profile-angle": 60,
+    "tip-diameter": 0,
+    "tip-length": 0,
+    "tip-offset": 0
+   },
+   "guid": "a1c4a03a-0609-4ad2-9861-561d4a467199",
+   "holder": {
+    "description": "NBT30-SK13C-90 (85mm)",
+    "gaugeLength": 3.346417,
+    "guid": "82b79d9b-5c50-43f9-b35b-354ae2df7bbf",
+    "product-id": "",
+    "product-link": "",
+    "segments": [
+     {
+      "height": 2.5590551181102,
+      "lower-diameter": 1.2992125984252,
+      "upper-diameter": 1.2992125984252
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.7322834645669,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.13385826771654,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.13311023622047,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.25984251968504,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.7322834645669
+     },
+     {
+      "height": 0.078740157480315,
+      "lower-diameter": 1.25,
+      "upper-diameter": 1.25
+     }
+    ],
+    "type": "holder",
+    "unit": "inches",
+    "vendor": ""
+   },
+   "last_modified": 1780673247472,
+   "post-process": {
+    "break-control": false,
+    "comment": "FTL-000001",
+    "diameter-offset": 50,
+    "length-offset": 50,
+    "live": true,
+    "manual-tool-change": false,
+    "number": 50,
+    "turret": 0
+   },
+   "product-id": "A-25",
+   "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-25$",
+   "reference_guid": "86b21e97-a5e0-4bb2-bf18-06fd58e6576b",
+   "start-values": {
+    "presets": [
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerTooth": ".002 in",
+       "tool_feedPlunge": "50 inpm",
+       "tool_feedRamp": "30 inpm",
+       "tool_surfaceSpeed": "525 fpm"
+      },
+      "f_n": 0.009349978135683903,
+      "f_z": 0.002,
+      "guid": "a91e80ea-a826-447e-bad1-5a010253e3a3",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 5347.606087887685,
+      "n_ramp": 5347.606087887685,
+      "name": "ST",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 525,
+      "v_f": 42.78084870310147,
+      "v_f_leadIn": 42.78084870310147,
+      "v_f_leadOut": 42.78084870310147,
+      "v_f_plunge": 50,
+      "v_f_ramp": 30,
+      "v_f_transition": 42.78084870310147
+     },
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerTooth": ".001 in",
+       "tool_feedPlunge": "50 inpm",
+       "tool_feedRamp": "20 inpm",
+       "tool_surfaceSpeed": "525 fpm"
+      },
+      "f_n": 0.009349978135683903,
+      "f_z": 0.001,
+      "guid": "71cd26da-f7b2-447d-8c07-107c4953669e",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 5347.606087887685,
+      "n_ramp": 5347.606087887685,
+      "name": "ST FIN",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 525,
+      "v_f": 21.390424351550735,
+      "v_f_leadIn": 21.390424351550735,
+      "v_f_leadOut": 21.390424351550735,
+      "v_f_plunge": 50,
+      "v_f_ramp": 20,
+      "v_f_transition": 21.390424351550735
+     },
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerTooth": ".003 in",
+       "tool_feedPlunge": "50 inpm",
+       "tool_feedRamp": "12 inpm",
+       "tool_stepdown": "tool_fluteLength * 0.9",
+       "tool_stepover": "tool_diameter * 0.08",
+       "tool_surfaceSpeed": "240 fpm"
+      },
+      "f_n": 0.020453077171808543,
+      "f_z": 0.003,
+      "guid": "86cd9b47-fd0f-44c2-8208-be121d1e1500",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 2444.619925891513,
+      "n_ramp": 2444.619925891513,
+      "name": "SS-316",
+      "ramp-angle": 2,
+      "stepdown": 0.7874999999999998,
+      "stepover": 0.029999999999999992,
+      "tool-coolant": "flood",
+      "use-stepdown": true,
+      "use-stepover": true,
+      "v_c": 240.00000000000009,
+      "v_f": 29.33543911069815,
+      "v_f_leadIn": 29.33543911069815,
+      "v_f_leadOut": 29.33543911069815,
+      "v_f_plunge": 50,
+      "v_f_ramp": 12,
+      "v_f_transition": 29.33543911069815
+     }
+    ]
+   },
+   "type": "flat end mill",
+   "unit": "inches",
+   "vendor": "LC-14"
+  },
+  {
+   "BMC": "carbide",
+   "GRADE": "Mill Generic",
+   "description": "0.5 BALL EM 3FL 2.0LOC AL",
+   "expressions": {
+    "holder_description": "'NBT30-SK20C-90'",
+    "tool_bodyLength": "2.4 in",
+    "tool_description": "'0.5 BALL EM 3FL 2.0LOC AL'",
+    "tool_diameter": ".5 in",
+    "tool_fluteLength": "2 in",
+    "tool_lengthOffset": "10",
+    "tool_material": "'carbide'",
+    "tool_number": "10",
+    "tool_overallLength": "4 in",
+    "tool_productId": "'B-75'",
+    "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/B/B-75$'",
+    "tool_shoulderLength": "2 in",
+    "tool_vendor": "'LC84'",
+    "tool_comment": "'FTL-000002'"
+   },
+   "geometry": {
+    "CSP": false,
+    "DC": 0.5,
+    "HAND": true,
+    "LB": 2.4,
+    "LCF": 2,
+    "NOF": 3,
+    "OAL": 4,
+    "SFDM": 0.5,
+    "assemblyGaugeLength": 5.667677165354331,
+    "shoulder-diameter": 0.5,
+    "shoulder-length": 2
+   },
+   "guid": "2b20a485-56dd-411d-8955-9b893e76aad9",
+   "holder": {
+    "description": "NBT30-SK20C-90",
+    "expressions": {
+     "tool_description": "'NBT30-SK20C-90'",
+     "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+    },
+    "gaugeLength": 82.999,
+    "guid": "8c278b74-52e9-4d4e-affa-b1eaa6c58c15",
+    "product-id": "",
+    "product-link": "",
+    "segments": [
+     {
+      "height": 63,
+      "lower-diameter": 49,
+      "upper-diameter": 49
+     },
+     {
+      "height": 1,
+      "lower-diameter": 44,
+      "upper-diameter": 46
+     },
+     {
+      "height": 3.4,
+      "lower-diameter": 46,
+      "upper-diameter": 46
+     },
+     {
+      "height": 2.309,
+      "lower-diameter": 46,
+      "upper-diameter": 38
+     },
+     {
+      "height": 3.381,
+      "lower-diameter": 38,
+      "upper-diameter": 38
+     },
+     {
+      "height": 2.309,
+      "lower-diameter": 38,
+      "upper-diameter": 46
+     },
+     {
+      "height": 6.6,
+      "lower-diameter": 46,
+      "upper-diameter": 46
+     },
+     {
+      "height": 1,
+      "lower-diameter": 46,
+      "upper-diameter": 44
+     },
+     {
+      "height": 2,
+      "lower-diameter": 31.75,
+      "upper-diameter": 31.75
+     }
+    ],
+    "type": "holder",
+    "unit": "millimeters",
+    "vendor": ""
+   },
+   "last_modified": 1780673247475,
+   "post-process": {
+    "break-control": false,
+    "comment": "FTL-000002",
+    "diameter-offset": 10,
+    "length-offset": 10,
+    "live": true,
+    "manual-tool-change": false,
+    "number": 10,
+    "turret": 0
+   },
+   "product-id": "B-75",
+   "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/B/B-75$",
+   "reference_guid": "3e9d6d2a-f98c-454e-a9cc-c90bcc1a4554",
+   "start-values": {
+    "presets": [
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerTooth": ".0025 in",
+       "tool_feedPlunge": "50 inpm",
+       "tool_feedRamp": "80 inpm",
+       "tool_spindleSpeed": "12000 rpm"
+      },
+      "f_n": 0.004166666666666667,
+      "f_z": 0.0025,
+      "guid": "3bf9bdaf-f071-4969-ae16-a3320e8033b9",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 12000,
+      "n_ramp": 12000,
+      "name": "AL",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 1570.7963267948965,
+      "v_f": 90,
+      "v_f_leadIn": 90,
+      "v_f_leadOut": 90,
+      "v_f_plunge": 50,
+      "v_f_ramp": 80,
+      "v_f_transition": 90
+     },
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedCutting": "120 inpm",
+       "tool_feedPlunge": "50 inpm",
+       "tool_feedRamp": "80 inpm",
+       "tool_spindleSpeed": "12000 rpm"
+      },
+      "f_n": 0.004166666666666667,
+      "f_z": 0.003333333333333333,
+      "guid": "68342d33-f094-4219-a62d-d139214a6c56",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 12000,
+      "n_ramp": 12000,
+      "name": "AL Finish",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 1570.7963267948965,
+      "v_f": 120,
+      "v_f_leadIn": 120,
+      "v_f_leadOut": 120,
+      "v_f_plunge": 50,
+      "v_f_ramp": 80,
+      "v_f_transition": 120
+     }
+    ]
+   },
+   "type": "ball end mill",
+   "unit": "inches",
+   "vendor": "LC84"
+  },
+  {
+   "BMC": "carbide",
+   "GRADE": "Mill Generic",
+   "description": "1/4 BULL EM .03R 3FL 1.0LOC AL VarPitch",
+   "expressions": {
+    "tool_bodyLength": "1.24 in",
+    "tool_cornerRadius": ".03 in",
+    "tool_description": "'1/4 BULL EM .03R 3FL 1.0LOC AL VarPitch'",
+    "tool_number": "12",
+    "tool_overallLength": "3. in",
+    "tool_productId": "'A-160'",
+    "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-160$'",
+    "tool_shoulderLength": "1.15 in",
+    "tool_vendor": "'LC-158'",
+    "tool_comment": "'FTL-000003'"
+   },
+   "geometry": {
+    "CSP": false,
+    "DC": 0.25,
+    "HAND": true,
+    "LB": 1.24,
+    "LCF": 1,
+    "NOF": 3,
+    "OAL": 3,
+    "RE": 0.03,
+    "SFDM": 0.25,
+    "assemblyGaugeLength": 5.76752,
+    "shoulder-diameter": 0.25,
+    "shoulder-length": 1.15
+   },
+   "guid": "215e30a4-a94e-40b5-8f6e-edf606aa0cb6",
+   "holder": {
+    "description": "NBT30-SK13C-120",
+    "gaugeLength": 4.52752,
+    "guid": "8f0b0e81-b5eb-4cbd-b3ea-d880f03c1d4e",
+    "product-id": "",
+    "product-link": "",
+    "segments": [
+     {
+      "height": 3.740157480315,
+      "lower-diameter": 1.2992125984252,
+      "upper-diameter": 1.2992125984252
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.7322834645669,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.13385826771654,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.13311023622047,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.25984251968504,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.7322834645669
+     },
+     {
+      "height": 0.078740157480315,
+      "lower-diameter": 1.25,
+      "upper-diameter": 1.25
+     }
+    ],
+    "type": "holder",
+    "unit": "inches",
+    "vendor": ""
+   },
+   "last_modified": 1780673247461,
+   "post-process": {
+    "break-control": false,
+    "comment": "FTL-000003",
+    "diameter-offset": 12,
+    "length-offset": 12,
+    "live": true,
+    "manual-tool-change": false,
+    "number": 12,
+    "turret": 0
+   },
+   "product-id": "A-160",
+   "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-160$",
+   "reference_guid": "ddcca67a-b0da-4375-a0eb-9e89b3de88c9",
+   "start-values": {
+    "presets": [
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerTooth": ".0015 in",
+       "tool_feedPlunge": "50 inpm",
+       "tool_feedRamp": "40 inpm",
+       "tool_surfaceSpeed": "800fpm"
+      },
+      "f_n": 0.004090615434361709,
+      "f_z": 0.0015,
+      "guid": "89c29003-4fd7-4f27-b288-54b0f1af4ed6",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 12223.099629457563,
+      "n_ramp": 12223.099629457563,
+      "name": "AL",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 800,
+      "v_f": 55.003948332559034,
+      "v_f_leadIn": 55.003948332559034,
+      "v_f_leadOut": 55.003948332559034,
+      "v_f_plunge": 50,
+      "v_f_ramp": 40,
+      "v_f_transition": 55.003948332559034
+     },
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerTooth": "0.0006 in",
+       "tool_feedPlunge": "40 inpm",
+       "tool_feedRamp": "16 inpm",
+       "tool_surfaceSpeed": "600 fpm"
+      },
+      "f_n": 0.004363323129985824,
+      "f_z": 0.0006,
+      "guid": "362aeb49-92fa-42de-a12c-109cfe41da3a",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 9167.32472209317,
+      "n_ramp": 9167.32472209317,
+      "name": "AL SM Bore",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 600,
+      "v_f": 16.50118449976771,
+      "v_f_leadIn": 16.50118449976771,
+      "v_f_leadOut": 16.50118449976771,
+      "v_f_plunge": 40,
+      "v_f_ramp": 16,
+      "v_f_transition": 16.50118449976771
+     },
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedCutting": "40 inpm",
+       "tool_feedPlunge": "50 inpm",
+       "tool_feedRamp": "40 inpm",
+       "tool_surfaceSpeed": "600fpm"
+      },
+      "f_n": 0.00545415391248228,
+      "f_z": 0.001454441043328608,
+      "guid": "e9be15a2-9531-4c72-bd58-ec2b0d42352f",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 9167.32472209317,
+      "n_ramp": 9167.32472209317,
+      "name": "AL RAMP",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 600,
+      "v_f": 40,
+      "v_f_leadIn": 40,
+      "v_f_leadOut": 40,
+      "v_f_plunge": 50,
+      "v_f_ramp": 40,
+      "v_f_transition": 40
+     }
+    ]
+   },
+   "type": "bull nose end mill",
+   "unit": "inches",
+   "vendor": "LC-158"
+  },
+  {
+   "BMC": "carbide",
+   "GRADE": "Mill Generic",
+   "description": "1/8 90deg Chamfer",
+   "expressions": {
+    "holder_description": "'NBT30-SK13C-150'",
+    "holder_vendor": "'Lindex nikken'",
+    "tool_bodyLength": ".7 in",
+    "tool_description": "'1/8 90deg Chamfer'",
+    "tool_diameter": ".125 in",
+    "tool_fluteLength": ".058 in",
+    "tool_material": "'carbide'",
+    "tool_number": "52",
+    "tool_numberOfFlutes": "4",
+    "tool_overallLength": "1.5 in",
+    "tool_productId": "'L-124'",
+    "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/L/L-124$'",
+    "tool_shaftDiameter": ".125 in",
+    "tool_shoulderLength": ".1 in",
+    "tool_tipDiameter": ".01 in",
+    "tool_vendor": "'LC-133'",
+    "tool_comment": "'FTL-000004'"
+   },
+   "geometry": {
+    "CSP": false,
+    "DC": 0.125,
+    "HAND": true,
+    "LB": 0.7,
+    "LCF": 0.058,
+    "NOF": 4,
+    "NT": 1,
+    "OAL": 1.5,
+    "RE": 0,
+    "SFDM": 0.125,
+    "TA": 45,
+    "TP": 0,
+    "assemblyGaugeLength": 6.329882,
+    "shoulder-diameter": 0.125,
+    "shoulder-length": 0.1,
+    "thread-profile-angle": 60,
+    "tip-diameter": 0.01,
+    "tip-length": 0,
+    "tip-offset": 0
+   },
+   "guid": "9c32b2bc-f109-4a73-848e-ffa88656cf23",
+   "holder": {
+    "description": "NBT30-SK13C-150",
+    "gaugeLength": 5.6298819999999985,
+    "guid": "0bb67e22-1d3e-4ae4-b729-30d71c7f880d",
+    "product-id": "",
+    "product-link": "",
+    "segments": [
+     {
+      "height": 4.8425196850394,
+      "lower-diameter": 1.2992125984252,
+      "upper-diameter": 1.2992125984252
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.7322834645669,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.13385826771654,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.13311023622047,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.25984251968504,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.7322834645669
+     },
+     {
+      "height": 0.078740157480315,
+      "lower-diameter": 1.25,
+      "upper-diameter": 1.25
+     }
+    ],
+    "type": "holder",
+    "unit": "inches",
+    "vendor": "Lindex nikken"
+   },
+   "last_modified": 1780673247453,
+   "post-process": {
+    "break-control": false,
+    "comment": "FTL-000004",
+    "diameter-offset": 52,
+    "length-offset": 52,
+    "live": true,
+    "manual-tool-change": false,
+    "number": 52,
+    "turret": 0
+   },
+   "product-id": "L-124",
+   "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/L/L-124$",
+   "reference_guid": "3d3693cb-5676-47f9-87d8-de8ab879fdc1",
+   "start-values": {
+    "presets": [
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedCutting": "70 inpm",
+       "tool_feedEntry": "tool_feedCutting",
+       "tool_feedExit": "tool_feedCutting",
+       "tool_feedPlunge": "60 inpm",
+       "tool_feedRamp": "tool_feedPlunge",
+       "tool_feedTransition": "tool_feedCutting",
+       "tool_rampAngle": "2deg",
+       "tool_rampSpindleSpeed": "tool_spindleSpeed",
+       "tool_surfaceSpeed": "175 fpm"
+      },
+      "f_n": 0.01121997376282069,
+      "f_z": 0.003272492347489368,
+      "guid": "59fdfd0a-8641-3eb3-bdc4-8a817e476ee4",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 5347.606087887683,
+      "n_ramp": 5347.606087887683,
+      "name": "SS",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 175,
+      "v_f": 70,
+      "v_f_leadIn": 70,
+      "v_f_leadOut": 70,
+      "v_f_plunge": 60,
+      "v_f_ramp": 60,
+      "v_f_transition": 70
+     },
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedEntry": "tool_feedCutting",
+       "tool_feedExit": "tool_feedCutting",
+       "tool_feedPerTooth": ".002 in",
+       "tool_feedPlunge": "60 inpm",
+       "tool_feedRamp": "tool_feedPlunge",
+       "tool_feedTransition": "tool_feedCutting",
+       "tool_rampAngle": "2deg",
+       "tool_rampSpindleSpeed": "tool_spindleSpeed",
+       "tool_surfaceSpeed": "300 fpm"
+      },
+      "f_n": 0.006544984694978737,
+      "f_z": 0.0020000000000000013,
+      "guid": "0dd7d0c2-9888-4e2f-be96-d969772d8550",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 9167.32472209317,
+      "n_ramp": 9167.32472209317,
+      "name": "SS316",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 299.9999999999999,
+      "v_f": 73.3385977767454,
+      "v_f_leadIn": 73.3385977767454,
+      "v_f_leadOut": 73.3385977767454,
+      "v_f_plunge": 60,
+      "v_f_ramp": 60,
+      "v_f_transition": 73.3385977767454
+     },
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedEntry": "tool_feedCutting",
+       "tool_feedExit": "tool_feedCutting",
+       "tool_feedPerTooth": ".0012 in",
+       "tool_feedPlunge": "60 inpm",
+       "tool_feedRamp": "tool_feedPlunge",
+       "tool_feedTransition": "tool_feedCutting",
+       "tool_rampAngle": "2deg",
+       "tool_rampSpindleSpeed": "tool_spindleSpeed",
+       "tool_surfaceSpeed": "460 fpm"
+      },
+      "f_n": 0.004268468279333957,
+      "f_z": 0.0012,
+      "guid": "a55d6c36-4a3d-4503-b461-518cb6d89ceb",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 14056.5645738762,
+      "n_ramp": 14056.5645738762,
+      "name": "AL/BRZ",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 460,
+      "v_f": 67.47150995460575,
+      "v_f_leadIn": 67.47150995460575,
+      "v_f_leadOut": 67.47150995460575,
+      "v_f_plunge": 60,
+      "v_f_ramp": 60,
+      "v_f_transition": 67.47150995460575
+     }
+    ]
+   },
+   "type": "chamfer mill",
+   "unit": "inches",
+   "vendor": "LC-133"
+  },
+  {
+   "BMC": "hss",
+   "GRADE": "generic",
+   "description": "25/64 (.3906) HSS Drill",
+   "expressions": {
+    "holder_description": "'DRILL CHUCK - BT30'",
+    "holder_productId": "'BT30-APU13D'",
+    "holder_productLink": "'https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Drill-Chucks/c23_33_444_533/p17945/BT30-DUAL-CONTACT-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html'",
+    "holder_vendor": "'Maritool'",
+    "tool_description": "'25/64 (.3906) HSS Drill'",
+    "tool_diameter": ".3906 in",
+    "tool_fluteLength": "3.4 in",
+    "tool_number": "18",
+    "tool_productId": "'D-190'",
+    "tool_shoulderLength": "4.0 in",
+    "tool_tipAngle": "135 degrees",
+    "tool_vendor": "''",
+    "tool_comment": "'FTL-000005'"
+   },
+   "geometry": {
+    "CSP": false,
+    "DC": 0.3906,
+    "HAND": true,
+    "LB": 4,
+    "LCF": 3.4,
+    "NOF": 2,
+    "NT": 1,
+    "OAL": 5.2,
+    "RE": 0,
+    "SFDM": 0.3906,
+    "SIG": 135,
+    "TP": 0,
+    "assemblyGaugeLength": 8.265004,
+    "shoulder-length": 4,
+    "thread-profile-angle": 60,
+    "tip-diameter": 0,
+    "tip-length": 0,
+    "tip-offset": 0
+   },
+   "guid": "8ebd8d4b-0fc8-45e3-8841-9c548a9890e5",
+   "holder": {
+    "description": "DRILL CHUCK - BT30",
+    "gaugeLength": 4.265004,
+    "guid": "420a54c7-ed6a-429f-92aa-281028199826",
+    "product-id": "BT30-APU13D",
+    "product-link": "https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Drill-Chucks/c23_33_444_533/p17945/BT30-DUAL-CONTACT-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html",
+    "segments": [
+     {
+      "height": 0.23,
+      "lower-diameter": 0.685,
+      "upper-diameter": 0.9
+     },
+     {
+      "height": 0.8,
+      "lower-diameter": 1.5,
+      "upper-diameter": 1.943
+     },
+     {
+      "height": 0.1,
+      "lower-diameter": 1.95,
+      "upper-diameter": 1.95
+     },
+     {
+      "height": 1.82087,
+      "lower-diameter": 1.99,
+      "upper-diameter": 1.99
+     },
+     {
+      "height": 0.7,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.13311023622047,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.25984251968504,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.7322834645669
+     },
+     {
+      "height": 0.078740157480315,
+      "lower-diameter": 1.25,
+      "upper-diameter": 1.25
+     }
+    ],
+    "type": "holder",
+    "unit": "inches",
+    "vendor": "Maritool"
+   },
+   "last_modified": 1777307021286,
+   "post-process": {
+    "break-control": false,
+    "comment": "FTL-000005",
+    "diameter-offset": 18,
+    "length-offset": 18,
+    "live": true,
+    "manual-tool-change": false,
+    "number": 18,
+    "turret": 0
+   },
+   "product-id": "D-190",
+   "product-link": "",
+   "reference_guid": "5bc00272-1d9d-4a9d-806d-e05b789b94d7",
+   "start-values": {
+    "presets": [
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerRevolution": ".007 in",
+       "tool_surfaceSpeed": "100 fpm"
+      },
+      "f_z": 0,
+      "guid": "2d917a5b-54a6-4877-86cb-0bf3a461a5f7",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 977.9105566322294,
+      "name": "ST",
+      "tool-coolant": "flood",
+      "use-feed-per-revolution": false,
+      "v_c": 100,
+      "v_f": 0,
+      "v_f_leadIn": 0,
+      "v_f_leadOut": 0,
+      "v_f_plunge": 6.845373896425606,
+      "v_f_ramp": 0,
+      "v_f_retract": 40,
+      "v_f_transition": 0
+     },
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerRevolution": ".0065 in",
+       "tool_surfaceSpeed": "200 fpm"
+      },
+      "f_z": 0,
+      "guid": "03f924e1-f834-40f9-9623-87e67dbd62ac",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 1955.8211132644587,
+      "name": "AL",
+      "tool-coolant": "flood",
+      "use-feed-per-revolution": false,
+      "v_c": 200,
+      "v_f": 0,
+      "v_f_leadIn": 0,
+      "v_f_leadOut": 0,
+      "v_f_plunge": 12.712837236218984,
+      "v_f_ramp": 0,
+      "v_f_retract": 40,
+      "v_f_transition": 0
+     }
+    ]
+   },
+   "type": "drill",
+   "unit": "inches",
+   "vendor": ""
+  },
+  {
+   "BMC": "hss",
+   "GRADE": "generic",
+   "description": "25/64 (.3906) HSS Drill",
+   "expressions": {
+    "holder_description": "'DRILL CHUCK - BT30'",
+    "holder_productId": "'BT30-APU13D'",
+    "holder_productLink": "'https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Drill-Chucks/c23_33_444_533/p17945/BT30-DUAL-CONTACT-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html'",
+    "holder_vendor": "'Maritool'",
+    "tool_description": "'25/64 (.3906) HSS Drill'",
+    "tool_diameter": ".3906 in",
+    "tool_fluteLength": "3.4 in",
+    "tool_number": "18",
+    "tool_productId": "'D-190'",
+    "tool_shoulderLength": "4.0 in",
+    "tool_tipAngle": "135 degrees",
+    "tool_vendor": "''",
+    "tool_comment": "'FTL-000005'",
+    "tool_bodyLength": "4.5 in"
+   },
+   "geometry": {
+    "CSP": false,
+    "DC": 0.3906,
+    "HAND": true,
+    "LB": 4.5,
+    "LCF": 3.4,
+    "NOF": 2,
+    "NT": 1,
+    "OAL": 5.2,
+    "RE": 0,
+    "SFDM": 0.3906,
+    "SIG": 135,
+    "TP": 0,
+    "assemblyGaugeLength": 8.765004,
+    "shoulder-length": 4,
+    "thread-profile-angle": 60,
+    "tip-diameter": 0,
+    "tip-length": 0,
+    "tip-offset": 0
+   },
+   "guid": "8ebd8d4b-0fc8-45e3-8841-9c548a989099",
+   "holder": {
+    "description": "DRILL CHUCK - BT30",
+    "gaugeLength": 4.265004,
+    "guid": "420a54c7-ed6a-429f-92aa-281028199826",
+    "product-id": "BT30-APU13D",
+    "product-link": "https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Drill-Chucks/c23_33_444_533/p17945/BT30-DUAL-CONTACT-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html",
+    "segments": [
+     {
+      "height": 0.23,
+      "lower-diameter": 0.685,
+      "upper-diameter": 0.9
+     },
+     {
+      "height": 0.8,
+      "lower-diameter": 1.5,
+      "upper-diameter": 1.943
+     },
+     {
+      "height": 0.1,
+      "lower-diameter": 1.95,
+      "upper-diameter": 1.95
+     },
+     {
+      "height": 1.82087,
+      "lower-diameter": 1.99,
+      "upper-diameter": 1.99
+     },
+     {
+      "height": 0.7,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.13311023622047,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.25984251968504,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.7322834645669
+     },
+     {
+      "height": 0.078740157480315,
+      "lower-diameter": 1.25,
+      "upper-diameter": 1.25
+     }
+    ],
+    "type": "holder",
+    "unit": "inches",
+    "vendor": "Maritool"
+   },
+   "last_modified": 1777307021286,
+   "post-process": {
+    "break-control": false,
+    "comment": "FTL-000005",
+    "diameter-offset": 18,
+    "length-offset": 18,
+    "live": true,
+    "manual-tool-change": false,
+    "number": 18,
+    "turret": 0
+   },
+   "product-id": "D-190",
+   "product-link": "",
+   "reference_guid": "5bc00272-1d9d-4a9d-806d-e05b789b94d7",
+   "start-values": {
+    "presets": [
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerRevolution": ".007 in",
+       "tool_surfaceSpeed": "100 fpm"
+      },
+      "f_z": 0,
+      "guid": "2d917a5b-54a6-4877-86cb-0bf3a461a5f7",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 977.9105566322294,
+      "name": "ST",
+      "tool-coolant": "flood",
+      "use-feed-per-revolution": false,
+      "v_c": 100,
+      "v_f": 0,
+      "v_f_leadIn": 0,
+      "v_f_leadOut": 0,
+      "v_f_plunge": 6.845373896425606,
+      "v_f_ramp": 0,
+      "v_f_retract": 40,
+      "v_f_transition": 0
+     },
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerRevolution": ".0065 in",
+       "tool_surfaceSpeed": "200 fpm"
+      },
+      "f_z": 0,
+      "guid": "03f924e1-f834-40f9-9623-87e67dbd62ac",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 1955.8211132644587,
+      "name": "AL",
+      "tool-coolant": "flood",
+      "use-feed-per-revolution": false,
+      "v_c": 200,
+      "v_f": 0,
+      "v_f_leadIn": 0,
+      "v_f_leadOut": 0,
+      "v_f_plunge": 12.712837236218984,
+      "v_f_ramp": 0,
+      "v_f_retract": 40,
+      "v_f_transition": 0
+     }
+    ]
+   },
+   "type": "drill",
+   "unit": "inches",
+   "vendor": ""
+  },
+  {
+   "BMC": "carbide",
+   "GRADE": "generic",
+   "description": "0.50 90DEG SPOT DRILL",
+   "expressions": {
+    "holder_description": "'NBT30-SK13C-120'",
+    "tool_bodyLength": "1.5 in",
+    "tool_description": "'0.50 90DEG SPOT DRILL'",
+    "tool_diameter": ".5 in",
+    "tool_fluteLength": ".75 in",
+    "tool_material": "'carbide'",
+    "tool_number": "17",
+    "tool_overallLength": "4. in",
+    "tool_productId": "'O-83'",
+    "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/O/O-83$'",
+    "tool_shoulderLength": ".8 in",
+    "tool_tipAngle": "90 degrees",
+    "tool_tipDiameter": ".0134 in",
+    "tool_vendor": "'LC92'",
+    "tool_comment": "'FTL-000006'"
+   },
+   "geometry": {
+    "CSP": false,
+    "DC": 0.5,
+    "HAND": true,
+    "LB": 1.5,
+    "LCF": 0.75,
+    "NOF": 2,
+    "NT": 1,
+    "OAL": 4,
+    "RE": 0,
+    "SFDM": 0.5,
+    "SIG": 90,
+    "TP": 0,
+    "assemblyGaugeLength": 6.02752,
+    "shoulder-length": 0.8,
+    "thread-profile-angle": 60,
+    "tip-diameter": 0.0134,
+    "tip-length": 0,
+    "tip-offset": 0
+   },
+   "guid": "78e527ab-f46d-4bfe-8731-2c0990d5469e",
+   "holder": {
+    "description": "NBT30-SK13C-120",
+    "gaugeLength": 4.52752,
+    "guid": "0330cb19-c7eb-4668-8ba8-ecdccfde500b",
+    "product-id": "",
+    "product-link": "",
+    "segments": [
+     {
+      "height": 3.740157480315,
+      "lower-diameter": 1.2992125984252,
+      "upper-diameter": 1.2992125984252
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.7322834645669,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.13385826771654,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.13311023622047,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.25984251968504,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.7322834645669
+     },
+     {
+      "height": 0.078740157480315,
+      "lower-diameter": 1.25,
+      "upper-diameter": 1.25
+     }
+    ],
+    "type": "holder",
+    "unit": "inches",
+    "vendor": ""
+   },
+   "last_modified": 1780673247475,
+   "post-process": {
+    "break-control": false,
+    "comment": "FTL-000006",
+    "diameter-offset": 17,
+    "length-offset": 17,
+    "live": true,
+    "manual-tool-change": false,
+    "number": 17,
+    "turret": 0
+   },
+   "product-id": "O-83",
+   "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/O/O-83$",
+   "reference_guid": "9da2d24e-72e4-48e5-b34e-b80272b36bed",
+   "start-values": {
+    "presets": [
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedCutting": "18 inpm",
+       "tool_feedPlunge": "18 inpm",
+       "tool_feedRamp": "18 inpm",
+       "tool_feedRetract": "tool_feedPlunge",
+       "tool_spindleSpeed": "2600 rpm"
+      },
+      "f_z": 0.0034615384615384616,
+      "guid": "2a25f2e7-f145-4f45-a4ff-1b80ed493f7e",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 2600,
+      "name": "AL",
+      "tool-coolant": "flood",
+      "use-feed-per-revolution": false,
+      "v_c": 340.3392041388942,
+      "v_f": 18,
+      "v_f_leadIn": 18,
+      "v_f_leadOut": 18,
+      "v_f_plunge": 18,
+      "v_f_ramp": 18,
+      "v_f_retract": 18,
+      "v_f_transition": 18
+     },
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerTooth": ".003 in",
+       "tool_feedPlunge": "11 inpm",
+       "tool_feedRamp": "18 inpm",
+       "tool_feedRetract": "tool_feedPlunge",
+       "tool_surfaceSpeed": "250 fpm"
+      },
+      "f_z": 0.003,
+      "guid": "5be20591-7ac8-4e5e-923e-6c6c0e9736ac",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 1909.859317102744,
+      "name": "ST",
+      "tool-coolant": "flood",
+      "use-feed-per-revolution": false,
+      "v_c": 250,
+      "v_f": 11.459155902616466,
+      "v_f_leadIn": 11.459155902616466,
+      "v_f_leadOut": 11.459155902616466,
+      "v_f_plunge": 10.999999999999996,
+      "v_f_ramp": 18,
+      "v_f_retract": 10.999999999999996,
+      "v_f_transition": 11.459155902616466
+     }
+    ]
+   },
+   "type": "spot drill",
+   "unit": "inches",
+   "vendor": "LC92"
+  },
+  {
+   "BMC": "hss",
+   "GRADE": "generic",
+   "description": ".194 HSS Reamer",
+   "expressions": {
+    "holder_description": "'DRILL CHUCK - BT30'",
+    "holder_productId": "'BT30-APU13D'",
+    "holder_productLink": "'https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Drill-Chucks/c23_33_444_533/p17945/BT30-DUAL-CONTACT-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html'",
+    "holder_vendor": "'Maritool'",
+    "tool_bodyLength": "2.5 in",
+    "tool_description": "'.194 HSS Reamer'",
+    "tool_diameter": ".194 in",
+    "tool_fluteLength": "1.25 in",
+    "tool_number": "6",
+    "tool_numberOfFlutes": "6",
+    "tool_overallLength": "5 in",
+    "tool_productId": "'F-136'",
+    "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/F/F-136$'",
+    "tool_shaftDiameter": ".1855 in",
+    "tool_shoulderLength": "1.65 in",
+    "tool_vendor": "'LC-139'",
+    "tool_comment": "'FTL-000007'"
+   },
+   "geometry": {
+    "CSP": false,
+    "DC": 0.194,
+    "HAND": true,
+    "LB": 2.5,
+    "LCF": 1.25,
+    "NOF": 6,
+    "NT": 1,
+    "OAL": 5,
+    "RE": 0,
+    "SFDM": 0.1855,
+    "SIG": 0,
+    "TP": 0,
+    "assemblyGaugeLength": 6.765004,
+    "shoulder-length": 1.65,
+    "thread-profile-angle": 60,
+    "tip-diameter": 0,
+    "tip-length": 0,
+    "tip-offset": 0
+   },
+   "guid": "87ac2b05-7fe1-493a-9a65-9654b1e7e37c",
+   "holder": {
+    "description": "DRILL CHUCK - BT30",
+    "gaugeLength": 4.265004,
+    "guid": "420a54c7-ed6a-429f-92aa-281028199826",
+    "product-id": "BT30-APU13D",
+    "product-link": "",
+    "segments": [
+     {
+      "height": 0.23,
+      "lower-diameter": 0.685,
+      "upper-diameter": 0.9
+     },
+     {
+      "height": 0.8,
+      "lower-diameter": 1.5,
+      "upper-diameter": 1.943
+     },
+     {
+      "height": 0.1,
+      "lower-diameter": 1.95,
+      "upper-diameter": 1.95
+     },
+     {
+      "height": 1.82087,
+      "lower-diameter": 1.99,
+      "upper-diameter": 1.99
+     },
+     {
+      "height": 0.7,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.13311023622047,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.25984251968504,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.7322834645669
+     },
+     {
+      "height": 0.078740157480315,
+      "lower-diameter": 1.25,
+      "upper-diameter": 1.25
+     }
+    ],
+    "type": "holder",
+    "unit": "inches",
+    "vendor": "Maritool"
+   },
+   "last_modified": 1777306791210,
+   "post-process": {
+    "break-control": false,
+    "comment": "FTL-000007",
+    "diameter-offset": 6,
+    "length-offset": 6,
+    "live": true,
+    "manual-tool-change": false,
+    "number": 6,
+    "turret": 0
+   },
+   "product-id": "F-136",
+   "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/F/F-136$",
+   "reference_guid": "891644ed-44ef-40b4-97bc-32a3792c4de9",
+   "start-values": {
+    "presets": [
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerRevolution": ".0014 in",
+       "tool_surfaceSpeed": "600 fpm"
+      },
+      "f_z": 0,
+      "guid": "6132d6df-6722-41c3-aeb7-ea7a2d62d42f",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 11813.56278620254,
+      "name": "Default preset",
+      "tool-coolant": "flood",
+      "use-feed-per-revolution": false,
+      "v_c": 600,
+      "v_f": 0,
+      "v_f_leadIn": 0,
+      "v_f_leadOut": 0,
+      "v_f_plunge": 16.53898790068356,
+      "v_f_ramp": 0,
+      "v_f_retract": 40,
+      "v_f_transition": 0
+     }
+    ]
+   },
+   "type": "reamer",
+   "unit": "inches",
+   "vendor": "LC-139"
+  },
+  {
+   "BMC": "hss",
+   "GRADE": "generic",
+   "description": "M5X.8 Form tap 4H Class",
+   "expressions": {
+    "holder_description": "'NBT30-SK13C-120'",
+    "tool_bodyLength": "1.1 in",
+    "tool_description": "'M5X.8 Form tap 4H Class'",
+    "tool_diameter": ".1968 in",
+    "tool_fluteLength": ".874 in",
+    "tool_overallLength": "2.36 in",
+    "tool_productId": "'R-98'",
+    "tool_shoulderLength": "1.09 in",
+    "tool_threadPitch": "(.8/25.4) in",
+    "tool_comment": "'FTL-000008'"
+   },
+   "geometry": {
+    "CSP": false,
+    "DC": 0.1968,
+    "LB": 1.1,
+    "LCF": 0.874,
+    "NOF": 3,
+    "OAL": 2.36,
+    "SFDM": 0.1968,
+    "TP": 0.031496062992126,
+    "assemblyGaugeLength": 5.62751968503937,
+    "shoulder-length": 1.09
+   },
+   "guid": "1f27e3eb-10e5-4644-9f1e-c69cc32c6aa8",
+   "holder": {
+    "description": "NBT30-SK13C-120",
+    "expressions": {
+     "tool_description": "'NBT30-SK13C-120'",
+     "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+    },
+    "gaugeLength": 114.999,
+    "guid": "8f0b0e81-b5eb-4cbd-b3ea-d880f03c1d4e",
+    "product-id": "",
+    "product-link": "",
+    "segments": [
+     {
+      "height": 95,
+      "lower-diameter": 33,
+      "upper-diameter": 33
+     },
+     {
+      "height": 1,
+      "lower-diameter": 44,
+      "upper-diameter": 46
+     },
+     {
+      "height": 3.4,
+      "lower-diameter": 46,
+      "upper-diameter": 46
+     },
+     {
+      "height": 2.309,
+      "lower-diameter": 46,
+      "upper-diameter": 38
+     },
+     {
+      "height": 3.381,
+      "lower-diameter": 38,
+      "upper-diameter": 38
+     },
+     {
+      "height": 2.309,
+      "lower-diameter": 38,
+      "upper-diameter": 46
+     },
+     {
+      "height": 6.6,
+      "lower-diameter": 46,
+      "upper-diameter": 46
+     },
+     {
+      "height": 1,
+      "lower-diameter": 46,
+      "upper-diameter": 44
+     },
+     {
+      "height": 2,
+      "lower-diameter": 31.75,
+      "upper-diameter": 31.75
+     }
+    ],
+    "type": "holder",
+    "unit": "millimeters",
+    "vendor": ""
+   },
+   "last_modified": 1777306775627,
+   "post-process": {
+    "break-control": false,
+    "comment": "FTL-000008",
+    "diameter-offset": 4,
+    "length-offset": 4,
+    "live": true,
+    "manual-tool-change": false,
+    "number": 4,
+    "turret": 0
+   },
+   "product-id": "R-98",
+   "product-link": "",
+   "reference_guid": "667d9062-ecdc-4935-b0fd-d67e954da8fc",
+   "start-values": {
+    "presets": [
+     {
+      "description": "",
+      "guid": "c915699d-ea64-433d-87fa-f14c3fa74b99",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 500,
+      "name": "Default preset",
+      "tool-coolant": "flood",
+      "v_c": 25.761059759436307
+     }
+    ]
+   },
+   "type": "tap right hand",
+   "unit": "inches",
+   "vendor": ""
+  },
+  {
+   "BMC": "carbide",
+   "GRADE": "Mill Generic",
+   "description": ".488 11-32 THREAD MILL",
+   "expressions": {
+    "holder_description": "'NBT30-SK13C-60'",
+    "tool_bodyLength": "1.25 in",
+    "tool_description": "'.488 11-32 THREAD MILL'",
+    "tool_diameter": ".488 in",
+    "tool_fluteLength": ".1 in",
+    "tool_material": "'carbide'",
+    "tool_number": "19",
+    "tool_numberOfFlutes": "5",
+    "tool_numberOfTeeth": "1",
+    "tool_overallLength": "3.5 in",
+    "tool_productId": "'N-78'",
+    "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/N/N-78$'",
+    "tool_shaftDiameter": ".5 in",
+    "tool_shoulderLength": ".95 in",
+    "tool_threadPitch": ".085 in",
+    "tool_vendor": "'LC87'",
+    "tool_comment": "'FTL-000009'"
+   },
+   "geometry": {
+    "CSP": false,
+    "DC": 0.488,
+    "HAND": true,
+    "LB": 1.25,
+    "LCF": 0.1,
+    "NOF": 5,
+    "NT": 1,
+    "OAL": 3.5,
+    "RE": 0,
+    "SFDM": 0.5,
+    "TA": 0,
+    "TP": 0.085,
+    "TPN": 0.03937008,
+    "TPX": 0.085,
+    "assemblyGaugeLength": 3.415315,
+    "shoulder-diameter": 0.3407757,
+    "shoulder-length": 0.95,
+    "thread-profile-angle": 60,
+    "thread-tip-type": "point",
+    "tip-diameter": 0.488,
+    "tip-length": 0,
+    "tip-offset": 0
+   },
+   "guid": "64a3493f-fce3-457e-b7f8-8863a397ff7b",
+   "holder": {
+    "description": "NBT30-SK13C-60",
+    "gaugeLength": 2.165315,
+    "guid": "5f52f738-7099-4cdc-8bf7-a93859237490",
+    "product-id": "",
+    "product-link": "",
+    "segments": [
+     {
+      "height": 1.3779527559055,
+      "lower-diameter": 1.2992125984252,
+      "upper-diameter": 1.2992125984252
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.7322834645669,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.13385826771654,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.13311023622047,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.25984251968504,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.7322834645669
+     },
+     {
+      "height": 0.078740157480315,
+      "lower-diameter": 1.25,
+      "upper-diameter": 1.25
+     }
+    ],
+    "type": "holder",
+    "unit": "inches",
+    "vendor": ""
+   },
+   "last_modified": 1777306928718,
+   "post-process": {
+    "break-control": false,
+    "comment": "FTL-000009",
+    "diameter-offset": 19,
+    "length-offset": 19,
+    "live": true,
+    "manual-tool-change": false,
+    "number": 19,
+    "turret": 0
+   },
+   "product-id": "N-78",
+   "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/N/N-78$",
+   "reference_guid": "e45722a7-58eb-423a-afe6-267620ef6b97",
+   "start-values": {
+    "presets": [
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedCutting": "20 inpm",
+       "tool_feedPlunge": "30 inpm",
+       "tool_feedRamp": "20 inpm",
+       "tool_spindleSpeed": "2600 rpm"
+      },
+      "f_n": 0.01153846153846154,
+      "f_z": 0.0015384615384615385,
+      "guid": "503804fe-efa0-46c1-9e88-9153eb212a79",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 2600,
+      "n_ramp": 2600,
+      "name": "AL",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 332.17106323956085,
+      "v_f": 20,
+      "v_f_leadIn": 20,
+      "v_f_leadOut": 20,
+      "v_f_plunge": 30,
+      "v_f_ramp": 20,
+      "v_f_transition": 20
+     }
+    ]
+   },
+   "type": "thread mill",
+   "unit": "inches",
+   "vendor": "LC87"
+  },
+  {
+   "BMC": "carbide",
+   "GRADE": "generic",
+   "description": "RTA 21 Boring Head TPGP080204FLA H1 .016R",
+   "expressions": {
+    "holder_description": "'BBT30-CKB3-79 (For  EWN Boring Heads)'",
+    "tool_bodyLength": "1.56 in",
+    "tool_description": "'RTA 21 Boring Head TPGP080204FLA H1 .016R'",
+    "tool_diameter": "1.4379 in",
+    "tool_fluteLength": "0.04 in",
+    "tool_material": "'carbide'",
+    "tool_number": "17",
+    "tool_overallLength": "1.56 in",
+    "tool_productId": "'TL-143'",
+    "tool_shaftDiameter": "1.4 in",
+    "tool_shoulderLength": ".04 in",
+    "tool_comment": "'FTL-00000A'"
+   },
+   "geometry": {
+    "CSP": false,
+    "DC": 1.4379,
+    "HAND": true,
+    "LB": 1.56,
+    "LCF": 0.04,
+    "NOF": 1,
+    "NT": 1,
+    "OAL": 1.56,
+    "RE": 0,
+    "SFDM": 1.4,
+    "SIG": 0,
+    "TP": 0,
+    "assemblyGaugeLength": 4.587362,
+    "shoulder-length": 0.04,
+    "thread-profile-angle": 60,
+    "tip-diameter": 0,
+    "tip-length": 0,
+    "tip-offset": 0
+   },
+   "guid": "f55d0b81-fcf9-4e26-b120-afa48c5a8ce4",
+   "holder": {
+    "description": "BBT30-CKB3-79 (For  EWN Boring Heads)",
+    "gaugeLength": 3.027362,
+    "guid": "c0fc0f9e-5d07-4b2c-a993-1958c17195ab",
+    "product-id": "",
+    "product-link": "",
+    "segments": [
+     {
+      "height": 1.99,
+      "lower-diameter": 1.22,
+      "upper-diameter": 1.22
+     },
+     {
+      "height": 0.25,
+      "lower-diameter": 1.22,
+      "upper-diameter": 1.6
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.7322834645669,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.13385826771654,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.13311023622047,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.25984251968504,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.7322834645669
+     },
+     {
+      "height": 0.078740157480315,
+      "lower-diameter": 1.25,
+      "upper-diameter": 1.25
+     },
+     {
+      "height": 0.078740157480315,
+      "lower-diameter": 1.25,
+      "upper-diameter": 1.25
+     }
+    ],
+    "type": "holder",
+    "unit": "inches",
+    "vendor": ""
+   },
+   "last_modified": 1780673247480,
+   "post-process": {
+    "break-control": false,
+    "comment": "FTL-00000A",
+    "diameter-offset": 17,
+    "length-offset": 17,
+    "live": true,
+    "manual-tool-change": false,
+    "number": 17,
+    "turret": 0
+   },
+   "product-id": "TL-143",
+   "product-link": "",
+   "reference_guid": "033fa379-a830-4b23-b7e9-0865a3e1a2c9",
+   "start-values": {
+    "presets": [
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerRevolution": ".001 in",
+       "tool_feedPerTooth": ".001 in",
+       "tool_surfaceSpeed": "1000 fpm"
+      },
+      "f_n": 0.001,
+      "f_z": 0.001,
+      "guid": "eff5a7ca-fe3f-4ae2-b872-56f7614041e6",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 2656.456383757903,
+      "name": "Default preset",
+      "tool-coolant": "flood",
+      "use-feed-per-revolution": false,
+      "v_c": 1000,
+      "v_f": 2.6564563837579027,
+      "v_f_leadIn": 2.6564563837579027,
+      "v_f_leadOut": 2.6564563837579027,
+      "v_f_plunge": 2.6564563837579027,
+      "v_f_ramp": 13.333333333333334,
+      "v_f_retract": 0,
+      "v_f_transition": 2.6564563837579027
+     }
+    ]
+   },
+   "type": "boring bar",
+   "unit": "inches",
+   "vendor": ""
+  },
+  {
+   "BMC": "carbide",
+   "GRADE": "Mill Generic",
+   "description": "2.5 FACE MILL HAAS 45DEG AL",
+   "expressions": {
+    "holder_description": "'NBT30 Holder for hass 2.5\" shell mill '",
+    "tool_bodyLength": "1.74 in",
+    "tool_comment": "'FTL-00000B'",
+    "tool_description": "'2.5 FACE MILL HAAS 45DEG AL'",
+    "tool_diameter": "2.5 in",
+    "tool_fluteLength": ".236 in",
+    "tool_material": "'carbide'",
+    "tool_number": "4",
+    "tool_numberOfFlutes": "5",
+    "tool_productId": "'I-167/ G-168'",
+    "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/rtas/2026/22$'",
+    "tool_shaftDiameter": "1.78 in",
+    "tool_shoulderLength": ".236 in",
+    "tool_taperAngle": "45 degrees",
+    "tool_vendor": "'LC-24'"
+   },
+   "geometry": {
+    "CSP": false,
+    "DC": 2.5,
+    "DCX": 3.472,
+    "HAND": true,
+    "LB": 1.74,
+    "LCF": 0.236,
+    "NOF": 5,
+    "OAL": 4,
+    "RE": 0,
+    "SFDM": 1.78,
+    "TA": 45,
+    "assemblyGaugeLength": 2.9391022047244117,
+    "shoulder-diameter": 3.472,
+    "shoulder-length": 0.236,
+    "upper-radius": 0
+   },
+   "guid": "2c698bb1-ff97-4f83-81a0-a9a9cb7f4e2f",
+   "holder": {
+    "description": "NBT30 Holder for hass 2.5\" shell mill ",
+    "expressions": {
+     "tool_description": "'NBT30 Holder for hass 2.5\" shell mill '",
+     "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height"
+    },
+    "gaugeLength": 1.199102204724412,
+    "guid": "4f62c999-f24d-403d-9a0e-b52595aaed98",
+    "product-id": "",
+    "product-link": "",
+    "segments": [
+     {
+      "height": 0.41174,
+      "lower-diameter": 1.7322834645669,
+      "upper-diameter": 1.7322834645669
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.7322834645669,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.13385826771654,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.13311023622047,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.496062992126
+     },
+     {
+      "height": 0.090905511811024,
+      "lower-diameter": 1.496062992126,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.25984251968504,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.8110236220472
+     },
+     {
+      "height": 0.039370078740157,
+      "lower-diameter": 1.8110236220472,
+      "upper-diameter": 1.7322834645669
+     },
+     {
+      "height": 0.078740157480315,
+      "lower-diameter": 1.25,
+      "upper-diameter": 1.25
+     }
+    ],
+    "type": "holder",
+    "unit": "inches",
+    "vendor": ""
+   },
+   "last_modified": 1777306762965,
+   "post-process": {
+    "break-control": false,
+    "comment": "FTL-00000B",
+    "diameter-offset": 4,
+    "length-offset": 4,
+    "live": true,
+    "manual-tool-change": false,
+    "number": 4,
+    "turret": 0
+   },
+   "product-id": "I-167/ G-168",
+   "product-link": "https://americanprecisionworks.adionsystems.com/procnc/rtas/2026/22$",
+   "reference_guid": "5972bae6-e0a5-4838-bbf5-bc0c7033b12f",
+   "start-values": {
+    "presets": [
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedCutting": "90 inpm",
+       "tool_feedPlunge": "50 inpm",
+       "tool_feedRamp": "25 inpm",
+       "tool_spindleSpeed": "4000 rpm"
+      },
+      "f_n": 0.012499999999999995,
+      "f_z": 0.0045,
+      "guid": "e06b0f8c-a0d2-46df-94e0-09ca31d5667d",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 4000,
+      "n_ramp": 4000,
+      "name": "AL A-13",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 2617.993877991494,
+      "v_f": 90,
+      "v_f_leadIn": 90,
+      "v_f_leadOut": 90,
+      "v_f_plunge": 50,
+      "v_f_ramp": 25,
+      "v_f_transition": 90
+     },
+     {
+      "description": "",
+      "expressions": {
+       "tool_feedPerTooth": ".005 in",
+       "tool_feedPlunge": "100 inpm",
+       "tool_feedRamp": "25 inpm",
+       "tool_surfaceSpeed": "804 fpm"
+      },
+      "f_n": 0.0814052822758549,
+      "f_z": 0.005,
+      "guid": "295eae16-76f8-4703-9e19-15e013e613d7",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 1228.421512760485,
+      "n_ramp": 1228.421512760485,
+      "name": "Steel A-28",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 804,
+      "v_f": 30.710537819012128,
+      "v_f_leadIn": 30.710537819012128,
+      "v_f_leadOut": 30.710537819012128,
+      "v_f_plunge": 100,
+      "v_f_ramp": 25,
+      "v_f_transition": 30.710537819012128
+     }
+    ]
+   },
+   "type": "face mill",
+   "unit": "inches",
+   "vendor": "LC-24"
+  },
+  {
+   "BMC": "unspecified",
+   "GRADE": "Mill Generic",
+   "description": "3/16\u00d8 High Feed mill .562LOC",
+   "expressions": {
+    "holder_description": "'NBT30-SK13C-120'",
+    "tool_bodyLength": ".86 in",
+    "tool_description": "'3/16\u00d8 High Feed mill .562LOC'",
+    "tool_diameter": ".1875 in",
+    "tool_fluteLength": ".5625 in",
+    "tool_lengthOffset": "tool_number",
+    "tool_number": "51",
+    "tool_numberOfFlutes": "4",
+    "tool_productId": "'A-180'",
+    "tool_comment": "'FTL-00000C'"
+   },
+   "geometry": {
+    "CSP": false,
+    "DC": 0.1875,
+    "HAND": true,
+    "LB": 0.86,
+    "LCF": 0.5625,
+    "NOF": 4,
+    "OAL": 2,
+    "assemblyGaugeLength": 5.38751968503937,
+    "profile": [
+     {
+      "end": [
+       -5.463695987312625e-18,
+       0.002360256099768295
+      ]
+     },
+     {
+      "arc": true,
+      "ccw": true,
+      "center": [
+       0.02812499999328139,
+       0.16874999995905746
+      ],
+      "end": [
+       0.0836890243903592,
+       0.009410106401345864
+      ]
+     },
+     {
+      "arc": true,
+      "ccw": true,
+      "center": [
+       0.07875000000011356,
+       0.02357365249943017
+      ],
+      "end": [
+       0.09371457863481854,
+       0.02460388853342033
+      ]
+     },
+     {
+      "end": [
+       0.08250000000010417,
+       0.18749999999943057
+      ]
+     },
+     {
+      "end": [
+       0.0825000000000826,
+       0.5624999999994305
+      ]
+     },
+     {
+      "end": [
+       0.12500000000007347,
+       0.721112159299433
+      ]
+     },
+     {
+      "end": [
+       0.12500000000000056,
+       1.989999999999433
+      ]
+     },
+     {
+      "end": [
+       0.115,
+       1.999999999999432
+      ]
+     },
+     {
+      "end": [
+       0,
+       1.9999999999994256
+      ]
+     }
+    ],
+    "tip-offset": 0
+   },
+   "guid": "19d00a3d-8bac-4095-b4a1-b95f0f9185cd",
+   "holder": {
+    "description": "NBT30-SK13C-120",
+    "gaugeLength": 4.52751968503937,
+    "guid": "8f0b0e81-b5eb-4cbd-b3ea-d880f03c1d4e",
+    "product-id": "",
+    "product-link": "",
+    "segments": [
+     {
+      "height": 3.74015748031496,
+      "lower-diameter": 1.2992125984251968,
+      "upper-diameter": 1.2992125984251968
+     },
+     {
+      "height": 0.03937007874015748,
+      "lower-diameter": 1.7322834645669292,
+      "upper-diameter": 1.811023622047244
+     },
+     {
+      "height": 0.13385826771653542,
+      "lower-diameter": 1.811023622047244,
+      "upper-diameter": 1.811023622047244
+     },
+     {
+      "height": 0.09090551181102365,
+      "lower-diameter": 1.811023622047244,
+      "upper-diameter": 1.4960629921259845
+     },
+     {
+      "height": 0.13311023622047244,
+      "lower-diameter": 1.4960629921259845,
+      "upper-diameter": 1.4960629921259845
+     },
+     {
+      "height": 0.09090551181102365,
+      "lower-diameter": 1.4960629921259845,
+      "upper-diameter": 1.811023622047244
+     },
+     {
+      "height": 0.25984251968503935,
+      "lower-diameter": 1.811023622047244,
+      "upper-diameter": 1.811023622047244
+     },
+     {
+      "height": 0.03937007874015748,
+      "lower-diameter": 1.811023622047244,
+      "upper-diameter": 1.7322834645669292
+     },
+     {
+      "height": 0.07874015748031496,
+      "lower-diameter": 1.25,
+      "upper-diameter": 1.25
+     }
+    ],
+    "type": "holder",
+    "unit": "inches",
+    "vendor": ""
+   },
+   "last_modified": 1777306950309,
+   "post-process": {
+    "break-control": false,
+    "comment": "FTL-00000C",
+    "diameter-offset": 51,
+    "length-offset": 51,
+    "live": true,
+    "manual-tool-change": false,
+    "number": 51,
+    "turret": 0
+   },
+   "product-id": "A-180",
+   "product-link": "",
+   "reference_guid": "302f2d98-ca6d-4113-aced-d09d2bf7d5f9",
+   "start-values": {
+    "presets": [
+     {
+      "description": "",
+      "expressions": {
+       "tool_coolant": "'flood'",
+       "tool_feedPerTooth": ".003 in",
+       "tool_feedPlunge": "200 inpm",
+       "tool_feedRamp": "30 inpm",
+       "tool_surfaceSpeed": "350 fpm"
+      },
+      "f_n": 0.028049934407051717,
+      "f_z": 0.003,
+      "guid": "97ab34fe-4632-0149-4523-0cb4d082f7ff",
+      "material": {
+       "category": "all",
+       "query": "",
+       "use-hardness": false
+      },
+      "n": 7130.141450516912,
+      "n_ramp": 7130.141450516912,
+      "name": "Default Preset",
+      "ramp-angle": 2,
+      "tool-coolant": "flood",
+      "use-stepdown": false,
+      "use-stepover": false,
+      "v_c": 350,
+      "v_f": 85.56169740620295,
+      "v_f_leadIn": 85.56169740620295,
+      "v_f_leadOut": 85.56169740620295,
+      "v_f_plunge": 200,
+      "v_f_ramp": 30,
+      "v_f_transition": 85.56169740620295
+     }
+    ]
+   },
+   "type": "form mill",
+   "unit": "inches",
+   "vendor": ""
+  }
+ ],
+ "version": 36
+}
