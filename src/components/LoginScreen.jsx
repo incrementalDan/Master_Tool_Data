@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
-import { Wrench, UploadCloud } from 'lucide-react';
+import { Wrench, UploadCloud, FlaskConical } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import * as aps from '../services/apsService.js';
 
 export default function LoginScreen() {
-  const { error, enterLocalMode } = useApp();
+  const { error, enterLocalMode, enterDemoMode } = useApp();
   const [redirecting, setRedirecting] = useState(false);
   const [loadingFile, setLoadingFile] = useState(false);
   const fileRef = useRef(null);
@@ -95,6 +95,18 @@ export default function LoginScreen() {
           No Autodesk account needed — upload a <code>fusion_tool_library.json</code> file to
           search, filter, and view the library and export it to ProShop. Editing and saving
           requires signing in with Autodesk.
+        </p>
+
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={enterDemoMode}
+          style={{ width: '100%', justifyContent: 'center', marginTop: 16 }}
+        >
+          <FlaskConical size={15} />
+          Explore the demo
+        </button>
+        <p className="text-sub text-sm" style={{ marginTop: 8 }}>
+          Browse the full app with bundled sample data — no sign-in, nothing saved.
         </p>
       </div>
     </div>

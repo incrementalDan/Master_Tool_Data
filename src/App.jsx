@@ -47,10 +47,11 @@ function AppShell() {
     processingAuth, user, loadTools, signOutAll,
     changingLibrary, cancelChangeLibrary,
     localMode, exitLocalMode, tools,
+    demoMode, exitDemoMode,
     toasts, dismissToast,
   } = useApp();
 
-  const ready = !localMode && apsAuthenticated && libraryLocation && (googleAuthenticated || metadataSkipped);
+  const ready = !localMode && !demoMode && apsAuthenticated && libraryLocation && (googleAuthenticated || metadataSkipped);
   const loadedRef = useRef(false);
 
   useEffect(() => {
@@ -68,6 +69,28 @@ function AppShell() {
       <div className="loading-screen" style={{ minHeight: '100vh' }}>
         <div className="spinner" />
         <span>Completing Autodesk sign-in…</span>
+      </div>
+    );
+  } else if (demoMode) {
+    // Full app shell on bundled sample data — read-only (see AppContext guards).
+    content = (
+      <div className="app-shell">
+        <TopBar />
+        <DemoBanner onExit={exitDemoMode} />
+        <main className="page-content">
+          <Routes>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/tool/new" element={<AddToolFlow />} />
+            <Route path="/tool/:id" element={<ToolDetail />} />
+            <Route path="/import" element={<ImportFlow />} />
+            <Route path="/merge" element={<MergeFlow />} />
+            <Route path="/merge/:id" element={<MergeFlow />} />
+            <Route path="/materials" element={<MaterialsEditor />} />
+            <Route path="/vendors" element={<VendorsEditor />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </main>
       </div>
     );
   } else if (localMode) {
@@ -121,6 +144,28 @@ function AppShell() {
       {content}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </>
+  );
+}
+
+// Shown across the top in demo mode (?demo=true): the app is running on bundled
+// sample data with no Autodesk/Google connection, and nothing the user does is
+// persisted anywhere. "Exit demo" drops the flag and returns to the login screen.
+function DemoBanner({ onExit }) {
+  return (
+    <div role="status" style={{
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      padding: '10px 16px', background: 'rgba(124,58,237,0.12)',
+      borderBottom: '1px solid rgba(124,58,237,0.4)', color: '#c4b5fd', fontSize: 13,
+    }}>
+      <FlaskConical size={16} style={{ flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 220 }}>
+        <strong>Demo Mode</strong> — changes are not saved. You're browsing bundled
+        sample data, not a live Autodesk library.
+      </span>
+      <button className="btn btn-secondary btn-sm" onClick={onExit}>
+        <LogOut size={14} /> Exit demo
+      </button>
+    </div>
   );
 }
 
