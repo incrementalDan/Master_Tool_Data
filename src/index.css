@@ -2459,12 +2459,14 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /*                                                                            */
 /*  .description-badge  — Tool Description  — violet rounded-rect            */
 /*  .proshot-pill       — ProShop ID        — amber pill (monospace)          */
-/*  .holder-pill        — Holder            — teal pill  (override inline)    */
+/*  .holder-pill        — Holder            — colored by SIZE (--badge-color) */
 /*  .machine-num-badge  — Machine Tool #    — green rect (monospace, square)  */
 /*  .location-tag       — Location/Cabinet  — indigo rounded-rect (monospace)  */
-/*  .preset-tag         — Preset Name       — emerald pill                    */
+/*  .preset-tag         — Preset Name       — colored by ISO group (--badge-color) */
 /*                                                                            */
-/* When changing any class, update ALL usages across the codebase.            */
+/* Holder + preset badges carry a per-instance --badge-color set by the host: */
+/* the holder's size color (holderColor) / the material's ISO-group color     */
+/* (presetMaterialColor). When changing any class, update ALL usages.         */
 
 .description-badge {
   background: rgba(var(--tok-description), 0.10);
@@ -2558,16 +2560,40 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 
 .preset-tag {
-  display: inline-block;
-  padding: 1px 7px;
+  /* Color follows the MATERIAL's ISO group — host sets --badge-color from the
+     selected material (presetMaterialColor). Defaults to the P (steel) color. */
+  --badge-color: var(--iso-p);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 13px;
   border-radius: 999px;
-  border: 1px solid rgba(var(--tok-preset), 0.35);
-  background: rgba(var(--tok-preset), 0.10);
-  color: rgb(var(--tok-preset));
-  font-size: 11px;
-  font-weight: 600;
+  border: 1px solid color-mix(in srgb, var(--badge-color) 70%, transparent);
+  background: var(--input-bg);
+  color: color-mix(in srgb, var(--badge-color) 78%, #ffffff);
+  font-size: 13px;
+  font-weight: 700;
   white-space: nowrap;
 }
+/* "All" / selected state — solid gray fill, white-matched border. */
+.preset-tag.is-all {
+  --badge-color: var(--text-faint);
+  border-color: color-mix(in srgb, var(--text) 55%, transparent);
+  background: color-mix(in srgb, var(--text-faint) 45%, var(--input-bg));
+  color: var(--text);
+}
+/* Optional leading dot inside a preset chip (host opts in). */
+.preset-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--badge-color);
+  flex-shrink: 0;
+}
+
+/* The ⌀ diameter glyph, tinted orange wherever it appears inline. The number
+   and units stay neutral; only the glyph is colored. */
+.dia { color: var(--orange); font-weight: 600; }
 
 /* ─── Library landing page — left sidebar + main content ────────────────── */
 .landing-layout {
@@ -2773,17 +2799,22 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 /* ─── Holder pill — teal by default; AssemblyCard overrides per-holder ─────── */
 .holder-pill {
-  display: inline-block;
-  padding: 2px 8px;
+  /* Color follows the HOLDER SIZE — host sets --badge-color per holder
+     (holderColor). Defaults to the unknown-holder teal. Full holder names are
+     preserved — never truncate. */
+  --badge-color: var(--holder-default);
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(var(--tok-holder), 0.40);
-  background: rgba(var(--tok-holder), 0.15);
-  color: rgb(var(--tok-holder));
+  border: 1px solid color-mix(in srgb, var(--badge-color) 60%, transparent);
+  background: color-mix(in srgb, var(--badge-color) 9%, var(--input-bg));
+  color: color-mix(in srgb, var(--badge-color) 60%, #ffffff);
   font-size: 11px;
   font-weight: 600;
-  white-space: normal;
-  word-break: break-word;
-  line-height: 1.5;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
 }
 
 /* ─── Assemblies grid — multiple cards per row ───────────────────────────── */
