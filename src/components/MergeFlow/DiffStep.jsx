@@ -2,8 +2,7 @@ import { useState, useMemo } from 'react';
 import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle, RefreshCw, Plus, CheckCircle, Wrench } from 'lucide-react';
 import { generateId, generateAssemblyId } from '../../schema/toolSchema.js';
 import { fieldLabel } from '../../schema/fieldRegistry.js';
-import { composePresetName, parsePresetName, presetMatchesAssembly, materialNameCode, HOLE_MAKING_TYPES } from '../../utils/presetNaming.js';
-import { PresetDot } from '../PresetDot.jsx';
+import { composePresetName, parsePresetName, presetMatchesAssembly, materialNameCode, presetMaterialColor, HOLE_MAKING_TYPES } from '../../utils/presetNaming.js';
 import { lengthEps, unitAbbr } from '../../utils/units.js';
 import { useApp } from '../../context/AppContext.jsx';
 import InfoTip from '../InfoTip.jsx';
@@ -236,7 +235,7 @@ function PresetsDiff({
                   checked={addedPresets.has(preset.guid)}
                   onChange={() => onToggleAddedPreset(preset.guid)}
                 />
-                <span className="preset-tag"><PresetDot query={preset.material?.query} materials={materials} />{preset.name || 'Unnamed'}</span>
+                <span className="preset-tag" style={{ '--badge-color': presetMaterialColor(preset.material?.query, materials) || undefined }}>{preset.name || 'Unnamed'}</span>
               </label>
             ))}
           </div>

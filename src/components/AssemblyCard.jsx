@@ -1,39 +1,36 @@
 import { useState } from 'react';
 import { Pencil, X } from 'lucide-react';
-import { presetMatchesAssembly } from '../utils/presetNaming.js';
+import { presetMatchesAssembly, presetMaterialColor } from '../utils/presetNaming.js';
 import { unitAbbr } from '../utils/units.js';
 import { useApp } from '../context/AppContext.jsx';
-import { PresetDot } from './PresetDot.jsx';
 
 // ── Holder color system ───────────────────────────────────────────────────────
+// Every holder SIZE carries its own color (the --holder-* design tokens). The
+// .holder-pill class derives its fill/border/text from a single --badge-color,
+// so holderColor() returns just that base color. Unknown holders get a stable
+// hash-assigned color, falling back to the teal --holder-default.
 const NAMED_COLORS = {
-  'NBT30-SK13C-60':  { bg: 'rgba(6,182,212,0.20)',   border: '#06b6d4', text: '#22d3ee' },
-  'NBT30-SK13C-90':  { bg: 'rgba(236,72,153,0.20)',  border: '#ec4899', text: '#f472b6' },
-  'NBT30-SK13C-120': { bg: 'rgba(101,163,13,0.20)',  border: '#65a30d', text: '#a3e635' },
-  'NBT30-SK13C-150': { bg: 'rgba(139,92,246,0.20)',  border: '#8b5cf6', text: '#a78bfa' },
-  'NBT30-SK20C-60':  { bg: 'rgba(234,179,8,0.20)',   border: '#eab308', text: '#fde047' },
-  'NBT30-SK20C-90':  { bg: 'rgba(239,68,68,0.20)',   border: '#ef4444', text: '#f87171' },
-  'DRILL CHUCK':     { bg: 'rgba(16,185,129,0.20)',  border: '#10b981', text: '#34d399' },
+  'NBT30-SK13C-60':  '#06b6d4',  /* 30-SK13-60 · cyan */
+  'NBT30-SK13C-90':  '#ec4899',  /* 30-SK13-90 · pink */
+  'NBT30-SK13C-120': '#65a30d',  /* 30-SK13-120 · lime */
+  'NBT30-SK13C-150': '#8b5cf6',  /* 30-SK13-150 · violet */
+  'NBT30-SK20C-60':  '#eab308',  /* 30-SK20-60 · yellow */
+  'NBT30-SK20C-90':  '#ef4444',  /* 30-SK20-90 · red */
+  'DRILL CHUCK':     '#10b981',  /* drill chuck · green */
 };
 
-const FALLBACK = [
-  { bg: 'rgba(236,72,153,0.20)',  border: '#ec4899', text: '#f472b6' },
-  { bg: 'rgba(168,85,247,0.20)',  border: '#a855f7', text: '#c084fc' },
-  { bg: 'rgba(20,184,166,0.20)',  border: '#14b8a6', text: '#2dd4bf' },
-  { bg: 'rgba(251,191,36,0.20)',  border: '#fbbf24', text: '#fde68a' },
-  { bg: 'rgba(239,68,68,0.20)',   border: '#ef4444', text: '#f87171' },
-  { bg: 'rgba(16,185,129,0.20)',  border: '#10b981', text: '#34d399' },
-];
+const HOLDER_DEFAULT = '#2dd4bf';  // teal — unknown / no holder
+const FALLBACK = ['#ec4899', '#a855f7', '#14b8a6', '#fbbf24', '#ef4444', '#10b981'];
 
 export function holderColor(description) {
-  if (!description) return FALLBACK[0];
+  if (!description) return HOLDER_DEFAULT;
   const norm = description.trim().toUpperCase();
   if (NAMED_COLORS[norm]) return NAMED_COLORS[norm];
   let hash = 0;
   for (let i = 0; i < norm.length; i++) {
     hash = (hash * 31 + norm.charCodeAt(i)) | 0;
   }
-  return FALLBACK[Math.abs(hash) % 6];
+  return FALLBACK[Math.abs(hash) % FALLBACK.length];
 }
 
 export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete }) {
@@ -51,7 +48,7 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
 
       {/* Header: holder pill + OOH + action buttons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', flexWrap: 'wrap' }}>
-        <span className="holder-pill" style={{ background: color.bg, borderColor: color.border, color: color.text, fontSize: 11 }}>
+        <span className="holder-pill" style={{ '--badge-color': color }}>
           {holderDescription}
         </span>
         <span style={{ fontSize: 13, fontWeight: 700, flex: 'none', color: 'var(--text)' }}>
@@ -71,7 +68,7 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
       {linkedPresets.length > 0 && (
         <div className="assembly-presets">
           {linkedPresets.map((p) => (
-            <span key={p.guid} className="preset-tag"><PresetDot query={p.material?.query} materials={materials} />{p.name || 'Unnamed'}</span>
+            <span key={p.guid} className="preset-tag" style={{ '--badge-color': presetMaterialColor(p.material?.query, materials) || undefined }}>{p.name || 'Unnamed'}</span>
           ))}
         </div>
       )}

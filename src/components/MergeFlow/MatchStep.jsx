@@ -28,7 +28,7 @@ function CandidateCard({ tool, score, onSelect }) {
         <div className="merge-candidate-name truncate">{tool.description || '—'}</div>
         <div className="text-xs text-sub">
           {TOOL_TYPE_LABELS[tool.tool_type] || tool.tool_type}
-          {tool.diameter != null ? ` · ⌀${tool.diameter} ${unitAbbr(tool.unit)}` : ''}
+          {tool.diameter != null && <> · <span className="dia">⌀</span>{tool.diameter} {unitAbbr(tool.unit)}</>}
           {tool.number_of_flutes ? ` · ${tool.number_of_flutes}FL` : ''}
           {tool.vendor ? ` · ${tool.vendor}` : ''}
         </div>
@@ -78,7 +78,7 @@ export default function MatchStep({ importedTool, presetCandidates, onSelect, on
             <div style={{ fontWeight: 600 }}>{importedTool.description || '—'}</div>
             <div className="text-xs text-sub">
               {TOOL_TYPE_LABELS[importedTool.tool_type] || importedTool.tool_type}
-              {importedTool.diameter != null ? ` · ⌀${importedTool.diameter} ${unitAbbr(importedTool.unit)}` : ''}
+              {importedTool.diameter != null && <> · <span className="dia">⌀</span>{importedTool.diameter} {unitAbbr(importedTool.unit)}</>}
               {importedTool.number_of_flutes ? ` · ${importedTool.number_of_flutes}FL` : ''}
             </div>
           </div>

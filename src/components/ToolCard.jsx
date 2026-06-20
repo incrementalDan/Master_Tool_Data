@@ -81,7 +81,7 @@ export default function ToolCard({ tool, variant = 'grid' }) {
           T{tool.machine_tool_number}
         </span>
       )}
-      {formatDim(tool.diameter) && <span className="meta-badge">⌀ {formatDim(tool.diameter)} {unitAbbr(tool.unit)}</span>}
+      {formatDim(tool.diameter) && <span className="meta-badge"><span className="dia">⌀</span> {formatDim(tool.diameter)} {unitAbbr(tool.unit)}</span>}
       {tool.number_of_flutes && <span className="meta-badge">{tool.number_of_flutes}FL</span>}
       {formatDim(tool.flute_length) && <span className="meta-badge">{formatDim(tool.flute_length)}LOC</span>}
       {tool.vendor && <span className="meta-badge truncate" style={{ maxWidth: 120 }}>{tool.vendor}</span>}

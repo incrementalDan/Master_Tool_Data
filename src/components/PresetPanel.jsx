@@ -346,7 +346,7 @@ function CollapsedCard({
       )}
       <div className="preset-card-body">
         <div className="preset-card-name">
-          <span className="preset-tag" title={preset.name}>{preset.name || 'Unnamed'}</span>
+          <span className="preset-tag" title={preset.name} style={{ '--badge-color': accentColor || undefined }}>{preset.name || 'Unnamed'}</span>
         </div>
         <div className="preset-card-mat" style={accentColor ? { color: accentColor } : undefined}>{mat}</div>
         <div className="preset-card-stats">
@@ -387,7 +387,7 @@ function CollapsedCard({
                 {assemblyHolderDesc && (
                   <span
                     className="holder-pill"
-                    style={assemblyHolderColor ? { background: assemblyHolderColor.bg, borderColor: assemblyHolderColor.border, color: assemblyHolderColor.text } : {}}
+                    style={assemblyHolderColor ? { '--badge-color': assemblyHolderColor } : {}}
                   >{assemblyHolderDesc}</span>
                 )}
                 <span className="text-xs text-sub">OOH: {singleAssembly.ooh != null ? `${singleAssembly.ooh.toFixed(3)} ${lenUnit}` : '—'}</span>

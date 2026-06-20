@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS } from '../../schema/toolSchema.js';
 import { fieldLabel } from '../../schema/fieldRegistry.js';
 import { unitAbbr } from '../../utils/units.js';
-import { PresetDot } from '../PresetDot.jsx';
+import { presetMaterialColor } from '../../utils/presetNaming.js';
 import ToolTypeIcon from '../icons/ToolTypeIcon.jsx';
 
 function formatValue(v) {
@@ -105,7 +105,7 @@ export default function CommitStep({
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {newPresetList.map(p => (
-                  <span key={p.guid} className="preset-tag"><PresetDot query={p.material?.query} materials={materials} />{p.name || 'Unnamed'}</span>
+                  <span key={p.guid} className="preset-tag" style={{ '--badge-color': presetMaterialColor(p.material?.query, materials) || undefined }}>{p.name || 'Unnamed'}</span>
                 ))}
               </div>
             </div>

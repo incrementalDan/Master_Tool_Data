@@ -592,7 +592,7 @@ function AssembliesSection({ tool, holders, onSave }) {
         return (
           <div key={holderDesc} style={{ marginBottom: 10 }}>
             <div style={{ marginBottom: 4 }}>
-              <span className="holder-pill" style={{ background: c.bg, borderColor: c.border, color: c.text }}>
+              <span className="holder-pill" style={{ '--badge-color': c }}>
                 {holderDesc}
               </span>
             </div>
@@ -618,7 +618,7 @@ function AssembliesSection({ tool, holders, onSave }) {
         return (
           <div style={{ marginBottom: 10 }}>
             <div style={{ marginBottom: 4 }}>
-              <span className="holder-pill" style={{ background: c.bg, borderColor: c.border, color: c.text }}>
+              <span className="holder-pill" style={{ '--badge-color': c }}>
                 {pendingAssembly.holder_description || '—'}
               </span>
             </div>
@@ -744,7 +744,7 @@ function AssemblyExportPicker({ tool, holders, onConfirm, onCancel }) {
                   style={isSel ? { borderColor: c.border, background: c.bg } : {}}
                   onClick={() => setSelected(a.assembly_id)}
                 >
-                  <span className="holder-pill" style={{ background: c.bg, borderColor: c.border, color: c.text }}>
+                  <span className="holder-pill" style={{ '--badge-color': c }}>
                     {a.holder_description || '—'}
                   </span>
                   <span style={{ fontSize: 13 }}>OOH: {a.ooh?.toFixed(3)} {unitAbbr(tool.unit)}</span>
