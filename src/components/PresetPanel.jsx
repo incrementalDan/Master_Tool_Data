@@ -772,7 +772,7 @@ function EditCard({
       </div>
       </div>
 
-      <div className="preset-edit-modal-cols">
+      <div className="preset-edit-modal-rest">
       {/* Speed */}
       <div className="preset-edit-section">
         <div className="preset-edit-section-label">SPEED</div>
@@ -796,143 +796,6 @@ function EditCard({
           )}
         </div>
       </div>
-
-      {/* Feedrates — milling only */}
-      {isMilling && (
-        <div className="preset-edit-section">
-          <div className="preset-edit-section-label">FEEDRATES</div>
-          <div className="preset-edit-grid">
-            <NField
-              label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
-              formulaField="v_f" formulaState={fx.v_f}
-              warning={noSpeed ? 'Set spindle speed first' : undefined}
-              onChange={v => handleNumChange('v_f', v)}
-            />
-            <NField
-              label="Feed per tooth" value={draft.f_z} unit={lenUnit}
-              formulaField="f_z" formulaState={fx.f_z}
-              warning={noSpeed ? 'Set spindle speed first' : undefined}
-              onChange={v => handleNumChange('f_z', v)}
-            />
-            <NField
-              label="Lead-in feedrate" value={draft.v_f_leadIn} unit={feedUnit}
-              formulaField="v_f_leadIn" formulaState={fx.v_f_leadIn}
-              onChange={v => handleNumChange('v_f_leadIn', v)}
-            />
-            <NField
-              label="Lead-out feedrate" value={draft.v_f_leadOut} unit={feedUnit}
-              formulaField="v_f_leadOut" formulaState={fx.v_f_leadOut}
-              onChange={v => handleNumChange('v_f_leadOut', v)}
-            />
-            <NField
-              label="Transition feedrate" value={draft.v_f_transition} unit={feedUnit}
-              formulaField="v_f_transition" formulaState={fx.v_f_transition}
-              onChange={v => handleNumChange('v_f_transition', v)}
-            />
-            <NField label="Plunge feedrate" value={draft.v_f_plunge}   unit={feedUnit} onChange={v => setPlunge(v)} />
-            <NField label="Ramp feedrate" value={draft.v_f_ramp}      unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
-            <NField label="Ramp angle"    value={draft['ramp-angle']} unit="°"        onChange={v => set('ramp-angle', v)} />
-          </div>
-        </div>
-      )}
-
-      {/* Feedrates — spot drill: milling-style cutting feed + plunge/retract,
-          no feed/rev or ramp angle (see normalizePreset's isSpotDrill branch) */}
-      {isSpotDrill && (
-        <div className="preset-edit-section">
-          <div className="preset-edit-section-label">FEEDRATES</div>
-          <div className="preset-edit-grid">
-            <NField
-              label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
-              formulaField="v_f" formulaState={fx.v_f}
-              warning={noSpeed ? 'Set spindle speed first' : undefined}
-              onChange={v => handleNumChange('v_f', v)}
-            />
-            <NField
-              label="Feed per tooth" value={draft.f_z} unit={lenUnit}
-              formulaField="f_z" formulaState={fx.f_z}
-              warning={noSpeed ? 'Set spindle speed first' : undefined}
-              onChange={v => handleNumChange('f_z', v)}
-            />
-            <NField
-              label="Lead-in feedrate" value={draft.v_f_leadIn} unit={feedUnit}
-              formulaField="v_f_leadIn" formulaState={fx.v_f_leadIn}
-              onChange={v => handleNumChange('v_f_leadIn', v)}
-            />
-            <NField
-              label="Lead-out feedrate" value={draft.v_f_leadOut} unit={feedUnit}
-              formulaField="v_f_leadOut" formulaState={fx.v_f_leadOut}
-              onChange={v => handleNumChange('v_f_leadOut', v)}
-            />
-            <NField
-              label="Transition feedrate" value={draft.v_f_transition} unit={feedUnit}
-              formulaField="v_f_transition" formulaState={fx.v_f_transition}
-              onChange={v => handleNumChange('v_f_transition', v)}
-            />
-            <NField label="Ramp feedrate" value={draft.v_f_ramp} unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
-            <NField
-              label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
-              warning={noSpeed ? 'Set spindle speed first' : undefined}
-              onChange={v => setPlunge(v)}
-            />
-            <NField
-              label="Retract feedrate" value={draft['v_f_retract']} unit={feedUnit}
-              formulaField="v_f_retract" formulaState={fx.v_f_retract}
-              onChange={v => handleNumChange('v_f_retract', v)}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Feedrates — turning/boring */}
-      {isTurning && (
-        <div className="preset-edit-section">
-          <div className="preset-edit-section-label">FEEDRATES</div>
-          <div className="preset-edit-grid">
-            <NField
-              label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
-              formulaField="v_f" formulaState={fx.v_f}
-              warning={noSpeed ? 'Set spindle speed first' : undefined}
-              onChange={v => handleNumChange('v_f', v)}
-            />
-            <NField
-              label="Feed per rev" value={draft.f_n} unit={`${lenUnit}/rev`}
-              formulaField="f_n" formulaState={fx.f_n}
-              onChange={v => handleNumChange('f_n', v)}
-            />
-            <NField
-              label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
-              formulaField="v_f_plunge" formulaState={fx.v_f_plunge}
-              onChange={v => handleNumChange('v_f_plunge', v)}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Feedrates — drill family: plunge + retract + feed/rev */}
-      {isDrillFamily && (
-        <div className="preset-edit-section">
-          <div className="preset-edit-section-label">FEEDRATES</div>
-          <div className="preset-edit-grid">
-            <NField
-              label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
-              formulaField="v_f_plunge" formulaState={fx.v_f_plunge}
-              warning={noSpeed ? 'Set spindle speed first' : undefined}
-              onChange={v => handleNumChange('v_f_plunge', v)}
-            />
-            <NField
-              label="Retract feedrate" value={draft['v_f_retract']} unit={feedUnit}
-              formulaField="v_f_retract" formulaState={fx.v_f_retract}
-              onChange={v => handleNumChange('v_f_retract', v)}
-            />
-            <NField
-              label="Feed per rev" value={draft.f_n} unit={`${lenUnit}/rev`}
-              formulaField="f_n" formulaState={fx.f_n}
-              onChange={v => handleNumChange('f_n', v)}
-            />
-          </div>
-        </div>
-      )}
 
       {/* Passes & Linking — milling only */}
       {isMilling && (
@@ -988,6 +851,145 @@ function EditCard({
           ))}
         </select>
       </div>
+
+      {/* Feedrates — full-width row at the bottom (the tallest section, so it
+          gets its own wide grid instead of squeezing into a column) */}
+      {/* Feedrates — milling only */}
+      {isMilling && (
+        <div className="preset-edit-section preset-edit-section--wide">
+          <div className="preset-edit-section-label">FEEDRATES</div>
+          <div className="preset-edit-grid preset-edit-grid--wide">
+            <NField
+              label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
+              formulaField="v_f" formulaState={fx.v_f}
+              warning={noSpeed ? 'Set spindle speed first' : undefined}
+              onChange={v => handleNumChange('v_f', v)}
+            />
+            <NField
+              label="Feed per tooth" value={draft.f_z} unit={lenUnit}
+              formulaField="f_z" formulaState={fx.f_z}
+              warning={noSpeed ? 'Set spindle speed first' : undefined}
+              onChange={v => handleNumChange('f_z', v)}
+            />
+            <NField
+              label="Lead-in feedrate" value={draft.v_f_leadIn} unit={feedUnit}
+              formulaField="v_f_leadIn" formulaState={fx.v_f_leadIn}
+              onChange={v => handleNumChange('v_f_leadIn', v)}
+            />
+            <NField
+              label="Lead-out feedrate" value={draft.v_f_leadOut} unit={feedUnit}
+              formulaField="v_f_leadOut" formulaState={fx.v_f_leadOut}
+              onChange={v => handleNumChange('v_f_leadOut', v)}
+            />
+            <NField
+              label="Transition feedrate" value={draft.v_f_transition} unit={feedUnit}
+              formulaField="v_f_transition" formulaState={fx.v_f_transition}
+              onChange={v => handleNumChange('v_f_transition', v)}
+            />
+            <NField label="Plunge feedrate" value={draft.v_f_plunge}   unit={feedUnit} onChange={v => setPlunge(v)} />
+            <NField label="Ramp feedrate" value={draft.v_f_ramp}      unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
+            <NField label="Ramp angle"    value={draft['ramp-angle']} unit="°"        onChange={v => set('ramp-angle', v)} />
+          </div>
+        </div>
+      )}
+
+      {/* Feedrates — spot drill: milling-style cutting feed + plunge/retract,
+          no feed/rev or ramp angle (see normalizePreset's isSpotDrill branch) */}
+      {isSpotDrill && (
+        <div className="preset-edit-section preset-edit-section--wide">
+          <div className="preset-edit-section-label">FEEDRATES</div>
+          <div className="preset-edit-grid preset-edit-grid--wide">
+            <NField
+              label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
+              formulaField="v_f" formulaState={fx.v_f}
+              warning={noSpeed ? 'Set spindle speed first' : undefined}
+              onChange={v => handleNumChange('v_f', v)}
+            />
+            <NField
+              label="Feed per tooth" value={draft.f_z} unit={lenUnit}
+              formulaField="f_z" formulaState={fx.f_z}
+              warning={noSpeed ? 'Set spindle speed first' : undefined}
+              onChange={v => handleNumChange('f_z', v)}
+            />
+            <NField
+              label="Lead-in feedrate" value={draft.v_f_leadIn} unit={feedUnit}
+              formulaField="v_f_leadIn" formulaState={fx.v_f_leadIn}
+              onChange={v => handleNumChange('v_f_leadIn', v)}
+            />
+            <NField
+              label="Lead-out feedrate" value={draft.v_f_leadOut} unit={feedUnit}
+              formulaField="v_f_leadOut" formulaState={fx.v_f_leadOut}
+              onChange={v => handleNumChange('v_f_leadOut', v)}
+            />
+            <NField
+              label="Transition feedrate" value={draft.v_f_transition} unit={feedUnit}
+              formulaField="v_f_transition" formulaState={fx.v_f_transition}
+              onChange={v => handleNumChange('v_f_transition', v)}
+            />
+            <NField label="Ramp feedrate" value={draft.v_f_ramp} unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
+            <NField
+              label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
+              warning={noSpeed ? 'Set spindle speed first' : undefined}
+              onChange={v => setPlunge(v)}
+            />
+            <NField
+              label="Retract feedrate" value={draft['v_f_retract']} unit={feedUnit}
+              formulaField="v_f_retract" formulaState={fx.v_f_retract}
+              onChange={v => handleNumChange('v_f_retract', v)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Feedrates — turning/boring */}
+      {isTurning && (
+        <div className="preset-edit-section preset-edit-section--wide">
+          <div className="preset-edit-section-label">FEEDRATES</div>
+          <div className="preset-edit-grid preset-edit-grid--wide">
+            <NField
+              label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
+              formulaField="v_f" formulaState={fx.v_f}
+              warning={noSpeed ? 'Set spindle speed first' : undefined}
+              onChange={v => handleNumChange('v_f', v)}
+            />
+            <NField
+              label="Feed per rev" value={draft.f_n} unit={`${lenUnit}/rev`}
+              formulaField="f_n" formulaState={fx.f_n}
+              onChange={v => handleNumChange('f_n', v)}
+            />
+            <NField
+              label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
+              formulaField="v_f_plunge" formulaState={fx.v_f_plunge}
+              onChange={v => handleNumChange('v_f_plunge', v)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Feedrates — drill family: plunge + retract + feed/rev */}
+      {isDrillFamily && (
+        <div className="preset-edit-section preset-edit-section--wide">
+          <div className="preset-edit-section-label">FEEDRATES</div>
+          <div className="preset-edit-grid preset-edit-grid--wide">
+            <NField
+              label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
+              formulaField="v_f_plunge" formulaState={fx.v_f_plunge}
+              warning={noSpeed ? 'Set spindle speed first' : undefined}
+              onChange={v => handleNumChange('v_f_plunge', v)}
+            />
+            <NField
+              label="Retract feedrate" value={draft['v_f_retract']} unit={feedUnit}
+              formulaField="v_f_retract" formulaState={fx.v_f_retract}
+              onChange={v => handleNumChange('v_f_retract', v)}
+            />
+            <NField
+              label="Feed per rev" value={draft.f_n} unit={`${lenUnit}/rev`}
+              formulaField="f_n" formulaState={fx.f_n}
+              onChange={v => handleNumChange('f_n', v)}
+            />
+          </div>
+        </div>
+      )}
       </div>
       </div>
 
