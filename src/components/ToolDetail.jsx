@@ -47,6 +47,16 @@ export default function ToolDetail() {
   const [reconcileResults, setReconcileResults] = useState(null);
   const [showPhotoUpload, setShowPhotoUpload] = useState(false);
 
+  // True while the inline preset editor has unsaved changes — used to warn
+  // before navigating away or switching into the tool edit form.
+  const presetDirtyRef = useRef(false);
+  const guardLeave = (fn) => () => {
+    if (presetDirtyRef.current &&
+        !window.confirm('You have unsaved changes to a preset. Leave without saving them?')) return;
+    presetDirtyRef.current = false;
+    fn();
+  };
+
   const tool = tools.find(t => t.id === id);
 
   // Reconcile against the Fusion library on open: detect entries dumped straight
@@ -221,9 +231,9 @@ export default function ToolDetail() {
     <div className="tool-detail-wrap">
       {/* Frozen left action sidebar */}
       <aside className="tool-action-sidebar">
-        <SidebarBtn icon={ArrowLeft} label="Back" tip="Go back" onClick={() => navigate(-1)} />
+        <SidebarBtn icon={ArrowLeft} label="Back" tip="Go back" onClick={guardLeave(() => navigate(-1))} />
         <div className="tool-sidebar-divider" />
-        <SidebarBtn icon={Pencil} label="Edit" tip="Edit this tool" onClick={() => setEditing(true)} />
+        <SidebarBtn icon={Pencil} label="Edit" tip="Edit this tool" onClick={guardLeave(() => setEditing(true))} />
         <SidebarBtn icon={Copy} label="Duplicate" tip="Duplicate tool" onClick={handleClone} />
         <SidebarBtn icon={GitMerge} label="Sync Job" tip="Sync proven values from a job file" onClick={() => navigate(`/merge/${tool.id}`)} />
         <div className="tool-sidebar-divider" />
@@ -360,7 +370,8 @@ export default function ToolDetail() {
               }}
             />
 
-            <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving} />
+            <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving}
+              onDirtyChange={(d) => { presetDirtyRef.current = d; }} />
 
             <SpeedFeedSection
               tool={tool}

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Search, X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { unitAbbr } from '../utils/units.js';
+import { holderColor } from './AssemblyCard.jsx';
 
 export default function HolderPicker({ currentGuid, onSelect, onClose }) {
   const { holders } = useApp();
@@ -52,10 +53,10 @@ export default function HolderPicker({ currentGuid, onSelect, onClose }) {
                   onClick={() => setPendingGuid(h.guid)}
                   className={`picker-row${selected ? ' selected' : ''}`}
                 >
-                  <div style={{ fontWeight: selected ? 600 : 400, fontSize: 13 }}>
+                  <span className="holder-pill" style={{ '--badge-color': holderColor(h.description) }}>
                     {h.description || '—'}
-                  </div>
-                  <div className="text-sub text-xs" style={{ marginTop: 2 }}>
+                  </span>
+                  <div className="text-sub text-xs" style={{ marginTop: 4 }}>
                     Gauge: {gl.toFixed(3)} {unitAbbr(h.unit)}
                     {h.vendor ? ` · ${h.vendor}` : ''}
                   </div>

@@ -58,7 +58,7 @@ function blankPreset() {
   };
 }
 
-export default function PresetPanel({ tool, onSave, isSaving }) {
+export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
   const { holders, materials } = useApp();
   // Resolve a preset's material to its group color (from the Materials library).
   const groupColorOf = (query) => presetMaterialColor(query, materials);
@@ -81,10 +81,30 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
   const [editingId, setEditingId] = useState(null);
   const [materialFilter, setMaterialFilter] = useState('All');
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
-  const [addPromptOpen, setAddPromptOpen] = useState(false);
-  const [copyFromId, setCopyFromId] = useState('');
+  // Add flow: `addOpen` reveals the "copy from" row; `copySrc` is what a new
+  // preset will be seeded from — start blank, copy an existing preset, or seed
+  // from a Speeds & Feeds reference.
+  const [addOpen, setAddOpen] = useState(false);
+  const [copySrc, setCopySrc] = useState({ type: 'blank', id: '' });
+  const [editorDirty, setEditorDirty] = useState(false);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const dragSrcIdx = useRef(null);
+  const panelRef = useRef(null);
+
+  // Speeds & Feeds references (metadata-only) the user can seed a preset from.
+  const sfRefs = (tool.speed_feed_refs || []).filter(r => r.preset_id);
+  const camPresetById = (id) => (materials?.presets || []).find(p => p.id === id);
+
+  // Report unsaved-editor state up so ToolDetail can warn before navigating away.
+  useEffect(() => { onDirtyChange?.(!!editingId && editorDirty); }, [editingId, editorDirty, onDirtyChange]);
+
+  // Confirm discarding unsaved edits before switching presets / adding / etc.
+  const guardDiscard = () => {
+    if (editingId && editorDirty) {
+      return window.confirm('You have unsaved changes to this preset. Discard them?');
+    }
+    return true;
+  };
 
   // Re-sync local state when the global tool updates (e.g. after a save).
   // Only run when no edit is in progress to avoid clobbering unsaved drafts.
@@ -132,8 +152,22 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
   const handlePresetSave = (updated) => {
     const next = presets.map(p => p.guid === updated.guid ? updated : p);
     setPresets(next);
+    setEditorDirty(false);
     setEditingId(null);
     onSave(next);
+  };
+
+  const handleEditClick = (guid) => {
+    if (guid === editingId) return;
+    if (!guardDiscard()) return;
+    setAddOpen(false);
+    setEditorDirty(false);
+    setEditingId(guid);
+  };
+
+  const handleCancelEdit = () => {
+    setEditorDirty(false);
+    setEditingId(null);
   };
 
   const handleDelete = () => {
@@ -143,32 +177,59 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
     onSave(next);
   };
 
+  // Open the "copy from" row, and scroll the Speeds & Feeds header to the top.
   const handleAddClick = () => {
-    if (editingId) {
-      const src = presets.find(p => p.guid === editingId) || blankPreset();
-      const np = { ...src, guid: generateId(), name: `${src.name || 'Preset'} (copy)` };
-      const next = [...presets, np];
-      setPresets(next);
-      setEditingId(np.guid);
-    } else {
-      setAddPromptOpen(true);
+    if (!guardDiscard()) return;
+    setEditorDirty(false);
+    setEditingId(null);
+    setCopySrc({ type: 'blank', id: '' });
+    setAddOpen(true);
+    setTimeout(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 40);
+  };
+
+  // Label shown in the "copy from" line for the current selection.
+  const copyFromLabel = () => {
+    if (copySrc.type === 'preset') return presets.find(p => p.guid === copySrc.id)?.name || 'preset';
+    if (copySrc.type === 'ref') return camPresetById(copySrc.id)?.name || 'reference';
+    return 'Start blank';
+  };
+
+  // Build the new preset from the chosen source (blank / preset copy / reference).
+  const buildNewPreset = () => {
+    if (copySrc.type === 'preset') {
+      const src = presets.find(p => p.guid === copySrc.id);
+      if (src) return { ...src, guid: generateId(), name: `${src.name || 'Preset'} (copy)` };
     }
+    if (copySrc.type === 'ref') {
+      const ref = sfRefs.find(r => r.preset_id === copySrc.id);
+      const cam = camPresetById(copySrc.id);
+      const np = blankPreset();
+      if (cam) np.material = { ...np.material, query: cam.name, category: materialCategory(cam.name) };
+      // Seed speeds/feeds from the reference using THIS tool's diameter + flutes.
+      const factor = isMetric ? 1000 : 12;
+      const rpm = (ref?.sfm && diameter) ? (ref.sfm * factor) / (Math.PI * diameter) : 0;
+      const flutes = numberOfFlutes || 0;
+      np.n   = roundForField('n', rpm);
+      np.v_c = ref?.sfm ?? 0;
+      np.f_z = ref?.chip_load ?? 0;
+      np.v_f = (ref?.chip_load && rpm && flutes) ? roundForField('v_f', ref.chip_load * rpm * flutes) : 0;
+      np.name = composePresetName({ materialQuery: materialNameCode(cam?.name, materials) }) || cam?.name || 'New Preset';
+      return np;
+    }
+    return blankPreset();
   };
 
   const handleConfirmAdd = () => {
-    const src = copyFromId ? presets.find(p => p.guid === copyFromId) : null;
-    const np = src
-      ? { ...src, guid: generateId(), name: `${src.name || 'Preset'} (copy)` }
-      : blankPreset();
-    const next = [...presets, np];
-    setPresets(next);
+    const np = buildNewPreset();
+    setPresets([...presets, np]);
+    setAddOpen(false);
+    setCopySrc({ type: 'blank', id: '' });
+    setEditorDirty(false);
     setEditingId(np.guid);
-    setAddPromptOpen(false);
-    setCopyFromId('');
   };
 
   return (
-    <div className="preset-panel">
+    <div className="preset-panel" ref={panelRef}>
       {/* Header */}
       <div className="preset-panel-header">
         <span className="preset-panel-title">Speeds &amp; Feeds</span>
@@ -203,28 +264,6 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
         </div>
       )}
 
-      {/* Inline add prompt */}
-      {addPromptOpen && (
-        <div className="preset-inline-prompt">
-          <span className="text-sm text-sub">Copy from:</span>
-          <select
-            className="field-input"
-            value={copyFromId}
-            onChange={e => setCopyFromId(e.target.value)}
-            style={{ minWidth: 140 }}
-          >
-            <option value="">Start blank</option>
-            {presets.map(p => (
-              <option key={p.guid} value={p.guid}>{p.name || 'Unnamed'}</option>
-            ))}
-          </select>
-          <button className="btn btn-primary btn-sm" onClick={handleConfirmAdd}>Add</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => setAddPromptOpen(false)}>
-            Cancel
-          </button>
-        </div>
-      )}
-
       {/* Horizontal scroll row */}
       <div className="preset-scroll">
         <div className="preset-row">
@@ -253,13 +292,16 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
                   feedUnit={feedUnit}
                   speedUnit={speedUnit}
                   isEditing={editingId === preset.guid}
+                  pickMode={addOpen}
+                  picked={addOpen && copySrc.type === 'preset' && copySrc.id === preset.guid}
+                  onPick={() => setCopySrc({ type: 'preset', id: preset.guid })}
                   isDragOver={dragOverIdx === globalIdx}
-                  dragEnabled={materialFilter === 'All'}
+                  dragEnabled={materialFilter === 'All' && !addOpen}
                   linkedAssemblies={(tool.assemblies || []).filter(a =>
                     presetMatchesAssembly(preset, a, tool.unit)
                   )}
                   holders={holders}
-                  onEdit={() => setEditingId(preset.guid)}
+                  onEdit={() => handleEditClick(preset.guid)}
                   onDelete={() => setDeleteConfirmId(preset.guid)}
                   onDragStart={e => handleDragStart(e, globalIdx)}
                   onDragOver={e => handleDragOver(e, globalIdx)}
@@ -274,11 +316,63 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
             <div className="preset-empty">No presets for {materialFilter}</div>
           )}
 
-          <button className="preset-add-card" onClick={handleAddClick} title="Add preset">
-            <Plus size={22} />
-            <span>Add Preset</span>
-          </button>
+          {presets.length === 0 && materialFilter === 'All' && (
+            <div className="preset-empty">No presets yet — add one below.</div>
+          )}
         </div>
+      </div>
+
+      {/* Add control — a small button under the scroll; clicking expands the
+          "copy from" row inline (start blank / pick a preset card above / pick a
+          reference) before the editor pops out below. */}
+      <div className="preset-add-bar">
+        {!addOpen ? (
+          <button className="preset-add-btn" onClick={handleAddClick} disabled={!!editingId} title="Add preset">
+            <Plus size={14} /> Add Preset
+          </button>
+        ) : (
+          <div className="preset-copyfrom">
+            <button className="preset-add-btn preset-add-btn--active" onClick={() => { setAddOpen(false); setCopySrc({ type: 'blank', id: '' }); }} title="Close">
+              <Plus size={14} /> Add Preset
+            </button>
+            <span className="preset-copyfrom-label">Copy from:</span>
+            <button
+              className={`chip ${copySrc.type === 'blank' ? 'active' : ''}`}
+              onClick={() => setCopySrc({ type: 'blank', id: '' })}
+            >
+              Start blank
+            </button>
+            {presets.length > 0 && (
+              <span className="text-xs text-sub">or click a preset above</span>
+            )}
+            {sfRefs.length > 0 && (
+              <>
+                <span className="preset-copyfrom-sep">·</span>
+                <span className="text-xs text-sub">reference:</span>
+                {sfRefs.map(r => {
+                  const cam = camPresetById(r.preset_id);
+                  const on = copySrc.type === 'ref' && copySrc.id === r.preset_id;
+                  return (
+                    <button
+                      key={r.preset_id}
+                      className={`chip ${on ? 'active' : ''}`}
+                      style={{ '--badge-color': groupColorOf(cam?.name) || undefined }}
+                      onClick={() => setCopySrc({ type: 'ref', id: r.preset_id })}
+                      title={`Seed from ${cam?.name || 'reference'} (${r.sfm ?? '—'} SFM, ${r.chip_load ?? '—'} chip load)`}
+                    >
+                      {cam?.name || 'reference'}
+                    </button>
+                  );
+                })}
+              </>
+            )}
+            <span className="preset-copyfrom-current">{copyFromLabel()}</span>
+            <div className="preset-copyfrom-actions">
+              <button className="btn btn-primary btn-sm" onClick={handleConfirmAdd}>Add</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setAddOpen(false); setCopySrc({ type: 'blank', id: '' }); }}>Cancel</button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Editor — opens as an overlay (like the CAM Preset picker) on add/edit */}
@@ -301,7 +395,8 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
             holders={holders}
             materials={materials}
             onSave={handlePresetSave}
-            onCancel={() => setEditingId(null)}
+            onCancel={handleCancelEdit}
+            onDirtyChange={setEditorDirty}
             isSaving={isSaving}
           />
         );
@@ -313,7 +408,7 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
 // ── Collapsed card ───────────────────────────────────────────────────────────
 function CollapsedCard({
   preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
-  isEditing, isDragOver, dragEnabled,
+  isEditing, pickMode, picked, onPick, isDragOver, dragEnabled,
   linkedAssemblies, holders,
   onEdit, onDelete,
   onDragStart, onDragOver, onDrop, onDragEnd,
@@ -338,9 +433,10 @@ function CollapsedCard({
 
   return (
     <div
-      className={`preset-card${isDragOver ? ' preset-card--drop' : ''}${isEditing ? ' preset-card--editing' : ''}`}
+      className={`preset-card${isDragOver ? ' preset-card--drop' : ''}${isEditing ? ' preset-card--editing' : ''}${pickMode ? ' preset-card--pick' : ''}${picked ? ' preset-card--picked' : ''}`}
       style={accentColor ? { borderLeft: `3px solid ${accentColor}` } : undefined}
       draggable={dragEnabled}
+      onClick={pickMode ? onPick : undefined}
       onDragStart={dragEnabled ? onDragStart : undefined}
       onDragOver={dragEnabled ? onDragOver : undefined}
       onDrop={dragEnabled ? onDrop : undefined}
@@ -406,10 +502,16 @@ function CollapsedCard({
         )}
       </div>
       <div className="preset-card-footer">
-        <button className="btn btn-secondary btn-sm" onClick={onEdit}>{isEditing ? 'Editing…' : 'Edit'}</button>
-        <button className="btn btn-ghost btn-sm preset-card-del" onClick={onDelete}>
-          <Trash2 size={12} />
-        </button>
+        {pickMode ? (
+          <span className="preset-pick-hint">{picked ? 'Selected to copy' : 'Click to copy'}</span>
+        ) : (
+          <>
+            <button className="btn btn-secondary btn-sm" onClick={onEdit}>{isEditing ? 'Editing…' : 'Edit'}</button>
+            <button className="btn btn-ghost btn-sm preset-card-del" onClick={onDelete}>
+              <Trash2 size={12} />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -463,7 +565,7 @@ function EditCard({
   preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
   diameter, fluteLength, numberOfFlutes,
   assemblies = [], holders = [], materials,
-  onSave, onCancel, isSaving,
+  onSave, onCancel, onDirtyChange, isSaving,
 }) {
   const isTap = toolType === 'tap';
   const isSpotDrill = toolType === 'spot drill';
@@ -530,6 +632,33 @@ function EditCard({
     });
   };
 
+  // ── Unsaved-changes tracking ───────────────────────────────────────────────
+  // `dirty` flips true on the first user edit; the parent uses it to warn before
+  // switching presets / adding / leaving. Cancel + Save both clear it (handled
+  // by the parent when the editor unmounts). A browser-level beforeunload guard
+  // covers refresh/close while dirty.
+  const [dirty, setDirty] = useState(false);
+  const touch = () => setDirty(true);
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty, onDirtyChange]);
+  useEffect(() => {
+    const warn = (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
+  // ── Esc cancels; scroll the editor to center on open (it "pops out" inline) ──
+  const containerRef = useRef(null);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel(); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(() => containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 60);
+    return () => clearTimeout(t);
+  }, []);
+
   // Recalculate formula fields whenever geometry changes (e.g. user edits
   // number of flutes or diameter in the tool form while a preset is open).
   const fxRef = useRef(fx);
@@ -543,15 +672,15 @@ function EditCard({
 
   // Plain setter for non-formula fields (name, material, checkboxes, coolant,
   // and the independent feedrate fields that have no formula linkage).
-  const set = (k, v) => setDraft(d => ({ ...d, [k]: v }));
-  const setMat = (k, v) => setDraft(d => ({ ...d, material: { ...(d.material || {}), [k]: v } }));
+  const set = (k, v) => { touch(); setDraft(d => ({ ...d, [k]: v })); };
+  const setMat = (k, v) => { touch(); setDraft(d => ({ ...d, material: { ...(d.material || {}), [k]: v } })); };
   // Plunge for milling / spot drill is a plain value (no f_n field), but retract
   // still follows it unless overridden — so cascade retract here too.
-  const setPlunge = (v) => setDraft(d => {
+  const setPlunge = (v) => { touch(); setDraft(d => {
     const nd = { ...d, v_f_plunge: v };
     if (fx.v_f_retract !== 'manual') nd.v_f_retract = v;
     return nd;
-  });
+  }); };
 
   // ── Bidirectional calculation ──────────────────────────────────────────────
   // Called for every formula-linked field on each keystroke.
@@ -559,6 +688,7 @@ function EditCard({
   // immediately recomputed. When n/v_c change, the cutting and plunge feed
   // groups cascade too.
   const handleNumChange = (field, value) => {
+    touch();
     const newDraft = { ...draft, [field]: value };
     const newFx   = { ...fx,    [field]: 'manual' };
 
@@ -640,13 +770,10 @@ function EditCard({
 
   return (
     <div
-      className="modal-backdrop"
-      onMouseDown={e => { if (e.target === e.currentTarget && !isSaving) onCancel(); }}
+      ref={containerRef}
+      className="preset-editor-inline"
+      style={accentColor ? { borderTop: `3px solid ${accentColor}` } : undefined}
     >
-      <div
-        className="modal preset-edit-modal"
-        style={accentColor ? { borderTop: `3px solid ${accentColor}` } : undefined}
-      >
       {/* Header */}
       <div className="preset-edit-modal-header">
         <input
@@ -682,11 +809,11 @@ function EditCard({
               const cur = findMaterialInLibrary(draft.material?.query, materials);
               const sel = cur.preset || cur.group;
               const color = presetMaterialColor(draft.material?.query, materials);
-              const clearMat = () => setDraft(d => {
+              const clearMat = () => { touch(); setDraft(d => {
                 const nd = { ...d, material: { ...(d.material || {}), query: '', category: 'all' } };
                 nd.name = composeName(nd, assemblyId, nd.operation_type);
                 return nd;
-              });
+              }); };
               return (
                 <div
                   className="preset-mat-field"
@@ -740,6 +867,7 @@ function EditCard({
                 value={draft.operation_type || ''}
                 onChange={e => {
                   const op = e.target.value || null;
+                  touch();
                   setDraft(d => ({ ...d, operation_type: op, name: composeName(d, assemblyId, op) }));
                 }}
               >
@@ -755,6 +883,7 @@ function EditCard({
               disabled={assemblies.length === 0}
               onChange={e => {
                 const aid = e.target.value;
+                touch();
                 setAssemblyId(aid);
                 setDraft(d => ({ ...d, name: composeName(d, aid, d.operation_type) }));
               }}
@@ -773,6 +902,7 @@ function EditCard({
       </div>
 
       <div className="preset-edit-modal-rest">
+      <div className="preset-edit-col">
       {/* Speed */}
       <div className="preset-edit-section">
         <div className="preset-edit-section-label">SPEED</div>
@@ -796,7 +926,9 @@ function EditCard({
           )}
         </div>
       </div>
+      </div>
 
+      <div className="preset-edit-col">
       {/* Passes & Linking — milling only */}
       {isMilling && (
       <div className="preset-edit-section">
@@ -850,6 +982,8 @@ function EditCard({
             <option key={v} value={v}>{l}</option>
           ))}
         </select>
+      </div>
+      </div>
       </div>
 
       {/* Feedrates — full-width row at the bottom (the tallest section, so it
@@ -991,22 +1125,20 @@ function EditCard({
         </div>
       )}
       </div>
-      </div>
 
       {pickerOpen && (
         <CamPresetPicker
           materials={materials}
           currentQuery={draft.material?.query}
           onClose={() => setPickerOpen(false)}
-          onSelect={(cp) => setDraft(d => {
+          onSelect={(cp) => { touch(); setDraft(d => {
             const query = cp.name;
             const nd = { ...d, material: { ...(d.material || {}), query, category: materialCategory(query) } };
             nd.name = composeName(nd, assemblyId, nd.operation_type);
             return nd;
-          })}
+          }); }}
         />
       )}
-      </div>
     </div>
   );
 }
@@ -1129,23 +1261,24 @@ function NField({ label, value, unit, onChange, formulaField, formulaState, warn
       onMouseLeave={() => setShiftHover(false)}
     >
       <label className="field-label">{label}</label>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+      <div className="nfield-row">
         <input
           className="field-input"
           type="number"
           step="0.0001"
-          style={{ flex: 1 }}
           value={displayed}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onChange={e => onChange(e.target.value === '' ? null : parseFloat(e.target.value))}
           placeholder="0"
         />
-        {unit && <span className="text-xs text-sub" style={{ whiteSpace: 'nowrap' }}>{unit}</span>}
-        {/* Reserve space for badge whether shown or not, to keep grid aligned */}
-        {formulaInfo && (
-          <span className={`fx-badge${isFormula ? '' : ' fx-badge--hidden'}`}>fx</span>
-        )}
+        <span className="nfield-unit">{unit || ''}</span>
+        {/* Always reserve the badge slot so every input is the same width */}
+        <span className="nfield-fx">
+          {formulaInfo && (
+            <span className={`fx-badge${isFormula ? '' : ' fx-badge--hidden'}`}>fx</span>
+          )}
+        </span>
       </div>
       {warning && <div className="fx-warning">{warning}</div>}
       {shiftHover && formulaInfo && (

@@ -2086,32 +2086,6 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .preset-card-del { margin-left: auto; color: var(--text-sub); }
 .preset-card-del:hover { color: var(--red); }
 
-/* ── Add preset card ── */
-.preset-add-card {
-  width: 110px;
-  min-height: 175px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  background: transparent;
-  border: 1.5px dashed var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--text-sub);
-  font-size: 12px;
-  cursor: pointer;
-  transition: border-color var(--ease), background var(--ease), color var(--ease);
-  font-family: inherit;
-}
-
-.preset-add-card:hover {
-  border-color: var(--text-sub);
-  background: var(--surface-2);
-  color: var(--text);
-}
-
 /* ── Material group separator (vertical divider with rotated label) ── */
 .preset-group-sep {
   align-self: stretch;
@@ -2180,16 +2154,25 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   gap: 8px 10px;
 }
 
-/* ── Preset editor modal (overlay, like the CAM Preset picker) ── */
-.preset-edit-modal {
-  max-width: 760px;
-  width: 100%;
-  max-height: 88vh;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
+/* ── Preset editor — inline "pop-out" panel (non-obstructive) ──
+   Grows out of the bottom of the presets section and lifts off the page with a
+   shadow + ring so it reads as "you're editing this", without covering the rest
+   of the page (the material CAM-preset picker is still a modal). */
+.preset-editor-inline {
+  margin-top: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-focus);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 0 0 2px rgba(74,143,255,0.20), var(--shadow-lg);
   overflow: hidden;
+  transform-origin: top center;
+  animation: preset-pop 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
+@keyframes preset-pop {
+  from { opacity: 0; transform: scaleY(0.55) translateY(-10px); }
+  to   { opacity: 1; transform: none; }
+}
+.preset-editor-inline .preset-edit-modal-body { overflow: visible; }
 
 .preset-edit-modal-header {
   display: flex;
@@ -2221,9 +2204,9 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   gap: 12px;
 }
 
-/* The remaining sections (Speed, Passes, Coolant) sit in a tidy two-column
-   grid; Feedrates — the tallest — spans the full width at the bottom so it
-   doesn't leave the lopsided gaps an auto-balanced layout produced. */
+/* Two explicit columns: Speed on the left, Passes + Coolant stacked on the
+   right (so the short sections fill the space instead of leaving a gap).
+   Feedrates — the tallest — spans full width below. */
 .preset-edit-modal-rest {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2232,28 +2215,107 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   margin-top: 12px;
 }
 
+.preset-edit-col { display: flex; flex-direction: column; gap: 12px; }
+
 .preset-edit-modal-body .preset-edit-section {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
 }
 
-/* Feedrates spans both columns and lays its fields out three-up */
-.preset-edit-section--wide { grid-column: 1 / -1; }
-.preset-edit-grid--wide { grid-template-columns: repeat(3, 1fr); }
+/* Inside the modal, sections live in half-width cells, so their fields stack
+   in a single column — every input then gets the full cell width (no cramped
+   half-fields, no wrapped labels like "Assembly (holder + OOH)"). */
+.preset-edit-modal-body .preset-edit-grid { grid-template-columns: 1fr; }
+
+/* Feedrates is a full-width section under the two columns, laid out three-up */
+.preset-edit-section--wide { margin-top: 12px; }
+.preset-edit-modal-body .preset-edit-grid--wide { grid-template-columns: repeat(3, 1fr); }
+
+/* Numeric field row: input flexes, unit + fx badge occupy fixed slots so
+   every input across the editor lines up at the same width. */
+.nfield-row { display: flex; align-items: center; gap: 6px; }
+.nfield-row .field-input { flex: 1 1 auto; min-width: 0; }
+.nfield-unit {
+  flex: 0 0 auto;
+  width: 50px;
+  font-size: 11px;
+  color: var(--text-sub);
+  white-space: nowrap;
+}
+.nfield-fx { flex: 0 0 auto; width: 20px; display: flex; justify-content: center; }
 
 /* Single column on narrow screens */
 @media (max-width: 720px) {
   .preset-edit-modal-top,
   .preset-edit-modal-rest { grid-template-columns: 1fr; }
-  .preset-edit-grid--wide { grid-template-columns: 1fr 1fr; }
+  .preset-edit-modal-body .preset-edit-grid--wide { grid-template-columns: 1fr 1fr; }
 }
 
-/* The collapsed card whose editor is currently open in the overlay */
+/* The collapsed card whose editor is currently open below */
 .preset-card--editing {
   border-color: var(--blue);
   box-shadow: 0 0 0 2px rgba(74,143,255,0.18);
 }
+
+/* ── Add bar (small button under the scroll; expands the copy-from row) ── */
+.preset-add-bar { margin-top: 8px; }
+
+.preset-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-sub);
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: border-color var(--ease), color var(--ease), background var(--ease);
+}
+.preset-add-btn:hover:not(:disabled) { border-color: var(--text-sub); color: var(--text); background: var(--surface-2); }
+.preset-add-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.preset-add-btn--active { border-style: solid; border-color: var(--blue); color: var(--blue); }
+
+.preset-copyfrom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+.preset-copyfrom-label { font-size: 12px; font-weight: 600; color: var(--text-sub); }
+.preset-copyfrom-sep { color: var(--border); }
+.preset-copyfrom-current {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+}
+.preset-copyfrom-actions { display: flex; gap: 6px; margin-left: auto; }
+
+/* ── Pick mode: preset cards pop out + become clickable copy sources ── */
+.preset-card--pick {
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+  transition: box-shadow var(--ease), transform var(--ease), border-color var(--ease);
+}
+.preset-card--pick:hover { border-color: var(--blue); }
+.preset-card--picked {
+  border-color: var(--blue) !important;
+  box-shadow: 0 0 0 2px rgba(74,143,255,0.30), var(--shadow-lg);
+}
+.preset-pick-hint { font-size: 11px; color: var(--text-sub); }
+.preset-card--picked .preset-pick-hint { color: var(--blue); font-weight: 600; }
 
 .preset-check-label {
   display: flex;
