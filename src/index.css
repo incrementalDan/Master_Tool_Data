@@ -2221,9 +2221,9 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   gap: 12px;
 }
 
-/* The remaining sections (Speed, Passes, Coolant) sit in a tidy two-column
-   grid; Feedrates — the tallest — spans the full width at the bottom so it
-   doesn't leave the lopsided gaps an auto-balanced layout produced. */
+/* Two explicit columns: Speed on the left, Passes + Coolant stacked on the
+   right (so the short sections fill the space instead of leaving a gap).
+   Feedrates — the tallest — spans full width below. */
 .preset-edit-modal-rest {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2232,21 +2232,41 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   margin-top: 12px;
 }
 
+.preset-edit-col { display: flex; flex-direction: column; gap: 12px; }
+
 .preset-edit-modal-body .preset-edit-section {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 12px 14px;
 }
 
-/* Feedrates spans both columns and lays its fields out three-up */
-.preset-edit-section--wide { grid-column: 1 / -1; }
-.preset-edit-grid--wide { grid-template-columns: repeat(3, 1fr); }
+/* Inside the modal, sections live in half-width cells, so their fields stack
+   in a single column — every input then gets the full cell width (no cramped
+   half-fields, no wrapped labels like "Assembly (holder + OOH)"). */
+.preset-edit-modal-body .preset-edit-grid { grid-template-columns: 1fr; }
+
+/* Feedrates is a full-width section under the two columns, laid out three-up */
+.preset-edit-section--wide { margin-top: 12px; }
+.preset-edit-modal-body .preset-edit-grid--wide { grid-template-columns: repeat(3, 1fr); }
+
+/* Numeric field row: input flexes, unit + fx badge occupy fixed slots so
+   every input across the editor lines up at the same width. */
+.nfield-row { display: flex; align-items: center; gap: 6px; }
+.nfield-row .field-input { flex: 1 1 auto; min-width: 0; }
+.nfield-unit {
+  flex: 0 0 auto;
+  width: 50px;
+  font-size: 11px;
+  color: var(--text-sub);
+  white-space: nowrap;
+}
+.nfield-fx { flex: 0 0 auto; width: 20px; display: flex; justify-content: center; }
 
 /* Single column on narrow screens */
 @media (max-width: 720px) {
   .preset-edit-modal-top,
   .preset-edit-modal-rest { grid-template-columns: 1fr; }
-  .preset-edit-grid--wide { grid-template-columns: 1fr 1fr; }
+  .preset-edit-modal-body .preset-edit-grid--wide { grid-template-columns: 1fr 1fr; }
 }
 
 /* The collapsed card whose editor is currently open in the overlay */

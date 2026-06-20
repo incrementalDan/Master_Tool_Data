@@ -773,6 +773,7 @@ function EditCard({
       </div>
 
       <div className="preset-edit-modal-rest">
+      <div className="preset-edit-col">
       {/* Speed */}
       <div className="preset-edit-section">
         <div className="preset-edit-section-label">SPEED</div>
@@ -796,7 +797,9 @@ function EditCard({
           )}
         </div>
       </div>
+      </div>
 
+      <div className="preset-edit-col">
       {/* Passes & Linking — milling only */}
       {isMilling && (
       <div className="preset-edit-section">
@@ -850,6 +853,8 @@ function EditCard({
             <option key={v} value={v}>{l}</option>
           ))}
         </select>
+      </div>
+      </div>
       </div>
 
       {/* Feedrates — full-width row at the bottom (the tallest section, so it
@@ -991,7 +996,6 @@ function EditCard({
         </div>
       )}
       </div>
-      </div>
 
       {pickerOpen && (
         <CamPresetPicker
@@ -1129,23 +1133,24 @@ function NField({ label, value, unit, onChange, formulaField, formulaState, warn
       onMouseLeave={() => setShiftHover(false)}
     >
       <label className="field-label">{label}</label>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+      <div className="nfield-row">
         <input
           className="field-input"
           type="number"
           step="0.0001"
-          style={{ flex: 1 }}
           value={displayed}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           onChange={e => onChange(e.target.value === '' ? null : parseFloat(e.target.value))}
           placeholder="0"
         />
-        {unit && <span className="text-xs text-sub" style={{ whiteSpace: 'nowrap' }}>{unit}</span>}
-        {/* Reserve space for badge whether shown or not, to keep grid aligned */}
-        {formulaInfo && (
-          <span className={`fx-badge${isFormula ? '' : ' fx-badge--hidden'}`}>fx</span>
-        )}
+        <span className="nfield-unit">{unit || ''}</span>
+        {/* Always reserve the badge slot so every input is the same width */}
+        <span className="nfield-fx">
+          {formulaInfo && (
+            <span className={`fx-badge${isFormula ? '' : ' fx-badge--hidden'}`}>fx</span>
+          )}
+        </span>
       </div>
       {warning && <div className="fx-warning">{warning}</div>}
       {shiftHover && formulaInfo && (
