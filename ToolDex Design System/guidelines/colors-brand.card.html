@@ -1,0 +1,25 @@
+<!-- @dsCard group="Colors" viewport="700x160" name="Brand & action" subtitle="One confident blue for action; indigo for selection; blue tints for active fills" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { padding: 18px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .sw { width: 130px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
+  .chip { height: 56px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+  .meta { padding: 6px 9px; background: var(--surface); }
+  .name { font-size: 12px; font-weight: 600; color: var(--text); }
+  .val { font-family: var(--font-mono); font-size: 11px; color: var(--text-sub); }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--blue);color:#fff">Primary</div><div class="meta"><div class="name">blue</div><div class="val">#4a8fff</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--accent);color:#fff">Select</div><div class="meta"><div class="name">accent</div><div class="val">#6366f1</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--blue-tint);color:var(--blue)">Active fill</div><div class="meta"><div class="name">blue-tint</div><div class="val">#16263b</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--blue-tint-2);color:var(--blue)">Active alt</div><div class="meta"><div class="name">blue-tint-2</div><div class="val">#1a2a3a</div></div></div>
+  </div>
+</body>
+</html>

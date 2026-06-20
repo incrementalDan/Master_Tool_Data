@@ -1,0 +1,20 @@
+<!-- @dsCard group="Spacing" viewport="700x160" name="Elevation" subtitle="Deep, dark-tuned shadows — sm / base / lg" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { padding: 26px 20px; display: flex; gap: 26px; align-items: center; }
+  .item { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+  .box { width: 120px; height: 64px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .cap { font-size: 11px; color: var(--text); }
+  .v { font-family: var(--font-mono); font-size: 10px; color: var(--text-sub); }
+</style>
+</head>
+<body>
+  <div class="item"><div class="box" style="box-shadow:var(--shadow-sm)"></div><span class="cap">shadow-sm</span><span class="v">cards at rest</span></div>
+  <div class="item"><div class="box" style="box-shadow:var(--shadow)"></div><span class="cap">shadow</span><span class="v">hover lift</span></div>
+  <div class="item"><div class="box" style="box-shadow:var(--shadow-lg)"></div><span class="cap">shadow-lg</span><span class="v">modals · toasts</span></div>
+</body>
+</html>

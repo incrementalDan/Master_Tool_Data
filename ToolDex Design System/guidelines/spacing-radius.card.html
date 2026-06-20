@@ -1,0 +1,21 @@
+<!-- @dsCard group="Spacing" viewport="700x140" name="Radius" subtitle="5 / 8 / 12 px + pill — buttons, cards, modals" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { padding: 20px; display: flex; gap: 18px; align-items: flex-end; }
+  .item { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .box { width: 84px; height: 60px; background: var(--surface-2); border: 1px solid var(--border); }
+  .cap { font-size: 11px; color: var(--text); }
+  .v { font-family: var(--font-mono); font-size: 10px; color: var(--text-sub); }
+</style>
+</head>
+<body>
+  <div class="item"><div class="box" style="border-radius:var(--radius-sm)"></div><span class="cap">sm</span><span class="v">5px</span></div>
+  <div class="item"><div class="box" style="border-radius:var(--radius)"></div><span class="cap">base</span><span class="v">8px</span></div>
+  <div class="item"><div class="box" style="border-radius:var(--radius-lg)"></div><span class="cap">lg</span><span class="v">12px</span></div>
+  <div class="item"><div class="box" style="border-radius:var(--radius-pill);width:120px"></div><span class="cap">pill</span><span class="v">999px</span></div>
+</body>
+</html>
