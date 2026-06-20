@@ -669,6 +669,7 @@ function EditCard({
       </div>
 
       <div className="preset-edit-modal-body">
+      <div className="preset-edit-modal-top">
       {/* Material — picked from the Materials library via the CAM Preset picker
           (search "6061"/"1018" → its CAM preset, or browse the group pills).
           Stored as material.query = CAM preset name, else group label. The CAM
@@ -769,7 +770,9 @@ function EditCard({
           </FGroup>
         </div>
       </div>
+      </div>
 
+      <div className="preset-edit-modal-cols">
       {/* Speed */}
       <div className="preset-edit-section">
         <div className="preset-edit-section-label">SPEED</div>
@@ -984,6 +987,7 @@ function EditCard({
             <option key={v} value={v}>{l}</option>
           ))}
         </select>
+      </div>
       </div>
       </div>
 

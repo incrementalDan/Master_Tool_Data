@@ -2206,13 +2206,24 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   padding-bottom: 8px;
 }
 
-/* Body packs the sections into two columns so there's far less up/down
-   scrolling, and each section keeps wider, roomier inputs. */
 .preset-edit-modal-body {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: 8px 18px 18px;
+}
+
+/* Material + Operation/Assembly sit together at the top in their own row —
+   these define what the preset IS, separate from its speed/feed values. */
+.preset-edit-modal-top {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* The speed/feed sections pack into two columns so there's far less up/down
+   scrolling, and each section keeps wider, roomier inputs. */
+.preset-edit-modal-cols {
   columns: 2;
   column-gap: 22px;
 }
@@ -2225,11 +2236,13 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   padding: 12px 14px;
 }
 
-.preset-edit-modal-body .preset-edit-section:last-child { border-bottom: 1px solid var(--border); }
+/* Grid gap handles spacing for the top row — no stacking margin needed */
+.preset-edit-modal-top .preset-edit-section { margin-top: 0; }
 
 /* Single column on narrow screens */
 @media (max-width: 720px) {
-  .preset-edit-modal-body { columns: 1; }
+  .preset-edit-modal-top { grid-template-columns: 1fr; }
+  .preset-edit-modal-cols { columns: 1; }
 }
 
 /* The collapsed card whose editor is currently open in the overlay */
