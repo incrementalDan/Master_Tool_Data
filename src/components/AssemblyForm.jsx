@@ -5,6 +5,7 @@ import { presetMatchesAssembly, presetMaterialColor } from '../utils/presetNamin
 import { unitAbbr } from '../utils/units.js';
 import { useApp } from '../context/AppContext.jsx';
 import HolderPicker from './HolderPicker.jsx';
+import { holderColor } from './AssemblyCard.jsx';
 
 export default function AssemblyForm({ tool, holders, assembly, onSave, onClose }) {
   const { materials } = useApp();
@@ -77,8 +78,10 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
           <label className="field-label">Holder</label>
           {selectedHolder ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ flex: 1, fontSize: 13 }}>{selectedHolder.description}</span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setShowHolderPicker(true)}>
+              <span className="holder-pill" style={{ '--badge-color': holderColor(selectedHolder.description), flex: '0 1 auto' }}>
+                {selectedHolder.description}
+              </span>
+              <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setShowHolderPicker(true)}>
                 Change
               </button>
             </div>
