@@ -741,7 +741,7 @@ function AssemblyExportPicker({ tool, holders, onConfirm, onCancel }) {
                 <div
                   key={a.assembly_id}
                   className={`assembly-picker-option${isSel ? ' selected' : ''}`}
-                  style={isSel ? { borderColor: c.border, background: c.bg } : {}}
+                  style={isSel ? { borderColor: c, background: `color-mix(in srgb, ${c} 12%, var(--input-bg))` } : {}}
                   onClick={() => setSelected(a.assembly_id)}
                 >
                   <span className="holder-pill" style={{ '--badge-color': c }}>
