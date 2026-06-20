@@ -2221,28 +2221,32 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   gap: 12px;
 }
 
-/* The speed/feed sections pack into two columns so there's far less up/down
-   scrolling, and each section keeps wider, roomier inputs. */
-.preset-edit-modal-cols {
-  columns: 2;
-  column-gap: 22px;
+/* The remaining sections (Speed, Passes, Coolant) sit in a tidy two-column
+   grid; Feedrates — the tallest — spans the full width at the bottom so it
+   doesn't leave the lopsided gaps an auto-balanced layout produced. */
+.preset-edit-modal-rest {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+  margin-top: 12px;
 }
 
 .preset-edit-modal-body .preset-edit-section {
-  break-inside: avoid;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  margin-top: 12px;
   padding: 12px 14px;
 }
 
-/* Grid gap handles spacing for the top row — no stacking margin needed */
-.preset-edit-modal-top .preset-edit-section { margin-top: 0; }
+/* Feedrates spans both columns and lays its fields out three-up */
+.preset-edit-section--wide { grid-column: 1 / -1; }
+.preset-edit-grid--wide { grid-template-columns: repeat(3, 1fr); }
 
 /* Single column on narrow screens */
 @media (max-width: 720px) {
-  .preset-edit-modal-top { grid-template-columns: 1fr; }
-  .preset-edit-modal-cols { columns: 1; }
+  .preset-edit-modal-top,
+  .preset-edit-modal-rest { grid-template-columns: 1fr; }
+  .preset-edit-grid--wide { grid-template-columns: 1fr 1fr; }
 }
 
 /* The collapsed card whose editor is currently open in the overlay */
