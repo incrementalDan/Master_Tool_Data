@@ -1,0 +1,31 @@
+<!-- @dsCard group="Brand" viewport="700x230" name="Logo & wordmark" subtitle="End-mill mark on the brand blue tile + Space Grotesk wordmark" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="../styles.css">
+<style>
+  body { padding: 24px; display: flex; flex-direction: column; gap: 22px; }
+  .lockup { display: flex; align-items: center; gap: 16px; }
+  .word { font-family: var(--font-display); font-size: 38px; font-weight: 700; letter-spacing: -0.02em; color: var(--text); }
+  .word b { color: var(--blue); font-weight: 700; }
+  .variants { display: flex; gap: 16px; align-items: center; }
+  .tile { display: flex; align-items: center; justify-content: center; border-radius: var(--radius); }
+  .on-light { background: #ebebeb; }
+  .cap { font-family: var(--font-mono); font-size: 10px; color: var(--text-sub); }
+  .vcol { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+</style>
+</head>
+<body>
+  <div class="lockup">
+    <img src="../assets/tooldex-mark.svg" width="60" height="60" alt="ToolDex mark">
+    <span class="word">Tool<b>Dex</b></span>
+  </div>
+  <div class="variants">
+    <div class="vcol"><img src="../assets/tooldex-mark.svg" width="56" height="56" alt=""><span class="cap">primary mark</span></div>
+    <div class="vcol"><div class="tile" style="width:56px;height:56px;background:var(--surface-2);border:1px solid var(--border)"><img src="../assets/tooldex-mark.svg" width="40" height="40" alt=""></div><span class="cap">on surface</span></div>
+    <div class="vcol"><div class="tile on-light" style="width:56px;height:56px"><img src="../assets/tooldex-mark.svg" width="40" height="40" alt=""></div><span class="cap">on light</span></div>
+    <div class="vcol"><span class="word" style="font-size:24px">Tool<b>Dex</b></span><span class="cap">wordmark only</span></div>
+  </div>
+</body>
+</html>

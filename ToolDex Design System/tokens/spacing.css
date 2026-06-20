@@ -1,0 +1,44 @@
+/* ToolDex — Spacing, radius, shadow, motion tokens
+   ──────────────────────────────────────────────────────────────────────────
+   Dense by design. The base rhythm is a 4px grid; most gaps are 6–16px. */
+
+:root {
+  /* ── Spacing scale (4px grid) ──────────────────────────────────────────── */
+  --space-1:  2px;
+  --space-2:  4px;
+  --space-3:  6px;
+  --space-4:  8px;
+  --space-5:  10px;
+  --space-6:  12px;
+  --space-7:  14px;
+  --space-8:  16px;
+  --space-10: 20px;
+  --space-12: 24px;
+  --space-16: 32px;
+  --space-20: 40px;
+
+  /* ── Radius ────────────────────────────────────────────────────────────── */
+  --radius-sm: 5px;   /* buttons, inputs, badges */
+  --radius:    8px;   /* cards, panels, search bar */
+  --radius-lg: 12px;  /* modals, hero tiles */
+  --radius-pill: 999px;
+
+  /* ── Elevation (dark-tuned — shadows are deep, never soft/grey) ─────────── */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow:    0 4px 14px rgba(0,0,0,0.35);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.5);
+
+  /* Focus ring color reuses the brand blue */
+  --ring: rgba(74, 143, 255, 0.4);  /* @kind color */
+
+  /* ── Motion ────────────────────────────────────────────────────────────────
+     One easing curve, one short duration. ToolDex motion is functional —
+     fast fades and 1px press nudges, never bouncy or decorative. */
+  --ease: 0.16s cubic-bezier(0.4, 0, 0.2, 1);  /* @kind other */ /* motion */
+  --ease-emphasis: 0.22s cubic-bezier(0.2, 0.8, 0.2, 1); /* @kind other */ /* toast/modal entrance */
+
+  /* ── Layout constants ──────────────────────────────────────────────────── */
+  --topbar-h: 54px;        /* @kind spacing */
+  --rail-w: 72px;          /* @kind spacing */ /* library left action rail */
+  --content-max: 1400px;   /* @kind spacing */ /* page-content max width */
+}

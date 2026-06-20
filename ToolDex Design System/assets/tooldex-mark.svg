@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="ToolDex mark">
+  <rect width="96" height="96" rx="22" fill="#4a8fff"></rect>
+  <rect x="0.5" y="0.5" width="95" height="95" rx="21.5" fill="none" stroke="#ffffff" stroke-opacity="0.18"></rect>
+  <g transform="translate(13.2 14.2) scale(2.9)" fill="none" stroke="#ffffff" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 3 H15 V20.3 H9 Z"></path>
+    <path d="M9 18.6 C10.6 18.7 12.2 17.4 13 16.2 C13.6 15.3 14.5 14.9 15 14.9"></path>
+    <path d="M9 15.6 C10.6 15.7 12.2 14.4 13 13.2 C13.6 12.3 14.5 11.9 15 11.9"></path>
+    <path d="M9 12.6 C10.6 12.7 12.2 11.4 13 10.2"></path>
+  </g>
+</svg>

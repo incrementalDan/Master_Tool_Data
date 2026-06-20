@@ -1,0 +1,19 @@
+/* ToolDex webfonts.
+   ─────────────────────────────────────────────────────────────────────────
+   The source app ships with the platform system-UI stack only (no webfonts).
+   ToolDex layers in two brand faces, both loaded from Google Fonts:
+
+     • Space Grotesk — the display/wordmark face. Industrial, slightly
+       mechanical grotesque that reads as "precision machining".
+     • JetBrains Mono — the data face. Every measurement, tool ID, speed/feed
+       and machine number is monospaced; this is the workhorse for tabular
+       numbers and reads cleanly at small sizes.
+
+   The interface body text stays on the native system-UI stack (see
+   typography.css → --font-sans), exactly as the product does today.
+
+   ⚠ Substitution flag: these two webfonts are NOT in the original codebase —
+   they are a ToolDex brand decision. If the team has licensed brand fonts,
+   swap the @import below and the --font-display / --font-mono values. */
+
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');

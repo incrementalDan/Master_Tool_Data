@@ -1,0 +1,47 @@
+/* ToolDex — base reset & global element styling.
+   Mirrors the source app's index.css globals so any consumer page that links
+   styles.css renders ToolDex-correct out of the box. */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg-app);
+  color: var(--text-body);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  line-height: var(--lh-normal);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a { color: var(--blue); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button { cursor: pointer; font-family: inherit; }
+input, select, textarea { font-family: inherit; }
+
+/* Numeric spinner is dimmed, not removed — operators still nudge values */
+input[type=number]::-webkit-inner-spin-button { opacity: 0.3; }
+
+/* Native checkboxes/radios pick up the brand accent everywhere */
+input[type='checkbox'], input[type='radio'] { accent-color: var(--blue); }
+
+/* Keyboard focus ring — brand blue, offset, never removed for a11y */
+:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Thin, dark scrollbars — the app is scroll-heavy and these stay out of the way */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-app); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
