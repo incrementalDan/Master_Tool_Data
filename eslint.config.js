@@ -14,7 +14,7 @@ import tseslint from 'typescript-eslint';
 const sharedGlobals = { ...globals.browser, ...globals.node };
 
 export default [
-  { ignores: ['dist/**', 'node_modules/**', 'coverage/**'] },
+  { ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'ToolDex Design System/**'] },
 
   // JS / JSX (app code + Node scripts)
   {
