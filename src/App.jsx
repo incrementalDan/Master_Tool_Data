@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useGoogleLogin } from '@react-oauth/google';
-import { Wrench, FolderOpen, LogOut, Library, Settings, RefreshCw, AlertTriangle, Download, X, FlaskConical, Building2 } from 'lucide-react';
+import { FolderOpen, LogOut, Library, Settings, RefreshCw, AlertTriangle, Download, X, FlaskConical, Building2 } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
+import BrandLogo from './components/BrandLogo.jsx';
 import { setAccessToken, fetchUserInfo } from './services/driveService.js';
 import { exportFullLibrary } from './utils/proShopExport.js';
 import ToastStack from './components/Toast.jsx';
@@ -274,8 +275,7 @@ function TopBar() {
   return (
     <header className="topbar">
       <a href="#/" className="topbar-brand" onClick={e => { if (onLanding) e.preventDefault(); }}>
-        <Wrench size={17} strokeWidth={2.2} />
-        Tool Library
+        <BrandLogo markSize={24} />
       </a>
       <nav className="topbar-tabs">
         <a
@@ -331,8 +331,7 @@ function LocalModeTopBar({ tools, onExit }) {
   return (
     <header className="topbar">
       <a href="#/" className="topbar-brand">
-        <Wrench size={17} strokeWidth={2.2} />
-        Tool Library
+        <BrandLogo markSize={24} />
       </a>
       <span className="local-mode-badge" title="Browsing an uploaded library file — view-only, not connected to Autodesk">
         <FolderOpen size={13} /> Local mode (read-only)

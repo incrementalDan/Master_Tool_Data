@@ -17,52 +17,62 @@ shared class · `[Larger Redesign]` structural.
 
 **Overall state:** the design system is in good shape — one CSS file, real tokens, consistent
 modals, and the data-field token system (description badge / proshot pill / holder pill / machine
-badge / location tag / preset tag) is applied consistently. The gaps are concentrated in (1) a few
-broken/missing tokens, (2) ~500 inline `style={{…}}` blocks re-creating the same layout patterns,
-and (3) edit mode (ToolForm) being structurally barer than view mode (ToolDetail).
+badge / location tag / preset tag) is applied consistently. The original three gaps — (1) a few
+broken/missing tokens and (3) edit mode (ToolForm) being structurally barer than view mode — are
+both **resolved** (see the STATUS banner + Suggested-order table). The remaining gap is (2) the
+inline `style={{…}}` blocks (now ~650 across `src/`, partly because several new editor components
+landed since this audit), absorbed opportunistically as components are touched.
+
+> **Note:** §1–§8 below are the *original* findings. Most are now implemented; line numbers and
+> present-tense "this is broken" wording have been refreshed to current state where the item shipped.
 
 ---
 
 ## 1. Global — `index.css` tokens
 
-- **`--accent` is used but never defined** → resolves to nothing. `ToolDetail.jsx:899` (export
-  picker's Confirm button — its "enabled" highlight silently doesn't render) and `index.css:2435`
-  (`.assembly-picker-option.selected` border). The companion rgba on :2435 is indigo
-  `rgba(99,102,241,…)`, so either define `--accent: #6366f1` in `:root` or switch both usages to
-  `--blue`. `[Quick Win]` — this is a live visual bug, not just hygiene.
-- **Data-field token colors are hardcoded hexes**, not tokens: `.proshot-pill` `#f59e0b`,
-  `.machine-num-badge` `#4ade80`, `.location-tag` `#818cf8`, `.holder-pill` `#2dd4bf`,
-  `.preset-tag` `#34d399`, `.description-badge` violet rgba (all in the "Data-field visual tokens"
-  block, index.css:2167–2285). The documented rule says "when changing any token's style, update ALL
-  usages" — promoting these six to `:root` variables (`--c-proshot`, `--c-holder`, …) makes that a
-  one-line change and lets the inline per-holder overrides in AssemblyCard reference them.
-  `[Quick Win]`
-- **Repeated raw `rgba()` warning/info tints with no shared class** — the amber warning banner is
-  hand-built inline in `ReconcileModal.jsx:50` and `NormalizeModal.jsx` (`rgba(234,179,8,…)` +
-  `#fde047`), while LandingPage uses a real `.error-banner` class. Add `.banner-warn` / `.banner-info`
-  next to `.error-banner` and swap the inline copies. `[Quick Win]`
-- **Scrollbar styling forked**: global 6px thumb on `--bg` track (index.css:53–56) vs.
-  `.preset-scroll`'s own 5px/transparent-track variant (index.css:1704–1707). Pick one treatment.
-  `[Quick Win]`
-- **Inline styles at scale**: 503 `style={{…}}` blocks across `src/`. Heaviest: ToolDetail (70),
-  Settings (55), ImportFlow (35), ToolForm (32), DiffStep (24), ReconcileModal (18), AssemblyForm
-  (16), NormalizeModal (17), HolderPicker (15). The same few patterns repeat — a flex row with gap
-  (`display:'flex', alignItems:'center', gap:8…`), a margin-bottom, a muted color. A handful of
-  utility classes (`.row`, `.row-wrap`, `.gap-6/8/12`, `.mb-8/12/16`) would absorb most of them.
-  Best done opportunistically per component, not as one big sweep. `[Medium]`
-- **Browser-default form controls**: bare `<input type="checkbox">` in ToolForm (e.g. :315, :411,
-  :472), PresetPanel and DiffStep's field checkboxes; `<select>`s get `.field-input` but keep the
-  native arrow; number-input spinners only dimmed (index.css:51). A custom checkbox + a
-  `.select-input` with chevron would modernize every form at once. `[Medium]`
-- **Counterexample worth copying:** `PurchasingSection.jsx` has **zero** inline styles — it's the
-  newest component and shows the house style works when classes exist. Use it as the template.
+- **`--accent` is used but never defined** → ✅ **Resolved.** `--accent: #6366f1` is defined in
+  `:root` (index.css:30). The export-picker Confirm button switches to `btn-primary` when enabled
+  (`ToolDetail.jsx:798`) and `.assembly-picker-option.selected` (index.css:2800) renders its indigo
+  highlight. `[Quick Win]`
+- **Data-field token colors are hardcoded hexes** → ✅ **Resolved (tokenized).** The six classes
+  live in the "Data-field visual tokens" block (index.css:2454+). Four — `.proshot-pill`,
+  `.machine-num-badge`, `.location-tag`, `.description-badge` — compose their tints from `--tok-*`
+  RGB-triplet `:root` vars (`rgba(var(--tok-*), a)`). `.holder-pill` and `.preset-tag` were taken
+  further in the ToolDex design-system pass: each derives from a per-instance `--badge-color` custom
+  property (holder size color via `holderColor`, material ISO-group color via `presetMaterialColor`),
+  with the holder-size + ISO-group palettes promoted to `:root` tokens (`--holder-*`, `--iso-*`). The
+  "update ALL usages" rule is now a one-line token change. `[Quick Win]`
+- **Repeated raw `rgba()` warning/info tints with no shared class** → ✅ **Resolved.**
+  `.banner-warn` / `.banner-info` exist next to `.error-banner` (index.css:1183–1203); ReconcileModal
+  and NormalizeModal use them instead of hand-built inline amber. `[Quick Win]`
+- **Scrollbar styling forked** → ✅ **Resolved.** `.preset-scroll` (index.css:1986–1992) now matches
+  the global 6px thumb on `--bg` track (index.css:170). `[Quick Win]`
+- **Inline styles at scale**: ✏️ **Partial / ongoing.** ~650 `style={{…}}` blocks across `src/` (up
+  from the original 503 as several new editor components landed). Heaviest now: Settings (100),
+  ToolDetail (56), MaterialsEditor (51), ImportPhotosModal (37), ImportFlow (37), MetadataConnect
+  (26), DiffStep (25), DescRenameModal (24). The same few patterns repeat — a flex row with gap, a
+  margin-bottom, a muted color. A handful of utility classes (`.row`, `.flex-wrap`, `.gap-6/8/12`,
+  `.mb-8/12/16`) absorb most of them; `.flex-wrap` + `.picker-row` already exist. Best done
+  opportunistically per component, not as one big sweep. `[Medium]`
+- **Browser-default form controls** → ✅ **Resolved.** `accent-color: var(--blue)` on all
+  checkboxes/radios (index.css:168), so they pick up the brand blue; `select.field-input` gets a
+  theme chevron (`appearance: none` + inline SVG, index.css:405). Number-input spinners stay
+  intentionally dimmed (index.css:171), not removed — operators still nudge values. `[Medium]`
+- **Counterexample worth copying:** `PurchasingSection.jsx` has **near-zero** inline styles (2) —
+  one of the newer components, it shows the house style works when classes exist. Use it as the
+  template.
 
 ## 2. ToolForm (edit mode) vs ToolDetail (view mode) — the headline gap
 
+> ✅ **Resolved (shipped as the "Shared field layout" redesign — see bottom).** `ToolForm` now uses
+> the same two-column `.detail-layout` and `.tool-sticky-header` as view mode, and renders the
+> Geometry/Setup fields through the shared `<ToolFields mode="edit">` (`ToolForm.jsx:143–146`). Edit
+> is now "view, unlocked." The bullets below are the original findings that drove that redesign.
+
 View mode is the benchmark: frozen action sidebar, sticky identity header (type icon + description
-badge + proshot pill), 65/35 two-column layout, iconed collapsible panels. Entering edit mode
-(`ToolDetail.jsx:163–181`) throws all of that away and renders a bare page: a `btn-ghost` Back
-button + a generic `<h2 style={{fontSize:16…}}>Edit Tool</h2>`, then a flat single-column form.
+badge + proshot pill), 65/35 two-column layout, iconed collapsible panels. Edit mode *used to* throw
+all of that away and render a bare page: a `btn-ghost` Back button + a generic `<h2>Edit Tool</h2>`,
+then a flat single-column form.
 
 - **No identity context while editing.** Scrolling a long form, nothing tells you which tool you're
   on. Reuse the existing sticky header (`.tool-sticky-header`) in edit mode — same icon, description
@@ -89,8 +99,8 @@ button + a generic `<h2 style={{fontSize:16…}}>Edit Tool</h2>`, then a flat si
 
 - The benchmark — only nits. 70 inline styles, nearly all layout flex/gap (e.g. :231); absorb with
   the utility classes from §1 when touched. `[Medium]`
-- Export-picker Confirm button styles itself via inline `--accent` override on `.btn-secondary`
-  (:899) instead of switching to `btn-primary` when enabled — and `--accent` doesn't exist (§1).
+- Export-picker Confirm button → ✅ **Resolved.** It now switches between `btn-secondary` and
+  `btn-primary` on the `canConfirm` flag (`ToolDetail.jsx:798`), and `--accent` is defined (§1).
   `[Quick Win]`
 - Text-glyph chevrons `▾/▸` in panel headers (shared with ToolForm's Section) vs. lucide
   `ChevronDown` icons used elsewhere — minor datedness; swap in the shared Section/panel header
@@ -114,10 +124,10 @@ button + a generic `<h2 style={{fontSize:16…}}>Edit Tool</h2>`, then a flat si
 
 - **Structure is consistent** — all use `.modal-backdrop`/`.modal`/`.modal-title`/`.modal-actions`
   with the same footer button order. Good.
-- The inline amber banners (ReconcileModal:50, NormalizeModal) → `.banner-warn` from §1. `[Quick Win]`
-- HolderPicker's selected-row state is an inline `borderLeft: '3px solid var(--blue)'` (:48) —
-  move to a `.selected` modifier like `.assembly-picker-option.selected` (and that class is the
-  other `--accent` casualty). `[Quick Win]`
+- The inline amber banners (ReconcileModal, NormalizeModal) → ✅ **Resolved**, now use `.banner-warn`
+  from §1. `[Quick Win]`
+- HolderPicker's selected-row state → ✅ **Resolved.** It uses a `.picker-row.selected` modifier
+  (`HolderPicker.jsx:53`), not an inline `borderLeft`. `[Quick Win]`
 
 ## 7. MergeFlow (ImportStep → MatchStep → DiffStep → CommitStep → SummaryStep, QueuePanel)
 
@@ -132,8 +142,8 @@ button + a generic `<h2 style={{fontSize:16…}}>Edit Tool</h2>`, then a flat si
 
 ## 8. Not broken — explicitly checked and fine
 
-- Panel/section title casing: CSS uppercases all panel headers (index.css:627), so view and edit
-  titles render identically despite mixed-case source strings.
+- Panel/section title casing: CSS uppercases all panel headers (`.panel-header`, index.css:826), so
+  view and edit titles render identically despite mixed-case source strings.
 - Data-field token usage: spot-checked `.description-badge`/`.proshot-pill`/`.machine-num-badge`
   across ToolCard, sticky header, Identity section — consistent with the documented system.
 - AssemblyCard's physical-tag layout (`.operator-tag`/`.tag-box`) — intentional exception per
@@ -147,7 +157,7 @@ button + a generic `<h2 style={{fontSize:16…}}>Edit Tool</h2>`, then a flat si
 |---|---|---|
 | 1 | Define/replace `--accent` (live visual bug) | Quick Win ✅ — `--accent: #6366f1` added to `:root`; the export-modal Confirm button now switches to `btn-primary` when enabled |
 | 2 | `.banner-warn`/`.banner-info` + swap the two inline modal banners | Quick Win ✅ — classes added; ReconcileModal + NormalizeModal converted |
-| 3 | Tokenize the six data-field colors | Quick Win ✅ — `--tok-*` RGB-triplet vars in `:root`; all six token classes compose tints via `rgba(var(--tok-*), a)` |
+| 3 | Tokenize the six data-field colors | Quick Win ✅ — four (proshot/machine/location/description) compose tints via `rgba(var(--tok-*), a)`; holder + preset later moved to a per-instance `--badge-color` (holder-size / ISO-group, ToolDex pass) |
 | 4 | `.btn-toggle` segmented control → ToolForm unit picker + Settings | Quick Win ✅ |
 | 5 | Collapse type grid when editing an existing tool | Quick Win ✅ — current type chip + “Change type…” expander; full grid kept for the create flow |
 | 6 | Shared `.empty-state`; scrollbar unification; lucide chevrons | Quick Win ✅ — LandingPage no-results uses `.empty-state`; `.preset-scroll` matches the global scrollbar; panel chevrons are lucide `ChevronDown/Right` |

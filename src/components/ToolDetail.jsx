@@ -96,8 +96,8 @@ export default function ToolDetail() {
   useEffect(() => {
     if (!tool) return;
     const parts = [tool.proshot_id, tool.description].filter(Boolean);
-    document.title = parts.length ? parts.join(' · ') : 'Fusion Tool Library';
-    return () => { document.title = 'Fusion Tool Library'; };
+    document.title = parts.length ? `${parts.join(' · ')} · ToolDex` : 'ToolDex';
+    return () => { document.title = 'ToolDex'; };
   }, [tool?.proshot_id, tool?.description]);
 
   if (!tool) {
