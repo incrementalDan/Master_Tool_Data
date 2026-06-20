@@ -2180,6 +2180,64 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   gap: 8px 10px;
 }
 
+/* ── Preset editor modal (overlay, like the CAM Preset picker) ── */
+.preset-edit-modal {
+  max-width: 760px;
+  width: 100%;
+  max-height: 88vh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.preset-edit-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.preset-edit-modal-header .preset-name-input {
+  font-size: 14px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+/* Body packs the sections into two columns so there's far less up/down
+   scrolling, and each section keeps wider, roomier inputs. */
+.preset-edit-modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 18px 18px;
+  columns: 2;
+  column-gap: 22px;
+}
+
+.preset-edit-modal-body .preset-edit-section {
+  break-inside: avoid;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-top: 12px;
+  padding: 12px 14px;
+}
+
+.preset-edit-modal-body .preset-edit-section:last-child { border-bottom: 1px solid var(--border); }
+
+/* Single column on narrow screens */
+@media (max-width: 720px) {
+  .preset-edit-modal-body { columns: 1; }
+}
+
+/* The collapsed card whose editor is currently open in the overlay */
+.preset-card--editing {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(74,143,255,0.18);
+}
+
 .preset-check-label {
   display: flex;
   align-items: center;
