@@ -5,6 +5,7 @@
 // are guaranteed identical between viewing and editing — edit simply swaps the
 // read-only value for an input. See src/schema/toolFieldLayout.js for the field
 // lists and the visibility rule.
+import { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { fieldLabel, FIELD_REGISTRY, INCLUSIVE_ANGLE_TYPES } from '../schema/fieldRegistry.js';
 import {
@@ -36,6 +37,32 @@ const fmtNum = (v, precision) => {
   const p = precision ?? 4;
   return Number(n.toFixed(p)).toString();
 };
+
+// Edit-mode numeric input. The stored value keeps full precision (e.g. a metric
+// tool whose 1 mm diameter is stored as 0.03937007874015748 in), but the input
+// shows it rounded to `precision` (default 4) decimals at rest — clicking in
+// reveals the exact stored value so it can be edited precisely. The underlying
+// value is never changed unless the user actually edits the field.
+function NumInput({ value, step, precision, className, placeholder, onChange }) {
+  const [focused, setFocused] = useState(false);
+  const display = focused
+    ? (value ?? '')
+    : (value === null || value === undefined || value === ''
+        ? ''
+        : Number(Number(value).toFixed(precision ?? 4)));
+  return (
+    <input
+      className={className}
+      type="number"
+      step={step}
+      value={display}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onChange={onChange}
+      placeholder={placeholder}
+    />
+  );
+}
 
 // Per-type label override (data/field unchanged — display only).
 function labelFor(field, tool) {
@@ -155,15 +182,16 @@ export default function ToolFields({ tool, mode, setField, geoIssueFields }) {
       const dbl = showsDoubled(field, tool);
       const val = dbl && tool[field] != null ? tool[field] * 2 : tool[field];
       return fieldGroup(
-        <input
+        <NumInput
           className={`field-input ${warn.has(field) ? 'error' : ''}`}
-          type="number" step={STEP[field] || '0.001'}
-          value={val ?? ''}
+          step={STEP[field] || '0.001'}
+          precision={def.precision}
+          value={val}
+          placeholder="—"
           onChange={e => {
             const v = e.target.value === '' ? null : parseFloat(e.target.value);
             setField(field, (dbl && v != null) ? v / 2 : v);
           }}
-          placeholder="—"
         />
       );
     }
@@ -226,7 +254,7 @@ function ThreadBlock({ tool, mode, setField, fields }) {
     return (
       <div className="field-group" key={field}>
         <label className="field-label">{label || fieldLabel(field, tool.unit)}</label>
-        <input className="field-input" type="number" step={STEP[field] || '0.001'} value={tool[field] ?? ''}
+        <NumInput className="field-input" step={STEP[field] || '0.001'} precision={def.precision} value={tool[field]}
           onChange={e => setField(field, e.target.value === '' ? null : parseFloat(e.target.value))} placeholder="—" />
       </div>
     );
