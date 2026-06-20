@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { Wrench, UploadCloud, FlaskConical } from 'lucide-react';
+import { UploadCloud, FlaskConical } from 'lucide-react';
+import { ToolDexMark, ToolDexWordmark } from './BrandLogo.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import * as aps from '../services/apsService.js';
 
@@ -32,10 +33,10 @@ export default function LoginScreen() {
   return (
     <div className="login-screen">
       <div className="login-card">
-        <div className="login-logo"><Wrench size={28} strokeWidth={2.2} /></div>
-        <h1 className="login-title">Fusion Tool Library</h1>
+        <div className="login-logo"><ToolDexMark size={60} /></div>
+        <h1 className="login-title"><ToolDexWordmark /></h1>
         <p className="login-subtitle">
-          Sign in with your Autodesk account to read and write the Fusion 360 cloud tool library directly.
+          The shop's tool library. Sign in with your Autodesk account to read and write the Fusion 360 cloud tool library directly.
         </p>
 
         {error && <div className="error-banner" style={{ marginBottom: 16 }}>{error}</div>}

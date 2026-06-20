@@ -228,6 +228,7 @@ The full tool list (~250 tools) is loaded once on login. All search and filterin
 - **Auth**: Two separate flows:
   - APS PKCE OAuth (`Single Page App` type — no client secret) — required
   - Google OAuth implicit flow via `@react-oauth/google` — optional
+- **Brand**: the app is named **ToolDex**. Identity = the end-mill **mark** on the brand-blue tile + the **"ToolDex" wordmark** (Space Grotesk; "Tool" in `--text`, "Dex" in `--blue`). Both live in one component, `src/components/BrandLogo.jsx` (`<BrandLogo>` lockup, plus `ToolDexMark` / `ToolDexWordmark`), used by the top-bar header and the login screen — mirrors the ToolDex Design System brand reference (`assets/tooldex-mark.svg` + `guidelines/brand-logo`). Don't reintroduce "Tool Library"/"Fusion Tool Library" as the app name; that label only survives where it refers to the actual Fusion 360 library file (e.g. the importer).
 - **Icons**: `lucide-react` for UI icons; custom SVG silhouettes for 26 tool types in `ToolTypeIcon.jsx`
 - **Design system / tokens**: the visual language is the **ToolDex Design System** (a separate design reference, not in this repo). `src/index.css` `:root` is the canonical token layer reconciled from it — surface/text ramps, `--blue` action color, `--iso-*` material-group colors, `--holder-*` holder-size colors, the type scale, spacing, radius, shadow, and motion tokens. Build UI against these tokens; don't hard-code hex inline.
 - **Fonts**: brand webfonts loaded from Google Fonts in `index.html` — **Space Grotesk** (`--font-display`, wordmark/titles) and **JetBrains Mono** (`--font-mono`, all measured data: tool IDs, machine #s, speeds/feeds, badges). Interface body text stays on the system-UI stack (`--font-sans`). All three are `:root` tokens; the mono/display faces degrade to the system stack if the webfonts fail to load.
@@ -626,6 +627,9 @@ src/
     SpeedFeedSection.jsx          # ToolDetail panel: per-CAM-preset SFM + chip-load
                                   # reference (metadata speed_feed_refs[]); shows
                                   # derived RPM + feed from the tool's own dia/flutes
+    BrandLogo.jsx                 # ToolDex brand: mark + "ToolDex" wordmark
+                                  # (BrandLogo lockup / ToolDexMark / ToolDexWordmark);
+                                  # used by the top-bar header + LoginScreen
     LibrarySetup.jsx              # First-run APS library location picker
     LoginScreen.jsx               # APS PKCE login gate (unauthorized visitors)
     Settings.jsx                  # Settings — one of 4 top-bar chrome-style tabs

@@ -208,6 +208,15 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--blue); }
   flex-shrink: 0;
 }
 
+/* ToolDex wordmark — "Tool" in the text color, "Dex" in brand blue, display face. */
+.tooldex-wordmark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.tooldex-wordmark b { color: var(--blue); font-weight: 700; }
+
 /* Chrome-style centered tab strip */
 .topbar-tabs {
   position: absolute;
@@ -1115,10 +1124,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 
 .login-title {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: 30px;
   margin-bottom: 8px;
-  color: var(--blue);
 }
 
 .login-subtitle {
@@ -1380,10 +1387,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   width: 60px; height: 60px;
   margin: 0 auto 16px;
   display: flex; align-items: center; justify-content: center;
-  border-radius: var(--radius-lg);
-  background: var(--blue-tint);
-  border: 1px solid var(--blue);
-  color: var(--blue);
+  /* The ToolDex mark is its own brand-blue tile — no wrapper fill/border. */
 }
 
 /* ─── Toasts ─────────────────────────────────────────────────────────────── */
