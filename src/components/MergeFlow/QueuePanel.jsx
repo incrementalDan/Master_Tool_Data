@@ -58,7 +58,7 @@ export default function QueuePanel({ queue, activeIdx, onSelect }) {
             <div className="queue-item-main">
               <span className="queue-item-desc truncate">{entry.incomingTool.description || '—'}</span>
               {entry.incomingTool.diameter != null && (
-                <span className="text-xs text-sub">⌀{entry.incomingTool.diameter}"</span>
+                <span className="text-xs text-sub"><span className="dia">⌀</span>{entry.incomingTool.diameter}"</span>
               )}
             </div>
             <StatusBadge status={entry.status} />

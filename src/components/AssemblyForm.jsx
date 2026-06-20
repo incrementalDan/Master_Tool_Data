@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { X, Info } from 'lucide-react';
 import { generateAssemblyId } from '../schema/toolSchema.js';
-import { presetMatchesAssembly } from '../utils/presetNaming.js';
+import { presetMatchesAssembly, presetMaterialColor } from '../utils/presetNaming.js';
 import { unitAbbr } from '../utils/units.js';
+import { useApp } from '../context/AppContext.jsx';
 import HolderPicker from './HolderPicker.jsx';
 
 export default function AssemblyForm({ tool, holders, assembly, onSave, onClose }) {
+  const { materials } = useApp();
   const isNew = !assembly;
 
   const [holderGuid, setHolderGuid] = useState(assembly?.holder_guid || '');
@@ -155,7 +157,7 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
             {matchedPresets.length > 0 ? (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                 {matchedPresets.map(p => (
-                  <span key={p.guid} className="preset-tag">{p.name || 'Unnamed'}</span>
+                  <span key={p.guid} className="preset-tag" style={{ '--badge-color': presetMaterialColor(p.material?.query, materials) || undefined }}>{p.name || 'Unnamed'}</span>
                 ))}
               </div>
             ) : (

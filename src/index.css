@@ -1,37 +1,143 @@
+/* ─── ToolDex Design-System tokens ──────────────────────────────────────────
+   Canonical token layer, reconciled from the ToolDex Design System (tokens/).
+   Where a value differed from the older app value, the design system wins.
+   Build UI against these tokens — do not hard-code hex values inline. */
 :root {
-  --bg: #202020;
-  --surface: #2a2a2a;
-  --surface-2: #333333;
-  --surface-3: #3c3c3c;
-  --border: #484848;
-  --border-focus: #4a8fff;
-  --text: #ebebeb;
-  --text-sub: #adadad;
-  --text-label: #d0d0d0;
-  --blue: #4a8fff;
-  --orange: #d97830;
-  --green: #45b36b;
-  --red: #d94f4f;
-  --amber: #d4922a;
-  --input-bg: #1e1e1e;
-  --blue-tint: #16263b;
+  /* ── Surface ramp ───────────────────────────────────────────────────────
+     The app canvas is the LIGHTEST layer; cards/controls sit inset (darker)
+     on it, and inputs are recessed deepest. */
+  --bg: #383838;            /* app background — lightest layer (was #202020) */
+  --surface: #2a2a2a;       /* cards, panels */
+  --surface-2: #333333;     /* raised controls, headers, hover fills */
+  --surface-3: #3c3c3c;     /* highest raise — popovers, dropdown panels */
+  --input-bg: #1e1e1e;      /* recessed: inputs sit BELOW the surface */
+
+  /* ── Borders ──────────────────────────────────────────────────────────── */
+  --border: #484848;         /* default hairline */
+  --border-hover: #4a4a4a;   /* hover/active border lift */
+  --border-strong: #555555;  /* emphasized dividers, scrollbar thumb hover */
+  --border-focus: var(--blue);
+
+  /* ── Text ramp ────────────────────────────────────────────────────────── */
+  --text: #f5f5f5;          /* primary copy (was #ebebeb) */
+  --text-label: #dcdcdc;    /* field labels, uppercase (was #d0d0d0) */
+  --text-sub: #bdbdbd;      /* secondary / meta (was #adadad) */
+  --text-faint: #6e6e6e;    /* placeholders, empty-state, disabled */
+
+  /* ── Brand & action ───────────────────────────────────────────────────── */
+  --blue: #4a8fff;          /* PRIMARY action + brand accent */
+  --blue-hover: #3f82f0;    /* border lift (we brighten fills, not darken) */
+  --accent: #6366f1;        /* indigo — selection highlight (pickers, confirm) */
+  --blue-tint: #16263b;     /* selected/active fills on the dark ground */
   --blue-tint-2: #1a2a3a;
-  --accent: #6366f1;            /* indigo — selection highlight (pickers, confirm) */
-  /* Data-field token colors — RGB triplets so tints compose via rgba(var(--tok-*), a).
-     One per named data type; see the "Data-field visual tokens" block below. */
+
+  /* ── Status / semantic hues ───────────────────────────────────────────── */
+  --green: #45b36b;         /* success, saved, additive */
+  --red: #d94f4f;           /* destructive, error */
+  --amber: #d4922a;         /* warning, dirty/unsaved */
+  --orange: #d97830;        /* attention — secondary warning, "needs setup" */
+
+  /* ── Identity data-field colors ─────────────────────────────────────────
+     RGB triplets so tints compose via rgba(var(--tok-*), a). One per named
+     data type; see the "Data-field visual tokens" block below.
+     NOTE: --tok-holder / --tok-preset are app-only flat colors retained until
+     the component-level holder/ISO reconciliation; the design system colors
+     holders by size (--holder-*) and presets by ISO group (--iso-*). */
   --tok-description: 124, 58, 237;   /* violet  — .description-badge */
   --tok-proshot: 245, 158, 11;       /* amber   — .proshot-pill */
   --tok-holder: 45, 212, 191;        /* teal    — .holder-pill */
   --tok-machine: 74, 222, 128;       /* green   — .machine-num-badge */
   --tok-location: 129, 140, 248;     /* indigo  — .location-tag */
   --tok-preset: 52, 211, 153;        /* emerald — .preset-tag */
-  --radius: 8px;
-  --radius-sm: 5px;
-  --radius-lg: 12px;
+
+  /* ── Holder colors — keyed by HOLDER SIZE ───────────────────────────────
+     Every physical holder size carries its own color, followed everywhere it
+     is referenced. Canonical assignments; unknown holders get a stable
+     hash-assigned color, falling back to --holder-default. */
+  --holder-30-sk13-60: #06b6d4;   /* 30-SK13-60 · cyan */
+  --holder-30-sk13-90: #ec4899;   /* 30-SK13-90 · pink */
+  --holder-30-sk13-120: #65a30d;  /* 30-SK13-120 · lime */
+  --holder-30-sk13-150: #8b5cf6;  /* 30-SK13-150 · violet */
+  --holder-30-sk20-60: #eab308;   /* 30-SK20-60 · yellow */
+  --holder-30-sk20-90: #ef4444;   /* 30-SK20-90 · red */
+  --holder-drill-chuck: #10b981;  /* drill chuck · green */
+  --holder-default: #2dd4bf;      /* unknown holder · teal */
+
+  /* ── Material ISO-group colors — presets, feeds & speeds ─────────────────
+     Anything tied to a material inherits its ISO 513 group color. Canonical
+     defaults; the shop's materials.json groups[] may override at runtime. */
+  --iso-p: #5b9bf5;  /* P · Steel */
+  --iso-m: #d9923f;  /* M · Stainless */
+  --iso-k: #ef5f5f;  /* K · Cast Iron */
+  --iso-n: #4cb96e;  /* N · Non-Ferrous */
+  --iso-s: #ee7f44;  /* S · High-Temp Alloys */
+  --iso-h: #93a1b5;  /* H · Hardened */
+
+  /* ── Typography ─────────────────────────────────────────────────────────
+     Three faces, three jobs: system-UI body, Space Grotesk display, JetBrains
+     Mono for all measured data. Webfonts are loaded in fonts.css / index.html. */
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-display: 'Space Grotesk', var(--font-sans);
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --text-2xs: 10px;   /* micro labels on tags/badges */
+  --text-xs: 11px;    /* field labels, meta */
+  --text-sm: 12px;    /* dense table cells, secondary */
+  --text-base: 13px;  /* default control text */
+  --text-md: 14px;    /* body / search input */
+  --text-lg: 16px;    /* modal titles, section heads */
+  --text-xl: 19px;    /* detail page title */
+  --text-2xl: 22px;   /* login / page hero */
+  --text-3xl: 30px;   /* marketing / big stat */
+  --text-4xl: 44px;   /* display numbers */
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  --lh-tight: 1.25;   /* titles */
+  --lh-snug: 1.4;     /* control labels, cards */
+  --lh-normal: 1.5;   /* body */
+  --lh-relaxed: 1.6;  /* prose, modal bodies */
+
+  --ls-label: 0.06em; /* uppercase eyebrow / field labels */
+  --ls-data: 0.04em;  /* monospace badges / IDs */
+
+  /* ── Spacing scale (4px grid) ───────────────────────────────────────────── */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 14px;
+  --space-8: 16px;
+  --space-10: 20px;
+  --space-12: 24px;
+  --space-16: 32px;
+  --space-20: 40px;
+
+  /* ── Radius ─────────────────────────────────────────────────────────────── */
+  --radius-sm: 5px;   /* buttons, inputs, badges */
+  --radius: 8px;      /* cards, panels, search bar */
+  --radius-lg: 12px;  /* modals, hero tiles */
+  --radius-pill: 999px;
+
+  /* ── Elevation (dark-tuned — deep, never soft/grey) ─────────────────────── */
   --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
   --shadow: 0 4px 14px rgba(0,0,0,0.35);
   --shadow-lg: 0 12px 32px rgba(0,0,0,0.5);
+  --ring: rgba(74, 143, 255, 0.4);  /* focus ring — brand blue */
+
+  /* ── Motion ─────────────────────────────────────────────────────────────── */
   --ease: 0.16s cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-emphasis: 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);  /* toast/modal entrance */
+
+  /* ── Layout constants ───────────────────────────────────────────────────── */
+  --topbar-h: 54px;
+  --rail-w: 72px;          /* library left action rail */
+  --content-max: 1400px;   /* page-content max width */
 }
 
 :focus-visible {
@@ -58,11 +164,13 @@ button { cursor: pointer; font-family: inherit; }
 input, select, textarea { font-family: inherit; }
 
 input[type=number]::-webkit-inner-spin-button { opacity: 0.3; }
+/* Native checkboxes/radios pick up the brand accent everywhere */
+input[type='checkbox'], input[type='radio'] { accent-color: var(--blue); }
 
-::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #555; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
 /* ─── Layout ────────────────────────────────────────────────────────────── */
 .app-shell {
@@ -90,8 +198,10 @@ input[type=number]::-webkit-inner-spin-button { opacity: 0.3; }
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 15px;
+  letter-spacing: 0.01em;
   color: var(--blue);
   white-space: nowrap;
   text-decoration: none;
@@ -1721,7 +1831,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 .diff-val {
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1768,8 +1878,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 .commit-field-row:last-child { border-bottom: none; }
 .commit-field-name { color: var(--text-sub); }
-.commit-field-old { color: var(--text-sub); font-family: monospace; text-align: right; }
-.commit-field-new { color: var(--green); font-family: monospace; font-weight: 600; text-align: right; }
+.commit-field-old { color: var(--text-sub); font-family: var(--font-mono); text-align: right; }
+.commit-field-new { color: var(--green); font-family: var(--font-mono); font-weight: 600; text-align: right; }
 
 /* Merge success screen */
 .merge-success {
@@ -1835,7 +1945,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .text-sm { font-size: 12px; }
 .text-xs { font-size: 11px; }
 .font-bold { font-weight: 700; }
-.font-mono { font-family: monospace; }
+.font-mono { font-family: var(--font-mono); }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ─── Preset Panel ───────────────────────────────────────────────────────── */
@@ -1955,7 +2065,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .preset-stat-label { color: var(--text-sub); flex-shrink: 0; }
 
 .preset-stat-value {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   text-align: right;
   white-space: nowrap;
@@ -2100,7 +2210,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 
 .step-abs-val {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   color: var(--text);
   min-width: 52px;
@@ -2143,7 +2253,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .step-factor-input {
   width: 72px !important;
   padding: 3px 6px !important;
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 12px !important;
 }
 
@@ -2153,7 +2263,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 
 .step-factor-result {
-  font-family: monospace;
+  font-family: var(--font-mono);
   color: var(--green);
   font-weight: 600;
   white-space: nowrap;
@@ -2351,12 +2461,14 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /*                                                                            */
 /*  .description-badge  — Tool Description  — violet rounded-rect            */
 /*  .proshot-pill       — ProShop ID        — amber pill (monospace)          */
-/*  .holder-pill        — Holder            — teal pill  (override inline)    */
+/*  .holder-pill        — Holder            — colored by SIZE (--badge-color) */
 /*  .machine-num-badge  — Machine Tool #    — green rect (monospace, square)  */
 /*  .location-tag       — Location/Cabinet  — indigo rounded-rect (monospace)  */
-/*  .preset-tag         — Preset Name       — emerald pill                    */
+/*  .preset-tag         — Preset Name       — colored by ISO group (--badge-color) */
 /*                                                                            */
-/* When changing any class, update ALL usages across the codebase.            */
+/* Holder + preset badges carry a per-instance --badge-color set by the host: */
+/* the holder's size color (holderColor) / the material's ISO-group color     */
+/* (presetMaterialColor). When changing any class, update ALL usages.         */
 
 .description-badge {
   background: rgba(var(--tok-description), 0.10);
@@ -2375,7 +2487,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
-  font-family: monospace;
+  font-family: var(--font-mono);
   background: rgba(var(--tok-proshot), 0.14);
   border: 1px solid rgba(var(--tok-proshot), 0.42);
   color: rgb(var(--tok-proshot));
@@ -2430,7 +2542,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: rgb(var(--tok-machine));
   font-size: 11px;
   font-weight: 700;
-  font-family: monospace;
+  font-family: var(--font-mono);
   white-space: nowrap;
   letter-spacing: 0.04em;
 }
@@ -2444,22 +2556,46 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: rgb(var(--tok-location));
   font-size: 11px;
   font-weight: 600;
-  font-family: monospace;
+  font-family: var(--font-mono);
   white-space: nowrap;
   letter-spacing: 0.04em;
 }
 
 .preset-tag {
-  display: inline-block;
-  padding: 1px 7px;
+  /* Color follows the MATERIAL's ISO group — host sets --badge-color from the
+     selected material (presetMaterialColor). Defaults to the P (steel) color. */
+  --badge-color: var(--iso-p);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 13px;
   border-radius: 999px;
-  border: 1px solid rgba(var(--tok-preset), 0.35);
-  background: rgba(var(--tok-preset), 0.10);
-  color: rgb(var(--tok-preset));
-  font-size: 11px;
-  font-weight: 600;
+  border: 1px solid color-mix(in srgb, var(--badge-color) 70%, transparent);
+  background: var(--input-bg);
+  color: color-mix(in srgb, var(--badge-color) 78%, #ffffff);
+  font-size: 13px;
+  font-weight: 700;
   white-space: nowrap;
 }
+/* "All" / selected state — solid gray fill, white-matched border. */
+.preset-tag.is-all {
+  --badge-color: var(--text-faint);
+  border-color: color-mix(in srgb, var(--text) 55%, transparent);
+  background: color-mix(in srgb, var(--text-faint) 45%, var(--input-bg));
+  color: var(--text);
+}
+/* Optional leading dot inside a preset chip (host opts in). */
+.preset-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--badge-color);
+  flex-shrink: 0;
+}
+
+/* The ⌀ diameter glyph, tinted orange wherever it appears inline. The number
+   and units stay neutral; only the glyph is colored. */
+.dia { color: var(--orange); font-weight: 600; }
 
 /* ─── Library landing page — left sidebar + main content ────────────────── */
 .landing-layout {
@@ -2665,17 +2801,22 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 /* ─── Holder pill — teal by default; AssemblyCard overrides per-holder ─────── */
 .holder-pill {
-  display: inline-block;
-  padding: 2px 8px;
+  /* Color follows the HOLDER SIZE — host sets --badge-color per holder
+     (holderColor). Defaults to the unknown-holder teal. Full holder names are
+     preserved — never truncate. */
+  --badge-color: var(--holder-default);
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(var(--tok-holder), 0.40);
-  background: rgba(var(--tok-holder), 0.15);
-  color: rgb(var(--tok-holder));
+  border: 1px solid color-mix(in srgb, var(--badge-color) 60%, transparent);
+  background: color-mix(in srgb, var(--badge-color) 9%, var(--input-bg));
+  color: color-mix(in srgb, var(--badge-color) 60%, #ffffff);
   font-size: 11px;
   font-weight: 600;
-  white-space: normal;
-  word-break: break-word;
-  line-height: 1.5;
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
 }
 
 /* ─── Assemblies grid — multiple cards per row ───────────────────────────── */
@@ -2731,7 +2872,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   border-radius: 999px;
   color: var(--text);
   text-decoration: none;
-  font-family: monospace;
+  font-family: var(--font-mono);
   flex-shrink: 0;
   letter-spacing: 0.02em;
 }
@@ -2744,7 +2885,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   padding: 1px 7px;
   border: 2px solid var(--text);
   border-radius: 3px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   flex-shrink: 0;
 }
 
