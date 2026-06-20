@@ -410,7 +410,7 @@ Stored in a single file on Google Drive. The file contains an array of metadata 
   "preferred_machine": "",
   "material_suitability": [],
   "speed_feed_refs": [
-    { "preset_id": "pre_M_aus_316", "sfm": 350, "chip_load": 0.002 }
+    { "preset_id": "pre_M_aus_316", "operation_type": "rough", "sfm": 350, "chip_load": 0.002 }
   ],
   "tags": [],
   "updated_by": "",
@@ -1265,7 +1265,7 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 
 ## TODO / Future Work
 
-- **Speeds & Feeds Reference — link to stepdown/stepover as a %.** Each tool carries `speed_feed_refs[]` (metadata-only: `{ preset_id → materials.presets, sfm, chip_load }`) — a per-CAM-preset SFM + chip-load starting-point table, edited in `SpeedFeedSection.jsx` (a panel in ToolDetail's left column, same save pattern as `PurchasingSection`). The section already shows derived RPM + feed per row using the tool's own diameter + flute count (`deriveRPM`, generic over the tool's unit; feed via chip_load × rpm × flutes). **Next step (deferred):** express stepdown/stepover as a % (e.g. of diameter) and connect them so the reference drives full proven preset values rather than just SFM/chip-load — the user explicitly scoped this for later. These values are a manual starting point today; a future path could also pull from existing Fusion presets.
+- **Speeds & Feeds Reference — link to stepdown/stepover as a %.** Each tool carries `speed_feed_refs[]` (metadata-only: `{ preset_id → materials.presets, operation_type (rough/finish/… or null), sfm, chip_load }`) — a per-CAM-preset + per-operation SFM + chip-load starting-point table, edited in `SpeedFeedSection.jsx` (a panel in ToolDetail's left column, same save pattern as `PurchasingSection`). The material cell opens the shared **`CamPresetPicker`** modal (search "6061"/"1018" → its CAM preset), the operation is an `OP_TYPES` dropdown, and the Save button shows a `.spinner` while the `writeLogicalTool` round-trip is in flight (it's a local `saving` state, not the global `isSaving`). The section shows derived RPM + feed per row using the tool's own diameter + flute count (`deriveRPM`, generic over the tool's unit; feed via chip_load × rpm × flutes). **Next step (deferred):** express stepdown/stepover as a % (e.g. of diameter) and connect them so the reference drives full proven preset values rather than just SFM/chip-load — the user explicitly scoped this for later. These values are a manual starting point today; a future path could also pull from existing Fusion presets.
 
 - **Local mode, phase 2 — full edit with manual re-export.** Today's local browse mode (see above) is read-only. A bigger follow-up: allow editing/saving everything in-memory while in local mode (tools, presets, assemblies, metadata), plus a "Download updated library" button that produces a new `fusion_tool_library.json` (and `tool_metadata.json` if applicable) for the user to manually re-upload to Autodesk/Drive themselves. **This is a big ask** — `writeLogicalTool`, `saveFullLibrary`, `renumberLibrary`, `deleteTool`, `addTool`, `normalizeLibrary`, and the whole Phase 2 merge flow all currently assume `uploadFusionList`/`downloadFusionList` hit APS; each would need a local-mode branch that mutates `toolsRef`/state in place and marks the library "dirty" instead of calling APS, plus export/download plumbing for the edited JSON. Confirm scope before starting.
 

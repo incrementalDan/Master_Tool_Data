@@ -1521,10 +1521,12 @@ export function buildMetadataTool(tool) {
     preferred_machine: tool.preferred_machine || '',
     material_suitability: tool.material_suitability || [],
     // Per-CAM-preset SFM + chip-load starting-point reference (metadata-only).
-    // Each entry: { preset_id (→ materials.presets), sfm, chip_load }. A manual
-    // lookup table the programmer seeds speeds/feeds from per material.
+    // Each entry: { preset_id (→ materials.presets), operation_type, sfm,
+    // chip_load }. A manual lookup table the programmer seeds speeds/feeds from
+    // per material + operation (rough/finish/…).
     speed_feed_refs: (tool.speed_feed_refs || []).map(r => ({
       preset_id: r.preset_id || null,
+      operation_type: r.operation_type || null,
       sfm: r.sfm ?? null,
       chip_load: r.chip_load ?? null,
     })),
