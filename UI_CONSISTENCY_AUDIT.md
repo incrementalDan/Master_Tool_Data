@@ -37,6 +37,12 @@ and (3) edit mode (ToolForm) being structurally barer than view mode (ToolDetail
   usages" — promoting these six to `:root` variables (`--c-proshot`, `--c-holder`, …) makes that a
   one-line change and lets the inline per-holder overrides in AssemblyCard reference them.
   `[Quick Win]`
+  > **Update (ToolDex design-system pass):** partly addressed. `.holder-pill` and `.preset-tag` no
+  > longer carry a flat hex — both derive from a per-instance `--badge-color` custom property
+  > (holder size color via `holderColor`, material ISO-group color via `presetMaterialColor`), with
+  > ISO-group + holder-size colors promoted to `:root` tokens (`--iso-*`, `--holder-*`). The other
+  > four (`.proshot-pill`, `.machine-num-badge`, `.location-tag`, `.description-badge`) still use the
+  > `--tok-*` RGB-triplet tokens. Line numbers above predate the pass.
 - **Repeated raw `rgba()` warning/info tints with no shared class** — the amber warning banner is
   hand-built inline in `ReconcileModal.jsx:50` and `NormalizeModal.jsx` (`rgba(234,179,8,…)` +
   `#fde047`), while LandingPage uses a real `.error-banner` class. Add `.banner-warn` / `.banner-info`

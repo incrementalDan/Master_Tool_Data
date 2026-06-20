@@ -229,6 +229,8 @@ The full tool list (~250 tools) is loaded once on login. All search and filterin
   - APS PKCE OAuth (`Single Page App` type — no client secret) — required
   - Google OAuth implicit flow via `@react-oauth/google` — optional
 - **Icons**: `lucide-react` for UI icons; custom SVG silhouettes for 26 tool types in `ToolTypeIcon.jsx`
+- **Design system / tokens**: the visual language is the **ToolDex Design System** (a separate design reference, not in this repo). `src/index.css` `:root` is the canonical token layer reconciled from it — surface/text ramps, `--blue` action color, `--iso-*` material-group colors, `--holder-*` holder-size colors, the type scale, spacing, radius, shadow, and motion tokens. Build UI against these tokens; don't hard-code hex inline.
+- **Fonts**: brand webfonts loaded from Google Fonts in `index.html` — **Space Grotesk** (`--font-display`, wordmark/titles) and **JetBrains Mono** (`--font-mono`, all measured data: tool IDs, machine #s, speeds/feeds, badges). Interface body text stays on the system-UI stack (`--font-sans`). All three are `:root` tokens; the mono/display faces degrade to the system stack if the webfonts fail to load.
 - **No backend server** — everything runs client-side
 
 -----
@@ -599,7 +601,7 @@ src/
     ToolForm.jsx                  # Edit form with sticky action bar + dirty guard
     ToolCard.jsx                  # Grid and list card variants with hover actions
                                   # Uses data-field tokens: .description-badge, .proshot-pill,
-                                  # .holder-pill, .machine-num-badge, .location-tag
+                                  # .machine-num-badge, .location-tag
     ToolTypeGrid.jsx              # Tool type selector tiles (icons size 36)
     FacetFilters.jsx              # Cascading facet filter UI
     AddToolFlow.jsx               # New tool flow (extractor or manual)
@@ -856,7 +858,7 @@ Three editor pages, reached from the top-bar chrome-style tabs (**Library**, **M
 
 ### Preset color coding (from `materials.json` group colors)
 
-Presets are tinted by their material's group color. `presetMaterialColor(query, materials)` (`src/utils/presetNaming.js`) resolves the stored `material.query` against the library (`findMaterialInLibrary` → group color), falling back to the legacy keyword map (`materialIsoGroup` → `MATERIAL_CODE_TO_ISO_GROUP`: `AL`/`BRONZE`/`BRASS`→N, `SS`→M, `STEEL`/`MILD`→P, `CI`→K, `TI`→S; plastics/unknown → null) so pre-library/imported material strings still color. `PresetPanel.jsx` (`groupColorOf`) applies it as a left-border accent on each preset card (collapsed + edit) and on the material label / group-divider dot. Preset **chips** elsewhere (`AssemblyCard` linked presets, Sync Job `DiffStep`/`CommitStep` new-preset rows) get a small leading material dot via the shared `<PresetDot query materials>` component (`src/components/PresetDot.jsx`) — the `.preset-tag` chip itself stays emerald (the per-data-type token is unchanged; the dot is additive). Unknown materials or groups with no color → no accent/dot (silent fallback).
+Presets are tinted by their material's ISO-group color (the ToolDex design system colors anything tied to a material by its ISO 513 group). `presetMaterialColor(query, materials)` (`src/utils/presetNaming.js`) resolves the stored `material.query` against the library (`findMaterialInLibrary` → group color), falling back to the legacy keyword map (`materialIsoGroup` → `MATERIAL_CODE_TO_ISO_GROUP`: `AL`/`BRONZE`/`BRASS`→N, `SS`→M, `STEEL`/`MILD`→P, `CI`→K, `TI`→S; plastics/unknown → null) so pre-library/imported material strings still color. `PresetPanel.jsx` (`groupColorOf`) applies it as a left-border accent on each preset card (collapsed + edit) and on the material label / group-divider dot. The **`.preset-tag` chip itself is colored by the material's ISO group**: each host sets the `--badge-color` CSS custom property from `presetMaterialColor` (`AssemblyCard`/`AssemblyForm` linked presets, `PresetPanel` collapsed card via its `accentColor` prop, Sync Job `DiffStep`/`CommitStep` new-preset rows), and the chip class derives its text + border from it (flat `--input-bg` fill, no leading dot). When `presetMaterialColor` returns null (unknown material), the host passes `undefined` and the chip falls back to the CSS default `--iso-p` (steel). The old per-data-type emerald `.preset-tag` token and the standalone `<PresetDot>` component were removed in the design-system pass — color now lives on the tag via `--badge-color`. The seeded ISO-group colors are `:root` tokens (`--iso-p/m/k/n/s/h`); the shop's `materials.json` `groups[]` may override them at runtime.
 
 -----
 
@@ -1029,21 +1031,25 @@ Machine tool number is shown inside the Identity section, in the same row as the
 | Data Type | Class | Shape | Color |
 |---|---|---|---|
 | Tool Description | `.description-badge` | Rounded rect (r=7px) | Violet — `rgba(124,58,237,…)` |
-| ProShop ID | `.proshot-pill` | Pill | Amber — `#f59e0b` |
-| Holder | `.holder-pill` | Pill | Teal default — `#2dd4bf`; AssemblyCard overrides per-holder via inline style |
-| Machine Tool # | `.machine-num-badge` | Slightly rounded rect (r=5px) | Green — `#4ade80`, monospace |
-| Location/Cabinet | `.location-tag` | Rounded rect (r=7px) | Indigo — `#818cf8`, monospace |
-| Preset Name | `.preset-tag` | Pill | Emerald — `#34d399` |
+| ProShop ID | `.proshot-pill` | Pill | Amber — `#f59e0b`, mono (`--font-mono`) |
+| Holder | `.holder-pill` | Pill | Colored by **holder SIZE** via `--badge-color` (host sets it from `holderColor`); default teal `--holder-default`, mono |
+| Machine Tool # | `.machine-num-badge` | Slightly rounded rect (r=5px) | Green — `#4ade80`, mono |
+| Location/Cabinet | `.location-tag` | Rounded rect (r=7px) | Indigo — `#818cf8`, mono |
+| Preset Name | `.preset-tag` | Pill | Colored by **material's ISO group** via `--badge-color` (host sets it from `presetMaterialColor`); default `--iso-p` (steel) |
 
 All six classes are defined in `src/index.css` in the "Data-field visual tokens" block.
+
+**`--badge-color` pattern (holder + preset)**: these two badges are no longer a single flat color. The class carries a default `--badge-color` and derives its fill/border/text from it (`color-mix`); each host sets `--badge-color` per instance via an inline style (`style={{ '--badge-color': color }}`). For holders the color comes from `holderColor(description)` (returns a single base color — canonical `--holder-*` per known size, stable-hash fallback, teal `--holder-default` for unknown); for presets from `presetMaterialColor(query, materials)` (the material's ISO-group color). Pass `undefined` when there's no color so the CSS default applies. This replaced the old approach where `holderColor` returned a `{bg,border,text}` object overriding all three inline and `.preset-tag` was a flat emerald token.
+
+**`.dia` glyph utility**: the orange diameter symbol. Wrap the `⌀` in `<span className="dia">⌀</span>` everywhere a diameter renders inline (`ToolCard` meta badge, `QueuePanel`, `MatchStep`); the number/units stay neutral. `.dia { color: var(--orange); font-weight: 600 }`.
 
 **Current usages:**
 - `.description-badge` — `ToolCard` (grid + list), `ToolDetail` sticky header
 - `.proshot-pill` — `ToolCard`, `ToolDetail` sticky header, `AssemblyCard` operator tag (as `.tag-proshot-oval` — physical tag format exception)
-- `.holder-pill` — `ToolCard` badge, `ToolDetail` export picker
+- `.holder-pill` — `AssemblyCard`, `ToolDetail` (assembly groups, pending assembly, export picker), `PresetPanel` (single-assembly preset card)
 - `.machine-num-badge` — `ToolCard` badge, `ToolDetail` Identity section (T/H/D)
 - `.location-tag` — `ToolCard` badge (when location is set)
-- `.preset-tag` — `AssemblyCard` linked presets list, `DiffStep` new-preset rows, `CommitStep` new-preset rows
+- `.preset-tag` — `AssemblyCard` linked presets, `AssemblyForm` matched presets, `PresetPanel` collapsed card, `DiffStep`/`CommitStep` new-preset rows
 
 **Exception**: `AssemblyCard` uses its own `.operator-tag` / `.tag-box` / `.tag-proshot-oval` layout to match the physical shop tag format. That internal layout is intentional and is not subject to this rule.
 
