@@ -245,46 +245,27 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
                     <span>{matchMaterial(preset.material?.query)}</span>
                   </div>
                 )}
-                {editingId === preset.guid ? (
-                  <EditCard
-                    preset={preset}
-                    toolType={toolType}
-                    accentColor={groupColorOf(preset.material?.query)}
-                    lenUnit={lenUnit}
-                    feedUnit={feedUnit}
-                    speedUnit={speedUnit}
-                    diameter={diameter}
-                    fluteLength={tool.flute_length || 0}
-                    numberOfFlutes={numberOfFlutes}
-                    assemblies={tool.assemblies || []}
-                    holders={holders}
-                    materials={materials}
-                    onSave={handlePresetSave}
-                    onCancel={() => setEditingId(null)}
-                    isSaving={isSaving}
-                  />
-                ) : (
-                  <CollapsedCard
-                    preset={preset}
-                    toolType={toolType}
-                    accentColor={groupColorOf(preset.material?.query)}
-                    lenUnit={lenUnit}
-                    feedUnit={feedUnit}
-                    speedUnit={speedUnit}
-                    isDragOver={dragOverIdx === globalIdx}
-                    dragEnabled={materialFilter === 'All'}
-                    linkedAssemblies={(tool.assemblies || []).filter(a =>
-                      presetMatchesAssembly(preset, a, tool.unit)
-                    )}
-                    holders={holders}
-                    onEdit={() => setEditingId(preset.guid)}
-                    onDelete={() => setDeleteConfirmId(preset.guid)}
-                    onDragStart={e => handleDragStart(e, globalIdx)}
-                    onDragOver={e => handleDragOver(e, globalIdx)}
-                    onDrop={e => handleDrop(e, globalIdx)}
-                    onDragEnd={handleDragEnd}
-                  />
-                )}
+                <CollapsedCard
+                  preset={preset}
+                  toolType={toolType}
+                  accentColor={groupColorOf(preset.material?.query)}
+                  lenUnit={lenUnit}
+                  feedUnit={feedUnit}
+                  speedUnit={speedUnit}
+                  isEditing={editingId === preset.guid}
+                  isDragOver={dragOverIdx === globalIdx}
+                  dragEnabled={materialFilter === 'All'}
+                  linkedAssemblies={(tool.assemblies || []).filter(a =>
+                    presetMatchesAssembly(preset, a, tool.unit)
+                  )}
+                  holders={holders}
+                  onEdit={() => setEditingId(preset.guid)}
+                  onDelete={() => setDeleteConfirmId(preset.guid)}
+                  onDragStart={e => handleDragStart(e, globalIdx)}
+                  onDragOver={e => handleDragOver(e, globalIdx)}
+                  onDrop={e => handleDrop(e, globalIdx)}
+                  onDragEnd={handleDragEnd}
+                />
               </React.Fragment>
             );
           })}
@@ -299,6 +280,32 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
           </button>
         </div>
       </div>
+
+      {/* Editor — opens as an overlay (like the CAM Preset picker) on add/edit */}
+      {editingId && (() => {
+        const editing = presets.find(p => p.guid === editingId);
+        if (!editing) return null;
+        return (
+          <EditCard
+            key={editingId}
+            preset={editing}
+            toolType={toolType}
+            accentColor={groupColorOf(editing.material?.query)}
+            lenUnit={lenUnit}
+            feedUnit={feedUnit}
+            speedUnit={speedUnit}
+            diameter={diameter}
+            fluteLength={tool.flute_length || 0}
+            numberOfFlutes={numberOfFlutes}
+            assemblies={tool.assemblies || []}
+            holders={holders}
+            materials={materials}
+            onSave={handlePresetSave}
+            onCancel={() => setEditingId(null)}
+            isSaving={isSaving}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -306,7 +313,7 @@ export default function PresetPanel({ tool, onSave, isSaving }) {
 // ── Collapsed card ───────────────────────────────────────────────────────────
 function CollapsedCard({
   preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
-  isDragOver, dragEnabled,
+  isEditing, isDragOver, dragEnabled,
   linkedAssemblies, holders,
   onEdit, onDelete,
   onDragStart, onDragOver, onDrop, onDragEnd,
@@ -331,7 +338,7 @@ function CollapsedCard({
 
   return (
     <div
-      className={`preset-card${isDragOver ? ' preset-card--drop' : ''}`}
+      className={`preset-card${isDragOver ? ' preset-card--drop' : ''}${isEditing ? ' preset-card--editing' : ''}`}
       style={accentColor ? { borderLeft: `3px solid ${accentColor}` } : undefined}
       draggable={dragEnabled}
       onDragStart={dragEnabled ? onDragStart : undefined}
@@ -399,7 +406,7 @@ function CollapsedCard({
         )}
       </div>
       <div className="preset-card-footer">
-        <button className="btn btn-secondary btn-sm" onClick={onEdit}>Edit</button>
+        <button className="btn btn-secondary btn-sm" onClick={onEdit}>{isEditing ? 'Editing…' : 'Edit'}</button>
         <button className="btn btn-ghost btn-sm preset-card-del" onClick={onDelete}>
           <Trash2 size={12} />
         </button>
@@ -632,14 +639,22 @@ function EditCard({
   const noSpeed = !(draft.n);
 
   return (
-    <div className="preset-card preset-card--edit" style={accentColor ? { borderLeft: `3px solid ${accentColor}` } : undefined}>
+    <div
+      className="modal-backdrop"
+      onMouseDown={e => { if (e.target === e.currentTarget && !isSaving) onCancel(); }}
+    >
+      <div
+        className="modal preset-edit-modal"
+        style={accentColor ? { borderTop: `3px solid ${accentColor}` } : undefined}
+      >
       {/* Header */}
-      <div className="preset-edit-header">
+      <div className="preset-edit-modal-header">
         <input
           className="field-input preset-name-input"
           value={draft.name || ''}
           onChange={e => set('name', e.target.value)}
           placeholder="Preset name"
+          autoFocus
         />
         <button
           className="btn btn-primary btn-sm"
@@ -653,6 +668,7 @@ function EditCard({
         </button>
       </div>
 
+      <div className="preset-edit-modal-body">
       {/* Material — picked from the Materials library via the CAM Preset picker
           (search "6061"/"1018" → its CAM preset, or browse the group pills).
           Stored as material.query = CAM preset name, else group label. The CAM
@@ -711,20 +727,6 @@ function EditCard({
           </FGroup>
         </div>
       </div>
-
-      {pickerOpen && (
-        <CamPresetPicker
-          materials={materials}
-          currentQuery={draft.material?.query}
-          onClose={() => setPickerOpen(false)}
-          onSelect={(cp) => setDraft(d => {
-            const query = cp.name;
-            const nd = { ...d, material: { ...(d.material || {}), query, category: materialCategory(query) } };
-            nd.name = composeName(nd, assemblyId, nd.operation_type);
-            return nd;
-          })}
-        />
-      )}
 
       {/* Operation & Assembly — drive the convention preset name */}
       <div className="preset-edit-section">
@@ -982,6 +984,22 @@ function EditCard({
             <option key={v} value={v}>{l}</option>
           ))}
         </select>
+      </div>
+      </div>
+
+      {pickerOpen && (
+        <CamPresetPicker
+          materials={materials}
+          currentQuery={draft.material?.query}
+          onClose={() => setPickerOpen(false)}
+          onSelect={(cp) => setDraft(d => {
+            const query = cp.name;
+            const nd = { ...d, material: { ...(d.material || {}), query, category: materialCategory(query) } };
+            nd.name = composeName(nd, assemblyId, nd.operation_type);
+            return nd;
+          })}
+        />
+      )}
       </div>
     </div>
   );
