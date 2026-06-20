@@ -198,8 +198,10 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--blue); }
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  font-family: var(--font-display);
   font-weight: 700;
   font-size: 15px;
+  letter-spacing: 0.01em;
   color: var(--blue);
   white-space: nowrap;
   text-decoration: none;
@@ -1829,7 +1831,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 .diff-val {
   font-size: 12px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1876,8 +1878,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 .commit-field-row:last-child { border-bottom: none; }
 .commit-field-name { color: var(--text-sub); }
-.commit-field-old { color: var(--text-sub); font-family: monospace; text-align: right; }
-.commit-field-new { color: var(--green); font-family: monospace; font-weight: 600; text-align: right; }
+.commit-field-old { color: var(--text-sub); font-family: var(--font-mono); text-align: right; }
+.commit-field-new { color: var(--green); font-family: var(--font-mono); font-weight: 600; text-align: right; }
 
 /* Merge success screen */
 .merge-success {
@@ -1943,7 +1945,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .text-sm { font-size: 12px; }
 .text-xs { font-size: 11px; }
 .font-bold { font-weight: 700; }
-.font-mono { font-family: monospace; }
+.font-mono { font-family: var(--font-mono); }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ─── Preset Panel ───────────────────────────────────────────────────────── */
@@ -2063,7 +2065,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .preset-stat-label { color: var(--text-sub); flex-shrink: 0; }
 
 .preset-stat-value {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   text-align: right;
   white-space: nowrap;
@@ -2208,7 +2210,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 
 .step-abs-val {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-weight: 600;
   color: var(--text);
   min-width: 52px;
@@ -2251,7 +2253,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .step-factor-input {
   width: 72px !important;
   padding: 3px 6px !important;
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: 12px !important;
 }
 
@@ -2261,7 +2263,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 
 .step-factor-result {
-  font-family: monospace;
+  font-family: var(--font-mono);
   color: var(--green);
   font-weight: 600;
   white-space: nowrap;
@@ -2485,7 +2487,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
-  font-family: monospace;
+  font-family: var(--font-mono);
   background: rgba(var(--tok-proshot), 0.14);
   border: 1px solid rgba(var(--tok-proshot), 0.42);
   color: rgb(var(--tok-proshot));
@@ -2540,7 +2542,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: rgb(var(--tok-machine));
   font-size: 11px;
   font-weight: 700;
-  font-family: monospace;
+  font-family: var(--font-mono);
   white-space: nowrap;
   letter-spacing: 0.04em;
 }
@@ -2554,7 +2556,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: rgb(var(--tok-location));
   font-size: 11px;
   font-weight: 600;
-  font-family: monospace;
+  font-family: var(--font-mono);
   white-space: nowrap;
   letter-spacing: 0.04em;
 }
@@ -2870,7 +2872,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   border-radius: 999px;
   color: var(--text);
   text-decoration: none;
-  font-family: monospace;
+  font-family: var(--font-mono);
   flex-shrink: 0;
   letter-spacing: 0.02em;
 }
@@ -2883,7 +2885,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   padding: 1px 7px;
   border: 2px solid var(--text);
   border-radius: 3px;
-  font-family: monospace;
+  font-family: var(--font-mono);
   flex-shrink: 0;
 }
 
