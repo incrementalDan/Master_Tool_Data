@@ -20,7 +20,7 @@ const SORTS = {
 };
 
 export default function LandingPage() {
-  const { tools, isLoading, error, clearLibraryLocation } = useApp();
+  const { tools, isLoading, error, clearLibraryLocation, shopSettings } = useApp();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchRef = useRef(null);
@@ -39,6 +39,23 @@ export default function LandingPage() {
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'grid');
   const [sort, setSort] = useState(() => localStorage.getItem(SORT_KEY) || 'updated');
   const debounceRef = useRef(null);
+
+  // Machine filter — only active when machines are configured in shop settings.
+  // Initialised to the default machine (if one is set) on first load, then
+  // stays as the user sets it for the session.
+  const machines = shopSettings?.machines || [];
+  const defaultMachineId = shopSettings?.default_machine_id || null;
+  const [machineFilter, setMachineFilter] = useState({ machineId: null, strict: false });
+  const machineInitialised = useRef(false);
+  useEffect(() => {
+    if (machineInitialised.current) return;
+    if (defaultMachineId && machines.length > 0) {
+      // Only pre-select if the default machine actually exists in the list.
+      const exists = machines.some(m => m.id === defaultMachineId);
+      if (exists) setMachineFilter({ machineId: defaultMachineId, strict: false });
+    }
+    machineInitialised.current = true;
+  }, [defaultMachineId, machines]);
 
   // Persist filters to URL
   useEffect(() => {
@@ -67,9 +84,9 @@ export default function LandingPage() {
 
   const activeFilters = { toolTypes: selectedTypes, textQuery, facets };
   const filtered = useMemo(() => {
-    const result = applyFilters(tools, activeFilters);
+    const result = applyFilters(tools, activeFilters, machines.length > 0 ? machineFilter : null);
     return [...result].sort(SORTS[sort]?.fn || SORTS.updated.fn);
-  }, [tools, selectedTypes, textQuery, facets, sort]);
+  }, [tools, selectedTypes, textQuery, facets, sort, machineFilter, machines.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleQueryChange = useCallback((val) => {
     setDisplayQuery(val);
@@ -100,7 +117,7 @@ export default function LandingPage() {
     setFacets(newFilters.facets || {});
   };
 
-  const hasFilters = selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0;
+  const hasFilters = selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0 || !!machineFilter.machineId;
 
   if (isLoading) {
     return (
@@ -165,6 +182,43 @@ export default function LandingPage() {
         </button>
       </div>
 
+      {/* Machine filter — only when machines are configured in shop settings */}
+      {machines.length > 0 && (
+        <div className="mb-16">
+          <div className="section-header">Machine</div>
+          <div className="flex items-center gap-8 flex-wrap">
+            <button
+              className={`chip ${!machineFilter.machineId ? 'active' : ''}`}
+              onClick={() => setMachineFilter({ machineId: null, strict: false })}
+            >
+              All
+            </button>
+            {machines.map(m => (
+              <button
+                key={m.id}
+                className={`chip ${machineFilter.machineId === m.id ? 'active' : ''}`}
+                onClick={() => setMachineFilter(f => ({
+                  machineId: f.machineId === m.id ? null : m.id,
+                  strict: f.machineId === m.id ? false : f.strict,
+                }))}
+              >
+                {m.model}
+              </button>
+            ))}
+            {machineFilter.machineId && (
+              <label className="flex items-center gap-6 text-xs text-sub" style={{ marginLeft: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={machineFilter.strict}
+                  onChange={e => setMachineFilter(f => ({ ...f, strict: e.target.checked }))}
+                />
+                Strict (linked only)
+              </label>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tool type grid — single-select by default; shift-click adds more types
           that could do the same job (e.g. flat end mill + bull nose end mill) */}
       <div className="mb-16">
@@ -204,7 +258,7 @@ export default function LandingPage() {
         {hasFilters && (
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); }}
+            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); setMachineFilter({ machineId: null, strict: false }); }}
           >
             Reset
           </button>

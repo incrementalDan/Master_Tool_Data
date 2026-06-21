@@ -55,11 +55,12 @@ function blankPreset() {
     'tool-coolant': 'flood', 'use-stepdown': false, 'use-stepover': false,
     stepdown: null, stepover: null,
     'ramp-spindle-speed': 'n',
+    machine_id: null,
   };
 }
 
 export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
-  const { holders, materials } = useApp();
+  const { holders, materials, shopSettings } = useApp();
   // Resolve a preset's material to its group color (from the Materials library).
   const groupColorOf = (query) => presetMaterialColor(query, materials);
   const isMetric = tool.unit === 'millimeters';
@@ -196,14 +197,15 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
 
   // Build the new preset from the chosen source (blank / preset copy / reference).
   const buildNewPreset = () => {
+    let np;
     if (copySrc.type === 'preset') {
       const src = presets.find(p => p.guid === copySrc.id);
-      if (src) return { ...src, guid: generateId(), name: `${src.name || 'Preset'} (copy)` };
+      if (src) np = { ...src, guid: generateId(), name: `${src.name || 'Preset'} (copy)` };
     }
-    if (copySrc.type === 'ref') {
+    if (!np && copySrc.type === 'ref') {
       const ref = sfRefs.find(r => r.preset_id === copySrc.id);
       const cam = camPresetById(copySrc.id);
-      const np = blankPreset();
+      np = blankPreset();
       if (cam) np.material = { ...np.material, query: cam.name, category: materialCategory(cam.name) };
       // Seed speeds/feeds from the reference using THIS tool's diameter + flutes.
       const factor = isMetric ? 1000 : 12;
@@ -214,9 +216,14 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
       np.f_z = ref?.chip_load ?? 0;
       np.v_f = (ref?.chip_load && rpm && flutes) ? roundForField('v_f', ref.chip_load * rpm * flutes) : 0;
       np.name = composePresetName({ materialQuery: materialNameCode(cam?.name, materials) }) || cam?.name || 'New Preset';
-      return np;
     }
-    return blankPreset();
+    if (!np) np = blankPreset();
+    // Pre-populate the default machine for new/ref-seeded presets (not copies —
+    // a copy already carries the original preset's machine_id).
+    if (copySrc.type !== 'preset' && shopSettings?.default_machine_id) {
+      np.machine_id = shopSettings.default_machine_id;
+    }
+    return np;
   };
 
   const handleConfirmAdd = () => {
@@ -394,6 +401,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
             assemblies={tool.assemblies || []}
             holders={holders}
             materials={materials}
+            shopSettings={shopSettings}
             onSave={handlePresetSave}
             onCancel={handleCancelEdit}
             onDirtyChange={setEditorDirty}
@@ -560,11 +568,18 @@ function computeFormulaDraft(draft, fx, diameter, numberOfFlutes) {
   return d;
 }
 
+// Returns true when the machine's taper is found in the holder description.
+// Used for the informational taper compatibility hint — non-blocking.
+function taperMatches(machTaper, holderDesc) {
+  if (!machTaper || !holderDesc || machTaper === 'Other') return true;
+  return holderDesc.toUpperCase().includes(machTaper.toUpperCase());
+}
+
 // ── Edit card ────────────────────────────────────────────────────────────────
 function EditCard({
   preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
   diameter, fluteLength, numberOfFlutes,
-  assemblies = [], holders = [], materials,
+  assemblies = [], holders = [], materials, shopSettings,
   onSave, onCancel, onDirtyChange, isSaving,
 }) {
   const isTap = toolType === 'tap';
@@ -600,11 +615,13 @@ function EditCard({
   } else {
     initialFx.v_f_retract = 'manual';
   }
+  const configMachines = shopSettings?.machines || [];
   const [fx, setFx] = useState(initialFx);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [draft, setDraft] = useState(() => {
     const d = computeFormulaDraft({ ...preset }, initialFx, diameter, numberOfFlutes);
     d.operation_type = preset.operation_type ?? parsePresetName(preset.name)?.opType ?? null;
+    d.machine_id = preset.machine_id ?? null;
     return d;
   });
 
@@ -897,6 +914,36 @@ function EditCard({
               ))}
             </select>
           </FGroup>
+          {configMachines.length > 0 && (() => {
+            const selMachine = configMachines.find(m => m.id === draft.machine_id);
+            const selAsm = assemblies.find(a => a.assembly_id === assemblyId);
+            const holderDesc = selAsm ? holderDescOf(selAsm) : '';
+            const taperOk = !selMachine || !holderDesc || taperMatches(selMachine.taper, holderDesc);
+            return (
+              <FGroup label={
+                <span className="flex items-center gap-6">
+                  Machine
+                  {!taperOk && (
+                    <span
+                      title={`Taper mismatch: machine is ${selMachine.taper} but holder may not match`}
+                      style={{ color: 'var(--orange)', cursor: 'help', lineHeight: 1 }}
+                    >⚠</span>
+                  )}
+                </span>
+              }>
+                <select
+                  className="field-input"
+                  value={draft.machine_id || ''}
+                  onChange={e => { touch(); setDraft(d => ({ ...d, machine_id: e.target.value || null })); }}
+                >
+                  <option value="">— None —</option>
+                  {configMachines.map(m => (
+                    <option key={m.id} value={m.id}>{m.model}</option>
+                  ))}
+                </select>
+              </FGroup>
+            );
+          })()}
         </div>
       </div>
       </div>

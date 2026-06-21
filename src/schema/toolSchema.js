@@ -1435,7 +1435,12 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
 export function buildMetadataTool(tool) {
   const preset_meta = {};
   for (const p of (tool.presets || [])) {
-    if (p.guid && p.operation_type) preset_meta[p.guid] = { operation_type: p.operation_type };
+    if (p.guid && (p.operation_type || p.machine_id)) {
+      preset_meta[p.guid] = {
+        ...(p.operation_type ? { operation_type: p.operation_type } : {}),
+        ...(p.machine_id    ? { machine_id: p.machine_id }         : {}),
+      };
+    }
   }
   return {
     id: tool.tracking_id || tool.id,
@@ -1587,6 +1592,7 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
     return {
       ...p,
       operation_type: parsePresetName(p.name)?.opType ?? presetMeta[p.guid]?.operation_type ?? null,
+      machine_id: presetMeta[p.guid]?.machine_id ?? null,
       material: inferredMat
         ? { ...(p.material || {}), query: inferredMat, category: materialCategory(inferredMat) }
         : p.material,

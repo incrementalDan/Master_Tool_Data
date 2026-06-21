@@ -42,7 +42,7 @@ function matchesNumericFacet(toolValue, filter) {
 // { toolTypes, textQuery, facets: { diameter, number_of_flutes, flute_length, overall_length, material, coating, vendor, preferred_machine, material_suitability, tags, ... } }
 // toolTypes is an array — empty/absent means "any type". Numeric facets are { value, op }
 // objects (see isOperatorFilter); everything else is a bare string/array.
-export function applyFilters(tools, activeFilters) {
+export function applyFilters(tools, activeFilters, machineFilter = null) {
   let result = tools;
 
   if (activeFilters.textQuery) {
@@ -64,6 +64,18 @@ export function applyFilters(tools, activeFilters) {
       continue;
     }
     result = result.filter(t => matchesFacet(t, field, value));
+  }
+
+  if (machineFilter?.machineId) {
+    const { machineId, strict } = machineFilter;
+    result = result.filter(t => {
+      const presets = t.presets || [];
+      const hasLinked = presets.some(p => p.machine_id === machineId);
+      if (strict) return hasLinked;
+      // Default: show linked + tools with no machine-linked presets at all.
+      const hasAnyMachineLink = presets.some(p => p.machine_id);
+      return hasLinked || !hasAnyMachineLink;
+    });
   }
 
   return result;
