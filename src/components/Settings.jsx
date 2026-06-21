@@ -87,6 +87,20 @@ export default function Settings() {
     finally { setSavingShop(false); }
   };
 
+  // Persist just the machine-number config (start + skip), preserving the rest
+  // of shop settings. Lives next to its inputs in the Renumber section.
+  const saveMachineNumbers = async () => {
+    setSavingShop(true);
+    try {
+      await saveShopSettings({
+        ...(shopSettings || {}),
+        machine_number: { start: Number(machineStart) || 30, skip: skipList },
+      });
+      notify('Machine numbers saved', 'success');
+    } catch { /* notify handled in saveShopSettings */ }
+    finally { setSavingShop(false); }
+  };
+
   const fmtDate = (v) => {
     if (!v) return null;
     try { return new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
@@ -106,7 +120,7 @@ export default function Settings() {
     setLoadingPreview(true);
     try {
       const list = await fetchRawLibrary();
-      const numbers = generateMachineNumbers(list.length);
+      const numbers = generateMachineNumbers(list.length, Number(machineStart) || 30, skipList);
       setPreviewRows(list.map((f, i) => ({
         id: f.guid,
         description: f.description || '—',
@@ -476,33 +490,6 @@ export default function Settings() {
         </button>
       </div>
 
-      {/* Machine numbers — saved to shop_settings.json, drives renumber/add */}
-      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <Hash size={16} style={{ color: 'var(--blue)' }} />
-          <h3 style={{ margin: 0 }}>Machine Numbers</h3>
-          <InfoTip text="Machine tool numbers are assigned starting at this number, skipping the reserved list. Used by Renumber Library and when adding a new tool." alignRight />
-        </div>
-        <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Start number</label>
-        <input className="field-input" type="number" style={{ maxWidth: 140, marginBottom: 16 }} value={machineStart} onChange={e => setMachineStart(e.target.value)} />
-
-        <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 6 }}>Skip / reserved numbers</label>
-        <div className="flex items-center gap-6 flex-wrap" style={{ marginBottom: 8 }}>
-          {skipList.map(n => (
-            <span key={n} className="chip" style={{ gap: 6 }}>
-              {n}
-              <button className="icon-btn" style={{ width: 16, height: 16 }} title="Remove" onClick={() => removeSkip(n)}><X size={12} /></button>
-            </span>
-          ))}
-          {skipList.length === 0 && <span className="text-sub text-sm">None</span>}
-        </div>
-        <div className="flex items-center gap-6">
-          <input className="field-input" type="number" style={{ maxWidth: 110 }} placeholder="Add #" value={skipInput}
-            onChange={e => setSkipInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSkip()} />
-          <button className="btn btn-secondary btn-sm" onClick={addSkip}>Add</button>
-        </div>
-      </div>
-
       {/* ProShop export */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -535,11 +522,38 @@ export default function Settings() {
         {showDescRename && <DescRenameModal onClose={() => setShowDescRename(false)} />}
       </div>
 
+      {/* Machine Numbers + Renumber — grouped because the numbers drive the
+          renumber (and adding a tool). Set/save the numbering here, then renumber. */}
       <div className="card" style={{ maxWidth: 760 }}>
-        <h3 style={{ marginBottom: 4 }}>Advanced</h3>
-        <p className="text-sub text-sm mb-16">Destructive maintenance actions. Use with care.</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Hash size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Machine Numbers</h3>
+          <InfoTip text="Machine tool numbers are assigned starting at this number, skipping the reserved list. Used by Renumber Library and when adding a new tool." alignRight />
+        </div>
+        <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Start number</label>
+        <input className="field-input" type="number" style={{ maxWidth: 140, marginBottom: 16 }} value={machineStart} onChange={e => setMachineStart(e.target.value)} />
+
+        <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 6 }}>Skip / reserved numbers</label>
+        <div className="flex items-center gap-6 flex-wrap" style={{ marginBottom: 8 }}>
+          {skipList.map(n => (
+            <span key={n} className="chip" style={{ gap: 6 }}>
+              {n}
+              <button className="icon-btn" style={{ width: 16, height: 16 }} title="Remove" onClick={() => removeSkip(n)}><X size={12} /></button>
+            </span>
+          ))}
+          {skipList.length === 0 && <span className="text-sub text-sm">None</span>}
+        </div>
+        <div className="flex items-center gap-6" style={{ marginBottom: 16 }}>
+          <input className="field-input" type="number" style={{ maxWidth: 110 }} placeholder="Add #" value={skipInput}
+            onChange={e => setSkipInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSkip()} />
+          <button className="btn btn-secondary btn-sm" onClick={addSkip}>Add</button>
+        </div>
+        <button className="btn btn-primary btn-sm" onClick={saveMachineNumbers} disabled={savingShop}>
+          {savingShop ? 'Saving…' : 'Save Machine Numbers'}
+        </button>
 
         <div style={{
+          marginTop: 20,
           padding: 16, borderRadius: 'var(--radius-sm)',
           border: '1px solid var(--border)', borderLeft: '3px solid var(--red)',
           background: 'var(--surface-2)',
@@ -555,7 +569,7 @@ export default function Settings() {
                 <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
                 <span>
                   This will reassign machine tool numbers to all tools in the library starting at
-                  <strong> #30</strong>, in their current import order. Tools currently referenced in saved
+                  <strong> #{Number(machineStart) || 30}</strong>, in their current import order. Tools currently referenced in saved
                   programs will have stale tool numbers after this. This should only be done once during
                   initial setup.
                 </span>
@@ -570,8 +584,8 @@ export default function Settings() {
           {stage === 'preview' && (
             <>
               <p className="text-sub text-sm mb-12">
-                Review the change below ({previewRows.length} tools, fresh from the library). Numbers
-                <strong> 98, 99, and 100</strong> are skipped (reserved).
+                Review the change below ({previewRows.length} tools, fresh from the library).
+                {skipList.length > 0 && <> Numbers <strong>{skipList.join(', ')}</strong> are skipped (reserved).</>}
               </p>
               <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', marginBottom: 14 }}>
                 <table className="match-table">
@@ -622,7 +636,7 @@ export default function Settings() {
 
           {stage === 'done' && (
             <div style={{ color: 'var(--green)' }}>
-              ✓ Renumbered {resultCount} tools starting at #30. Both the Fusion library and metadata have been updated.
+              ✓ Renumbered {resultCount} tools starting at #{Number(machineStart) || 30}. Both the Fusion library and metadata have been updated.
             </div>
           )}
         </div>

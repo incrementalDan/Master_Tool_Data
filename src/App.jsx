@@ -275,7 +275,7 @@ function TopBar() {
   return (
     <header className="topbar">
       <a href="#/" className="topbar-brand" onClick={e => { if (onLanding) e.preventDefault(); }}>
-        <BrandLogo markSize={24} />
+        <BrandLogo markSize={30} />
       </a>
       <nav className="topbar-tabs">
         <a
@@ -331,7 +331,7 @@ function LocalModeTopBar({ tools, onExit }) {
   return (
     <header className="topbar">
       <a href="#/" className="topbar-brand">
-        <BrandLogo markSize={24} />
+        <BrandLogo markSize={30} />
       </a>
       <span className="local-mode-badge" title="Browsing an uploaded library file — view-only, not connected to Autodesk">
         <FolderOpen size={13} /> Local mode (read-only)
