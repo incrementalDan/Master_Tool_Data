@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon } from 'lucide-react';
+import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight } from 'lucide-react';
 import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
-import { generateMachineNumbers } from '../schema/toolSchema.js';
+import { generateMachineNumbers, generateId } from '../schema/toolSchema.js';
+import { useDragReorder } from './useDragReorder.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
 import { FilePicker } from './LibrarySetup.jsx';
 import DescRenameModal from './DescRenameModal.jsx';
@@ -106,6 +107,59 @@ export default function Settings() {
     try { return new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
     catch { return null; }
   };
+
+  // ── Machines ───────────────────────────────────────────────────────────────
+  const [machines, setMachines] = useState(shopSettings?.machines || []);
+  const [defaultMachineId, setDefaultMachineId] = useState(shopSettings?.default_machine_id || null);
+  const [expandedMachineId, setExpandedMachineId] = useState(null);
+  const [addingMachine, setAddingMachine] = useState(false);
+  const [machineDeleteId, setMachineDeleteId] = useState(null);
+  const [savingMachines, setSavingMachines] = useState(false);
+
+  // Keep local machine state in sync when shopSettings loads from Drive.
+  useEffect(() => {
+    setMachines(shopSettings?.machines || []);
+    setDefaultMachineId(shopSettings?.default_machine_id || null);
+  }, [shopSettings]);
+
+  const blankMachine = () => ({
+    id: generateId(),
+    model: '',
+    machine_type: 'Machining Center',
+    taper: '',
+    max_rpm: null,
+    horsepower: null,
+    through_coolant: false,
+    through_coolant_psi: null,
+    order: machines.length,
+  });
+
+  const saveMachines = async (updatedMachines, updatedDefaultId) => {
+    setSavingMachines(true);
+    try {
+      await saveShopSettings({
+        ...(shopSettings || {}),
+        machines: updatedMachines,
+        default_machine_id: updatedDefaultId,
+      });
+      notify('Machines saved', 'success');
+    } catch { /* notify handled in saveShopSettings */ }
+    finally { setSavingMachines(false); }
+  };
+
+  const updateMachine = (id, patch) =>
+    setMachines(ms => ms.map(m => m.id === id ? { ...m, ...patch } : m));
+
+  const { handlers: machDragHandlers } = useDragReorder(machines, (reordered) => {
+    setMachines(reordered);
+  });
+
+  const MACHINE_TYPES = ['Machining Center', '5-Axis', 'Mill-Turn', 'Lathe / Turret', 'Other'];
+  const TAPER_TYPES = [
+    'NBT30', 'BT30', 'BT40', 'BT50',
+    'CAT40', 'CAT40 Dual Contact', 'CAT50', 'CAT50 Dual Contact',
+    'HSK-A63', 'HSK-A100', 'HSK-E32', 'HSK-E40', 'Other',
+  ];
 
   // ── Renumber ───────────────────────────────────────────────────────────────
   const [stage, setStage] = useState('idle');
@@ -490,6 +544,210 @@ export default function Settings() {
         </button>
       </div>
 
+      {/* Machines */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Cpu size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Machines</h3>
+          {!googleAuthenticated && <InfoTip text="Connect Google Drive to persist machine settings." alignRight />}
+        </div>
+        <p className="text-sub text-sm mb-16">
+          Configure the shop&apos;s CNC machines. Presets can be linked to a machine to document which
+          machine they were proven on, and the landing page gains a machine filter.
+        </p>
+
+        {/* Default machine picker */}
+        {machines.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Default machine</label>
+            <select
+              className="field-input"
+              style={{ maxWidth: 320 }}
+              value={defaultMachineId || ''}
+              onChange={e => setDefaultMachineId(e.target.value || null)}
+            >
+              <option value="">None</option>
+              {machines.map(m => <option key={m.id} value={m.id}>{m.model || 'Unnamed'}</option>)}
+            </select>
+            <div className="text-sub text-xs" style={{ marginTop: 4 }}>
+              Pre-selected in the machine filter and preset editor.
+            </div>
+          </div>
+        )}
+
+        {/* Machine list */}
+        {machines.map((m, idx) => {
+          const isExpanded = expandedMachineId === m.id;
+          const isDeleting = machineDeleteId === m.id;
+          return (
+            <div
+              key={m.id}
+              style={{
+                border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)',
+                marginBottom: 8,
+                background: 'var(--surface)',
+              }}
+            >
+              {/* Row header */}
+              <div
+                className="flex items-center gap-8"
+                style={{ padding: '8px 10px', cursor: 'pointer' }}
+                onClick={() => setExpandedMachineId(isExpanded ? null : m.id)}
+                {...machDragHandlers(idx)}
+              >
+                <GripVertical size={14} style={{ color: 'var(--text-sub)', flexShrink: 0, cursor: 'grab' }} />
+                <span style={{ flex: 1, fontWeight: 500, fontSize: 13 }}>{m.model || <span className="text-sub">Unnamed machine</span>}</span>
+                {m.taper && <span className="chip" style={{ fontSize: 11, padding: '2px 7px' }}>{m.taper}</span>}
+                {m.machine_type && <span className="text-sub text-xs">{m.machine_type}</span>}
+                {isExpanded ? <ChevronDown size={14} className="text-sub" /> : <ChevronRight size={14} className="text-sub" />}
+              </div>
+
+              {/* Expanded inline editor */}
+              {isExpanded && (
+                <div style={{ padding: '0 12px 12px 12px', borderTop: '1px solid var(--border)' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', marginTop: 12 }}>
+                    <div>
+                      <label className="field-label">Model *</label>
+                      <input
+                        className="field-input"
+                        value={m.model}
+                        placeholder="e.g. Brother Speedio M300X3"
+                        onChange={e => updateMachine(m.id, { model: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label">Machine type</label>
+                      <select className="field-input" value={m.machine_type || ''} onChange={e => updateMachine(m.id, { machine_type: e.target.value })}>
+                        <option value="">—</option>
+                        {MACHINE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="field-label">Taper</label>
+                      <select className="field-input" value={m.taper || ''} onChange={e => updateMachine(m.id, { taper: e.target.value })}>
+                        <option value="">—</option>
+                        {TAPER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="field-label">Max RPM</label>
+                      <input
+                        className="field-input"
+                        type="number"
+                        value={m.max_rpm ?? ''}
+                        placeholder="e.g. 16000"
+                        onChange={e => updateMachine(m.id, { max_rpm: e.target.value === '' ? null : Number(e.target.value) })}
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label">Horsepower</label>
+                      <input
+                        className="field-input"
+                        type="number"
+                        value={m.horsepower ?? ''}
+                        placeholder="e.g. 12"
+                        onChange={e => updateMachine(m.id, { horsepower: e.target.value === '' ? null : Number(e.target.value) })}
+                      />
+                    </div>
+                    <div>
+                      <label className="field-label">Through-spindle coolant</label>
+                      <div className="btn-toggle" style={{ marginTop: 4 }}>
+                        <button className={m.through_coolant ? 'active' : ''} onClick={() => updateMachine(m.id, { through_coolant: true })}>Yes</button>
+                        <button className={!m.through_coolant ? 'active' : ''} onClick={() => updateMachine(m.id, { through_coolant: false, through_coolant_psi: null })}>No</button>
+                      </div>
+                    </div>
+                    {m.through_coolant && (
+                      <div>
+                        <label className="field-label">Coolant pressure (PSI)</label>
+                        <input
+                          className="field-input"
+                          type="number"
+                          value={m.through_coolant_psi ?? ''}
+                          placeholder="e.g. 1000"
+                          onChange={e => updateMachine(m.id, { through_coolant_psi: e.target.value === '' ? null : Number(e.target.value) })}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-8" style={{ marginTop: 14 }}>
+                    {isDeleting ? (
+                      <>
+                        <span className="text-sm" style={{ color: 'var(--red)' }}>Delete this machine?</span>
+                        <button className="btn btn-danger btn-sm" onClick={() => {
+                          const updated = machines.filter(x => x.id !== m.id).map((x, i) => ({ ...x, order: i }));
+                          const newDefault = defaultMachineId === m.id ? null : defaultMachineId;
+                          setMachines(updated);
+                          setDefaultMachineId(newDefault);
+                          setMachineDeleteId(null);
+                          setExpandedMachineId(null);
+                          saveMachines(updated, newDefault);
+                        }}>Delete</button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setMachineDeleteId(null)}>Cancel</button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          className="btn btn-primary btn-sm"
+                          disabled={!m.model || savingMachines}
+                          onClick={() => { setExpandedMachineId(null); saveMachines(machines, defaultMachineId); }}
+                        >
+                          {savingMachines ? 'Saving…' : 'Save'}
+                        </button>
+                        <button className="btn btn-ghost btn-sm" onClick={() => setExpandedMachineId(null)}>Cancel</button>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          style={{ marginLeft: 'auto', color: 'var(--red)' }}
+                          onClick={() => setMachineDeleteId(m.id)}
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Add machine */}
+        {addingMachine ? (
+          <AddMachineForm
+            machineTypes={MACHINE_TYPES}
+            taperTypes={TAPER_TYPES}
+            onSave={(m) => {
+              const updated = [...machines, { ...m, order: machines.length }];
+              setMachines(updated);
+              setAddingMachine(false);
+              saveMachines(updated, defaultMachineId);
+            }}
+            onCancel={() => setAddingMachine(false)}
+          />
+        ) : (
+          <button
+            className="btn btn-secondary btn-sm"
+            style={{ marginTop: machines.length > 0 ? 8 : 0 }}
+            onClick={() => setAddingMachine(true)}
+          >
+            <Plus size={14} /> Add Machine
+          </button>
+        )}
+
+        {/* Save default machine when changed without opening a row editor */}
+        {machines.length > 0 && (
+          <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={savingMachines || !googleAuthenticated}
+              onClick={() => saveMachines(machines, defaultMachineId)}
+            >
+              {savingMachines ? 'Saving…' : 'Save Machines'}
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* ProShop export */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -640,6 +898,105 @@ export default function Settings() {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function AddMachineForm({ machineTypes, taperTypes, onSave, onCancel }) {
+  const [draft, setDraft] = useState({
+    model: '',
+    machine_type: 'Machining Center',
+    taper: '',
+    max_rpm: null,
+    horsepower: null,
+    through_coolant: false,
+    through_coolant_psi: null,
+  });
+  const set = (patch) => setDraft(d => ({ ...d, ...patch }));
+
+  return (
+    <div style={{
+      border: '1px solid var(--blue)',
+      borderRadius: 'var(--radius-sm)',
+      padding: '12px',
+      marginTop: 8,
+      background: 'var(--surface)',
+    }}>
+      <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>New Machine</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px' }}>
+        <div>
+          <label className="field-label">Model *</label>
+          <input
+            className="field-input"
+            value={draft.model}
+            placeholder="e.g. Brother Speedio M300X3"
+            autoFocus
+            onChange={e => set({ model: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="field-label">Machine type</label>
+          <select className="field-input" value={draft.machine_type} onChange={e => set({ machine_type: e.target.value })}>
+            {machineTypes.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="field-label">Taper</label>
+          <select className="field-input" value={draft.taper} onChange={e => set({ taper: e.target.value })}>
+            <option value="">—</option>
+            {taperTypes.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="field-label">Max RPM</label>
+          <input
+            className="field-input"
+            type="number"
+            value={draft.max_rpm ?? ''}
+            placeholder="e.g. 16000"
+            onChange={e => set({ max_rpm: e.target.value === '' ? null : Number(e.target.value) })}
+          />
+        </div>
+        <div>
+          <label className="field-label">Horsepower</label>
+          <input
+            className="field-input"
+            type="number"
+            value={draft.horsepower ?? ''}
+            placeholder="e.g. 12"
+            onChange={e => set({ horsepower: e.target.value === '' ? null : Number(e.target.value) })}
+          />
+        </div>
+        <div>
+          <label className="field-label">Through-spindle coolant</label>
+          <div className="btn-toggle" style={{ marginTop: 4 }}>
+            <button className={draft.through_coolant ? 'active' : ''} onClick={() => set({ through_coolant: true })}>Yes</button>
+            <button className={!draft.through_coolant ? 'active' : ''} onClick={() => set({ through_coolant: false, through_coolant_psi: null })}>No</button>
+          </div>
+        </div>
+        {draft.through_coolant && (
+          <div>
+            <label className="field-label">Coolant pressure (PSI)</label>
+            <input
+              className="field-input"
+              type="number"
+              value={draft.through_coolant_psi ?? ''}
+              placeholder="e.g. 1000"
+              onChange={e => set({ through_coolant_psi: e.target.value === '' ? null : Number(e.target.value) })}
+            />
+          </div>
+        )}
+      </div>
+      <div className="flex items-center gap-8" style={{ marginTop: 14 }}>
+        <button
+          className="btn btn-primary btn-sm"
+          disabled={!draft.model.trim()}
+          onClick={() => onSave({ ...draft, id: generateId() })}
+        >
+          Add Machine
+        </button>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );

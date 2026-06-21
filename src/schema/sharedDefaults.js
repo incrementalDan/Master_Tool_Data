@@ -152,13 +152,16 @@ export const DEFAULT_MATERIALS = {
 };
 
 // shop_settings.json — shop-wide settings shared by all users via Drive.
-// Foundation only: loaded/exposed/saved, but existing behavior (default unit,
-// renumber start/skip, APS picker, import-folder memory) is NOT yet wired to it.
 export const DEFAULT_SHOP_SETTINGS = {
   version: 1,
   shop_name: '',
   default_units: 'inches',
   machine_number: { start: 30, skip: [98, 99, 100] },
+  // CNC machine models. Each entry: id, model, machine_type, taper, max_rpm,
+  // horsepower, through_coolant, through_coolant_psi, order.
+  // machine_id on presets links to these entries.
+  machines: [],
+  default_machine_id: null,
   import: { last_proshop_import: null, last_photo_import_folder_id: null },
   aps: { last_used_hub_id: null, last_used_project_id: null },
   // ISO timestamps set when each step of the initial setup workflow completes.
