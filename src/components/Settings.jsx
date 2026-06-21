@@ -518,7 +518,7 @@ export default function Settings() {
 
       {showPhotos && <ImportPhotosModal onClose={() => setShowPhotos(false)} />}
 
-      {/* Shop (name + default unit) — saved to shop_settings.json */}
+      {/* Shop — name, default unit, and machines (all saved to shop_settings.json) */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <Ruler size={16} style={{ color: 'var(--blue)' }} />
@@ -542,19 +542,17 @@ export default function Settings() {
         <button className="btn btn-primary" onClick={saveShop} disabled={savingShop || !googleAuthenticated}>
           {savingShop ? 'Saving…' : 'Save Shop Settings'}
         </button>
-      </div>
 
-      {/* Machines */}
-      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <Cpu size={16} style={{ color: 'var(--blue)' }} />
-          <h3 style={{ margin: 0 }}>Machines</h3>
-          {!googleAuthenticated && <InfoTip text="Connect Google Drive to persist machine settings." alignRight />}
-        </div>
-        <p className="text-sub text-sm mb-16">
-          Configure the shop&apos;s CNC machines. Presets can be linked to a machine to document which
-          machine they were proven on, and the landing page gains a machine filter.
-        </p>
+        {/* ── Machines subsection ────────────────────────────────────────── */}
+        <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <Cpu size={15} style={{ color: 'var(--blue)' }} />
+            <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>Machines</h4>
+          </div>
+          <p className="text-sub text-sm mb-16">
+            Configure the shop&apos;s CNC machines. Presets can be linked to a machine to document which
+            machine they were proven on, and the landing page gains a machine filter.
+          </p>
 
         {/* Default machine picker */}
         {machines.length > 0 && (
@@ -746,7 +744,8 @@ export default function Settings() {
             </button>
           </div>
         )}
-      </div>
+        </div>{/* end Machines subsection */}
+      </div>{/* end Shop card */}
 
       {/* ProShop export */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>

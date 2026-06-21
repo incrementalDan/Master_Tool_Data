@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, Check, GripVertical, Trash2, ChevronDown } from 'lucide-react';
+import { Plus, X, Check, GripVertical, Trash2, ChevronDown, Cpu } from 'lucide-react';
 import { generateId, COOLANT_OPTS } from '../schema/toolSchema.js';
 import { useApp } from '../context/AppContext.jsx';
 import { holderColor } from './AssemblyCard.jsx';
@@ -81,6 +81,8 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
   const [presets, setPresets] = useState(initialPresets);
   const [editingId, setEditingId] = useState(null);
   const [materialFilter, setMaterialFilter] = useState('All');
+  const [machineFilter, setMachineFilter] = useState('All');
+  const machines = shopSettings?.machines || [];
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   // Add flow: `addOpen` reveals the "copy from" row; `copySrc` is what a new
   // preset will be seeded from — start blank, copy an existing preset, or seed
@@ -122,9 +124,12 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
   });
   const tabs = ['All', ...Object.keys(materialCounts).sort()];
 
-  const visible = materialFilter === 'All'
+  const afterMaterialFilter = materialFilter === 'All'
     ? presets
     : presets.filter(p => matchMaterial(p.material?.query) === materialFilter);
+  const visible = machineFilter === 'All'
+    ? afterMaterialFilter
+    : afterMaterialFilter.filter(p => p.machine_id === machineFilter);
 
   // ── Drag-to-reorder (only when showing All so indices map to presets[]) ──
   const handleDragStart = (e, idx) => {
@@ -260,6 +265,31 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
         </div>
       )}
 
+      {/* Machine filter — only when machines are configured */}
+      {presets.length > 0 && machines.length > 0 && (
+        <div className="preset-tabs" style={{ paddingTop: 4, borderTop: 'none', gap: 6 }}>
+          <Cpu size={12} style={{ color: 'var(--text-sub)', flexShrink: 0 }} />
+          <button
+            className={`chip ${machineFilter === 'All' ? 'active' : ''}`}
+            onClick={() => setMachineFilter('All')}
+          >
+            All
+          </button>
+          {machines.map(m => {
+            const count = presets.filter(p => p.machine_id === m.id).length;
+            return (
+              <button
+                key={m.id}
+                className={`chip ${machineFilter === m.id ? 'active' : ''}`}
+                onClick={() => setMachineFilter(f => f === m.id ? 'All' : m.id)}
+              >
+                {m.model}{count > 0 ? ` (${count})` : ''}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Inline delete confirmation */}
       {deleteConfirmId && (
         <div className="preset-inline-prompt">
@@ -303,11 +333,12 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
                   picked={addOpen && copySrc.type === 'preset' && copySrc.id === preset.guid}
                   onPick={() => setCopySrc({ type: 'preset', id: preset.guid })}
                   isDragOver={dragOverIdx === globalIdx}
-                  dragEnabled={materialFilter === 'All' && !addOpen}
+                  dragEnabled={materialFilter === 'All' && machineFilter === 'All' && !addOpen}
                   linkedAssemblies={(tool.assemblies || []).filter(a =>
                     presetMatchesAssembly(preset, a, tool.unit)
                   )}
                   holders={holders}
+                  machines={machines}
                   onEdit={() => handleEditClick(preset.guid)}
                   onDelete={() => setDeleteConfirmId(preset.guid)}
                   onDragStart={e => handleDragStart(e, globalIdx)}
@@ -319,11 +350,14 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
             );
           })}
 
-          {visible.length === 0 && materialFilter !== 'All' && (
-            <div className="preset-empty">No presets for {materialFilter}</div>
+          {visible.length === 0 && (materialFilter !== 'All' || machineFilter !== 'All') && (
+            <div className="preset-empty">
+              No presets match{materialFilter !== 'All' ? ` ${materialFilter}` : ''}
+              {machineFilter !== 'All' ? ` on ${machines.find(m => m.id === machineFilter)?.model || 'this machine'}` : ''}.
+            </div>
           )}
 
-          {presets.length === 0 && materialFilter === 'All' && (
+          {presets.length === 0 && materialFilter === 'All' && machineFilter === 'All' && (
             <div className="preset-empty">No presets yet — add one below.</div>
           )}
         </div>
@@ -417,7 +451,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
 function CollapsedCard({
   preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
   isEditing, pickMode, picked, onPick, isDragOver, dragEnabled,
-  linkedAssemblies, holders,
+  linkedAssemblies, holders, machines,
   onEdit, onDelete,
   onDragStart, onDragOver, onDrop, onDragEnd,
 }) {
@@ -438,6 +472,9 @@ function CollapsedCard({
     ? (singleAssembly.holder_description || holders?.find(h => h.guid === singleAssembly.holder_guid)?.description || '')
     : null;
   const assemblyHolderColor = assemblyHolderDesc ? holderColor(assemblyHolderDesc) : null;
+  const linkedMachine = preset.machine_id && machines?.length
+    ? machines.find(m => m.id === preset.machine_id)
+    : null;
 
   return (
     <div
@@ -506,6 +543,12 @@ function CollapsedCard({
             ) : (
               <span className="text-xs text-sub">{linkedAssemblies.length} assemblies</span>
             )}
+          </div>
+        )}
+        {linkedMachine && (
+          <div style={{ marginTop: linkedAssemblies?.length > 0 ? 4 : 6, display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Cpu size={10} style={{ color: 'var(--text-sub)', flexShrink: 0 }} />
+            <span className="text-xs text-sub">{linkedMachine.model}</span>
           </div>
         )}
       </div>
