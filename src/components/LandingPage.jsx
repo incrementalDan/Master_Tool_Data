@@ -140,8 +140,8 @@ export default function LandingPage() {
 
       {/* Search bar + Add button */}
       <div className="flex items-center gap-12 mb-16">
-        <div className="search-bar" style={{ flex: 1 }}>
-          <Search size={16} style={{ color: 'var(--text-sub)', flexShrink: 0 }} />
+        <div className="search-bar search-bar--lg" style={{ flex: '0 1 480px' }}>
+          <Search size={18} style={{ color: 'var(--text-sub)', flexShrink: 0 }} />
           <input
             ref={searchRef}
             type="text"
@@ -160,8 +160,8 @@ export default function LandingPage() {
             </button>
           )}
         </div>
-        <button className="btn btn-primary" onClick={() => navigate('/tool/new')}>
-          <Plus size={16} /> Add Tool
+        <button className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={() => navigate('/tool/new')}>
+          <Plus size={20} /> Add Tool
         </button>
       </div>
 

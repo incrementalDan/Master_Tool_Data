@@ -451,6 +451,10 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 .search-bar input::placeholder { color: #555; }
 
+/* Landing-page search: a bit taller/larger, but not full-width. */
+.search-bar--lg { padding: 10px 14px; }
+.search-bar--lg input { font-size: 16px; }
+
 /* ─── Tool type grid ─────────────────────────────────────────────────────── */
 .type-grid {
   display: grid;
