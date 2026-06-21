@@ -592,9 +592,11 @@ src/
     speedsAndFeedsCalc.js         # speeds & feeds calculator helpers
 
   components/
-    LandingPage.jsx               # Search + facets + sort + grid/list toggle
+    LandingPage.jsx               # Search + facets + sort + grid/list toggle + machine filter
                                   # Uses .landing-layout (flex): .landing-sidebar (72px, Sync Job btn)
                                   # + .landing-main (flex:1, all search/results content)
+                                  # Machine filter chips appear only when machines are configured;
+                                  # default machine pre-selected on load via machineInitialised ref
     ToolDetail.jsx                # Detail view with frozen left action sidebar + sticky header
                                   # Sections: Identity (incl. machine tool#), Geometry,
                                   #           Assemblies, Presets, Setup, History, Merge History
@@ -622,6 +624,8 @@ src/
     NormalizeModal.jsx            # One-time normalization: preset operation-type assignment
     DescRenameModal.jsx           # Per-tool description rename confirmation (buildDesc suggestions)
     PresetPanel.jsx               # Preset editor panel (speeds/feeds per preset)
+                                  # CollapsedCard shows linked machine (Cpu icon + model name)
+                                  # Machine filter chip row (below material tabs, machines only)
     CamPresetPicker.jsx           # Modal "mini Materials page" — pick a CAM preset
                                   # for a preset's material (search by alloy + group pills)
     SpeedFeedSection.jsx          # ToolDetail panel: per-CAM-preset SFM + chip-load
@@ -850,7 +854,38 @@ Three shop-wide JSON files live in the **same Drive root as `tool_metadata.json`
 
 - **`vendor_registry.json`** (default = `DEFAULT_VENDOR_REGISTRY` in `vendorRegistry.js`) — the unified entity list (see `vendorRegistry.js` above). Each entity carries a preferred `name` + `aliases[]` (match-only alternates). Manufacturers also carry **`material_code_system`** (`'iso_513' | 'kennametal' | 'vdi_3323' | null`, from `MATERIAL_CODE_SYSTEMS`) — which material-classification standard that manufacturer publishes, so its catalog's material codes map to the CAM presets' code columns. Each tool's `purchasing.manufacturers[]` / `vendors[]` are intended to reference entity IDs from this list; the `is_manufacturer` / `is_vendor` flags determine which picker an entity appears in.
 
-- **`shop_settings.json`** (default in `sharedDefaults.js`) — `{ shop_name, default_units, machine_number:{start,skip}, import:{...}, aps:{...}, setup_steps:{fusionConnected,metadataConnected,normalized,proshopMerged,proshopPhotos,machineNumbers,proshopExported} }`. **Wired into behavior**: `default_units` is mirrored to `setDefaultUnit` on load; `machine_number.{start,skip}` drives renumber/add-tool. `setup_steps` holds ISO timestamps written by `markSetupStepInSettings()` (AppContext) each time a setup step completes — shared across devices via Drive. The **6 canonical `SETUP_STEPS`** (exported from AppContext, in order) are: `fusionConnected`, `metadataConnected`, `normalized`, `proshopMerged`, `machineNumbers`, `proshopExported`; `proshopPhotos` is a sub-step tracked in `setup_steps` but not in `SETUP_STEPS`. **`metadataConnected` is step 2** — it completes the moment Google Drive connects (a declarative effect in AppContext marks it for both live sign-in and a restored session); seeding derives it from `googleRef.current`, and `loadSetupProgress`'s migration back-fills it (and `machineNumbers`) on an established library (`proshopExported` true). **Still NOT wired**: the `import` and `aps` sub-objects (the import/APS flows don't write them back yet).
+- **`shop_settings.json`** (default in `sharedDefaults.js`) — `{ shop_name, default_units, machine_number:{start,skip}, machines:[], default_machine_id:null, import:{...}, aps:{...}, setup_steps:{...} }`. **Wired into behavior**: `default_units` is mirrored to `setDefaultUnit` on load; `machine_number.{start,skip}` drives renumber/add-tool. `setup_steps` holds ISO timestamps written by `markSetupStepInSettings()` (AppContext) each time a setup step completes — shared across devices via Drive. The **6 canonical `SETUP_STEPS`** (exported from AppContext, in order) are: `fusionConnected`, `metadataConnected`, `normalized`, `proshopMerged`, `machineNumbers`, `proshopExported`; `proshopPhotos` is a sub-step tracked in `setup_steps` but not in `SETUP_STEPS`. **`metadataConnected` is step 2** — it completes the moment Google Drive connects (a declarative effect in AppContext marks it for both live sign-in and a restored session); seeding derives it from `googleRef.current`, and `loadSetupProgress`'s migration back-fills it (and `machineNumbers`) on an established library (`proshopExported` true). **Still NOT wired**: the `import` and `aps` sub-objects (the import/APS flows don't write them back yet).
+
+### Machine Configuration
+
+CNC machines are configured in `shop_settings.json` under `machines[]` (each with a `default_machine_id` for pre-selection). Machine data is informational — it never drives toolpath behavior or blocks saves.
+
+**Machine data model** (`machines[]` entry):
+```json
+{
+  "id": "uuid",
+  "model": "Brother Speedio M300X3",
+  "machine_type": "Machining Center",
+  "taper": "BT30",
+  "max_rpm": 16000,
+  "horsepower": 12,
+  "through_coolant": true,
+  "through_coolant_psi": 1000,
+  "order": 0
+}
+```
+`MACHINE_TYPES` = `['Machining Center', '5-Axis', 'Mill-Turn', 'Lathe / Turret', 'Other']`.
+`TAPER_TYPES` = standard spindle taper names (BT30/40/50, CAT40/50 with dual-contact variants, HSK-A63/A100/E32/E40, Other).
+
+**Preset machine link** — each preset carries a metadata-only `machine_id` field (null when unlinked). It is stored in `preset_meta[guid].machine_id` in `tool_metadata.json` (alongside `operation_type`) and read back in `mergeFusionAndMetadata`. **Never written to Fusion JSON.** New blank/ref-seeded presets are pre-populated with `shopSettings.default_machine_id`; copied presets keep the original's `machine_id`.
+
+**Taper compatibility hint** (`taperMatches`, `PresetPanel.jsx`) — when a preset's linked assembly has a holder, checks whether the machine's taper string appears (case-insensitive substring) in the holder description. Mismatch shows a ⚠ warning next to the machine picker in `EditCard`. Informational only, non-blocking. `'Other'` taper never flags.
+
+**Landing page filter** (`LandingPage.jsx`) — rendered only when `shopSettings.machines.length > 0`. Default (non-strict): shows tools with presets linked to the selected machine **plus** tools with no machine-linked presets at all. Strict toggle: shows only tools with at least one preset explicitly linked to the machine. Initialized to `default_machine_id` once on first load via `machineInitialised` ref (doesn't re-apply when `shopSettings` reloads). The `machineFilter` state `{ machineId, strict }` is passed as the third argument to `applyFilters` (see `searchEngine.js`).
+
+**Preset panel filter** (`PresetPanel.jsx`) — a second filter chip row (below the material tabs, only when `machines.length > 0`) lets the user narrow the visible preset cards to a single machine. Drag-to-reorder is disabled while either filter (material or machine) is active. The `CollapsedCard` shows the linked machine's model name (small `Cpu` icon + model) when `preset.machine_id` is set.
+
+**Settings UI** — the Machines configuration lives **inside the Shop card** as a subsection (not a separate card). Includes: default machine picker (pre-selects the machine in the landing filter and new presets), machine list with expand-to-edit inline form, drag-to-reorder (`useDragReorder`), delete confirmation, `+ Add Machine` button (`AddMachineForm` local component). Changes to individual machines auto-save on the row's Save button; the default machine picker has a "Save Machines" button at the bottom.
 
 ### Editor UIs (`/materials`, `/vendors`, Settings)
 
@@ -858,7 +893,7 @@ Three editor pages, reached from the top-bar chrome-style tabs (**Library**, **M
 
 - **`MaterialsEditor.jsx`** (`/materials`) — a **65/35 two-column layout** (`.mat-layout`, same proportions as `ToolDetail`). **Left (main):** a hierarchy-graph toggle — two separate node buttons, **CAM Presets ──made up of⟶ Material Alloys** (`.mat-hier`) — switches the main list between the two; color-coded full-name **group filter pills** (`.mat-gpill`, e.g. "P — Steel", tinted by group color) drive both lists, alongside a full-width **search box at the top of the page** (matches CAM presets by name/code/description/standard codes + their alloys, or alloys by name/alias/code). CAM presets render as **rich rectangles** (`.cam-card`: left border in the group color, group badge, name + description, the three standard codes ISO 513 / Kennametal / Haas-VDI as columns, and the alloy chips that compose the preset); Material Alloys render as expand-to-edit rows (label/aliases/group/linked CAM preset/condition/code/codes/notes). Click a card/row to expand its inline editor (Delete lives inside the editor). **Right (reference):** the **Material Groups** card (drag-reorder via `useDragReorder`, editable color/label/**code**, ISO groups not deletable, `+ Add Group`) plus the **"Load reference data"** action (resets the whole library to the bundled seed — one-off migration). Autosaves to `materials.json` on each change via `saveMaterials`. **This library is the only source of material** in the app (the preset picker + naming + coloring all read it) and **group colors drive preset color coding** — see Preset color coding below.
 - **`VendorsEditor.jsx`** (`/vendors`) — one list over `vendorRegistry.entities`; per row: name, **MFG**/**VENDOR** toggle pills (both can be active), **Has Own #** (vendor only), expand-to-edit **Also known as** (aliases) + (manufacturers) a **Material code system** dropdown (`MATERIAL_CODE_SYSTEMS`) + URL patterns with a live preview. **No drag-reorder** — a toolbar offers a name/alias **filter**, a role filter (All/MFG/Vendor), and an **A–Z/Z–A sort** (alphabetical by default). Rows use a CSS grid (`.vendor-row`) so the MFG/VENDOR/Has-Own-# columns stay **vertically aligned** even when a row isn't a vendor (the Has-Own-# cell is `visibility:hidden`, not removed). The **MFG/VENDOR pills are color-filled when active** (indigo / teal) — these `.vendor-role-pill` colors are scoped to this page only, not the shared chip tokens. Autosaves to `vendor_registry.json` via `saveVendorRegistry` (which also refreshes the active registry).
-- **`Settings.jsx`** — sections around the 6-step workflow: **Account** (sign-out), **Setup & Import** (unified checklist with live-data warnings + Drive timestamps), **Shop** (name + default-unit + Save button), **Machine Numbers**, **ProShop Export**, **Rename**, **Advanced**. The Setup & Import checklist **embeds two config panels inline under their steps** (not as separate cards): the **Fusion Libraries** panel (tool + holder inline pickers) under step 1 `fusionConnected`, and the **Tool Metadata (Google Drive)** panel under step 2 `metadataConnected` — both are plain `render*Panel()` functions (NOT components) so the `FilePicker`'s navigation state survives re-renders. Steps with an embedded panel render no `StepAction` button (they self-serve). The Tool Metadata panel deliberately does **not** show the Fusion library file name (that's the Fusion Libraries step's job). The "Save Shop Settings" button is inside the Shop card and writes `shop_settings.json` (unit toggle takes effect immediately). The Setup & Import tracker reads `setupProgress` (localStorage flags) + `shopSettings.setup_steps` (Drive timestamps) and calls `markSetupStepInSettings` to write both.
+- **`Settings.jsx`** — sections around the 6-step workflow: **Account** (sign-out), **Setup & Import** (unified checklist with live-data warnings + Drive timestamps), **Shop** (name + default-unit + **Machines subsection** + Save button), **Machine Numbers**, **ProShop Export**, **Rename**, **Advanced**. The Machines subsection is **inside the Shop card** (not a separate card) — it contains the default machine picker, the machine list (expand-to-edit inline, drag-to-reorder, delete confirmation, `AddMachineForm`), and a "Save Machines" button. The Setup & Import checklist **embeds two config panels inline under their steps** (not as separate cards): the **Fusion Libraries** panel (tool + holder inline pickers) under step 1 `fusionConnected`, and the **Tool Metadata (Google Drive)** panel under step 2 `metadataConnected` — both are plain `render*Panel()` functions (NOT components) so the `FilePicker`'s navigation state survives re-renders. Steps with an embedded panel render no `StepAction` button (they self-serve). The Tool Metadata panel deliberately does **not** show the Fusion library file name (that's the Fusion Libraries step's job). The "Save Shop Settings" button is inside the Shop card and writes `shop_settings.json` (unit toggle takes effect immediately). The Setup & Import tracker reads `setupProgress` (localStorage flags) + `shopSettings.setup_steps` (Drive timestamps) and calls `markSetupStepInSettings` to write both.
 
 ### Preset color coding (from `materials.json` group colors)
 
