@@ -12,7 +12,7 @@ export { TT, TL, MA, CO, WM, PS_GROUPS, AUTO_GROUP, typeFromProShopGroup, COOLAN
 
 // ─── Icons ─────────────────────────────────────────────────────────────────
 // Tool-type icons are rendered by the <ToolTypeIcon> component
-// (src/components/icons/ToolTypeIcon.jsx) as hand-crafted SVG silhouettes.
+// (src/components/icons/ToolTypeIcon.jsx) as solid-silhouette SVGs.
 
 export const TOOL_TYPES = TT;
 export const TOOL_TYPE_LABELS = TL;

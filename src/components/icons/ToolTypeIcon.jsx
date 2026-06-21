@@ -1,275 +1,146 @@
-// Hand-crafted SVG silhouettes for each CNC tool type.
-// All icons share a 24×24 viewBox, stroke `currentColor`, so they inherit the
-// surrounding text color and tint via CSS (e.g. selected tiles turn blue).
-// Grouped by family — end mills share a shank+flute body and differ at the tip;
-// drills share a pointed tip; taps share a thread profile, etc.
+import React from 'react';
 
-// ─── Shared primitives ───────────────────────────────────────────────────────
-// A vertical tool shank (the smooth top portion held by the holder).
-const Shank = ({ y1 = 2.5, y2 = 8 }) => (
-  <>
-    <line x1="9.7" y1={y1} x2="9.7" y2={y2} />
-    <line x1="14.3" y1={y1} x2="14.3" y2={y2} />
-    <line x1="9.7" y1={y1} x2="14.3" y2={y1} />
-  </>
-);
+// ToolDex — ToolTypeIcon
+// SOLID-SILHOUETTE icons for each CNC tool type — the signature ToolDex
+// iconography (Teenage-Engineering vibe). 24×24 viewBox, filled `currentColor`
+// so it tints to context. Each icon is ONE path with fillRule="evenodd": the
+// outer silhouette is filled and the flute/thread gaps are subpaths cut back
+// out to the background, so it stays crisp at any size. Identity lives in the
+// END/TIP geometry (flat 90°, ball hemisphere, drill point, cone, disc, …);
+// the shank is short and the flutes are simple angled cuts at the cutting end.
+//
+// Exported as BOTH a default and a named export so it can be imported either
+// way (the app imports it as a default everywhere).
 
-// Flute hint lines across a cutting body between yTop and yBot.
-const Flutes = ({ yTop = 9, yBot = 19, x1 = 9, x2 = 15 }) => (
-  <>
-    <line x1={x1} y1={yTop + 2.5} x2={x2} y2={yTop} />
-    <line x1={x1} y1={yTop + 5.5} x2={x2} y2={yTop + 3} />
-    <line x1={x1} y1={yTop + 8.5} x2={x2} y2={yTop + 6} />
-  </>
-);
+const SOLID = (d) => <path key="s" d={d} fill="currentColor" stroke="none" fillRule="evenodd" />;
+// Angled flute cut whose cutting edge sits at the bottom y `yb`, inset to xl..xr.
+const slash  = (yb, xl = 9, xr = 15) => ` M${xl} ${yb} L${xl} ${yb - 1} L${xr} ${yb - 4.4} L${xr} ${yb - 3.4} Z`;
+// Tighter flute cut for short/pointed bodies (drills, chamfer, spot).
+const slashT = (yb, xl = 9, xr = 15) => ` M${xl} ${yb} L${xl} ${yb - 0.9} L${xr} ${yb - 3.5} L${xr} ${yb - 2.6} Z`;
 
-// ─── Per-type artwork ────────────────────────────────────────────────────────
 function paths(type) {
   switch (type) {
-    // ── End mills ──────────────────────────────────────────────────────────
+
+    // ── End mills (square / small-radius / hemisphere / large-radius bottom) ──
     case 'flat end mill':
-      return (
-        <>
-          <Shank />
-          <path d="M9 8.5 L9 20 L15 20 L15 8.5" />
-          <Flutes yTop={9.5} yBot={19} />
-        </>
-      );
-    case 'ball end mill':
-      return (
-        <>
-          <Shank />
-          <path d="M9 8.5 L9 17 A3 3 0 0 0 15 17 L15 8.5" />
-          <Flutes yTop={9.5} yBot={16} />
-        </>
-      );
+      return [SOLID('M8.5 5 H15.5 V21 H8.5 Z' + slash(19.8) + slash(16.4))];
+
     case 'bull nose end mill':
-      return (
-        <>
-          <Shank />
-          <path d="M9 8.5 L9 18 A1.6 1.6 0 0 0 10.6 19.6 L13.4 19.6 A1.6 1.6 0 0 0 15 18 L15 8.5" />
-          <Flutes yTop={9.5} yBot={18} />
-        </>
-      );
+      return [SOLID('M8.5 5 H15.5 V18.8 Q15.5 21 13.3 21 H10.7 Q8.5 21 8.5 18.8 Z' + slash(19.4) + slash(16))];
+
+    case 'ball end mill':
+      return [SOLID(
+        'M8.5 5 H15.5 V15.8 A3.5 3.5 0 0 1 8.5 15.8 Z' +
+        ' M9 13.6 L9 12.6 L15 9 L15 10 Z' +                                              // angled shank flute
+        ' M9.3 14.3 C10.1 17.1 13.9 17.1 14.7 14.3 L14.7 13.4 C13.9 16.2 10.1 16.2 9.3 13.4 Z'  // ball-nose flute
+      )];
+
     case 'radius mill':
-      return (
-        <>
-          <Shank />
-          <path d="M9 8.5 L9 17.5 A1.1 1.1 0 0 0 10.1 18.6 L13.9 18.6 A1.1 1.1 0 0 0 15 17.5 L15 8.5" />
-          <Flutes yTop={9.5} yBot={17.5} />
-        </>
-      );
+      return [SOLID('M8.5 5 H15.5 V17.5 Q15.5 21 12.5 21 H11.5 Q8.5 21 8.5 17.5 Z' + slash(19) + slash(15.6))];
+
     case 'tapered mill':
-      return (
-        <>
-          <Shank />
-          <path d="M9 8.5 L10.4 20 L13.6 20 L15 8.5" />
-          <line x1="9.4" y1="11" x2="14.6" y2="11" />
-          <line x1="9.8" y1="14.5" x2="14.2" y2="14.5" />
-        </>
-      );
-    case 'chamfer mill':
-      return (
-        <>
-          <Shank />
-          <path d="M9 8.5 L9 13 L12 20 L15 13 L15 8.5" />
-          <line x1="9" y1="13" x2="15" y2="13" />
-          <Flutes yTop={9.2} yBot={12} x1={9.4} x2={14.6} />
-        </>
-      );
-    case 'lollipop mill':
-      return (
-        <>
-          <Shank y2={11} />
-          <line x1="11.4" y1="11" x2="11.4" y2="15" />
-          <line x1="12.6" y1="11" x2="12.6" y2="15" />
-          <circle cx="12" cy="17.5" r="3" />
-        </>
-      );
+      return [SOLID('M8.5 5 H15.5 V11.5 L13.6 21 H10.4 L8.5 11.5 Z' + slash(19.4, 10.2, 13.6) + slash(16, 9.7, 14.3))];
+
+    case 'chamfer mill':   // conical point
+      return [SOLID('M8.5 5 H15.5 V12.5 L12 20.5 L8.5 12.5 Z' + slashT(11.8) + slashT(9.2))];
+
+    case 'lollipop mill':  // undercutting — thin neck + spherical cutter
+      return [SOLID(
+        'M9.6 5 H14.4 V9 H9.6 Z M11.3 9 H12.7 V12 H11.3 Z' +
+        ' M8.5 15 A3.5 3.5 0 1 0 15.5 15 A3.5 3.5 0 1 0 8.5 15 Z' +
+        ' M10 14.4 C11 16.8 13 16.8 14 14.4 L14 13.6 C13 16 11 16 10 13.6 Z'
+      )];
+
     case 'dovetail':
-      return (
-        <>
-          <Shank y2={11} />
-          <line x1="11.2" y1="11" x2="11.2" y2="14" />
-          <line x1="12.8" y1="11" x2="12.8" y2="14" />
-          <path d="M8.5 20 L10 14 L14 14 L15.5 20 Z" />
-        </>
-      );
-    case 'slot/key cutter':
-      return (
-        <>
-          <Shank y2={11} />
-          <line x1="11.2" y1="11" x2="11.2" y2="14" />
-          <line x1="12.8" y1="11" x2="12.8" y2="14" />
-          <rect x="6.5" y="14" width="11" height="4" rx="0.6" />
-          <line x1="9.5" y1="14" x2="9.5" y2="18" />
-          <line x1="14.5" y1="14" x2="14.5" y2="18" />
-        </>
-      );
-    case 'form mill':
-      return (
-        <>
-          <Shank />
-          <path d="M9 8.5 L9 13 Q12 11 15 13 L15 8.5" />
-          <path d="M9 13 L9 16 Q12 22 15 16 L15 13" />
-        </>
-      );
+      return [SOLID('M9.6 5 H14.4 V10 H9.6 Z M11.2 10 H12.8 V12 H11.2 Z M10 12 L7.7 19.6 H16.3 L14 12 Z M8.9 15.9 H15.1 V16.6 H8.7 Z')];
+
+    case 'slot/key cutter':   // woodruff / keyseat — thin neck + wide toothed disc
+      return [SOLID(
+        'M10.6 5 H13.4 V12.6 H10.6 Z M6 12.6 H18 V16.4 H6 Z' +
+        [7, 9, 11, 13, 15, 17].map((x) => ` M${x} 16.4 H${x + 0.6} V15.2 H${x} Z`).join('')
+      )];
+
+    case 'form mill':   // profiled / radius-form bottom
+      return [SOLID('M8.5 5 H15.5 V12.5 C14.5 12.5 14 16 12 13.5 C10 16 9.5 12.5 8.5 12.5 Z' + slashT(11.4) + slashT(8.8))];
+
     case 'thread mill':
-      return (
-        <>
-          <Shank />
-          <path d="M9.2 9 L9.2 20 M14.8 9 L14.8 20" />
-          <path d="M9.2 10.5 L14.8 11.5 M9.2 13 L14.8 14 M9.2 15.5 L14.8 16.5 M9.2 18 L14.8 19" />
-        </>
-      );
+      return [SOLID('M8.5 5 H15.5 V21 H8.5 Z' + [9.6, 12, 14.4, 16.8, 19.2].map((y) => ` M9 ${y} H15 V${y + 0.6} H9 Z`).join(''))];
 
-    // ── Circle-segment family (barrel-style profiles) ──────────────────────
+    // ── Circle-segment family ───────────────────────────────────────────────
     case 'circle segment barrel':
-      return (
-        <>
-          <Shank y2={9} />
-          <path d="M9.5 9 Q6.5 14 9.5 20 L14.5 20 Q17.5 14 14.5 9" />
-          <line x1="8" y1="14.5" x2="16" y2="14.5" />
-        </>
-      );
-    case 'circle segment lens':
-      return (
-        <>
-          <Shank y2={10} />
-          <path d="M12 10 Q6 14 12 20 Q18 14 12 10 Z" />
-        </>
-      );
+      return [SOLID(
+        'M9 5 H15 V8 C18 12 18 16 15 21 H9 C6 16 6 12 9 8 Z' +
+        ' M8 12 C10.5 11.2 13.5 11.2 16 12 L16 12.6 C13.5 11.8 10.5 11.8 8 12.6 Z' +
+        ' M8.4 16 C10.6 15.3 13.4 15.3 15.6 16 L15.6 16.6 C13.4 15.9 10.6 15.9 8.4 16.6 Z'
+      )];
+
+    case 'circle segment lens':   // labelled "High Feed" in our UI
+      return [SOLID('M10.6 5 H13.4 V8.5 H10.6 Z M12 8.5 C6.5 13 6.5 16 12 21 C17.5 16 17.5 13 12 8.5 Z M11.7 9.4 H12.3 V20 H11.7 Z')];
+
     case 'circle segment oval':
-      return (
-        <>
-          <Shank y2={9.5} />
-          <ellipse cx="12" cy="15" rx="3.4" ry="5" />
-        </>
-      );
+      return [SOLID(
+        'M10.6 5 H13.4 V8.5 H10.6 Z M12 9.2 A3.6 5.6 0 1 0 12 20.4 A3.6 5.6 0 1 0 12 9.2 Z' +
+        ' M8.6 13 C10 12.3 14 12.3 15.4 13 L15.4 13.6 C14 12.9 10 12.9 8.6 13.6 Z' +
+        ' M8.6 16.6 C10 17.3 14 17.3 15.4 16.6 L15.4 17.2 C14 17.9 10 17.9 8.6 17.2 Z'
+      )];
+
     case 'circle segment taper':
-      return (
-        <>
-          <Shank y2={9} />
-          <path d="M9.5 9 Q9 15 11 20 L13 20 Q15 15 14.5 9" />
-          <line x1="9.3" y1="13" x2="14.7" y2="13" />
-        </>
-      );
+      return [SOLID(
+        'M10.6 5 H13.4 V8.5 H10.6 Z M9.4 8.5 Q8.6 15 11 21 H13 Q15.4 15 14.6 8.5 Z' +
+        ' M9.7 12.5 C11 12 13 12 14.3 12.5 L14.3 13.1 C13 12.6 11 12.6 9.7 13.1 Z' +
+        ' M10 16.5 C11.1 16.1 12.9 16.1 14 16.5 L14 17.1 C12.9 16.7 11.1 16.7 10 17.1 Z'
+      )];
 
-    // ── Drills ─────────────────────────────────────────────────────────────
-    case 'drill':
-      return (
-        <>
-          <Shank />
-          <path d="M9 8.5 L9 17 L12 21 L15 17 L15 8.5" />
-          <path d="M9.5 9.5 Q12 12 14.5 9.5 M9.3 13 Q12 15.5 14.7 13" />
-        </>
-      );
-    case 'center drill':
-      return (
-        <>
-          <path d="M9 3 L9 11 L15 11 L15 3" />
-          <line x1="9" y1="11" x2="15" y2="11" />
-          <path d="M10.5 11 L10.5 17 L12 20 L13.5 17 L13.5 11" />
-        </>
-      );
-    case 'spot drill':
-      return (
-        <>
-          <Shank y2={12} />
-          <path d="M9 11.5 L9 14 L12 20 L15 14 L15 11.5" />
-          <line x1="9" y1="14" x2="15" y2="14" />
-        </>
-      );
-    case 'reamer':
-      return (
-        <>
-          <Shank />
-          <path d="M9 8.5 L9 19.5 L15 19.5 L15 8.5" />
-          <line x1="10" y1="9" x2="10" y2="19.5" />
-          <line x1="12" y1="9" x2="12" y2="19.5" />
-          <line x1="14" y1="9" x2="14" y2="19.5" />
-        </>
-      );
+    // ── Hole making ─────────────────────────────────────────────────────────
+    case 'drill':   // pointed tip, 2-flute
+      return [SOLID('M8.5 5 H15.5 V14.8 L12 20.6 L8.5 14.8 Z' + slashT(13.6) + slashT(11))];
 
-    // ── Hole finishing ─────────────────────────────────────────────────────
-    case 'counter bore':
-      return (
-        <>
-          <Shank y2={9} />
-          <path d="M9 8.5 L9 16 L15 16 L15 8.5" />
-          <Flutes yTop={9.2} yBot={15} />
-          <path d="M11 16 L11 20 L13 20 L13 16" />
-        </>
-      );
-    case 'counter sink':
-      return (
-        <>
-          <Shank y2={9} />
-          <path d="M8 9 L8 11 L12 20 L16 11 L16 9" />
-          <line x1="8" y1="11" x2="16" y2="11" />
-          <line x1="9.4" y1="12.5" x2="14.6" y2="12.5" />
-        </>
-      );
+    case 'center drill':   // thick body steps to a thin pilot point
+      return [SOLID('M8 5 H16 V11 H8 Z M10.4 11 H13.6 V14.6 L12 18 L10.4 14.6 Z' + slashT(10.2, 8.6, 15.4) + slashT(7.8, 8.6, 15.4))];
 
-    // ── Taps ───────────────────────────────────────────────────────────────
+    case 'spot drill':   // short, wide-angle point
+      return [SOLID('M8.5 5 H15.5 V12.5 L12 19.5 L8.5 12.5 Z' + slashT(11.5) + slashT(8.9))];
+
+    case 'reamer':   // STRAIGHT flutes, chamfered start
+      return [SOLID('M8.5 5 H15.5 V18.4 L13.8 21 H10.2 L8.5 18.4 Z M10 8 H10.5 V20 H10 Z M11.75 8 H12.25 V20.2 H11.75 Z M13.5 8 H14 V20 H13.5 Z')];
+
+    case 'counter bore':   // flat body + central pilot pin
+      return [SOLID('M8.5 5 H15.5 V16 H8.5 Z M11 16 H13 V20.5 H11 Z' + slash(14.6) + slash(11.2))];
+
+    case 'counter sink':   // conical countersink
+      return [SOLID('M10.5 5 H13.5 V9 H10.5 Z M7.4 9 H16.6 L12 19.6 Z M9.8 9.3 H10.2 L11.85 18.6 H11.55 Z M13.8 9.3 H14.2 L12.45 18.6 H12.15 Z')];
+
+    // ── Tap ───────────────────────────────────────────────────────────────
     case 'tap':
-      return (
-        <>
-          <path d="M9.5 2.5 L9.5 6 L8.7 6 L8.7 4 L15.3 4 L15.3 6 L14.5 6 L14.5 2.5" />
-          <path d="M9.5 6 L9.5 20 L14.5 20 L14.5 6" />
-          <path d="M9.5 8 L14.5 9 M9.5 11 L14.5 12 M9.5 14 L14.5 15 M9.5 17 L14.5 18" />
-        </>
-      );
+      return [SOLID(
+        'M10.3 4 H13.7 V6.5 H10.3 Z M9.5 6.5 H14.5 V16.5 L12.7 21 H11.3 L9.5 16.5 Z' +
+        ' M9.5 8 L14.5 9 V9.5 L9.5 8.5 Z M9.5 10.3 L14.5 11.3 V11.8 L9.5 10.8 Z' +
+        ' M9.5 12.6 L14.5 13.6 V14.1 L9.5 13.1 Z M9.5 14.9 L14.5 15.9 V16.4 L9.5 15.4 Z'
+      )];
 
-    // ── Boring ─────────────────────────────────────────────────────────────
+    // ── Boring (bar + offset cutting bit) ─────────────────────────────────────
     case 'boring head':
-      return (
-        <>
-          <line x1="12" y1="2.5" x2="12" y2="9" />
-          <rect x="6" y="9" width="12" height="4" rx="0.6" />
-          <path d="M7 13 L7 17 L9 17 L9 13" />
-          <path d="M6.5 17 L9.5 17 L9.5 19 L7.5 20 L6.5 19 Z" />
-        </>
-      );
+      return [SOLID('M10.6 5 H12.6 V9 H10.6 Z M7.5 9 H16.5 V13 H7.5 Z M9.5 13 H11 V18 H9.5 Z M6.3 16.8 L9 17.9 L7 19.8 Z')];
 
-    // ── Turning ────────────────────────────────────────────────────────────
+    // ── Turning (lathe holder + diamond insert) ──────────────────────────────
     case 'turning general':
-      return (
-        <>
-          <path d="M3 6 L16 6 L20 8 L20 11 L3 11 Z" />
-          <path d="M14 11 L18 16 L13 16 Z" />
-          <line x1="6" y1="8.5" x2="13" y2="8.5" />
-        </>
-      );
+      return [SOLID('M6.5 12 H20 V18 H6.5 Z M6.5 9.6 H11.5 V12 H6.5 Z M4.6 10.6 L8.5 8.3 L11 11.1 L7.1 13.4 Z')];
 
-    // ── Fallback (generic mill) ────────────────────────────────────────────
     default:
-      return (
-        <>
-          <Shank />
-          <path d="M9 8.5 L9 20 L15 20 L15 8.5" />
-          <Flutes yTop={9.5} yBot={19} />
-        </>
-      );
+      return [SOLID('M8.5 5 H15.5 V21 H8.5 Z' + slash(19.8) + slash(16.4))];
   }
 }
 
-export default function ToolTypeIcon({ type, size = 22, className = '', style }) {
+export function ToolTypeIcon({ type, size = 24, className = '', style }) {
   return (
     <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      style={style}
-      aria-hidden="true"
+      width={size} height={size} viewBox="0 0 24 24"
+      fill="currentColor" stroke="none"
+      className={className} style={style} aria-hidden="true"
     >
       {paths(type)}
     </svg>
   );
 }
+
+export default ToolTypeIcon;
