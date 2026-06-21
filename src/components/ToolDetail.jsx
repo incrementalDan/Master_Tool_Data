@@ -59,6 +59,10 @@ export default function ToolDetail() {
 
   const tool = tools.find(t => t.id === id);
 
+  // Land at the top of the page when opening a tool (navigating in keeps the
+  // window's previous scroll position otherwise).
+  useEffect(() => { window.scrollTo(0, 0); }, [id]);
+
   // Reconcile against the Fusion library on open: detect entries dumped straight
   // from Fusion (sharing this tool's tracking ID or ProShop #) and prompt. Runs
   // once per opened tool; skip while editing.
