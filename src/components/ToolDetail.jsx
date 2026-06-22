@@ -18,6 +18,7 @@ import InfoTip from './InfoTip.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS, validateGeometry, fusionToolToInternal, readOohFromFusion } from '../schema/toolSchema.js';
 import { convertLength, unitAbbr } from '../utils/units.js';
+import { showsProShopUrl, toolIdLabel } from '../utils/toolIdSystem.js';
 import ToolFields from './ToolFields.jsx';
 import { hasReconcileWork } from '../services/reconcile.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
@@ -38,7 +39,9 @@ export default function ToolDetail() {
   const {
     tools, saveTool, deleteTool, cloneTool, isSaving, notify, holders, holderLibraryLocation,
     reconcileTool, googleAuthenticated, uploadToolPhoto, uploadToolAttachment, deleteToolAttachment,
+    shopSettings,
   } = useApp();
+  const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
   const [editing, setEditing] = useState(searchParams.get('edit') === '1');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -306,15 +309,23 @@ export default function ToolDetail() {
               )}
             </div>
             {tool.proshot_id && (
-              <a
-                className="proshot-pill"
-                href={proshotUrl(tool.proshot_id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Open in ProShop"
-                onClick={e => e.stopPropagation()}
-                style={{ fontSize: 15, padding: '4px 16px', alignSelf: 'flex-start' }}
-              >{tool.proshot_id}</a>
+              showsProShopUrl(idMode) ? (
+                <a
+                  className="proshot-pill"
+                  href={proshotUrl(tool.proshot_id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Open in ProShop"
+                  onClick={e => e.stopPropagation()}
+                  style={{ fontSize: 15, padding: '4px 16px', alignSelf: 'flex-start' }}
+                >{tool.proshot_id}</a>
+              ) : (
+                <span
+                  className="proshot-pill"
+                  title={toolIdLabel(idMode)}
+                  style={{ fontSize: 15, padding: '4px 16px', alignSelf: 'flex-start' }}
+                >{tool.proshot_id}</span>
+              )
             )}
           </div>
           {(tool.location || hasMachineNum) && (

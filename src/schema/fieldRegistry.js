@@ -153,6 +153,30 @@ export const FIELD_REGISTRY = {
     precision: null,
   },
 
+  cabinet: {
+    label: 'Cabinet',
+    type: 'string',
+    unit: null,
+    fusionPath: null,                  // composes into `location` (Fusion vendor); not written directly
+    proShopColumn: null,
+    metadataOnly: true,
+    appliesToTypes: 'all',
+    required: false,
+    precision: null,
+  },
+
+  drawer: {
+    label: 'Drawer',
+    type: 'string',
+    unit: null,
+    fusionPath: null,
+    proShopColumn: null,
+    metadataOnly: true,
+    appliesToTypes: 'all',
+    required: false,
+    precision: null,
+  },
+
   grouping: {
     label: 'ProShop Group',
     type: 'string',
