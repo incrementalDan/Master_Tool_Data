@@ -157,6 +157,29 @@ export const DEFAULT_SHOP_SETTINGS = {
   shop_name: '',
   default_units: 'inches',
   machine_number: { start: 30, skip: [98, 99, 100] },
+  // Tool ID system — controls how a tool's displayed ID is generated, labelled,
+  // and (in proshop mode) linked. The value lives in one stored field: Fusion's
+  // native `product-id` (our internal `proshot_id`). The mode only changes how
+  // that value is produced and shown — there is no separate tool_id field.
+  //   mode: location | sequential | type_prefix | size_first | machine_linked
+  //         | proshop | other_erp (placeholder, disabled)
+  //   separator: joins segments ('-', '.', '/', '_', or '' for none)
+  //   start/skip: sequential counter floor + reserved numbers (shared with
+  //               machine_number when mode === 'machine_linked')
+  //   digits: zero-pad width for the numeric segment
+  //   location.{cabinet,drawer}_identifier: 'number' | 'letter' — the format of
+  //               the cabinet/drawer inputs in location mode
+  tool_id_system: {
+    mode: 'proshop',
+    separator: '-',
+    start: 1000,
+    skip: [],
+    digits: 4,
+    location: {
+      cabinet_identifier: 'number',
+      drawer_identifier: 'letter',
+    },
+  },
   // CNC machine models. Each entry: id, model, machine_type, taper, max_rpm,
   // horsepower, through_coolant, through_coolant_psi, order.
   // machine_id on presets links to these entries.

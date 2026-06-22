@@ -5,6 +5,7 @@ import { unitAbbr } from '../utils/units.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { exportSingleTool as exportProShop } from '../utils/proShopExport.js';
+import { showsProShopUrl, toolIdLabel } from '../utils/toolIdSystem.js';
 
 function formatDim(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -20,8 +21,9 @@ function proshotUrl(id) {
 
 export default function ToolCard({ tool, variant = 'grid' }) {
   const navigate = useNavigate();
-  const { cloneTool, notify } = useApp();
+  const { cloneTool, notify, shopSettings } = useApp();
   const label = TOOL_TYPE_LABELS[tool.tool_type] || tool.tool_type;
+  const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
 
   const open = () => navigate(`/tool/${tool.id}`);
   const stop = (e, fn) => { e.stopPropagation(); fn(); };
@@ -57,14 +59,20 @@ export default function ToolCard({ tool, variant = 'grid' }) {
         <span className="location-tag" title="Location" style={{ fontSize: 10, padding: '1px 6px' }}>{tool.location}</span>
       )}
       {tool.proshot_id && (
-        <a
-          className="proshot-pill font-mono"
-          href={proshotUrl(tool.proshot_id)}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={e => e.stopPropagation()}
-          style={{ fontSize: 10, padding: '1px 7px' }}
-        >{tool.proshot_id}</a>
+        showsProShopUrl(idMode) ? (
+          <a
+            className="proshot-pill font-mono"
+            href={proshotUrl(tool.proshot_id)}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            style={{ fontSize: 10, padding: '1px 7px' }}
+          >{tool.proshot_id}</a>
+        ) : (
+          <span className="proshot-pill font-mono" title={toolIdLabel(idMode)} style={{ fontSize: 10, padding: '1px 7px' }}>
+            {tool.proshot_id}
+          </span>
+        )
       )}
       {tool.no_fusion_link && (
         <span className="no-fusion-pill" style={{ fontSize: 10, padding: '1px 7px' }} title="Added from ProShop with no Fusion match — Fusion entry is a placeholder and needs setup">

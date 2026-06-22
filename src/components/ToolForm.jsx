@@ -8,6 +8,7 @@ import {
 } from '../schema/toolSchema.js';
 import { fieldLabel } from '../schema/fieldRegistry.js';
 import { unitAbbr } from '../utils/units.js';
+import { toolIdLabel } from '../utils/toolIdSystem.js';
 import InfoTip from './InfoTip.jsx';
 import { buildDesc } from '../utils/toolNaming.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -35,7 +36,9 @@ function derivePitchFromThreadSize(pitchStr, toolUnit = 'inches') {
 }
 
 export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
-  const { tools } = useApp();
+  const { tools, shopSettings } = useApp();
+  const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
+  const locationMode = idMode === 'location';
   const [data, setData] = useState({ ...tool });
   const [errors, setErrors] = useState([]);
   const [tagInput, setTagInput] = useState('');
@@ -217,8 +220,39 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
               </div>
             </div>
             <div className="form-grid">
-              <FieldInput field="proshot_id" label="ProShop ID" data={data} setField={setField} placeholder="e.g. A-3" />
-              <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
+              <FieldInput field="proshot_id" label={toolIdLabel(idMode)} data={data} setField={setField} placeholder="e.g. A-3" />
+              {locationMode ? (
+                <div className="field-group">
+                  <label className="field-label">
+                    Location (Cabinet / Drawer)
+                    <InfoTip text={'In location-mode the tool ID, the cabinet and drawer form the ID prefix (e.g. "2C-1405"). They also fill the Location field (Fusion’s "Vendor"). Editing Location elsewhere won’t change the assigned ID.'} />
+                  </label>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input
+                      className="field-input"
+                      style={{ flex: 1 }}
+                      value={data.cabinet || ''}
+                      placeholder="Cabinet"
+                      onChange={e => {
+                        const cabinet = e.target.value;
+                        setData(d => ({ ...d, cabinet, location: `${cabinet}${d.drawer || ''}` }));
+                      }}
+                    />
+                    <input
+                      className="field-input"
+                      style={{ flex: 1 }}
+                      value={data.drawer || ''}
+                      placeholder="Drawer"
+                      onChange={e => {
+                        const drawer = e.target.value;
+                        setData(d => ({ ...d, drawer, location: `${d.cabinet || ''}${drawer}` }));
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
+              )}
             </div>
           </Section>
 

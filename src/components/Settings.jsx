@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight } from 'lucide-react';
 import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
 import { generateMachineNumbers, generateId } from '../schema/toolSchema.js';
+import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../utils/toolIdSystem.js';
 import { useDragReorder } from './useDragReorder.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
 import { FilePicker } from './LibrarySetup.jsx';
@@ -11,10 +12,20 @@ import InfoTip from './InfoTip.jsx';
 import ImportPhotosModal from './ImportPhotosModal.jsx';
 import { exportFullLibrary } from '../utils/proShopExport.js';
 
+const ID_MODES = [
+  { id: 'proshop', label: 'ProShop', desc: 'ID comes from ProShop (today’s behavior). Shows a working link to the ProShop tool page.' },
+  { id: 'location', label: 'Location-based', desc: 'Cabinet + drawer + number, e.g. 2C-1405. Cabinet/drawer also fill the Location field.' },
+  { id: 'sequential', label: 'Sequential', desc: 'A plain running number, e.g. 1042.' },
+  { id: 'type_prefix', label: 'Type prefix', desc: 'Tool-type code + number, e.g. EM-1042.' },
+  { id: 'size_first', label: 'Size first', desc: 'Diameter + type code + number, e.g. 0500-EM-1042.' },
+  { id: 'machine_linked', label: 'Machine-linked', desc: 'Follows the machine tool number, e.g. T42.' },
+  { id: 'other_erp', label: 'Other ERP', desc: 'Reserved for a future in-house ERP ID source.', disabled: true },
+];
+
 export default function Settings() {
   const navigate = useNavigate();
   const {
-    tools, needsNormalize, fetchRawLibrary, renumberLibrary, isSaving,
+    tools, needsNormalize, fetchRawLibrary, renumberLibrary, assignToolIds, isSaving,
     markSetupStepInSettings,
     libraryLocation, holderLibraryLocation, holderLibrarySetupComplete,
     setLibraryLocation, setHolderLibraryLocation, clearHolderLibraryLocation, notify,
@@ -65,6 +76,76 @@ export default function Settings() {
     setMachineStart(shopSettings?.machine_number?.start ?? 30);
     setSkipList(shopSettings?.machine_number?.skip ?? [98, 99, 100]);
   }, [shopSettings]);
+
+  // ── Tool ID system (shop_settings.tool_id_system) ──────────────────────────
+  const idsDefault = { mode: 'proshop', separator: '-', start: 1000, skip: [], digits: 4, location: { cabinet_identifier: 'number', drawer_identifier: 'letter' } };
+  const [idCfg, setIdCfg] = useState({ ...idsDefault, ...(shopSettings?.tool_id_system || {}) });
+  const [idSkipInput, setIdSkipInput] = useState('');
+  const [savingIds, setSavingIds] = useState(false);
+  // Assign-IDs flow: 'idle' | 'preview' | 'done'
+  const [idStage, setIdStage] = useState('idle');
+  const [idResultCount, setIdResultCount] = useState(0);
+
+  useEffect(() => {
+    setIdCfg({ ...idsDefault, ...(shopSettings?.tool_id_system || {}) });
+  }, [shopSettings]);
+
+  const setIdField = (patch) => setIdCfg(c => ({ ...c, ...patch }));
+  const machineLinked = idCfg.mode === 'machine_linked';
+
+  const addIdSkip = () => {
+    const n = parseInt(idSkipInput, 10);
+    if (!isNaN(n) && !(idCfg.skip || []).includes(n)) setIdField({ skip: [...(idCfg.skip || []), n].sort((a, b) => a - b) });
+    setIdSkipInput('');
+  };
+  const removeIdSkip = (n) => setIdField({ skip: (idCfg.skip || []).filter(x => x !== n) });
+
+  const saveIdSystem = async () => {
+    setSavingIds(true);
+    try {
+      const next = {
+        ...(shopSettings || {}),
+        tool_id_system: {
+          mode: idCfg.mode,
+          separator: idCfg.separator,
+          start: Number(idCfg.start) || 1000,
+          skip: idCfg.skip || [],
+          digits: Number(idCfg.digits) || 4,
+          location: idCfg.location || idsDefault.location,
+        },
+      };
+      // machine_linked drives machine numbering off the same start/skip.
+      if (idCfg.mode === 'machine_linked') {
+        next.machine_number = { start: Number(idCfg.start) || 30, skip: idCfg.skip || [] };
+      }
+      await saveShopSettings(next);
+      notify('Tool ID system saved', 'success');
+    } catch { /* notify handled in saveShopSettings */ }
+    finally { setSavingIds(false); }
+  };
+
+  // Tools without an ID yet, with the value they'd get — used for the preview.
+  const idPreviewRows = (() => {
+    if (idCfg.mode === 'proshop' || idCfg.mode === 'other_erp') return [];
+    let counter = isCounterMode(idCfg.mode) ? nextSequential(idCfg.start, idCfg.skip) : null;
+    const rows = [];
+    for (const t of tools) {
+      if (t.proshot_id) continue;
+      const value = composeToolId(idCfg, t, counter);
+      if (!value) continue;
+      rows.push({ id: t.id, description: t.description, tool_type: t.tool_type, value });
+      if (counter !== null) counter = nextSequential(counter + 1, idCfg.skip);
+    }
+    return rows;
+  })();
+
+  const handleAssignIds = async () => {
+    try {
+      const count = await assignToolIds();
+      setIdResultCount(count);
+      setIdStage('done');
+    } catch { /* notify handled in assignToolIds */ }
+  };
 
   const addSkip = () => {
     const n = parseInt(skipInput, 10);
@@ -780,6 +861,173 @@ export default function Settings() {
         {showDescRename && <DescRenameModal onClose={() => setShowDescRename(false)} />}
       </div>
 
+      {/* Tool ID System — how each tool's displayed ID is generated/labelled.
+          The value is stored in one field (Fusion product-id / proshot_id); the
+          mode only changes how it's produced and shown. */}
+      <div className="card" style={{ maxWidth: 760 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Hash size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Tool ID System</h3>
+          <InfoTip text="Controls how each tool's ID is generated and shown. The ID lives in one field shared with the ProShop number — switching modes only changes how the value is produced and displayed, never the storage. ProShop mode keeps today's behavior (ID from ProShop, with a working link)." alignRight />
+        </div>
+
+        <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 6 }}>ID scheme</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+          {ID_MODES.map(m => (
+            <label key={m.id} className="radio-row" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', opacity: m.disabled ? 0.5 : 1, cursor: m.disabled ? 'not-allowed' : 'pointer' }}>
+              <input
+                type="radio"
+                name="id-mode"
+                checked={idCfg.mode === m.id}
+                disabled={m.disabled}
+                onChange={() => setIdField({ mode: m.id })}
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                <strong>{m.label}</strong>{m.disabled && <span className="text-sub text-xs"> · coming soon</span>}
+                <div className="text-sub text-xs">{m.desc}</div>
+              </span>
+            </label>
+          ))}
+        </div>
+
+        {idCfg.mode !== 'proshop' && idCfg.mode !== 'other_erp' && (
+          <>
+            <div className="flex items-center gap-16 flex-wrap" style={{ marginBottom: 14 }}>
+              <div>
+                <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Separator</label>
+                <select className="field-input" style={{ maxWidth: 120 }} value={idCfg.separator} onChange={e => setIdField({ separator: e.target.value })}>
+                  <option value="-">- (dash)</option>
+                  <option value=".">. (dot)</option>
+                  <option value="/">/ (slash)</option>
+                  <option value="_">_ (underscore)</option>
+                  <option value="">none</option>
+                </select>
+              </div>
+              {isCounterMode(idCfg.mode) && (
+                <div>
+                  <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Number digits</label>
+                  <input className="field-input" type="number" style={{ maxWidth: 90 }} value={idCfg.digits} onChange={e => setIdField({ digits: e.target.value })} />
+                </div>
+              )}
+              <div style={{ alignSelf: 'flex-end' }}>
+                <span className="text-sub text-sm">Preview: </span>
+                <span className="font-mono" style={{ color: 'var(--green)' }}>{previewToolId(idCfg) || '—'}</span>
+              </div>
+            </div>
+
+            {machineLinked ? (
+              <div className="text-sub text-sm" style={{ marginBottom: 14 }}>
+                IDs follow each tool's machine tool number (e.g. <span className="font-mono">T42</span>). Set the start/skip in <strong>Machine Numbers</strong> below.
+              </div>
+            ) : (
+              <>
+                <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Start number</label>
+                <input className="field-input" type="number" style={{ maxWidth: 140, marginBottom: 14 }} value={idCfg.start} onChange={e => setIdField({ start: e.target.value })} />
+
+                <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 6 }}>Skip / reserved numbers</label>
+                <div className="flex items-center gap-6 flex-wrap" style={{ marginBottom: 8 }}>
+                  {(idCfg.skip || []).map(n => (
+                    <span key={n} className="chip" style={{ gap: 6 }}>
+                      {n}
+                      <button className="icon-btn" style={{ width: 16, height: 16 }} title="Remove" onClick={() => removeIdSkip(n)}><X size={12} /></button>
+                    </span>
+                  ))}
+                  {(idCfg.skip || []).length === 0 && <span className="text-sub text-sm">None</span>}
+                </div>
+                <div className="flex items-center gap-6" style={{ marginBottom: 14 }}>
+                  <input className="field-input" type="number" style={{ maxWidth: 110 }} placeholder="Add #" value={idSkipInput}
+                    onChange={e => setIdSkipInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addIdSkip()} />
+                  <button className="btn btn-secondary btn-sm" onClick={addIdSkip}>Add</button>
+                </div>
+              </>
+            )}
+
+            {idCfg.mode === 'location' && (
+              <div className="flex items-center gap-16" style={{ marginBottom: 14 }}>
+                <div>
+                  <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Cabinet format</label>
+                  <select className="field-input" style={{ maxWidth: 130 }} value={idCfg.location?.cabinet_identifier || 'number'}
+                    onChange={e => setIdField({ location: { ...idCfg.location, cabinet_identifier: e.target.value } })}>
+                    <option value="number">Number</option>
+                    <option value="letter">Letter</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Drawer format</label>
+                  <select className="field-input" style={{ maxWidth: 130 }} value={idCfg.location?.drawer_identifier || 'letter'}
+                    onChange={e => setIdField({ location: { ...idCfg.location, drawer_identifier: e.target.value } })}>
+                    <option value="number">Number</option>
+                    <option value="letter">Letter</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        <button className="btn btn-primary btn-sm" onClick={saveIdSystem} disabled={savingIds} style={{ marginBottom: 16 }}>
+          {savingIds ? 'Saving…' : 'Save ID System'}
+        </button>
+
+        {/* Assign IDs to unassigned tools */}
+        {idCfg.mode !== 'proshop' && idCfg.mode !== 'other_erp' && (
+          <div style={{
+            marginTop: 4, padding: 16, borderRadius: 'var(--radius-sm)',
+            border: '1px solid var(--border)', borderLeft: '3px solid var(--blue)',
+            background: 'var(--surface-2)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Hash size={16} style={{ color: 'var(--blue)' }} />
+              <strong>Assign IDs to unassigned tools</strong>
+            </div>
+            <p className="text-sub text-sm mb-12">
+              Generates an ID for every tool that doesn't already have one, using the scheme above. Tools that already have an ID are left untouched.
+            </p>
+
+            {idStage === 'idle' && (
+              <button className="btn btn-primary" onClick={() => setIdStage('preview')} disabled={idPreviewRows.length === 0 || isSaving}>
+                {idPreviewRows.length === 0 ? 'No unassigned tools' : `Assign IDs to ${idPreviewRows.length} tool${idPreviewRows.length === 1 ? '' : 's'}…`}
+              </button>
+            )}
+
+            {idStage === 'preview' && (
+              <>
+                <p className="text-sub text-sm mb-12">Review the IDs that will be written ({idPreviewRows.length} tools). Save the ID system first if you changed it above.</p>
+                <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', marginBottom: 14 }}>
+                  <table className="match-table">
+                    <thead><tr><th>#</th><th>Description</th><th>Type</th><th>New ID</th></tr></thead>
+                    <tbody>
+                      {idPreviewRows.map((row, i) => (
+                        <tr key={`${row.id}-${i}`}>
+                          <td className="text-sub text-xs">{i + 1}</td>
+                          <td className="truncate" style={{ maxWidth: 260 }}>{row.description}</td>
+                          <td className="text-xs text-sub">{row.tool_type}</td>
+                          <td className="font-mono" style={{ color: 'var(--green)' }}>{row.value}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex gap-8">
+                  <button className="btn btn-primary" onClick={handleAssignIds} disabled={isSaving}>
+                    {isSaving ? 'Assigning…' : 'Assign IDs'}
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => setIdStage('idle')} disabled={isSaving}>Cancel</button>
+                </div>
+              </>
+            )}
+
+            {idStage === 'done' && (
+              <div style={{ color: 'var(--green)' }}>
+                ✓ Assigned IDs to {idResultCount} tool{idResultCount === 1 ? '' : 's'}.
+                <button className="btn btn-secondary btn-sm" style={{ marginLeft: 12 }} onClick={() => setIdStage('idle')}>Done</button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Machine Numbers + Renumber — grouped because the numbers drive the
           renumber (and adding a tool). Set/save the numbering here, then renumber. */}
       <div className="card" style={{ maxWidth: 760 }}>
@@ -788,6 +1036,11 @@ export default function Settings() {
           <h3 style={{ margin: 0 }}>Machine Numbers</h3>
           <InfoTip text="Machine tool numbers are assigned starting at this number, skipping the reserved list. Used by Renumber Library and when adding a new tool." alignRight />
         </div>
+        {machineLinked && (
+          <div className="text-sub text-sm" style={{ marginBottom: 12, padding: 10, borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+            Tool IDs are linked to machine numbers — start/skip below also drive the generated IDs.
+          </div>
+        )}
         <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Start number</label>
         <input className="field-input" type="number" style={{ maxWidth: 140, marginBottom: 16 }} value={machineStart} onChange={e => setMachineStart(e.target.value)} />
 

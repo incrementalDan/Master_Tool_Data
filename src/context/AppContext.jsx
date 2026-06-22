@@ -5,9 +5,10 @@ import {
   validateTool, generateId, generateAssemblyId, generateTrackingId,
   groupByTrackingId, buildLogicalTool, splitToFusionInstances, readTrackingId,
   getNextMachineNumber, generateMachineNumbers, applyMachineNumberToFusion,
-  fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
+  applyProShopIdToFusion, fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
   combineToolsByProshopId, buildMetadataTool,
 } from '../schema/toolSchema.js';
+import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSystem.js';
 import { composePresetName, opTypeWord, parsePresetName, materialNameCode, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import { classifyStrays } from '../services/reconcile.js';
@@ -1321,6 +1322,60 @@ export function AppProvider({ children }) {
     }
   }, [downloadFusionList, uploadFusionList, notify]);
 
+  // Assign generated tool IDs to logical tools that don't have one yet, per the
+  // configured tool_id_system. Writes the value into Fusion's native product-id
+  // (our proshot_id) — the single stored ID field — and never touches tools that
+  // already have an ID. No-op in proshop/other_erp modes (IDs aren't generated).
+  // Always re-reads from APS immediately before writing, like renumberLibrary.
+  const assignToolIds = useCallback(async () => {
+    const config = shopSettingsRef.current?.tool_id_system || {};
+    const { mode } = config;
+    if (mode === 'proshop' || mode === 'other_erp') {
+      notify('IDs are not generated in this mode', 'info');
+      return 0;
+    }
+    dispatch({ type: 'SAVE_START' });
+    try {
+      const fusionList = await downloadFusionList();
+      const metaList = googleRef.current ? await driveService.loadMetadata() : [];
+      const metaByTracking = new Map(metaList.map(m => [m.id, m]));
+
+      const { groups, untracked } = groupByTrackingId(fusionList);
+      const orderedGroups = [...groups.values(), ...untracked.map(r => [r])];
+
+      let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip) : null;
+      let assigned = 0;
+      for (const raws of orderedGroups) {
+        const logical = buildLogicalTool(raws, metaByTracking);
+        if (logical.proshot_id) continue;          // already has an ID — skip
+        const value = composeToolId(config, logical, counter);
+        if (!value) continue;                       // mode can't produce one (e.g. no machine #)
+        raws.forEach(r => applyProShopIdToFusion(r, value));
+        assigned++;
+        if (counter !== null) counter = nextSequential(counter + 1, config.skip);
+      }
+
+      if (assigned === 0) { dispatch({ type: 'SAVE_SUCCESS' }); notify('No unassigned tools to ID', 'info'); return 0; }
+
+      await uploadFusionList(fusionList);
+      // proshot_id is Fusion-owned (product-id) — it's not written to metadata,
+      // so no metadata save is needed here.
+
+      // Rebuild the in-memory library so the new IDs show immediately.
+      const tools = [];
+      for (const [, raws] of groups) tools.push(buildLogicalTool(raws, metaByTracking));
+      for (const raw of untracked) tools.push(buildLogicalTool([raw], metaByTracking));
+      dispatch({ type: 'SET_TOOLS', tools });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify(`Assigned IDs to ${assigned} tool${assigned === 1 ? '' : 's'}`, 'success');
+      return assigned;
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Assign IDs failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  }, [downloadFusionList, uploadFusionList, notify]);
+
   // ─── One-time normalization (transition to the multi-instance model) ──────
   // Assigns tracking IDs to untracked tools, fans each out into instances per
   // its existing metadata assemblies, renames presets to the naming convention,
@@ -1487,6 +1542,7 @@ export function AppProvider({ children }) {
       applyReconcile,
       saveFullLibrary,
       renumberLibrary,
+      assignToolIds,
       normalizeLibrary,
       clearError,
       notify,
