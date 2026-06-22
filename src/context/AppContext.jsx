@@ -350,6 +350,13 @@ export function AppProvider({ children }) {
   // call these to persist edits.
   const saveSharedFile = useCallback(async (key, data, dispatchType, onSaved) => {
     const { SHARED_FILES } = driveService;
+    // Demo mode: update in-memory state only (no Drive write, no Google guard) so
+    // the sandbox can edit shop settings / materials / vendors — lost on refresh.
+    if (demoModeRef.current) {
+      onSaved?.(data);
+      dispatch({ type: dispatchType, [key === 'shopSettings' ? 'shopSettings' : key === 'vendorRegistry' ? 'vendorRegistry' : 'materials']: data });
+      return;
+    }
     if (!googleRef.current) { notify('Connect Google Drive to save', 'error'); throw new Error('Google Drive not connected'); }
     try {
       await driveService.saveSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, data);
@@ -1333,6 +1340,23 @@ export function AppProvider({ children }) {
     if (mode === 'proshop' || mode === 'other_erp') {
       notify('IDs are not generated in this mode', 'info');
       return 0;
+    }
+    // Demo mode: pure in-memory path — no APS/Drive. Reassign ALL tools (not just
+    // unassigned ones) so the sandbox is repeatable: flip the scheme, re-run, and
+    // watch every tool re-render. Reset by refreshing the page.
+    if (demoModeRef.current) {
+      let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip) : null;
+      let assigned = 0;
+      const tools = toolsRef.current.map(t => {
+        const value = composeToolId(config, t, counter);
+        if (!value) return t;
+        assigned++;
+        if (counter !== null) counter = nextSequential(counter + 1, config.skip);
+        return { ...t, proshot_id: value };
+      });
+      dispatch({ type: 'SET_TOOLS', tools });
+      notify(`Assigned IDs to ${assigned} tool${assigned === 1 ? '' : 's'} (demo — not saved)`, 'success');
+      return assigned;
     }
     dispatch({ type: 'SAVE_START' });
     try {

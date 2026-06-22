@@ -162,6 +162,49 @@ Chamfer mill was removed from `tip_angle`'s `appliesToTypes`, `TIP_ANGLE_TYPES`,
 
 -----
 
+## Tool ID System
+
+A shop-wide, **configurable** scheme for how a tool's human-readable ID is generated and displayed, set in `shop_settings.tool_id_system`. The design rule that makes it simple:
+
+- **One stored field, mode-driven display.** The ID always lives in the existing Fusion `product-id` (internal `proshot_id`). There is **no** separate `tool_id` field. The active **mode** only controls how that value is *generated*, how it's *labelled*, and whether the *ProShop URL* is shown — never where it's stored. (This mirrors how `location` reuses Fusion's repurposed "Vendor" field.)
+- **ProShop mode = unchanged legacy behavior** — the value comes from ProShop, the ProShop tool-page URL link is shown/active, and it remains the Phase 2 / import match key. In **every other mode** the same field holds a generated shop ID, shown as "Tool ID" with **no** URL link. ProShop import/export is **not** changed — `matchProShopToTools` already falls back to description+diameter matching when `Tool #` doesn't match, so import still works regardless of mode.
+
+### Modes (`shop_settings.tool_id_system.mode`)
+
+| Mode | Format | Example |
+|---|---|---|
+| `proshop` | value from ProShop (legacy) | `A-3` |
+| `location` | `{cabinet}{drawer}{sep}{number}` | `2C-1405` |
+| `sequential` | zero-padded number | `1042` |
+| `type_prefix` | `{typecode}{sep}{number}` | `EM-1042` |
+| `size_first` | `{dia}{sep}{typecode}{sep}{number}` | `0500-EM-1042` |
+| `machine_linked` | `T{machine_tool_number}` (start/skip from **Machine Numbers**) | `T42` |
+| `other_erp` | reserved for a future in-house ERP — **disabled** placeholder | — |
+
+Config also carries `separator` (`-` `.` `/` `_` or none), `start` + `skip` (counter floor + reserved numbers), `digits` (zero-pad width), and `location.{cabinet,drawer}_identifier` (`number` | `letter`).
+
+### Pure helpers — `src/utils/toolIdSystem.js`
+
+All ID-composition logic is here (no React): `TYPE_CODES` (per-`tool_type` short code — the one complete type→code map; `buildDesc` only hardcodes "EM" inline), `composeToolId(config, tool, seqNumber)`, `padNumber` / `padDiameter` (dia × 1000 → 4-digit, **inch assumption**), `nextSequential(start, skip, used)` (mirrors `getNextMachineNumber`), `isCounterMode`, `toolIdLabel(mode)`, `showsProShopUrl(mode)`, `previewToolId(config)`. Reuse these rather than re-deriving an ID anywhere.
+
+### Generation never auto-runs
+
+Existing tools are **never** auto-assigned an ID (no migration shims — the displayed value just falls back to `proshot_id`). New IDs are written **only** by the explicit **Settings → "Assign IDs to unassigned tools"** action → `AppContext.assignToolIds()`. It models on `renumberLibrary` (download → mutate Fusion `product-id` via `applyProShopIdToFusion` → upload → rebuild in memory), assigns **unassigned tools only** in current library order, and is a no-op in `proshop`/`other_erp` modes. `proshot_id` is Fusion-owned, so no metadata write is needed.
+
+### Location mode + cabinet/drawer
+
+`cabinet` and `drawer` are **metadata-only** fields (`buildMetadataTool` / `mergeFusionAndMetadata` / `fieldRegistry`). In `location` mode `ToolForm` swaps the single Location input for structured **Cabinet + Drawer** inputs that compose into the *same* `location` string (Fusion's "Vendor" field) **and** form the ID prefix (`2C-1405`). In every other mode Location is a single free-text field, as before. The ID is baked at assignment time, so editing Location afterward doesn't change an already-assigned ID.
+
+### Settings UI + machine-linked interplay
+
+The **Tool ID System** card (`Settings.jsx`, near Machine Numbers) holds the mode selector, separator/start/skip/digits, location sub-settings, a live `previewToolId` preview, and the **Assign IDs** preview→confirm flow. When `mode === 'machine_linked'`, the **Machine Numbers** card shows a note that its start/skip now also drive the IDs (and `saveIdSystem` mirrors them into `machine_number`). Display gating (label + ProShop URL) lives in `ToolCard.jsx` and `ToolDetail.jsx` via `showsProShopUrl` / `toolIdLabel`.
+
+### Trying it in demo mode
+
+In `?demo=true`, the ID system is **fully editable in-memory** (throwaway, reset on refresh): `saveSharedFile` and `assignToolIds` have demo branches that update state without any APS/Drive write, and demo **Assign IDs reassigns *all* tools** (not just unassigned) so you can flip schemes and re-run repeatedly. The bundled demo tools carry varied `cabinet`/`drawer` + machine numbers so every mode produces realistic, distinct IDs. A live (non-demo) session is unaffected — both branches are guarded by `demoModeRef`.
+
+-----
+
 ## The Problem Being Solved
 
 Current workflow:
@@ -390,7 +433,7 @@ The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/sche
 
 ### Metadata Schema (`tool_metadata.json`)
 
-Stored in a single file on Google Drive. The file contains an array of metadata objects — one per **logical tool**. The `id` field is the tool's **`tracking_id`** (`FTL-XXXXXX`), falling back to the Fusion `guid` for pre-migration untracked tools — it is **not** keyed per Fusion instance. `buildMetadataTool` in `src/schema/toolSchema.js` is the authoritative source of the full field set (the example below is abridged); add new metadata fields there and read them back in `mergeFusionAndMetadata` / `buildLogicalTool`. Note `proshot_id` is **Fusion-owned** (`product-id`) and is **not** written to metadata.
+Stored in a single file on Google Drive. The file contains an array of metadata objects — one per **logical tool**. The `id` field is the tool's **`tracking_id`** (`FTL-XXXXXX`), falling back to the Fusion `guid` for pre-migration untracked tools — it is **not** keyed per Fusion instance. `buildMetadataTool` in `src/schema/toolSchema.js` is the authoritative source of the full field set (the example below is abridged); add new metadata fields there and read them back in `mergeFusionAndMetadata` / `buildLogicalTool`. Note `proshot_id` is **Fusion-owned** (`product-id`) and is **not** written to metadata. Metadata-only fields include `cabinet` / `drawer` (the structured location inputs used by the Tool ID System's `location` mode — they compose into `location` and the ID prefix; see Tool ID System).
 
 ```json
 {
@@ -850,7 +893,7 @@ Three shop-wide JSON files live in the **same Drive root as `tool_metadata.json`
 
 - **`vendor_registry.json`** (default = `DEFAULT_VENDOR_REGISTRY` in `vendorRegistry.js`) — the unified entity list (see `vendorRegistry.js` above). Each entity carries a preferred `name` + `aliases[]` (match-only alternates). Manufacturers also carry **`material_code_system`** (`'iso_513' | 'kennametal' | 'vdi_3323' | null`, from `MATERIAL_CODE_SYSTEMS`) — which material-classification standard that manufacturer publishes, so its catalog's material codes map to the CAM presets' code columns. Each tool's `purchasing.manufacturers[]` / `vendors[]` are intended to reference entity IDs from this list; the `is_manufacturer` / `is_vendor` flags determine which picker an entity appears in.
 
-- **`shop_settings.json`** (default in `sharedDefaults.js`) — `{ shop_name, default_units, machine_number:{start,skip}, import:{...}, aps:{...}, setup_steps:{fusionConnected,metadataConnected,normalized,proshopMerged,proshopPhotos,machineNumbers,proshopExported} }`. **Wired into behavior**: `default_units` is mirrored to `setDefaultUnit` on load; `machine_number.{start,skip}` drives renumber/add-tool. `setup_steps` holds ISO timestamps written by `markSetupStepInSettings()` (AppContext) each time a setup step completes — shared across devices via Drive. The **6 canonical `SETUP_STEPS`** (exported from AppContext, in order) are: `fusionConnected`, `metadataConnected`, `normalized`, `proshopMerged`, `machineNumbers`, `proshopExported`; `proshopPhotos` is a sub-step tracked in `setup_steps` but not in `SETUP_STEPS`. **`metadataConnected` is step 2** — it completes the moment Google Drive connects (a declarative effect in AppContext marks it for both live sign-in and a restored session); seeding derives it from `googleRef.current`, and `loadSetupProgress`'s migration back-fills it (and `machineNumbers`) on an established library (`proshopExported` true). **Still NOT wired**: the `import` and `aps` sub-objects (the import/APS flows don't write them back yet).
+- **`shop_settings.json`** (default in `sharedDefaults.js`) — `{ shop_name, default_units, machine_number:{start,skip}, tool_id_system:{mode,separator,start,skip,digits,location:{cabinet_identifier,drawer_identifier}}, import:{...}, aps:{...}, setup_steps:{fusionConnected,metadataConnected,normalized,proshopMerged,proshopPhotos,machineNumbers,proshopExported} }`. **Wired into behavior**: `default_units` is mirrored to `setDefaultUnit` on load; `machine_number.{start,skip}` drives renumber/add-tool; `tool_id_system` drives the configurable Tool ID System (see that section) — `mode` controls ID generation/display and `machine_linked` mode keeps `machine_number` in sync. `setup_steps` holds ISO timestamps written by `markSetupStepInSettings()` (AppContext) each time a setup step completes — shared across devices via Drive. The **6 canonical `SETUP_STEPS`** (exported from AppContext, in order) are: `fusionConnected`, `metadataConnected`, `normalized`, `proshopMerged`, `machineNumbers`, `proshopExported`; `proshopPhotos` is a sub-step tracked in `setup_steps` but not in `SETUP_STEPS`. **`metadataConnected` is step 2** — it completes the moment Google Drive connects (a declarative effect in AppContext marks it for both live sign-in and a restored session); seeding derives it from `googleRef.current`, and `loadSetupProgress`'s migration back-fills it (and `machineNumbers`) on an established library (`proshopExported` true). **Still NOT wired**: the `import` and `aps` sub-objects (the import/APS flows don't write them back yet).
 
 ### Editor UIs (`/materials`, `/vendors`, Settings)
 
