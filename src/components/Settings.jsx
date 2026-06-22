@@ -32,7 +32,7 @@ export default function Settings() {
     googleAuthenticated, metadataSkipped, user: googleUser,
     fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
     shopSettings, saveShopSettings, signOutAll,
-    setupProgress,
+    setupProgress, demoMode,
   } = useApp();
 
   const [showToolPicker, setShowToolPicker] = useState(false);
@@ -124,13 +124,15 @@ export default function Settings() {
     finally { setSavingIds(false); }
   };
 
-  // Tools without an ID yet, with the value they'd get — used for the preview.
+  // Tools that will get an ID, with the value they'd get — used for the preview.
+  // Demo mode reassigns ALL tools (repeatable sandbox); a live library assigns
+  // only the unassigned ones.
   const idPreviewRows = (() => {
     if (idCfg.mode === 'proshop' || idCfg.mode === 'other_erp') return [];
     let counter = isCounterMode(idCfg.mode) ? nextSequential(idCfg.start, idCfg.skip) : null;
     const rows = [];
     for (const t of tools) {
-      if (t.proshot_id) continue;
+      if (!demoMode && t.proshot_id) continue;
       const value = composeToolId(idCfg, t, counter);
       if (!value) continue;
       rows.push({ id: t.id, description: t.description, tool_type: t.tool_type, value });
