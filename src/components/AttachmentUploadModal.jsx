@@ -4,6 +4,7 @@ import { X, Upload, Image, FileText, Box, Layers, File, Camera } from 'lucide-re
 const FILE_TYPES = [
   { value: 'photo', label: 'Photo' },
   { value: 'spec_sheet', label: 'Spec Sheet' },
+  { value: 'speeds_feeds', label: 'Speeds & Feeds' },
   { value: 'model_3d', label: '3D Model' },
   { value: 'fusion_file', label: 'Fusion File' },
   { value: 'other', label: 'Other' },

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Gauge, Plus, X, Pencil, ChevronDown } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { unitAbbr } from '../utils/units.js';
@@ -11,6 +11,8 @@ import CamPresetPicker from './CamPresetPicker.jsx';
 // material + operation; the derived RPM/feed shown per row turns it into a real
 // starting point for THIS tool (uses its own diameter + flute count). The "%
 // relative to stepdown / stepover" linkage is a deliberate later step (TODO).
+
+const tint = (color, alpha) => (color || '#888') + alpha;
 
 // RPM from surface speed, generic over the tool's unit. SFM (surface feet/min)
 // for inch tools, SMM (surface metres/min) for mm tools; diameter is in the
@@ -66,6 +68,23 @@ export default function SpeedFeedSection({ tool, onSave }) {
 
   const viewRows = (tool.speed_feed_refs || []);
 
+  // Group view rows by ISO group for the card display.
+  const groupedRows = useMemo(() => {
+    const map = new Map();
+    for (const r of viewRows) {
+      const p = presetById(r.preset_id);
+      const gid = p?.group_id || '__unknown__';
+      if (!map.has(gid)) map.set(gid, []);
+      map.get(gid).push(r);
+    }
+    const ordered = [];
+    for (const g of groups) {
+      if (map.has(g.id)) ordered.push({ group: g, rows: map.get(g.id) });
+    }
+    if (map.has('__unknown__')) ordered.push({ group: null, rows: map.get('__unknown__') });
+    return ordered;
+  }, [viewRows, groups, presets]);
+
   return (
     <div className={`panel ${open ? 'open' : ''}`}>
       <button className="panel-header" onClick={() => setOpen(o => !o)}>
@@ -86,30 +105,43 @@ export default function SpeedFeedSection({ tool, onSave }) {
             viewRows.length === 0 ? (
               <div className="detail-field-empty text-sm">No SFM / chip-load reference yet.</div>
             ) : (
-              <div className="sf-ref-table">
-                <div className="sf-ref-head">
-                  <span>Material (CAM Preset)</span>
-                  <span>Operation</span>
-                  <span className="sf-ref-num">{surfaceLabel}</span>
-                  <span className="sf-ref-num">Chip Load</span>
-                  <span className="sf-ref-derived">Starting point</span>
-                </div>
-                {viewRows.map((r, i) => {
-                  const p = presetById(r.preset_id);
-                  const { rpm, feed } = derived(r.sfm, r.chip_load);
+              <div className="sf-ref-groups">
+                {groupedRows.map(({ group, rows: gRows }) => {
+                  const c = group?.color || '#888';
                   return (
-                    <div className="sf-ref-row" key={i}>
-                      <span className="sf-ref-mat">
-                        <span className="sf-ref-dot" style={{ background: groupColor(p?.group_id) }} />
-                        {p ? p.name : <span className="text-sub">(unknown preset)</span>}
-                      </span>
-                      <span className="text-sub" style={{ fontSize: 12 }}>{opTypeWord(r.operation_type) || '—'}</span>
-                      <span className="sf-ref-num font-mono">{r.sfm ?? '—'}</span>
-                      <span className="sf-ref-num font-mono">{r.chip_load ?? '—'}</span>
-                      <span className="sf-ref-derived text-sub text-xs">
-                        {rpm ? `≈ ${Math.round(rpm).toLocaleString()} RPM` : '—'}
-                        {feed ? ` · ${feed.toFixed(isInch ? 1 : 0)} ${unitAbbr(unit)}/min` : ''}
-                      </span>
+                    <div key={group?.id || '__unknown__'} className="sf-ref-group">
+                      <div className="sf-ref-group-header">
+                        <span className="mat-badge" style={{ background: tint(c, '22'), color: c, borderColor: tint(c, '44'), fontSize: 11 }}>
+                          {group?.id || '?'}
+                        </span>
+                        <span style={{ color: c, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          {group ? `${group.id} — ${group.label}` : 'Unknown'}
+                        </span>
+                      </div>
+                      {gRows.map((r, i) => {
+                        const p = presetById(r.preset_id);
+                        const { rpm, feed } = derived(r.sfm, r.chip_load);
+                        return (
+                          <div key={i} className="sf-ref-card" style={{ borderLeftColor: c }}>
+                            <span className="sf-ref-card-mat">
+                              {p ? p.name : <span className="text-sub">(unknown preset)</span>}
+                            </span>
+                            <span className="sf-ref-card-op text-sub">{opTypeWord(r.operation_type) || <span style={{ opacity: 0.4 }}>—</span>}</span>
+                            <span className="sf-ref-card-num font-mono">
+                              {r.sfm ?? <span className="text-sub">—</span>}
+                              {r.sfm != null && <span className="sf-ref-unit"> {surfaceLabel}</span>}
+                            </span>
+                            <span className="sf-ref-card-num font-mono">
+                              {r.chip_load != null ? r.chip_load.toFixed(4) : <span className="text-sub">—</span>}
+                              {r.chip_load != null && <span className="sf-ref-unit">/tooth</span>}
+                            </span>
+                            <span className="sf-ref-card-derived text-sub">
+                              {rpm ? `≈ ${Math.round(rpm).toLocaleString()} RPM` : '—'}
+                              {feed ? ` · ${feed.toFixed(isInch ? 1 : 0)} ${unitAbbr(unit)}/min` : ''}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   );
                 })}

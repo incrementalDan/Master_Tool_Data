@@ -3628,10 +3628,11 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .cam-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 
 /* ─── Speeds & Feeds Reference (SFM / chip load per CAM preset) ───────────── */
+/* Edit mode — still uses the flat table grid */
 .sf-ref-table { display: flex; flex-direction: column; gap: 2px; }
 .sf-ref-head {
   display: grid;
-  grid-template-columns: minmax(120px, 1.3fr) 92px 56px 70px 1.1fr;
+  grid-template-columns: minmax(120px, 1.3fr) 104px 64px 74px 26px;
   gap: 8px;
   align-items: center;
   padding: 0 4px 6px;
@@ -3644,7 +3645,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .sf-ref-head--edit { grid-template-columns: minmax(120px, 1.3fr) 104px 64px 74px 26px; }
 .sf-ref-row {
   display: grid;
-  grid-template-columns: minmax(120px, 1.3fr) 92px 56px 70px 1.1fr;
+  grid-template-columns: minmax(120px, 1.3fr) 104px 64px 74px 26px;
   gap: 8px;
   align-items: center;
   padding: 6px 4px;
@@ -3660,6 +3661,38 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .sf-ref-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 .sf-ref-derived { text-align: right; }
 input.sf-ref-num { text-align: right; }
+
+/* View mode — grouped compact cam-cards */
+.sf-ref-groups { display: flex; flex-direction: column; gap: 14px; }
+.sf-ref-group { display: flex; flex-direction: column; gap: 5px; }
+.sf-ref-group-header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border);
+}
+.sf-ref-card {
+  display: grid;
+  grid-template-columns: minmax(100px, 1.4fr) 68px 90px 90px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 7px 12px 7px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 8px;
+  font-size: 12px;
+  background: var(--surface);
+}
+.sf-ref-card-mat { font-weight: 500; color: var(--text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sf-ref-card-op { font-size: 11px; }
+.sf-ref-card-num { text-align: right; font-size: 12px; }
+.sf-ref-card-derived { text-align: right; font-size: 11px; }
+.sf-ref-unit { font-size: 10px; color: var(--text-sub); }
+@media (max-width: 600px) {
+  .sf-ref-card { grid-template-columns: 1fr 56px 72px; }
+  .sf-ref-card-num:nth-child(4), .sf-ref-card-derived { display: none; }
+}
 
 /* ─── Attachment upload drop zone ────────────────────────────────────────── */
 .upload-dropzone {

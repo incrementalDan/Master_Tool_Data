@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { Paperclip, Download, X, Image, FileText, Box, Layers, File, Plus, Loader } from 'lucide-react';
+import { Paperclip, Download, X, Image, FileText, Box, Layers, File, Plus, Loader, TrendingUp } from 'lucide-react';
 import AttachmentUploadModal from './AttachmentUploadModal.jsx';
 import { fetchFileBlob } from '../services/driveService.js';
 
-const TYPE_ORDER = ['photo', 'spec_sheet', 'model_3d', 'fusion_file', 'other'];
+const TYPE_ORDER = ['photo', 'spec_sheet', 'speeds_feeds', 'model_3d', 'fusion_file', 'other'];
 const TYPE_LABELS = {
   photo: 'Photos',
   spec_sheet: 'Spec Sheets',
+  speeds_feeds: 'Speeds & Feeds',
   model_3d: '3D Models',
   fusion_file: 'Fusion Files',
   other: 'Other',
@@ -27,12 +28,13 @@ function isPdfFile(filename) {
   return getExt(filename) === '.pdf';
 }
 
-function AttIcon({ filename, size = 14 }) {
+function AttIcon({ filename, type, size = 14 }) {
   const ext = getExt(filename);
   if (isImageFile(filename)) return <Image size={size} style={{ color: 'var(--blue)', flexShrink: 0 }} />;
   if (ext === '.pdf') return <FileText size={size} style={{ color: 'var(--orange)', flexShrink: 0 }} />;
   if (MODEL_EXTS.includes(ext)) return <Box size={size} style={{ color: '#2dd4bf', flexShrink: 0 }} />;
   if (ext === '.f3d' || ext === '.fusion') return <Layers size={size} style={{ color: 'var(--blue)', flexShrink: 0 }} />;
+  if (type === 'speeds_feeds') return <TrendingUp size={size} style={{ color: '#a78bfa', flexShrink: 0 }} />;
   return <File size={size} style={{ color: 'var(--text-sub)', flexShrink: 0 }} />;
 }
 
@@ -196,7 +198,7 @@ export default function FilesSection({ tool, googleAuthenticated, onUpload, onDe
                             <>
                               {isBusy
                                 ? <Loader size={13} className="files-spin" style={{ flexShrink: 0, color: 'var(--text-sub)' }} />
-                                : <AttIcon filename={att.filename} />}
+                                : <AttIcon filename={att.filename} type={att.type} />}
                               <span className="files-card-name" title={att.filename}>{att.filename}</span>
                               <button
                                 className="icon-btn files-card-delete"
