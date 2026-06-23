@@ -5,7 +5,7 @@ import { useApp } from '../context/AppContext.jsx';
 import {
   setAccessToken, fetchUserInfo,
   checkMetadataFile, listFolders, listSharedDrives, createMetadataInFolder,
-  findMetadataInFolder, connectToMetadataFile,
+  findMetadataInFolder, connectToMetadataFile, checkSharedFilesInFolder,
 } from '../services/driveService.js';
 
 const GOOGLE_CONNECTED_KEY = 'google_drive_connected';
@@ -27,6 +27,7 @@ export default function MetadataConnect() {
   const [folderLoading, setFolderLoading] = useState(false);
   const [pickerRoot, setPickerRoot] = useState('myDrive'); // 'myDrive' | drive-id
   const [foundFile, setFoundFile] = useState(null); // existing tool_metadata.json in current folder
+  const [sharedFiles, setSharedFiles] = useState(null); // { [filename]: bool } for the 3 shared files
   const [confirmCreate, setConfirmCreate] = useState(false); // show "already exists" warning
 
   // Stored user info so we can call setGoogleUser after file is created
@@ -106,19 +107,22 @@ export default function MetadataConnect() {
   async function loadPickerRoot() {
     setFolderLoading(true);
     setFoundFile(null);
+    setSharedFiles(null);
     setConfirmCreate(false);
     setError('');
     try {
-      const [drives, rootFolders, existing] = await Promise.all([
+      const [drives, rootFolders, existing, shared] = await Promise.all([
         listSharedDrives(),
         listFolders('root'),
         findMetadataInFolder(null).catch(() => null),
+        checkSharedFilesInFolder(null).catch(() => null),
       ]);
       setSharedDrives(drives);
       setFolders(rootFolders);
       setStack([]);
       setPickerRoot('myDrive');
       setFoundFile(existing);
+      setSharedFiles(shared);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -130,16 +134,19 @@ export default function MetadataConnect() {
   async function openFolder(folder) {
     setFolderLoading(true);
     setFoundFile(null);
+    setSharedFiles(null);
     setConfirmCreate(false);
     setError('');
     try {
-      const [children, existing] = await Promise.all([
+      const [children, existing, shared] = await Promise.all([
         listFolders(folder.id),
         findMetadataInFolder(folder.id).catch(() => null),
+        checkSharedFilesInFolder(folder.id).catch(() => null),
       ]);
       setStack(s => [...s, { id: folder.id, name: folder.name }]);
       setFolders(children);
       setFoundFile(existing);
+      setSharedFiles(shared);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -150,28 +157,33 @@ export default function MetadataConnect() {
   async function navigateToCrumb(index) {
     setFolderLoading(true);
     setFoundFile(null);
+    setSharedFiles(null);
     setConfirmCreate(false);
     setError('');
     try {
       if (index < 0) {
         const parentId = pickerRoot === 'myDrive' ? 'root' : pickerRoot;
         const checkId = pickerRoot === 'myDrive' ? null : pickerRoot;
-        const [children, existing] = await Promise.all([
+        const [children, existing, shared] = await Promise.all([
           listFolders(parentId),
           findMetadataInFolder(checkId).catch(() => null),
+          checkSharedFilesInFolder(checkId).catch(() => null),
         ]);
         setStack([]);
         setFolders(children);
         setFoundFile(existing);
+        setSharedFiles(shared);
       } else {
         const target = stack[index];
-        const [children, existing] = await Promise.all([
+        const [children, existing, shared] = await Promise.all([
           listFolders(target.id),
           findMetadataInFolder(target.id).catch(() => null),
+          checkSharedFilesInFolder(target.id).catch(() => null),
         ]);
         setStack(s => s.slice(0, index + 1));
         setFolders(children);
         setFoundFile(existing);
+        setSharedFiles(shared);
       }
     } catch (err) {
       setError(err.message);
@@ -183,17 +195,20 @@ export default function MetadataConnect() {
   async function selectSharedDrive(drive) {
     setFolderLoading(true);
     setFoundFile(null);
+    setSharedFiles(null);
     setConfirmCreate(false);
     setError('');
     setPickerRoot(drive.id);
     try {
-      const [children, existing] = await Promise.all([
+      const [children, existing, shared] = await Promise.all([
         listFolders(drive.id),
         findMetadataInFolder(drive.id).catch(() => null),
+        checkSharedFilesInFolder(drive.id).catch(() => null),
       ]);
       setStack([{ id: drive.id, name: drive.name }]);
       setFolders(children);
       setFoundFile(existing);
+      setSharedFiles(shared);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -348,20 +363,39 @@ export default function MetadataConnect() {
 
         {/* Existing file callout — shown when tool_metadata.json is found in this folder */}
         {!folderLoading && foundFile && (
-          <div className="flex items-center gap-10" style={{
+          <div style={{
             padding: '10px 12px',
             background: 'rgba(34,197,94,0.08)',
             borderBottom: '1px solid var(--border)',
           }}>
-            <span style={{ flex: 1, fontSize: 13 }}>
-              <strong style={{ color: 'var(--text)' }}>Found existing tool_metadata.json</strong>
-              <span className="text-sub" style={{ marginLeft: 8, fontSize: 12 }}>
-                Modified {new Date(foundFile.modifiedTime).toLocaleDateString()}
+            <div className="flex items-center gap-10" style={{ marginBottom: sharedFiles ? 8 : 0 }}>
+              <span style={{ flex: 1, fontSize: 13 }}>
+                <strong style={{ color: 'var(--text)' }}>Found existing tool_metadata.json</strong>
+                <span className="text-sub" style={{ marginLeft: 8, fontSize: 12 }}>
+                  Modified {new Date(foundFile.modifiedTime).toLocaleDateString()}
+                </span>
               </span>
-            </span>
-            <button className="btn btn-primary btn-sm" onClick={connectExisting}>
-              Connect to this file
-            </button>
+              <button className="btn btn-primary btn-sm" onClick={connectExisting}>
+                Connect to this file
+              </button>
+            </div>
+            {sharedFiles && (
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12 }}>
+                {[
+                  ['materials.json', 'Materials'],
+                  ['vendor_registry.json', 'Vendor Registry'],
+                  ['shop_settings.json', 'Shop Settings'],
+                ].map(([filename, label]) => (
+                  <span key={filename} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {sharedFiles[filename]
+                      ? <span style={{ color: '#4ade80' }}>✓</span>
+                      : <span className="text-sub">—</span>}
+                    <span className={sharedFiles[filename] ? '' : 'text-sub'}>{label}</span>
+                    {!sharedFiles[filename] && <span className="text-sub">(will create)</span>}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
