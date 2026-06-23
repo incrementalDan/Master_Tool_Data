@@ -618,6 +618,14 @@ src/
                                   # OAuth scope: drive (not drive.file — required for shared drives)
                                   # All API calls include supportsAllDrives=true
                                   # listFolderChildren + copyDriveFile back the ProShop photo import
+                                  # findMetadataInFolder(folderId) — searches for an existing
+                                  #   tool_metadata.json in a folder (null = My Drive root);
+                                  #   returns { id, name, modifiedTime } or null
+                                  # connectToMetadataFile(fileId) — stores a file ID in localStorage
+                                  #   so loadTools picks it up as the connected metadata file
+                                  # checkSharedFilesInFolder(folderId) — parallel-checks for
+                                  #   materials.json, vendor_registry.json, shop_settings.json
+                                  #   in the same folder; returns { [filename]: boolean }
     searchEngine.js               # In-memory faceted search + filter logic
     duplicateDetector.js          # Weighted similarity scoring for Phase 2 matching
     mergeQueue.js                 # Phase 2 queue state: parseIncoming, buildQueue
@@ -657,6 +665,11 @@ src/
     ImportPhotosModal.jsx         # One-time ProShop photo import: Drive folder browser +
                                   # progress/summary (see ProShop Integration → ProShop photo import)
     MetadataConnect.jsx           # Google Drive connect flow + shared-drive-aware folder picker
+                                  # On every folder navigation, runs findMetadataInFolder +
+                                  # checkSharedFilesInFolder in parallel with listFolders (no
+                                  # extra latency). When tool_metadata.json is found, shows a
+                                  # green callout with ✓/— status for all 4 metadata files so
+                                  # the user can confirm the full set before clicking Connect.
     HolderPicker.jsx              # Modal for selecting a holder from the holder library
     ReconcileModal.jsx            # Reconcile-on-open prompt: delete duplicates, add/delete
                                   # new assemblies, review conflicts (→ Sync Job diff)
@@ -885,6 +898,8 @@ A collapsible "Purchasing" panel in `ToolDetail`'s right column. Nested table: o
 ## Shared Drive Files (materials / vendor registry / shop settings)
 
 Three shop-wide JSON files live in the **same Drive root as `tool_metadata.json`** and are loaded at startup **in parallel** with the metadata (in `loadTools`, when Google is connected). Each is **created from its default content if it doesn't exist yet**; a load failure on any one falls back to its default and never blocks the library load. All three are exposed via `useApp()` as `state.materials` / `state.vendorRegistry` / `state.shopSettings` (defaulting to their seeds before load), with save functions `saveMaterials` / `saveVendorRegistry` / `saveShopSettings`. **Foundation only — no UI yet.**
+
+**How they are found (never need separate selection):** `loadOrCreateSharedJson` calls `getMetaParentFolderId()` (the parent folder of the connected `tool_metadata.json`) to locate them. Their Drive file IDs are cached in localStorage under the keys in `SHARED_FILES`; on a fresh machine (empty cache) the function searches the metadata folder by name and re-caches. A missing file is created from its default seed. This means connecting `tool_metadata.json` once is sufficient — the other three files auto-join on the next `loadTools`. The `MetadataConnect.jsx` folder picker checks for all four files in parallel during browsing and shows a ✓/— status grid in the callout so users can confirm all files are present before connecting (see **Google Drive — Shared Drive Support** below).
 
 - **Generic Drive-file plumbing** lives in `driveService.js`: `loadOrCreateSharedJson(name, cacheKey, default)` and `saveSharedJson(name, cacheKey, content)`, with the file names + localStorage cache keys in `SHARED_FILES`. Content is pretty-printed (`JSON.stringify(data, null, 2)`) like all Drive JSON. Cache keys are cleared on `signOut()`.
 
@@ -1154,6 +1169,7 @@ The Google Drive metadata folder picker supports shared drives (team drives). Ke
 - **OAuth scope**: `https://www.googleapis.com/auth/drive` — NOT `drive.file`. The `drive.file` scope blocks `drives.list` and prevents browsing shared drive contents. Using `drive` is required for any app that needs to browse or create files in shared drives.
 - **API calls**: All Drive API calls (`files.get`, `files.list`, `files.create`, `files.update`) must include `supportsAllDrives=true`. Folder listings also need `includeItemsFromAllDrives=true`.
 - The folder picker in `MetadataConnect.jsx` shows a "Shared Drives" section above "My Drive" when shared drives are available. Clicking a shared drive navigates into it; the section header updates to show the drive name.
+- **Connecting to an existing metadata file** — on every folder navigation, the picker runs `findMetadataInFolder` and `checkSharedFilesInFolder` in parallel alongside `listFolders` (no extra round-trip latency). If `tool_metadata.json` is found, a green callout appears with a ✓/— status line for `materials.json`, `vendor_registry.json`, and `shop_settings.json`. "Connect to this file" stores the file ID in localStorage via `connectToMetadataFile(fileId)` and completes setup. "Create here" checks for an existing file first — if one is found, it prompts to connect to it instead of silently creating a duplicate. The three shared files never need separate selection; they are auto-located from the metadata file's parent folder on every `loadTools`.
 
 -----
 
