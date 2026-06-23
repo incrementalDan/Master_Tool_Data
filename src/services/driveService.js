@@ -355,6 +355,28 @@ export async function createMetadataInFolder(folderId) {
   return driveCreate([], folderId);
 }
 
+// Search for an existing tool_metadata.json in a folder without reading its content.
+// Pass null for folderId to search My Drive root.
+// Returns { id, name, modifiedTime } or null.
+export async function findMetadataInFolder(folderId) {
+  const parent = folderId || 'root';
+  const q = `'${parent}' in parents and name='tool_metadata.json' and trashed=false`;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+    { headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.files?.[0] || null;
+}
+
+// Store an existing metadata file's ID in localStorage without writing any content.
+// Called when the user selects an existing file rather than creating a new one.
+export function connectToMetadataFile(fileId) {
+  localStorage.setItem(CACHED_FILE_ID_KEY, fileId);
+}
+
 // ─── Tool file storage ────────────────────────────────────────────────────────
 // Folder layout: [metadata root]/tool_files/{trackingId}/{filename}
 

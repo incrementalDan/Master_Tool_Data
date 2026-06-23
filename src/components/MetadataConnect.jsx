@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext.jsx';
 import {
   setAccessToken, fetchUserInfo,
   checkMetadataFile, listFolders, listSharedDrives, createMetadataInFolder,
+  findMetadataInFolder, connectToMetadataFile,
 } from '../services/driveService.js';
 
 const GOOGLE_CONNECTED_KEY = 'google_drive_connected';
@@ -25,6 +26,8 @@ export default function MetadataConnect() {
   const [folders, setFolders] = useState([]);
   const [folderLoading, setFolderLoading] = useState(false);
   const [pickerRoot, setPickerRoot] = useState('myDrive'); // 'myDrive' | drive-id
+  const [foundFile, setFoundFile] = useState(null); // existing tool_metadata.json in current folder
+  const [confirmCreate, setConfirmCreate] = useState(false); // show "already exists" warning
 
   // Stored user info so we can call setGoogleUser after file is created
   const [pendingUser, setPendingUser] = useState(null);
@@ -102,13 +105,20 @@ export default function MetadataConnect() {
 
   async function loadPickerRoot() {
     setFolderLoading(true);
+    setFoundFile(null);
+    setConfirmCreate(false);
     setError('');
     try {
-      const [drives, rootFolders] = await Promise.all([listSharedDrives(), listFolders('root')]);
+      const [drives, rootFolders, existing] = await Promise.all([
+        listSharedDrives(),
+        listFolders('root'),
+        findMetadataInFolder(null).catch(() => null),
+      ]);
       setSharedDrives(drives);
       setFolders(rootFolders);
       setStack([]);
       setPickerRoot('myDrive');
+      setFoundFile(existing);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -119,11 +129,17 @@ export default function MetadataConnect() {
 
   async function openFolder(folder) {
     setFolderLoading(true);
+    setFoundFile(null);
+    setConfirmCreate(false);
     setError('');
     try {
-      const children = await listFolders(folder.id);
+      const [children, existing] = await Promise.all([
+        listFolders(folder.id),
+        findMetadataInFolder(folder.id).catch(() => null),
+      ]);
       setStack(s => [...s, { id: folder.id, name: folder.name }]);
       setFolders(children);
+      setFoundFile(existing);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -133,19 +149,29 @@ export default function MetadataConnect() {
 
   async function navigateToCrumb(index) {
     setFolderLoading(true);
+    setFoundFile(null);
+    setConfirmCreate(false);
     setError('');
     try {
       if (index < 0) {
-        // Back to the root of whichever drive is active
         const parentId = pickerRoot === 'myDrive' ? 'root' : pickerRoot;
-        const children = await listFolders(parentId);
+        const checkId = pickerRoot === 'myDrive' ? null : pickerRoot;
+        const [children, existing] = await Promise.all([
+          listFolders(parentId),
+          findMetadataInFolder(checkId).catch(() => null),
+        ]);
         setStack([]);
         setFolders(children);
+        setFoundFile(existing);
       } else {
         const target = stack[index];
-        const children = await listFolders(target.id);
+        const [children, existing] = await Promise.all([
+          listFolders(target.id),
+          findMetadataInFolder(target.id).catch(() => null),
+        ]);
         setStack(s => s.slice(0, index + 1));
         setFolders(children);
+        setFoundFile(existing);
       }
     } catch (err) {
       setError(err.message);
@@ -156,12 +182,18 @@ export default function MetadataConnect() {
 
   async function selectSharedDrive(drive) {
     setFolderLoading(true);
+    setFoundFile(null);
+    setConfirmCreate(false);
     setError('');
     setPickerRoot(drive.id);
     try {
-      const children = await listFolders(drive.id);
+      const [children, existing] = await Promise.all([
+        listFolders(drive.id),
+        findMetadataInFolder(drive.id).catch(() => null),
+      ]);
       setStack([{ id: drive.id, name: drive.name }]);
       setFolders(children);
+      setFoundFile(existing);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -169,13 +201,31 @@ export default function MetadataConnect() {
     }
   }
 
-  async function createHere() {
-    const folderId = stack.length ? stack[stack.length - 1].id
+  function getCurrentFolderId() {
+    return stack.length ? stack[stack.length - 1].id
       : pickerRoot === 'myDrive' ? null : pickerRoot;
+  }
+
+  // Connect to the existing file found in the current folder.
+  function connectExisting() {
+    connectToMetadataFile(foundFile.id);
+    setGoogleUser(pendingUser);
+  }
+
+  // "Create here" — if an existing file was found, show a confirmation first.
+  function createHere() {
+    if (foundFile) {
+      setConfirmCreate(true);
+      return;
+    }
+    doCreate();
+  }
+
+  async function doCreate() {
     setView('creating');
     setError('');
     try {
-      await createMetadataInFolder(folderId);
+      await createMetadataInFolder(getCurrentFolderId());
       setGoogleUser(pendingUser);
     } catch (err) {
       setError(err.message);
@@ -251,8 +301,8 @@ export default function MetadataConnect() {
         <h2 style={{ fontSize: 18, fontWeight: 700 }}>Choose a folder for tool_metadata.json</h2>
       </div>
       <p className="text-sub text-sm mb-16">
-        No existing metadata file was found. Pick any shared folder your teammates already have access to —
-        the file will be created there and reused on every sign-in.
+        Browse to the folder containing your team's <code>tool_metadata.json</code> to connect to it,
+        or navigate to any shared folder to create a new one.
       </p>
 
       {error && <div className="error-banner mb-12">{error}</div>}
@@ -296,6 +346,25 @@ export default function MetadataConnect() {
           ))}
         </div>
 
+        {/* Existing file callout — shown when tool_metadata.json is found in this folder */}
+        {!folderLoading && foundFile && (
+          <div className="flex items-center gap-10" style={{
+            padding: '10px 12px',
+            background: 'rgba(34,197,94,0.08)',
+            borderBottom: '1px solid var(--border)',
+          }}>
+            <span style={{ flex: 1, fontSize: 13 }}>
+              <strong style={{ color: 'var(--text)' }}>Found existing tool_metadata.json</strong>
+              <span className="text-sub" style={{ marginLeft: 8, fontSize: 12 }}>
+                Modified {new Date(foundFile.modifiedTime).toLocaleDateString()}
+              </span>
+            </span>
+            <button className="btn btn-primary btn-sm" onClick={connectExisting}>
+              Connect to this file
+            </button>
+          </div>
+        )}
+
         {folderLoading ? (
           <div className="flex items-center justify-center" style={{ padding: 24 }}>
             <span className="spinner" style={{ width: 20, height: 20, borderWidth: 2 }} />
@@ -320,12 +389,24 @@ export default function MetadataConnect() {
           </>
         )}
 
-        {/* Create here footer */}
-        <div className="flex items-center gap-10" style={{ padding: '10px 12px', background: 'var(--surface)' }}>
-          <span className="text-sub text-sm" style={{ flex: 1 }}>Create in: <strong>{currentFolderName}</strong></span>
-          <button className="btn btn-primary btn-sm" onClick={createHere} disabled={folderLoading}>
-            Create tool_metadata.json here
-          </button>
+        {/* Footer — create here, or confirmation when an existing file was found */}
+        <div style={{ padding: '10px 12px', background: 'var(--surface)' }}>
+          {confirmCreate ? (
+            <div className="flex items-center gap-10">
+              <span className="text-sub text-sm" style={{ flex: 1 }}>
+                A metadata file already exists here — connect to it instead?
+              </span>
+              <button className="btn btn-primary btn-sm" onClick={connectExisting}>Connect to existing</button>
+              <button className="btn btn-ghost btn-sm" onClick={doCreate}>Create new anyway</button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-10">
+              <span className="text-sub text-sm" style={{ flex: 1 }}>Create in: <strong>{currentFolderName}</strong></span>
+              <button className="btn btn-primary btn-sm" onClick={createHere} disabled={folderLoading}>
+                Create tool_metadata.json here
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
