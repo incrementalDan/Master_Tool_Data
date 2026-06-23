@@ -118,6 +118,7 @@ function AppShell() {
       <div className="app-shell">
         <TopBar />
         <NormalizeBanner />
+        <CombineConflictBanner />
         <GoogleReconnectBanner />
         <MetadataFileBanner />
         <SetupGuideBanner />
@@ -174,9 +175,10 @@ function DemoBanner({ onExit }) {
 // (no tracking ID). Runs the one-time normalization: assigns tracking IDs, fans
 // tools out into per-assembly instances, and renames presets to the convention.
 function NormalizeBanner() {
-  const { needsNormalize } = useApp();
+  const { needsNormalize, normalizeCount } = useApp();
   const [showModal, setShowModal] = useState(false);
   if (!needsNormalize) return null;
+  const n = normalizeCount || 0;
   return (
     <div className="normalize-banner" role="alert" style={{
       display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
@@ -185,12 +187,36 @@ function NormalizeBanner() {
     }}>
       <AlertTriangle size={16} />
       <span style={{ flex: 1, minWidth: 220 }}>
-        Some tools haven't been migrated to the multi-instance model yet. Normalizing
-        assigns tracking IDs, splits each tool into per-assembly instances, and renames
-        presets to the standard convention.
+        <strong>{n} tool{n === 1 ? '' : 's'}</strong> {n === 1 ? 'hasn\'t' : 'haven\'t'} been migrated
+        to the multi-instance model. Normalizing only affects un-migrated tools —
+        already-migrated tools are left untouched.
       </span>
       <button className="btn btn-secondary btn-sm" onClick={() => setShowModal(true)}>Review &amp; normalize</button>
       {showModal && <NormalizeModal onClose={() => setShowModal(false)} />}
+    </div>
+  );
+}
+
+// Shown when any tool in the library has _combineConflicts — fields that were
+// non-empty on both the ProShop placeholder and the real Fusion entry, with
+// different values. Open the flagged tool to resolve via the existing reconcile flow.
+function CombineConflictBanner() {
+  const { tools } = useApp();
+  const conflictTools = tools.filter(t => t._combineConflicts?.length);
+  if (conflictTools.length === 0) return null;
+  const n = conflictTools.length;
+  return (
+    <div role="alert" style={{
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      padding: '10px 16px', background: 'rgba(234,179,8,0.12)',
+      borderBottom: '1px solid rgba(234,179,8,0.4)', color: '#fde047', fontSize: 13,
+    }}>
+      <AlertTriangle size={16} />
+      <span style={{ flex: 1, minWidth: 220 }}>
+        <strong>{n} tool{n === 1 ? '' : 's'}</strong> {n === 1 ? 'has' : 'have'} fields that differ
+        between the ProShop placeholder and the Fusion entry — open {n === 1 ? 'it' : 'them'} to
+        review and resolve the conflict before normalizing.
+      </span>
     </div>
   );
 }

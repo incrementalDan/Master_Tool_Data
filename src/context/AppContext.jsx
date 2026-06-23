@@ -89,6 +89,7 @@ const initialState = {
   tools: [],
   holders: [],                // loaded from Master-Holder library
   needsNormalize: false,      // true when any tool lacks a tracking ID (pre-migration)
+  normalizeCount: 0,          // number of un-migrated tools (for banner/modal copy)
   metadataFileWarning: null,  // null | 'missing' | 'trashed' — linked metadata file is gone
   // Shared Drive files (loaded at startup; default to the seeds until then).
   materials: DEFAULT_MATERIALS,
@@ -153,7 +154,7 @@ function reducer(state, action) {
         holderLibraryLocation: state.holderLibraryLocation,
       };
     case 'LOAD_START': return { ...state, isLoading: true, error: null };
-    case 'LOAD_SUCCESS': return { ...state, isLoading: false, tools: action.tools, needsNormalize: !!action.needsNormalize };
+    case 'LOAD_SUCCESS': return { ...state, isLoading: false, tools: action.tools, needsNormalize: !!action.needsNormalize, normalizeCount: action.normalizeCount ?? 0 };
     case 'LOAD_ERROR': return { ...state, isLoading: false, error: action.error };
     case 'SAVE_START': return { ...state, isSaving: true, error: null };
     case 'SAVE_SUCCESS': return { ...state, isSaving: false };
@@ -163,7 +164,7 @@ function reducer(state, action) {
       return { ...state, tools: state.tools.map(t => t.id === action.tool.id ? action.tool : t) };
     case 'DELETE_TOOL':
       return { ...state, tools: state.tools.filter(t => t.id !== action.id) };
-    case 'SET_TOOLS': return { ...state, tools: action.tools, ...(action.needsNormalize !== undefined ? { needsNormalize: action.needsNormalize } : {}) };
+    case 'SET_TOOLS': return { ...state, tools: action.tools, ...(action.needsNormalize !== undefined ? { needsNormalize: action.needsNormalize } : {}), ...(action.normalizeCount !== undefined ? { normalizeCount: action.normalizeCount } : {}) };
     case 'METADATA_FILE_WARNING': return { ...state, metadataFileWarning: action.warning };
     case 'SET_SHARED_FILES':
       return { ...state, materials: action.materials, vendorRegistry: action.vendorRegistry, shopSettings: action.shopSettings };
@@ -592,7 +593,7 @@ export function AppProvider({ children }) {
         if (established) localStorage.setItem(SETUP_CELEBRATED_KEY, '1');
       }
 
-      dispatch({ type: 'LOAD_SUCCESS', tools, needsNormalize });
+      dispatch({ type: 'LOAD_SUCCESS', tools, needsNormalize, normalizeCount: untracked.length });
       // Load holder library alongside tools (non-critical — failure won't block)
       if (holderLocationRef.current) {
         try {
@@ -1503,12 +1504,22 @@ export function AppProvider({ children }) {
       const combined = combineToolsByProshopId(logicalTools);
       const dupCount = logicalTools.length - combined.length;
 
-      await saveFullLibrary(combined);
+      // Skip tools whose fields genuinely conflict (non-empty values differ between
+      // the placeholder and the Fusion entry). Leave their raw entries untouched in
+      // the library so nothing is destroyed; the user can reconcile on next open.
+      const cleanTools = combined.filter(t => !t._combineConflicts?.length);
+      const conflictTools = combined.filter(t => t._combineConflicts?.length);
+
+      await saveFullLibrary(cleanTools);
       markSetupStepInSettings('normalized');
       const base = `Normalized ${untracked.length} tool${untracked.length === 1 ? '' : 's'} to the multi-instance model`;
-      notify(dupCount > 0
-        ? `${base}; combined ${dupCount} ProShop-number duplicate${dupCount === 1 ? '' : 's'}`
-        : base, 'success', 6000);
+      const conflictSuffix = conflictTools.length > 0
+        ? `; ${conflictTools.length} need${conflictTools.length === 1 ? 's' : ''} conflict review — open them to resolve`
+        : '';
+      const dupSuffix = dupCount > 0
+        ? `; combined ${dupCount} ProShop-number duplicate${dupCount === 1 ? '' : 's'}`
+        : '';
+      notify(`${base}${dupSuffix}${conflictSuffix}`, 'success', 6000);
       return untracked.length;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });

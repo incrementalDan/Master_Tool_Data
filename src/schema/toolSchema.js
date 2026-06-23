@@ -394,8 +394,62 @@ function mergeLogicalTools(group) {
     if (Array.isArray(t.merge_history)) mergeHistory.push(...t.merge_history);
   }
 
+  // ── Gap-fill + conflict detect ──────────────────────────────────────────────
+  // Start from primary's scalar values. For every other tool in the group:
+  //   - If the current (primary or previously gap-filled) value is empty and
+  //     the other tool has a non-empty value → take it (gap-fill).
+  //   - If both are non-empty primitive values that differ → record a conflict.
+  // The unioned arrays and per-instance / transient / audit fields are excluded.
+  const SKIP_KEYS = new Set([
+    'id', 'tracking_id', 'machine_tool_number', 'no_fusion_link',
+    'assemblies', 'presets', 'merge_history',
+    '_instancesRaw', '_fusionRaw', '_registeredAssemblies', '_combineConflicts',
+    'ooh', 'selected_holder_guid',
+    'created_at', 'updated_at', 'updated_by', 'revision_notes',
+  ]);
+  const isEmpty = (v) => v == null || v === '' || (Array.isArray(v) && v.length === 0);
+  const scalarConflict = (a, b) => {
+    if (typeof a === 'number' && typeof b === 'number') return round4(a) !== round4(b);
+    if (typeof a === 'string' && typeof b === 'string') return a.trim() !== b.trim();
+    return a !== b;
+  };
+
+  const merged = { ...primary };
+  const combineConflicts = [];
+  const allKeys = new Set(group.flatMap(t => Object.keys(t)));
+
+  for (const key of allKeys) {
+    if (SKIP_KEYS.has(key) || key.startsWith('_')) continue;
+    for (const other of ordered.slice(1)) {
+      const curVal = merged[key];
+      const otherVal = other[key];
+      if (isEmpty(curVal) && !isEmpty(otherVal)) {
+        merged[key] = otherVal;                                  // gap-fill
+      } else if (
+        !isEmpty(curVal) && !isEmpty(otherVal) &&
+        (typeof curVal === 'string' || typeof curVal === 'number' || typeof curVal === 'boolean') &&
+        (typeof otherVal === 'string' || typeof otherVal === 'number' || typeof otherVal === 'boolean') &&
+        scalarConflict(curVal, otherVal) &&
+        !combineConflicts.some(c => c.field === key)            // one entry per field
+      ) {
+        combineConflicts.push({
+          field: key,
+          values: [curVal, otherVal],
+          guids: [
+            primary._fusionRaw?.guid || primary.id,
+            other._fusionRaw?.guid || other.id,
+          ],
+        });
+      }
+    }
+  }
+
+  // no_fusion_link: clear the flag if any tool in the group is a real Fusion entry.
+  const no_fusion_link = group.every(t => t.no_fusion_link) ? true : false;
+
   return {
-    ...primary,
+    ...merged,
+    no_fusion_link,
     machine_tool_number: machine,
     assemblies,
     presets,
@@ -403,6 +457,7 @@ function mergeLogicalTools(group) {
     _instancesRaw: raws,
     _fusionRaw: primary._fusionRaw || raws[0] || null,
     _registeredAssemblies: registered,
+    ...(combineConflicts.length > 0 ? { _combineConflicts: combineConflicts } : {}),
   };
 }
 
