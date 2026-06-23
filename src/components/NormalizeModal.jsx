@@ -8,7 +8,7 @@ import { OP_TYPES } from '../utils/presetNaming.js';
 // assign one. The selections become the `opOverrides` map passed to
 // normalizeLibrary so those presets get a proper convention name.
 export default function NormalizeModal({ onClose }) {
-  const { tools, normalizeLibrary, isSaving } = useApp();
+  const { tools, normalizeLibrary, isSaving, normalizeCount } = useApp();
   const [overrides, setOverrides] = useState({}); // presetGuid -> op value ('' = leave blank)
 
   // Group presets needing review by their (untracked) tool.
@@ -57,9 +57,14 @@ export default function NormalizeModal({ onClose }) {
         </div>
 
         <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
+          <div className="text-sub text-sm" style={{ marginBottom: 12 }}>
+            This will normalize <strong style={{ color: 'var(--text)' }}>{normalizeCount || 0} tool{(normalizeCount || 0) === 1 ? '' : 's'}</strong>.
+            Already-migrated tools won't be touched.
+          </div>
           {reviewCount === 0 ? (
-            <div className="text-sub text-sm" style={{ padding: '12px 0' }}>
-              All preset names were recognized — nothing to review. You're ready to normalize.
+            <div className="text-sub text-sm" style={{ padding: '4px 0' }}>
+              All preset names were recognized — no operation types need review.
+              Click <strong style={{ color: 'var(--text)' }}>Normalize now</strong> to proceed.
             </div>
           ) : (
             <>
