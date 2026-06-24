@@ -95,17 +95,19 @@ export const FIELD_REGISTRY = {
     precision: null,
   },
 
+  // The tool's human-readable ID. Metadata is the source of truth (the TMS owns
+  // it); also mirrored to Fusion's product-id — an unmanaged free-text field —
+  // so the Fusion library still shows it. On read, metadata wins and falls back
+  // to Fusion product-id only for tools imported before the TMS assigned an ID.
+  // Previously-assigned values retired by a re-number live in metadata legacy_ids[].
   tool_id: {
     label: 'Tool ID',
     type: 'string',
     unit: null,
-    // Primary Fusion path is product-id; internalToFusionTool also mirrors it to
-    // expressions.tool_productId (Fusion re-derives the field from the expression
-    // on load, so both are written together).
-    fusionPath: 'product-id',     // Fusion's product-id field = our Tool ID
+    fusionPath: 'product-id',     // metadata is source of truth; also mirrored to Fusion
     fusionMirror: 'expressions.tool_productId',
     proShopColumn: 'toolNumber',  // ProShop's "Tool #" — Primary Key, e.g. "A-217"
-    metadataOnly: false,
+    metadataOnly: false,          // written to Fusion product-id, but metadata wins
     appliesToTypes: 'all',
     required: false,
     precision: null,

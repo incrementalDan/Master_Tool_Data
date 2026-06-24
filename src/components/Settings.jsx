@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight } from 'lucide-react';
 import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
-import { generateMachineNumbers, generateId } from '../schema/toolSchema.js';
+import { generateMachineNumbers, generateId, duplicateIdClusters } from '../schema/toolSchema.js';
 import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../utils/toolIdSystem.js';
 import { useDragReorder } from './useDragReorder.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
@@ -89,6 +89,8 @@ export default function Settings() {
   // 'idle' | 'preview' | 'done'
   const [renumStage, setRenumStage] = useState('idle');
   const [renumResultCount, setRenumResultCount] = useState(0);
+  // Per-duplicate-cluster decision: tool_id -> 'merge' | 'split' (default 'merge').
+  const [renumDecisions, setRenumDecisions] = useState({});
 
   useEffect(() => {
     setIdCfg({ ...idsDefault, ...(shopSettings?.tool_id_system || {}) });
@@ -168,9 +170,22 @@ export default function Settings() {
     return rows;
   })();
 
+  // Duplicate clusters: tools that show as one entry but are several Fusion
+  // tracking-ID groups sharing a tool_id (human-error dupes). Re-number would
+  // split them into separate IDs unless the user chooses to merge.
+  const renumClusters = duplicateIdClusters(tools);
+  const decisionFor = (toolId) => renumDecisions[toolId] || 'merge';
+  const setDecision = (toolId, d) => setRenumDecisions(prev => ({ ...prev, [toolId]: d }));
+  const setAllDecisions = (d) => setRenumDecisions(
+    Object.fromEntries(renumClusters.map(c => [c.tool_id, d]))
+  );
+
   const handleRenumberAll = async () => {
     try {
-      const count = await renumberAllToolIds();
+      const consolidateIds = renumClusters
+        .filter(c => decisionFor(c.tool_id) === 'merge')
+        .map(c => c.tool_id);
+      const count = await renumberAllToolIds(consolidateIds);
       setRenumResultCount(count);
       setRenumStage('done');
     } catch { /* notify handled in renumberAllToolIds */ }
@@ -1079,7 +1094,40 @@ export default function Settings() {
 
             {renumStage === 'preview' && (
               <>
-                <p className="text-sub text-sm mb-12">Review old → new IDs ({renumPreviewRows.length} tools). Save the ID system first if you changed it above.</p>
+                {renumClusters.length > 0 && (
+                  <div style={{
+                    marginBottom: 14, padding: 12, borderRadius: 'var(--radius-sm)',
+                    border: '1px solid var(--amber, #f59e0b)', background: 'rgba(245,158,11,0.08)',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <AlertTriangle size={15} style={{ color: 'var(--amber, #f59e0b)' }} />
+                      <strong>{renumClusters.length} duplicate ID{renumClusters.length === 1 ? '' : 's'} found</strong>
+                      <InfoTip text="These show as one tool but are several Fusion entries that share a tool_id (usually a duplicate from legacy/Fusion data). Merge = give the whole group one new ID (keeps it as one tool). Split = give each entry its own new ID (treats them as separate tools)." alignRight />
+                    </div>
+                    <p className="text-sub text-xs mb-12">Choose how to re-number each. Default is Merge (keep as one tool).</p>
+                    <div className="flex gap-8" style={{ marginBottom: 10 }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setAllDecisions('merge')}>Merge all</button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => setAllDecisions('split')}>Split all</button>
+                    </div>
+                    {renumClusters.map(c => (
+                      <div key={c.tool_id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
+                        <span className="font-mono text-xs tool-id-pill" style={{ fontSize: 10, padding: '1px 7px' }}>{c.tool_id}</span>
+                        <span className="truncate text-sm" style={{ flex: 1, minWidth: 0 }}>{c.description} <span className="text-sub text-xs">({c.count} entries)</span></span>
+                        <div className="flex gap-4">
+                          <button
+                            className={`btn btn-sm ${decisionFor(c.tool_id) === 'merge' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setDecision(c.tool_id, 'merge')}
+                          >Merge</button>
+                          <button
+                            className={`btn btn-sm ${decisionFor(c.tool_id) === 'split' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setDecision(c.tool_id, 'split')}
+                          >Split</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-sub text-sm mb-12">Review old → new IDs ({renumPreviewRows.length} tools). Save the ID system first if you changed it above.{renumClusters.length > 0 ? ' Split duplicates get extra IDs not shown below.' : ''}</p>
                 <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', marginBottom: 14 }}>
                   <table className="match-table">
                     <thead><tr><th>#</th><th>Description</th><th>Old ID</th><th>New ID</th></tr></thead>

@@ -1331,10 +1331,10 @@ export function AppProvider({ children }) {
   }, [downloadFusionList, uploadFusionList, notify]);
 
   // Assign generated tool IDs to logical tools that don't have one yet, per the
-  // configured tool_id_system. Writes the value into Fusion's native product-id
-  // (our tool_id) — the single stored ID field — and never touches tools that
-  // already have an ID. No-op in proshop/other_erp modes (IDs aren't generated).
-  // Always re-reads from APS immediately before writing, like renumberLibrary.
+  // configured tool_id_system. tool_id is metadata-owned — writes the value to
+  // metadata (source of truth) and mirrors it to Fusion's native product-id —
+  // and never touches tools that already have an ID. No-op in proshop/other_erp
+  // modes (IDs aren't generated). Always re-reads from APS before writing.
   const assignToolIds = useCallback(async () => {
     const config = shopSettingsRef.current?.tool_id_system || {};
     const { mode } = config;
@@ -1376,6 +1376,13 @@ export function AppProvider({ children }) {
         const value = composeToolId(config, logical, counter);
         if (!value) continue;                       // mode can't produce one (e.g. no machine #)
         raws.forEach(r => applyToolIdToFusion(r, value));
+        // tool_id is metadata-owned — record it in metadata (source of truth) too,
+        // mirrored to Fusion's product-id above.
+        const tid = readTrackingId(raws[0]);
+        if (tid) {
+          const meta = metaByTracking.get(tid) || { id: tid };
+          metaByTracking.set(tid, { ...meta, tool_id: value });
+        }
         assigned++;
         if (counter !== null) counter = nextSequential(counter + 1, config.skip);
       }
@@ -1383,8 +1390,8 @@ export function AppProvider({ children }) {
       if (assigned === 0) { dispatch({ type: 'SAVE_SUCCESS' }); notify('No unassigned tools to ID', 'info'); return 0; }
 
       await uploadFusionList(fusionList);
-      // tool_id is Fusion-owned (product-id) — it's not written to metadata,
-      // so no metadata save is needed here.
+      // tool_id is metadata-owned (mirrored to Fusion's product-id) — persist it.
+      if (googleRef.current) await driveService.saveAllMetadata([...metaByTracking.values()]);
 
       // Rebuild the in-memory library so the new IDs show immediately.
       const tools = [];
@@ -1405,9 +1412,16 @@ export function AppProvider({ children }) {
   // after switching ID schemes. Unlike assignToolIds (which only fills blanks),
   // this overwrites every existing ID and retires the old value into the tool's
   // metadata `legacy_ids[]` so old job files / CSVs still match and search still
-  // finds the tool. New IDs avoid reusing a retired number (best-effort, by the
-  // numeric tail). Writes Fusion AND metadata. No-op in proshop/other_erp modes.
-  const renumberAllToolIds = useCallback(async () => {
+  // finds the tool. New IDs skip only an EXACT collision with a retired ID
+  // (partial digit overlap with a different prefix is fine). Writes Fusion AND
+  // metadata. No-op in proshop/other_erp modes.
+  //
+  // `consolidateIds`: tool_ids of duplicate clusters (one tool_id shared across
+  // multiple Fusion tracking-ID groups — a fold from human-error data) that the
+  // user chose to MERGE — all the cluster's groups get ONE shared new ID instead
+  // of being split into separate IDs. Clusters not listed are split (default
+  // per-tracking-group behavior). See duplicateIdClusters (toolSchema.js).
+  const renumberAllToolIds = useCallback(async (consolidateIds = []) => {
     const config = shopSettingsRef.current?.tool_id_system || {};
     const { mode } = config;
     if (mode === 'proshop' || mode === 'other_erp') {
@@ -1445,31 +1459,53 @@ export function AppProvider({ children }) {
       const { groups, untracked } = groupByTrackingId(fusionList);
       const orderedGroups = [...groups.values(), ...untracked.map(r => [r])];
 
-      // Reserve the numeric tail of every already-retired ID so a new ID never
-      // reuses a retired number (only meaningful within the new mode's number space).
-      const usedNumbers = new Set();
+      // Avoid re-issuing an ID whose EXACT full value was retired into a tool's
+      // legacy_ids. Partial overlap (same trailing digits, different prefix) is
+      // fine — only a full-string collision is skipped.
+      const retiredExact = new Set();
       for (const m of metaList) {
-        for (const lid of (m.legacy_ids || [])) {
-          const tail = String(lid).match(/(\d+)\s*$/);
-          if (tail) usedNumbers.add(Number(tail[1]));
-        }
+        for (const lid of (m.legacy_ids || [])) retiredExact.add(String(lid));
       }
 
-      let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip, usedNumbers) : null;
+      // Duplicate clusters the user chose to MERGE (one shared new ID across all
+      // their tracking groups) instead of letting re-number split them. Keyed by
+      // the shared current tool_id.
+      const mergedIds = new Set(consolidateIds);
+      const clusterValue = new Map();   // tool_id -> the one new ID for a merged cluster
+
+      let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip) : null;
       let assigned = 0;
       for (const raws of orderedGroups) {
         const logical = buildLogicalTool(raws, metaByTracking);
-        const value = composeToolId(config, logical, counter);
-        if (!value) continue;                        // mode can't produce one (e.g. no machine #)
-        if (counter !== null) counter = nextSequential(counter + 1, config.skip, usedNumbers);
+        const oldId = logical.tool_id;
+
+        let value;
+        if (oldId && mergedIds.has(oldId) && clusterValue.has(oldId)) {
+          // A later tracking group of a merged duplicate cluster — reuse its one ID
+          // (don't consume a counter value).
+          value = clusterValue.get(oldId);
+        } else {
+          value = composeToolId(config, logical, counter);
+          if (!value) continue;                      // mode can't produce one (e.g. no machine #)
+          // Skip only an exact collision with a retired ID — bump and recompose.
+          while (counter !== null && retiredExact.has(value)) {
+            counter = nextSequential(counter + 1, config.skip);
+            value = composeToolId(config, logical, counter);
+          }
+          if (counter !== null) counter = nextSequential(counter + 1, config.skip);
+          if (oldId && mergedIds.has(oldId)) clusterValue.set(oldId, value);
+        }
         assigned++;
 
-        const oldId = logical.tool_id;
         const tid = readTrackingId(raws[0]);
-        if (tid && oldId && oldId !== value) {
+        if (tid) {
+          // tool_id is metadata-owned — write the new value to metadata (source of
+          // truth) and mirror it to Fusion's product-id below. Retire the old value.
           const meta = metaByTracking.get(tid) || { id: tid };
-          const prev = (meta.legacy_ids || []).filter(l => l !== value);
-          metaByTracking.set(tid, { ...meta, legacy_ids: uniqPush(prev, oldId) });
+          const legacy_ids = (oldId && oldId !== value)
+            ? uniqPush((meta.legacy_ids || []).filter(l => l !== value), oldId)
+            : (meta.legacy_ids || []);
+          metaByTracking.set(tid, { ...meta, tool_id: value, legacy_ids });
         }
         raws.forEach(r => applyToolIdToFusion(r, value));
       }
@@ -1477,7 +1513,7 @@ export function AppProvider({ children }) {
       if (assigned === 0) { dispatch({ type: 'SAVE_SUCCESS' }); notify('No tools to re-number', 'info'); return 0; }
 
       await uploadFusionList(fusionList);
-      // legacy_ids lives in metadata — persist it (assignToolIds does not write metadata).
+      // tool_id (metadata-owned) and legacy_ids both live in metadata — persist them.
       if (googleRef.current) await driveService.saveAllMetadata([...metaByTracking.values()]);
 
       const tools = [];
