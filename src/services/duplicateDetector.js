@@ -2,7 +2,7 @@
 // Scores are 0–100. Thresholds: ≥80 = likely match, 50–79 = possible match.
 //
 // Matching priority (highest to lowest confidence):
-//   1. proshot_id exact match (Fusion's "product-id" field — stable ProShop number)
+//   1. tool_id exact match (Fusion's "product-id" field — stable ProShop number)
 //   2. GUID exact match
 //   3. Geometry fuzzy match (type + diameter + flutes + OAL + vendor + description)
 
@@ -11,7 +11,7 @@ const WEIGHTS = {
   diameter: 20,
   number_of_flutes: 10,
   overall_length: 8,
-  proshot_id: 12,   // secondary fuzzy signal (primary is exact match above)
+  tool_id: 12,   // secondary fuzzy signal (primary is exact match above)
   vendor: 10,
   description: 10,
 };
@@ -47,7 +47,7 @@ export function scoreSimilarity(a, b) {
     a.number_of_flutes != null && a.number_of_flutes === b.number_of_flutes ? 1 : 0
   );
   score += WEIGHTS.overall_length * numericSim(a.overall_length, b.overall_length, 0.01);
-  score += WEIGHTS.proshot_id * stringSim(a.proshot_id, b.proshot_id);
+  score += WEIGHTS.tool_id * stringSim(a.tool_id, b.tool_id);
   score += WEIGHTS.vendor * stringSim(a.vendor, b.vendor);
   score += WEIGHTS.description * stringSim(a.description, b.description);
   return Math.min(100, Math.round(score));
@@ -72,12 +72,21 @@ export function matchTool(incomingTool, libraryTools) {
     if (match) return { tool: match, confidence: 'exact', method: 'tracking-id', candidates: [] };
   }
 
-  // 1. proshot_id (Fusion product-id) exact match
-  if (incomingTool.proshot_id) {
+  // 1. tool_id (Fusion product-id) exact match
+  if (incomingTool.tool_id) {
     const match = libraryTools.find(
-      m => m.proshot_id && m.proshot_id === incomingTool.proshot_id
+      m => m.tool_id && m.tool_id === incomingTool.tool_id
     );
     if (match) return { tool: match, confidence: 'exact', method: 'product-id', candidates: [] };
+  }
+
+  // 1b. Legacy ID match — the incoming ID is one this tool used to carry before a
+  //     bulk re-number. Lets old job files / pasted tools still resolve to master.
+  if (incomingTool.tool_id) {
+    const match = libraryTools.find(
+      m => Array.isArray(m.legacy_ids) && m.legacy_ids.includes(incomingTool.tool_id)
+    );
+    if (match) return { tool: match, confidence: 'exact', method: 'legacy-id', candidates: [] };
   }
 
   // 2. GUID exact match — the incoming job entry's guid is one of a logical

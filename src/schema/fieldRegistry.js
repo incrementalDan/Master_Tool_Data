@@ -95,14 +95,14 @@ export const FIELD_REGISTRY = {
     precision: null,
   },
 
-  proshot_id: {
-    label: 'ProShop ID',
+  tool_id: {
+    label: 'Tool ID',
     type: 'string',
     unit: null,
     // Primary Fusion path is product-id; internalToFusionTool also mirrors it to
     // expressions.tool_productId (Fusion re-derives the field from the expression
     // on load, so both are written together).
-    fusionPath: 'product-id',     // Fusion's product-id field = our ProShop ID
+    fusionPath: 'product-id',     // Fusion's product-id field = our Tool ID
     fusionMirror: 'expressions.tool_productId',
     proShopColumn: 'toolNumber',  // ProShop's "Tool #" — Primary Key, e.g. "A-217"
     metadataOnly: false,

@@ -75,7 +75,7 @@ export default function ReconcileModal({ tool, results, onClose, onResolved, onR
           <AlertTriangle size={16} />
           <span>
             Extra Fusion entries for <strong>{tool.description || 'this tool'}</strong>
-            {tool.proshot_id ? <> (<Pill>{tool.proshot_id}</Pill>)</> : null} were found in the
+            {tool.tool_id ? <> (<Pill>{tool.tool_id}</Pill>)</> : null} were found in the
             library — likely copied in Fusion and saved directly. Choose what to do with each.
           </span>
         </div>

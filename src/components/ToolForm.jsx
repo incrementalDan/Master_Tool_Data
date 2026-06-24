@@ -220,7 +220,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
               </div>
             </div>
             <div className="form-grid">
-              <FieldInput field="proshot_id" label={toolIdLabel(idMode)} data={data} setField={setField} placeholder="e.g. A-3" />
+              <FieldInput field="tool_id" label={toolIdLabel(idMode)} data={data} setField={setField} placeholder="e.g. A-3" />
               {locationMode ? (
                 <div className="field-group">
                   <label className="field-label">

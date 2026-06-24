@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { groupByTrackingId, buildLogicalTool, combineToolsByProshopId } from '../schema/toolSchema.js';
+import { groupByTrackingId, buildLogicalTool, combineToolsByToolId } from '../schema/toolSchema.js';
 import { getDemoData } from './index.js';
 
 describe('demo data', () => {
@@ -10,7 +10,7 @@ describe('demo data', () => {
     const built = [];
     for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
     for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
-    const tools = combineToolsByProshopId(built);
+    const tools = combineToolsByToolId(built);
 
     expect(untracked.length).toBe(0);          // all demo tools are tracked
     expect(tools.length).toBe(12);
@@ -18,7 +18,7 @@ describe('demo data', () => {
 
     for (const t of tools) {
       expect(t.tracking_id).toMatch(/^FTL-/);
-      expect(t.proshot_id).toBeTruthy();        // every tool has a ProShop id
+      expect(t.tool_id).toBeTruthy();           // every tool has a tool id
       expect(t.assemblies.length).toBeGreaterThanOrEqual(1);
       expect(t.presets.length).toBeGreaterThanOrEqual(1);
       expect(t.purchasing.manufacturers.length).toBe(1);

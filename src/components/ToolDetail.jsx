@@ -112,10 +112,10 @@ export default function ToolDetail() {
 
   useEffect(() => {
     if (!tool) return;
-    const parts = [tool.proshot_id, tool.description].filter(Boolean);
+    const parts = [tool.tool_id, tool.description].filter(Boolean);
     document.title = parts.length ? `${parts.join(' · ')} · ToolDex` : 'ToolDex';
     return () => { document.title = 'ToolDex'; };
-  }, [tool?.proshot_id, tool?.description]);
+  }, [tool?.tool_id, tool?.description]);
 
   if (!tool) {
     return (
@@ -201,7 +201,7 @@ export default function ToolDetail() {
               >
                 {tool.description || '—'}
               </span>
-              {tool.proshot_id && <span className="proshot-pill">{tool.proshot_id}</span>}
+              {tool.tool_id && <span className="tool-id-pill">{tool.tool_id}</span>}
             </div>
           </div>
           {(tool.location || hasMachineNum) && (
@@ -308,23 +308,23 @@ export default function ToolDetail() {
                 </span>
               )}
             </div>
-            {tool.proshot_id && (
+            {tool.tool_id && (
               showsProShopUrl(idMode) ? (
                 <a
-                  className="proshot-pill"
-                  href={proshotUrl(tool.proshot_id)}
+                  className="tool-id-pill"
+                  href={proshotUrl(tool.tool_id)}
                   target="_blank"
                   rel="noopener noreferrer"
                   title="Open in ProShop"
                   onClick={e => e.stopPropagation()}
                   style={{ fontSize: 15, padding: '4px 16px', alignSelf: 'flex-start' }}
-                >{tool.proshot_id}</a>
+                >{tool.tool_id}</a>
               ) : (
                 <span
-                  className="proshot-pill"
+                  className="tool-id-pill"
                   title={toolIdLabel(idMode)}
                   style={{ fontSize: 15, padding: '4px 16px', alignSelf: 'flex-start' }}
-                >{tool.proshot_id}</span>
+                >{tool.tool_id}</span>
               )
             )}
           </div>
@@ -445,6 +445,14 @@ export default function ToolDetail() {
                   catch { /* toast handled in context */ }
                 }}
               />
+              {/* Former (retired) IDs — shown only when present, directly below the
+                  photo. Muted, one line. Never shown anywhere else. */}
+              {Array.isArray(tool.legacy_ids) && tool.legacy_ids.length > 0 && (
+                <div className="text-sub text-xs" style={{ marginTop: 8 }}>
+                  Formerly:{' '}
+                  <span className="font-mono">{tool.legacy_ids.join(', ')}</span>
+                </div>
+              )}
             </Section>
 
             <PurchasingSection

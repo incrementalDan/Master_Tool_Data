@@ -75,7 +75,7 @@ function downloadJSON(content, filename) {
 }
 
 export function exportSingleTool(tool, holders = [], assembly = null) {
-  downloadJSON({ data: [toFusionFormat(tool, holders, assembly)] }, `fusion_tool_${tool.proshot_id || tool.id}.json`);
+  downloadJSON({ data: [toFusionFormat(tool, holders, assembly)] }, `fusion_tool_${tool.tool_id || tool.id}.json`);
 }
 
 export function exportFullLibrary(tools, holders = []) {
@@ -296,7 +296,7 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
     S(122, tsvStr(preset.material?.query || ''));
     S(123, tsvBool(preset.material?.['use-hardness'] || false));
 
-    S(126, tsvStr(tool.proshot_id || ''));
+    S(126, tsvStr(tool.tool_id || ''));
     S(127, tsvStr(tool.product_link || ''));
 
     if (prTypes.has(fusionType) && tool.profile_radius)

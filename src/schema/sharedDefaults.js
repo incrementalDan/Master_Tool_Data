@@ -159,8 +159,8 @@ export const DEFAULT_SHOP_SETTINGS = {
   machine_number: { start: 30, skip: [98, 99, 100] },
   // Tool ID system — controls how a tool's displayed ID is generated, labelled,
   // and (in proshop mode) linked. The value lives in one stored field: Fusion's
-  // native `product-id` (our internal `proshot_id`). The mode only changes how
-  // that value is produced and shown — there is no separate tool_id field.
+  // native `product-id` (our internal `tool_id`). The mode only changes how
+  // that value is produced and shown — there is no second ID field.
   //   mode: location | sequential | type_prefix | size_first | machine_linked
   //         | proshop | other_erp (placeholder, disabled)
   //   separator: joins segments ('-', '.', '/', '_', or '' for none)

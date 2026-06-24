@@ -126,7 +126,7 @@ export default function DescRenameModal({ onClose }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div className="text-sub" style={{ fontSize: 11, marginBottom: 4 }}>
                         {c.tool.tool_type}
-                        {c.tool.proshot_id ? <> · <span style={{ color: 'var(--amber, #f59e0b)' }}>{c.tool.proshot_id}</span></> : ''}
+                        {c.tool.tool_id ? <> · <span style={{ color: 'var(--amber, #f59e0b)' }}>{c.tool.tool_id}</span></> : ''}
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', columnGap: 10, rowGap: 4, alignItems: 'center' }}>
                         <span className="text-sub" style={{ fontSize: 11 }}>Current</span>

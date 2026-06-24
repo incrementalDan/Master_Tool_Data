@@ -19,7 +19,7 @@ function proshotUrl(id) {
   return `https://americanprecisionworks.adionsystems.com/procnc/tools/${prefix}/${id}$`;
 }
 
-export default function ToolCard({ tool, variant = 'grid' }) {
+export default function ToolCard({ tool, variant = 'grid', matchedLegacyId = null }) {
   const navigate = useNavigate();
   const { cloneTool, notify, shopSettings } = useApp();
   const label = TOOL_TYPE_LABELS[tool.tool_type] || tool.tool_type;
@@ -58,25 +58,31 @@ export default function ToolCard({ tool, variant = 'grid' }) {
       {tool.location && (
         <span className="location-tag" title="Location" style={{ fontSize: 10, padding: '1px 6px' }}>{tool.location}</span>
       )}
-      {tool.proshot_id && (
+      {tool.tool_id && (
         showsProShopUrl(idMode) ? (
           <a
-            className="proshot-pill font-mono"
-            href={proshotUrl(tool.proshot_id)}
+            className="tool-id-pill font-mono"
+            href={proshotUrl(tool.tool_id)}
             target="_blank"
             rel="noopener noreferrer"
             onClick={e => e.stopPropagation()}
             style={{ fontSize: 10, padding: '1px 7px' }}
-          >{tool.proshot_id}</a>
+          >{tool.tool_id}</a>
         ) : (
-          <span className="proshot-pill font-mono" title={toolIdLabel(idMode)} style={{ fontSize: 10, padding: '1px 7px' }}>
-            {tool.proshot_id}
+          <span className="tool-id-pill font-mono" title={toolIdLabel(idMode)} style={{ fontSize: 10, padding: '1px 7px' }}>
+            {tool.tool_id}
           </span>
         )
       )}
       {tool.no_fusion_link && (
         <span className="no-fusion-pill" style={{ fontSize: 10, padding: '1px 7px' }} title="Added from ProShop with no Fusion match — Fusion entry is a placeholder and needs setup">
           <AlertTriangle size={10} /> No Fusion Link
+        </span>
+      )}
+      {/* Only shown when the search matched a former (retired) ID. */}
+      {matchedLegacyId && (
+        <span className="text-sub font-mono" style={{ fontSize: 9, opacity: 0.7, whiteSpace: 'nowrap' }} title="Matched a former ID">
+          formerly {matchedLegacyId}
         </span>
       )}
     </div>

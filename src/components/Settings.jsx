@@ -25,7 +25,7 @@ const ID_MODES = [
 export default function Settings() {
   const navigate = useNavigate();
   const {
-    tools, needsNormalize, fetchRawLibrary, renumberLibrary, assignToolIds, isSaving,
+    tools, needsNormalize, fetchRawLibrary, renumberLibrary, assignToolIds, renumberAllToolIds, isSaving,
     markSetupStepInSettings,
     libraryLocation, holderLibraryLocation, holderLibrarySetupComplete,
     setLibraryLocation, setHolderLibraryLocation, clearHolderLibraryLocation, notify,
@@ -85,6 +85,10 @@ export default function Settings() {
   // Assign-IDs flow: 'idle' | 'preview' | 'done'
   const [idStage, setIdStage] = useState('idle');
   const [idResultCount, setIdResultCount] = useState(0);
+  // Re-number-all flow (overwrites every ID, retires old ones into legacy_ids):
+  // 'idle' | 'preview' | 'done'
+  const [renumStage, setRenumStage] = useState('idle');
+  const [renumResultCount, setRenumResultCount] = useState(0);
 
   useEffect(() => {
     setIdCfg({ ...idsDefault, ...(shopSettings?.tool_id_system || {}) });
@@ -132,7 +136,7 @@ export default function Settings() {
     let counter = isCounterMode(idCfg.mode) ? nextSequential(idCfg.start, idCfg.skip) : null;
     const rows = [];
     for (const t of tools) {
-      if (!demoMode && t.proshot_id) continue;
+      if (!demoMode && t.tool_id) continue;
       const value = composeToolId(idCfg, t, counter);
       if (!value) continue;
       rows.push({ id: t.id, description: t.description, tool_type: t.tool_type, value });
@@ -147,6 +151,29 @@ export default function Settings() {
       setIdResultCount(count);
       setIdStage('done');
     } catch { /* notify handled in assignToolIds */ }
+  };
+
+  // Re-number ALL tools: every tool gets a fresh ID under the current scheme; its
+  // old ID is retired into legacy_ids. Preview shows old → new for every tool.
+  const renumPreviewRows = (() => {
+    if (idCfg.mode === 'proshop' || idCfg.mode === 'other_erp') return [];
+    let counter = isCounterMode(idCfg.mode) ? nextSequential(idCfg.start, idCfg.skip) : null;
+    const rows = [];
+    for (const t of tools) {
+      const value = composeToolId(idCfg, t, counter);
+      if (!value) continue;
+      if (counter !== null) counter = nextSequential(counter + 1, idCfg.skip);
+      rows.push({ id: t.id, description: t.description, oldId: t.tool_id || '—', value });
+    }
+    return rows;
+  })();
+
+  const handleRenumberAll = async () => {
+    try {
+      const count = await renumberAllToolIds();
+      setRenumResultCount(count);
+      setRenumStage('done');
+    } catch { /* notify handled in renumberAllToolIds */ }
   };
 
   const addSkip = () => {
@@ -863,7 +890,7 @@ export default function Settings() {
       </div>
 
       {/* Tool ID System — how each tool's displayed ID is generated/labelled.
-          The value is stored in one field (Fusion product-id / proshot_id); the
+          The value is stored in one field (Fusion product-id / tool_id); the
           mode only changes how it's produced and shown. */}
       <div className="card" style={{ maxWidth: 760 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -1023,6 +1050,64 @@ export default function Settings() {
               <div style={{ color: 'var(--green)' }}>
                 ✓ Assigned IDs to {idResultCount} tool{idResultCount === 1 ? '' : 's'}.
                 <button className="btn btn-secondary btn-sm" style={{ marginLeft: 12 }} onClick={() => setIdStage('idle')}>Done</button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Re-number ALL tools — overwrites every ID; old IDs are kept as legacy. */}
+        {idCfg.mode !== 'proshop' && idCfg.mode !== 'other_erp' && (
+          <div style={{
+            marginTop: 16, padding: 16, borderRadius: 'var(--radius-sm)',
+            border: '1px solid var(--border)', borderLeft: '3px solid var(--amber, #f59e0b)',
+            background: 'var(--surface-2)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Hash size={16} style={{ color: 'var(--amber, #f59e0b)' }} />
+              <strong>Re-number all tools (new scheme)</strong>
+              <InfoTip text="Use after switching ID schemes. Overwrites EVERY tool's ID using the scheme above. Each tool's previous ID is saved as a former ID (shown on the tool page, and still matched on import/search) — nothing is lost." alignRight />
+            </div>
+            <p className="text-sub text-sm mb-12">
+              Overwrites every tool's ID with a freshly generated one. Each old ID is retired into the tool's former IDs, so old job files and searches still find it.
+            </p>
+
+            {renumStage === 'idle' && (
+              <button className="btn btn-secondary" onClick={() => setRenumStage('preview')} disabled={renumPreviewRows.length === 0 || isSaving}>
+                {renumPreviewRows.length === 0 ? 'No tools to re-number' : `Re-number all ${renumPreviewRows.length} tool${renumPreviewRows.length === 1 ? '' : 's'}…`}
+              </button>
+            )}
+
+            {renumStage === 'preview' && (
+              <>
+                <p className="text-sub text-sm mb-12">Review old → new IDs ({renumPreviewRows.length} tools). Save the ID system first if you changed it above.</p>
+                <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', marginBottom: 14 }}>
+                  <table className="match-table">
+                    <thead><tr><th>#</th><th>Description</th><th>Old ID</th><th>New ID</th></tr></thead>
+                    <tbody>
+                      {renumPreviewRows.map((row, i) => (
+                        <tr key={`${row.id}-${i}`}>
+                          <td className="text-sub text-xs">{i + 1}</td>
+                          <td className="truncate" style={{ maxWidth: 240 }}>{row.description}</td>
+                          <td className="font-mono text-xs text-sub">{row.oldId}</td>
+                          <td className="font-mono" style={{ color: 'var(--green)' }}>{row.value}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex gap-8">
+                  <button className="btn btn-primary" onClick={handleRenumberAll} disabled={isSaving}>
+                    {isSaving ? 'Re-numbering…' : 'Re-number all'}
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => setRenumStage('idle')} disabled={isSaving}>Cancel</button>
+                </div>
+              </>
+            )}
+
+            {renumStage === 'done' && (
+              <div style={{ color: 'var(--green)' }}>
+                ✓ Re-numbered {renumResultCount} tool{renumResultCount === 1 ? '' : 's'}.
+                <button className="btn btn-secondary btn-sm" style={{ marginLeft: 12 }} onClick={() => setRenumStage('idle')}>Done</button>
               </div>
             )}
           </div>

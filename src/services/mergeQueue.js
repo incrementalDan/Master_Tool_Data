@@ -173,7 +173,7 @@ function parseFusionCsv(raw) {
       thread_pitch: csvNum(r.tool_threadPitch),
       shoulder_length: csvNum(r.tool_shoulderLength),
       material: csvStr(r.tool_material) || 'carbide',
-      proshot_id: csvStr(r.tool_productId) || '',
+      tool_id: csvStr(r.tool_productId) || '',
       product_link: csvStr(r.tool_productLink) || '',
       location: csvStr(r.tool_vendor) || '',
       spindle_speed: p0.n || null,

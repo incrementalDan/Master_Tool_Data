@@ -92,7 +92,7 @@ function extractorKeyToAppKey(k) {
     axialDistance: 'axial_distance',
     minThreadPitch: 'min_thread_pitch',
     maxThreadPitch: 'max_thread_pitch',
-    psToolId: 'proshot_id',
+    psToolId: 'tool_id',
     workpieceMats: 'material_suitability',
     shoulderLen: 'shoulder_length',
     ooh: 'ooh',
@@ -197,7 +197,7 @@ export function extractorToTool(f) {
     preset_name: f.presetName || '',
     machine_tool_number: (f.toolNumber === '' || f.toolNumber == null) ? null : Number(f.toolNumber),
     grouping: f.grouping || '',
-    proshot_id: f.psToolId || '',
+    tool_id: f.psToolId || '',
     location: f.location || '',
   };
 }
@@ -257,7 +257,7 @@ export function toolToExtractor(tool) {
     upperRadius: String(tool.upper_radius ?? ''),
     profileRadius: String(tool.profile_radius ?? ''),
     axialDistance: String(tool.axial_distance ?? ''),
-    psToolId: tool.proshot_id || '',
+    psToolId: tool.tool_id || '',
     location: tool.location || '',
   };
 }
@@ -315,7 +315,7 @@ function round4(n) {
 // Family signature for validating a tracking-ID group and for matching incoming
 // job tools: ProShop ID + tool type + cut diameter (4-decimal tolerance).
 export function familySignature(tool) {
-  const pid = String(tool.proshot_id || tool['product-id'] || '').trim();
+  const pid = String(tool.tool_id || tool['product-id'] || '').trim();
   const type = tool.tool_type || tool.type || '';
   const dia = round4(tool.diameter ?? tool.geometry?.DC);
   return `${pid}|${type}|${dia}`;
@@ -340,7 +340,7 @@ export function groupByTrackingId(fusionList) {
 }
 
 // ─── Combine logical tools that share a ProShop number ─────────────────────
-// The ProShop number (Fusion's `product-id`, our `proshot_id`) is the
+// The ProShop number (Fusion's `product-id`, our `tool_id`) is the
 // authoritative identity of a physical tool. Two library entries carrying the
 // same ProShop number are the same tool — different holder/OOH setups at most —
 // so they are folded into ONE logical tool regardless of any other field
@@ -461,12 +461,12 @@ function mergeLogicalTools(group) {
   };
 }
 
-export function combineToolsByProshopId(tools) {
+export function combineToolsByToolId(tools) {
   const groups = new Map();   // key -> [tool, ...]
   const order = [];           // preserve first-seen order
   let anon = 0;
   for (const tool of (tools || [])) {
-    const pid = String(tool.proshot_id || '').trim();
+    const pid = String(tool.tool_id || '').trim();
     const key = pid ? `pid:${pid}` : `anon:${anon++}`;
     if (!groups.has(key)) { groups.set(key, []); order.push(key); }
     groups.get(key).push(tool);
@@ -600,7 +600,7 @@ export function getNextMachineNumber(existingNumbers, start = DEFAULT_MACHINE_ST
 // Fusion entry — the native `product-id` plus its paired expression. Mirrors
 // the native+expression pairing internalToFusionTool uses for tool_productId.
 // Used by the bulk "Assign IDs" action, which mutates raws in place.
-export function applyProShopIdToFusion(fTool, value) {
+export function applyToolIdToFusion(fTool, value) {
   const v = String(value ?? '');
   fTool['product-id'] = v;
   fTool.expressions = { ...(fTool.expressions || {}), tool_productId: `'${v}'` };
@@ -694,7 +694,7 @@ export function fusionToolToInternal(fTool) {
     thread_pitch: geo.TP || null,
     shoulder_length: geo['shoulder-length'] || null,
     material: fTool.BMC || 'carbide',
-    proshot_id: fTool['product-id'] || stripQuotes(expr.tool_productId) || '',
+    tool_id: fTool['product-id'] || stripQuotes(expr.tool_productId) || '',
     product_link: fTool['product-link'] || stripQuotes(expr.tool_productLink) || '',
     // Fusion re-derives the root `vendor` from expressions.tool_vendor, but some
     // entries carry the cabinet location only in the root field — fall back to it
@@ -1251,7 +1251,7 @@ export function internalToFusionTool(tool) {
   const exGeo = existing.geometry || {};
   syncStrExpr('tool_description', tool.description, existing.description);
   syncStrExpr('tool_material', tool.material || 'carbide', existing.BMC);
-  syncStrExpr('tool_productId', tool.proshot_id, existing['product-id']);
+  syncStrExpr('tool_productId', tool.tool_id, existing['product-id']);
   syncStrExpr('tool_productLink', tool.product_link, existing['product-link']);
   syncStrExpr('tool_vendor', tool.location,
     existing.expressions?.tool_vendor != null ? stripQuotes(existing.expressions.tool_vendor) : existing.vendor);
@@ -1303,7 +1303,7 @@ export function internalToFusionTool(tool) {
     unit: tool.unit || existing.unit || 'inches',
     guid: tool.id,
     last_modified: Date.now(),
-    'product-id': tool.proshot_id || '',
+    'product-id': tool.tool_id || '',
     'product-link': tool.product_link || '',
     expressions: exTool,
     geometry: {
@@ -1493,6 +1493,8 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     primary_photo_id: meta.primary_photo_id || null,
     primary_photo_name: meta.primary_photo_name || null,
     attachments: meta.attachments || [],
+    // Previously-assigned tool IDs retired by a bulk re-number (metadata-only).
+    legacy_ids: meta.legacy_ids || [],
   };
 }
 
@@ -1623,6 +1625,10 @@ export function buildMetadataTool(tool) {
       type: a.type || 'other',
       uploaded_at: a.uploaded_at || new Date().toISOString(),
     })),
+    // Previously-assigned tool IDs retired by a bulk re-number. Kept so old job
+    // files / CSVs that still reference an old ID can match, and so search finds
+    // the tool by it. Never written to Fusion (no native field).
+    legacy_ids: Array.isArray(tool.legacy_ids) ? tool.legacy_ids : [],
   };
 }
 
@@ -1870,7 +1876,7 @@ export function newTool(toolType = 'flat end mill') {
     product_link: '',
     preset_name: '',
     grouping: '',
-    proshot_id: '',
+    tool_id: '',
     location: '',
     cabinet: '',
     drawer: '',
