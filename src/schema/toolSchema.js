@@ -1421,6 +1421,9 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
   if (!meta) return fusionInternal;
   return {
     ...fusionInternal,
+    // tool_id is metadata-owned (the TMS manages it); metadata wins, falling back
+    // to Fusion's product-id only for tools that predate the TMS assigning an ID.
+    tool_id: meta.tool_id || fusionInternal.tool_id,
     vendor: meta.vendor || '',
     coating: meta.coating || '',
     purchasing: meta.purchasing || { manufacturers: [], vendors: [] },
@@ -1514,6 +1517,8 @@ export function buildMetadataTool(tool) {
   }
   return {
     id: tool.tracking_id || tool.id,
+    // tool_id is metadata-owned (mirrored to Fusion's product-id on write).
+    tool_id: tool.tool_id || '',
     vendor: tool.vendor || '',
     coating: tool.coating || '',
     purchasing: {
