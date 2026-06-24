@@ -10,7 +10,7 @@ function csvCell(v) {
 export function exportSingleTool(tool) {
   const extFmt = toolToExtractor(tool);
   const csv = buildProShopCSV(extFmt);
-  downloadCSV(csv, `${tool.proshot_id || tool.id}_proshop.csv`);
+  downloadCSV(csv, `${tool.tool_id || tool.id}_proshop.csv`);
 }
 
 // Purchasing/Approved-Brand columns — one CSV row per `tool.purchasing[]` entry,

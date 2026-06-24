@@ -55,8 +55,8 @@ This is also the foundation of a future in-house **ERP system**: ProShop continu
 
 A **logical tool** maps to **N Fusion library entries ("instances")** — one instance per **assembly** (holder + OOH). Every instance is a real Fusion tool entry; all instances of a logical tool are identical **except** their holder and OOH (`geometry.LB`). This keeps proven setup knowledge (which holder/stick-out a preset was proven on) living natively in the Fusion library, not just in app metadata.
 
-- **Family key**: an app-generated **tracking ID** (`FTL-XXXXXX`) written into Fusion's native comment (`post-process.comment`, mirrored in `expressions.tool_comment`). All instances of one logical tool share it. The library is grouped strictly by tracking ID on load (`groupByTrackingId`). `familySignature` (proshot_id + tool_type + diameter ±0.0001) is used only to validate a group and to match incoming job tools — never to merge two different guids.
-- **Shared vs per-instance**: editing any shared field (description, geometry except LB, vendor, proshot_id, presets, tags, notes, machine number, …) propagates to **all** instances. Only **holder** and **OOH** are per-instance.
+- **Family key**: an app-generated **tracking ID** (`FTL-XXXXXX`) written into Fusion's native comment (`post-process.comment`, mirrored in `expressions.tool_comment`). All instances of one logical tool share it. The library is grouped strictly by tracking ID on load (`groupByTrackingId`). `familySignature` (tool_id + tool_type + diameter ±0.0001) is used only to validate a group and to match incoming job tools — never to merge two different guids.
+- **Shared vs per-instance**: editing any shared field (description, geometry except LB, vendor, tool_id, presets, tags, notes, machine number, …) propagates to **all** instances. Only **holder** and **OOH** are per-instance.
 - **Machine tool number** is shared across all instances of a logical tool. When a programmer copies a tool into a Fusion job file, they will typically reassign the T# to a job-specific value (e.g. ≤ 100 for the Haas, ≤ 200 for the M300) — this is intentional and should never sync back to master. `machine_tool_number` is deliberately excluded from `DIFF_SECTIONS` in `DiffStep.jsx` so job-modified T# values are silently ignored during Phase 2 job sync. Do not add it to those fields.
 - **Presets** are a single shared set replicated identically onto every instance. Each preset's name encodes its assembly + operation (see below), so opening any instance in Fusion shows the full proven-preset set.
 - **In-memory shape**: `id` (= `tracking_id`), `tracking_id`, `assemblies[]` (`{ assembly_id, instance_guid, holder_guid, holder_description, ooh, linked_preset_guids, notes, source }`), shared `presets[]` (each with `operation_type`), `machine_tool_number`, and `_instancesRaw[]` (raw Fusion entries).
@@ -166,7 +166,8 @@ Chamfer mill was removed from `tip_angle`'s `appliesToTypes`, `TIP_ANGLE_TYPES`,
 
 A shop-wide, **configurable** scheme for how a tool's human-readable ID is generated and displayed, set in `shop_settings.tool_id_system`. The design rule that makes it simple:
 
-- **One stored field, mode-driven display.** The ID always lives in the existing Fusion `product-id` (internal `proshot_id`). There is **no** separate `tool_id` field. The active **mode** only controls how that value is *generated*, how it's *labelled*, and whether the *ProShop URL* is shown — never where it's stored. (This mirrors how `location` reuses Fusion's repurposed "Vendor" field.)
+- **One stored field, mode-driven display.** The ID always lives in the existing Fusion `product-id` (internal `tool_id` — formerly `proshot_id`, renamed because the ID is no longer ProShop-specific). There is **no** second ID field — `tool_id` *is* the `product-id` value. The active **mode** only controls how that value is *generated*, how it's *labelled*, and whether the *ProShop URL* is shown — never where it's stored. (This mirrors how `location` reuses Fusion's repurposed "Vendor" field.)
+- **Legacy IDs.** Switching ID schemes and running **Settings → "Re-number all tools (new scheme)"** (`AppContext.renumberAllToolIds`) overwrites every tool's `tool_id` and retires each old value into a **metadata-only `legacy_ids[]`** array. Legacy IDs are matched on ProShop import (`matchProShopToTools`) and Phase-2 sync (`duplicateDetector.matchTool`, `method: 'legacy-id'`), are searchable (`searchEngine` — `matchedLegacyId` surfaces which one matched), and avoid being reused by a new ID (best-effort, by numeric tail). Unlike "Assign IDs to unassigned tools" (`assignToolIds`, fills blanks only, Fusion-only write), re-number **writes metadata** too. **Display:** ToolDetail shows a muted "Formerly:" line below the photo when `legacy_ids` is non-empty; a search result card shows "formerly X" **only** when the query matched that legacy ID; nowhere else.
 - **ProShop mode = unchanged legacy behavior** — the value comes from ProShop, the ProShop tool-page URL link is shown/active, and it remains the Phase 2 / import match key. In **every other mode** the same field holds a generated shop ID, shown as "Tool ID" with **no** URL link. ProShop import/export is **not** changed — `matchProShopToTools` already falls back to description+diameter matching when `Tool #` doesn't match, so import still works regardless of mode.
 
 ### Modes (`shop_settings.tool_id_system.mode`)
@@ -189,7 +190,7 @@ All ID-composition logic is here (no React): `TYPE_CODES` (per-`tool_type` short
 
 ### Generation never auto-runs
 
-Existing tools are **never** auto-assigned an ID (no migration shims — the displayed value just falls back to `proshot_id`). New IDs are written **only** by the explicit **Settings → "Assign IDs to unassigned tools"** action → `AppContext.assignToolIds()`. It models on `renumberLibrary` (download → mutate Fusion `product-id` via `applyProShopIdToFusion` → upload → rebuild in memory), assigns **unassigned tools only** in current library order, and is a no-op in `proshop`/`other_erp` modes. `proshot_id` is Fusion-owned, so no metadata write is needed.
+Existing tools are **never** auto-assigned an ID (no migration shims — the displayed value just falls back to `tool_id`). New IDs are written **only** by the explicit **Settings → "Assign IDs to unassigned tools"** action → `AppContext.assignToolIds()`. It models on `renumberLibrary` (download → mutate Fusion `product-id` via `applyProShopIdToFusion` → upload → rebuild in memory), assigns **unassigned tools only** in current library order, and is a no-op in `proshop`/`other_erp` modes. `tool_id` is Fusion-owned, so no metadata write is needed.
 
 ### Location mode + cabinet/drawer
 
@@ -253,7 +254,7 @@ The full tool list (~250 tools) is loaded once on login. All search and filterin
 
 ## Local (No-Autodesk) Browse Mode
 
-`LoginScreen.jsx` offers a second path besides "Sign in with Autodesk": **"Browse a local library file"** — uploads a `fusion_tool_library.json` directly (no APS/Google sign-in). `enterLocalMode(file)` (`AppContext.jsx`) parses it with the same `groupByTrackingId` / `buildLogicalTool` / `combineToolsByProshopId` pipeline as `loadTools`, then dispatches `ENTER_LOCAL_MODE` (sets `localMode: true` + `tools`).
+`LoginScreen.jsx` offers a second path besides "Sign in with Autodesk": **"Browse a local library file"** — uploads a `fusion_tool_library.json` directly (no APS/Google sign-in). `enterLocalMode(file)` (`AppContext.jsx`) parses it with the same `groupByTrackingId` / `buildLogicalTool` / `combineToolsByToolId` pipeline as `loadTools`, then dispatches `ENTER_LOCAL_MODE` (sets `localMode: true` + `tools`).
 
 - **Read-only by a single central guard**: `downloadFusionList` and `uploadFusionList` (`AppContext.jsx`) both throw immediately when `localModeRef.current` is true ("Local mode is read-only — connect to Autodesk to load or save changes"). Every save/sync/reconcile path already routes through these two functions and already surfaces errors as toasts, so this one guard makes editing fail gracefully everywhere with no per-screen changes.
 - **What works**: search/filter/view (`LandingPage`, `ToolDetail`), and ProShop CSV export (`exportFullLibrary`, available from the local-mode topbar).
@@ -366,7 +367,7 @@ Key fields — see `src/schema/toolSchema.js` for the complete list:
   "tool_type": "flat end mill",
   "description": "tool description",
   "vendor": "manufacturer name (metadata)",
-  "proshot_id": "ProShop ID = Fusion's product-id field = ProShop 'Tool #' (metadata + Fusion)",
+  "tool_id": "Tool ID = Fusion's product-id field = ProShop 'Tool #' (Fusion-owned; previous IDs kept in metadata legacy_ids[])",
   "purchasing": {
     "manufacturers": [
       { "id": "uuid", "name": "Helical", "edp": "12334", "edp_url": "", "mfg_num": "", "mfg_num_url": "", "order": 0 }
@@ -424,16 +425,16 @@ The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/sche
 | `taper_angle`    | `geometry.TA`           | `Taper` (export id `taper`) | Written only when non-zero (or original Fusion entry already had a non-zero value). For `chamfer mill` and `tapered mill` (`INCLUSIVE_ANGLE_TYPES`), the UI shows this as "Included/Inclusive Tip Angle (°)" = 2 × `geometry.TA` — see below |
 | `tip_diameter`   | `geometry['tip-diameter']` | `Tip Diameter` (export id `tipDiameter`) | **Fusion-native both ways**: read from `geometry['tip-diameter']`, Fusion wins over metadata (metadata is a transition fallback, same as `tip_angle`). Written only when non-zero (or original Fusion entry already had a non-zero value) |
 | `min_ooh`        | — (metadata only)       | `Length Below Holder - MIN OOH` (export id `lengthBelowShankDiameter`) | Minimum stick-out floor — see the three-length-concepts table + ProShop Field Priority Rules |
-| `proshot_id`     | `product-id`            | `Tool #` (export id `toolNumber`) | **Primary key in ProShop, primary match key for Phase 2** |
+| `tool_id`     | `product-id`            | `Tool #` (export id `toolNumber`) | **Primary key in ProShop, primary match key for Phase 2** |
 | `purchasing.manufacturers[]` / `purchasing.vendors[]` | — (metadata only) | `Approved Brand` / `Vendor` / `EDP#` / `Cost` (sub-table) | Normalized purchasing model — see Purchasing / Vendor Data Model section |
 
-**Important**: `proshot_id` (our field) = Fusion's `product-id` field (shown as "Vendor Number" in Fusion UI) = ProShop's `Tool #` (the ProShop primary key). It is the primary key for Phase 2 tool matching and for grouping ProShop CSV rows on import. It is stored in both the Fusion JSON and in metadata.
+**Important**: `tool_id` (our field) = Fusion's `product-id` field (shown as "Vendor Number" in Fusion UI) = ProShop's `Tool #` (the ProShop primary key). It is the primary key for Phase 2 tool matching and for grouping ProShop CSV rows on import. It is **Fusion-owned** (stored in the Fusion JSON, not metadata); previously-assigned IDs retired by a re-number live in metadata `legacy_ids[]`.
 
 **Assembly export**: When exporting a tool with an assembly selected, the assembly gauge length is written as `geometry.assemblyGaugeLength` (Fusion-native, nested in `geometry` — **not** a root-level `assembly-gauge-length`). Its value is **holder gauge length + OOH**, in the tool's unit. OOH is stored in the tool's unit (written raw to `geometry.LB`); only the holder's `gaugeLength` (in the holder's unit) is converted into the tool's unit via `convertLength` before adding the OOH.
 
 ### Metadata Schema (`tool_metadata.json`)
 
-Stored in a single file on Google Drive. The file contains an array of metadata objects — one per **logical tool**. The `id` field is the tool's **`tracking_id`** (`FTL-XXXXXX`), falling back to the Fusion `guid` for pre-migration untracked tools — it is **not** keyed per Fusion instance. `buildMetadataTool` in `src/schema/toolSchema.js` is the authoritative source of the full field set (the example below is abridged); add new metadata fields there and read them back in `mergeFusionAndMetadata` / `buildLogicalTool`. Note `proshot_id` is **Fusion-owned** (`product-id`) and is **not** written to metadata. Metadata-only fields include `cabinet` / `drawer` (the structured location inputs used by the Tool ID System's `location` mode — they compose into `location` and the ID prefix; see Tool ID System).
+Stored in a single file on Google Drive. The file contains an array of metadata objects — one per **logical tool**. The `id` field is the tool's **`tracking_id`** (`FTL-XXXXXX`), falling back to the Fusion `guid` for pre-migration untracked tools — it is **not** keyed per Fusion instance. `buildMetadataTool` in `src/schema/toolSchema.js` is the authoritative source of the full field set (the example below is abridged); add new metadata fields there and read them back in `mergeFusionAndMetadata` / `buildLogicalTool`. Note `tool_id` is **Fusion-owned** (`product-id`) and is **not** written to metadata. Metadata-only fields include `cabinet` / `drawer` (the structured location inputs used by the Tool ID System's `location` mode — they compose into `location` and the ID prefix; see Tool ID System).
 
 ```json
 {
@@ -654,7 +655,7 @@ src/
                                   # Right sidebar: Identity, Photo, Purchasing, Notes & Tags, Files
     ToolForm.jsx                  # Edit form with sticky action bar + dirty guard
     ToolCard.jsx                  # Grid and list card variants with hover actions
-                                  # Uses data-field tokens: .description-badge, .proshot-pill,
+                                  # Uses data-field tokens: .description-badge, .tool-id-pill,
                                   # .machine-num-badge, .location-tag
     ToolTypeGrid.jsx              # Tool type selector tiles (icons size 36)
     FacetFilters.jsx              # Cascading facet filter UI
@@ -771,8 +772,8 @@ The row's `Tool Group` value itself is always preserved as-is into `tool.groupin
 A one-time bulk action that copies the shop's existing ProShop tool photos into the app's attachment system as each tool's **primary photo**. Launched from the **"Import ProShop Photos"** button in the Import flow (`ImportFlow.jsx`), which opens `ImportPhotosModal.jsx` (a Drive folder browser reusing `MetadataConnect`'s picker pattern — My Drive + shared drives, nothing saved, picked fresh each run). The work lives in `AppContext.importProShopPhotos(sourceFolderId, { onProgress })`.
 
 - **Source must be in Google Drive** (My Drive or a shared drive the connected account can open) — the importer uses the Drive API to browse and copy; there is no local-disk path. The modal shows an amber note saying so.
-- **Folder layout (confirmed against real data)**: the **main photo is a top-level file** in the picked folder, named `tools_{proshot_id}_….{img}` (any image — png/jpg/gif/webp/avif, matched by extension OR Drive `mimeType` starting `image/`). Same-named **subfolders** hold only the `300w.png` / `600w.png` / `900w.png` resized variants and are **ignored** — the importer scans top-level image files only and never descends into subfolders. (The original task spec had this backwards — main photo "in a subfolder" — it is not.)
-- **ProShop ID** is the segment between the **first and second underscore** of the file name (`tools_A242_… → A242`). Matching to `tool.proshot_id` is **dash/space/case-insensitive** (`normId` strips `[\s-]` and uppercases) so `D241`, `D-241`, and `d 241` all match the same tool.
+- **Folder layout (confirmed against real data)**: the **main photo is a top-level file** in the picked folder, named `tools_{tool_id}_….{img}` (any image — png/jpg/gif/webp/avif, matched by extension OR Drive `mimeType` starting `image/`). Same-named **subfolders** hold only the `300w.png` / `600w.png` / `900w.png` resized variants and are **ignored** — the importer scans top-level image files only and never descends into subfolders. (The original task spec had this backwards — main photo "in a subfolder" — it is not.)
+- **ProShop ID** is the segment between the **first and second underscore** of the file name (`tools_A242_… → A242`). Matching to `tool.tool_id` is **dash/space/case-insensitive** (`normId` strips `[\s-]` and uppercases) so `D241`, `D-241`, and `d 241` all match the same tool.
 - **Skips**: files with no extractable ID, no matching tool (logged), tools that already have a `primary_photo_id` (never overwrites), and a second photo for a tool already imported in the same run.
 - **Copy is server-side** (`driveService.copyDriveFile` → Drive `files.copy`, no byte transfer through the browser); the source folder is never modified. The photo is copied into the tool's `tool_files/{trackingId}/` folder (`ensureToolFolder`) and set as `primary_photo_id` / `primary_photo_name` — see **Tool File Attachments & Photos**.
 - **Metadata-only write**: a primary photo is metadata, not a Fusion field, so the action loads `tool_metadata.json` once, sets the photo on each matched tool's record (`buildMetadataTool`), and calls `saveAllMetadata` **once** at the end — it does **not** route through `writeLogicalTool` per tool (which would re-download/re-upload the whole Fusion library hundreds of times). In-memory tools are updated via `UPDATE_TOOL`.
@@ -789,7 +790,7 @@ These rules apply during the **initial ProShop CSV merge** and on any **subseque
 |---|---|---|
 | Tool description | PS wins | Always via the per-tool rename confirmation UI — see Description Rename Workflow |
 | `vendor` (manufacturer) | PS wins | From `Approved Brand`; metadata-only, **never** written to Fusion |
-| `proshot_id` | Fill gap only | From `Tool #` — only set if the tool doesn't already have one |
+| `tool_id` | Fill gap only | From `Tool #` — only set if the tool doesn't already have one |
 | `location` (cabinet) | Fill gap only | From `Location`; Fusion's "Vendor" UI field (`expressions.tool_vendor`) holds the cabinet location → internal `location` |
 | `purchasing` (Approved Brands → manufacturers/vendors) | PS wins, replace when present | Built from every row sharing a `Tool #` via `buildPurchasingFromGroup` — see Purchasing / Vendor Data Model |
 | `min_ooh` (MIN OOH floor) | PS wins | From `Length Below Holder - MIN OOH` (export id `lengthBelowShankDiameter`); metadata-only, always overwrites |
@@ -989,7 +990,7 @@ When a programmer proves better speeds/feeds in a job, they can sync those value
 1. Copy tool(s) from Fusion 360 — Fusion's right-click copy puts tool data on the clipboard as **TSV** (tab-separated, a CSV-family format), not JSON
 2. Go to "Sync Job" in the app (left sidebar on the Library page) → paste (Ctrl+V anywhere on the import screen)
 3. App builds a batch queue — auto-matches each tool by priority:
-   - **`proshot_id` exact match** — primary (Fusion's `product-id` field)
+   - **`tool_id` exact match** — primary (Fusion's `product-id` field)
    - **GUID exact match** — secondary
    - **Geometry fuzzy match** — fallback, requires user confirmation
    - **No match** → route to "Add to Library" flow
@@ -1061,15 +1062,15 @@ There are **three distinct ways tool data gets reconciled** across the Fusion li
 
 | Workflow | Trigger | Scope | Conflicts | Code |
 |---|---|---|---|---|
-| **Load-time auto-combine** | Every load + bulk write | Whole library, by ProShop # | Never silently overwrites — strays preserved in `_instancesRaw` | `combineToolsByProshopId` |
+| **Load-time auto-combine** | Every load + bulk write | Whole library, by ProShop # | Never silently overwrites — strays preserved in `_instancesRaw` | `combineToolsByToolId` |
 | **Reconcile on open** | Opening a tool (ToolDetail) | One logical tool vs. live Fusion library | Surfaced — hands off to Sync Job diff | `reconcileTool` / `applyReconcile` |
 | **Sync Job (Phase 2)** | User pastes job tools | Batch queue of incoming tools | User picks per-field/per-preset | `MergeFlow` / `mergeTool` |
 
 All three ultimately persist through `writeLogicalTool()` (re-download → drop everything this tool owns → append fresh split instances).
 
-### 1. Load-time auto-combine (`combineToolsByProshopId`)
+### 1. Load-time auto-combine (`combineToolsByToolId`)
 
-In `src/schema/toolSchema.js`. Runs **silently** in `loadTools` (after `groupByTrackingId` + `buildLogicalTool`) and in bulk writes (`saveFullLibrary`, `normalizeLibrary`). Folds separate logical tools that share a `proshot_id` into **one** logical tool so a tool copied/dumped under a fresh GUID or tracking ID doesn't show up as a separate entry:
+In `src/schema/toolSchema.js`. Runs **silently** in `loadTools` (after `groupByTrackingId` + `buildLogicalTool`) and in bulk writes (`saveFullLibrary`, `normalizeLibrary`). Folds separate logical tools that share a `tool_id` into **one** logical tool so a tool copied/dumped under a fresh GUID or tracking ID doesn't show up as a separate entry:
 
 - One instance per **distinct** (holder, OOH); identical (holder, OOH) instances collapse to one assembly.
 - Presets are unioned by name; the **primary** tool's shared fields win.
@@ -1108,7 +1109,7 @@ The ToolDetail view uses a three-zone layout:
 2. **Sticky header** (`.tool-sticky-header`): stays at top of viewport while scrolling
    - Back button, tool type icon, tool type label
    - Description in a violet rounded badge (`.description-badge`)
-   - ProShop ID in an amber pill (`.proshot-pill`)
+   - Tool ID in an amber pill (`.tool-id-pill`)
 
 3. **Scrollable main content** (`.tool-detail-main`): two-column layout (`.detail-layout`, ~65% / 35% via `grid-template-columns: 65fr 35fr`)
    - Left column (`.detail-layout-left`): Geometry, Setup, Assemblies, Presets, History (incl. Merge History)
@@ -1127,7 +1128,7 @@ Machine tool number is shown inside the Identity section, in the same row as the
 | Data Type | Class | Shape | Color |
 |---|---|---|---|
 | Tool Description | `.description-badge` | Rounded rect (r=7px) | Violet — `rgba(124,58,237,…)` |
-| ProShop ID | `.proshot-pill` | Pill | Amber — `#f59e0b`, mono (`--font-mono`) |
+| Tool ID | `.tool-id-pill` | Pill | Amber — `#f59e0b`, mono (`--font-mono`) |
 | Holder | `.holder-pill` | Pill | Colored by **holder SIZE** via `--badge-color` (host sets it from `holderColor`); default teal `--holder-default`, mono |
 | Machine Tool # | `.machine-num-badge` | Slightly rounded rect (r=5px) | Green — `#4ade80`, mono |
 | Location/Cabinet | `.location-tag` | Rounded rect (r=7px) | Indigo — `#818cf8`, mono |
@@ -1141,7 +1142,7 @@ All six classes are defined in `src/index.css` in the "Data-field visual tokens"
 
 **Current usages:**
 - `.description-badge` — `ToolCard` (grid + list), `ToolDetail` sticky header
-- `.proshot-pill` — `ToolCard`, `ToolDetail` sticky header, `AssemblyCard` operator tag (as `.tag-proshot-oval` — physical tag format exception)
+- `.tool-id-pill` — `ToolCard`, `ToolDetail` sticky header, `AssemblyCard` operator tag (as `.tag-proshot-oval` — physical tag format exception)
 - `.holder-pill` — `AssemblyCard`, `ToolDetail` (assembly groups, pending assembly, export picker), `PresetPanel` (single-assembly preset card)
 - `.machine-num-badge` — `ToolCard` badge, `ToolDetail` Identity section (T/H/D)
 - `.location-tag` — `ToolCard` badge (when location is set)
@@ -1341,7 +1342,7 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 - **APS token in memory only** — `window._apsToken`, never localStorage. The refresh token is stored in `sessionStorage` (`aps_refresh_token`) so the session survives page refreshes within the same browser tab.
 - **Always re-download before write** — call `downloadFusionList()` immediately before any `uploadFusionList()`.
 - **No extra fields in Fusion JSON** — Fusion validates strictly. Only Fusion-native fields go in the library file; everything else goes in `tool_metadata.json`. Exception: `geometry.assemblyGaugeLength` is a Fusion-native field (nested in `geometry`; = holder gauge length + OOH, not OOH alone), safe to write.
-- **`proshot_id` is the primary match key** — it is Fusion's `product-id` field (the ProShop-assigned number). There is no separate `product_id` field — manufacturer part numbers live per-manufacturer in `purchasing.manufacturers[].edp` (see Purchasing / Vendor Data Model).
+- **`tool_id` is the primary match key** — it is Fusion's `product-id` field (the ProShop-assigned number). There is no separate `product_id` field — manufacturer part numbers live per-manufacturer in `purchasing.manufacturers[].edp` (see Purchasing / Vendor Data Model).
 - **Every length is stored in its record's own unit** (tool lengths in the tool's unit, holder gauge in the holder's unit) — OOH/min_ooh included. Convert only at cross-unit boundaries via `src/utils/units.js` (`convertLength`); never to a hidden inches canonical.
 - **Preset GUIDs are stable through the merge flow** — `presetsToAdd` GUIDs must not be regenerated after DiffStep. The assembly record in CommitStep uses them.
 - **Conflict presets must get a new GUID** — when a conflict preset is resolved as 'create', the incoming preset's GUID matches the master, so `generateId()` must produce a fresh one.

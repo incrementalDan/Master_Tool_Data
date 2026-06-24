@@ -586,7 +586,7 @@ function psRowToTool(group, psUnit = 'inches') {
   return {
     ...newTool(toolType),
     unit: psUnit,
-    proshot_id: r['Tool #'] || '',
+    tool_id: r['Tool #'] || '',
     grouping,
     description: r['Description'] || '',
     diameter: psNum(r['Cut Dia']),
@@ -700,9 +700,16 @@ function matchProShopToTools(groups, tools, psUnit = 'inches') {
 
     let toolIdx = -1;
 
-    // Primary match: ProShop "Tool #" is the Primary Key === our proshot_id
+    // Primary match: ProShop "Tool #" is the Primary Key === our tool_id
     if (toolNum) {
-      toolIdx = tools.findIndex((t, i) => !usedToolIdxs.has(i) && t.proshot_id === toolNum);
+      toolIdx = tools.findIndex((t, i) => !usedToolIdxs.has(i) && t.tool_id === toolNum);
+    }
+
+    // Legacy-ID match: an old ProShop "Tool #" that this tool used to carry before
+    // a bulk re-number still resolves to the right tool.
+    if (toolIdx < 0 && toolNum) {
+      toolIdx = tools.findIndex((t, i) =>
+        !usedToolIdxs.has(i) && Array.isArray(t.legacy_ids) && t.legacy_ids.includes(toolNum));
     }
 
     // Fall back: match by description similarity + diameter (tools not yet ProShop-linked)
@@ -723,7 +730,7 @@ function matchProShopToTools(groups, tools, psUnit = 'inches') {
 
       // ProShop wins
       if (r['Approved Brand']) additions.vendor = resolveVendorName(r['Approved Brand']);
-      if (toolNum && !tool.proshot_id) additions.proshot_id = toolNum;
+      if (toolNum && !tool.tool_id) additions.tool_id = toolNum;
       const purchasing = buildPurchasingFromGroup(group);
       if (purchasing.manufacturers.length || purchasing.vendors.length) additions.purchasing = purchasing;
       if (r['Through Coolant'] === 'true' || r['Through Coolant'] === 'false') {

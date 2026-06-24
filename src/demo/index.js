@@ -27,7 +27,7 @@ export function isDemoRequested() {
 }
 
 // Raw bundled data — AppContext builds the logical tools from these using the
-// same pipeline (groupByTrackingId → buildLogicalTool → combineToolsByProshopId)
+// same pipeline (groupByTrackingId → buildLogicalTool → combineToolsByToolId)
 // as a live load, so demo tools behave exactly like real ones.
 export function getDemoData() {
   const fusionList = Array.isArray(demoFusionLibrary?.data) ? demoFusionLibrary.data : [];

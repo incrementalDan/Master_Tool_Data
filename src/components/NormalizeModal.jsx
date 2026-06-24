@@ -77,7 +77,7 @@ export default function NormalizeModal({ onClose }) {
                 <div key={tool.id} style={{ marginBottom: 14 }}>
                   <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
                     {tool.description || 'Untitled tool'}
-                    {tool.proshot_id ? <span className="text-sub text-xs" style={{ marginLeft: 6 }}>{tool.proshot_id}</span> : null}
+                    {tool.tool_id ? <span className="text-sub text-xs" style={{ marginLeft: 6 }}>{tool.tool_id}</span> : null}
                   </div>
                   <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
                     {presets.map(p => (

@@ -5,8 +5,8 @@ import {
   validateTool, generateId, generateAssemblyId, generateTrackingId,
   groupByTrackingId, buildLogicalTool, splitToFusionInstances, readTrackingId,
   getNextMachineNumber, generateMachineNumbers, applyMachineNumberToFusion,
-  applyProShopIdToFusion, fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
-  combineToolsByProshopId, buildMetadataTool,
+  applyToolIdToFusion, fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
+  combineToolsByToolId, buildMetadataTool,
 } from '../schema/toolSchema.js';
 import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSystem.js';
 import { composePresetName, opTypeWord, parsePresetName, materialNameCode, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
@@ -454,7 +454,7 @@ export function AppProvider({ children }) {
       const built = [];
       for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
       for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
-      const tools = combineToolsByProshopId(built);
+      const tools = combineToolsByToolId(built);
 
       dispatch({ type: 'ENTER_LOCAL_MODE', tools });
       notify(`Loaded ${tools.length} tool${tools.length === 1 ? '' : 's'} (local mode — read-only)`, 'success');
@@ -478,7 +478,7 @@ export function AppProvider({ children }) {
     const built = [];
     for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
     for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
-    const tools = combineToolsByProshopId(built);
+    const tools = combineToolsByToolId(built);
 
     // Make the shared-file-backed helpers (vendor registry, default unit) resolve
     // against the demo data, just like loadTools does after a Drive load.
@@ -569,7 +569,7 @@ export function AppProvider({ children }) {
       // Fold any entries sharing a ProShop number into one logical tool so
       // duplicates surface as a single combined tool (auto-combine). The merge
       // is persisted on the next write of that tool / on normalize.
-      const tools = combineToolsByProshopId(built);
+      const tools = combineToolsByToolId(built);
       const needsNormalize = untracked.length > 0;
 
       // Seed setup-progress flags once for libraries that already completed this
@@ -705,12 +705,12 @@ export function AppProvider({ children }) {
       // Auto-combine: if a tool with this ProShop number already exists, fold the
       // new entry into it instead of creating a duplicate logical tool. The
       // ProShop number alone decides identity — no other field is checked.
-      const pid = String(tool.proshot_id || '').trim();
+      const pid = String(tool.tool_id || '').trim();
       const existingDup = pid
-        ? toolsRef.current.find(t => String(t.proshot_id || '').trim() === pid)
+        ? toolsRef.current.find(t => String(t.tool_id || '').trim() === pid)
         : null;
       if (existingDup) {
-        const combined = combineToolsByProshopId([
+        const combined = combineToolsByToolId([
           existingDup,
           { ...tool, tracking_id: null, id: undefined },
         ])[0];
@@ -770,9 +770,9 @@ export function AppProvider({ children }) {
       id: generateId(),
       tracking_id: null,        // addTool assigns a fresh tracking ID
       // Clear the ProShop ID — keeping it would make addTool's auto-combine
-      // (combineToolsByProshopId) fold this copy straight back into the source,
+      // (combineToolsByToolId) fold this copy straight back into the source,
       // so the "duplicate" would never actually appear as its own tool.
-      proshot_id: '',
+      tool_id: '',
       description: `${source.description || 'Tool'} (copy)`,
       _fusionRaw: undefined,
       _instancesRaw: undefined,
@@ -1073,7 +1073,7 @@ export function AppProvider({ children }) {
 
   // ─── One-time: import ProShop tool photos from a Drive folder ─────────────
   // The picked folder holds one main photo file PER TOOL at its top level, named
-  // "tools_{proshot_id}_….{png|jpg|gif|webp|avif}". (Same-named subfolders hold only the
+  // "tools_{tool_id}_….{png|jpg|gif|webp|avif}". (Same-named subfolders hold only the
   // 300/600/900w resized variants — ignored; we never descend into them.) Each
   // main photo is copied into the matching tool's tool_files folder and set as
   // its primary photo. Read-only on the source; skips tools with no match or an
@@ -1120,7 +1120,7 @@ export function AppProvider({ children }) {
         const pid = extractProshopId(photo.name);
         if (!pid) { summary.noMatch.push({ folder: photo.name, reason: 'No ProShop ID in file name' }); continue; }
         const wantId = normId(pid);
-        const tool = toolsRef.current.find(t => normId(t.proshot_id) === wantId);
+        const tool = toolsRef.current.find(t => normId(t.tool_id) === wantId);
         if (!tool) { summary.noMatch.push({ folder: photo.name, proshopId: pid, reason: 'No tool with this ProShop ID' }); continue; }
         if (tool.primary_photo_id || importedToolIds.has(tool.id)) {
           summary.skippedHasPhoto.push({ folder: photo.name, proshopId: pid, description: tool.description });
@@ -1161,7 +1161,7 @@ export function AppProvider({ children }) {
     const empty = { duplicates: [], newAssemblies: [], conflicts: [] };
     if (!tool) return empty;
     const tid = tool.tracking_id || null;
-    const pid = String(tool.proshot_id || '').trim();
+    const pid = String(tool.tool_id || '').trim();
     if (!tid && !pid) return empty;
 
     const rawList = await fetchRawLibrary();
@@ -1241,7 +1241,7 @@ export function AppProvider({ children }) {
       const holders = holdersRef.current || [];
       // Auto-combine any same-ProShop-number duplicates before writing the full
       // library (covers bulk import, which routes through here).
-      const combinedTools = combineToolsByProshopId(tools);
+      const combinedTools = combineToolsByToolId(tools);
       const fusionList = [];
       const metaList = [];
       for (const tool of combinedTools) {
@@ -1332,7 +1332,7 @@ export function AppProvider({ children }) {
 
   // Assign generated tool IDs to logical tools that don't have one yet, per the
   // configured tool_id_system. Writes the value into Fusion's native product-id
-  // (our proshot_id) — the single stored ID field — and never touches tools that
+  // (our tool_id) — the single stored ID field — and never touches tools that
   // already have an ID. No-op in proshop/other_erp modes (IDs aren't generated).
   // Always re-reads from APS immediately before writing, like renumberLibrary.
   const assignToolIds = useCallback(async () => {
@@ -1353,7 +1353,7 @@ export function AppProvider({ children }) {
         if (!value) return t;
         assigned++;
         if (counter !== null) counter = nextSequential(counter + 1, config.skip);
-        return { ...t, proshot_id: value };
+        return { ...t, tool_id: value };
       });
       dispatch({ type: 'SET_TOOLS', tools });
       notify(`Assigned IDs to ${assigned} tool${assigned === 1 ? '' : 's'} (demo — not saved)`, 'success');
@@ -1372,10 +1372,10 @@ export function AppProvider({ children }) {
       let assigned = 0;
       for (const raws of orderedGroups) {
         const logical = buildLogicalTool(raws, metaByTracking);
-        if (logical.proshot_id) continue;          // already has an ID — skip
+        if (logical.tool_id) continue;          // already has an ID — skip
         const value = composeToolId(config, logical, counter);
         if (!value) continue;                       // mode can't produce one (e.g. no machine #)
-        raws.forEach(r => applyProShopIdToFusion(r, value));
+        raws.forEach(r => applyToolIdToFusion(r, value));
         assigned++;
         if (counter !== null) counter = nextSequential(counter + 1, config.skip);
       }
@@ -1383,7 +1383,7 @@ export function AppProvider({ children }) {
       if (assigned === 0) { dispatch({ type: 'SAVE_SUCCESS' }); notify('No unassigned tools to ID', 'info'); return 0; }
 
       await uploadFusionList(fusionList);
-      // proshot_id is Fusion-owned (product-id) — it's not written to metadata,
+      // tool_id is Fusion-owned (product-id) — it's not written to metadata,
       // so no metadata save is needed here.
 
       // Rebuild the in-memory library so the new IDs show immediately.
@@ -1397,6 +1397,99 @@ export function AppProvider({ children }) {
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
       notify(`Assign IDs failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  }, [downloadFusionList, uploadFusionList, notify]);
+
+  // Re-number EVERY tool to the current tool_id_system scheme — the action to run
+  // after switching ID schemes. Unlike assignToolIds (which only fills blanks),
+  // this overwrites every existing ID and retires the old value into the tool's
+  // metadata `legacy_ids[]` so old job files / CSVs still match and search still
+  // finds the tool. New IDs avoid reusing a retired number (best-effort, by the
+  // numeric tail). Writes Fusion AND metadata. No-op in proshop/other_erp modes.
+  const renumberAllToolIds = useCallback(async () => {
+    const config = shopSettingsRef.current?.tool_id_system || {};
+    const { mode } = config;
+    if (mode === 'proshop' || mode === 'other_erp') {
+      notify('IDs are not generated in this mode', 'info');
+      return 0;
+    }
+    const uniqPush = (arr, v) => (arr.includes(v) ? arr : [...arr, v]);
+
+    // Demo mode: pure in-memory, reassign all, retire old IDs into legacy_ids.
+    if (demoModeRef.current) {
+      let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip) : null;
+      let assigned = 0;
+      const tools = toolsRef.current.map(t => {
+        const value = composeToolId(config, t, counter);
+        if (!value) return t;
+        if (counter !== null) counter = nextSequential(counter + 1, config.skip);
+        assigned++;
+        const old = t.tool_id;
+        const legacy_ids = (old && old !== value)
+          ? uniqPush((t.legacy_ids || []).filter(l => l !== value), old)
+          : (t.legacy_ids || []);
+        return { ...t, tool_id: value, legacy_ids };
+      });
+      dispatch({ type: 'SET_TOOLS', tools });
+      notify(`Re-numbered ${assigned} tool${assigned === 1 ? '' : 's'} (demo — not saved)`, 'success');
+      return assigned;
+    }
+
+    dispatch({ type: 'SAVE_START' });
+    try {
+      const fusionList = await downloadFusionList();
+      const metaList = googleRef.current ? await driveService.loadMetadata() : [];
+      const metaByTracking = new Map(metaList.map(m => [m.id, m]));
+
+      const { groups, untracked } = groupByTrackingId(fusionList);
+      const orderedGroups = [...groups.values(), ...untracked.map(r => [r])];
+
+      // Reserve the numeric tail of every already-retired ID so a new ID never
+      // reuses a retired number (only meaningful within the new mode's number space).
+      const usedNumbers = new Set();
+      for (const m of metaList) {
+        for (const lid of (m.legacy_ids || [])) {
+          const tail = String(lid).match(/(\d+)\s*$/);
+          if (tail) usedNumbers.add(Number(tail[1]));
+        }
+      }
+
+      let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip, usedNumbers) : null;
+      let assigned = 0;
+      for (const raws of orderedGroups) {
+        const logical = buildLogicalTool(raws, metaByTracking);
+        const value = composeToolId(config, logical, counter);
+        if (!value) continue;                        // mode can't produce one (e.g. no machine #)
+        if (counter !== null) counter = nextSequential(counter + 1, config.skip, usedNumbers);
+        assigned++;
+
+        const oldId = logical.tool_id;
+        const tid = readTrackingId(raws[0]);
+        if (tid && oldId && oldId !== value) {
+          const meta = metaByTracking.get(tid) || { id: tid };
+          const prev = (meta.legacy_ids || []).filter(l => l !== value);
+          metaByTracking.set(tid, { ...meta, legacy_ids: uniqPush(prev, oldId) });
+        }
+        raws.forEach(r => applyToolIdToFusion(r, value));
+      }
+
+      if (assigned === 0) { dispatch({ type: 'SAVE_SUCCESS' }); notify('No tools to re-number', 'info'); return 0; }
+
+      await uploadFusionList(fusionList);
+      // legacy_ids lives in metadata — persist it (assignToolIds does not write metadata).
+      if (googleRef.current) await driveService.saveAllMetadata([...metaByTracking.values()]);
+
+      const tools = [];
+      for (const [, raws] of groups) tools.push(buildLogicalTool(raws, metaByTracking));
+      for (const raw of untracked) tools.push(buildLogicalTool([raw], metaByTracking));
+      dispatch({ type: 'SET_TOOLS', tools });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify(`Re-numbered ${assigned} tool${assigned === 1 ? '' : 's'}`, 'success');
+      return assigned;
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Re-number failed: ${err.message}`, 'error', 7000);
       throw err;
     }
   }, [downloadFusionList, uploadFusionList, notify]);
@@ -1501,7 +1594,7 @@ export function AppProvider({ children }) {
       // Fold tools sharing a ProShop number into one logical tool before saving,
       // so duplicate copies pushed into the library merge into a single tool
       // (with one instance per distinct holder/OOH) instead of staying separate.
-      const combined = combineToolsByProshopId(logicalTools);
+      const combined = combineToolsByToolId(logicalTools);
       const dupCount = logicalTools.length - combined.length;
 
       // Skip tools whose fields genuinely conflict (non-empty values differ between
@@ -1578,6 +1671,7 @@ export function AppProvider({ children }) {
       saveFullLibrary,
       renumberLibrary,
       assignToolIds,
+      renumberAllToolIds,
       normalizeLibrary,
       clearError,
       notify,

@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, X, Plus, LayoutGrid, List, PackageOpen, FolderOpen, GitMerge } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { applyFilters } from '../services/searchEngine.js';
+import { applyFilters, matchedLegacyId } from '../services/searchEngine.js';
 import ToolTypeGrid from './ToolTypeGrid.jsx';
 import FacetFilters from './FacetFilters.jsx';
 import ToolCard from './ToolCard.jsx';
@@ -288,11 +288,11 @@ export default function LandingPage() {
         </div>
       ) : view === 'list' ? (
         <div className="tool-list">
-          {filtered.map(tool => <ToolCard key={tool.id} tool={tool} variant="list" />)}
+          {filtered.map(tool => <ToolCard key={tool.id} tool={tool} variant="list" matchedLegacyId={matchedLegacyId(tool, textQuery)} />)}
         </div>
       ) : (
         <div className="tool-grid">
-          {filtered.map(tool => <ToolCard key={tool.id} tool={tool} />)}
+          {filtered.map(tool => <ToolCard key={tool.id} tool={tool} matchedLegacyId={matchedLegacyId(tool, textQuery)} />)}
         </div>
       )}
       </div>

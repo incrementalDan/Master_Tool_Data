@@ -77,7 +77,7 @@ export default function NewToolStep({ incomingTool, onAdded, onSkip }) {
           <FieldRow label={fieldLabel('overall_length', incomingTool.unit)} value={incomingTool.overall_length != null ? `${incomingTool.overall_length} ${u}` : null} />
           <FieldRow label={FIELD_LABELS.number_of_flutes} value={incomingTool.number_of_flutes} />
           <FieldRow label={FIELD_LABELS.vendor} value={incomingTool.vendor} />
-          <FieldRow label={FIELD_LABELS.proshot_id} value={incomingTool.proshot_id} />
+          <FieldRow label={FIELD_LABELS.tool_id} value={incomingTool.tool_id} />
           <FieldRow label={FIELD_LABELS.spindle_speed} value={incomingTool.spindle_speed} />
           <FieldRow label={FIELD_LABELS.cutting_feedrate} value={incomingTool.cutting_feedrate} />
         </div>

@@ -44,7 +44,7 @@
      the component-level holder/ISO reconciliation; the design system colors
      holders by size (--holder-*) and presets by ISO group (--iso-*). */
   --tok-description: 124, 58, 237;   /* violet  — .description-badge */
-  --tok-proshot: 245, 158, 11;       /* amber   — .proshot-pill */
+  --tok-tool-id: 245, 158, 11;       /* amber   — .tool-id-pill */
   --tok-holder: 45, 212, 191;        /* teal    — .holder-pill */
   --tok-machine: 74, 222, 128;       /* green   — .machine-num-badge */
   --tok-location: 129, 140, 248;     /* indigo  — .location-tag */
@@ -2616,7 +2616,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /* when the data stands alone without a label next to it.                     */
 /*                                                                            */
 /*  .description-badge  — Tool Description  — violet rounded-rect            */
-/*  .proshot-pill       — ProShop ID        — amber pill (monospace)          */
+/*  .tool-id-pill       — Tool ID           — amber pill (monospace)          */
 /*  .holder-pill        — Holder            — colored by SIZE (--badge-color) */
 /*  .machine-num-badge  — Machine Tool #    — green rect (monospace, square)  */
 /*  .location-tag       — Location/Cabinet  — indigo rounded-rect (monospace)  */
@@ -2636,7 +2636,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   display: inline-block;
 }
 
-.proshot-pill {
+.tool-id-pill {
   display: inline-flex;
   align-items: center;
   padding: 4px 13px;
@@ -2644,16 +2644,16 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   font-size: 12px;
   font-weight: 700;
   font-family: var(--font-mono);
-  background: rgba(var(--tok-proshot), 0.14);
-  border: 1px solid rgba(var(--tok-proshot), 0.42);
-  color: rgb(var(--tok-proshot));
+  background: rgba(var(--tok-tool-id), 0.14);
+  border: 1px solid rgba(var(--tok-tool-id), 0.42);
+  color: rgb(var(--tok-tool-id));
   white-space: nowrap;
   flex-shrink: 0;
   letter-spacing: 0.02em;
   text-decoration: none;
   cursor: pointer;
 }
-.proshot-pill:hover { filter: brightness(1.2); text-decoration: none; }
+.tool-id-pill:hover { filter: brightness(1.2); text-decoration: none; }
 
 /* Bright, prominent — flags an STI/Helicoil tap (a meaningfully different tool to grab) */
 .sti-pill {

@@ -1,7 +1,7 @@
 // Tool ID system — generates a tool's human-readable ID from the shop-wide
 // scheme configured in shop_settings.tool_id_system. The generated value is
 // stored in ONE place: Fusion's native `product-id` field (our internal
-// `proshot_id`). The active mode only controls how that value is produced, how
+// `tool_id`). The active mode only controls how that value is produced, how
 // it's labelled in the UI, and whether the ProShop URL link is shown.
 //
 // Modes:
@@ -11,7 +11,7 @@
 //   size_first    — {dia}{sep}{typecode}{sep}{number} e.g. "0500-EM-1042"
 //   machine_linked— "T{machine_tool_number}"        e.g. "T42"
 //   proshop       — value comes from ProShop (unchanged); generator passes
-//                   through the existing proshot_id
+//                   through the existing tool_id
 //   other_erp     — placeholder for a future ERP; not selectable yet
 
 // Short code per tool_type, used in type_prefix / size_first IDs. Kept here
@@ -104,7 +104,7 @@ export function composeToolId(config, tool, seqNumber) {
     case 'proshop':
     case 'other_erp':
     default:
-      return tool.proshot_id || '';
+      return tool.tool_id || '';
   }
 }
 
@@ -131,7 +131,7 @@ export function previewToolId(config) {
     cabinet: config?.location?.cabinet_identifier === 'letter' ? 'B' : '2',
     drawer: config?.location?.drawer_identifier === 'letter' ? 'C' : '4',
     machine_tool_number: 42,
-    proshot_id: 'A-3',
+    tool_id: 'A-3',
   };
   return composeToolId(config, sample, Number(config?.start) || 1000);
 }

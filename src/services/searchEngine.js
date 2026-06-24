@@ -1,6 +1,15 @@
 // Pure search/filter functions — no React imports
 
-const TEXT_FIELDS = ['description', 'vendor', 'material', 'coating', 'notes', 'location', 'proshot_id', 'preferred_machine'];
+const TEXT_FIELDS = ['description', 'vendor', 'material', 'coating', 'notes', 'location', 'tool_id', 'preferred_machine'];
+
+// The first legacy (retired) ID of `tool` that the search query matched, or null.
+// Used to show a "formerly …" line on a result card ONLY when the match was on a
+// legacy ID (never otherwise).
+export function matchedLegacyId(tool, query) {
+  const q = query?.toLowerCase().trim();
+  if (!q || !Array.isArray(tool?.legacy_ids)) return null;
+  return tool.legacy_ids.find(l => String(l).toLowerCase().includes(q)) || null;
+}
 
 export function textSearch(tools, query) {
   if (!query?.trim()) return tools;
@@ -17,6 +26,8 @@ export function textSearch(tools, query) {
     }
     if (Array.isArray(tool.tags) && tool.tags.some(t => t.toLowerCase().includes(q))) return true;
     if (Array.isArray(tool.material_suitability) && tool.material_suitability.some(m => m.toLowerCase().includes(q))) return true;
+    // Legacy (retired) tool IDs — so an old job number still finds the tool.
+    if (Array.isArray(tool.legacy_ids) && tool.legacy_ids.some(l => String(l).toLowerCase().includes(q))) return true;
     return false;
   });
 }
