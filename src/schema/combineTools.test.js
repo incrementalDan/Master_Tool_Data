@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { combineToolsByToolId } from './toolSchema.js';
+import { combineToolsByToolId, duplicateIdClusters } from './toolSchema.js';
 
 // Minimal logical-tool shape that satisfies mergeLogicalTools' expectations.
 function makeTool(overrides = {}) {
@@ -133,5 +133,27 @@ describe('combineToolsByToolId — no grouping without tool_id', () => {
 
     const result = combineToolsByToolId([a, b]);
     expect(result).toHaveLength(2);
+  });
+});
+
+describe('duplicateIdClusters', () => {
+  let n = 0;
+  const raw = (comment) => ({ guid: `g-${n++}`, 'post-process': { comment } });
+
+  it('flags a combined tool whose instances span multiple tracking IDs', () => {
+    const tools = [
+      { tool_id: 'A-3', description: 'dup', _instancesRaw: [raw('FTL-000001'), raw('FTL-000002')] },
+      { tool_id: 'B-1', description: 'single', _instancesRaw: [raw('FTL-000003')] },
+    ];
+    const clusters = duplicateIdClusters(tools);
+    expect(clusters).toHaveLength(1);
+    expect(clusters[0]).toMatchObject({ tool_id: 'A-3', count: 2 });
+  });
+
+  it('does not flag a multi-assembly tool under ONE tracking ID', () => {
+    const tools = [
+      { tool_id: 'C-1', description: 'multi-asm', _instancesRaw: [raw('FTL-000004'), raw('FTL-000004')] },
+    ];
+    expect(duplicateIdClusters(tools)).toHaveLength(0);
   });
 });

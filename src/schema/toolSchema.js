@@ -477,6 +477,26 @@ export function combineToolsByToolId(tools) {
   });
 }
 
+// Combined tools that are actually MORE THAN ONE Fusion tracking-ID group folded
+// together because they share a tool_id (usually a duplicate from human error in
+// the legacy/Fusion data). These are the tools a bulk re-number would split into
+// separate IDs (it works per tracking group), so the UI surfaces them for an
+// explicit merge-to-one-ID vs split decision. Each cluster's tool_id is unique
+// (the combine already folded same-id tools into one). Returns
+// [{ tool_id, description, count }] where count = distinct tracking IDs folded.
+export function duplicateIdClusters(tools) {
+  const out = [];
+  for (const t of (tools || [])) {
+    const tids = new Set();
+    for (const r of (t._instancesRaw || [])) {
+      const tid = readTrackingId(r);
+      if (tid) tids.add(tid);
+    }
+    if (tids.size > 1) out.push({ tool_id: t.tool_id, description: t.description, count: tids.size });
+  }
+  return out;
+}
+
 // ─── Holder gauge length (expression-derived) ──────────────────────────────
 // Fusion numbers holder segments top→bottom starting at 1, but the JSON
 // `segments` array stores them in the OPPOSITE order (bottom/collet face first,

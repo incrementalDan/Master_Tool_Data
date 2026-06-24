@@ -1415,7 +1415,13 @@ export function AppProvider({ children }) {
   // finds the tool. New IDs skip only an EXACT collision with a retired ID
   // (partial digit overlap with a different prefix is fine). Writes Fusion AND
   // metadata. No-op in proshop/other_erp modes.
-  const renumberAllToolIds = useCallback(async () => {
+  //
+  // `consolidateIds`: tool_ids of duplicate clusters (one tool_id shared across
+  // multiple Fusion tracking-ID groups — a fold from human-error data) that the
+  // user chose to MERGE — all the cluster's groups get ONE shared new ID instead
+  // of being split into separate IDs. Clusters not listed are split (default
+  // per-tracking-group behavior). See duplicateIdClusters (toolSchema.js).
+  const renumberAllToolIds = useCallback(async (consolidateIds = []) => {
     const config = shopSettingsRef.current?.tool_id_system || {};
     const { mode } = config;
     if (mode === 'proshop' || mode === 'other_erp') {
@@ -1461,21 +1467,36 @@ export function AppProvider({ children }) {
         for (const lid of (m.legacy_ids || [])) retiredExact.add(String(lid));
       }
 
+      // Duplicate clusters the user chose to MERGE (one shared new ID across all
+      // their tracking groups) instead of letting re-number split them. Keyed by
+      // the shared current tool_id.
+      const mergedIds = new Set(consolidateIds);
+      const clusterValue = new Map();   // tool_id -> the one new ID for a merged cluster
+
       let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip) : null;
       let assigned = 0;
       for (const raws of orderedGroups) {
         const logical = buildLogicalTool(raws, metaByTracking);
-        let value = composeToolId(config, logical, counter);
-        if (!value) continue;                        // mode can't produce one (e.g. no machine #)
-        // Skip only an exact collision with a retired ID — bump and recompose.
-        while (counter !== null && retiredExact.has(value)) {
-          counter = nextSequential(counter + 1, config.skip);
+        const oldId = logical.tool_id;
+
+        let value;
+        if (oldId && mergedIds.has(oldId) && clusterValue.has(oldId)) {
+          // A later tracking group of a merged duplicate cluster — reuse its one ID
+          // (don't consume a counter value).
+          value = clusterValue.get(oldId);
+        } else {
           value = composeToolId(config, logical, counter);
+          if (!value) continue;                      // mode can't produce one (e.g. no machine #)
+          // Skip only an exact collision with a retired ID — bump and recompose.
+          while (counter !== null && retiredExact.has(value)) {
+            counter = nextSequential(counter + 1, config.skip);
+            value = composeToolId(config, logical, counter);
+          }
+          if (counter !== null) counter = nextSequential(counter + 1, config.skip);
+          if (oldId && mergedIds.has(oldId)) clusterValue.set(oldId, value);
         }
-        if (counter !== null) counter = nextSequential(counter + 1, config.skip);
         assigned++;
 
-        const oldId = logical.tool_id;
         const tid = readTrackingId(raws[0]);
         if (tid) {
           // tool_id is metadata-owned — write the new value to metadata (source of
