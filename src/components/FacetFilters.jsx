@@ -37,7 +37,7 @@ function isFacetEmpty(value) {
   return value === '' || value === null || value === undefined;
 }
 
-export default function FacetFilters({ tools, activeFilters, onFilterChange }) {
+export default function FacetFilters({ tools, activeFilters, onFilterChange, exactMode, onExactModeChange, tolerances }) {
   const { toolTypes, facets = {} } = activeFilters;
   const facetFields = getFacetFields(toolTypes);
 
@@ -57,8 +57,31 @@ export default function FacetFilters({ tools, activeFilters, onFilterChange }) {
 
   const activeCount = Object.keys(facets).length;
 
+  const tolTip = exactMode
+    ? 'Exact match only — click to enable tolerance mode'
+    : tolerances
+      ? `Tolerance: ±${tolerances.diameter} dia · ±${tolerances.flute_length} LOC — click for exact match`
+      : 'Tolerance mode active';
+
   return (
-    <div className="facet-panel">
+    <div className="facet-panel" style={{ position: 'relative' }}>
+      <button
+        className={`chip${exactMode ? ' active' : ''}`}
+        onClick={onExactModeChange}
+        title={tolTip}
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          fontSize: 11,
+          padding: '2px 8px',
+          lineHeight: '1.4',
+          fontFamily: 'var(--font-mono)',
+          zIndex: 1,
+        }}
+      >
+        {exactMode ? '= Exact' : '± Tol'}
+      </button>
       <div className="facet-row">
         {facetFields.map(field => (
           <FacetControl
@@ -70,6 +93,7 @@ export default function FacetFilters({ tools, activeFilters, onFilterChange }) {
             value={MULTI_SELECT_FIELDS.has(field) ? (facets[field] ?? []) : (facets[field] ?? '')}
             onChange={val => setFacet(field, val)}
             isMulti={MULTI_SELECT_FIELDS.has(field)}
+            tolerances={tolerances}
           />
         ))}
       </div>
@@ -97,8 +121,8 @@ export default function FacetFilters({ tools, activeFilters, onFilterChange }) {
   );
 }
 
-function FacetControl({ field, label, tools, activeFilters, value, onChange, isMulti }) {
-  const { options, showAsChips } = getAvailableOptions(tools, activeFilters, field);
+function FacetControl({ field, label, tools, activeFilters, value, onChange, isMulti, tolerances }) {
+  const { options, showAsChips } = getAvailableOptions(tools, activeFilters, field, tolerances);
   const numeric = isNumericFacet(field);
   // Numeric facets carry { value, op }; everything below works against the bare
   // value, with the chosen operator handled separately (see `op` below).

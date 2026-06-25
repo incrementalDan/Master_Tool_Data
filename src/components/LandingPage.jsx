@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, X, Plus, LayoutGrid, List, PackageOpen, FolderOpen, GitMerge } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { applyFilters, matchedLegacyId } from '../services/searchEngine.js';
+import { getDefaultUnit } from '../utils/units.js';
 import ToolTypeGrid from './ToolTypeGrid.jsx';
 import FacetFilters from './FacetFilters.jsx';
 import ToolCard from './ToolCard.jsx';
@@ -38,7 +39,16 @@ export default function LandingPage() {
   const [displayQuery, setDisplayQuery] = useState(initQuery);
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'grid');
   const [sort, setSort] = useState(() => localStorage.getItem(SORT_KEY) || 'updated');
+  const [exactMode, setExactMode] = useState(false);
   const debounceRef = useRef(null);
+
+  // Diameter ±0.002" / LOC ±0.02" in inch mode; ±0.05mm / ±0.5mm in mm mode.
+  // Null when exactMode is on (falls back to the tiny float epsilon = effectively exact).
+  const isInch = getDefaultUnit() === 'inches';
+  const tolerances = exactMode ? null : {
+    diameter: isInch ? 0.002 : 0.05,
+    flute_length: isInch ? 0.02 : 0.5,
+  };
 
   // Machine filter — only active when machines are configured in shop settings.
   // Initialised to the default machine (if one is set) on first load, then
@@ -84,9 +94,14 @@ export default function LandingPage() {
 
   const activeFilters = { toolTypes: selectedTypes, textQuery, facets };
   const filtered = useMemo(() => {
-    const result = applyFilters(tools, activeFilters, machines.length > 0 ? machineFilter : null);
+    const unit = getDefaultUnit();
+    const tols = exactMode ? null : {
+      diameter: unit === 'inches' ? 0.002 : 0.05,
+      flute_length: unit === 'inches' ? 0.02 : 0.5,
+    };
+    const result = applyFilters(tools, activeFilters, machines.length > 0 ? machineFilter : null, tols);
     return [...result].sort(SORTS[sort]?.fn || SORTS.updated.fn);
-  }, [tools, selectedTypes, textQuery, facets, sort, machineFilter, machines.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tools, selectedTypes, textQuery, facets, sort, machineFilter, machines.length, exactMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleQueryChange = useCallback((val) => {
     setDisplayQuery(val);
@@ -244,6 +259,9 @@ export default function LandingPage() {
             tools={tools}
             activeFilters={activeFilters}
             onFilterChange={handleFilterChange}
+            exactMode={exactMode}
+            onExactModeChange={() => setExactMode(m => !m)}
+            tolerances={tolerances}
           />
         </div>
       )}
