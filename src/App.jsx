@@ -11,6 +11,7 @@ import ToastStack from './components/Toast.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
 import LibrarySetup from './components/LibrarySetup.jsx';
 import MetadataConnect from './components/MetadataConnect.jsx';
+import ShopConnect from './components/ShopConnect.jsx';
 import LandingPage from './components/LandingPage.jsx';
 import ToolDetail from './components/ToolDetail.jsx';
 import AddToolFlow from './components/AddToolFlow.jsx';
@@ -51,6 +52,8 @@ function AppShell() {
     demoMode, exitDemoMode,
     toasts, dismissToast,
   } = useApp();
+
+  const [shopConnectChosen, setShopConnectChosen] = useState(false);
 
   const ready = !localMode && !demoMode && apsAuthenticated && libraryLocation && (googleAuthenticated || metadataSkipped);
   const loadedRef = useRef(false);
@@ -109,6 +112,13 @@ function AppShell() {
     );
   } else if (!apsAuthenticated) {
     content = <LoginScreen />;
+  } else if (!libraryLocation && !changingLibrary && !shopConnectChosen) {
+    content = (
+      <ShopConnect
+        onConnectDone={(needsWizard) => { if (needsWizard) setShopConnectChosen(true); }}
+        onSetupNew={() => setShopConnectChosen(true)}
+      />
+    );
   } else if (!libraryLocation || changingLibrary) {
     content = <LibrarySetup canCancel={!!libraryLocation} onCancel={cancelChangeLibrary} />;
   } else if (!googleAuthenticated && !metadataSkipped) {

@@ -398,6 +398,25 @@ export function connectToMetadataFile(fileId) {
   localStorage.setItem(CACHED_FILE_ID_KEY, fileId);
 }
 
+// Find shop_settings.json in a folder and return its parsed content without creating it.
+// Used by ShopConnect to preview what libraries are registered before connecting.
+// Returns { fileId, shopSettings } or null if not found.
+export async function previewShopSettingsFromFolder(folderId) {
+  const parent = folderId || 'root';
+  const q = `'${parent}' in parents and name='shop_settings.json' and trashed=false`;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+    { headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const fileId = data.files?.[0]?.id;
+  if (!fileId) return null;
+  const shopSettings = await driveGet(fileId);
+  return shopSettings ? { fileId, shopSettings } : null;
+}
+
 // ─── Tool file storage ────────────────────────────────────────────────────────
 // Folder layout: [metadata root]/tool_files/{trackingId}/{filename}
 

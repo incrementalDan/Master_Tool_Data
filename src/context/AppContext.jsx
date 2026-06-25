@@ -2007,6 +2007,7 @@ export function AppProvider({ children }) {
       setHolderLibraryLocation,
       clearHolderLibraryLocation,
       // Multi-library registry actions
+      persistRegistry,
       addToolLibrary,
       removeToolLibrary,
       setDefaultToolLibrary,
