@@ -24,7 +24,10 @@ function mergeImportedTools(current, imported) {
 
 export default function ImportFlow() {
   const navigate = useNavigate();
-  const { tools, saveFullLibrary, isSaving, markSetupStepInSettings } = useApp();
+  const { tools, saveFullLibrary, isSaving, markSetupStepInSettings, shopSettings } = useApp();
+  const toolLibraries = shopSettings?.tool_libraries || [];
+  const defaultLibId = shopSettings?.default_tool_library_id || toolLibraries[0]?.id || null;
+  const [targetLibraryId, setTargetLibraryId] = useState(defaultLibId);
   const [step, setStep] = useState(1);
   const [fusionTools, setFusionTools] = useState(tools);
   const [parseError, setParseError] = useState('');
@@ -158,7 +161,14 @@ export default function ImportFlow() {
   const handleSaveToDrive = async () => {
     setSaving(true);
     try {
-      const numbered = fusionTools.map((t, i) => ({ ...t, machine_tool_number: machineNumbers[i] }));
+      // Tag tools that don't already belong to a library (newly imported ones)
+      // with the chosen destination library. Existing tools keep their own
+      // library_id so saveFullLibrary writes each back to its own file.
+      const numbered = fusionTools.map((t, i) => ({
+        ...t,
+        machine_tool_number: machineNumbers[i],
+        library_id: t.library_id || targetLibraryId,
+      }));
       await saveFullLibrary(numbered);
       navigate('/');
     } catch (err) {
@@ -487,6 +497,20 @@ export default function ImportFlow() {
               </tbody>
             </table>
           </div>
+
+          {toolLibraries.length > 1 && (
+            <label className="flex items-center gap-8 text-sm mt-16" style={{ flexWrap: 'wrap' }}>
+              <span className="text-sub">Import new tools into library:</span>
+              <select
+                className="field-input"
+                style={{ width: 'auto' }}
+                value={targetLibraryId || ''}
+                onChange={e => setTargetLibraryId(e.target.value)}
+              >
+                {toolLibraries.map(lib => <option key={lib.id} value={lib.id}>{lib.fileName}</option>)}
+              </select>
+            </label>
+          )}
 
           <div className="flex gap-8 mt-16">
             <button className="btn btn-primary btn-lg" onClick={handleSaveToDrive} disabled={saving || isSaving}>

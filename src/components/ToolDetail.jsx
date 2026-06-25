@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
   Ruler, StickyNote, Clock, Wrench, AlertTriangle, Camera, X,
-  ChevronDown, ChevronRight,
+  ChevronDown, ChevronRight, FileJson,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
 import AssemblyCard, { holderColor } from './AssemblyCard.jsx';
@@ -495,6 +495,15 @@ export default function ToolDetail() {
             />
           </div>
         </div>
+
+        {/* Which library this tool lives in (multi-library). Reads and writes go
+            back to this library. Muted one-liner at the bottom of the page. */}
+        {tool.library_name && (
+          <div className="text-sub text-xs" style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <FileJson size={13} style={{ flexShrink: 0 }} />
+            In library: <span className="font-mono">{tool.library_name}</span>
+          </div>
+        )}
 
         {/* Primary photo upload modal */}
         {showPhotoUpload && (

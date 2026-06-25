@@ -56,8 +56,14 @@ function matchesNumericFacet(toolValue, filter, tol = null) {
 // objects (see isOperatorFilter); everything else is a bare string/array.
 // tolerances: optional { diameter: number, flute_length: number } — per-field tolerance
 // applied when op is '='. Null/absent = tiny float epsilon (effectively exact).
-export function applyFilters(tools, activeFilters, machineFilter = null, tolerances = null) {
+// libraryFilter: optional { libraryId } — when set, keep only tools from that
+// source library (multi-library support; tools are tagged with library_id on load).
+export function applyFilters(tools, activeFilters, machineFilter = null, tolerances = null, libraryFilter = null) {
   let result = tools;
+
+  if (libraryFilter?.libraryId) {
+    result = result.filter(t => t.library_id === libraryFilter.libraryId);
+  }
 
   if (activeFilters.textQuery) {
     result = textSearch(result, activeFilters.textQuery);

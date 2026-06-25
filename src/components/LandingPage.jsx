@@ -50,6 +50,11 @@ export default function LandingPage() {
     flute_length: isInch ? 0.02 : 0.5,
   };
 
+  // Library filter — only shown when more than one tool library is linked.
+  // Lets the user narrow the merged tool list to a single source library.
+  const toolLibraries = shopSettings?.tool_libraries || [];
+  const [libraryFilter, setLibraryFilter] = useState({ libraryId: null });
+
   // Machine filter — only active when machines are configured in shop settings.
   // Initialised to the default machine (if one is set) on first load, then
   // stays as the user sets it for the session.
@@ -99,9 +104,13 @@ export default function LandingPage() {
       diameter: unit === 'inches' ? 0.002 : 0.05,
       flute_length: unit === 'inches' ? 0.02 : 0.5,
     };
-    const result = applyFilters(tools, activeFilters, machines.length > 0 ? machineFilter : null, tols);
+    const result = applyFilters(
+      tools, activeFilters,
+      machines.length > 0 ? machineFilter : null, tols,
+      toolLibraries.length > 1 ? libraryFilter : null,
+    );
     return [...result].sort(SORTS[sort]?.fn || SORTS.updated.fn);
-  }, [tools, selectedTypes, textQuery, facets, sort, machineFilter, machines.length, exactMode]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tools, selectedTypes, textQuery, facets, sort, machineFilter, machines.length, exactMode, libraryFilter, toolLibraries.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleQueryChange = useCallback((val) => {
     setDisplayQuery(val);
@@ -132,7 +141,7 @@ export default function LandingPage() {
     setFacets(newFilters.facets || {});
   };
 
-  const hasFilters = selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0 || !!machineFilter.machineId;
+  const hasFilters = selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0 || !!machineFilter.machineId || !!libraryFilter.libraryId;
 
   // When hide_unused_tool_types is on (default) and not in demo mode, only show
   // tool type tiles for types that have at least one tool in the library.
@@ -203,6 +212,31 @@ export default function LandingPage() {
           <Plus size={20} /> Add Tool
         </button>
       </div>
+
+      {/* Library filter — only when more than one tool library is linked */}
+      {toolLibraries.length > 1 && (
+        <div className="mb-16">
+          <div className="section-header">Library</div>
+          <div className="flex items-center gap-8 flex-wrap">
+            <button
+              className={`chip ${!libraryFilter.libraryId ? 'active' : ''}`}
+              onClick={() => setLibraryFilter({ libraryId: null })}
+            >
+              All
+            </button>
+            {toolLibraries.map(lib => (
+              <button
+                key={lib.id}
+                className={`chip ${libraryFilter.libraryId === lib.id ? 'active' : ''}`}
+                onClick={() => setLibraryFilter(f => ({ libraryId: f.libraryId === lib.id ? null : lib.id }))}
+                title={lib.fileName}
+              >
+                {lib.fileName}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Machine filter — only when machines are configured in shop settings */}
       {machines.length > 0 && (
@@ -283,7 +317,7 @@ export default function LandingPage() {
         {hasFilters && (
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); setMachineFilter({ machineId: null, strict: false }); }}
+            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); setMachineFilter({ machineId: null, strict: false }); setLibraryFilter({ libraryId: null }); }}
           >
             Reset
           </button>
