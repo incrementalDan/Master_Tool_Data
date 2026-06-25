@@ -7,6 +7,7 @@ import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../
 import { useDragReorder } from './useDragReorder.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
 import { FilePicker } from './LibrarySetup.jsx';
+import { composeLocationString } from '../utils/locationSystem.js';
 import DescRenameModal from './DescRenameModal.jsx';
 import InfoTip from './InfoTip.jsx';
 import ImportPhotosModal from './ImportPhotosModal.jsx';
@@ -23,10 +24,15 @@ const ID_MODES = [
 ];
 
 // ── Location System card ────────────────────────────────────────────────────
-// Manages the Zone → Station → Drawer → Bin location hierarchy stored in
+// Manages the Location Group → Cabinet → Drawer → Bin hierarchy stored in
 // shop_settings.json under location_system. Each level has stable UUIDs so
 // tool_location references survive renaming.
+// UI terminology: "Location Group" = zone (prefix, e.g. "LC")
+//                 "Cabinet" = station (individual location, e.g. "LC-140")
 function LocationSystemCard({ locationSystem, onSave }) {
+  const { tools, shopSettings, bulkAssignToolLocations, notify } = useApp();
+  const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
+
   const [ls, setLs] = useState(() => ({
     zones:    locationSystem.zones    || [],
     stations: locationSystem.stations || [],
@@ -43,6 +49,8 @@ function LocationSystemCard({ locationSystem, onSave }) {
   const [newName, setNewName] = useState('');
   const [newExtra, setNewExtra] = useState('');
   const [expanded, setExpanded] = useState({});     // zoneId / stationId / drawerId → bool
+  const [matchStage, setMatchStage] = useState('idle'); // idle | preview | applying | done
+  const [matchResults, setMatchResults] = useState(null);
 
   useEffect(() => {
     setLs({
@@ -58,6 +66,7 @@ function LocationSystemCard({ locationSystem, onSave }) {
     try { await onSave(next); } finally { setSaving(false); }
   };
 
+  // ── CRUD ──────────────────────────────────────────────────────────────────
   const addItem = (level, parentId) => {
     const label = newLabel.trim();
     if (!label) return;
@@ -128,13 +137,93 @@ function LocationSystemCard({ locationSystem, onSave }) {
 
   const toggle = (key) => setExpanded(e => ({ ...e, [key]: !e[key] }));
 
+  // ── Live preview (computed from first group / cabinet / drawer in ls) ──────
+  const previewGroup   = ls.zones[0];
+  const previewCabinet = ls.stations.find(s => s.zone_id === previewGroup?.id);
+  const previewDrawer  = ls.drawers.find(d => d.station_id === previewCabinet?.id);
+  const previewLocStr  = previewGroup
+    ? composeLocationString({
+        zone_id:    previewGroup?.id   || null,
+        station_id: previewCabinet?.id || null,
+        drawer_id:  previewDrawer?.id  || null,
+        bin_id:     null,
+      }, ls)
+    : '';
+  const previewIdPrefix = previewCabinet
+    ? `${previewCabinet.label || ''}${previewDrawer ? (previewDrawer.label || '') : ''}`
+    : '';
+
+  // ── Match existing tool locations ─────────────────────────────────────────
+  const normalizeStr = s => (s || '').toLowerCase().replace(/[\s\-_.]/g, '');
+
+  const computeMatches = () => {
+    const matched = [];
+    const unmatched = [];
+    for (const tool of tools) {
+      if (tool.tool_location?.zone_id || tool.tool_location?.station_id) continue;
+      const locStr = (tool.location || '').trim();
+      if (!locStr) continue;
+      const normLoc = normalizeStr(locStr);
+      // 1. Exact cabinet (station) match
+      let station = ls.stations.find(s => normalizeStr(s.label) === normLoc);
+      if (station) {
+        const zone = ls.zones.find(z => z.id === station.zone_id);
+        matched.push({ tool, station, zone, matchType: 'exact', toolLocation: { zone_id: zone?.id || null, station_id: station.id, drawer_id: null, bin_id: null } });
+        continue;
+      }
+      // 2. Cabinet label ends with location string — e.g. "140" matches "LC-140"
+      station = normLoc.length >= 2 ? ls.stations.find(s => normalizeStr(s.label).endsWith(normLoc)) : null;
+      if (station) {
+        const zone = ls.zones.find(z => z.id === station.zone_id);
+        matched.push({ tool, station, zone, matchType: 'partial', toolLocation: { zone_id: zone?.id || null, station_id: station.id, drawer_id: null, bin_id: null } });
+        continue;
+      }
+      // 3. Location Group (zone/prefix) match
+      const zone = ls.zones.find(z => normalizeStr(z.label) === normLoc);
+      if (zone) {
+        matched.push({ tool, station: null, zone, matchType: 'group', toolLocation: { zone_id: zone.id, station_id: null, drawer_id: null, bin_id: null } });
+        continue;
+      }
+      unmatched.push({ tool, locStr });
+    }
+    return { matched, unmatched };
+  };
+
+  const handlePreview = () => {
+    if (!ls.zones.length && !ls.stations.length) {
+      notify('Add at least one Location Group or Cabinet first.', 'error');
+      return;
+    }
+    const results = computeMatches();
+    setMatchResults(results);
+    setMatchStage('preview');
+  };
+
+  const handleApply = async () => {
+    if (!matchResults?.matched.length) return;
+    setMatchStage('applying');
+    try {
+      const assignments = matchResults.matched.map(m => ({ id: m.tool.id, toolLocation: m.toolLocation }));
+      await bulkAssignToolLocations(assignments);
+      setMatchStage('done');
+    } catch {
+      setMatchStage('preview');
+    }
+  };
+
+  // ── Render helpers ────────────────────────────────────────────────────────
   const rowStyle = { display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', borderBottom: '1px solid var(--border-faint, var(--border))' };
   const labelStyle = { flex: 1, fontSize: '0.9rem' };
   const addRowStyle = { display: 'flex', gap: 6, marginTop: 6 };
 
+  const matchTypeBadge = (t) => {
+    if (t === 'exact') return <span style={{ fontSize: '0.72rem', color: 'var(--green, #4ade80)', marginLeft: 6 }}>exact</span>;
+    if (t === 'partial') return <span style={{ fontSize: '0.72rem', color: 'var(--orange, #f59e0b)', marginLeft: 6 }}>partial</span>;
+    return <span style={{ fontSize: '0.72rem', color: 'var(--text-sub)', marginLeft: 6 }}>group</span>;
+  };
+
   const renderBins = (drawerId) => {
     const bins = ls.bins.filter(b => b.drawer_id === drawerId);
-    const key = `d:${drawerId}`;
     return (
       <div style={{ marginLeft: 24 }}>
         {bins.map(bin => {
@@ -217,7 +306,7 @@ function LocationSystemCard({ locationSystem, onSave }) {
     );
   };
 
-  const renderStations = (zoneId) => {
+  const renderCabinets = (zoneId) => {
     const stations = ls.stations.filter(s => s.zone_id === zoneId);
     return (
       <div style={{ marginLeft: 24 }}>
@@ -232,7 +321,7 @@ function LocationSystemCard({ locationSystem, onSave }) {
                 </button>
                 {editingId === `station:${station.id}` ? (
                   <>
-                    <input className="field-input" style={{ width: 80 }} placeholder="Label" value={editLabel} onChange={e => setEditLabel(e.target.value)} autoFocus />
+                    <input className="field-input" style={{ width: 80 }} placeholder="Label (e.g. LC-140)" value={editLabel} onChange={e => setEditLabel(e.target.value)} autoFocus />
                     <input className="field-input" style={{ width: 140 }} placeholder="Name (optional)" value={editName} onChange={e => setEditName(e.target.value)} />
                     <button className="btn btn-primary btn-sm" onClick={() => commitEdit('station', station.id)}>Save</button>
                     <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
@@ -251,13 +340,13 @@ function LocationSystemCard({ locationSystem, onSave }) {
         })}
         {newLevel?.level === 'station' && newLevel.parentId === zoneId ? (
           <div style={addRowStyle}>
-            <input className="field-input" style={{ width: 80 }} placeholder="Label" value={newLabel} onChange={e => setNewLabel(e.target.value)} autoFocus />
+            <input className="field-input" style={{ width: 80 }} placeholder="Label (e.g. LC-140)" value={newLabel} onChange={e => setNewLabel(e.target.value)} autoFocus />
             <input className="field-input" style={{ width: 140 }} placeholder="Name (optional)" value={newName} onChange={e => setNewName(e.target.value)} />
             <button className="btn btn-primary btn-sm" onClick={() => addItem('station', zoneId)}>Add</button>
             <button className="btn btn-secondary btn-sm" onClick={() => setNewLevel(null)}>Cancel</button>
           </div>
         ) : (
-          <button className="btn btn-ghost btn-sm" style={{ marginTop: 4, fontSize: '0.78rem' }} onClick={() => { setNewLevel({ level: 'station', parentId: zoneId }); setNewLabel(''); setNewName(''); }}>+ Add Station</button>
+          <button className="btn btn-ghost btn-sm" style={{ marginTop: 4, fontSize: '0.78rem' }} onClick={() => { setNewLevel({ level: 'station', parentId: zoneId }); setNewLabel(''); setNewName(''); }}>+ Add Cabinet</button>
         )}
       </div>
     );
@@ -268,15 +357,15 @@ function LocationSystemCard({ locationSystem, onSave }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <MapPin size={16} style={{ color: 'var(--blue)' }} />
         <h3 style={{ margin: 0 }}>Location System</h3>
-        <InfoTip text="Defines the physical location hierarchy: Zone → Station → Drawer → Bin. Each level gets a stable ID so tool locations survive renaming. Tools are assigned a location in the tool form." alignRight />
+        <InfoTip text="Location Groups are top-level prefixes (e.g. LC). Cabinets are the specific numbered locations within a group (e.g. LC-140). Drawers and Bins subdivide further. In Location ID mode, the Cabinet + Drawer labels form the tool ID prefix." alignRight />
       </div>
       <p className="text-sub text-sm" style={{ marginBottom: 12 }}>
-        Build the cabinet/location hierarchy your shop uses. Each Zone contains Stations; each Station has Drawers; each Drawer has Bins.
+        <strong>Location Groups</strong> are prefixes (e.g. <span className="font-mono">LC</span>). <strong>Cabinets</strong> are the specific locations within a group (e.g. <span className="font-mono">LC-140</span>). Each gets a stable ID so tool locations survive renaming.
       </p>
 
       {ls.zones.length === 0 && !newLevel && (
         <div className="text-sub text-sm" style={{ marginBottom: 8, padding: 10, borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-          No zones defined yet — add a Zone to get started.
+          No Location Groups defined yet — add one to get started.
         </div>
       )}
 
@@ -291,7 +380,7 @@ function LocationSystemCard({ locationSystem, onSave }) {
               </button>
               {editingId === `zone:${zone.id}` ? (
                 <>
-                  <input className="field-input" style={{ width: 80 }} placeholder="Label" value={editLabel} onChange={e => setEditLabel(e.target.value)} autoFocus />
+                  <input className="field-input" style={{ width: 80 }} placeholder="Prefix (e.g. LC)" value={editLabel} onChange={e => setEditLabel(e.target.value)} autoFocus />
                   <input className="field-input" style={{ width: 140 }} placeholder="Name (optional)" value={editName} onChange={e => setEditName(e.target.value)} />
                   <button className="btn btn-primary btn-sm" onClick={() => commitEdit('zone', zone.id)}>Save</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
@@ -299,28 +388,128 @@ function LocationSystemCard({ locationSystem, onSave }) {
               ) : (
                 <>
                   <span style={{ ...labelStyle, fontWeight: 600 }}><MapPin size={12} style={{ marginRight: 4, color: 'var(--blue)' }} />{zone.label}{zone.name && <span className="text-sub text-xs" style={{ marginLeft: 6, fontWeight: 400 }}>{zone.name}</span>}</span>
-                  <span className="text-sub text-xs">{ls.stations.filter(s => s.zone_id === zone.id).length} stations</span>
+                  <span className="text-sub text-xs">{ls.stations.filter(s => s.zone_id === zone.id).length} cabinet{ls.stations.filter(s => s.zone_id === zone.id).length !== 1 ? 's' : ''}</span>
                   <button className="btn btn-ghost btn-sm" onClick={() => startEdit('zone', zone)}>Edit</button>
                   <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red, #ef4444)' }} onClick={() => deleteItem('zone', zone.id)}><X size={13} /></button>
                 </>
               )}
             </div>
-            {open && renderStations(zone.id)}
+            {open && renderCabinets(zone.id)}
           </div>
         );
       })}
 
       {newLevel?.level === 'zone' ? (
         <div style={addRowStyle}>
-          <input className="field-input" style={{ width: 80 }} placeholder="Label" value={newLabel} onChange={e => setNewLabel(e.target.value)} autoFocus />
+          <input className="field-input" style={{ width: 80 }} placeholder="Prefix (e.g. LC)" value={newLabel} onChange={e => setNewLabel(e.target.value)} autoFocus />
           <input className="field-input" style={{ width: 140 }} placeholder="Name (optional)" value={newName} onChange={e => setNewName(e.target.value)} />
-          <button className="btn btn-primary btn-sm" onClick={() => addItem('zone', null)}>Add Zone</button>
+          <button className="btn btn-primary btn-sm" onClick={() => addItem('zone', null)}>Add</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setNewLevel(null)}>Cancel</button>
         </div>
       ) : (
         <button className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={() => { setNewLevel({ level: 'zone', parentId: null }); setNewLabel(''); setNewName(''); }}>
-          <Plus size={13} /> Add Zone
+          <Plus size={13} /> Add Location Group
         </button>
+      )}
+
+      {/* Live preview — updates as the hierarchy changes */}
+      {previewLocStr && (
+        <div style={{ marginTop: 14, padding: '8px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: '0.85rem' }}>
+          <span className="text-sub" style={{ marginRight: 8 }}>Preview:</span>
+          <span className="font-mono" style={{ color: 'var(--blue)' }}>{previewLocStr}</span>
+          {idMode === 'location' && previewIdPrefix && (
+            <span className="text-sub" style={{ marginLeft: 16 }}>
+              ID prefix: <span className="font-mono" style={{ color: 'var(--text)' }}>{previewIdPrefix}</span>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Assign existing tools to cabinets */}
+      {tools.length > 0 && (ls.zones.length > 0 || ls.stations.length > 0) && (
+        <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+            <strong style={{ fontSize: '0.9rem' }}>Assign existing tools to cabinets</strong>
+            <InfoTip text="Scans tools that have a legacy text location (e.g. LC-140) but no Cabinet assigned yet. Matches against the Cabinets defined above — exact, partial (number suffix), or group-level. Review before applying." />
+          </div>
+          <p className="text-sub text-sm" style={{ marginBottom: 10 }}>
+            Only tools without a structured Cabinet assignment are affected. Tools already assigned are skipped.
+          </p>
+
+          {matchStage === 'idle' && (
+            <button className="btn btn-secondary btn-sm" onClick={handlePreview}>Preview matches</button>
+          )}
+
+          {matchStage === 'preview' && matchResults && (
+            <div>
+              {matchResults.matched.length === 0 && matchResults.unmatched.length === 0 && (
+                <p className="text-sub text-sm">No tools with unassigned legacy locations found.</p>
+              )}
+              {matchResults.matched.length > 0 && (
+                <>
+                  <div className="text-sub text-xs" style={{ marginBottom: 6 }}>
+                    {matchResults.matched.length} tool{matchResults.matched.length !== 1 ? 's' : ''} can be assigned:
+                  </div>
+                  <div style={{ overflowX: 'auto', marginBottom: 10 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                          <th style={{ textAlign: 'left', padding: '3px 8px', fontWeight: 600 }}>Tool</th>
+                          <th style={{ textAlign: 'left', padding: '3px 8px', fontWeight: 600 }}>Current location</th>
+                          <th style={{ textAlign: 'left', padding: '3px 8px', fontWeight: 600 }}>→ Cabinet</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {matchResults.matched.map(m => (
+                          <tr key={m.tool.id} style={{ borderBottom: '1px solid var(--border-faint, var(--border))' }}>
+                            <td style={{ padding: '3px 8px', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.tool.description}</td>
+                            <td style={{ padding: '3px 8px' }}><span className="font-mono">{m.tool.location || '—'}</span></td>
+                            <td style={{ padding: '3px 8px' }}>
+                              <span className="font-mono">{m.station?.label || m.zone?.label}</span>
+                              {matchTypeBadge(m.matchType)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button className="btn btn-primary btn-sm" onClick={handleApply}>
+                      Apply {matchResults.matched.length} assignment{matchResults.matched.length !== 1 ? 's' : ''}
+                    </button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setMatchStage('idle')}>Cancel</button>
+                  </div>
+                </>
+              )}
+              {matchResults.unmatched.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <div className="text-sub text-xs" style={{ marginBottom: 4 }}>
+                    {matchResults.unmatched.length} unmatched (no cabinet found for their location string):
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-sub)', lineHeight: 1.8 }}>
+                    {matchResults.unmatched.map(u => (
+                      <span key={u.tool.id} style={{ marginRight: 12, display: 'inline-block' }}>
+                        {u.tool.description} <span className="font-mono">({u.locStr || 'no location'})</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {matchStage === 'applying' && (
+            <div className="text-sub text-sm">Applying assignments…</div>
+          )}
+
+          {matchStage === 'done' && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CheckCircle2 size={15} style={{ color: 'var(--green, #4ade80)' }} />
+              <span className="text-sm">{matchResults?.matched.length} tool{matchResults?.matched.length !== 1 ? 's' : ''} assigned to cabinets.</span>
+              <button className="btn btn-ghost btn-sm" onClick={() => { setMatchStage('idle'); setMatchResults(null); }}>Dismiss</button>
+            </div>
+          )}
+        </div>
       )}
 
       {saving && <div className="text-sub text-xs" style={{ marginTop: 8 }}>Saving…</div>}

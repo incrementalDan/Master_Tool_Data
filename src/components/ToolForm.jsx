@@ -87,17 +87,17 @@ function LocationPicker({ locationSystem, value, onChange, locationMode }) {
       </label>
       {displayStr && <div className="font-mono text-xs" style={{ color: 'var(--blue)', marginBottom: 4 }}>{displayStr}</div>}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {/* Zone */}
+        {/* Location Group */}
         <select className="field-input" style={{ flex: 1, minWidth: 90 }} value={selectedZoneId}
           onChange={e => pick('zone', e.target.value)}>
-          <option value="">Zone…</option>
+          <option value="">Location Group…</option>
           {ls.zones.map(z => <option key={z.id} value={z.id}>{z.label}{z.name ? ` — ${z.name}` : ''}</option>)}
         </select>
-        {/* Station */}
+        {/* Cabinet */}
         {selectedZoneId && (
           <select className="field-input" style={{ flex: 1, minWidth: 90 }} value={selectedStationId}
             onChange={e => pick('station', e.target.value)}>
-            <option value="">Station…</option>
+            <option value="">Cabinet…</option>
             {stations.map(s => <option key={s.id} value={s.id}>{s.label}{s.name ? ` — ${s.name}` : ''}</option>)}
           </select>
         )}
@@ -167,6 +167,22 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.tool_type]);
+
+  // For new tools, auto-select the Location Group and Cabinet when there's only one of each.
+  useEffect(() => {
+    if (!isNew) return;
+    if (data.tool_location?.zone_id || data.tool_location?.station_id) return;
+    const ls = shopSettings?.location_system || { zones: [], stations: [], drawers: [], bins: [] };
+    if (ls.zones.length !== 1) return;
+    const zone = ls.zones[0];
+    const cabs = (ls.stations || []).filter(s => s.zone_id === zone.id);
+    if (cabs.length === 1) {
+      setData(d => ({ ...d, tool_location: buildToolLocation(ls, 'station', cabs[0].id) }));
+    } else {
+      setData(d => ({ ...d, tool_location: buildToolLocation(ls, 'zone', zone.id) }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleSave = async () => {
     const { valid, errors: errs } = validateTool(data);
