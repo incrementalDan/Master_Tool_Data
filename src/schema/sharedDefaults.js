@@ -198,6 +198,18 @@ export const DEFAULT_SHOP_SETTINGS = {
   // Hide tool types that have no tools in the library from the landing page type grid.
   // All types remain visible in the Add Tool form. Off in demo mode (small sample set).
   hide_unused_tool_types: true,
+  // Physical location hierarchy. Each level links to its parent:
+  //   station.zone_id, drawer.station_id, bin.drawer_id
+  // Tools store tool_location: { zone_id, station_id, drawer_id, bin_id }
+  // with only the most-specific assigned level non-null (parents filled in
+  // for easy querying). The composed string is written to Fusion's vendor
+  // field (the cabinet-location slot).
+  location_system: {
+    zones:    [],   // { id, label, name, order }
+    stations: [],   // { id, zone_id, label, name, order }
+    drawers:  [],   // { id, station_id, label, capacity_slots, order }
+    bins:     [],   // { id, drawer_id, slot_number, order }
+  },
   import: { last_proshop_import: null, last_photo_import_folder_id: null },
   aps: { last_used_hub_id: null, last_used_project_id: null },
   // ISO timestamps set when each step of the initial setup workflow completes.

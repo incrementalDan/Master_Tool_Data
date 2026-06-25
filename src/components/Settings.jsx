@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight } from 'lucide-react';
+import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight, MapPin } from 'lucide-react';
 import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
 import { generateMachineNumbers, generateId, duplicateIdClusters } from '../schema/toolSchema.js';
 import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../utils/toolIdSystem.js';
@@ -22,6 +22,312 @@ const ID_MODES = [
   { id: 'other_erp', label: 'Other ERP', desc: 'Reserved for a future in-house ERP ID source.', disabled: true },
 ];
 
+// ── Location System card ────────────────────────────────────────────────────
+// Manages the Zone → Station → Drawer → Bin location hierarchy stored in
+// shop_settings.json under location_system. Each level has stable UUIDs so
+// tool_location references survive renaming.
+function LocationSystemCard({ locationSystem, onSave }) {
+  const [ls, setLs] = useState(() => ({
+    zones:    locationSystem.zones    || [],
+    stations: locationSystem.stations || [],
+    drawers:  locationSystem.drawers  || [],
+    bins:     locationSystem.bins     || [],
+  }));
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editLabel, setEditLabel] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editExtra, setEditExtra] = useState('');   // capacity_slots for drawers, slot_number for bins
+  const [newLevel, setNewLevel] = useState(null);   // { level, parentId } for the add form
+  const [newLabel, setNewLabel] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newExtra, setNewExtra] = useState('');
+  const [expanded, setExpanded] = useState({});     // zoneId / stationId / drawerId → bool
+
+  useEffect(() => {
+    setLs({
+      zones:    locationSystem.zones    || [],
+      stations: locationSystem.stations || [],
+      drawers:  locationSystem.drawers  || [],
+      bins:     locationSystem.bins     || [],
+    });
+  }, [locationSystem]);
+
+  const save = async (next) => {
+    setSaving(true);
+    try { await onSave(next); } finally { setSaving(false); }
+  };
+
+  const addItem = (level, parentId) => {
+    const label = newLabel.trim();
+    if (!label) return;
+    const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    let next;
+    if (level === 'zone') {
+      const item = { id, label, name: newName.trim(), order: ls.zones.length };
+      next = { ...ls, zones: [...ls.zones, item] };
+    } else if (level === 'station') {
+      const item = { id, zone_id: parentId || null, label, name: newName.trim(), order: ls.stations.filter(s => s.zone_id === (parentId || null)).length };
+      next = { ...ls, stations: [...ls.stations, item] };
+    } else if (level === 'drawer') {
+      const item = { id, station_id: parentId || null, label, capacity_slots: parseInt(newExtra) || null, order: ls.drawers.filter(d => d.station_id === (parentId || null)).length };
+      next = { ...ls, drawers: [...ls.drawers, item] };
+    } else {
+      const item = { id, drawer_id: parentId || null, slot_number: parseInt(newExtra) || null, order: ls.bins.filter(b => b.drawer_id === (parentId || null)).length };
+      next = { ...ls, bins: [...ls.bins, item] };
+    }
+    setLs(next);
+    setNewLevel(null); setNewLabel(''); setNewName(''); setNewExtra('');
+    save(next);
+  };
+
+  const deleteItem = (level, id) => {
+    let next = { ...ls };
+    if (level === 'zone') {
+      const stationIds = ls.stations.filter(s => s.zone_id === id).map(s => s.id);
+      const drawerIds = ls.drawers.filter(d => stationIds.includes(d.station_id)).map(d => d.id);
+      next = { ...next, zones: ls.zones.filter(z => z.id !== id), stations: ls.stations.filter(s => s.zone_id !== id), drawers: ls.drawers.filter(d => !stationIds.includes(d.station_id)), bins: ls.bins.filter(b => !drawerIds.includes(b.drawer_id)) };
+    } else if (level === 'station') {
+      const drawerIds = ls.drawers.filter(d => d.station_id === id).map(d => d.id);
+      next = { ...next, stations: ls.stations.filter(s => s.id !== id), drawers: ls.drawers.filter(d => d.station_id !== id), bins: ls.bins.filter(b => !drawerIds.includes(b.drawer_id)) };
+    } else if (level === 'drawer') {
+      next = { ...next, drawers: ls.drawers.filter(d => d.id !== id), bins: ls.bins.filter(b => b.drawer_id !== id) };
+    } else {
+      next = { ...next, bins: ls.bins.filter(b => b.id !== id) };
+    }
+    setLs(next);
+    save(next);
+  };
+
+  const startEdit = (level, item) => {
+    setEditingId(`${level}:${item.id}`);
+    setEditLabel(item.label || '');
+    setEditName(item.name || '');
+    if (level === 'drawer') setEditExtra(item.capacity_slots != null ? String(item.capacity_slots) : '');
+    else if (level === 'bin') setEditExtra(item.slot_number != null ? String(item.slot_number) : '');
+    else setEditExtra('');
+  };
+
+  const commitEdit = (level, id) => {
+    const label = editLabel.trim();
+    if (!label) { setEditingId(null); return; }
+    let next;
+    if (level === 'zone') {
+      next = { ...ls, zones: ls.zones.map(z => z.id === id ? { ...z, label, name: editName.trim() } : z) };
+    } else if (level === 'station') {
+      next = { ...ls, stations: ls.stations.map(s => s.id === id ? { ...s, label, name: editName.trim() } : s) };
+    } else if (level === 'drawer') {
+      next = { ...ls, drawers: ls.drawers.map(d => d.id === id ? { ...d, label, capacity_slots: parseInt(editExtra) || null } : d) };
+    } else {
+      next = { ...ls, bins: ls.bins.map(b => b.id === id ? { ...b, slot_number: parseInt(editExtra) || null } : b) };
+    }
+    setLs(next);
+    setEditingId(null);
+    save(next);
+  };
+
+  const toggle = (key) => setExpanded(e => ({ ...e, [key]: !e[key] }));
+
+  const rowStyle = { display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', borderBottom: '1px solid var(--border-faint, var(--border))' };
+  const labelStyle = { flex: 1, fontSize: '0.9rem' };
+  const addRowStyle = { display: 'flex', gap: 6, marginTop: 6 };
+
+  const renderBins = (drawerId) => {
+    const bins = ls.bins.filter(b => b.drawer_id === drawerId);
+    const key = `d:${drawerId}`;
+    return (
+      <div style={{ marginLeft: 24 }}>
+        {bins.map(bin => {
+          const eid = `bin:${bin.id}`;
+          return (
+            <div key={bin.id} style={rowStyle}>
+              {editingId === eid ? (
+                <>
+                  <input className="field-input" style={{ width: 70 }} placeholder="Label" value={editLabel} onChange={e => setEditLabel(e.target.value)} autoFocus />
+                  <input className="field-input" style={{ width: 70 }} placeholder="Slot #" type="number" value={editExtra} onChange={e => setEditExtra(e.target.value)} />
+                  <button className="btn btn-primary btn-sm" onClick={() => commitEdit('bin', bin.id)}>Save</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
+                </>
+              ) : (
+                <>
+                  <span style={labelStyle}>Bin {bin.slot_number != null ? `#${bin.slot_number}` : bin.id.slice(0, 6)}</span>
+                  <button className="btn btn-ghost btn-sm" onClick={() => startEdit('bin', bin)}>Edit</button>
+                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red, #ef4444)' }} onClick={() => deleteItem('bin', bin.id)}><X size={13} /></button>
+                </>
+              )}
+            </div>
+          );
+        })}
+        {newLevel?.level === 'bin' && newLevel.parentId === drawerId ? (
+          <div style={addRowStyle}>
+            <input className="field-input" style={{ width: 70 }} placeholder="Slot #" type="number" value={newExtra} onChange={e => setNewExtra(e.target.value)} autoFocus />
+            <button className="btn btn-primary btn-sm" onClick={() => addItem('bin', drawerId)}>Add</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setNewLevel(null)}>Cancel</button>
+          </div>
+        ) : (
+          <button className="btn btn-ghost btn-sm" style={{ marginTop: 4, fontSize: '0.78rem' }} onClick={() => { setNewLevel({ level: 'bin', parentId: drawerId }); setNewLabel(''); setNewExtra(''); }}>+ Add Bin</button>
+        )}
+      </div>
+    );
+  };
+
+  const renderDrawers = (stationId) => {
+    const drawers = ls.drawers.filter(d => d.station_id === stationId);
+    return (
+      <div style={{ marginLeft: 24 }}>
+        {drawers.map(drawer => {
+          const key = `drw:${drawer.id}`;
+          const open = expanded[key];
+          return (
+            <div key={drawer.id}>
+              <div style={rowStyle}>
+                <button className="btn btn-ghost btn-sm" style={{ padding: '0 4px' }} onClick={() => toggle(key)}>
+                  {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                </button>
+                {editingId === `drawer:${drawer.id}` ? (
+                  <>
+                    <input className="field-input" style={{ width: 70 }} placeholder="Label" value={editLabel} onChange={e => setEditLabel(e.target.value)} autoFocus />
+                    <input className="field-input" style={{ width: 80 }} placeholder="Slots" type="number" value={editExtra} onChange={e => setEditExtra(e.target.value)} />
+                    <button className="btn btn-primary btn-sm" onClick={() => commitEdit('drawer', drawer.id)}>Save</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <span style={labelStyle}><span className="font-mono">{drawer.label}</span>{drawer.capacity_slots != null && <span className="text-sub text-xs" style={{ marginLeft: 6 }}>{drawer.capacity_slots} slots</span>}</span>
+                    <button className="btn btn-ghost btn-sm" onClick={() => startEdit('drawer', drawer)}>Edit</button>
+                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red, #ef4444)' }} onClick={() => deleteItem('drawer', drawer.id)}><X size={13} /></button>
+                  </>
+                )}
+              </div>
+              {open && renderBins(drawer.id)}
+            </div>
+          );
+        })}
+        {newLevel?.level === 'drawer' && newLevel.parentId === stationId ? (
+          <div style={addRowStyle}>
+            <input className="field-input" style={{ width: 80 }} placeholder="Label" value={newLabel} onChange={e => setNewLabel(e.target.value)} autoFocus />
+            <input className="field-input" style={{ width: 80 }} placeholder="Slots" type="number" value={newExtra} onChange={e => setNewExtra(e.target.value)} />
+            <button className="btn btn-primary btn-sm" onClick={() => addItem('drawer', stationId)}>Add</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setNewLevel(null)}>Cancel</button>
+          </div>
+        ) : (
+          <button className="btn btn-ghost btn-sm" style={{ marginTop: 4, fontSize: '0.78rem' }} onClick={() => { setNewLevel({ level: 'drawer', parentId: stationId }); setNewLabel(''); setNewExtra(''); }}>+ Add Drawer</button>
+        )}
+      </div>
+    );
+  };
+
+  const renderStations = (zoneId) => {
+    const stations = ls.stations.filter(s => s.zone_id === zoneId);
+    return (
+      <div style={{ marginLeft: 24 }}>
+        {stations.map(station => {
+          const key = `st:${station.id}`;
+          const open = expanded[key];
+          return (
+            <div key={station.id}>
+              <div style={rowStyle}>
+                <button className="btn btn-ghost btn-sm" style={{ padding: '0 4px' }} onClick={() => toggle(key)}>
+                  {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                </button>
+                {editingId === `station:${station.id}` ? (
+                  <>
+                    <input className="field-input" style={{ width: 80 }} placeholder="Label" value={editLabel} onChange={e => setEditLabel(e.target.value)} autoFocus />
+                    <input className="field-input" style={{ width: 140 }} placeholder="Name (optional)" value={editName} onChange={e => setEditName(e.target.value)} />
+                    <button className="btn btn-primary btn-sm" onClick={() => commitEdit('station', station.id)}>Save</button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
+                  </>
+                ) : (
+                  <>
+                    <span style={labelStyle}><span className="font-mono">{station.label}</span>{station.name && <span className="text-sub text-xs" style={{ marginLeft: 6 }}>{station.name}</span>}</span>
+                    <button className="btn btn-ghost btn-sm" onClick={() => startEdit('station', station)}>Edit</button>
+                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red, #ef4444)' }} onClick={() => deleteItem('station', station.id)}><X size={13} /></button>
+                  </>
+                )}
+              </div>
+              {open && renderDrawers(station.id)}
+            </div>
+          );
+        })}
+        {newLevel?.level === 'station' && newLevel.parentId === zoneId ? (
+          <div style={addRowStyle}>
+            <input className="field-input" style={{ width: 80 }} placeholder="Label" value={newLabel} onChange={e => setNewLabel(e.target.value)} autoFocus />
+            <input className="field-input" style={{ width: 140 }} placeholder="Name (optional)" value={newName} onChange={e => setNewName(e.target.value)} />
+            <button className="btn btn-primary btn-sm" onClick={() => addItem('station', zoneId)}>Add</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setNewLevel(null)}>Cancel</button>
+          </div>
+        ) : (
+          <button className="btn btn-ghost btn-sm" style={{ marginTop: 4, fontSize: '0.78rem' }} onClick={() => { setNewLevel({ level: 'station', parentId: zoneId }); setNewLabel(''); setNewName(''); }}>+ Add Station</button>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="card" style={{ maxWidth: 760 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <MapPin size={16} style={{ color: 'var(--blue)' }} />
+        <h3 style={{ margin: 0 }}>Location System</h3>
+        <InfoTip text="Defines the physical location hierarchy: Zone → Station → Drawer → Bin. Each level gets a stable ID so tool locations survive renaming. Tools are assigned a location in the tool form." alignRight />
+      </div>
+      <p className="text-sub text-sm" style={{ marginBottom: 12 }}>
+        Build the cabinet/location hierarchy your shop uses. Each Zone contains Stations; each Station has Drawers; each Drawer has Bins.
+      </p>
+
+      {ls.zones.length === 0 && !newLevel && (
+        <div className="text-sub text-sm" style={{ marginBottom: 8, padding: 10, borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+          No zones defined yet — add a Zone to get started.
+        </div>
+      )}
+
+      {ls.zones.map(zone => {
+        const key = `z:${zone.id}`;
+        const open = expanded[key];
+        return (
+          <div key={zone.id} style={{ marginBottom: 4, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '6px 10px' }}>
+            <div style={rowStyle}>
+              <button className="btn btn-ghost btn-sm" style={{ padding: '0 4px' }} onClick={() => toggle(key)}>
+                {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+              </button>
+              {editingId === `zone:${zone.id}` ? (
+                <>
+                  <input className="field-input" style={{ width: 80 }} placeholder="Label" value={editLabel} onChange={e => setEditLabel(e.target.value)} autoFocus />
+                  <input className="field-input" style={{ width: 140 }} placeholder="Name (optional)" value={editName} onChange={e => setEditName(e.target.value)} />
+                  <button className="btn btn-primary btn-sm" onClick={() => commitEdit('zone', zone.id)}>Save</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
+                </>
+              ) : (
+                <>
+                  <span style={{ ...labelStyle, fontWeight: 600 }}><MapPin size={12} style={{ marginRight: 4, color: 'var(--blue)' }} />{zone.label}{zone.name && <span className="text-sub text-xs" style={{ marginLeft: 6, fontWeight: 400 }}>{zone.name}</span>}</span>
+                  <span className="text-sub text-xs">{ls.stations.filter(s => s.zone_id === zone.id).length} stations</span>
+                  <button className="btn btn-ghost btn-sm" onClick={() => startEdit('zone', zone)}>Edit</button>
+                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red, #ef4444)' }} onClick={() => deleteItem('zone', zone.id)}><X size={13} /></button>
+                </>
+              )}
+            </div>
+            {open && renderStations(zone.id)}
+          </div>
+        );
+      })}
+
+      {newLevel?.level === 'zone' ? (
+        <div style={addRowStyle}>
+          <input className="field-input" style={{ width: 80 }} placeholder="Label" value={newLabel} onChange={e => setNewLabel(e.target.value)} autoFocus />
+          <input className="field-input" style={{ width: 140 }} placeholder="Name (optional)" value={newName} onChange={e => setNewName(e.target.value)} />
+          <button className="btn btn-primary btn-sm" onClick={() => addItem('zone', null)}>Add Zone</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setNewLevel(null)}>Cancel</button>
+        </div>
+      ) : (
+        <button className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={() => { setNewLevel({ level: 'zone', parentId: null }); setNewLabel(''); setNewName(''); }}>
+          <Plus size={13} /> Add Zone
+        </button>
+      )}
+
+      {saving && <div className="text-sub text-xs" style={{ marginTop: 8 }}>Saving…</div>}
+    </div>
+  );
+}
+
 export default function Settings() {
   const navigate = useNavigate();
   const {
@@ -31,7 +337,7 @@ export default function Settings() {
     addHolderLibrary, removeHolderLibrary, notify,
     googleAuthenticated, metadataSkipped, user: googleUser,
     fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
-    shopSettings, saveShopSettings, signOutAll,
+    shopSettings, saveShopSettings, saveLocationSystem, signOutAll,
     setupProgress, demoMode,
   } = useApp();
 
@@ -997,7 +1303,7 @@ export default function Settings() {
               )}
               <div style={{ alignSelf: 'flex-end' }}>
                 <span className="text-sub text-sm">Preview: </span>
-                <span className="font-mono" style={{ color: 'var(--green)' }}>{previewToolId(idCfg) || '—'}</span>
+                <span className="font-mono" style={{ color: 'var(--green)' }}>{previewToolId(idCfg, shopSettings?.location_system) || '—'}</span>
               </div>
             </div>
 
@@ -1203,6 +1509,11 @@ export default function Settings() {
           </div>
         )}
       </div>
+
+      <LocationSystemCard
+        locationSystem={shopSettings?.location_system || { zones: [], stations: [], drawers: [], bins: [] }}
+        onSave={saveLocationSystem}
+      />
 
       {/* Machine Numbers + Renumber — grouped because the numbers drive the
           renumber (and adding a tool). Set/save the numbering here, then renumber. */}

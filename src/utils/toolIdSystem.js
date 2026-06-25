@@ -77,18 +77,34 @@ export function showsProShopUrl(mode) {
 
 // Compose a single tool's ID string. `seqNumber` is the pre-computed sequential
 // number for counter-based modes (location/sequential/type_prefix/size_first).
+// `locationSystem` is shop_settings.location_system — required for location mode
+// when the tool has a structured tool_location (otherwise falls back to the
+// legacy cabinet/drawer string fields for pre-migration tools).
 // Returns '' when the mode can't produce a value for this tool (e.g.
 // machine_linked with no machine number).
-export function composeToolId(config, tool, seqNumber) {
+export function composeToolId(config, tool, seqNumber, locationSystem) {
   const { mode = 'proshop', separator = '-', digits = 4 } = config || {};
   const sep = separator;
   const join = (parts) => parts.filter(p => p !== '' && p != null).join(sep);
 
   switch (mode) {
     case 'location': {
-      const cabinet = String(tool.cabinet ?? '').trim();
-      const drawer = String(tool.drawer ?? '').trim();
-      const prefix = `${cabinet}${drawer}`;
+      let prefix;
+      if (tool.tool_location && locationSystem) {
+        const tl = tool.tool_location;
+        const station = tl.station_id
+          ? locationSystem.stations?.find(s => s.id === tl.station_id)
+          : null;
+        const drawer = tl.drawer_id
+          ? locationSystem.drawers?.find(d => d.id === tl.drawer_id)
+          : null;
+        prefix = `${station?.label ?? ''}${drawer?.label ?? ''}`;
+      } else {
+        // Legacy free-text fields (pre-migration tools with no tool_location)
+        const cabinet = String(tool.cabinet ?? '').trim();
+        const drawer  = String(tool.drawer  ?? '').trim();
+        prefix = `${cabinet}${drawer}`;
+      }
       return join([prefix, padNumber(seqNumber, digits)]);
     }
     case 'sequential':
@@ -124,14 +140,24 @@ export function isCounterMode(mode) {
 }
 
 // A live preview string for the Settings editor, using sample values.
-export function previewToolId(config) {
+// Pass locationSystem (shop_settings.location_system) when the mode is
+// 'location' so the preview can resolve sample station/drawer labels.
+export function previewToolId(config, locationSystem) {
   const sample = {
     tool_type: 'flat end mill',
     diameter: 0.5,
+    // Legacy fallback labels used when locationSystem has no entries yet
     cabinet: config?.location?.cabinet_identifier === 'letter' ? 'B' : '2',
     drawer: config?.location?.drawer_identifier === 'letter' ? 'C' : '4',
     machine_tool_number: 42,
     tool_id: 'A-3',
+    // Use the first station/drawer from locationSystem for the preview if available
+    tool_location: (() => {
+      if (!locationSystem?.stations?.length) return null;
+      const station = locationSystem.stations[0];
+      const drawer  = locationSystem.drawers?.find(d => d.station_id === station.id) || null;
+      return { zone_id: station.zone_id || null, station_id: station.id, drawer_id: drawer?.id || null, bin_id: null };
+    })(),
   };
-  return composeToolId(config, sample, Number(config?.start) || 1000);
+  return composeToolId(config, sample, Number(config?.start) || 1000, locationSystem);
 }

@@ -144,10 +144,10 @@ export const FIELD_REGISTRY = {
   },
 
   location: {
-    label: 'Location (Cabinet)',
+    label: 'Location',
     type: 'string',
     unit: null,
-    fusionPath: 'expressions.tool_vendor', // Fusion's "Vendor" UI field repurposed as cabinet location
+    fusionPath: 'expressions.tool_vendor', // Fusion's "Vendor" UI field — derived from tool_location
     proShopColumn: null,
     metadataOnly: false,
     appliesToTypes: 'all',
@@ -155,23 +155,11 @@ export const FIELD_REGISTRY = {
     precision: null,
   },
 
-  cabinet: {
-    label: 'Cabinet',
-    type: 'string',
+  tool_location: {
+    label: 'Tool Location',
+    type: 'object',
     unit: null,
-    fusionPath: null,                  // composes into `location` (Fusion vendor); not written directly
-    proShopColumn: null,
-    metadataOnly: true,
-    appliesToTypes: 'all',
-    required: false,
-    precision: null,
-  },
-
-  drawer: {
-    label: 'Drawer',
-    type: 'string',
-    unit: null,
-    fusionPath: null,
+    fusionPath: null,   // derives the `location` string written to Fusion vendor
     proShopColumn: null,
     metadataOnly: true,
     appliesToTypes: 'all',

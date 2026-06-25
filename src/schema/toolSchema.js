@@ -1488,8 +1488,7 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     backside_capable: meta.backside_capable || false,
     grouping: meta.grouping || '',
     preset_name: meta.preset_name || '',
-    cabinet: meta.cabinet || '',
-    drawer: meta.drawer || '',
+    tool_location: meta.tool_location || null,
     ooh: meta.ooh ?? null,
     min_ooh: meta.min_ooh ?? null,
     // Holder selection + proven assemblies live only in metadata.
@@ -1597,12 +1596,12 @@ export function buildMetadataTool(tool) {
     backside_capable: tool.backside_capable || false,
     grouping: tool.grouping || '',
     preset_name: tool.preset_name || '',
-    // Cabinet / drawer — the structured location inputs used in location-mode
-    // of the Tool ID system. They also compose into `location` (Fusion's
-    // "Vendor" field) for display; stored here so the structured editor and the
-    // bulk ID-assign can read them back. Empty in free-text/non-location modes.
-    cabinet: tool.cabinet || '',
-    drawer: tool.drawer || '',
+    // Structured physical location — Zone/Station/Drawer/Bin hierarchy.
+    // Stored as four nullable IDs; more-general parent IDs filled in redundantly
+    // for easy querying. The composed display string is derived via
+    // composeLocationString (locationSystem.js) and written to Fusion's vendor
+    // field (tool.location) at write time in AppContext — not stored here.
+    tool_location: tool.tool_location || null,
     // Machine tool number — persisted here as the source of truth, independent
     // of what gets written to the Fusion JSON.
     machine_tool_number: (tool.machine_tool_number ?? null) === null ? null : Number(tool.machine_tool_number),
@@ -1903,8 +1902,7 @@ export function newTool(toolType = 'flat end mill') {
     grouping: '',
     tool_id: '',
     location: '',
-    cabinet: '',
-    drawer: '',
+    tool_location: null,
     machine_tool_number: null,
     no_fusion_link: false,
     spindle_speed: null,
