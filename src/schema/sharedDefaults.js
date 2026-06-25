@@ -185,6 +185,9 @@ export const DEFAULT_SHOP_SETTINGS = {
   // machine_id on presets links to these entries.
   machines: [],
   default_machine_id: null,
+  // Hide tool types that have no tools in the library from the landing page type grid.
+  // All types remain visible in the Add Tool form. Off in demo mode (small sample set).
+  hide_unused_tool_types: true,
   import: { last_proshop_import: null, last_photo_import_folder_id: null },
   aps: { last_used_hub_id: null, last_used_project_id: null },
   // ISO timestamps set when each step of the initial setup workflow completes.

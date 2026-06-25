@@ -21,7 +21,7 @@ const SORTS = {
 };
 
 export default function LandingPage() {
-  const { tools, isLoading, error, clearLibraryLocation, shopSettings } = useApp();
+  const { tools, isLoading, error, clearLibraryLocation, shopSettings, demoMode } = useApp();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchRef = useRef(null);
@@ -133,6 +133,13 @@ export default function LandingPage() {
   };
 
   const hasFilters = selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0 || !!machineFilter.machineId;
+
+  // When hide_unused_tool_types is on (default) and not in demo mode, only show
+  // tool type tiles for types that have at least one tool in the library.
+  const hideUnused = shopSettings?.hide_unused_tool_types ?? true;
+  const allowedTypes = (!demoMode && hideUnused && tools.length > 0)
+    ? new Set(tools.map(t => t.tool_type))
+    : null;
 
   if (isLoading) {
     return (
@@ -249,7 +256,7 @@ export default function LandingPage() {
             </span>
           )}
         </div>
-        <ToolTypeGrid selected={selectedTypes} onSelect={handleTypeSelect} />
+        <ToolTypeGrid selected={selectedTypes} onSelect={handleTypeSelect} allowedTypes={allowedTypes} />
       </div>
 
       {/* Facet filters (shown when at least one type selected) */}

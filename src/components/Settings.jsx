@@ -69,12 +69,14 @@ export default function Settings() {
   const [machineStart, setMachineStart] = useState(shopSettings?.machine_number?.start ?? 30);
   const [skipList, setSkipList] = useState(shopSettings?.machine_number?.skip ?? [98, 99, 100]);
   const [skipInput, setSkipInput] = useState('');
+  const [hideUnusedTypes, setHideUnusedTypes] = useState(shopSettings?.hide_unused_tool_types ?? true);
   const [savingShop, setSavingShop] = useState(false);
 
   useEffect(() => {
     setShopName(shopSettings?.shop_name || '');
     setMachineStart(shopSettings?.machine_number?.start ?? 30);
     setSkipList(shopSettings?.machine_number?.skip ?? [98, 99, 100]);
+    setHideUnusedTypes(shopSettings?.hide_unused_tool_types ?? true);
   }, [shopSettings]);
 
   // ── Tool ID system (shop_settings.tool_id_system) ──────────────────────────
@@ -206,6 +208,7 @@ export default function Settings() {
         shop_name: shopName,
         default_units: defaultUnit,
         machine_number: { start: Number(machineStart) || 30, skip: skipList },
+        hide_unused_tool_types: hideUnusedTypes,
       });
       setDefaultUnit(defaultUnit);
       notify('Shop settings saved', 'success');
@@ -662,6 +665,28 @@ export default function Settings() {
           {[['inches', 'Inch (in)'], ['millimeters', 'Metric (mm)']].map(([val, label]) => (
             <button key={val} className={defaultUnit === val ? 'active' : ''} onClick={() => changeDefaultUnit(val)}>{label}</button>
           ))}
+        </div>
+
+        {/* ── Library display ───────────────────────────────────────────── */}
+        <div style={{ marginTop: 20, paddingTop: 16, marginBottom: 20, borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', paddingBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span className="text-sm" style={{ fontWeight: 600 }}>Library display</span>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              style={{ marginTop: 2, flexShrink: 0 }}
+              checked={hideUnusedTypes}
+              onChange={e => setHideUnusedTypes(e.target.checked)}
+            />
+            <div>
+              <span className="text-sm">Hide unused tool types on the library page</span>
+              <div className="text-sub text-xs" style={{ marginTop: 3 }}>
+                Only shows tool type tiles for types that have at least one tool in the library.
+                All 26 types remain available when adding a new tool. Off in demo mode.
+              </div>
+            </div>
+          </label>
         </div>
 
         <button className="btn btn-primary" onClick={saveShop} disabled={savingShop || !googleAuthenticated}>
