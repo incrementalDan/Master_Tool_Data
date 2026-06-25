@@ -186,15 +186,17 @@ Config also carries `separator` (`-` `.` `/` `_` or none), `start` + `skip` (cou
 
 ### Pure helpers — `src/utils/toolIdSystem.js`
 
-All ID-composition logic is here (no React): `TYPE_CODES` (per-`tool_type` short code — the one complete type→code map; `buildDesc` only hardcodes "EM" inline), `composeToolId(config, tool, seqNumber)`, `padNumber` / `padDiameter` (dia × 1000 → 4-digit, **inch assumption**), `nextSequential(start, skip, used)` (mirrors `getNextMachineNumber`), `isCounterMode`, `toolIdLabel(mode)`, `showsProShopUrl(mode)`, `previewToolId(config)`. Reuse these rather than re-deriving an ID anywhere.
+All ID-composition logic is here (no React): `TYPE_CODES` (per-`tool_type` short code — the one complete type→code map; `buildDesc` only hardcodes "EM" inline), `composeToolId(config, tool, seqNumber, locationSystem)` (4th param required for location mode — pass `shopSettingsRef.current?.location_system`), `padNumber` / `padDiameter` (dia × 1000 → 4-digit, **inch assumption**), `nextSequential(start, skip, used)` (mirrors `getNextMachineNumber`), `isCounterMode`, `toolIdLabel(mode)`, `showsProShopUrl(mode)`, `previewToolId(config, locationSystem)`. Reuse these rather than re-deriving an ID anywhere.
 
 ### Generation never auto-runs
 
 Existing tools are **never** auto-assigned an ID (no migration shims — the displayed value just falls back to Fusion `product-id`). New IDs are written **only** by two explicit Settings actions: **"Assign IDs to unassigned tools"** → `AppContext.assignToolIds()` (fills blanks only) and **"Re-number all tools (new scheme)"** → `AppContext.renumberAllToolIds()` (overwrites all, retires old IDs). Both model on `renumberLibrary` (download → write the value to **both** metadata `tool_id` and Fusion `product-id` via `applyToolIdToFusion` → upload → save metadata → rebuild in memory), and are a no-op in `proshop`/`other_erp` modes. Because `tool_id` is metadata-owned, both actions **write metadata** (when Drive is connected) in addition to mirroring to Fusion.
 
-### Location mode + cabinet/drawer
+### Location mode + the Location System
 
-`cabinet` and `drawer` are **metadata-only** fields (`buildMetadataTool` / `mergeFusionAndMetadata` / `fieldRegistry`). In `location` mode `ToolForm` swaps the single Location input for structured **Cabinet + Drawer** inputs that compose into the *same* `location` string (Fusion's "Vendor" field) **and** form the ID prefix (`2C-1405`). In every other mode Location is a single free-text field, as before. The ID is baked at assignment time, so editing Location afterward doesn't change an already-assigned ID.
+In `location` mode the **Station** label + **Drawer** label form the ID prefix (e.g. `LC01-D3-1405`), resolved at ID-assignment time from the structured Location System (see below). The ID is baked at assignment time, so renaming a location afterward doesn't change an already-assigned ID.
+
+`composeToolId(config, tool, seqNumber, locationSystem)` takes a 4th param — pass `shopSettingsRef.current?.location_system` at all call sites. When `tool.tool_location` is set and `locationSystem` is provided, it resolves the station + drawer labels from the hierarchy; otherwise it falls back to the legacy `tool.cabinet`/`tool.drawer` string fields for pre-migration tools.
 
 ### Settings UI + machine-linked interplay
 
@@ -202,7 +204,66 @@ The **Tool ID System** card (`Settings.jsx`, near Machine Numbers) holds the mod
 
 ### Trying it in demo mode
 
-In `?demo=true`, the ID system is **fully editable in-memory** (throwaway, reset on refresh): `saveSharedFile` and `assignToolIds` have demo branches that update state without any APS/Drive write, and demo **Assign IDs reassigns *all* tools** (not just unassigned) so you can flip schemes and re-run repeatedly. The bundled demo tools carry varied `cabinet`/`drawer` + machine numbers so every mode produces realistic, distinct IDs. A live (non-demo) session is unaffected — both branches are guarded by `demoModeRef`.
+In `?demo=true`, the ID system is **fully editable in-memory** (throwaway, reset on refresh): `saveSharedFile` and `assignToolIds` have demo branches that update state without any APS/Drive write, and demo **Assign IDs reassigns *all* tools** (not just unassigned) so you can flip schemes and re-run repeatedly. The bundled demo tools carry varied `tool_location` + machine numbers so every mode produces realistic, distinct IDs. A live (non-demo) session is unaffected — both branches are guarded by `demoModeRef`.
+
+-----
+
+## Location System
+
+A structured **Zone → Station → Drawer → Bin** hierarchy that replaces the old free-text `cabinet`/`drawer` fields. Configured in `shop_settings.json` under `location_system`; edited in **Settings → Location System** (CRUD tree, auto-saves to Drive).
+
+### Data model
+
+Each level has a **stable UUID** so `tool_location` references survive renaming. The hierarchy:
+
+```
+location_system: {
+  zones:    [{ id, label, name, order }],
+  stations: [{ id, zone_id, label, name, order }],
+  drawers:  [{ id, station_id, label, capacity_slots, order }],
+  bins:     [{ id, drawer_id, slot_number, order }],
+}
+```
+
+Each tool stores a `tool_location` object in metadata (never in Fusion JSON):
+
+```json
+{ "zone_id": "uuid", "station_id": "uuid", "drawer_id": "uuid", "bin_id": null }
+```
+
+Only the most-specific assigned level needs to be non-null; parent IDs are filled in redundantly (via `buildToolLocation`) so queries at any level don't need to traverse the hierarchy.
+
+### `tool.location` string — derived, not stored
+
+`tool.location` (the string written to Fusion's "Vendor" field, `expressions.tool_vendor`) is now **derived** from `tool_location` at two points rather than stored separately:
+
+1. **Load time** (`loadTools` in AppContext): `withResolvedLocation(t, ls)` is called on every tool after `combineToolsByToolId`. This pre-computes `tool.location` so ToolDetail, ToolCard, and the search engine see a ready-to-use string.
+2. **Write time** (`writeLogicalTool`): `withResolvedLocation(toWrite, shopSettingsRef.current?.location_system)` is applied before `splitToFusionInstances`, so `internalToFusionTool` always receives the correct `location` without needing direct access to the location system config. Never touch this inside `internalToFusionTool` itself — the pre-resolution pattern keeps Fusion's writer clean.
+
+### Pure helpers — `src/utils/locationSystem.js`
+
+| Helper | Purpose |
+|---|---|
+| `findZone / findStation / findDrawer / findBin` | Look up a level by UUID |
+| `stationsForZone / drawersForStation / binsForDrawer` | Child lists for a parent |
+| `resolveLocationLabels(toolLocation, ls)` | → `{ zone, station, drawer, bin }` label strings |
+| `composeLocationString(toolLocation, ls)` | → `"LC / LC-01 / D1"` display string |
+| `locationFromBin / locationFromDrawer / locationFromStation / locationFromZone` | Build a `tool_location` with all parent IDs filled, given a known entity |
+| `buildToolLocation(ls, level, id)` | Picker helper — `level` = `'zone'|'station'|'drawer'|'bin'|null`; returns a complete `tool_location` with parent chain |
+| `withResolvedLocation(tool, ls)` | Copies tool with `location` string derived from `tool_location`; no-ops when `tool_location` is null or all-null |
+| `EMPTY_TOOL_LOCATION` | `{ zone_id: null, station_id: null, drawer_id: null, bin_id: null }` |
+
+### ToolForm location picker
+
+`LocationPicker` (inside `ToolForm.jsx`) renders cascading `select` dropdowns — Zone → Station → Drawer → Bin, each appearing only once its parent is selected. Picking any level calls `buildToolLocation(ls, level, id)` which fills in all parent IDs. Falls back to a free-text field when `location_system` has no zones configured (new shops before setup). The picker only updates `data.tool_location`; `data.location` is computed at write time.
+
+### Backward compatibility for pre-migration tools
+
+Tools created before the Location System have no `tool_location`. They may still have raw `cabinet`/`drawer` string fields (legacy metadata). `composeToolId` location mode falls back to these legacy strings when `tool.tool_location` is absent — so existing IDs are not broken, and the old `cabinet`/`drawer` data is still readable (though no longer editable via the UI). The migration path: once a tool is re-saved with a `tool_location` selected, the new structured location takes over.
+
+### `saveLocationSystem` context action
+
+A thin wrapper in AppContext that merges only the `location_system` sub-object into the existing `shopSettings` and saves to Drive. Exposed in the context value (`useApp().saveLocationSystem`). The Settings editor calls it after each add/edit/delete so changes are persisted immediately without a full Settings-page Save click.
 
 -----
 
@@ -1410,5 +1471,7 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 - **Speeds & Feeds Reference — link to stepdown/stepover as a %.** Each tool carries `speed_feed_refs[]` (metadata-only: `{ preset_id → materials.presets, operation_type (rough/finish/… or null), sfm, chip_load }`) — a per-CAM-preset + per-operation SFM + chip-load starting-point table, edited in `SpeedFeedSection.jsx` (a panel in ToolDetail's left column, same save pattern as `PurchasingSection`). The material cell opens the shared **`CamPresetPicker`** modal (search "6061"/"1018" → its CAM preset), the operation is an `OP_TYPES` dropdown, and the Save button shows a `.spinner` while the `writeLogicalTool` round-trip is in flight (it's a local `saving` state, not the global `isSaving`). The section shows derived RPM + feed per row using the tool's own diameter + flute count (`deriveRPM`, generic over the tool's unit; feed via chip_load × rpm × flutes). **Next step (deferred):** express stepdown/stepover as a % (e.g. of diameter) and connect them so the reference drives full proven preset values rather than just SFM/chip-load — the user explicitly scoped this for later. These values are a manual starting point today; a future path could also pull from existing Fusion presets.
 
 - **Local mode, phase 2 — full edit with manual re-export.** Today's local browse mode (see above) is read-only. A bigger follow-up: allow editing/saving everything in-memory while in local mode (tools, presets, assemblies, metadata), plus a "Download updated library" button that produces a new `fusion_tool_library.json` (and `tool_metadata.json` if applicable) for the user to manually re-upload to Autodesk/Drive themselves. **This is a big ask** — `writeLogicalTool`, `saveFullLibrary`, `renumberLibrary`, `deleteTool`, `addTool`, `normalizeLibrary`, and the whole Phase 2 merge flow all currently assume `uploadFusionList`/`downloadFusionList` hit APS; each would need a local-mode branch that mutates `toolsRef`/state in place and marks the library "dirty" instead of calling APS, plus export/download plumbing for the edited JSON. Confirm scope before starting.
+
+- **SQLite migration (future, no audit needed now).** The current storage layer (Fusion JSON in APS + `tool_metadata.json` on Drive) works for the shop's scale, but several data structures were deliberately designed with a future SQLite backend in mind: stable UUIDs at every entity level (`tracking_id` FTL-XXXXXX, assembly `assembly_id`, vendor/material/machine `id`s, location system `zone.id`/`station.id`/`drawer.id`/`bin.id`), normalized relational shapes (`purchasing.manufacturers[]` / `purchasing.vendors[]`, `assemblies[]` with a foreign-key `instance_guid`, `preset_meta` keyed by GUID, `speed_feed_refs` with a `preset_id` FK), and parent-id chains in the location hierarchy. **No code audit or migration work needed now** — just keep this in mind when adding new data structures: prefer stable UUIDs over positional indexes, avoid denormalized blobs when a normalized join table would be cleaner, and don't collapse IDs that a relational row would naturally separate. The goal is that a future migration produces clean tables, not a years-long untangling.
 
 - **"No Fusion Link" tools shouldn't need a Fusion entry at all.** Currently `no_fusion_link: true` is just a reminder flag (`src/components/ImportFlow.jsx` `psRowToTool`) — every logical tool, flagged or not, still gets a real placeholder entry written into the Fusion library on save (`saveFullLibrary` → `splitToFusionInstances`, which always emits ≥1 instance). So a ProShop row with no Fusion match still creates a brand-new (mostly-empty) entry in the shared Fusion library immediately on import/normalize. ImportFlow's Review step now warns about this before saving (see `newPlaceholderCount`), but the underlying behavior is unchanged. **This is a big ask to fix properly** — it means supporting logical tools with **zero** Fusion instances (metadata-only, "not in Fusion yet"), which breaks the "every instance is a real Fusion tool entry, minimum 1" assumption used throughout `writeLogicalTool`, `saveFullLibrary`, `groupByTrackingId`/`buildLogicalTool` (which currently builds `tools` state *from* Fusion instances), and reconcile. Likely belongs alongside the local-mode/no-Fusion-connection work above — both need a "tool exists in our app but not in Fusion (yet)" state. Confirm scope before starting.
