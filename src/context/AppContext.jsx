@@ -514,6 +514,37 @@ export function AppProvider({ children }) {
     return saveSharedFile('shopSettings', updated, 'SET_SHOP_SETTINGS');
   }, [saveSharedFile]);
 
+  // Bulk-assigns tool_location to a set of tools — metadata-only write (no Fusion
+  // round-trip). Used by the "Match existing locations" action in Settings.
+  // assignments = [{ id: trackingId, toolLocation }]
+  const bulkAssignToolLocations = useCallback(async (assignments) => {
+    if (!assignments.length) return 0;
+    const ls = shopSettingsRef.current?.location_system;
+
+    // Optimistic in-memory update so the UI reflects changes immediately.
+    const updated = toolsRef.current.map(t => {
+      const match = assignments.find(a => a.id === t.id);
+      if (!match) return t;
+      return withResolvedLocation({ ...t, tool_location: match.toolLocation }, ls);
+    });
+    dispatch({ type: 'SET_TOOLS', tools: updated });
+
+    if (!googleRef.current) return assignments.length;   // no Drive — in-memory only
+    try {
+      const metaList = await driveService.loadMetadata();
+      const metaByTracking = new Map(metaList.map(m => [m.id, m]));
+      for (const { id, toolLocation } of assignments) {
+        const existing = metaByTracking.get(id) || { id };
+        metaByTracking.set(id, { ...existing, tool_location: toolLocation });
+      }
+      await driveService.saveAllMetadata([...metaByTracking.values()]);
+    } catch (err) {
+      notify(`Failed to save location assignments: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+    return assignments.length;
+  }, [notify]);
+
   // Marks one step of the setup guide as complete (idempotent — see MARK_SETUP_STEP).
   const markSetupStep = useCallback((key) => dispatch({ type: 'MARK_SETUP_STEP', key }), []);
 
@@ -2009,6 +2040,7 @@ export function AppProvider({ children }) {
       saveVendorRegistry,
       saveShopSettings,
       saveLocationSystem,
+      bulkAssignToolLocations,
       markSetupStep,
       markSetupStepInSettings,
       setupCelebrated,
