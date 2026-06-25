@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Tag, Ruler, Layers, Save, X, AlertTriangle, Wand2, ChevronDown, ChevronRight, StickyNote } from 'lucide-react';
+import { Tag, Ruler, Layers, Save, X, AlertTriangle, Wand2, ChevronDown, ChevronRight, StickyNote, MapPin } from 'lucide-react';
 import {
   validateTool, validateGeometry, getNextMachineNumber, toolToExtractor,
   INCH_THREAD_SIZES, METRIC_THREAD_SIZES,
@@ -9,6 +9,7 @@ import {
 import { fieldLabel } from '../schema/fieldRegistry.js';
 import { unitAbbr } from '../utils/units.js';
 import { toolIdLabel } from '../utils/toolIdSystem.js';
+import { buildToolLocation, composeLocationString, stationsForZone, drawersForStation, binsForDrawer } from '../utils/locationSystem.js';
 import InfoTip from './InfoTip.jsx';
 import { buildDesc } from '../utils/toolNaming.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -33,6 +34,97 @@ function derivePitchFromThreadSize(pitchStr, toolUnit = 'inches') {
     return toolUnit === 'millimeters' ? pitchIn * 25.4 : pitchIn;
   }
   return null;
+}
+
+// Cascading Zone → Station → Drawer → Bin location picker.
+// When the shop has no location_system configured, falls back to a plain Location text field.
+function LocationPicker({ locationSystem, value, onChange, locationMode }) {
+  const ls = locationSystem || { zones: [], stations: [], drawers: [], bins: [] };
+  const hasHierarchy = ls.zones.length > 0 || ls.stations.length > 0;
+
+  if (!hasHierarchy) {
+    // No hierarchy configured — free-text fallback (legacy behavior).
+    const displayVal = value?.legacy_text || '';
+    return (
+      <div className="field-group">
+        <label className="field-label">
+          Location (Cabinet)
+          {locationMode && <InfoTip text="In location-mode the cabinet prefix is used in the tool ID. Configure the Location System in Settings to use a structured picker." />}
+        </label>
+        <input
+          className="field-input"
+          value={displayVal}
+          placeholder="LC-140"
+          onChange={e => onChange({ legacy_text: e.target.value })}
+        />
+      </div>
+    );
+  }
+
+  const tl = value || {};
+  const selectedZoneId    = tl.zone_id    || '';
+  const selectedStationId = tl.station_id || '';
+  const selectedDrawerId  = tl.drawer_id  || '';
+  const selectedBinId     = tl.bin_id     || '';
+
+  const stations = stationsForZone(ls, selectedZoneId || null);
+  const drawers  = drawersForStation(ls, selectedStationId || null);
+  const bins     = binsForDrawer(ls, selectedDrawerId || null);
+
+  const pick = (level, id) => {
+    const next = buildToolLocation(ls, id ? level : null, id || null);
+    onChange(next);
+  };
+
+  const displayStr = composeLocationString(tl, ls);
+
+  return (
+    <div className="field-group">
+      <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <MapPin size={13} style={{ color: 'var(--blue)' }} />
+        Location
+        {locationMode && <InfoTip text="In location-mode, the Station + Drawer labels form the ID prefix. Assign a location in the Location System (Settings) first." />}
+      </label>
+      {displayStr && <div className="font-mono text-xs" style={{ color: 'var(--blue)', marginBottom: 4 }}>{displayStr}</div>}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {/* Zone */}
+        <select className="field-input" style={{ flex: 1, minWidth: 90 }} value={selectedZoneId}
+          onChange={e => pick('zone', e.target.value)}>
+          <option value="">Zone…</option>
+          {ls.zones.map(z => <option key={z.id} value={z.id}>{z.label}{z.name ? ` — ${z.name}` : ''}</option>)}
+        </select>
+        {/* Station */}
+        {selectedZoneId && (
+          <select className="field-input" style={{ flex: 1, minWidth: 90 }} value={selectedStationId}
+            onChange={e => pick('station', e.target.value)}>
+            <option value="">Station…</option>
+            {stations.map(s => <option key={s.id} value={s.id}>{s.label}{s.name ? ` — ${s.name}` : ''}</option>)}
+          </select>
+        )}
+        {/* Drawer */}
+        {selectedStationId && (
+          <select className="field-input" style={{ flex: 1, minWidth: 90 }} value={selectedDrawerId}
+            onChange={e => pick('drawer', e.target.value)}>
+            <option value="">Drawer…</option>
+            {drawers.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
+          </select>
+        )}
+        {/* Bin */}
+        {selectedDrawerId && bins.length > 0 && (
+          <select className="field-input" style={{ flex: 1, minWidth: 90 }} value={selectedBinId}
+            onChange={e => pick('bin', e.target.value)}>
+            <option value="">Bin…</option>
+            {bins.map(b => <option key={b.id} value={b.id}>Bin {b.slot_number != null ? `#${b.slot_number}` : b.id.slice(0, 6)}</option>)}
+          </select>
+        )}
+        {displayStr && (
+          <button className="btn btn-ghost btn-sm" title="Clear location" onClick={() => onChange(null)}>
+            <X size={13} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
@@ -221,38 +313,12 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
             </div>
             <div className="form-grid">
               <FieldInput field="tool_id" label={toolIdLabel(idMode)} data={data} setField={setField} placeholder="e.g. A-3" />
-              {locationMode ? (
-                <div className="field-group">
-                  <label className="field-label">
-                    Location (Cabinet / Drawer)
-                    <InfoTip text={'In location-mode the tool ID, the cabinet and drawer form the ID prefix (e.g. "2C-1405"). They also fill the Location field (Fusion’s "Vendor"). Editing Location elsewhere won’t change the assigned ID.'} />
-                  </label>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <input
-                      className="field-input"
-                      style={{ flex: 1 }}
-                      value={data.cabinet || ''}
-                      placeholder="Cabinet"
-                      onChange={e => {
-                        const cabinet = e.target.value;
-                        setData(d => ({ ...d, cabinet, location: `${cabinet}${d.drawer || ''}` }));
-                      }}
-                    />
-                    <input
-                      className="field-input"
-                      style={{ flex: 1 }}
-                      value={data.drawer || ''}
-                      placeholder="Drawer"
-                      onChange={e => {
-                        const drawer = e.target.value;
-                        setData(d => ({ ...d, drawer, location: `${d.cabinet || ''}${drawer}` }));
-                      }}
-                    />
-                  </div>
-                </div>
-              ) : (
-                <FieldInput field="location" label="Location (Cabinet)" data={data} setField={setField} placeholder="LC-140" />
-              )}
+              <LocationPicker
+                locationSystem={shopSettings?.location_system}
+                value={data.tool_location || null}
+                onChange={tl => setData(d => ({ ...d, tool_location: tl }))}
+                locationMode={locationMode}
+              />
             </div>
           </Section>
 

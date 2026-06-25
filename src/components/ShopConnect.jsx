@@ -166,8 +166,8 @@ export default function ShopConnect({ onConnectDone, onSetupNew }) {
       let metaFileId = foundMeta?.id;
       if (!metaFileId) {
         // Create a new metadata file in this folder.
+        // driveCreate (inside createMetadataInFolder) writes the new file ID to localStorage directly.
         await createMetadataInFolder(folderId);
-        // connectToMetadataFile is called inside createMetadataInFolder already.
       } else {
         connectToMetadataFile(metaFileId);
       }

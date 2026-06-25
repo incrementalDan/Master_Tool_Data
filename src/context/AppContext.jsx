@@ -9,6 +9,7 @@ import {
   combineToolsByToolId, buildMetadataTool,
 } from '../schema/toolSchema.js';
 import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSystem.js';
+import { withResolvedLocation, composeLocationString } from '../utils/locationSystem.js';
 import { composePresetName, opTypeWord, parsePresetName, materialNameCode, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import { classifyStrays } from '../services/reconcile.js';
@@ -507,6 +508,12 @@ export function AppProvider({ children }) {
   const saveShopSettings = useCallback((shopSettings) =>
     saveSharedFile('shopSettings', shopSettings, 'SET_SHOP_SETTINGS'), [saveSharedFile]);
 
+  // Saves only the location_system sub-object inside shop_settings.json.
+  const saveLocationSystem = useCallback((locationSystem) => {
+    const updated = { ...(shopSettingsRef.current || {}), location_system: locationSystem };
+    return saveSharedFile('shopSettings', updated, 'SET_SHOP_SETTINGS');
+  }, [saveSharedFile]);
+
   // Marks one step of the setup guide as complete (idempotent — see MARK_SETUP_STEP).
   const markSetupStep = useCallback((key) => dispatch({ type: 'MARK_SETUP_STEP', key }), []);
 
@@ -819,7 +826,8 @@ export function AppProvider({ children }) {
         for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
         untrackedCount += untracked.length;
         const combined = combineToolsByToolId(built);
-        for (const t of combined) tools.push({ ...t, library_id: lib.id, library_name: lib.fileName });
+        const ls = shopSettingsRef.current?.location_system;
+        for (const t of combined) tools.push({ ...withResolvedLocation(t, ls), library_id: lib.id, library_name: lib.fileName });
       }
       const needsNormalize = untrackedCount > 0;
 
@@ -902,7 +910,11 @@ export function AppProvider({ children }) {
       _fusionRaw: refreshedRaws[0] || tool._fusionRaw || null,
     };
 
-    const { fusionInstances, metadataTool } = splitToFusionInstances(toWrite, holders);
+    // Derive the Fusion vendor string from tool_location before writing, so
+    // internalToFusionTool sees the correct `location` field without needing
+    // direct access to the location system config.
+    const locResolved = withResolvedLocation(toWrite, shopSettingsRef.current?.location_system);
+    const { fusionInstances, metadataTool } = splitToFusionInstances(locResolved, holders);
 
     // Drop every entry this logical tool owns before re-appending the fresh set:
     // its tracking ID, plus any guid carried by an assembly or absorbed raw
@@ -1638,7 +1650,7 @@ export function AppProvider({ children }) {
       let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip) : null;
       let assigned = 0;
       const tools = toolsRef.current.map(t => {
-        const value = composeToolId(config, t, counter);
+        const value = composeToolId(config, t, counter, shopSettingsRef.current?.location_system);
         if (!value) return t;
         assigned++;
         if (counter !== null) counter = nextSequential(counter + 1, config.skip);
@@ -1671,7 +1683,7 @@ export function AppProvider({ children }) {
       for (const raws of orderedGroups) {
         const logical = buildLogicalTool(raws, metaByTracking);
         if (logical.tool_id) continue;          // already has an ID — skip
-        const value = composeToolId(config, logical, counter);
+        const value = composeToolId(config, logical, counter, shopSettingsRef.current?.location_system);
         if (!value) continue;                       // mode can't produce one (e.g. no machine #)
         raws.forEach(r => applyToolIdToFusion(r, value));
         // tool_id is metadata-owned — record it in metadata (source of truth) too,
@@ -1736,7 +1748,7 @@ export function AppProvider({ children }) {
       let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip) : null;
       let assigned = 0;
       const tools = toolsRef.current.map(t => {
-        const value = composeToolId(config, t, counter);
+        const value = composeToolId(config, t, counter, shopSettingsRef.current?.location_system);
         if (!value) return t;
         if (counter !== null) counter = nextSequential(counter + 1, config.skip);
         assigned++;
@@ -1794,12 +1806,12 @@ export function AppProvider({ children }) {
           // (don't consume a counter value).
           value = clusterValue.get(oldId);
         } else {
-          value = composeToolId(config, logical, counter);
+          value = composeToolId(config, logical, counter, shopSettingsRef.current?.location_system);
           if (!value) continue;                      // mode can't produce one (e.g. no machine #)
           // Skip only an exact collision with a retired ID — bump and recompose.
           while (counter !== null && retiredExact.has(value)) {
             counter = nextSequential(counter + 1, config.skip);
-            value = composeToolId(config, logical, counter);
+            value = composeToolId(config, logical, counter, shopSettingsRef.current?.location_system);
           }
           if (counter !== null) counter = nextSequential(counter + 1, config.skip);
           if (oldId && mergedIds.has(oldId)) clusterValue.set(oldId, value);
@@ -1996,6 +2008,7 @@ export function AppProvider({ children }) {
       saveMaterials,
       saveVendorRegistry,
       saveShopSettings,
+      saveLocationSystem,
       markSetupStep,
       markSetupStepInSettings,
       setupCelebrated,
