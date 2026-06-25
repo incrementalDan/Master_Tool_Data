@@ -252,6 +252,22 @@ The full tool list (~250 tools) is loaded once on login. All search and filterin
 
 -----
 
+## Multi-Library Support (tool & holder libraries)
+
+The app links **multiple** Fusion tool libraries and **multiple** holder libraries, shows everything merged into one list, and reads/writes each tool back to the library it came from (no moving tools between libraries).
+
+- **Registry** lives in `shop_settings.json` (shop-wide on Drive) under `tool_libraries[]` / `holder_libraries[]` / `default_tool_library_id`. Each entry is an APS location `{ id, hubId, projectId, folderId, itemId, fileName, order }` where **`id === itemId`** is the canonical **library_id**. It is **also mirrored to localStorage** (`aps_library_registry`) so an APS-only session (Drive optional) still knows which libraries to load — Drive wins when present, the mirror is the fallback/seed. `seedShopSettingsRegistry` (`AppContext.jsx`) seeds the registry from the mirror, then the legacy single-location keys (`aps_library_location` / `aps_holder_library_location`), so an established single-library shop upgrades with no data migration.
+- **Provenance is runtime-derived, never persisted.** Each logical tool is tagged with `library_id` / `library_name` in `loadTools` (a tool came from file X → its library is X). Holders are tagged `_libraryId` / `_libraryName`. These are **never** written to Fusion JSON or `tool_metadata.json` (metadata stays one global file keyed by tracking_id).
+- **Per-library IO** (`AppContext.jsx`): `downloadFusionList(libraryId)` / `uploadFusionList(libraryId, list)` resolve the location via `toolLibById` and cache each library's wrapper in `libraryWrappersRef` (a `Map(itemId → wrapper)`, replacing the old single `libraryWrapperRef`). `fetchRawLibrary(libraryId)` live-fetches one library. `downloadAllLibraries()` returns `[{ libraryId, library, list }]` for the shop-global bulk ops.
+- **Write routing**: `writeLogicalTool` routes by `tool.library_id || default`. `saveFullLibrary` **partitions** tools by library and full-replaces each represented library (so callers must pass the complete in-memory set — they do). `renumberLibrary` / `assignToolIds` / `renumberAllToolIds` download **all** libraries, operate across the union, then write each back partitioned. `normalizeLibrary` runs per-library and tags. `combineToolsByToolId` runs **within each library only** (cross-library same-`tool_id` folding is avoided so writes stay routable).
+- **Convenience pointers**: `state.libraryLocation` / `state.holderLibraryLocation` are kept synced to the primary (default) tool library + first holder library via the `SET_LIBRARIES` reducer action, so `App.jsx` routing (which gates on `libraryLocation`) is unchanged.
+- **Registry actions** (`AppContext.jsx`): `addToolLibrary` / `removeToolLibrary` / `setDefaultToolLibrary` / `addHolderLibrary` / `removeHolderLibrary` (each updates state + mirror + Drive-if-connected via `persistRegistry`), and `commitInitialLibraries(toolLocs, holderLocs)` (first-run wizard — ONE write, avoids the stale-ref problem of looping the single-add actions). `loadHolders(holderLibsArg?)` takes an explicit list because refs lag a dispatch within the same tick.
+- **UI**: `LibrarySetup.jsx` (wizard) adds multiple tool then holder libraries; Settings → Fusion Libraries shows two lists with add/remove + a "default for new tools" radio; `LandingPage` shows a **library filter chip row** (only when `tool_libraries.length > 1`, wired through `applyFilters`'s `libraryFilter` arg); `ToolDetail` shows a muted "In library: …" note at the bottom; `HolderPicker` groups holders by `_libraryName`; `AddToolFlow` + `ImportFlow` have a target-library picker (default + override) for new tools; `MergeFlow` live-fetches by the master tool's `library_id` (cache keyed per library).
+- **Demo/local mode**: tools tagged `library_id: 'demo'` / `'local'` (holders `_libraryId: 'demo'`) so the note renders and the single-library filter stays hidden.
+- **Deferred (not built)**: linking a machine to specific libraries; moving tools between libraries; cross-library `tool_id` dedup.
+
+-----
+
 ## Local (No-Autodesk) Browse Mode
 
 `LoginScreen.jsx` offers a second path besides "Sign in with Autodesk": **"Browse a local library file"** — uploads a `fusion_tool_library.json` directly (no APS/Google sign-in). `enterLocalMode(file)` (`AppContext.jsx`) parses it with the same `groupByTrackingId` / `buildLogicalTool` / `combineToolsByToolId` pipeline as `loadTools`, then dispatches `ENTER_LOCAL_MODE` (sets `localMode: true` + `tools`).

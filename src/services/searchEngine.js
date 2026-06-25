@@ -40,21 +40,30 @@ function isOperatorFilter(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value) && 'op' in value;
 }
 
-function matchesNumericFacet(toolValue, filter) {
+function matchesNumericFacet(toolValue, filter, tol = null) {
   const tv = parseFloat(toolValue);
   const fv = parseFloat(filter.value);
   if (isNaN(tv) || isNaN(fv)) return false;
   if (filter.op === '>=') return tv >= fv;
   if (filter.op === '<=') return tv <= fv;
-  return Math.abs(tv - fv) < 0.00051; // '=' with float tolerance
+  const epsilon = tol != null ? tol : 0.00051; // '=' with configurable tolerance
+  return Math.abs(tv - fv) <= epsilon;
 }
 
 // activeFilters shape:
 // { toolTypes, textQuery, facets: { diameter, number_of_flutes, flute_length, overall_length, material, coating, vendor, preferred_machine, material_suitability, tags, ... } }
 // toolTypes is an array — empty/absent means "any type". Numeric facets are { value, op }
 // objects (see isOperatorFilter); everything else is a bare string/array.
-export function applyFilters(tools, activeFilters, machineFilter = null) {
+// tolerances: optional { diameter: number, flute_length: number } — per-field tolerance
+// applied when op is '='. Null/absent = tiny float epsilon (effectively exact).
+// libraryFilter: optional { libraryId } — when set, keep only tools from that
+// source library (multi-library support; tools are tagged with library_id on load).
+export function applyFilters(tools, activeFilters, machineFilter = null, tolerances = null, libraryFilter = null) {
   let result = tools;
+
+  if (libraryFilter?.libraryId) {
+    result = result.filter(t => t.library_id === libraryFilter.libraryId);
+  }
 
   if (activeFilters.textQuery) {
     result = textSearch(result, activeFilters.textQuery);
@@ -74,7 +83,7 @@ export function applyFilters(tools, activeFilters, machineFilter = null) {
     } else if (!value && value !== 0) {
       continue;
     }
-    result = result.filter(t => matchesFacet(t, field, value));
+    result = result.filter(t => matchesFacet(t, field, value, tolerances));
   }
 
   if (machineFilter?.machineId) {
@@ -92,9 +101,9 @@ export function applyFilters(tools, activeFilters, machineFilter = null) {
   return result;
 }
 
-function matchesFacet(tool, field, value) {
+function matchesFacet(tool, field, value, tolerances = null) {
   if (isOperatorFilter(value)) {
-    return matchesNumericFacet(tool[field], value);
+    return matchesNumericFacet(tool[field], value, tolerances?.[field] ?? null);
   }
   if (field === 'tags') {
     return Array.isArray(tool.tags) && tool.tags.includes(value);
@@ -113,7 +122,8 @@ function matchesFacet(tool, field, value) {
     const fv = parseFloat(value);
     if (isNaN(tv) || isNaN(fv)) return false;
     if (field === 'number_of_flutes') return tv === fv;
-    return Math.abs(tv - fv) < 0.00051;
+    const tol = tolerances?.[field] ?? 0.00051;
+    return Math.abs(tv - fv) <= tol;
   }
   // Boolean fields (e.g. tsc_capable, is_sti) are surfaced as Yes/No options.
   if (typeof tool[field] === 'boolean') {
@@ -123,7 +133,7 @@ function matchesFacet(tool, field, value) {
 }
 
 // Returns available option values for a given facet, given current filters applied to all OTHER facets
-export function getAvailableOptions(tools, activeFilters, targetField) {
+export function getAvailableOptions(tools, activeFilters, targetField, tolerances = null) {
   // Apply all filters except the target field
   const filtersWithoutTarget = {
     ...activeFilters,
@@ -132,7 +142,7 @@ export function getAvailableOptions(tools, activeFilters, targetField) {
     ),
   };
 
-  const filtered = applyFilters(tools, filtersWithoutTarget);
+  const filtered = applyFilters(tools, filtersWithoutTarget, null, tolerances);
   const values = new Set();
 
   for (const tool of filtered) {

@@ -50,21 +50,25 @@ export default function MergeFlow() {
   const [masterUpdated, setMasterUpdated] = useState(false);
   const [isFetchingLive, setIsFetchingLive] = useState(false);
 
-  // Cache for live APS fetches (60-second TTL)
-  const cacheRef = useRef({ data: null, fetchedAt: 0 });
+  // Cache for live APS fetches (60-second TTL), keyed by source library so a tool
+  // is always compared against its OWN library (multi-library).
+  const cacheRef = useRef(new Map()); // libraryId -> { data, fetchedAt }
 
   const getLiveTool = useCallback(async (masterTool) => {
     if (!fetchRawLibrary || !masterTool) return { tool: masterTool, updated: false };
     const now = Date.now();
+    const libId = masterTool.library_id || 'default';
     try {
-      if (!cacheRef.current.data || now - cacheRef.current.fetchedAt > 60000) {
-        const rawList = await fetchRawLibrary();
-        cacheRef.current = { data: rawList, fetchedAt: now };
+      const cached = cacheRef.current.get(libId);
+      if (!cached || now - cached.fetchedAt > 60000) {
+        const rawList = await fetchRawLibrary(masterTool.library_id);
+        cacheRef.current.set(libId, { data: rawList, fetchedAt: now });
       }
+      const data = cacheRef.current.get(libId).data;
       // Group the raw library into logical tools (one per tracking ID; a logical
       // tool fans out across N Fusion instances). Match by tracking ID, falling
       // back to instance guid for legacy untracked tools.
-      const { groups, untracked } = groupByTrackingId(cacheRef.current.data);
+      const { groups, untracked } = groupByTrackingId(data);
       const masterTid = masterTool.tracking_id || null;
       let rawInstances = null;
       if (masterTid && groups.has(masterTid)) {
@@ -84,7 +88,10 @@ export default function MergeFlow() {
       // metadata-only fields from masterTool (notes, tags, vendor, merge_history,
       // etc.) that a fresh build from Fusion alone would otherwise wipe.
       const rebuilt = buildLogicalTool(rawInstances, new Map());
-      const fresh = { ...mergeFusionAndMetadata(rebuilt, masterTool), assemblies: rebuilt.assemblies, presets: rebuilt.presets, _instancesRaw: rebuilt._instancesRaw, _fusionRaw: rebuilt._fusionRaw };
+      const fresh = { ...mergeFusionAndMetadata(rebuilt, masterTool), assemblies: rebuilt.assemblies, presets: rebuilt.presets, _instancesRaw: rebuilt._instancesRaw, _fusionRaw: rebuilt._fusionRaw,
+        // Keep the source-library tag so a subsequent merge writes back to the
+        // right file (buildLogicalTool doesn't set it).
+        library_id: masterTool.library_id, library_name: masterTool.library_name };
       return { tool: fresh, updated: true };
     } catch {
       return { tool: masterTool, updated: false };

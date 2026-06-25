@@ -204,30 +204,72 @@ export function FilePicker({ onSelect, onCancel, cancelLabel = 'Skip for now' })
 // Lets the user navigate hub → project → folders → pick the tool library .json file.
 // On selection, saves { hubId, projectId, folderId, itemId, fileName } via context.
 // Step 2: optionally pick the Master-Holder library before the app loads.
+// A compact list of already-picked libraries with a remove (×) on each.
+function PickedList({ items, onRemove, emptyLabel }) {
+  if (items.length === 0) return <p className="text-sub text-sm" style={{ marginBottom: 12 }}>{emptyLabel}</p>;
+  return (
+    <div style={{ marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {items.map((loc) => (
+        <div key={loc.itemId} className="flex items-center gap-8"
+          style={{ padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)' }}>
+          <FileJson size={14} style={{ color: 'var(--green)', flexShrink: 0 }} />
+          <span className="font-mono text-xs" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{loc.fileName}</span>
+          <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)', padding: '0 6px' }} onClick={() => onRemove(loc.itemId)}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function LibrarySetup({ canCancel = false, onCancel }) {
-  const { setLibraryLocation, setHolderLibraryLocation, holderLibraryLocation, notify, signOutAll } = useApp();
+  const { commitInitialLibraries, notify, signOutAll } = useApp();
   const [phase, setPhase] = useState('tool'); // 'tool' | 'holder'
-  const [pendingToolLocation, setPendingToolLocation] = useState(null);
+  const [toolLibs, setToolLibs] = useState([]);   // [{ ...location }]
+  const [holderLibs, setHolderLibs] = useState([]);
+  const [adding, setAdding] = useState(true);     // whether the FilePicker is open
+
+  const allItemIds = new Set([...toolLibs, ...holderLibs].map(l => l.itemId));
+
+  const finish = async () => {
+    await commitInitialLibraries(toolLibs, holderLibs);
+  };
 
   if (phase === 'holder') {
     return (
       <div className="page-content" style={{ maxWidth: 760 }}>
         <div className="flex items-center gap-8 mb-16">
-          <h2 style={{ fontSize: 18, fontWeight: 700 }}>Select Your Master-Holder Library (Optional)</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 700 }}>Select Your Holder Libraries (Optional)</h2>
         </div>
         <p className="text-sub text-sm mb-16">
-          Navigate to the folder containing the <code>Master-Holder</code> library <code>.json</code> file and select it.
-          This enables holder browsing and selection on each tool. You can also configure this later in{' '}
-          <strong>Settings</strong>.
+          Add one or more <code>Master-Holder</code> library <code>.json</code> files. Holders from every library are
+          available on every tool (grouped by library in the picker). You can also configure these later in <strong>Settings</strong>.
         </p>
-        <FilePicker
-          onSelect={async (loc) => {
-            await setHolderLibraryLocation(loc);
-            setLibraryLocation(pendingToolLocation);
-          }}
-          onCancel={() => setLibraryLocation(pendingToolLocation)}
-          cancelLabel="Skip — set up later in Settings"
-        />
+
+        <PickedList items={holderLibs} onRemove={(id) => setHolderLibs(hs => hs.filter(h => h.itemId !== id))}
+          emptyLabel="No holder libraries added yet." />
+
+        {adding ? (
+          <FilePicker
+            onSelect={(loc) => {
+              if (allItemIds.has(loc.itemId)) {
+                notify('That file is already linked — pick a different one.', 'error', 6000);
+                return;
+              }
+              setHolderLibs(hs => [...hs, loc]);
+              setAdding(false);
+            }}
+            onCancel={() => setAdding(false)}
+            cancelLabel="Cancel"
+          />
+        ) : (
+          <div className="flex items-center gap-8">
+            <button className="btn btn-secondary btn-sm" onClick={() => setAdding(true)}>+ Add holder library…</button>
+            <span className="topbar-spacer" style={{ flex: 1 }} />
+            <button className="btn btn-primary" onClick={finish}>
+              {holderLibs.length > 0 ? 'Finish' : 'Skip — finish setup'}
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -235,30 +277,42 @@ export default function LibrarySetup({ canCancel = false, onCancel }) {
   return (
     <div className="page-content" style={{ maxWidth: 760 }}>
       <div className="flex items-center gap-8 mb-16">
-        <h2 style={{ fontSize: 18, fontWeight: 700 }}>{canCancel ? 'Change Tool Library File' : 'Select Your Tool Library File'}</h2>
+        <h2 style={{ fontSize: 18, fontWeight: 700 }}>{canCancel ? 'Manage Tool Libraries' : 'Select Your Tool Libraries'}</h2>
         <span className="topbar-spacer" style={{ flex: 1 }} />
         {canCancel
-          ? <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel — keep current library</button>
+          ? <button className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel — keep current libraries</button>
           : <button className="btn btn-ghost btn-sm" onClick={signOutAll}>Sign out</button>}
       </div>
       <p className="text-sub text-sm mb-16">
-        Navigate to the Fusion 360 cloud folder containing your tool library and pick the <code>.json</code> file.
-        This is saved locally so you won't have to repeat it.
+        Add one or more Fusion 360 tool library <code>.json</code> files. Every tool from every library is shown together,
+        with a library filter on the home page. Each tool reads and writes back to the library it came from.
       </p>
-      <FilePicker
-        onSelect={(loc) => {
-          // Guard: the tool library must be a different file than the holder
-          // library — otherwise tool saves overwrite the holder file.
-          if (holderLibraryLocation && loc.itemId === holderLibraryLocation.itemId) {
-            notify('That is the holder library file — pick the separate tool library file instead.', 'error', 7000);
-            return;
-          }
-          setPendingToolLocation(loc);
-          setPhase('holder');
-        }}
-        onCancel={canCancel ? onCancel : undefined}
-        cancelLabel={canCancel ? 'Cancel — keep current library' : undefined}
-      />
+
+      <PickedList items={toolLibs} onRemove={(id) => setToolLibs(ts => ts.filter(t => t.itemId !== id))}
+        emptyLabel="No tool libraries added yet." />
+
+      {adding ? (
+        <FilePicker
+          onSelect={(loc) => {
+            if (allItemIds.has(loc.itemId)) {
+              notify('That file is already linked — pick a different one.', 'error', 6000);
+              return;
+            }
+            setToolLibs(ts => [...ts, loc]);
+            setAdding(false);
+          }}
+          onCancel={canCancel || toolLibs.length > 0 ? () => setAdding(false) : undefined}
+          cancelLabel="Cancel"
+        />
+      ) : (
+        <div className="flex items-center gap-8">
+          <button className="btn btn-secondary btn-sm" onClick={() => setAdding(true)}>+ Add tool library…</button>
+          <span className="topbar-spacer" style={{ flex: 1 }} />
+          <button className="btn btn-primary" disabled={toolLibs.length === 0} onClick={() => { setPhase('holder'); setAdding(false); }}>
+            Continue →
+          </button>
+        </div>
+      )}
     </div>
   );
 }

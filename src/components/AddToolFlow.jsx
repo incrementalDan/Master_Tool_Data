@@ -8,9 +8,15 @@ import ToolExtractorTab from './ToolExtractorTab.jsx';
 
 export default function AddToolFlow() {
   const navigate = useNavigate();
-  const { addTool, isSaving } = useApp();
+  const { addTool, isSaving, shopSettings } = useApp();
   const [step, setStep] = useState('choose'); // 'choose' | 'extract' | 'form'
   const [prefill, setPrefill] = useState(null);
+
+  // Destination library for the new tool (multi-library). Default to the
+  // configured default, falling back to the first linked library.
+  const toolLibraries = shopSettings?.tool_libraries || [];
+  const defaultLibId = shopSettings?.default_tool_library_id || toolLibraries[0]?.id || null;
+  const [targetLibraryId, setTargetLibraryId] = useState(defaultLibId);
 
   const handleExtracted = (toolData) => {
     setPrefill(toolData);
@@ -18,7 +24,8 @@ export default function AddToolFlow() {
   };
 
   const handleSave = async (toolData) => {
-    const saved = await addTool(toolData);
+    // Tag the new tool with its destination library so addTool writes it there.
+    const saved = await addTool({ ...toolData, library_id: targetLibraryId });
     navigate(`/tool/${saved.id}`);
   };
 
@@ -47,6 +54,21 @@ export default function AddToolFlow() {
         <div className="flex items-center gap-8 mb-16">
           <button className="btn btn-ghost btn-sm" onClick={() => setStep('choose')}><ArrowLeft size={14} /> Back</button>
           <h2 style={{ fontSize: 16, fontWeight: 600 }}>Add New Tool</h2>
+          <span style={{ flex: 1 }} />
+          {toolLibraries.length > 1 && (
+            <label className="flex items-center gap-6 text-sm text-sub">
+              Library:
+              <select
+                className="field-input"
+                style={{ width: 'auto' }}
+                value={targetLibraryId || ''}
+                onChange={e => setTargetLibraryId(e.target.value)}
+                title="The library this new tool will be written to"
+              >
+                {toolLibraries.map(lib => <option key={lib.id} value={lib.id}>{lib.fileName}</option>)}
+              </select>
+            </label>
+          )}
         </div>
         <ToolForm
           tool={initial}

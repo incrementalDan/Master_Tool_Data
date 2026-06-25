@@ -18,6 +18,39 @@ export default function HolderPicker({ currentGuid, onSelect, onClose }) {
     );
   }, [holders, query]);
 
+  // Group the matches by their source holder library (multi-library). Section
+  // headers are shown only when holders span more than one library.
+  const groups = useMemo(() => {
+    const byLib = new Map();
+    for (const h of filtered) {
+      const key = h._libraryName || 'Holders';
+      if (!byLib.has(key)) byLib.set(key, []);
+      byLib.get(key).push(h);
+    }
+    return [...byLib.entries()]; // [ [libraryName, holders[]], ... ]
+  }, [filtered]);
+  const showLibHeaders = groups.length > 1;
+
+  const renderRow = (h) => {
+    const gl = h.gaugeLength ?? 0;
+    const selected = pendingGuid === h.guid;
+    return (
+      <div
+        key={h.guid}
+        onClick={() => setPendingGuid(h.guid)}
+        className={`picker-row${selected ? ' selected' : ''}`}
+      >
+        <span className="holder-pill" style={{ '--badge-color': holderColor(h.description) }}>
+          {h.description || '—'}
+        </span>
+        <div className="text-sub text-xs" style={{ marginTop: 4 }}>
+          Gauge: {gl.toFixed(3)} {unitAbbr(h.unit)}
+          {h.vendor ? ` · ${h.vendor}` : ''}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="modal-backdrop">
       <div className="modal" style={{ width: '100%', maxWidth: 560 }}>
@@ -44,25 +77,16 @@ export default function HolderPicker({ currentGuid, onSelect, onClose }) {
           ) : filtered.length === 0 ? (
             <div className="text-sub text-sm" style={{ padding: 16 }}>No matches.</div>
           ) : (
-            filtered.map(h => {
-              const gl = h.gaugeLength ?? 0;
-              const selected = pendingGuid === h.guid;
-              return (
-                <div
-                  key={h.guid}
-                  onClick={() => setPendingGuid(h.guid)}
-                  className={`picker-row${selected ? ' selected' : ''}`}
-                >
-                  <span className="holder-pill" style={{ '--badge-color': holderColor(h.description) }}>
-                    {h.description || '—'}
-                  </span>
-                  <div className="text-sub text-xs" style={{ marginTop: 4 }}>
-                    Gauge: {gl.toFixed(3)} {unitAbbr(h.unit)}
-                    {h.vendor ? ` · ${h.vendor}` : ''}
+            groups.map(([libName, libHolders]) => (
+              <div key={libName}>
+                {showLibHeaders && (
+                  <div className="text-sub text-xs" style={{ padding: '6px 12px', position: 'sticky', top: 0, background: 'var(--surface-2, var(--surface))', fontWeight: 600, borderBottom: '1px solid var(--border)' }}>
+                    {libName}
                   </div>
-                </div>
-              );
-            })
+                )}
+                {libHolders.map(renderRow)}
+              </div>
+            ))
           )}
         </div>
 

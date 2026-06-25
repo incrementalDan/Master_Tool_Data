@@ -185,6 +185,19 @@ export const DEFAULT_SHOP_SETTINGS = {
   // machine_id on presets links to these entries.
   machines: [],
   default_machine_id: null,
+  // Linked Fusion libraries (multi-library support). Each entry is an APS file
+  // location: { id: itemId, hubId, projectId, folderId, itemId, fileName, order }.
+  // `id` === `itemId` (stable, globally-unique APS file id) is the canonical
+  // library_id used to tag a tool's source library and route its writes back.
+  // Holder libraries are cross-library (any holder usable on any tool); they are
+  // merged and only grouped-by-source in the holder picker. default_tool_library_id
+  // is where new tools go (falls back to tool_libraries[0] when null).
+  tool_libraries: [],
+  holder_libraries: [],
+  default_tool_library_id: null,
+  // Hide tool types that have no tools in the library from the landing page type grid.
+  // All types remain visible in the Add Tool form. Off in demo mode (small sample set).
+  hide_unused_tool_types: true,
   import: { last_proshop_import: null, last_photo_import_folder_id: null },
   aps: { last_used_hub_id: null, last_used_project_id: null },
   // ISO timestamps set when each step of the initial setup workflow completes.

@@ -27,13 +27,20 @@ export default function Settings() {
   const {
     tools, needsNormalize, fetchRawLibrary, renumberLibrary, assignToolIds, renumberAllToolIds, isSaving,
     markSetupStepInSettings,
-    libraryLocation, holderLibraryLocation, holderLibrarySetupComplete,
-    setLibraryLocation, setHolderLibraryLocation, clearHolderLibraryLocation, notify,
+    addToolLibrary, removeToolLibrary, setDefaultToolLibrary,
+    addHolderLibrary, removeHolderLibrary, notify,
     googleAuthenticated, metadataSkipped, user: googleUser,
     fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
     shopSettings, saveShopSettings, signOutAll,
     setupProgress, demoMode,
   } = useApp();
+
+  // Multi-library registry (from shop_settings). Tool + holder libraries are
+  // lists; new tools write to default_tool_library_id (falls back to the first).
+  const toolLibraries = shopSettings?.tool_libraries || [];
+  const holderLibraries = shopSettings?.holder_libraries || [];
+  const defaultLibId = shopSettings?.default_tool_library_id || toolLibraries[0]?.id || null;
+  const linkedItemIds = new Set([...toolLibraries, ...holderLibraries].map(l => l.id));
 
   const [showToolPicker, setShowToolPicker] = useState(false);
   const [showHolderPicker, setShowHolderPicker] = useState(false);
@@ -69,12 +76,14 @@ export default function Settings() {
   const [machineStart, setMachineStart] = useState(shopSettings?.machine_number?.start ?? 30);
   const [skipList, setSkipList] = useState(shopSettings?.machine_number?.skip ?? [98, 99, 100]);
   const [skipInput, setSkipInput] = useState('');
+  const [hideUnusedTypes, setHideUnusedTypes] = useState(shopSettings?.hide_unused_tool_types ?? true);
   const [savingShop, setSavingShop] = useState(false);
 
   useEffect(() => {
     setShopName(shopSettings?.shop_name || '');
     setMachineStart(shopSettings?.machine_number?.start ?? 30);
     setSkipList(shopSettings?.machine_number?.skip ?? [98, 99, 100]);
+    setHideUnusedTypes(shopSettings?.hide_unused_tool_types ?? true);
   }, [shopSettings]);
 
   // ── Tool ID system (shop_settings.tool_id_system) ──────────────────────────
@@ -206,6 +215,7 @@ export default function Settings() {
         shop_name: shopName,
         default_units: defaultUnit,
         machine_number: { start: Number(machineStart) || 30, skip: skipList },
+        hide_unused_tool_types: hideUnusedTypes,
       });
       setDefaultUnit(defaultUnit);
       notify('Shop settings saved', 'success');
@@ -372,81 +382,91 @@ export default function Settings() {
   const renderFusionLibrariesPanel = () => (
     <div style={{ marginTop: 10, paddingLeft: 12, borderLeft: '2px solid var(--border)' }}>
       <p className="text-sub text-xs" style={{ marginBottom: 12 }}>
-        Two distinct Autodesk cloud files — the <strong>tool library</strong> (read &amp; written) and the
-        <strong> holder library</strong> (read-only). Never point both at the same file, or saving tools overwrites the holder file.
+        Link one or more <strong>tool libraries</strong> (read &amp; written — each tool writes back to the one it came from)
+        and one or more <strong>holder libraries</strong> (read-only, shared across all tools). A file can be linked only
+        once, and the same file can&apos;t be both a tool and a holder library.
       </p>
 
-      {/* Tool library */}
+      {/* Tool libraries */}
       <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: '1px solid var(--border)' }}>
-        <div className="flex items-center gap-8" style={{ marginBottom: 6 }}>
+        <div className="flex items-center gap-8" style={{ marginBottom: 8 }}>
           <FileJson size={14} style={{ color: 'var(--green)', flexShrink: 0 }} />
-          <span className="text-sm" style={{ fontWeight: 600, minWidth: 96 }}>Tool library</span>
-          {libraryLocation?.fileName
-            ? <span className="font-mono text-xs">{libraryLocation.fileName}</span>
-            : <span className="text-sub text-xs">Not linked</span>}
+          <span className="text-sm" style={{ fontWeight: 600 }}>Tool libraries ({toolLibraries.length})</span>
         </div>
-        <div className="text-sub text-xs" style={{ marginBottom: 8, paddingLeft: 22 }}>
-          Read &amp; written by the app. This must be the tool library, not the holder library.
-        </div>
-        <div style={{ paddingLeft: 22 }}>
+        {toolLibraries.length === 0
+          ? <div className="text-sub text-xs" style={{ paddingLeft: 22, marginBottom: 8 }}>None linked yet.</div>
+          : toolLibraries.map(lib => (
+            <div key={lib.id} className="flex items-center gap-8"
+              style={{ paddingLeft: 22, marginBottom: 6 }}>
+              <span className="font-mono text-xs" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{lib.fileName}</span>
+              <label className="flex items-center gap-4 text-xs text-sub" style={{ cursor: 'pointer', flexShrink: 0 }} title="New tools are written to this library">
+                <input type="radio" name="defaultToolLib" checked={defaultLibId === lib.id} onChange={() => setDefaultToolLibrary(lib.id)} />
+                Default
+              </label>
+              <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)', padding: '0 6px', flexShrink: 0 }}
+                title="Unlink this library"
+                onClick={() => { removeToolLibrary(lib.id); notify(`Unlinked ${lib.fileName}`, 'info'); }}>
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
+        <div style={{ paddingLeft: 22, marginTop: 4 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => setShowToolPicker(p => !p)}>
-            <FolderOpen size={14} /> {showToolPicker ? 'Cancel' : libraryLocation ? 'Change Tool Library…' : 'Link Tool Library…'}
+            <FolderOpen size={14} /> {showToolPicker ? 'Cancel' : 'Add Tool Library…'}
           </button>
         </div>
         {showToolPicker && (
           <div style={{ marginTop: 16, paddingLeft: 22 }}>
             <FilePicker
               onSelect={(loc) => {
-                if (holderLibraryLocation && loc.itemId === holderLibraryLocation.itemId) {
-                  notify('That is the holder library file — pick the separate tool library file instead.', 'error', 7000);
+                if (linkedItemIds.has(loc.itemId)) {
+                  notify('That file is already linked as a tool or holder library.', 'error', 7000);
                   return;
                 }
-                setLibraryLocation(loc);
+                addToolLibrary(loc);
                 setShowToolPicker(false);
-                notify(`Tool library set to ${loc.fileName}`, 'success');
+                notify(`Linked tool library ${loc.fileName}`, 'success');
               }}
             />
           </div>
         )}
       </div>
 
-      {/* Holder library */}
+      {/* Holder libraries */}
       <div>
-        <div className="flex items-center gap-8" style={{ marginBottom: 6 }}>
+        <div className="flex items-center gap-8" style={{ marginBottom: 8 }}>
           <Package size={14} style={{ color: 'var(--blue)', flexShrink: 0 }} />
-          <span className="text-sm" style={{ fontWeight: 600, minWidth: 96 }}>Holder library</span>
-          {holderLibrarySetupComplete
-            ? <span className="font-mono text-xs">{holderLibraryLocation?.fileName}</span>
-            : <span className="text-sub text-xs">Not linked (optional)</span>}
+          <span className="text-sm" style={{ fontWeight: 600 }}>Holder libraries ({holderLibraries.length})</span>
         </div>
         <div className="text-sub text-xs" style={{ marginBottom: 8, paddingLeft: 22 }}>
-          Read-only. Enables browsing and assigning holders to each tool.
+          Read-only. Holders from every library are available on every tool (grouped by library in the picker).
         </div>
-        <div className="flex gap-8" style={{ paddingLeft: 22 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowHolderPicker(p => !p)}>
-            {showHolderPicker ? 'Cancel' : holderLibrarySetupComplete ? 'Change Holder Library…' : 'Set Up Holder Library…'}
-          </button>
-          {holderLibrarySetupComplete && (
-            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }}
-              onClick={() => { clearHolderLibraryLocation(); setShowHolderPicker(false); notify('Holder library removed', 'info'); }}>
-              <Trash2 size={13} /> Remove
+        {holderLibraries.map(lib => (
+          <div key={lib.id} className="flex items-center gap-8" style={{ paddingLeft: 22, marginBottom: 6 }}>
+            <span className="font-mono text-xs" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{lib.fileName}</span>
+            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)', padding: '0 6px', flexShrink: 0 }}
+              title="Unlink this holder library"
+              onClick={() => { removeHolderLibrary(lib.id); notify(`Unlinked ${lib.fileName}`, 'info'); }}>
+              <Trash2 size={13} />
             </button>
-          )}
+          </div>
+        ))}
+        <div style={{ paddingLeft: 22, marginTop: 4 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowHolderPicker(p => !p)}>
+            {showHolderPicker ? 'Cancel' : 'Add Holder Library…'}
+          </button>
         </div>
         {showHolderPicker && (
           <div style={{ marginTop: 16, paddingLeft: 22 }}>
             <FilePicker
               onSelect={async (loc) => {
-                // Guard: the holder library must be a different file than the tool
-                // library. Pointing both at the same item makes tool saves overwrite
-                // the holder file (the "holders disappear in Fusion" symptom).
-                if (libraryLocation && loc.itemId === libraryLocation.itemId) {
-                  notify('That is the tool library file — pick the separate holder library file instead.', 'error', 7000);
+                if (linkedItemIds.has(loc.itemId)) {
+                  notify('That file is already linked as a tool or holder library.', 'error', 7000);
                   return;
                 }
-                await setHolderLibraryLocation(loc);
+                await addHolderLibrary(loc);
                 setShowHolderPicker(false);
-                notify(`Holder library set to ${loc.fileName}`, 'success');
+                notify(`Linked holder library ${loc.fileName}`, 'success');
               }}
             />
           </div>
@@ -662,6 +682,28 @@ export default function Settings() {
           {[['inches', 'Inch (in)'], ['millimeters', 'Metric (mm)']].map(([val, label]) => (
             <button key={val} className={defaultUnit === val ? 'active' : ''} onClick={() => changeDefaultUnit(val)}>{label}</button>
           ))}
+        </div>
+
+        {/* ── Library display ───────────────────────────────────────────── */}
+        <div style={{ marginTop: 20, paddingTop: 16, marginBottom: 20, borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)', paddingBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <span className="text-sm" style={{ fontWeight: 600 }}>Library display</span>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              style={{ marginTop: 2, flexShrink: 0 }}
+              checked={hideUnusedTypes}
+              onChange={e => setHideUnusedTypes(e.target.checked)}
+            />
+            <div>
+              <span className="text-sm">Hide unused tool types on the library page</span>
+              <div className="text-sub text-xs" style={{ marginTop: 3 }}>
+                Only shows tool type tiles for types that have at least one tool in the library.
+                All 26 types remain available when adding a new tool. Off in demo mode.
+              </div>
+            </div>
+          </label>
         </div>
 
         <button className="btn btn-primary" onClick={saveShop} disabled={savingShop || !googleAuthenticated}>

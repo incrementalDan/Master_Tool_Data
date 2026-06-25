@@ -21,6 +21,13 @@ const AppContext = createContext(null);
 
 const LOCATION_KEY = 'aps_library_location';
 const HOLDER_LOCATION_KEY = 'aps_holder_library_location';
+// Multi-library registry mirror. The registry (linked tool + holder libraries +
+// default-for-new-tools) is shop-wide in shop_settings.json on Drive, but is
+// ALSO mirrored to localStorage so an APS-only session (Google Drive optional)
+// still knows which libraries to load. The Drive copy wins when present; this
+// cache is the fallback + the seed before Drive loads. Mirrors the existing
+// default_units localStorage-mirroring pattern.
+const REGISTRY_MIRROR_KEY = 'aps_library_registry';
 const SETUP_PROGRESS_KEY = 'tms_setup_progress';
 const SETUP_CELEBRATED_KEY = 'tms_setup_celebrated';
 
@@ -50,6 +57,84 @@ function loadStoredHolderLocation() {
   } catch { return null; }
 }
 
+// ─── Multi-library registry helpers ─────────────────────────────────────────
+// A library entry is an APS file location tagged with a stable `id` === itemId
+// (the canonical library_id used to tag a tool's source and route its writes).
+function locToLibEntry(loc, order = 0) {
+  if (!loc?.itemId) return null;
+  return {
+    id: loc.itemId,
+    hubId: loc.hubId, projectId: loc.projectId, folderId: loc.folderId,
+    itemId: loc.itemId, fileName: loc.fileName,
+    order,
+  };
+}
+
+function loadRegistryMirror() {
+  try {
+    const raw = localStorage.getItem(REGISTRY_MIRROR_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+function saveRegistryMirror(ss) {
+  try {
+    localStorage.setItem(REGISTRY_MIRROR_KEY, JSON.stringify({
+      tool_libraries: ss.tool_libraries || [],
+      holder_libraries: ss.holder_libraries || [],
+      default_tool_library_id: ss.default_tool_library_id || null,
+    }));
+  } catch { /* ignore */ }
+}
+
+// The tool library a new/untagged tool writes to (default → first linked).
+export function defaultToolLibraryId(ss) {
+  const tl = ss?.tool_libraries || [];
+  if (ss?.default_tool_library_id && tl.some(l => l.id === ss.default_tool_library_id)) {
+    return ss.default_tool_library_id;
+  }
+  return tl[0]?.id || null;
+}
+
+// The "primary" tool library location — kept mirrored to state.libraryLocation so
+// App.jsx routing (which gates on libraryLocation) is unchanged by multi-library.
+function primaryToolLib(ss) {
+  const tl = ss?.tool_libraries || [];
+  const id = defaultToolLibraryId(ss);
+  return tl.find(l => l.id === id) || tl[0] || null;
+}
+
+// Fill a shop_settings object's registry from the localStorage mirror, then the
+// legacy single-location keys — so an established single-library shop (or an
+// APS-only session) keeps working with no Drive write and no data migration.
+function seedShopSettingsRegistry(ss) {
+  let tool_libraries = ss?.tool_libraries || [];
+  let holder_libraries = ss?.holder_libraries || [];
+  let default_tool_library_id = ss?.default_tool_library_id || null;
+
+  if (tool_libraries.length === 0) {
+    const mirror = loadRegistryMirror();
+    if (mirror?.tool_libraries?.length) {
+      tool_libraries = mirror.tool_libraries;
+      default_tool_library_id = default_tool_library_id || mirror.default_tool_library_id || null;
+    }
+    if (holder_libraries.length === 0 && mirror?.holder_libraries?.length) {
+      holder_libraries = mirror.holder_libraries;
+    }
+  }
+  if (tool_libraries.length === 0) {
+    const legacy = locToLibEntry(loadStoredLocation());
+    if (legacy) { tool_libraries = [legacy]; default_tool_library_id = default_tool_library_id || legacy.id; }
+  }
+  if (holder_libraries.length === 0) {
+    const legacyH = locToLibEntry(loadStoredHolderLocation());
+    if (legacyH) holder_libraries = [legacyH];
+  }
+  if (!default_tool_library_id && tool_libraries.length) default_tool_library_id = tool_libraries[0].id;
+
+  return { ...ss, tool_libraries, holder_libraries, default_tool_library_id };
+}
+
 function loadSetupProgress() {
   try {
     const raw = localStorage.getItem(SETUP_PROGRESS_KEY);
@@ -70,6 +155,11 @@ function loadSetupProgress() {
   } catch { return null; }
 }
 
+// Seed the registry (linked tool/holder libraries) from the localStorage mirror /
+// legacy single-location keys so the very first render — before any Drive load —
+// already knows which libraries exist.
+const SEEDED_SHOP_SETTINGS = seedShopSettingsRegistry(DEFAULT_SHOP_SETTINGS);
+
 const initialState = {
   demoMode: false,            // ?demo=true — bundled sample data, no auth, read-only
   localMode: false,           // browsing a locally-uploaded library file — read-only, no APS/Drive
@@ -81,20 +171,24 @@ const initialState = {
   metadataForceNew: false,    // user explicitly disconnected to set up a brand-new file —
                               // skip the "does a file already exist" check and go straight
                               // to the folder picker (e.g. after deleting the old file in Drive)
-  libraryLocation: loadStoredLocation(), // { hubId, projectId, folderId, itemId, fileName }
+  // Convenience pointer to the PRIMARY (default) tool library — kept in sync with
+  // the multi-library registry (shopSettings.tool_libraries) so App.jsx routing,
+  // which gates on libraryLocation, is unchanged. The real source of truth is the
+  // registry; this is just "the first/default one".
+  libraryLocation: primaryToolLib(SEEDED_SHOP_SETTINGS),
   changingLibrary: false,     // transient: showing the library picker to switch, with Cancel
-  holderLibraryLocation: loadStoredHolderLocation(), // same shape, optional
+  holderLibraryLocation: (SEEDED_SHOP_SETTINGS.holder_libraries || [])[0] || null, // pointer to first holder lib
   setupProgress: loadSetupProgress() || {}, // { fusionConnected, normalized, proshopMerged, proshopExported }
   processingAuth: false,      // exchanging APS callback code
   tools: [],
-  holders: [],                // loaded from Master-Holder library
+  holders: [],                // loaded from Master-Holder library/libraries (tagged with _libraryId/_libraryName)
   needsNormalize: false,      // true when any tool lacks a tracking ID (pre-migration)
   normalizeCount: 0,          // number of un-migrated tools (for banner/modal copy)
   metadataFileWarning: null,  // null | 'missing' | 'trashed' — linked metadata file is gone
   // Shared Drive files (loaded at startup; default to the seeds until then).
   materials: DEFAULT_MATERIALS,
   vendorRegistry: DEFAULT_VENDOR_REGISTRY,
-  shopSettings: DEFAULT_SHOP_SETTINGS,
+  shopSettings: SEEDED_SHOP_SETTINGS,
   isLoading: false,
   isSaving: false,
   error: null,
@@ -114,12 +208,23 @@ function reducer(state, action) {
     case 'RECONNECT_METADATA': return { ...state, metadataSkipped: false };
     case 'DISCONNECT_METADATA':
       return { ...state, user: null, googleAuthenticated: false, googleExpired: false, metadataSkipped: false, metadataForceNew: true };
-    case 'SET_LIBRARY_LOCATION': return { ...state, libraryLocation: action.location, changingLibrary: false };
-    case 'CLEAR_LIBRARY_LOCATION': return { ...state, libraryLocation: null, tools: [] };
+    // Multi-library registry write: update shopSettings' library arrays and
+    // re-derive the convenience pointers (primary tool lib + first holder lib).
+    case 'SET_LIBRARIES': {
+      const ss = action.shopSettings;
+      const tl = ss.tool_libraries || [];
+      const hl = ss.holder_libraries || [];
+      return {
+        ...state,
+        shopSettings: ss,
+        libraryLocation: primaryToolLib(ss),
+        holderLibraryLocation: hl[0] || null,
+        changingLibrary: false,
+        ...(tl.length === 0 ? { tools: [] } : {}),
+      };
+    }
     case 'START_CHANGE_LIBRARY': return { ...state, changingLibrary: true };
     case 'CANCEL_CHANGE_LIBRARY': return { ...state, changingLibrary: false };
-    case 'SET_HOLDER_LOCATION': return { ...state, holderLibraryLocation: action.location };
-    case 'CLEAR_HOLDER_LOCATION': return { ...state, holderLibraryLocation: null, holders: [] };
     case 'SET_HOLDERS': return { ...state, holders: action.holders };
     case 'SET_SETUP_PROGRESS': return { ...state, setupProgress: action.progress };
     case 'MARK_SETUP_STEP':
@@ -198,9 +303,11 @@ export function AppProvider({ children }) {
   const demoModeRef = useRef(state.demoMode);
   const shopSettingsRef = useRef(state.shopSettings);
   const materialsRef = useRef(state.materials);
-  // Caches wrapper-level fields (e.g. `version`) from the last-loaded Fusion
-  // library file, other than `data` — see downloadFusionList/uploadFusionList.
-  const libraryWrapperRef = useRef(null);
+  // Caches each library's wrapper-level fields (e.g. `version`), keyed by
+  // library id (itemId), from the last download of that library — so a save
+  // writes the file back with the same wrapper shape. One entry per linked
+  // library. See downloadFusionList/uploadFusionList.
+  const libraryWrappersRef = useRef(new Map());
   locationRef.current = state.libraryLocation;
   holderLocationRef.current = state.holderLibraryLocation;
   googleRef.current = state.googleAuthenticated;
@@ -264,58 +371,81 @@ export function AppProvider({ children }) {
     return id;
   }, []);
 
-  // ─── Holder library ───────────────────────────────────────────────────────
-  const loadHolders = useCallback(async (location) => {
-    const loc = location || holderLocationRef.current;
-    if (!loc) return;
-    try {
-      const holders = await aps.loadHolderLibrary(loc.projectId, loc.itemId);
-      dispatch({ type: 'SET_HOLDERS', holders });
-    } catch (err) {
-      notify(`Holder library load failed: ${err.message}`, 'error');
+  // ─── Holder libraries (multi) ─────────────────────────────────────────────
+  // Load every linked holder library, tag each holder with its source library
+  // (_libraryId / _libraryName) so the holder picker can group by library, and
+  // merge into one list. Holders are cross-library — any holder usable anywhere.
+  // Pass an explicit holderLibs list when the registry was just changed in the
+  // same tick (refs lag a dispatch until the next render); otherwise it reads the
+  // current registry.
+  const loadHolders = useCallback(async (holderLibsArg) => {
+    const holderLibs = holderLibsArg || shopSettingsRef.current?.holder_libraries || [];
+    if (holderLibs.length === 0) { dispatch({ type: 'SET_HOLDERS', holders: [] }); return; }
+    const all = [];
+    for (const lib of holderLibs) {
+      try {
+        const hs = await aps.loadHolderLibrary(lib.projectId, lib.itemId);
+        for (const h of hs) all.push({ ...h, _libraryId: lib.id, _libraryName: lib.fileName });
+      } catch (err) {
+        notify(`Holder library "${lib.fileName}" failed to load: ${err.message}`, 'error');
+      }
     }
+    dispatch({ type: 'SET_HOLDERS', holders: all });
   }, [notify]);
 
-  const setHolderLibraryLocation = useCallback(async (location) => {
-    localStorage.setItem(HOLDER_LOCATION_KEY, JSON.stringify(location));
-    dispatch({ type: 'SET_HOLDER_LOCATION', location });
-    await loadHolders(location);
-  }, [loadHolders]);
+  // ─── Per-library registry helpers ─────────────────────────────────────────
+  // Resolve a tool library's APS location by its id (itemId). Falls back to the
+  // primary pointer when no id is given (single-library / legacy callers).
+  const toolLibById = (libraryId) => {
+    const tl = shopSettingsRef.current?.tool_libraries || [];
+    if (libraryId) return tl.find(l => l.id === libraryId) || null;
+    return primaryToolLib(shopSettingsRef.current) || locationRef.current || null;
+  };
 
-  const clearHolderLibraryLocation = useCallback(() => {
-    localStorage.removeItem(HOLDER_LOCATION_KEY);
-    dispatch({ type: 'CLEAR_HOLDER_LOCATION' });
-  }, []);
-
-  // ─── Drive-backed Fusion list helpers ─────────────────────────────────────
-  const downloadFusionList = useCallback(async () => {
+  // ─── Drive-backed Fusion list helpers (per library) ───────────────────────
+  const downloadFusionList = useCallback(async (libraryId) => {
     if (demoModeRef.current) throw new Error('Demo mode is read-only — changes are not saved');
     if (localModeRef.current) throw new Error('Local mode is read-only — connect to Autodesk to load or save the live library');
-    const loc = locationRef.current;
+    const loc = toolLibById(libraryId);
     if (!loc) throw new Error('No tool library location selected');
     const json = await aps.loadToolLibrary(loc.projectId, loc.itemId);
-    // Remember every wrapper-level field besides `data` (e.g. `version: 36`) so
-    // uploadFusionList can write the file back with the same wrapper shape —
-    // Fusion's library file is `{ data: [...], version: 36 }`, and silently
-    // dropping `version` on every save makes Fusion treat the round-tripped
-    // file as a different/unversioned library (symptoms: reassigned guids, etc).
+    // Remember every wrapper-level field besides `data` (e.g. `version: 36`),
+    // keyed per library, so uploadFusionList writes the file back with the same
+    // wrapper shape — Fusion's library file is `{ data: [...], version: 36 }`,
+    // and silently dropping `version` on save makes Fusion treat the round-
+    // tripped file as a different/unversioned library (reassigned guids, etc).
     if (json && typeof json === 'object' && !Array.isArray(json)) {
       const { data, ...wrapperRest } = json;
-      libraryWrapperRef.current = wrapperRest;
+      libraryWrappersRef.current.set(loc.id, wrapperRest);
     }
     return Array.isArray(json?.data) ? json.data : (Array.isArray(json) ? json : []);
   }, []);
 
-  const uploadFusionList = useCallback(async (list) => {
+  const uploadFusionList = useCallback(async (libraryId, list) => {
     if (demoModeRef.current) throw new Error('Demo mode is read-only — changes are not saved');
     if (localModeRef.current) throw new Error('Local mode is read-only — connect to Autodesk to save changes');
-    const loc = locationRef.current;
-    await aps.saveToolLibrary(loc.projectId, loc.folderId, loc.itemId, loc.fileName, { ...libraryWrapperRef.current, data: list });
+    const loc = toolLibById(libraryId);
+    if (!loc) throw new Error('No tool library location selected');
+    const wrapper = libraryWrappersRef.current.get(loc.id) || {};
+    await aps.saveToolLibrary(loc.projectId, loc.folderId, loc.itemId, loc.fileName, { ...wrapper, data: list });
   }, []);
 
-  // Expose raw Fusion list download for the merge flow live-fetch feature.
-  const fetchRawLibrary = useCallback(async () => {
-    return await downloadFusionList();
+  // Download every linked tool library: returns [{ libraryId, library, list }].
+  // Used by the shop-global bulk operations (renumber / assign IDs) that need to
+  // operate across all libraries then write each one back.
+  const downloadAllLibraries = useCallback(async () => {
+    const tl = shopSettingsRef.current?.tool_libraries || [];
+    const out = [];
+    for (const lib of tl) {
+      const list = await downloadFusionList(lib.id);
+      out.push({ libraryId: lib.id, library: lib, list });
+    }
+    return out;
+  }, [downloadFusionList]);
+
+  // Expose raw Fusion list download for the merge flow / reconcile live-fetch.
+  const fetchRawLibrary = useCallback(async (libraryId) => {
+    return await downloadFusionList(libraryId);
   }, [downloadFusionList]);
 
   // ─── Auth / setup actions ─────────────────────────────────────────────────
@@ -412,16 +542,106 @@ export function AppProvider({ children }) {
   const setupCelebrated = useCallback(() => localStorage.getItem(SETUP_CELEBRATED_KEY) === '1', []);
   const markSetupCelebrated = useCallback(() => localStorage.setItem(SETUP_CELEBRATED_KEY, '1'), []);
 
-  const setLibraryLocation = useCallback((location) => {
-    localStorage.setItem(LOCATION_KEY, JSON.stringify(location));
-    dispatch({ type: 'SET_LIBRARY_LOCATION', location });
+  // ─── Library registry actions ─────────────────────────────────────────────
+  // Single point that commits a registry change: updates state + pointers (via
+  // SET_LIBRARIES), mirrors to localStorage (so APS-only sessions keep working),
+  // and persists shop-wide to shop_settings.json when Drive is connected.
+  const persistRegistry = useCallback((nextSS) => {
+    dispatch({ type: 'SET_LIBRARIES', shopSettings: nextSS });
+    saveRegistryMirror(nextSS);
+    if (googleRef.current) {
+      const { SHARED_FILES } = driveService;
+      driveService.saveSharedJson(SHARED_FILES.shopSettings.name, SHARED_FILES.shopSettings.cacheKey, nextSS)
+        .catch(() => { /* mirror + in-memory already set; Drive is best-effort */ });
+    }
+  }, []);
+
+  const addToolLibrary = useCallback((location) => {
+    const ss = shopSettingsRef.current || {};
+    const existing = ss.tool_libraries || [];
+    if (existing.some(l => l.id === location.itemId)) return; // already linked
+    const entry = locToLibEntry(location, existing.length);
+    const tool_libraries = [...existing, entry];
+    const next = {
+      ...ss,
+      tool_libraries,
+      default_tool_library_id: ss.default_tool_library_id || entry.id,
+    };
+    persistRegistry(next);
     markSetupStepInSettings('fusionConnected');
-  }, [markSetupStepInSettings]);
+  }, [persistRegistry, markSetupStepInSettings]);
+
+  const removeToolLibrary = useCallback((libraryId) => {
+    const ss = shopSettingsRef.current || {};
+    const tool_libraries = (ss.tool_libraries || []).filter(l => l.id !== libraryId)
+      .map((l, i) => ({ ...l, order: i }));
+    const default_tool_library_id = ss.default_tool_library_id === libraryId
+      ? (tool_libraries[0]?.id || null)
+      : ss.default_tool_library_id;
+    persistRegistry({ ...ss, tool_libraries, default_tool_library_id });
+  }, [persistRegistry]);
+
+  const setDefaultToolLibrary = useCallback((libraryId) => {
+    const ss = shopSettingsRef.current || {};
+    persistRegistry({ ...ss, default_tool_library_id: libraryId });
+  }, [persistRegistry]);
+
+  const addHolderLibrary = useCallback(async (location) => {
+    const ss = shopSettingsRef.current || {};
+    const existing = ss.holder_libraries || [];
+    if (existing.some(l => l.id === location.itemId)) return;
+    const entry = locToLibEntry(location, existing.length);
+    const holder_libraries = [...existing, entry];
+    persistRegistry({ ...ss, holder_libraries });
+    await loadHolders(holder_libraries);
+  }, [persistRegistry, loadHolders]);
+
+  const removeHolderLibrary = useCallback(async (libraryId) => {
+    const ss = shopSettingsRef.current || {};
+    const holder_libraries = (ss.holder_libraries || []).filter(l => l.id !== libraryId)
+      .map((l, i) => ({ ...l, order: i }));
+    persistRegistry({ ...ss, holder_libraries });
+    await loadHolders(holder_libraries);
+  }, [persistRegistry, loadHolders]);
+
+  // First-run wizard commit: set the whole registry (multiple tool + holder
+  // libraries) in ONE write, avoiding the stale-ref problem of calling the
+  // single-add actions in a loop.
+  const commitInitialLibraries = useCallback(async (toolLocs, holderLocs) => {
+    const ss = shopSettingsRef.current || {};
+    const tool_libraries = (toolLocs || []).map((loc, i) => locToLibEntry(loc, i)).filter(Boolean);
+    const holder_libraries = (holderLocs || []).map((loc, i) => locToLibEntry(loc, i)).filter(Boolean);
+    persistRegistry({
+      ...ss,
+      tool_libraries,
+      holder_libraries,
+      default_tool_library_id: tool_libraries[0]?.id || null,
+    });
+    markSetupStepInSettings('fusionConnected');
+    await loadHolders(holder_libraries);
+  }, [persistRegistry, markSetupStepInSettings, loadHolders]);
+
+  // Back-compat shims used by the first-run wizard / Settings single-pick paths.
+  // setLibraryLocation = "add this tool library"; clearLibraryLocation = "unlink
+  // everything" (sends the user back to the setup wizard).
+  const setLibraryLocation = useCallback((location) => {
+    addToolLibrary(location);
+  }, [addToolLibrary]);
+
+  const setHolderLibraryLocation = useCallback(async (location) => {
+    await addHolderLibrary(location);
+  }, [addHolderLibrary]);
+
+  const clearHolderLibraryLocation = useCallback(() => {
+    const ss = shopSettingsRef.current || {};
+    persistRegistry({ ...ss, holder_libraries: [] });
+    dispatch({ type: 'SET_HOLDERS', holders: [] });
+  }, [persistRegistry]);
 
   const clearLibraryLocation = useCallback(() => {
-    localStorage.removeItem(LOCATION_KEY);
-    dispatch({ type: 'CLEAR_LIBRARY_LOCATION' });
-  }, []);
+    const ss = shopSettingsRef.current || {};
+    persistRegistry({ ...ss, tool_libraries: [], default_tool_library_id: null });
+  }, [persistRegistry]);
 
   // Switch libraries without losing the current one until a new pick is made:
   // beginChangeLibrary shows the picker (Cancel returns to the current library);
@@ -454,7 +674,8 @@ export function AppProvider({ children }) {
       const built = [];
       for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
       for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
-      const tools = combineToolsByToolId(built);
+      const tools = combineToolsByToolId(built)
+        .map(t => ({ ...t, library_id: 'local', library_name: file.name || 'Local file' }));
 
       dispatch({ type: 'ENTER_LOCAL_MODE', tools });
       notify(`Loaded ${tools.length} tool${tools.length === 1 ? '' : 's'} (local mode — read-only)`, 'success');
@@ -478,14 +699,17 @@ export function AppProvider({ children }) {
     const built = [];
     for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
     for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
-    const tools = combineToolsByToolId(built);
+    const tools = combineToolsByToolId(built)
+      .map(t => ({ ...t, library_id: 'demo', library_name: 'Demo library' }));
+    // Tag demo holders with a single synthetic library so the picker grouping works.
+    const taggedHolders = (holders || []).map(h => ({ ...h, _libraryId: 'demo', _libraryName: 'Demo holders' }));
 
     // Make the shared-file-backed helpers (vendor registry, default unit) resolve
     // against the demo data, just like loadTools does after a Drive load.
     setActiveVendorRegistry(vendorRegistry);
     if (shopSettings?.default_units) setDefaultUnit(shopSettings.default_units);
 
-    dispatch({ type: 'ENTER_DEMO_MODE', tools, holders, materials, vendorRegistry, shopSettings });
+    dispatch({ type: 'ENTER_DEMO_MODE', tools, holders: taggedHolders, materials, vendorRegistry, shopSettings });
   }, []);
 
   const exitDemoMode = useCallback(() => {
@@ -510,8 +734,12 @@ export function AppProvider({ children }) {
     if (demoModeRef.current) { enterDemoMode(); return; }
     dispatch({ type: 'LOAD_START' });
     try {
-      const fusionList = await downloadFusionList();
       let metaList = [];
+      // Resolve the registry FIRST (multi-library needs to know which libraries to
+      // download before downloading). When Drive is connected, shop_settings.json
+      // is the shared source of truth; otherwise we fall back to the registry
+      // already seeded into state from the localStorage mirror / legacy keys.
+      let effectiveShop = shopSettingsRef.current || DEFAULT_SHOP_SETTINGS;
       if (googleRef.current) {
         // Load metadata + the three shared Drive files (materials, vendor
         // registry, shop settings) in parallel. Each shared file is created with
@@ -533,7 +761,21 @@ export function AppProvider({ children }) {
           // shop_settings.json is the source of truth for the default unit —
           // mirror it into the localStorage cache the pure units helper reads.
           if (shopSettings?.default_units) setDefaultUnit(shopSettings.default_units);
-          dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings });
+          // Adopt the Drive registry. If Drive has no libraries yet but this device
+          // does (legacy single-location / mirror), keep the local set and migrate
+          // it up to Drive once, so an existing shop isn't emptied by the upgrade.
+          let ss = shopSettings;
+          if (!(ss.tool_libraries || []).length) {
+            const seeded = seedShopSettingsRegistry(ss);
+            if ((seeded.tool_libraries || []).length) {
+              ss = seeded;
+              driveService.saveSharedJson(SHARED_FILES.shopSettings.name, SHARED_FILES.shopSettings.cacheKey, ss).catch(() => {});
+            }
+          }
+          effectiveShop = ss;
+          saveRegistryMirror(ss);
+          dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings: ss });
+          dispatch({ type: 'SET_LIBRARIES', shopSettings: ss }); // sync pointers
         } catch (err) {
           if (err.code === 'TOKEN_EXPIRED') {
             dispatch({ type: 'GOOGLE_EXPIRED' });
@@ -560,17 +802,26 @@ export function AppProvider({ children }) {
         } catch { /* inconclusive — leave any existing warning as-is */ }
       }
 
-      // Group Fusion entries into logical tools by tracking ID. Entries without
-      // a tracking ID are each their own single-instance tool until normalized.
-      const { groups, untracked } = groupByTrackingId(fusionList);
-      const built = [];
-      for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
-      for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
-      // Fold any entries sharing a ProShop number into one logical tool so
-      // duplicates surface as a single combined tool (auto-combine). The merge
-      // is persisted on the next write of that tool / on normalize.
-      const tools = combineToolsByToolId(built);
-      const needsNormalize = untracked.length > 0;
+      // Download and build EACH linked tool library, tagging every tool with its
+      // source library (library_id / library_name) so writes route back to the
+      // right file and the landing page can filter/note by library. combine runs
+      // WITHIN each library only (cross-library same-tool_id folding is avoided so
+      // a tool always belongs to exactly one library).
+      const toolLibs = effectiveShop.tool_libraries || [];
+      if (toolLibs.length === 0) throw new Error('No tool library linked — add one in Settings');
+      const tools = [];
+      let untrackedCount = 0;
+      for (const lib of toolLibs) {
+        const fusionList = await downloadFusionList(lib.id);
+        const { groups, untracked } = groupByTrackingId(fusionList);
+        const built = [];
+        for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
+        for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
+        untrackedCount += untracked.length;
+        const combined = combineToolsByToolId(built);
+        for (const t of combined) tools.push({ ...t, library_id: lib.id, library_name: lib.fileName });
+      }
+      const needsNormalize = untrackedCount > 0;
 
       // Seed setup-progress flags once for libraries that already completed this
       // workflow before the setup guide existed — otherwise an established shop
@@ -593,21 +844,16 @@ export function AppProvider({ children }) {
         if (established) localStorage.setItem(SETUP_CELEBRATED_KEY, '1');
       }
 
-      dispatch({ type: 'LOAD_SUCCESS', tools, needsNormalize, normalizeCount: untracked.length });
-      // Load holder library alongside tools (non-critical — failure won't block)
-      if (holderLocationRef.current) {
-        try {
-          const holders = await aps.loadHolderLibrary(
-            holderLocationRef.current.projectId,
-            holderLocationRef.current.itemId,
-          );
-          dispatch({ type: 'SET_HOLDERS', holders });
-        } catch { /* non-critical */ }
-      }
+      dispatch({ type: 'LOAD_SUCCESS', tools, needsNormalize, normalizeCount: untrackedCount });
+      // Load every holder library alongside tools (non-critical — failure of one
+      // won't block). loadHolders tags each holder with its source library. Pass
+      // the resolved registry explicitly — the SET_LIBRARIES dispatch above hasn't
+      // updated shopSettingsRef yet this tick.
+      try { await loadHolders(effectiveShop.holder_libraries || []); } catch { /* non-critical */ }
     } catch (err) {
       dispatch({ type: 'LOAD_ERROR', error: err.message });
     }
-  }, [downloadFusionList, enterDemoMode]);
+  }, [downloadFusionList, loadHolders, enterDemoMode]);
 
   // ─── Core write: reconcile a logical tool's instances into the library ────
   // A logical tool maps to N Fusion entries (one per assembly). This drops every
@@ -619,6 +865,12 @@ export function AppProvider({ children }) {
   const writeLogicalTool = useCallback(async (tool) => {
     const holders = holdersRef.current || [];
     const tracking_id = tool.tracking_id || generateTrackingId();
+    // Route this tool's read+write to the library it belongs to (multi-library).
+    // A new/untagged tool goes to the configured default library.
+    const library_id = tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
+    const library_name = tool.library_name
+      || (shopSettingsRef.current?.tool_libraries || []).find(l => l.id === library_id)?.fileName
+      || tool.library_name;
 
     // Ensure at least one assembly, and stable ids on every assembly.
     const baseAssemblies = (tool.assemblies && tool.assemblies.length > 0)
@@ -636,13 +888,15 @@ export function AppProvider({ children }) {
       instance_guid: a.instance_guid || generateId(),
     }));
 
-    const fusionList = await downloadFusionList();
+    const fusionList = await downloadFusionList(library_id);
     const freshByGuid = new Map(fusionList.map(f => [f.guid, f]));
     const refreshedRaws = assemblies.map(a => freshByGuid.get(a.instance_guid)).filter(Boolean);
 
     const toWrite = {
       ...tool,
       tracking_id,
+      library_id,
+      library_name,
       assemblies,
       _instancesRaw: refreshedRaws,
       _fusionRaw: refreshedRaws[0] || tool._fusionRaw || null,
@@ -663,7 +917,7 @@ export function AppProvider({ children }) {
       .filter(f => readTrackingId(f) !== tracking_id && !dropGuids.has(f.guid))
       .concat(fusionInstances);
 
-    await uploadFusionList(next);
+    await uploadFusionList(library_id, next);
     if (googleRef.current) {
       try {
         await driveService.upsertMetadata(metadataTool);
@@ -721,17 +975,15 @@ export function AppProvider({ children }) {
         return written;
       }
 
-      const fusionList = await downloadFusionList();
-
-      // Assign the next available machine tool number at save time so concurrent
-      // adds don't collide. The number is app-managed (any value carried in is
-      // ignored) and shared across every instance of the logical tool. Reading
-      // post-process.number from each entry naturally dedupes, since all
-      // instances of a tool share one number.
+      // Machine tool numbers are shop-global, so gather used numbers across EVERY
+      // linked library (plus the in-memory tools) before picking the next free one.
       const usedNumbers = new Set();
-      for (const f of fusionList) {
-        const n = f['post-process']?.number;
-        if (n !== null && n !== undefined && n !== '') usedNumbers.add(Number(n));
+      const allLibs = await downloadAllLibraries();
+      for (const { list } of allLibs) {
+        for (const f of list) {
+          const n = f['post-process']?.number;
+          if (n !== null && n !== undefined && n !== '') usedNumbers.add(Number(n));
+        }
       }
       for (const t of toolsRef.current) {
         const n = t.machine_tool_number;
@@ -739,10 +991,13 @@ export function AppProvider({ children }) {
       }
 
       const tracking_id = generateTrackingId();
+      // Destination library: the picker's choice (tool.library_id) or the default.
+      const library_id = tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
       const created = {
         ...tool,
         id: tracking_id,
         tracking_id,
+        library_id,
         machine_tool_number: getNextMachineNumber([...usedNumbers], ...machineNumberArgs()),
         created_at: tool.created_at || now,
         updated_at: now,
@@ -758,7 +1013,7 @@ export function AppProvider({ children }) {
       notify(`Add failed: ${err.message}`, 'error', 7000);
       throw err;
     }
-  }, [downloadFusionList, writeLogicalTool, notify]);
+  }, [downloadAllLibraries, writeLogicalTool, notify]);
 
   // Duplicate an existing tool as a starting point for a new one.
   const cloneTool = useCallback(async (id) => {
@@ -887,7 +1142,8 @@ export function AppProvider({ children }) {
     try {
       const tool = toolsRef.current.find(t => t.id === id);
       const tid = tool?.tracking_id || id;
-      const fusionList = await downloadFusionList();
+      const library_id = tool?.library_id || defaultToolLibraryId(shopSettingsRef.current);
+      const fusionList = await downloadFusionList(library_id);
       let remaining;
       if (tool?.tracking_id) {
         // Delete every instance carrying this tracking ID.
@@ -897,7 +1153,7 @@ export function AppProvider({ children }) {
         const guids = new Set((tool?._instancesRaw || []).map(r => r.guid).concat([id]));
         remaining = fusionList.filter(f => !guids.has(f.guid));
       }
-      await uploadFusionList(remaining);
+      await uploadFusionList(library_id, remaining);
       if (googleRef.current) await driveService.deleteMetadata(tid);
       dispatch({ type: 'DELETE_TOOL', id });
       dispatch({ type: 'SAVE_SUCCESS' });
@@ -1164,7 +1420,7 @@ export function AppProvider({ children }) {
     const pid = String(tool.tool_id || '').trim();
     if (!tid && !pid) return empty;
 
-    const rawList = await fetchRawLibrary();
+    const rawList = await fetchRawLibrary(tool.library_id);
     const matchingRaws = rawList.filter(r => {
       const rtid = readTrackingId(r);
       const rpid = String(r['product-id'] || '').trim();
@@ -1239,12 +1495,19 @@ export function AppProvider({ children }) {
     dispatch({ type: 'SAVE_START' });
     try {
       const holders = holdersRef.current || [];
+      const defaultLib = defaultToolLibraryId(shopSettingsRef.current);
+      const libById = new Map((shopSettingsRef.current?.tool_libraries || []).map(l => [l.id, l]));
       // Auto-combine any same-ProShop-number duplicates before writing the full
       // library (covers bulk import, which routes through here).
       const combinedTools = combineToolsByToolId(tools);
-      const fusionList = [];
-      const metaList = [];
+
+      // Partition tools by their destination library (their own library_id, or the
+      // default for new/untagged tools). Each represented library is FULL-REPLACED
+      // with its subset, so libraries not represented here are left untouched.
+      const byLibrary = new Map();
+      const allMeta = [];
       for (const tool of combinedTools) {
+        const libId = tool.library_id || defaultLib;
         const tracking_id = tool.tracking_id || generateTrackingId();
         const assemblies = (tool.assemblies && tool.assemblies.length > 0)
           ? tool.assemblies
@@ -1262,20 +1525,32 @@ export function AppProvider({ children }) {
         }));
         const { fusionInstances, metadataTool } =
           splitToFusionInstances({ ...tool, tracking_id, assemblies: withIds }, holders);
-        fusionList.push(...fusionInstances);
-        metaList.push(metadataTool);
+        if (!byLibrary.has(libId)) byLibrary.set(libId, []);
+        byLibrary.get(libId).push(...fusionInstances);
+        allMeta.push(metadataTool);
       }
-      await uploadFusionList(fusionList);
-      if (googleRef.current) await driveService.saveAllMetadata(metaList);
 
-      // Rebuild logical tools from what we wrote so in-memory state matches.
-      const metaByTracking = new Map(metaList.map(m => [m.id, m]));
-      const { groups, untracked } = groupByTrackingId(fusionList);
+      // Write each represented library, then persist all metadata once (global).
+      for (const [libId, fusionList] of byLibrary) {
+        await uploadFusionList(libId, fusionList);
+      }
+      if (googleRef.current) await driveService.saveAllMetadata(allMeta);
+
+      // Rebuild logical tools from what we wrote so in-memory state matches,
+      // re-tagging each with its source library.
+      const metaByTracking = new Map(allMeta.map(m => [m.id, m]));
       const rebuilt = [];
-      for (const [, raws] of groups) rebuilt.push(buildLogicalTool(raws, metaByTracking));
-      for (const raw of untracked) rebuilt.push(buildLogicalTool([raw], metaByTracking));
+      let untrackedTotal = 0;
+      for (const [libId, fusionList] of byLibrary) {
+        const lib = libById.get(libId);
+        const { groups, untracked } = groupByTrackingId(fusionList);
+        untrackedTotal += untracked.length;
+        const tag = (t) => ({ ...t, library_id: libId, library_name: lib?.fileName });
+        for (const [, raws] of groups) rebuilt.push(tag(buildLogicalTool(raws, metaByTracking)));
+        for (const raw of untracked) rebuilt.push(tag(buildLogicalTool([raw], metaByTracking)));
+      }
 
-      dispatch({ type: 'SET_TOOLS', tools: rebuilt, needsNormalize: untracked.length > 0 });
+      dispatch({ type: 'SET_TOOLS', tools: rebuilt, needsNormalize: untrackedTotal > 0 });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify(`Saved ${rebuilt.length} tools to library`, 'success');
     } catch (err) {
@@ -1292,7 +1567,17 @@ export function AppProvider({ children }) {
   const renumberLibrary = useCallback(async () => {
     dispatch({ type: 'SAVE_START' });
     try {
-      const fusionList = await downloadFusionList();
+      // Machine numbers are shop-global: gather entries from EVERY library into one
+      // list (remembering each entry's source library), number across the union,
+      // then write each library back.
+      const perLib = await downloadAllLibraries();
+      const entryLib = new Map();
+      const fusionList = [];
+      const libNameById = new Map();
+      for (const { libraryId, library, list } of perLib) {
+        libNameById.set(libraryId, library.fileName);
+        for (const f of list) { entryLib.set(f, libraryId); fusionList.push(f); }
+      }
       const metaList = googleRef.current ? await driveService.loadMetadata() : [];
       const metaByTracking = new Map(metaList.map(m => [m.id, m]));
 
@@ -1312,13 +1597,17 @@ export function AppProvider({ children }) {
         }
       });
 
-      await uploadFusionList(fusionList);
+      // Write each library back (partition entries by their source library).
+      for (const { libraryId } of perLib) {
+        await uploadFusionList(libraryId, fusionList.filter(f => entryLib.get(f) === libraryId));
+      }
       if (googleRef.current) await driveService.saveAllMetadata([...metaByTracking.values()]);
 
       // Rebuild the in-memory library so the UI reflects the new numbers.
       const tools = [];
-      for (const [, raws] of groups) tools.push(buildLogicalTool(raws, metaByTracking));
-      for (const raw of untracked) tools.push(buildLogicalTool([raw], metaByTracking));
+      const tagOf = (raws) => { const lib = entryLib.get(raws[0]); return { library_id: lib, library_name: libNameById.get(lib) }; };
+      for (const [, raws] of groups) tools.push({ ...buildLogicalTool(raws, metaByTracking), ...tagOf(raws) });
+      for (const raw of untracked) tools.push({ ...buildLogicalTool([raw], metaByTracking), ...tagOf([raw]) });
       dispatch({ type: 'SET_TOOLS', tools });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify(`Renumbered ${orderedGroups.length} tools starting at #30`, 'success');
@@ -1328,7 +1617,7 @@ export function AppProvider({ children }) {
       notify(`Renumber failed: ${err.message}`, 'error', 7000);
       throw err;
     }
-  }, [downloadFusionList, uploadFusionList, notify]);
+  }, [downloadAllLibraries, uploadFusionList, notify]);
 
   // Assign generated tool IDs to logical tools that don't have one yet, per the
   // configured tool_id_system. tool_id is metadata-owned — writes the value to
@@ -1361,7 +1650,16 @@ export function AppProvider({ children }) {
     }
     dispatch({ type: 'SAVE_START' });
     try {
-      const fusionList = await downloadFusionList();
+      // Shop-global IDs: gather entries across every library, assign across the
+      // union, then write each library back.
+      const perLib = await downloadAllLibraries();
+      const entryLib = new Map();
+      const fusionList = [];
+      const libNameById = new Map();
+      for (const { libraryId, library, list } of perLib) {
+        libNameById.set(libraryId, library.fileName);
+        for (const f of list) { entryLib.set(f, libraryId); fusionList.push(f); }
+      }
       const metaList = googleRef.current ? await driveService.loadMetadata() : [];
       const metaByTracking = new Map(metaList.map(m => [m.id, m]));
 
@@ -1389,14 +1687,17 @@ export function AppProvider({ children }) {
 
       if (assigned === 0) { dispatch({ type: 'SAVE_SUCCESS' }); notify('No unassigned tools to ID', 'info'); return 0; }
 
-      await uploadFusionList(fusionList);
+      for (const { libraryId } of perLib) {
+        await uploadFusionList(libraryId, fusionList.filter(f => entryLib.get(f) === libraryId));
+      }
       // tool_id is metadata-owned (mirrored to Fusion's product-id) — persist it.
       if (googleRef.current) await driveService.saveAllMetadata([...metaByTracking.values()]);
 
       // Rebuild the in-memory library so the new IDs show immediately.
       const tools = [];
-      for (const [, raws] of groups) tools.push(buildLogicalTool(raws, metaByTracking));
-      for (const raw of untracked) tools.push(buildLogicalTool([raw], metaByTracking));
+      const tagOf = (raws) => { const lib = entryLib.get(raws[0]); return { library_id: lib, library_name: libNameById.get(lib) }; };
+      for (const [, raws] of groups) tools.push({ ...buildLogicalTool(raws, metaByTracking), ...tagOf(raws) });
+      for (const raw of untracked) tools.push({ ...buildLogicalTool([raw], metaByTracking), ...tagOf([raw]) });
       dispatch({ type: 'SET_TOOLS', tools });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify(`Assigned IDs to ${assigned} tool${assigned === 1 ? '' : 's'}`, 'success');
@@ -1406,7 +1707,7 @@ export function AppProvider({ children }) {
       notify(`Assign IDs failed: ${err.message}`, 'error', 7000);
       throw err;
     }
-  }, [downloadFusionList, uploadFusionList, notify]);
+  }, [downloadAllLibraries, uploadFusionList, notify]);
 
   // Re-number EVERY tool to the current tool_id_system scheme — the action to run
   // after switching ID schemes. Unlike assignToolIds (which only fills blanks),
@@ -1452,7 +1753,15 @@ export function AppProvider({ children }) {
 
     dispatch({ type: 'SAVE_START' });
     try {
-      const fusionList = await downloadFusionList();
+      // Shop-global re-number across every library.
+      const perLib = await downloadAllLibraries();
+      const entryLib = new Map();
+      const fusionList = [];
+      const libNameById = new Map();
+      for (const { libraryId, library, list } of perLib) {
+        libNameById.set(libraryId, library.fileName);
+        for (const f of list) { entryLib.set(f, libraryId); fusionList.push(f); }
+      }
       const metaList = googleRef.current ? await driveService.loadMetadata() : [];
       const metaByTracking = new Map(metaList.map(m => [m.id, m]));
 
@@ -1512,13 +1821,16 @@ export function AppProvider({ children }) {
 
       if (assigned === 0) { dispatch({ type: 'SAVE_SUCCESS' }); notify('No tools to re-number', 'info'); return 0; }
 
-      await uploadFusionList(fusionList);
+      for (const { libraryId } of perLib) {
+        await uploadFusionList(libraryId, fusionList.filter(f => entryLib.get(f) === libraryId));
+      }
       // tool_id (metadata-owned) and legacy_ids both live in metadata — persist them.
       if (googleRef.current) await driveService.saveAllMetadata([...metaByTracking.values()]);
 
       const tools = [];
-      for (const [, raws] of groups) tools.push(buildLogicalTool(raws, metaByTracking));
-      for (const raw of untracked) tools.push(buildLogicalTool([raw], metaByTracking));
+      const tagOf = (raws) => { const lib = entryLib.get(raws[0]); return { library_id: lib, library_name: libNameById.get(lib) }; };
+      for (const [, raws] of groups) tools.push({ ...buildLogicalTool(raws, metaByTracking), ...tagOf(raws) });
+      for (const raw of untracked) tools.push({ ...buildLogicalTool([raw], metaByTracking), ...tagOf([raw]) });
       dispatch({ type: 'SET_TOOLS', tools });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify(`Re-numbered ${assigned} tool${assigned === 1 ? '' : 's'}`, 'success');
@@ -1528,7 +1840,7 @@ export function AppProvider({ children }) {
       notify(`Re-number failed: ${err.message}`, 'error', 7000);
       throw err;
     }
-  }, [downloadFusionList, uploadFusionList, notify]);
+  }, [downloadAllLibraries, uploadFusionList, notify]);
 
   // ─── One-time normalization (transition to the multi-instance model) ──────
   // Assigns tracking IDs to untracked tools, fans each out into instances per
@@ -1540,12 +1852,20 @@ export function AppProvider({ children }) {
     dispatch({ type: 'SAVE_START' });
     try {
       const holders = holdersRef.current || [];
-      const fusionList = await downloadFusionList();
+      const perLib = await downloadAllLibraries();
       const metaList = googleRef.current ? await driveService.loadMetadata() : [];
       const metaByGuid = new Map(metaList.map(m => [m.id, m]));
       const metaByTracking = new Map(metaList.map(m => [m.id, m]));
 
+      // Normalize each library independently, tagging produced tools with their
+      // source library so saveFullLibrary writes each back to the right file.
+      const cleanTools = [];
+      const conflictTools = [];
+      let dupCount = 0;
+      let untrackedCount = 0;
+      for (const { libraryId, library, list: fusionList } of perLib) {
       const { groups, untracked } = groupByTrackingId(fusionList);
+      untrackedCount += untracked.length;
       const logicalTools = [];
 
       // Already-tracked tools: rebuild unchanged.
@@ -1630,18 +1950,22 @@ export function AppProvider({ children }) {
       // Fold tools sharing a ProShop number into one logical tool before saving,
       // so duplicate copies pushed into the library merge into a single tool
       // (with one instance per distinct holder/OOH) instead of staying separate.
+      // combine runs WITHIN each library only (cross-library tools stay separate).
       const combined = combineToolsByToolId(logicalTools);
-      const dupCount = logicalTools.length - combined.length;
+      dupCount += logicalTools.length - combined.length;
 
       // Skip tools whose fields genuinely conflict (non-empty values differ between
       // the placeholder and the Fusion entry). Leave their raw entries untouched in
       // the library so nothing is destroyed; the user can reconcile on next open.
-      const cleanTools = combined.filter(t => !t._combineConflicts?.length);
-      const conflictTools = combined.filter(t => t._combineConflicts?.length);
+      for (const t of combined) {
+        const tagged = { ...t, library_id: libraryId, library_name: library.fileName };
+        if (t._combineConflicts?.length) conflictTools.push(tagged); else cleanTools.push(tagged);
+      }
+      } // end per-library loop
 
       await saveFullLibrary(cleanTools);
       markSetupStepInSettings('normalized');
-      const base = `Normalized ${untracked.length} tool${untracked.length === 1 ? '' : 's'} to the multi-instance model`;
+      const base = `Normalized ${untrackedCount} tool${untrackedCount === 1 ? '' : 's'} to the multi-instance model`;
       const conflictSuffix = conflictTools.length > 0
         ? `; ${conflictTools.length} need${conflictTools.length === 1 ? 's' : ''} conflict review — open them to resolve`
         : '';
@@ -1649,13 +1973,13 @@ export function AppProvider({ children }) {
         ? `; combined ${dupCount} ProShop-number duplicate${dupCount === 1 ? '' : 's'}`
         : '';
       notify(`${base}${dupSuffix}${conflictSuffix}`, 'success', 6000);
-      return untracked.length;
+      return untrackedCount;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
       notify(`Normalize failed: ${err.message}`, 'error', 7000);
       throw err;
     }
-  }, [downloadFusionList, saveFullLibrary, notify, markSetupStepInSettings]);
+  }, [downloadAllLibraries, saveFullLibrary, notify, markSetupStepInSettings]);
 
   const clearError = useCallback(() => dispatch({ type: 'CLEAR_ERROR' }), []);
 
@@ -1682,6 +2006,14 @@ export function AppProvider({ children }) {
       cancelChangeLibrary,
       setHolderLibraryLocation,
       clearHolderLibraryLocation,
+      // Multi-library registry actions
+      persistRegistry,
+      addToolLibrary,
+      removeToolLibrary,
+      setDefaultToolLibrary,
+      addHolderLibrary,
+      removeHolderLibrary,
+      commitInitialLibraries,
       loadHolders,
       signOutAll,
       enterLocalMode,

@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, X, Plus, LayoutGrid, List, PackageOpen, FolderOpen, GitMerge } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { applyFilters, matchedLegacyId } from '../services/searchEngine.js';
+import { getDefaultUnit } from '../utils/units.js';
 import ToolTypeGrid from './ToolTypeGrid.jsx';
 import FacetFilters from './FacetFilters.jsx';
 import ToolCard from './ToolCard.jsx';
@@ -20,7 +21,7 @@ const SORTS = {
 };
 
 export default function LandingPage() {
-  const { tools, isLoading, error, clearLibraryLocation, shopSettings } = useApp();
+  const { tools, isLoading, error, clearLibraryLocation, shopSettings, demoMode } = useApp();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchRef = useRef(null);
@@ -38,7 +39,21 @@ export default function LandingPage() {
   const [displayQuery, setDisplayQuery] = useState(initQuery);
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'grid');
   const [sort, setSort] = useState(() => localStorage.getItem(SORT_KEY) || 'updated');
+  const [exactMode, setExactMode] = useState(false);
   const debounceRef = useRef(null);
+
+  // Diameter ±0.002" / LOC ±0.02" in inch mode; ±0.05mm / ±0.5mm in mm mode.
+  // Null when exactMode is on (falls back to the tiny float epsilon = effectively exact).
+  const isInch = getDefaultUnit() === 'inches';
+  const tolerances = exactMode ? null : {
+    diameter: isInch ? 0.002 : 0.05,
+    flute_length: isInch ? 0.02 : 0.5,
+  };
+
+  // Library filter — only shown when more than one tool library is linked.
+  // Lets the user narrow the merged tool list to a single source library.
+  const toolLibraries = shopSettings?.tool_libraries || [];
+  const [libraryFilter, setLibraryFilter] = useState({ libraryId: null });
 
   // Machine filter — only active when machines are configured in shop settings.
   // Initialised to the default machine (if one is set) on first load, then
@@ -84,9 +99,18 @@ export default function LandingPage() {
 
   const activeFilters = { toolTypes: selectedTypes, textQuery, facets };
   const filtered = useMemo(() => {
-    const result = applyFilters(tools, activeFilters, machines.length > 0 ? machineFilter : null);
+    const unit = getDefaultUnit();
+    const tols = exactMode ? null : {
+      diameter: unit === 'inches' ? 0.002 : 0.05,
+      flute_length: unit === 'inches' ? 0.02 : 0.5,
+    };
+    const result = applyFilters(
+      tools, activeFilters,
+      machines.length > 0 ? machineFilter : null, tols,
+      toolLibraries.length > 1 ? libraryFilter : null,
+    );
     return [...result].sort(SORTS[sort]?.fn || SORTS.updated.fn);
-  }, [tools, selectedTypes, textQuery, facets, sort, machineFilter, machines.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tools, selectedTypes, textQuery, facets, sort, machineFilter, machines.length, exactMode, libraryFilter, toolLibraries.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleQueryChange = useCallback((val) => {
     setDisplayQuery(val);
@@ -117,7 +141,14 @@ export default function LandingPage() {
     setFacets(newFilters.facets || {});
   };
 
-  const hasFilters = selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0 || !!machineFilter.machineId;
+  const hasFilters = selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0 || !!machineFilter.machineId || !!libraryFilter.libraryId;
+
+  // When hide_unused_tool_types is on (default) and not in demo mode, only show
+  // tool type tiles for types that have at least one tool in the library.
+  const hideUnused = shopSettings?.hide_unused_tool_types ?? true;
+  const allowedTypes = (!demoMode && hideUnused && tools.length > 0)
+    ? new Set(tools.map(t => t.tool_type))
+    : null;
 
   if (isLoading) {
     return (
@@ -182,6 +213,31 @@ export default function LandingPage() {
         </button>
       </div>
 
+      {/* Library filter — only when more than one tool library is linked */}
+      {toolLibraries.length > 1 && (
+        <div className="mb-16">
+          <div className="section-header">Library</div>
+          <div className="flex items-center gap-8 flex-wrap">
+            <button
+              className={`chip ${!libraryFilter.libraryId ? 'active' : ''}`}
+              onClick={() => setLibraryFilter({ libraryId: null })}
+            >
+              All
+            </button>
+            {toolLibraries.map(lib => (
+              <button
+                key={lib.id}
+                className={`chip ${libraryFilter.libraryId === lib.id ? 'active' : ''}`}
+                onClick={() => setLibraryFilter(f => ({ libraryId: f.libraryId === lib.id ? null : lib.id }))}
+                title={lib.fileName}
+              >
+                {lib.fileName}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Machine filter — only when machines are configured in shop settings */}
       {machines.length > 0 && (
         <div className="mb-16">
@@ -234,7 +290,7 @@ export default function LandingPage() {
             </span>
           )}
         </div>
-        <ToolTypeGrid selected={selectedTypes} onSelect={handleTypeSelect} />
+        <ToolTypeGrid selected={selectedTypes} onSelect={handleTypeSelect} allowedTypes={allowedTypes} />
       </div>
 
       {/* Facet filters (shown when at least one type selected) */}
@@ -244,6 +300,9 @@ export default function LandingPage() {
             tools={tools}
             activeFilters={activeFilters}
             onFilterChange={handleFilterChange}
+            exactMode={exactMode}
+            onExactModeChange={() => setExactMode(m => !m)}
+            tolerances={tolerances}
           />
         </div>
       )}
@@ -258,7 +317,7 @@ export default function LandingPage() {
         {hasFilters && (
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); setMachineFilter({ machineId: null, strict: false }); }}
+            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); setMachineFilter({ machineId: null, strict: false }); setLibraryFilter({ libraryId: null }); }}
           >
             Reset
           </button>
