@@ -1443,6 +1443,8 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 
 - **`vendor_registry.json` uses a single unified entity list** — `is_manufacturer` and `is_vendor` flags determine an entity's role, not separate manufacturer/vendor arrays.
 
+- **Design new data structures with a future SQLite migration in mind.** The app currently stores data in Fusion JSON + Google Drive JSON files, but the data model is intentionally relational. When adding new entities or relationships: use **stable UUIDs** (not positional indexes or derived keys), prefer **normalized shapes** (foreign-key references rather than embedded copies), and keep IDs that a relational table would naturally separate from IDs it would join on. You don't need to over-engineer for SQL — just don't make choices that would require years of untangling to move to a database later. The existing patterns (tracking IDs, assembly UUIDs, `purchasing.manufacturers[]/vendors[]`, location system `zone/station/drawer/bin` UUIDs) are the model to follow. See **TODO / Future Work → SQLite migration** for more context.
+
 -----
 
 ## Key Constraints
