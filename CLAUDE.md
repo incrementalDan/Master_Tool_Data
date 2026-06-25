@@ -261,7 +261,7 @@ The app links **multiple** Fusion tool libraries and **multiple** holder librari
 - **Per-library IO** (`AppContext.jsx`): `downloadFusionList(libraryId)` / `uploadFusionList(libraryId, list)` resolve the location via `toolLibById` and cache each library's wrapper in `libraryWrappersRef` (a `Map(itemId → wrapper)`, replacing the old single `libraryWrapperRef`). `fetchRawLibrary(libraryId)` live-fetches one library. `downloadAllLibraries()` returns `[{ libraryId, library, list }]` for the shop-global bulk ops.
 - **Write routing**: `writeLogicalTool` routes by `tool.library_id || default`. `saveFullLibrary` **partitions** tools by library and full-replaces each represented library (so callers must pass the complete in-memory set — they do). `renumberLibrary` / `assignToolIds` / `renumberAllToolIds` download **all** libraries, operate across the union, then write each back partitioned. `normalizeLibrary` runs per-library and tags. `combineToolsByToolId` runs **within each library only** (cross-library same-`tool_id` folding is avoided so writes stay routable).
 - **Convenience pointers**: `state.libraryLocation` / `state.holderLibraryLocation` are kept synced to the primary (default) tool library + first holder library via the `SET_LIBRARIES` reducer action, so `App.jsx` routing (which gates on `libraryLocation`) is unchanged.
-- **Registry actions** (`AppContext.jsx`): `addToolLibrary` / `removeToolLibrary` / `setDefaultToolLibrary` / `addHolderLibrary` / `removeHolderLibrary` (each updates state + mirror + Drive-if-connected via `persistRegistry`), and `commitInitialLibraries(toolLocs, holderLocs)` (first-run wizard — ONE write, avoids the stale-ref problem of looping the single-add actions). `loadHolders(holderLibsArg?)` takes an explicit list because refs lag a dispatch within the same tick.
+- **Registry actions** (`AppContext.jsx`): `addToolLibrary` / `removeToolLibrary` / `setDefaultToolLibrary` / `addHolderLibrary` / `removeHolderLibrary` (each updates state + mirror + Drive-if-connected via `persistRegistry`), and `commitInitialLibraries(toolLocs, holderLocs)` (first-run wizard — ONE write, avoids the stale-ref problem of looping the single-add actions). `loadHolders(holderLibsArg?)` takes an explicit list because refs lag a dispatch within the same tick. `persistRegistry` is also **exported in the context value** so `ShopConnect` (and any future caller) can commit a registry loaded directly from Drive without going through a wizard action — it dispatches `SET_LIBRARIES`, mirrors to localStorage, and saves to Drive best-effort.
 - **UI**: `LibrarySetup.jsx` (wizard) adds multiple tool then holder libraries; Settings → Fusion Libraries shows two lists with add/remove + a "default for new tools" radio; `LandingPage` shows a **library filter chip row** (only when `tool_libraries.length > 1`, wired through `applyFilters`'s `libraryFilter` arg); `ToolDetail` shows a muted "In library: …" note at the bottom; `HolderPicker` groups holders by `_libraryName`; `AddToolFlow` + `ImportFlow` have a target-library picker (default + override) for new tools; `MergeFlow` live-fetches by the master tool's `library_id` (cache keyed per library).
 - **Demo/local mode**: tools tagged `library_id: 'demo'` / `'local'` (holders `_libraryId: 'demo'`) so the note renders and the single-library filter stays hidden.
 - **Deferred (not built)**: linking a machine to specific libraries; moving tools between libraries; cross-library `tool_id` dedup.
@@ -612,6 +612,17 @@ assemblyUpdate = null
 ```
 src/
   App.jsx                         # Root: auth gates, routing, topbar, ToastStack
+                                  # AppShell gate order (each else-if short-circuits):
+                                  #   processingAuth → demoMode → localMode →
+                                  #   !apsAuthenticated (LoginScreen) →
+                                  #   !libraryLocation && !changingLibrary && !shopConnectChosen
+                                  #     (ShopConnect — new-device only) →
+                                  #   !libraryLocation || changingLibrary (LibrarySetup) →
+                                  #   !googleAuthenticated && !metadataSkipped (MetadataConnect) →
+                                  #   Full App
+                                  # shopConnectChosen is local useState(false) — resets on page
+                                  # refresh; returning devices skip the ShopConnect gate entirely
+                                  # because libraryLocation is already set from localStorage.
   main.jsx
   index.css                       # All styles — single file, CSS custom properties, dark theme
 
@@ -683,12 +694,27 @@ src/
                                   # as a sub-section (button → ImportPhotosModal)
     ImportPhotosModal.jsx         # One-time ProShop photo import: Drive folder browser +
                                   # progress/summary (see ProShop Integration → ProShop photo import)
-    MetadataConnect.jsx           # Google Drive connect flow + shared-drive-aware folder picker
-                                  # On every folder navigation, runs findMetadataInFolder +
-                                  # checkSharedFilesInFolder in parallel with listFolders (no
-                                  # extra latency). When tool_metadata.json is found, shows a
-                                  # green callout with ✓/— status for all 4 metadata files so
-                                  # the user can confirm the full set before clicking Connect.
+    MetadataConnect.jsx           # Google Drive connect flow + shared-drive-aware folder picker.
+                                  # Skipped when ShopConnect already authenticated Google Drive
+                                  # (setGoogleUser sets googleAuthenticated=true). On every folder
+                                  # navigation, runs findMetadataInFolder + checkSharedFilesInFolder
+                                  # in parallel with listFolders (no extra latency). When
+                                  # tool_metadata.json is found, shows a green callout with ✓/—
+                                  # status for all 4 metadata files so the user can confirm the
+                                  # full set before clicking Connect.
+    ShopConnect.jsx               # Post-Autodesk-login onboarding gate for new devices.
+                                  # Appears only when no libraries are configured (libraryLocation=null).
+                                  # Two paths:
+                                  #   A) Connect existing shop — Google OAuth → Drive folder picker →
+                                  #      shop_settings.json preview callout (shop name, library count,
+                                  #      file status badges) → calls persistRegistry to auto-link all
+                                  #      libraries; bypasses both LibrarySetup and MetadataConnect.
+                                  #      If shop_settings has no tool_libraries, Drive is still
+                                  #      connected (setGoogleUser) and LibrarySetup is shown next.
+                                  #   B) Set up new shop — sets shopConnectChosen=true → falls through
+                                  #      to LibrarySetup wizard exactly as before.
+                                  # Returning devices (libraryLocation already in localStorage)
+                                  # never see this screen.
     HolderPicker.jsx              # Modal for selecting a holder from the holder library
     ReconcileModal.jsx            # Reconcile-on-open prompt: delete duplicates, add/delete
                                   # new assemblies, review conflicts (→ Sync Job diff)
@@ -709,7 +735,11 @@ src/
     BrandLogo.jsx                 # ToolDex brand: mark + "ToolDex" wordmark
                                   # (BrandLogo lockup / ToolDexMark / ToolDexWordmark);
                                   # used by the top-bar header + LoginScreen
-    LibrarySetup.jsx              # First-run APS library location picker
+    LibrarySetup.jsx              # First-run APS library location picker. Reached via ShopConnect
+                                  # "Set up new shop" path, or when ShopConnect connects Drive but
+                                  # finds no tool_libraries, or directly (changingLibrary=true from
+                                  # Settings). Not shown for returning devices or when ShopConnect
+                                  # path A auto-links libraries from shop_settings.
     LoginScreen.jsx               # APS PKCE login gate (unauthorized visitors)
     Settings.jsx                  # Settings — one of 4 top-bar chrome-style tabs
                                   # Sections: Account (sign-out), Setup & Import (6-step tracker —
