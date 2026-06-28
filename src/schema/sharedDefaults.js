@@ -167,19 +167,30 @@ export const DEFAULT_SHOP_SETTINGS = {
   //   start/skip: sequential counter floor + reserved numbers (shared with
   //               machine_number when mode === 'machine_linked')
   //   digits: zero-pad width for the numeric segment
-  //   location.{cabinet,drawer}_identifier: 'number' | 'letter' — the format of
-  //               the cabinet/drawer inputs in location mode
+  // In `location` mode the ID is the composed physical-location string from the
+  // Location System (see location_config below) — the Location System owns the
+  // segment/identifier format, so there are no per-mode cabinet/drawer settings.
   tool_id_system: {
     mode: 'proshop',
     separator: '-',
     start: 1000,
     skip: [],
     digits: 4,
-    location: {
-      cabinet_identifier: 'number',
-      drawer_identifier: 'letter',
-    },
   },
+  // Location System — how tools are physically stored. Each system is an
+  // independent Zone → Station → Drawer → Bin pattern with its own delimiters,
+  // ProShop-export rule, and normalization state. Tools reference a system +
+  // level option ids (never display strings); the composed location string is
+  // derived on read and written to Fusion's vendor field + ProShop Location.
+  // bin_sizes are a shared lookup (capacity-aware suggestion is a future feature).
+  location_config: {
+    systems: [],
+    bin_sizes: [
+      { id: 'standard', label: 'Standard', slots: 1, isDefault: true },
+    ],
+  },
+  // Tool presetter integration — reserved placeholder (serial format/start).
+  presetter: { serial_format: null, serial_start: null },
   // CNC machine models. Each entry: id, model, machine_type, taper, max_rpm,
   // horsepower, through_coolant, through_coolant_psi, order.
   // machine_id on presets links to these entries.
@@ -198,18 +209,6 @@ export const DEFAULT_SHOP_SETTINGS = {
   // Hide tool types that have no tools in the library from the landing page type grid.
   // All types remain visible in the Add Tool form. Off in demo mode (small sample set).
   hide_unused_tool_types: true,
-  // Physical location hierarchy. Each level links to its parent:
-  //   station.zone_id, drawer.station_id, bin.drawer_id
-  // Tools store tool_location: { zone_id, station_id, drawer_id, bin_id }
-  // with only the most-specific assigned level non-null (parents filled in
-  // for easy querying). The composed string is written to Fusion's vendor
-  // field (the cabinet-location slot).
-  location_system: {
-    zones:    [],   // { id, label, name, order }
-    stations: [],   // { id, zone_id, label, name, order }
-    drawers:  [],   // { id, station_id, label, capacity_slots, order }
-    bins:     [],   // { id, drawer_id, slot_number, order }
-  },
   import: { last_proshop_import: null, last_photo_import_folder_id: null },
   aps: { last_used_hub_id: null, last_used_project_id: null },
   // ISO timestamps set when each step of the initial setup workflow completes.

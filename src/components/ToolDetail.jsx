@@ -3,9 +3,10 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
   Ruler, StickyNote, Clock, Wrench, AlertTriangle, Camera, X,
-  ChevronDown, ChevronRight, FileJson,
+  ChevronDown, ChevronRight, FileJson, MapPin,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
+import LocationPicker from './LocationPicker.jsx';
 import AssemblyCard, { holderColor } from './AssemblyCard.jsx';
 import AssemblyForm from './AssemblyForm.jsx';
 import ReconcileModal from './ReconcileModal.jsx';
@@ -453,6 +454,10 @@ export default function ToolDetail() {
                   <span className="font-mono">{tool.legacy_ids.join(', ')}</span>
                 </div>
               )}
+            </Section>
+
+            <Section title="Location" icon={MapPin} defaultOpen={false}>
+              <LocationPicker tool={tool} />
             </Section>
 
             <PurchasingSection

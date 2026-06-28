@@ -258,7 +258,10 @@ export function toolToExtractor(tool) {
     profileRadius: String(tool.profile_radius ?? ''),
     axialDistance: String(tool.axial_distance ?? ''),
     psToolId: tool.tool_id || '',
-    location: tool.location || '',
+    // ProShop Location column. A structured-location tool carries a
+    // `proshop_location` resolved per its system's export rule (number_only /
+    // full / fixed); legacy free-text tools fall back to the raw location.
+    location: tool.proshop_location != null ? tool.proshop_location : (tool.location || ''),
   };
 }
 
@@ -1488,7 +1491,14 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     backside_capable: meta.backside_capable || false,
     grouping: meta.grouping || '',
     preset_name: meta.preset_name || '',
-    tool_location: meta.tool_location || null,
+    // Structured physical location (Location System). References a system + level
+    // option ids by UUID; the composed display string (internal `location`) is
+    // derived in AppContext from this + location_config, never stored here.
+    // null = no structured location (legacy free-text location only).
+    tool_location: meta.location || null,
+    bin_size_id: meta.bin_size_id || null,
+    // Prior free-text location strings retired by normalization (metadata-only).
+    legacy_locations: meta.legacy_locations || [],
     ooh: meta.ooh ?? null,
     min_ooh: meta.min_ooh ?? null,
     // Holder selection + proven assemblies live only in metadata.
@@ -1596,12 +1606,13 @@ export function buildMetadataTool(tool) {
     backside_capable: tool.backside_capable || false,
     grouping: tool.grouping || '',
     preset_name: tool.preset_name || '',
-    // Structured physical location — Zone/Station/Drawer/Bin hierarchy.
-    // Stored as four nullable IDs; more-general parent IDs filled in redundantly
-    // for easy querying. The composed display string is derived via
-    // composeLocationString (locationSystem.js) and written to Fusion's vendor
-    // field (tool.location) at write time in AppContext — not stored here.
-    tool_location: tool.tool_location || null,
+    // Structured physical location (Location System) — { system_id, zone_id,
+    // station_id, drawer_id, bin } referencing level option UUIDs. The composed
+    // display string is derived on read (never stored). null when the tool has
+    // no structured location yet (legacy free-text only).
+    location: tool.tool_location || null,
+    bin_size_id: tool.bin_size_id || null,
+    legacy_locations: tool.legacy_locations || [],
     // Machine tool number — persisted here as the source of truth, independent
     // of what gets written to the Fusion JSON.
     machine_tool_number: (tool.machine_tool_number ?? null) === null ? null : Number(tool.machine_tool_number),
@@ -1903,6 +1914,8 @@ export function newTool(toolType = 'flat end mill') {
     tool_id: '',
     location: '',
     tool_location: null,
+    bin_size_id: null,
+    legacy_locations: [],
     machine_tool_number: null,
     no_fusion_link: false,
     spindle_speed: null,

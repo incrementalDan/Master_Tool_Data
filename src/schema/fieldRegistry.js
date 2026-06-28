@@ -144,10 +144,10 @@ export const FIELD_REGISTRY = {
   },
 
   location: {
-    label: 'Location',
+    label: 'Location (Cabinet)',
     type: 'string',
     unit: null,
-    fusionPath: 'expressions.tool_vendor', // Fusion's "Vendor" UI field — derived from tool_location
+    fusionPath: 'expressions.tool_vendor', // Fusion's "Vendor" UI field repurposed as cabinet location
     proShopColumn: null,
     metadataOnly: false,
     appliesToTypes: 'all',
@@ -155,11 +155,14 @@ export const FIELD_REGISTRY = {
     precision: null,
   },
 
+  // Structured physical location (Location System): { system_id, zone_id,
+  // station_id, drawer_id, bin } by UUID. Metadata-only; the composed display
+  // string lives in `location` (Fusion vendor), derived on read/write.
   tool_location: {
-    label: 'Tool Location',
+    label: 'Location',
     type: 'object',
     unit: null,
-    fusionPath: null,   // derives the `location` string written to Fusion vendor
+    fusionPath: null,                  // composes into `location` (Fusion vendor); not written directly
     proShopColumn: null,
     metadataOnly: true,
     appliesToTypes: 'all',
