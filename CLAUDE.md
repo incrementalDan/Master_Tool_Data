@@ -175,18 +175,18 @@ A shop-wide, **configurable** scheme for how a tool's human-readable ID is gener
 | Mode | Format | Example |
 |---|---|---|
 | `proshop` | value from ProShop (legacy) | `A-3` |
-| `location` | `{cabinet}{drawer}{sep}{number}` | `2C-1405` |
+| `location` | composed location string from the Location System | `LC-1405` |
 | `sequential` | zero-padded number | `1042` |
 | `type_prefix` | `{typecode}{sep}{number}` | `EM-1042` |
 | `size_first` | `{dia}{sep}{typecode}{sep}{number}` | `0500-EM-1042` |
 | `machine_linked` | `T{machine_tool_number}` (start/skip from **Machine Numbers**) | `T42` |
 | `other_erp` | reserved for a future in-house ERP — **disabled** placeholder | — |
 
-Config also carries `separator` (`-` `.` `/` `_` or none), `start` + `skip` (counter floor + reserved numbers), `digits` (zero-pad width), and `location.{cabinet,drawer}_identifier` (`number` | `letter`).
+Config also carries `separator` (`-` `.` `/` `_` or none), `start` + `skip` (counter floor + reserved numbers), and `digits` (zero-pad width). There are **no** per-mode cabinet/drawer settings — in `location` mode the Location System (see below) owns the segment/identifier format.
 
 ### Pure helpers — `src/utils/toolIdSystem.js`
 
-All ID-composition logic is here (no React): `TYPE_CODES` (per-`tool_type` short code — the one complete type→code map; `buildDesc` only hardcodes "EM" inline), `composeToolId(config, tool, seqNumber, locationSystem)` (4th param required for location mode — pass `shopSettingsRef.current?.location_system`), `padNumber` / `padDiameter` (dia × 1000 → 4-digit, **inch assumption**), `nextSequential(start, skip, used)` (mirrors `getNextMachineNumber`), `isCounterMode`, `toolIdLabel(mode)`, `showsProShopUrl(mode)`, `previewToolId(config, locationSystem)`. Reuse these rather than re-deriving an ID anywhere.
+All ID-composition logic is here (no React): `TYPE_CODES` (per-`tool_type` short code — the one complete type→code map; `buildDesc` only hardcodes "EM" inline), `composeToolId(config, tool, seqNumber)`, `padNumber` / `padDiameter` (dia × 1000 → 4-digit, **inch assumption**), `nextSequential(start, skip, used)` (mirrors `getNextMachineNumber`), `isCounterMode` (`location` is **not** a counter mode — its number is the bin, owned by the Location System), `toolIdLabel(mode)`, `showsProShopUrl(mode)`, `previewToolId(config)`. Reuse these rather than re-deriving an ID anywhere.
 
 ### Generation never auto-runs
 
@@ -194,76 +194,82 @@ Existing tools are **never** auto-assigned an ID (no migration shims — the dis
 
 ### Location mode + the Location System
 
-In `location` mode the **Station** label + **Drawer** label form the ID prefix (e.g. `LC01-D3-1405`), resolved at ID-assignment time from the structured Location System (see below). The ID is baked at assignment time, so renaming a location afterward doesn't change an already-assigned ID.
-
-`composeToolId(config, tool, seqNumber, locationSystem)` takes a 4th param — pass `shopSettingsRef.current?.location_system` at all call sites. When `tool.tool_location` is set and `locationSystem` is provided, it resolves the station + drawer labels from the hierarchy; otherwise it falls back to the legacy `tool.cabinet`/`tool.drawer` string fields for pre-migration tools.
+In `location` mode each tool's ID **is** its composed physical-location string from the Location System (see below). `composeToolId`'s `location` branch simply returns `tool.location` — the composed string that AppContext pre-resolves from the tool's structured `tool_location` + `location_config` at load/write time (the same pattern as the derived `location` display string). No counter, no cabinet/drawer config. A tool with no resolved location yields `''` (no ID). The Location System section in Settings shows a banner when this mode is active.
 
 ### Settings UI + machine-linked interplay
 
-The **Tool ID System** card (`Settings.jsx`, near Machine Numbers) holds the mode selector, separator/start/skip/digits, location sub-settings, a live `previewToolId` preview, and the **Assign IDs** preview→confirm flow. When `mode === 'machine_linked'`, the **Machine Numbers** card shows a note that its start/skip now also drive the IDs (and `saveIdSystem` mirrors them into `machine_number`). Display gating (label + ProShop URL) lives in `ToolCard.jsx` and `ToolDetail.jsx` via `showsProShopUrl` / `toolIdLabel`.
+The **Tool ID System** card (`Settings.jsx`, near Machine Numbers) holds the mode selector, separator/start/skip/digits, a live `previewToolId` preview, and the **Assign IDs** preview→confirm flow. When `mode === 'machine_linked'`, the **Machine Numbers** card shows a note that its start/skip now also drive the IDs (and `saveIdSystem` mirrors them into `machine_number`). In `location` mode the card shows a note pointing at the **Location System** section (rendered immediately below it) which owns the format. Display gating (label + ProShop URL) lives in `ToolCard.jsx` and `ToolDetail.jsx` via `showsProShopUrl` / `toolIdLabel`.
 
 ### Trying it in demo mode
 
-In `?demo=true`, the ID system is **fully editable in-memory** (throwaway, reset on refresh): `saveSharedFile` and `assignToolIds` have demo branches that update state without any APS/Drive write, and demo **Assign IDs reassigns *all* tools** (not just unassigned) so you can flip schemes and re-run repeatedly. The bundled demo tools carry varied `tool_location` + machine numbers so every mode produces realistic, distinct IDs. A live (non-demo) session is unaffected — both branches are guarded by `demoModeRef`.
+In `?demo=true`, the ID system is **fully editable in-memory** (throwaway, reset on refresh): `saveSharedFile` and `assignToolIds` have demo branches that update state without any APS/Drive write, and demo **Assign IDs reassigns *all* tools** (not just unassigned) so you can flip schemes and re-run repeatedly. A live (non-demo) session is unaffected — both branches are guarded by `demoModeRef`.
 
 -----
 
 ## Location System
 
-A structured **Zone → Station → Drawer → Bin** hierarchy that replaces the old free-text `cabinet`/`drawer` fields. Configured in `shop_settings.json` under `location_system`; edited in **Settings → Location System** (CRUD tree, auto-saves to Drive).
+A configurable, **database-ready** model for how tools are physically stored, in `shop_settings.json` under `location_config`. A shop defines **multiple independent systems**, each a **Zone → Station → Drawer → Bin** pattern where every upper level is optional and the Bin is always present (auto-incrementing or fixed). UI lives in **Settings → Location System** (`LocationSystemSettings.jsx`, rendered adjacent to the Tool ID System card) and the **Assign Location** picker in **ToolDetail** (`LocationPicker.jsx`). The approved UI prototype is `docs/LocationSystemUI.tsx` — follow it for layout/copy/interaction; the app design system wins on visuals.
 
-### Data model
+### Data model (`shop_settings.location_config`)
 
-Each level has a **stable UUID** so `tool_location` references survive renaming. The hierarchy:
-
-```
-location_system: {
-  zones:    [{ id, label, name, order }],
-  stations: [{ id, zone_id, label, name, order }],
-  drawers:  [{ id, station_id, label, capacity_slots, order }],
-  bins:     [{ id, drawer_id, slot_number, order }],
+```json
+"location_config": {
+  "systems": [{
+    "id": "uuid", "name": "LC Cabinet",
+    "normalized": false, "allowDuplicates": false,
+    "proShopExport": "number_only",   // number_only | full | fixed
+    "fixedExport": "",
+    "delimiters": { "zs": "-", "sd": "-", "db": "-" },
+    "levels": {
+      "zone":    { "on": false, "levelType": "Building", "customTypeName": "", "identFormat": "number", "customIdent": "", "options": [] },
+      "station": { "on": false, "levelType": "Cabinet",  "customTypeName": "", "identFormat": "number", "customIdent": "", "options": [] },
+      "drawer":  { "on": true,  "levelType": "Drawer",   "customTypeName": "", "identFormat": "custom", "customIdent": "LC", "options": [] },
+      "bin":     { "fixed": false, "start": 1000, "fixedVal": "", "skip": [] }
+    }
+  }],
+  "bin_sizes": [{ "id": "standard", "label": "Standard", "slots": 1, "isDefault": true }]
 }
 ```
 
-Each tool stores a `tool_location` object in metadata (never in Fusion JSON):
+Level `options[]` are stable-UUID entries `{ id, label, order }` (number/letter identifiers). A `custom` `identFormat` is a fixed prefix (e.g. `LC`) with no per-tool choice. `delimiters` are the three adjacent junctions (`zs`/`sd`/`db`); a non-adjacent junction (a middle level off) falls back to `-`. `bin_sizes` is a shared lookup — capacity-aware suggestion is a **future** feature (not built). A reserved `presetter: { serial_format, serial_start }` placeholder also lives in `shop_settings.json`.
+
+### Tool metadata additions (`buildMetadataTool` / `mergeFusionAndMetadata`)
+
+Metadata stores **only IDs**, never the display string:
 
 ```json
-{ "zone_id": "uuid", "station_id": "uuid", "drawer_id": "uuid", "bin_id": null }
+"location": { "system_id": "uuid", "zone_id": null, "station_id": null, "drawer_id": null, "bin": 1405 },
+"bin_size_id": "standard",
+"legacy_locations": []
 ```
 
-Only the most-specific assigned level needs to be non-null; parent IDs are filled in redundantly (via `buildToolLocation`) so queries at any level don't need to traverse the hierarchy.
+The metadata key `location` (object) maps to the internal field **`tool_location`** (to avoid clashing with the internal `location` **string**). `legacy_locations[]` holds prior free-text strings retired by normalization.
 
-### `tool.location` string — derived, not stored
+### `tool.location` (string) — derived, not stored
 
-`tool.location` (the string written to Fusion's "Vendor" field, `expressions.tool_vendor`) is now **derived** from `tool_location` at two points rather than stored separately:
+The internal `tool.location` string (written to Fusion's "Vendor" field, `expressions.tool_vendor`) is **composed on read/write** from `tool_location` + the system config — never stored on the tool:
 
-1. **Load time** (`loadTools` in AppContext): `withResolvedLocation(t, ls)` is called on every tool after `combineToolsByToolId`. This pre-computes `tool.location` so ToolDetail, ToolCard, and the search engine see a ready-to-use string.
-2. **Write time** (`writeLogicalTool`): `withResolvedLocation(toWrite, shopSettingsRef.current?.location_system)` is applied before `splitToFusionInstances`, so `internalToFusionTool` always receives the correct `location` without needing direct access to the location system config. Never touch this inside `internalToFusionTool` itself — the pre-resolution pattern keeps Fusion's writer clean.
+1. **Load time** (`loadTools`): for each tool with a `tool_location`, `resolveLocationString(tool_location, systems)` sets `location`; a `proShopLocationValue(system, composed)` is also stashed as **`proshop_location`** (per-system export rule). Tools with no structured location keep their legacy Fusion-vendor free text.
+2. **Write time** (`writeLogicalTool`): the composed string overrides `location` before `splitToFusionInstances`, so a structured location is the single source of truth for the Fusion vendor field.
+
+`toolToExtractor` emits `proshop_location ?? location` as the ProShop **Location** column.
 
 ### Pure helpers — `src/utils/locationSystem.js`
 
-| Helper | Purpose |
-|---|---|
-| `findZone / findStation / findDrawer / findBin` | Look up a level by UUID |
-| `stationsForZone / drawersForStation / binsForDrawer` | Child lists for a parent |
-| `resolveLocationLabels(toolLocation, ls)` | → `{ zone, station, drawer, bin }` label strings |
-| `composeLocationString(toolLocation, ls)` | → `"LC / LC-01 / D1"` display string |
-| `locationFromBin / locationFromDrawer / locationFromStation / locationFromZone` | Build a `tool_location` with all parent IDs filled, given a known entity |
-| `buildToolLocation(ls, level, id)` | Picker helper — `level` = `'zone'|'station'|'drawer'|'bin'|null`; returns a complete `tool_location` with parent chain |
-| `withResolvedLocation(tool, ls)` | Copies tool with `location` string derived from `tool_location`; no-ops when `tool_location` is null or all-null |
-| `EMPTY_TOOL_LOCATION` | `{ zone_id: null, station_id: null, drawer_id: null, bin_id: null }` |
+Framework-free. Key exports: `newLocationSystem(name)` / `newLevelOption(label, order)` (factories with UUIDs), `findSystem` / `levelOptions` / `findOption` / `levelTypeName`, `composeLocationString(loc, system)` and `buildPreview(system)` (the live-preview composer — order zone→station→drawer→bin, per-junction delimiters), `resolveLocationString(loc, systems)`, `proShopLocationValue(system, composed)` (number_only strips non-digits / full / fixed), `nextBin(system, usedBins)` + `usedBinsForSystem`, `parseLocationString(str, system)` (lenient regex parse for normalization), `analyzeSystem(tools, system)` (matched/unmatched/noLocation/nextBin), `libraryLocationStatus(tools, systems)` (library-wide assigned vs unassigned), `emptyLocation(systemId)`, `LEVEL_KEYS`.
 
-### ToolForm location picker
+### Normalization (migration action, not a toggle)
 
-`LocationPicker` (inside `ToolForm.jsx`) renders cascading `select` dropdowns — Zone → Station → Drawer → Bin, each appearing only once its parent is selected. Picking any level calls `buildToolLocation(ls, level, id)` which fills in all parent IDs. Falls back to a free-text field when `location_system` has no zones configured (new shops before setup). The picker only updates `data.tool_location`; `data.location` is computed at write time.
+Per system: **Analyze** (read-only `analyzeSystem` parse pass — no writes) → **preview** (matched count + next bin) → **commit** (`AppContext.normalizeLocationSystem(systemId)`). Commit assigns the parsed `tool_location` to every matched tool, marks `system.normalized = true`, and does a **metadata-only batch write** (`saveAllMetadata` once — a full Fusion round-trip per tool would re-upload the whole library hundreds of times; the composed string re-syncs to the Fusion vendor field the next time each tool is individually saved) plus an optimistic in-memory update. The **Library Location Status** panel (below all system cards, only once ≥1 system is normalized) shows the union of unassigned tools across all systems with an expandable table.
 
-### Backward compatibility for pre-migration tools
+### ProShop import/export
 
-Tools created before the Location System have no `tool_location`. They may still have raw `cabinet`/`drawer` string fields (legacy metadata). `composeToolId` location mode falls back to these legacy strings when `tool.tool_location` is absent — so existing IDs are not broken, and the old `cabinet`/`drawer` data is still readable (though no longer editable via the UI). The migration path: once a tool is re-saved with a `tool_location` selected, the new structured location takes over.
+- **Export**: composed string → ProShop `Location` column, transformed by the tool's system `proShopExport` rule (`number_only` strips to just the bin digits / `full` / `fixed`).
+- **Import** (`ImportFlow.matchProShopToTools`): the ProShop location free text fills `location` **only** when the tool has no structured `tool_location` yet. Once a tool is normalized/assigned, this app owns its location and the ProShop import value is ignored.
 
-### `saveLocationSystem` context action
+### Context actions (AppContext)
 
-A thin wrapper in AppContext that merges only the `location_system` sub-object into the existing `shopSettings` and saves to Drive. Exposed in the context value (`useApp().saveLocationSystem`). The Settings editor calls it after each add/edit/delete so changes are persisted immediately without a full Settings-page Save click.
+`saveLocationConfig(locationConfig)` (persists the `location_config` sub-object), `assignToolLocation(tool, toolLocation, binSizeId)` (single-tool assign/clear via `writeLogicalTool` — composes into Fusion vendor + metadata), `normalizeLocationSystem(systemId)` (the commit above). All exposed in the context value.
 
 -----
 
@@ -511,7 +517,7 @@ The `fusionToolToInternal()` and `internalToFusionTool()` functions in `src/sche
 
 ### Metadata Schema (`tool_metadata.json`)
 
-Stored in a single file on Google Drive. The file contains an array of metadata objects — one per **logical tool**. The `id` field is the tool's **`tracking_id`** (`FTL-XXXXXX`), falling back to the Fusion `guid` for pre-migration untracked tools — it is **not** keyed per Fusion instance. `buildMetadataTool` in `src/schema/toolSchema.js` is the authoritative source of the full field set (the example below is abridged); add new metadata fields there and read them back in `mergeFusionAndMetadata` / `buildLogicalTool`. Note `tool_id` **is** written to metadata — it is **metadata-owned** (source of truth) and mirrored to Fusion's `product-id`; `legacy_ids[]` (retired IDs) is metadata-only. Other metadata-only fields include `cabinet` / `drawer` (the structured location inputs used by the Tool ID System's `location` mode — they compose into `location` and the ID prefix; see Tool ID System).
+Stored in a single file on Google Drive. The file contains an array of metadata objects — one per **logical tool**. The `id` field is the tool's **`tracking_id`** (`FTL-XXXXXX`), falling back to the Fusion `guid` for pre-migration untracked tools — it is **not** keyed per Fusion instance. `buildMetadataTool` in `src/schema/toolSchema.js` is the authoritative source of the full field set (the example below is abridged); add new metadata fields there and read them back in `mergeFusionAndMetadata` / `buildLogicalTool`. Note `tool_id` **is** written to metadata — it is **metadata-owned** (source of truth) and mirrored to Fusion's `product-id`; `legacy_ids[]` (retired IDs) is metadata-only. Other metadata-only fields include the structured `location` object (internal `tool_location`), `bin_size_id`, and `legacy_locations[]` (see Location System) — the composed display string is derived, not stored.
 
 ```json
 {
@@ -744,6 +750,13 @@ src/
                                   #           Assemblies, Presets, Setup, History, Merge History
                                   # Right sidebar: Identity, Photo, Purchasing, Notes & Tags, Files
     ToolForm.jsx                  # Edit form with sticky action bar + dirty guard
+    LocationSystemSettings.jsx    # Settings section: configure Location Systems
+                                  # (levels/delimiters/ProShop export), normalize
+                                  # (analyze→preview→commit), library unmatched panel.
+                                  # Ported from docs/LocationSystemUI.tsx. Exports LivePreview.
+    LocationPicker.jsx            # ToolDetail "Assign Location" picker — pick system +
+                                  # level options + bin (auto-suggested), writes via
+                                  # AppContext.assignToolLocation
     ToolCard.jsx                  # Grid and list card variants with hover actions
                                   # Uses data-field tokens: .description-badge, .tool-id-pill,
                                   # .machine-num-badge, .location-tag

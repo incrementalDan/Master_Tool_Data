@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight, MapPin } from 'lucide-react';
+import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight } from 'lucide-react';
 import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
 import { generateMachineNumbers, generateId, duplicateIdClusters } from '../schema/toolSchema.js';
 import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../utils/toolIdSystem.js';
 import { useDragReorder } from './useDragReorder.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
 import { FilePicker } from './LibrarySetup.jsx';
-import { composeLocationString } from '../utils/locationSystem.js';
+import LocationSystemSettings from './LocationSystemSettings.jsx';
 import DescRenameModal from './DescRenameModal.jsx';
 import InfoTip from './InfoTip.jsx';
 import ImportPhotosModal from './ImportPhotosModal.jsx';
@@ -15,507 +15,13 @@ import { exportFullLibrary } from '../utils/proShopExport.js';
 
 const ID_MODES = [
   { id: 'proshop', label: 'ProShop', desc: 'ID comes from ProShop (today’s behavior). Shows a working link to the ProShop tool page.' },
-  { id: 'location', label: 'Location-based', desc: 'Cabinet + drawer + number, e.g. 2C-1405. Cabinet/drawer also fill the Location field.' },
+  { id: 'location', label: 'Location-based', desc: 'The tool ID is its physical-location string from the Location System, e.g. LC-1405.' },
   { id: 'sequential', label: 'Sequential', desc: 'A plain running number, e.g. 1042.' },
   { id: 'type_prefix', label: 'Type prefix', desc: 'Tool-type code + number, e.g. EM-1042.' },
   { id: 'size_first', label: 'Size first', desc: 'Diameter + type code + number, e.g. 0500-EM-1042.' },
   { id: 'machine_linked', label: 'Machine-linked', desc: 'Follows the machine tool number, e.g. T42.' },
   { id: 'other_erp', label: 'Other ERP', desc: 'Reserved for a future in-house ERP ID source.', disabled: true },
 ];
-
-// ── Location System card ────────────────────────────────────────────────────
-// Manages the Location Group → Cabinet → Drawer → Bin hierarchy stored in
-// shop_settings.json under location_system. Each level has stable UUIDs so
-// tool_location references survive renaming.
-// UI terminology: "Location Group" = zone (prefix, e.g. "LC")
-//                 "Cabinet" = station (individual location, e.g. "LC-140")
-function LocationSystemCard({ locationSystem, onSave }) {
-  const { tools, shopSettings, bulkAssignToolLocations, notify } = useApp();
-  const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
-
-  const [ls, setLs] = useState(() => ({
-    zones:    locationSystem.zones    || [],
-    stations: locationSystem.stations || [],
-    drawers:  locationSystem.drawers  || [],
-    bins:     locationSystem.bins     || [],
-  }));
-  const [saving, setSaving] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [editLabel, setEditLabel] = useState('');
-  const [editName, setEditName] = useState('');
-  const [editExtra, setEditExtra] = useState('');   // capacity_slots for drawers, slot_number for bins
-  const [newLevel, setNewLevel] = useState(null);   // { level, parentId } for the add form
-  const [newLabel, setNewLabel] = useState('');
-  const [newName, setNewName] = useState('');
-  const [newExtra, setNewExtra] = useState('');
-  const [expanded, setExpanded] = useState({});     // zoneId / stationId / drawerId → bool
-  const [matchStage, setMatchStage] = useState('idle'); // idle | preview | applying | done
-  const [matchResults, setMatchResults] = useState(null);
-
-  useEffect(() => {
-    setLs({
-      zones:    locationSystem.zones    || [],
-      stations: locationSystem.stations || [],
-      drawers:  locationSystem.drawers  || [],
-      bins:     locationSystem.bins     || [],
-    });
-  }, [locationSystem]);
-
-  const save = async (next) => {
-    setSaving(true);
-    try { await onSave(next); } finally { setSaving(false); }
-  };
-
-  // ── CRUD ──────────────────────────────────────────────────────────────────
-  const addItem = (level, parentId) => {
-    const label = newLabel.trim();
-    if (!label) return;
-    const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    let next;
-    if (level === 'zone') {
-      const item = { id, label, name: newName.trim(), order: ls.zones.length };
-      next = { ...ls, zones: [...ls.zones, item] };
-    } else if (level === 'station') {
-      const item = { id, zone_id: parentId || null, label, name: newName.trim(), order: ls.stations.filter(s => s.zone_id === (parentId || null)).length };
-      next = { ...ls, stations: [...ls.stations, item] };
-    } else if (level === 'drawer') {
-      const item = { id, station_id: parentId || null, label, capacity_slots: parseInt(newExtra) || null, order: ls.drawers.filter(d => d.station_id === (parentId || null)).length };
-      next = { ...ls, drawers: [...ls.drawers, item] };
-    } else {
-      const item = { id, drawer_id: parentId || null, slot_number: parseInt(newExtra) || null, order: ls.bins.filter(b => b.drawer_id === (parentId || null)).length };
-      next = { ...ls, bins: [...ls.bins, item] };
-    }
-    setLs(next);
-    setNewLevel(null); setNewLabel(''); setNewName(''); setNewExtra('');
-    save(next);
-  };
-
-  const deleteItem = (level, id) => {
-    let next = { ...ls };
-    if (level === 'zone') {
-      const stationIds = ls.stations.filter(s => s.zone_id === id).map(s => s.id);
-      const drawerIds = ls.drawers.filter(d => stationIds.includes(d.station_id)).map(d => d.id);
-      next = { ...next, zones: ls.zones.filter(z => z.id !== id), stations: ls.stations.filter(s => s.zone_id !== id), drawers: ls.drawers.filter(d => !stationIds.includes(d.station_id)), bins: ls.bins.filter(b => !drawerIds.includes(b.drawer_id)) };
-    } else if (level === 'station') {
-      const drawerIds = ls.drawers.filter(d => d.station_id === id).map(d => d.id);
-      next = { ...next, stations: ls.stations.filter(s => s.id !== id), drawers: ls.drawers.filter(d => d.station_id !== id), bins: ls.bins.filter(b => !drawerIds.includes(b.drawer_id)) };
-    } else if (level === 'drawer') {
-      next = { ...next, drawers: ls.drawers.filter(d => d.id !== id), bins: ls.bins.filter(b => b.drawer_id !== id) };
-    } else {
-      next = { ...next, bins: ls.bins.filter(b => b.id !== id) };
-    }
-    setLs(next);
-    save(next);
-  };
-
-  const startEdit = (level, item) => {
-    setEditingId(`${level}:${item.id}`);
-    setEditLabel(item.label || '');
-    setEditName(item.name || '');
-    if (level === 'drawer') setEditExtra(item.capacity_slots != null ? String(item.capacity_slots) : '');
-    else if (level === 'bin') setEditExtra(item.slot_number != null ? String(item.slot_number) : '');
-    else setEditExtra('');
-  };
-
-  const commitEdit = (level, id) => {
-    const label = editLabel.trim();
-    if (!label) { setEditingId(null); return; }
-    let next;
-    if (level === 'zone') {
-      next = { ...ls, zones: ls.zones.map(z => z.id === id ? { ...z, label, name: editName.trim() } : z) };
-    } else if (level === 'station') {
-      next = { ...ls, stations: ls.stations.map(s => s.id === id ? { ...s, label, name: editName.trim() } : s) };
-    } else if (level === 'drawer') {
-      next = { ...ls, drawers: ls.drawers.map(d => d.id === id ? { ...d, label, capacity_slots: parseInt(editExtra) || null } : d) };
-    } else {
-      next = { ...ls, bins: ls.bins.map(b => b.id === id ? { ...b, slot_number: parseInt(editExtra) || null } : b) };
-    }
-    setLs(next);
-    setEditingId(null);
-    save(next);
-  };
-
-  const toggle = (key) => setExpanded(e => ({ ...e, [key]: !e[key] }));
-
-  // ── Live preview (computed from first group / cabinet / drawer in ls) ──────
-  const previewGroup   = ls.zones[0];
-  const previewCabinet = ls.stations.find(s => s.zone_id === previewGroup?.id);
-  const previewDrawer  = ls.drawers.find(d => d.station_id === previewCabinet?.id);
-  const previewLocStr  = previewGroup
-    ? composeLocationString({
-        zone_id:    previewGroup?.id   || null,
-        station_id: previewCabinet?.id || null,
-        drawer_id:  previewDrawer?.id  || null,
-        bin_id:     null,
-      }, ls)
-    : '';
-  const previewIdPrefix = previewCabinet
-    ? `${previewCabinet.label || ''}${previewDrawer ? (previewDrawer.label || '') : ''}`
-    : '';
-
-  // ── Match existing tool locations ─────────────────────────────────────────
-  const normalizeStr = s => (s || '').toLowerCase().replace(/[\s\-_.]/g, '');
-
-  const computeMatches = () => {
-    const matched = [];
-    const unmatched = [];
-    for (const tool of tools) {
-      if (tool.tool_location?.zone_id || tool.tool_location?.station_id) continue;
-      const locStr = (tool.location || '').trim();
-      if (!locStr) continue;
-      const normLoc = normalizeStr(locStr);
-      // 1. Exact cabinet (station) match
-      let station = ls.stations.find(s => normalizeStr(s.label) === normLoc);
-      if (station) {
-        const zone = ls.zones.find(z => z.id === station.zone_id);
-        matched.push({ tool, station, zone, matchType: 'exact', toolLocation: { zone_id: zone?.id || null, station_id: station.id, drawer_id: null, bin_id: null } });
-        continue;
-      }
-      // 2. Cabinet label ends with location string — e.g. "140" matches "LC-140"
-      station = normLoc.length >= 2 ? ls.stations.find(s => normalizeStr(s.label).endsWith(normLoc)) : null;
-      if (station) {
-        const zone = ls.zones.find(z => z.id === station.zone_id);
-        matched.push({ tool, station, zone, matchType: 'partial', toolLocation: { zone_id: zone?.id || null, station_id: station.id, drawer_id: null, bin_id: null } });
-        continue;
-      }
-      // 3. Location Group (zone/prefix) match
-      const zone = ls.zones.find(z => normalizeStr(z.label) === normLoc);
-      if (zone) {
-        matched.push({ tool, station: null, zone, matchType: 'group', toolLocation: { zone_id: zone.id, station_id: null, drawer_id: null, bin_id: null } });
-        continue;
-      }
-      unmatched.push({ tool, locStr });
-    }
-    return { matched, unmatched };
-  };
-
-  const handlePreview = () => {
-    if (!ls.zones.length && !ls.stations.length) {
-      notify('Add at least one Location Group or Cabinet first.', 'error');
-      return;
-    }
-    const results = computeMatches();
-    setMatchResults(results);
-    setMatchStage('preview');
-  };
-
-  const handleApply = async () => {
-    if (!matchResults?.matched.length) return;
-    setMatchStage('applying');
-    try {
-      const assignments = matchResults.matched.map(m => ({ id: m.tool.id, toolLocation: m.toolLocation }));
-      await bulkAssignToolLocations(assignments);
-      setMatchStage('done');
-    } catch {
-      setMatchStage('preview');
-    }
-  };
-
-  // ── Render helpers ────────────────────────────────────────────────────────
-  const rowStyle = { display: 'flex', alignItems: 'center', gap: 6, padding: '4px 0', borderBottom: '1px solid var(--border-faint, var(--border))' };
-  const labelStyle = { flex: 1, fontSize: '0.9rem' };
-  const addRowStyle = { display: 'flex', gap: 6, marginTop: 6 };
-
-  const matchTypeBadge = (t) => {
-    if (t === 'exact') return <span style={{ fontSize: '0.72rem', color: 'var(--green, #4ade80)', marginLeft: 6 }}>exact</span>;
-    if (t === 'partial') return <span style={{ fontSize: '0.72rem', color: 'var(--orange, #f59e0b)', marginLeft: 6 }}>partial</span>;
-    return <span style={{ fontSize: '0.72rem', color: 'var(--text-sub)', marginLeft: 6 }}>group</span>;
-  };
-
-  const renderBins = (drawerId) => {
-    const bins = ls.bins.filter(b => b.drawer_id === drawerId);
-    return (
-      <div style={{ marginLeft: 24 }}>
-        {bins.map(bin => {
-          const eid = `bin:${bin.id}`;
-          return (
-            <div key={bin.id} style={rowStyle}>
-              {editingId === eid ? (
-                <>
-                  <input className="field-input" style={{ width: 70 }} placeholder="Label" value={editLabel} onChange={e => setEditLabel(e.target.value)} autoFocus />
-                  <input className="field-input" style={{ width: 70 }} placeholder="Slot #" type="number" value={editExtra} onChange={e => setEditExtra(e.target.value)} />
-                  <button className="btn btn-primary btn-sm" onClick={() => commitEdit('bin', bin.id)}>Save</button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
-                </>
-              ) : (
-                <>
-                  <span style={labelStyle}>Bin {bin.slot_number != null ? `#${bin.slot_number}` : bin.id.slice(0, 6)}</span>
-                  <button className="btn btn-ghost btn-sm" onClick={() => startEdit('bin', bin)}>Edit</button>
-                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red, #ef4444)' }} onClick={() => deleteItem('bin', bin.id)}><X size={13} /></button>
-                </>
-              )}
-            </div>
-          );
-        })}
-        {newLevel?.level === 'bin' && newLevel.parentId === drawerId ? (
-          <div style={addRowStyle}>
-            <input className="field-input" style={{ width: 70 }} placeholder="Slot #" type="number" value={newExtra} onChange={e => setNewExtra(e.target.value)} autoFocus />
-            <button className="btn btn-primary btn-sm" onClick={() => addItem('bin', drawerId)}>Add</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => setNewLevel(null)}>Cancel</button>
-          </div>
-        ) : (
-          <button className="btn btn-ghost btn-sm" style={{ marginTop: 4, fontSize: '0.78rem' }} onClick={() => { setNewLevel({ level: 'bin', parentId: drawerId }); setNewLabel(''); setNewExtra(''); }}>+ Add Bin</button>
-        )}
-      </div>
-    );
-  };
-
-  const renderDrawers = (stationId) => {
-    const drawers = ls.drawers.filter(d => d.station_id === stationId);
-    return (
-      <div style={{ marginLeft: 24 }}>
-        {drawers.map(drawer => {
-          const key = `drw:${drawer.id}`;
-          const open = expanded[key];
-          return (
-            <div key={drawer.id}>
-              <div style={rowStyle}>
-                <button className="btn btn-ghost btn-sm" style={{ padding: '0 4px' }} onClick={() => toggle(key)}>
-                  {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                </button>
-                {editingId === `drawer:${drawer.id}` ? (
-                  <>
-                    <input className="field-input" style={{ width: 70 }} placeholder="Label" value={editLabel} onChange={e => setEditLabel(e.target.value)} autoFocus />
-                    <input className="field-input" style={{ width: 80 }} placeholder="Slots" type="number" value={editExtra} onChange={e => setEditExtra(e.target.value)} />
-                    <button className="btn btn-primary btn-sm" onClick={() => commitEdit('drawer', drawer.id)}>Save</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
-                  </>
-                ) : (
-                  <>
-                    <span style={labelStyle}><span className="font-mono">{drawer.label}</span>{drawer.capacity_slots != null && <span className="text-sub text-xs" style={{ marginLeft: 6 }}>{drawer.capacity_slots} slots</span>}</span>
-                    <button className="btn btn-ghost btn-sm" onClick={() => startEdit('drawer', drawer)}>Edit</button>
-                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red, #ef4444)' }} onClick={() => deleteItem('drawer', drawer.id)}><X size={13} /></button>
-                  </>
-                )}
-              </div>
-              {open && renderBins(drawer.id)}
-            </div>
-          );
-        })}
-        {newLevel?.level === 'drawer' && newLevel.parentId === stationId ? (
-          <div style={addRowStyle}>
-            <input className="field-input" style={{ width: 80 }} placeholder="Label" value={newLabel} onChange={e => setNewLabel(e.target.value)} autoFocus />
-            <input className="field-input" style={{ width: 80 }} placeholder="Slots" type="number" value={newExtra} onChange={e => setNewExtra(e.target.value)} />
-            <button className="btn btn-primary btn-sm" onClick={() => addItem('drawer', stationId)}>Add</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => setNewLevel(null)}>Cancel</button>
-          </div>
-        ) : (
-          <button className="btn btn-ghost btn-sm" style={{ marginTop: 4, fontSize: '0.78rem' }} onClick={() => { setNewLevel({ level: 'drawer', parentId: stationId }); setNewLabel(''); setNewExtra(''); }}>+ Add Drawer</button>
-        )}
-      </div>
-    );
-  };
-
-  const renderCabinets = (zoneId) => {
-    const stations = ls.stations.filter(s => s.zone_id === zoneId);
-    return (
-      <div style={{ marginLeft: 24 }}>
-        {stations.map(station => {
-          const key = `st:${station.id}`;
-          const open = expanded[key];
-          return (
-            <div key={station.id}>
-              <div style={rowStyle}>
-                <button className="btn btn-ghost btn-sm" style={{ padding: '0 4px' }} onClick={() => toggle(key)}>
-                  {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                </button>
-                {editingId === `station:${station.id}` ? (
-                  <>
-                    <input className="field-input" style={{ width: 80 }} placeholder="Label (e.g. LC-140)" value={editLabel} onChange={e => setEditLabel(e.target.value)} autoFocus />
-                    <input className="field-input" style={{ width: 140 }} placeholder="Name (optional)" value={editName} onChange={e => setEditName(e.target.value)} />
-                    <button className="btn btn-primary btn-sm" onClick={() => commitEdit('station', station.id)}>Save</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
-                  </>
-                ) : (
-                  <>
-                    <span style={labelStyle}><span className="font-mono">{station.label}</span>{station.name && <span className="text-sub text-xs" style={{ marginLeft: 6 }}>{station.name}</span>}</span>
-                    <button className="btn btn-ghost btn-sm" onClick={() => startEdit('station', station)}>Edit</button>
-                    <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red, #ef4444)' }} onClick={() => deleteItem('station', station.id)}><X size={13} /></button>
-                  </>
-                )}
-              </div>
-              {open && renderDrawers(station.id)}
-            </div>
-          );
-        })}
-        {newLevel?.level === 'station' && newLevel.parentId === zoneId ? (
-          <div style={addRowStyle}>
-            <input className="field-input" style={{ width: 80 }} placeholder="Label (e.g. LC-140)" value={newLabel} onChange={e => setNewLabel(e.target.value)} autoFocus />
-            <input className="field-input" style={{ width: 140 }} placeholder="Name (optional)" value={newName} onChange={e => setNewName(e.target.value)} />
-            <button className="btn btn-primary btn-sm" onClick={() => addItem('station', zoneId)}>Add</button>
-            <button className="btn btn-secondary btn-sm" onClick={() => setNewLevel(null)}>Cancel</button>
-          </div>
-        ) : (
-          <button className="btn btn-ghost btn-sm" style={{ marginTop: 4, fontSize: '0.78rem' }} onClick={() => { setNewLevel({ level: 'station', parentId: zoneId }); setNewLabel(''); setNewName(''); }}>+ Add Cabinet</button>
-        )}
-      </div>
-    );
-  };
-
-  return (
-    <div className="card" style={{ maxWidth: 760 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <MapPin size={16} style={{ color: 'var(--blue)' }} />
-        <h3 style={{ margin: 0 }}>Location System</h3>
-        <InfoTip text="Location Groups are top-level prefixes (e.g. LC). Cabinets are the specific numbered locations within a group (e.g. LC-140). Drawers and Bins subdivide further. In Location ID mode, the Cabinet + Drawer labels form the tool ID prefix." alignRight />
-      </div>
-      <p className="text-sub text-sm" style={{ marginBottom: 12 }}>
-        <strong>Location Groups</strong> are prefixes (e.g. <span className="font-mono">LC</span>). <strong>Cabinets</strong> are the specific locations within a group (e.g. <span className="font-mono">LC-140</span>). Each gets a stable ID so tool locations survive renaming.
-      </p>
-
-      {ls.zones.length === 0 && !newLevel && (
-        <div className="text-sub text-sm" style={{ marginBottom: 8, padding: 10, borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-          No Location Groups defined yet — add one to get started.
-        </div>
-      )}
-
-      {ls.zones.map(zone => {
-        const key = `z:${zone.id}`;
-        const open = expanded[key];
-        return (
-          <div key={zone.id} style={{ marginBottom: 4, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '6px 10px' }}>
-            <div style={rowStyle}>
-              <button className="btn btn-ghost btn-sm" style={{ padding: '0 4px' }} onClick={() => toggle(key)}>
-                {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-              </button>
-              {editingId === `zone:${zone.id}` ? (
-                <>
-                  <input className="field-input" style={{ width: 80 }} placeholder="Prefix (e.g. LC)" value={editLabel} onChange={e => setEditLabel(e.target.value)} autoFocus />
-                  <input className="field-input" style={{ width: 140 }} placeholder="Name (optional)" value={editName} onChange={e => setEditName(e.target.value)} />
-                  <button className="btn btn-primary btn-sm" onClick={() => commitEdit('zone', zone.id)}>Save</button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => setEditingId(null)}>Cancel</button>
-                </>
-              ) : (
-                <>
-                  <span style={{ ...labelStyle, fontWeight: 600 }}><MapPin size={12} style={{ marginRight: 4, color: 'var(--blue)' }} />{zone.label}{zone.name && <span className="text-sub text-xs" style={{ marginLeft: 6, fontWeight: 400 }}>{zone.name}</span>}</span>
-                  <span className="text-sub text-xs">{ls.stations.filter(s => s.zone_id === zone.id).length} cabinet{ls.stations.filter(s => s.zone_id === zone.id).length !== 1 ? 's' : ''}</span>
-                  <button className="btn btn-ghost btn-sm" onClick={() => startEdit('zone', zone)}>Edit</button>
-                  <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red, #ef4444)' }} onClick={() => deleteItem('zone', zone.id)}><X size={13} /></button>
-                </>
-              )}
-            </div>
-            {open && renderCabinets(zone.id)}
-          </div>
-        );
-      })}
-
-      {newLevel?.level === 'zone' ? (
-        <div style={addRowStyle}>
-          <input className="field-input" style={{ width: 80 }} placeholder="Prefix (e.g. LC)" value={newLabel} onChange={e => setNewLabel(e.target.value)} autoFocus />
-          <input className="field-input" style={{ width: 140 }} placeholder="Name (optional)" value={newName} onChange={e => setNewName(e.target.value)} />
-          <button className="btn btn-primary btn-sm" onClick={() => addItem('zone', null)}>Add</button>
-          <button className="btn btn-secondary btn-sm" onClick={() => setNewLevel(null)}>Cancel</button>
-        </div>
-      ) : (
-        <button className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={() => { setNewLevel({ level: 'zone', parentId: null }); setNewLabel(''); setNewName(''); }}>
-          <Plus size={13} /> Add Location Group
-        </button>
-      )}
-
-      {/* Live preview — updates as the hierarchy changes */}
-      {previewLocStr && (
-        <div style={{ marginTop: 14, padding: '8px 12px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)', border: '1px solid var(--border)', fontSize: '0.85rem' }}>
-          <span className="text-sub" style={{ marginRight: 8 }}>Preview:</span>
-          <span className="font-mono" style={{ color: 'var(--blue)' }}>{previewLocStr}</span>
-          {idMode === 'location' && previewIdPrefix && (
-            <span className="text-sub" style={{ marginLeft: 16 }}>
-              ID prefix: <span className="font-mono" style={{ color: 'var(--text)' }}>{previewIdPrefix}</span>
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Assign existing tools to cabinets */}
-      {tools.length > 0 && (ls.zones.length > 0 || ls.stations.length > 0) && (
-        <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-            <strong style={{ fontSize: '0.9rem' }}>Assign existing tools to cabinets</strong>
-            <InfoTip text="Scans tools that have a legacy text location (e.g. LC-140) but no Cabinet assigned yet. Matches against the Cabinets defined above — exact, partial (number suffix), or group-level. Review before applying." />
-          </div>
-          <p className="text-sub text-sm" style={{ marginBottom: 10 }}>
-            Only tools without a structured Cabinet assignment are affected. Tools already assigned are skipped.
-          </p>
-
-          {matchStage === 'idle' && (
-            <button className="btn btn-secondary btn-sm" onClick={handlePreview}>Preview matches</button>
-          )}
-
-          {matchStage === 'preview' && matchResults && (
-            <div>
-              {matchResults.matched.length === 0 && matchResults.unmatched.length === 0 && (
-                <p className="text-sub text-sm">No tools with unassigned legacy locations found.</p>
-              )}
-              {matchResults.matched.length > 0 && (
-                <>
-                  <div className="text-sub text-xs" style={{ marginBottom: 6 }}>
-                    {matchResults.matched.length} tool{matchResults.matched.length !== 1 ? 's' : ''} can be assigned:
-                  </div>
-                  <div style={{ overflowX: 'auto', marginBottom: 10 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
-                      <thead>
-                        <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                          <th style={{ textAlign: 'left', padding: '3px 8px', fontWeight: 600 }}>Tool</th>
-                          <th style={{ textAlign: 'left', padding: '3px 8px', fontWeight: 600 }}>Current location</th>
-                          <th style={{ textAlign: 'left', padding: '3px 8px', fontWeight: 600 }}>→ Cabinet</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {matchResults.matched.map(m => (
-                          <tr key={m.tool.id} style={{ borderBottom: '1px solid var(--border-faint, var(--border))' }}>
-                            <td style={{ padding: '3px 8px', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.tool.description}</td>
-                            <td style={{ padding: '3px 8px' }}><span className="font-mono">{m.tool.location || '—'}</span></td>
-                            <td style={{ padding: '3px 8px' }}>
-                              <span className="font-mono">{m.station?.label || m.zone?.label}</span>
-                              {matchTypeBadge(m.matchType)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <button className="btn btn-primary btn-sm" onClick={handleApply}>
-                      Apply {matchResults.matched.length} assignment{matchResults.matched.length !== 1 ? 's' : ''}
-                    </button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => setMatchStage('idle')}>Cancel</button>
-                  </div>
-                </>
-              )}
-              {matchResults.unmatched.length > 0 && (
-                <div style={{ marginTop: 10 }}>
-                  <div className="text-sub text-xs" style={{ marginBottom: 4 }}>
-                    {matchResults.unmatched.length} unmatched (no cabinet found for their location string):
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: 'var(--text-sub)', lineHeight: 1.8 }}>
-                    {matchResults.unmatched.map(u => (
-                      <span key={u.tool.id} style={{ marginRight: 12, display: 'inline-block' }}>
-                        {u.tool.description} <span className="font-mono">({u.locStr || 'no location'})</span>
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {matchStage === 'applying' && (
-            <div className="text-sub text-sm">Applying assignments…</div>
-          )}
-
-          {matchStage === 'done' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <CheckCircle2 size={15} style={{ color: 'var(--green, #4ade80)' }} />
-              <span className="text-sm">{matchResults?.matched.length} tool{matchResults?.matched.length !== 1 ? 's' : ''} assigned to cabinets.</span>
-              <button className="btn btn-ghost btn-sm" onClick={() => { setMatchStage('idle'); setMatchResults(null); }}>Dismiss</button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {saving && <div className="text-sub text-xs" style={{ marginTop: 8 }}>Saving…</div>}
-    </div>
-  );
-}
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -526,7 +32,7 @@ export default function Settings() {
     addHolderLibrary, removeHolderLibrary, notify,
     googleAuthenticated, metadataSkipped, user: googleUser,
     fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
-    shopSettings, saveShopSettings, saveLocationSystem, signOutAll,
+    shopSettings, saveShopSettings, signOutAll,
     setupProgress, demoMode,
   } = useApp();
 
@@ -582,7 +88,7 @@ export default function Settings() {
   }, [shopSettings]);
 
   // ── Tool ID system (shop_settings.tool_id_system) ──────────────────────────
-  const idsDefault = { mode: 'proshop', separator: '-', start: 1000, skip: [], digits: 4, location: { cabinet_identifier: 'number', drawer_identifier: 'letter' } };
+  const idsDefault = { mode: 'proshop', separator: '-', start: 1000, skip: [], digits: 4 };
   const [idCfg, setIdCfg] = useState({ ...idsDefault, ...(shopSettings?.tool_id_system || {}) });
   const [idSkipInput, setIdSkipInput] = useState('');
   const [savingIds, setSavingIds] = useState(false);
@@ -1444,7 +950,7 @@ export default function Settings() {
       {/* Tool ID System — how each tool's displayed ID is generated/labelled.
           The value is stored in one field (Fusion product-id / tool_id); the
           mode only changes how it's produced and shown. */}
-      <div className="card" style={{ maxWidth: 760 }}>
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <Hash size={16} style={{ color: 'var(--blue)' }} />
           <h3 style={{ margin: 0 }}>Tool ID System</h3>
@@ -1492,7 +998,7 @@ export default function Settings() {
               )}
               <div style={{ alignSelf: 'flex-end' }}>
                 <span className="text-sub text-sm">Preview: </span>
-                <span className="font-mono" style={{ color: 'var(--green)' }}>{previewToolId(idCfg, shopSettings?.location_system) || '—'}</span>
+                <span className="font-mono" style={{ color: 'var(--green)' }}>{previewToolId(idCfg) || '—'}</span>
               </div>
             </div>
 
@@ -1524,23 +1030,8 @@ export default function Settings() {
             )}
 
             {idCfg.mode === 'location' && (
-              <div className="flex items-center gap-16" style={{ marginBottom: 14 }}>
-                <div>
-                  <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Cabinet format</label>
-                  <select className="field-input" style={{ maxWidth: 130 }} value={idCfg.location?.cabinet_identifier || 'number'}
-                    onChange={e => setIdField({ location: { ...idCfg.location, cabinet_identifier: e.target.value } })}>
-                    <option value="number">Number</option>
-                    <option value="letter">Letter</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Drawer format</label>
-                  <select className="field-input" style={{ maxWidth: 130 }} value={idCfg.location?.drawer_identifier || 'letter'}
-                    onChange={e => setIdField({ location: { ...idCfg.location, drawer_identifier: e.target.value } })}>
-                    <option value="number">Number</option>
-                    <option value="letter">Letter</option>
-                  </select>
-                </div>
+              <div className="text-sub text-sm" style={{ marginBottom: 14, padding: 10, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', borderLeft: '3px solid var(--blue)', background: 'var(--surface-2)' }}>
+                In <strong>Location</strong> mode each tool's ID is its composed physical-location string from the <strong>Location System</strong> (configured below). The segment format and bin numbering are owned there.
               </div>
             )}
           </>
@@ -1699,10 +1190,10 @@ export default function Settings() {
         )}
       </div>
 
-      <LocationSystemCard
-        locationSystem={shopSettings?.location_system || { zones: [], stations: [], drawers: [], bins: [] }}
-        onSave={saveLocationSystem}
-      />
+      {/* Location System — adjacent to Tool ID System (it drives the ID in
+          location mode). Self-contained: configures systems, normalizes, and
+          shows the library-wide unmatched panel. */}
+      <LocationSystemSettings />
 
       {/* Machine Numbers + Renumber — grouped because the numbers drive the
           renumber (and adding a tool). Set/save the numbering here, then renumber. */}

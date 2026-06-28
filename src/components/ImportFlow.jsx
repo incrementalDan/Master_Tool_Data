@@ -770,7 +770,10 @@ function matchProShopToTools(groups, tools, psUnit = 'inches') {
 
       // Fill gaps only — don't overwrite existing values
       if (!tool.coating && r['Coating']) additions.coating = r['Coating'];
-      if (!tool.location && r['Location']) additions.location = r['Location'];
+      // Location: ProShop's free text wins only until this tool owns a structured
+      // Location System assignment. Once normalized (tool_location set), this app
+      // owns location — the ProShop import value is ignored.
+      if (!tool.tool_location && !tool.location && r['Location']) additions.location = r['Location'];
       if (!tool.pitch && (r['Thread'] || r['Pitch'])) {
         const resolved = resolveThreadSize(r['Thread'] || r['Pitch'] || '');
         if (resolved.pitch) additions.pitch = resolved.pitch;

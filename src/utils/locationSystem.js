@@ -1,136 +1,295 @@
-// Location system helpers — resolves tool_location IDs against the
-// shop's location_system config stored in shop_settings.json.
+// Location System — pure helpers for the configurable physical-location model
+// stored in shop_settings.json under `location_config`.
 //
-// Hierarchy: Zone → Station → Drawer → Bin
-// Each level links to its parent via a parent-id field:
-//   station.zone_id, drawer.station_id, bin.drawer_id
+// A shop can define multiple independent location *systems*. Each system is a
+// Zone → Station → Drawer → Bin pattern where each upper level is optional and
+// the Bin is always present (auto-incrementing or a fixed value). Levels carry
+// `options[]` (stable-UUID entries) for number/letter identifiers; a `custom`
+// identifier is a fixed prefix (e.g. "LC") with no per-tool choice.
 //
-// tool_location stores four nullable IDs:
-//   { zone_id, station_id, drawer_id, bin_id }
-// Only the most-specific assigned level should be non-null; more-general
-// levels are derived. The redundant IDs are stored for easy filtering at
-// any level without traversing the hierarchy at query time.
+// A tool stores only IDs (system + level option ids + bin number) in metadata —
+// never the display string. The composed string is derived here on read, and is
+// what gets written to Fusion's vendor field + ProShop's Location column.
 //
-// Empty location_system: { zones: [], stations: [], drawers: [], bins: [] }
+// This module is framework-free (no React) so it can be called from AppContext,
+// the ProShop import/export, and the Settings UI alike.
 
-export function findZone(ls, id) {
-  return ls?.zones?.find(z => z.id === id) || null;
-}
-export function findStation(ls, id) {
-  return ls?.stations?.find(s => s.id === id) || null;
-}
-export function findDrawer(ls, id) {
-  return ls?.drawers?.find(d => d.id === id) || null;
-}
-export function findBin(ls, id) {
-  return ls?.bins?.find(b => b.id === id) || null;
+export const LEVEL_KEYS = ['zone', 'station', 'drawer'];
+
+// ─── IDs ─────────────────────────────────────────────────────────────────────
+export function genLocId() {
+  return (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `loc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function stationsForZone(ls, zoneId) {
-  return (ls?.stations || []).filter(s => s.zone_id === zoneId);
-}
-export function drawersForStation(ls, stationId) {
-  return (ls?.drawers || []).filter(d => d.station_id === stationId);
-}
-export function binsForDrawer(ls, drawerId) {
-  return (ls?.bins || []).filter(b => b.drawer_id === drawerId);
+// ─── Factories ───────────────────────────────────────────────────────────────
+function blankLevel(levelType, identFormat = 'number') {
+  return { on: false, levelType, customTypeName: '', identFormat, customIdent: '', options: [] };
 }
 
-// Resolve labels for each assigned level in tool_location.
-// Returns { zone, station, drawer, bin } where each is the label
-// string or null when that level is not assigned.
-export function resolveLocationLabels(toolLocation, ls) {
-  if (!toolLocation) return { zone: null, station: null, drawer: null, bin: null };
-  const zoneRec    = toolLocation.zone_id    ? findZone(ls, toolLocation.zone_id)       : null;
-  const stationRec = toolLocation.station_id ? findStation(ls, toolLocation.station_id) : null;
-  const drawerRec  = toolLocation.drawer_id  ? findDrawer(ls, toolLocation.drawer_id)   : null;
-  const binRec     = toolLocation.bin_id     ? findBin(ls, toolLocation.bin_id)         : null;
+// A fresh, empty location system (matches the prototype's addSystem shape).
+export function newLocationSystem(name = 'New System') {
   return {
-    zone:    zoneRec    ? zoneRec.label                    : null,
-    station: stationRec ? stationRec.label                 : null,
-    drawer:  drawerRec  ? drawerRec.label                  : null,
-    bin:     binRec     ? String(binRec.slot_number)       : null,
+    id: genLocId(),
+    name,
+    normalized: false,
+    allowDuplicates: false,
+    proShopExport: 'number_only',  // number_only | full | fixed
+    fixedExport: '',
+    delimiters: { zs: '-', sd: '-', db: '-' },
+    levels: {
+      zone:    blankLevel('Building', 'number'),
+      station: blankLevel('Cabinet', 'number'),
+      drawer:  blankLevel('Drawer', 'letter'),
+      bin:     { fixed: false, start: 1000, fixedVal: '', skip: [] },
+    },
   };
 }
 
-// Compose the short display / Fusion-vendor string from a tool_location.
-// Uses the deepest assigned levels, joined with " / ".
-// e.g. zone "LC" + station "LC-01" + drawer "D1" → "LC / LC-01 / D1"
-export function composeLocationString(toolLocation, ls) {
-  if (!toolLocation) return '';
-  const { zone, station, drawer, bin } = resolveLocationLabels(toolLocation, ls);
-  const parts = [zone, station, drawer, bin ? `Bin ${bin}` : null].filter(Boolean);
-  return parts.join(' / ');
+// A level option entry { id, label, order }.
+export function newLevelOption(label, order) {
+  return { id: genLocId(), label, order };
 }
 
-// Given a bin record, return a tool_location with all parent IDs filled in.
-export function locationFromBin(ls, bin) {
-  if (!bin) return null;
-  const drawer  = findDrawer(ls, bin.drawer_id);
-  const station = drawer ? findStation(ls, drawer.station_id) : null;
-  const zone    = station ? findZone(ls, station.zone_id) : null;
-  return {
-    zone_id:    zone    ? zone.id    : null,
-    station_id: station ? station.id : null,
-    drawer_id:  drawer  ? drawer.id  : null,
-    bin_id:     bin.id,
+// ─── Lookups ─────────────────────────────────────────────────────────────────
+export function findSystem(systems, id) {
+  return (systems || []).find(s => s.id === id) || null;
+}
+export function levelOptions(system, levelKey) {
+  return system?.levels?.[levelKey]?.options || [];
+}
+export function findOption(system, levelKey, optionId) {
+  return levelOptions(system, levelKey).find(o => o.id === optionId) || null;
+}
+// The display name for a level (its custom type name or the chosen levelType).
+export function levelTypeName(level) {
+  if (!level) return '';
+  return level.levelType === 'custom' ? (level.customTypeName || 'Custom') : level.levelType;
+}
+
+// ─── Composition ─────────────────────────────────────────────────────────────
+// Delimiter between two adjacent active levels, keyed by their first letters
+// (zs/sd/db). Non-adjacent junctions (a middle level is off) fall back to '-'.
+function junctionDelim(delimiters, aKey, bKey) {
+  const key = aKey[0] + bKey[0];
+  const d = delimiters?.[key];
+  return d == null ? '-' : d;
+}
+
+// The value of one configured level for a tool's stored location.
+function segmentValue(system, levelKey, loc) {
+  const level = system.levels[levelKey];
+  if (!level || !level.on) return null;
+  if (level.identFormat === 'custom') return level.customIdent || '';
+  const opt = findOption(system, levelKey, loc?.[`${levelKey}_id`]);
+  return opt ? opt.label : '';
+}
+
+// Build the composed location string from a tool's structured location + system.
+// Order zone → station → drawer → bin, joined by the per-junction delimiters.
+// Returns '' when there's nothing to show.
+export function composeLocationString(loc, system) {
+  if (!loc || !system) return '';
+  const L = system.levels;
+  const binVal = L.bin?.fixed
+    ? (L.bin.fixedVal || '')
+    : (loc.bin != null && loc.bin !== '' ? String(loc.bin) : '');
+  const segs = [
+    L.zone.on    ? { key: 'zone',    val: segmentValue(system, 'zone', loc) }    : null,
+    L.station.on ? { key: 'station', val: segmentValue(system, 'station', loc) } : null,
+    L.drawer.on  ? { key: 'drawer',  val: segmentValue(system, 'drawer', loc) }  : null,
+    { key: 'bin', val: binVal },
+  ].filter(Boolean);
+  return segs
+    .map((s, i) => (s.val ?? '') + (i < segs.length - 1 ? junctionDelim(system.delimiters, s.key, segs[i + 1].key) : ''))
+    .join('');
+}
+
+// Config-editor preview using placeholder values (1/A for number/letter levels).
+export function buildPreview(system) {
+  const L = system.levels;
+  const seg = (level, num, let_) => {
+    if (!level.on) return null;
+    if (level.identFormat === 'custom') return level.customIdent || '…';
+    if (level.identFormat === 'letter') return let_;
+    return num;
   };
+  const binNum = L.bin.fixed ? (L.bin.fixedVal || '1000') : String(L.bin.start);
+  const segs = [
+    L.zone.on    ? { key: 'zone',    val: seg(L.zone, '1', 'A') }    : null,
+    L.station.on ? { key: 'station', val: seg(L.station, '1', 'A') } : null,
+    L.drawer.on  ? { key: 'drawer',  val: seg(L.drawer, '1', 'A') }  : null,
+    { key: 'bin', val: binNum },
+  ].filter(Boolean);
+  const out = segs
+    .map((s, i) => s.val + (i < segs.length - 1 ? junctionDelim(system.delimiters, s.key, segs[i + 1].key) : ''))
+    .join('');
+  return out || '—';
 }
 
-// Given a drawer record, return a tool_location with parent IDs filled in.
-export function locationFromDrawer(ls, drawer) {
-  if (!drawer) return null;
-  const station = findStation(ls, drawer.station_id);
-  const zone    = station ? findZone(ls, station.zone_id) : null;
-  return {
-    zone_id:    zone    ? zone.id    : null,
-    station_id: station ? station.id : null,
-    drawer_id:  drawer.id,
-    bin_id:     null,
-  };
+// Resolve the composed string for a tool given the whole systems list (looks up
+// the tool's system by id). Falls back to '' when unresolvable.
+export function resolveLocationString(loc, systems) {
+  if (!loc?.system_id) return '';
+  const system = findSystem(systems, loc.system_id);
+  return system ? composeLocationString(loc, system) : '';
 }
 
-// Given a station record, return a tool_location with parent IDs filled in.
-export function locationFromStation(ls, station) {
-  if (!station) return null;
-  const zone = findZone(ls, station.zone_id);
-  return {
-    zone_id:    zone ? zone.id : null,
-    station_id: station.id,
-    drawer_id:  null,
-    bin_id:     null,
-  };
-}
-
-// Given a zone record, return a tool_location for zone-only assignment.
-export function locationFromZone(zone) {
-  if (!zone) return null;
-  return { zone_id: zone.id, station_id: null, drawer_id: null, bin_id: null };
-}
-
-// An empty tool_location (no level assigned).
-export const EMPTY_TOOL_LOCATION = {
-  zone_id: null, station_id: null, drawer_id: null, bin_id: null,
-};
-
-// Resolve which parent IDs to fill on the tool given what the picker selected.
-// level is 'zone' | 'station' | 'drawer' | 'bin' | null (clear).
-export function buildToolLocation(ls, level, id) {
-  if (!level || !id) return EMPTY_TOOL_LOCATION;
-  switch (level) {
-    case 'zone':    return locationFromZone(findZone(ls, id));
-    case 'station': return locationFromStation(ls, findStation(ls, id));
-    case 'drawer':  return locationFromDrawer(ls, findDrawer(ls, id));
-    case 'bin':     return locationFromBin(ls, findBin(ls, id));
-    default:        return EMPTY_TOOL_LOCATION;
+// ─── ProShop export mapping ──────────────────────────────────────────────────
+// The composed string → the value written to ProShop's Location column.
+export function proShopLocationValue(system, composed) {
+  if (!system) return composed || '';
+  switch (system.proShopExport) {
+    case 'number_only': return (composed || '').replace(/[^0-9]/g, '');
+    case 'fixed':       return system.fixedExport || '';
+    case 'full':
+    default:            return composed || '';
   }
 }
 
-// Apply resolved location string to a tool object, if tool_location is set.
-// Used as a pre-write step in AppContext so internalToFusionTool sees the
-// correct `location` string without needing access to locationSystem itself.
-export function withResolvedLocation(tool, ls) {
-  const tl = tool.tool_location;
-  if (!tl || (!tl.zone_id && !tl.station_id && !tl.drawer_id && !tl.bin_id)) return tool;
-  return { ...tool, location: composeLocationString(tl, ls) };
+// ─── Bin numbering ───────────────────────────────────────────────────────────
+// Next available bin for an auto-increment system: ≥ start, not skipped, not used.
+export function nextBin(system, usedBins = new Set()) {
+  const bin = system?.levels?.bin;
+  if (!bin || bin.fixed) return bin?.fixedVal || '';
+  const skip = new Set((bin.skip || []).map(Number));
+  const used = usedBins instanceof Set ? usedBins : new Set(usedBins);
+  let n = Number(bin.start) || 1;
+  while (skip.has(n) || used.has(n)) n++;
+  return n;
+}
+
+// Bins already taken within a system across the library (numbers only).
+export function usedBinsForSystem(tools, systemId) {
+  const used = new Set();
+  for (const t of tools || []) {
+    const loc = t.tool_location;
+    if (loc?.system_id === systemId && loc.bin != null && loc.bin !== '') {
+      const n = Number(loc.bin);
+      if (!Number.isNaN(n)) used.add(n);
+    }
+  }
+  return used;
+}
+
+// ─── Normalization parsing ───────────────────────────────────────────────────
+// Build a lenient regex that matches a free-text location against a system's
+// pattern. Inter-segment separators are matched loosely (any run of space / dash
+// / dot / slash / pipe / underscore) because legacy strings are inconsistent
+// ("LC 84", "LC14", "LC -158"). Returns { regex, levelKeys } or null when the
+// system can't be parsed (a number/letter level with no options to match).
+function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+function buildParseRegex(system) {
+  const L = system.levels;
+  const parts = [];
+  const capturedLevels = [];
+  const SEP = '[\\s\\-._/|]*';
+  for (const key of LEVEL_KEYS) {
+    const level = L[key];
+    if (!level.on) continue;
+    if (parts.length) parts.push(SEP);
+    if (level.identFormat === 'custom') {
+      if (!level.customIdent) return null;
+      parts.push(escapeRe(level.customIdent));
+    } else {
+      const opts = level.options || [];
+      if (opts.length === 0) return null; // nothing to match this level against
+      parts.push('(' + opts.map(o => escapeRe(o.label)).join('|') + ')');
+      capturedLevels.push(key);
+    }
+  }
+  // Bin: a fixed value is a literal; auto-increment captures a number.
+  if (parts.length) parts.push(SEP);
+  if (L.bin.fixed) {
+    if (!L.bin.fixedVal) return null;
+    parts.push(escapeRe(L.bin.fixedVal));
+  } else {
+    parts.push('(\\d+)');
+    capturedLevels.push('bin');
+  }
+  return { regex: new RegExp('^\\s*' + parts.join('') + '\\s*$', 'i'), capturedLevels };
+}
+
+// Try to parse a single free-text location string against a system.
+// On success returns a structured tool_location { system_id, …ids, bin }.
+export function parseLocationString(str, system) {
+  const text = (str || '').trim();
+  if (!text) return null;
+  const built = buildParseRegex(system);
+  if (!built) return null;
+  const m = text.match(built.regex);
+  if (!m) return null;
+  const loc = { system_id: system.id, zone_id: null, station_id: null, drawer_id: null, bin: null };
+  built.capturedLevels.forEach((key, i) => {
+    const captured = m[i + 1];
+    if (key === 'bin') {
+      loc.bin = Number(captured);
+    } else {
+      const opt = levelOptions(system, key).find(o => o.label.toLowerCase() === captured.toLowerCase());
+      loc[`${key}_id`] = opt ? opt.id : null;
+    }
+  });
+  return loc;
+}
+
+// ─── Analysis (read-only) ────────────────────────────────────────────────────
+// Scan the library for tools that could be assigned to `system`. A tool is a
+// candidate when it is not already assigned to this system. Returns matched
+// (with the parsed structured location), unmatched (had location text but no
+// parse), a noLocation count, and the next available bin after the matches.
+export function analyzeSystem(tools, system) {
+  const matched = [];
+  const unmatched = [];
+  let noLocation = 0;
+  const used = usedBinsForSystem(tools, system.id);
+
+  for (const tool of tools || []) {
+    if (tool.tool_location?.system_id === system.id) continue; // already in this system
+    const text = (tool.location || '').trim();
+    if (!text) { noLocation++; continue; }
+    const parsed = parseLocationString(text, system);
+    if (parsed) {
+      if (parsed.bin != null) used.add(Number(parsed.bin));
+      matched.push({ tool, location: parsed, previous: text });
+    } else {
+      unmatched.push({ tool, location: text });
+    }
+  }
+  const binCfg = system.levels.bin;
+  const next = binCfg.fixed ? null : nextBin(system, used);
+  return { matched, unmatched, noLocation, nextBin: next };
+}
+
+// ─── Library-wide status (across all normalized systems) ─────────────────────
+// Derives the union of tools not assigned to any system, split into "has
+// unmatched location text" vs "no location at all". Only meaningful once at
+// least one system is normalized.
+export function libraryLocationStatus(tools, systems) {
+  const normalized = (systems || []).filter(s => s.normalized);
+  if (normalized.length === 0) return null;
+  const list = tools || [];
+  const assignedTools = [];
+  const unassigned = [];
+  for (const tool of list) {
+    const sysId = tool.tool_location?.system_id;
+    if (sysId && findSystem(systems, sysId)) assignedTools.push(tool);
+    else unassigned.push(tool);
+  }
+  const withLocation = unassigned.filter(t => (t.location || '').trim());
+  const withoutLocation = unassigned.filter(t => !(t.location || '').trim());
+  return {
+    total: list.length,
+    assigned: assignedTools.length,
+    unassigned: unassigned.length,
+    withLocation: withLocation.length,
+    withoutLocation: withoutLocation.length,
+    unassignedTools: unassigned,
+  };
+}
+
+// An empty structured location for a given system (nothing picked yet).
+export function emptyLocation(systemId) {
+  return { system_id: systemId, zone_id: null, station_id: null, drawer_id: null, bin: null };
 }

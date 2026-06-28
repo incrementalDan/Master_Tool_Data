@@ -9,7 +9,7 @@ import {
   combineToolsByToolId, buildMetadataTool,
 } from '../schema/toolSchema.js';
 import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSystem.js';
-import { withResolvedLocation, composeLocationString } from '../utils/locationSystem.js';
+import { resolveLocationString, analyzeSystem, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { composePresetName, opTypeWord, parsePresetName, materialNameCode, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import { classifyStrays } from '../services/reconcile.js';
@@ -508,42 +508,12 @@ export function AppProvider({ children }) {
   const saveShopSettings = useCallback((shopSettings) =>
     saveSharedFile('shopSettings', shopSettings, 'SET_SHOP_SETTINGS'), [saveSharedFile]);
 
-  // Saves only the location_system sub-object inside shop_settings.json.
-  const saveLocationSystem = useCallback((locationSystem) => {
-    const updated = { ...(shopSettingsRef.current || {}), location_system: locationSystem };
-    return saveSharedFile('shopSettings', updated, 'SET_SHOP_SETTINGS');
-  }, [saveSharedFile]);
-
-  // Bulk-assigns tool_location to a set of tools — metadata-only write (no Fusion
-  // round-trip). Used by the "Match existing locations" action in Settings.
-  // assignments = [{ id: trackingId, toolLocation }]
-  const bulkAssignToolLocations = useCallback(async (assignments) => {
-    if (!assignments.length) return 0;
-    const ls = shopSettingsRef.current?.location_system;
-
-    // Optimistic in-memory update so the UI reflects changes immediately.
-    const updated = toolsRef.current.map(t => {
-      const match = assignments.find(a => a.id === t.id);
-      if (!match) return t;
-      return withResolvedLocation({ ...t, tool_location: match.toolLocation }, ls);
-    });
-    dispatch({ type: 'SET_TOOLS', tools: updated });
-
-    if (!googleRef.current) return assignments.length;   // no Drive — in-memory only
-    try {
-      const metaList = await driveService.loadMetadata();
-      const metaByTracking = new Map(metaList.map(m => [m.id, m]));
-      for (const { id, toolLocation } of assignments) {
-        const existing = metaByTracking.get(id) || { id };
-        metaByTracking.set(id, { ...existing, tool_location: toolLocation });
-      }
-      await driveService.saveAllMetadata([...metaByTracking.values()]);
-    } catch (err) {
-      notify(`Failed to save location assignments: ${err.message}`, 'error', 7000);
-      throw err;
-    }
-    return assignments.length;
-  }, [notify]);
+  // Persist only the location_config sub-object (the Settings Location System
+  // editor calls this after each add/edit/delete/normalize change).
+  const saveLocationConfig = useCallback((locationConfig) => {
+    const updated = { ...(shopSettingsRef.current || {}), location_config: locationConfig };
+    return saveShopSettings(updated);
+  }, [saveShopSettings]);
 
   // Marks one step of the setup guide as complete (idempotent — see MARK_SETUP_STEP).
   const markSetupStep = useCallback((key) => dispatch({ type: 'MARK_SETUP_STEP', key }), []);
@@ -847,6 +817,11 @@ export function AppProvider({ children }) {
       // a tool always belongs to exactly one library).
       const toolLibs = effectiveShop.tool_libraries || [];
       if (toolLibs.length === 0) throw new Error('No tool library linked — add one in Settings');
+      // Location systems drive the derived `location` display string: when a tool
+      // has a structured tool_location, its display location is composed here (so
+      // ToolDetail / search / Fusion-write all see a ready string); otherwise the
+      // legacy free-text Fusion vendor string is left untouched.
+      const locSystems = effectiveShop.location_config?.systems || [];
       const tools = [];
       let untrackedCount = 0;
       for (const lib of toolLibs) {
@@ -857,8 +832,15 @@ export function AppProvider({ children }) {
         for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
         untrackedCount += untracked.length;
         const combined = combineToolsByToolId(built);
-        const ls = shopSettingsRef.current?.location_system;
-        for (const t of combined) tools.push({ ...withResolvedLocation(t, ls), library_id: lib.id, library_name: lib.fileName });
+        for (const t of combined) {
+          let extra = {};
+          if (t.tool_location) {
+            const sys = findSystem(locSystems, t.tool_location.system_id);
+            const composed = sys ? resolveLocationString(t.tool_location, locSystems) : '';
+            if (composed) extra = { location: composed, proshop_location: proShopLocationValue(sys, composed) };
+          }
+          tools.push({ ...t, library_id: lib.id, library_name: lib.fileName, ...extra });
+        }
       }
       const needsNormalize = untrackedCount > 0;
 
@@ -931,6 +913,11 @@ export function AppProvider({ children }) {
     const freshByGuid = new Map(fusionList.map(f => [f.guid, f]));
     const refreshedRaws = assemblies.map(a => freshByGuid.get(a.instance_guid)).filter(Boolean);
 
+    // A structured location overrides the free-text `location` (Fusion vendor)
+    // on every write, so the composed string is the single source of truth.
+    const locSystems = shopSettingsRef.current?.location_config?.systems || [];
+    const composedLoc = tool.tool_location ? resolveLocationString(tool.tool_location, locSystems) : '';
+
     const toWrite = {
       ...tool,
       tracking_id,
@@ -939,13 +926,10 @@ export function AppProvider({ children }) {
       assemblies,
       _instancesRaw: refreshedRaws,
       _fusionRaw: refreshedRaws[0] || tool._fusionRaw || null,
+      ...(composedLoc ? { location: composedLoc } : {}),
     };
 
-    // Derive the Fusion vendor string from tool_location before writing, so
-    // internalToFusionTool sees the correct `location` field without needing
-    // direct access to the location system config.
-    const locResolved = withResolvedLocation(toWrite, shopSettingsRef.current?.location_system);
-    const { fusionInstances, metadataTool } = splitToFusionInstances(locResolved, holders);
+    const { fusionInstances, metadataTool } = splitToFusionInstances(toWrite, holders);
 
     // Drop every entry this logical tool owns before re-appending the fresh set:
     // its tracking ID, plus any guid carried by an assembly or absorbed raw
@@ -990,6 +974,75 @@ export function AppProvider({ children }) {
       throw err;
     }
   }, [writeLogicalTool, notify]);
+
+  // Assign (or clear) a single tool's structured location. Routes through
+  // writeLogicalTool so the composed string syncs to Fusion's vendor field +
+  // metadata in one save. `toolLocation` null clears it.
+  const assignToolLocation = useCallback(async (tool, toolLocation, binSizeId = null) => {
+    dispatch({ type: 'SAVE_START' });
+    try {
+      const updated = await writeLogicalTool({
+        ...tool,
+        tool_location: toolLocation,
+        bin_size_id: binSizeId,
+        updated_at: new Date().toISOString(),
+      });
+      dispatch({ type: 'UPDATE_TOOL', tool: updated });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify('Location saved', 'success');
+      return updated;
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Save failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  }, [writeLogicalTool, notify]);
+
+  // Normalization commit: assign the structured location to every tool that
+  // matched `systemId` during analysis, mark the system normalized, and persist.
+  // Metadata-only batch write (one saveAllMetadata) + optimistic in-memory update
+  // — a full Fusion round-trip per tool would re-upload the whole library for
+  // each of potentially hundreds of matches. The composed string re-syncs to the
+  // Fusion vendor field the next time each tool is individually saved.
+  const normalizeLocationSystem = useCallback(async (systemId) => {
+    const ss = shopSettingsRef.current || {};
+    const systems = ss.location_config?.systems || [];
+    const system = systems.find(s => s.id === systemId);
+    if (!system) throw new Error('Location system not found');
+
+    const { matched } = analyzeSystem(toolsRef.current || [], system);
+
+    // Optimistic in-memory update: set tool_location + recompose location string.
+    const byId = new Map(matched.map(m => [m.tool.id, m.location]));
+    const updatedTools = (toolsRef.current || []).map(t => {
+      const loc = byId.get(t.id);
+      if (!loc) return t;
+      return { ...t, tool_location: loc, location: resolveLocationString(loc, systems) };
+    });
+    dispatch({ type: 'SET_TOOLS', tools: updatedTools });
+
+    // Mark the system normalized + persist shop settings.
+    const nextSystems = systems.map(s => s.id === systemId ? { ...s, normalized: true } : s);
+    await saveLocationConfig({ ...(ss.location_config || {}), systems: nextSystems });
+
+    // Batch metadata write (Drive only — skipped when Google not connected).
+    if (googleRef.current && matched.length) {
+      try {
+        const metaList = await driveService.loadMetadata();
+        const metaById = new Map(metaList.map(m => [m.id, m]));
+        for (const { tool, location } of matched) {
+          const key = tool.tracking_id || tool.id;
+          const existing = metaById.get(key) || { id: key };
+          metaById.set(key, { ...existing, location });
+        }
+        await driveService.saveAllMetadata([...metaById.values()]);
+      } catch (err) {
+        notify(`Saved system but metadata write failed: ${err.message}`, 'error', 7000);
+        throw err;
+      }
+    }
+    return matched.length;
+  }, [saveLocationConfig, notify]);
 
   const addTool = useCallback(async (tool) => {
     const { valid, errors } = validateTool(tool);
@@ -1681,7 +1734,7 @@ export function AppProvider({ children }) {
       let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip) : null;
       let assigned = 0;
       const tools = toolsRef.current.map(t => {
-        const value = composeToolId(config, t, counter, shopSettingsRef.current?.location_system);
+        const value = composeToolId(config, t, counter);
         if (!value) return t;
         assigned++;
         if (counter !== null) counter = nextSequential(counter + 1, config.skip);
@@ -1714,7 +1767,7 @@ export function AppProvider({ children }) {
       for (const raws of orderedGroups) {
         const logical = buildLogicalTool(raws, metaByTracking);
         if (logical.tool_id) continue;          // already has an ID — skip
-        const value = composeToolId(config, logical, counter, shopSettingsRef.current?.location_system);
+        const value = composeToolId(config, logical, counter);
         if (!value) continue;                       // mode can't produce one (e.g. no machine #)
         raws.forEach(r => applyToolIdToFusion(r, value));
         // tool_id is metadata-owned — record it in metadata (source of truth) too,
@@ -1779,7 +1832,7 @@ export function AppProvider({ children }) {
       let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip) : null;
       let assigned = 0;
       const tools = toolsRef.current.map(t => {
-        const value = composeToolId(config, t, counter, shopSettingsRef.current?.location_system);
+        const value = composeToolId(config, t, counter);
         if (!value) return t;
         if (counter !== null) counter = nextSequential(counter + 1, config.skip);
         assigned++;
@@ -1837,12 +1890,12 @@ export function AppProvider({ children }) {
           // (don't consume a counter value).
           value = clusterValue.get(oldId);
         } else {
-          value = composeToolId(config, logical, counter, shopSettingsRef.current?.location_system);
+          value = composeToolId(config, logical, counter);
           if (!value) continue;                      // mode can't produce one (e.g. no machine #)
           // Skip only an exact collision with a retired ID — bump and recompose.
           while (counter !== null && retiredExact.has(value)) {
             counter = nextSequential(counter + 1, config.skip);
-            value = composeToolId(config, logical, counter, shopSettingsRef.current?.location_system);
+            value = composeToolId(config, logical, counter);
           }
           if (counter !== null) counter = nextSequential(counter + 1, config.skip);
           if (oldId && mergedIds.has(oldId)) clusterValue.set(oldId, value);
@@ -2039,8 +2092,9 @@ export function AppProvider({ children }) {
       saveMaterials,
       saveVendorRegistry,
       saveShopSettings,
-      saveLocationSystem,
-      bulkAssignToolLocations,
+      saveLocationConfig,
+      assignToolLocation,
+      normalizeLocationSystem,
       markSetupStep,
       markSetupStepInSettings,
       setupCelebrated,
