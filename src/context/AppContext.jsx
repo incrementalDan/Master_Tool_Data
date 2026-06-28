@@ -913,10 +913,18 @@ export function AppProvider({ children }) {
     const freshByGuid = new Map(fusionList.map(f => [f.guid, f]));
     const refreshedRaws = assemblies.map(a => freshByGuid.get(a.instance_guid)).filter(Boolean);
 
-    // A structured location overrides the free-text `location` (Fusion vendor)
-    // on every write, so the composed string is the single source of truth.
+    // A structured location is the single source of truth for the derived
+    // DISPLAY values only — the composed string (Fusion vendor) and the ProShop
+    // Location value. It deliberately does NOT write tool_id: ID generation stays
+    // the explicit job of the Tool ID System's Assign/Re-number actions (which, in
+    // location mode, read this same structured location). This keeps "where a tool
+    // lives" (Location System) cleanly separate from "what it's called" (Tool ID).
     const locSystems = shopSettingsRef.current?.location_config?.systems || [];
-    const composedLoc = tool.tool_location ? resolveLocationString(tool.tool_location, locSystems) : '';
+    const locSys = tool.tool_location ? findSystem(locSystems, tool.tool_location.system_id) : null;
+    const composedLoc = locSys ? resolveLocationString(tool.tool_location, locSystems) : '';
+    const locExtra = composedLoc
+      ? { location: composedLoc, proshop_location: proShopLocationValue(locSys, composedLoc) }
+      : {};
 
     const toWrite = {
       ...tool,
@@ -926,7 +934,7 @@ export function AppProvider({ children }) {
       assemblies,
       _instancesRaw: refreshedRaws,
       _fusionRaw: refreshedRaws[0] || tool._fusionRaw || null,
-      ...(composedLoc ? { location: composedLoc } : {}),
+      ...locExtra,
     };
 
     const { fusionInstances, metadataTool } = splitToFusionInstances(toWrite, holders);
@@ -981,10 +989,16 @@ export function AppProvider({ children }) {
   const assignToolLocation = useCallback(async (tool, toolLocation, binSizeId = null) => {
     dispatch({ type: 'SAVE_START' });
     try {
+      // Setting a location: writeLogicalTool composes the display string + ProShop
+      // value. Clearing it: explicitly wipe those derived fields too — otherwise the
+      // old composed string lingers in Fusion's vendor field. tool_id is left alone
+      // either way (only the Tool ID System's explicit actions write it).
+      const patch = toolLocation
+        ? { tool_location: toolLocation, bin_size_id: binSizeId }
+        : { tool_location: null, bin_size_id: null, location: '', proshop_location: '' };
       const updated = await writeLogicalTool({
         ...tool,
-        tool_location: toolLocation,
-        bin_size_id: binSizeId,
+        ...patch,
         updated_at: new Date().toISOString(),
       });
       dispatch({ type: 'UPDATE_TOOL', tool: updated });
@@ -1012,12 +1026,21 @@ export function AppProvider({ children }) {
 
     const { matched } = analyzeSystem(toolsRef.current || [], system);
 
-    // Optimistic in-memory update: set tool_location + recompose location string.
+    // Normalization assigns LOCATION data only — it never writes tool_id. In
+    // location-based Tool ID mode the user generates IDs separately via the Tool
+    // ID System's Assign/Re-number action (which reads this structured location).
+    // Optimistic in-memory update: set tool_location + recompose derived fields.
     const byId = new Map(matched.map(m => [m.tool.id, m.location]));
     const updatedTools = (toolsRef.current || []).map(t => {
       const loc = byId.get(t.id);
       if (!loc) return t;
-      return { ...t, tool_location: loc, location: resolveLocationString(loc, systems) };
+      const composed = resolveLocationString(loc, systems);
+      return {
+        ...t,
+        tool_location: loc,
+        location: composed,
+        proshop_location: proShopLocationValue(system, composed),
+      };
     });
     dispatch({ type: 'SET_TOOLS', tools: updatedTools });
 
@@ -1764,9 +1787,16 @@ export function AppProvider({ children }) {
 
       let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip) : null;
       let assigned = 0;
+      const idLocSystems = shopSettingsRef.current?.location_config?.systems || [];
       for (const raws of orderedGroups) {
         const logical = buildLogicalTool(raws, metaByTracking);
         if (logical.tool_id) continue;          // already has an ID — skip
+        // location mode: derive the ID from the structured location, not the
+        // (possibly stale) Fusion vendor string carried on the raw entry.
+        if (logical.tool_location) {
+          const composed = resolveLocationString(logical.tool_location, idLocSystems);
+          if (composed) logical.location = composed;
+        }
         const value = composeToolId(config, logical, counter);
         if (!value) continue;                       // mode can't produce one (e.g. no machine #)
         raws.forEach(r => applyToolIdToFusion(r, value));
@@ -1878,11 +1908,18 @@ export function AppProvider({ children }) {
       const mergedIds = new Set(consolidateIds);
       const clusterValue = new Map();   // tool_id -> the one new ID for a merged cluster
 
+      const idLocSystems = shopSettingsRef.current?.location_config?.systems || [];
       let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip) : null;
       let assigned = 0;
       for (const raws of orderedGroups) {
         const logical = buildLogicalTool(raws, metaByTracking);
         const oldId = logical.tool_id;
+        // location mode: derive the ID from the structured location (authoritative),
+        // not the raw Fusion vendor string.
+        if (logical.tool_location) {
+          const composed = resolveLocationString(logical.tool_location, idLocSystems);
+          if (composed) logical.location = composed;
+        }
 
         let value;
         if (oldId && mergedIds.has(oldId) && clusterValue.has(oldId)) {

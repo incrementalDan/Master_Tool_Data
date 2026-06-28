@@ -54,6 +54,17 @@ export default function LocationPicker({ tool }) {
 
   const preview = system ? (composeLocationString(draftLocation(), system) || '—') : '—';
 
+  // Enforce the system's "no duplicate locations" rule on the bin number.
+  const binCollision = useMemo(() => {
+    if (!system || system.levels.bin.fixed || system.allowDuplicates) return false;
+    const val = (bin.trim() || suggestedBin);
+    if (!val) return false;
+    const n = Number(val);
+    return tools.some(t => t.id !== tool.id
+      && t.tool_location?.system_id === sysId
+      && Number(t.tool_location?.bin) === n);
+  }, [system, bin, suggestedBin, tools, tool.id, sysId]);
+
   async function setLocation() {
     const loc = draftLocation();
     try { await assignToolLocation(tool, loc, tool.bin_size_id || null); }
@@ -130,8 +141,14 @@ export default function LocationPicker({ tool }) {
             </div>
           )}
 
+          {binCollision && (
+            <div style={{ background: 'color-mix(in srgb, var(--red) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--red) 40%, transparent)', borderRadius: 6, padding: '8px 12px', fontSize: '0.78rem', color: 'var(--red)', marginTop: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
+              <AlertTriangle size={13} style={{ flexShrink: 0 }} /> Bin {bin.trim() || suggestedBin} is already used in this system, which doesn't allow duplicates. Pick another bin.
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-            <button className="btn btn-primary btn-sm" onClick={setLocation} disabled={isSaving}>
+            <button className="btn btn-primary btn-sm" onClick={setLocation} disabled={isSaving || binCollision}>
               <MapPin size={13} /> {isSaving ? 'Saving…' : 'Set location'}
             </button>
             {current && (

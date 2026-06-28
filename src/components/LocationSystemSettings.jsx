@@ -233,7 +233,7 @@ function NormalizationStep({ sys, tools, onCommit, onUpdate }) {
     <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>Location Normalization</span>
-        <InfoTip text="Scans your tool library and matches each tool's current location text to this system's pattern. Once complete, this app owns location data — ProShop imports won't overwrite it, and next-available bin suggestions become accurate." />
+        <InfoTip text="Scans your tool library and matches each tool's current location text to this system's pattern. Commit assigns LOCATION data only — it never renumbers or changes Tool IDs. Once complete, this app owns location data: ProShop imports won't overwrite it, and next-available bin suggestions become accurate." />
         {phase === 'done' && <Badge color="g">Complete</Badge>}
         {phase === 'idle' && <Badge color="o">Not run</Badge>}
         {phase === 'preview' && <Badge color="b">Ready to commit</Badge>}
@@ -482,9 +482,11 @@ export default function LocationSystemSettings() {
       </p>
 
       {idMode === 'location' && (
-        <div style={{ marginBottom: 14, padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid color-mix(in srgb, var(--blue) 40%, transparent)', background: 'color-mix(in srgb, var(--blue) 10%, transparent)', display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.8rem', color: 'var(--blue)' }}>
-          <Info size={14} style={{ flexShrink: 0 }} />
-          The Tool ID System is set to <strong>Location</strong> mode — each tool's ID is its composed location string from the system below.
+        <div style={{ marginBottom: 14, padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid color-mix(in srgb, var(--blue) 40%, transparent)', background: 'color-mix(in srgb, var(--blue) 10%, transparent)', display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: '0.8rem', color: 'var(--blue)' }}>
+          <Info size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+          <span>
+            The Tool ID System is set to <strong>Location</strong> mode — each tool's ID is its composed location string. This section only assigns <strong>locations</strong>; it never renumbers Tool IDs. To (re)generate IDs from locations, use <strong>Assign IDs / Re-number</strong> in the Tool ID System.
+          </span>
         </div>
       )}
 

@@ -217,6 +217,15 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--blue); }
 }
 .tooldex-wordmark b { color: var(--blue); font-weight: 700; }
 
+/* Page-header / nav-tab labels in the brand display face. `b` is the blue
+   second syllable (e.g. the "Dex" in "InDex"). */
+.tab-wordmark {
+  font-family: var(--font-display);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.tab-wordmark b { color: var(--blue); font-weight: 700; }
+
 /* Chrome-style centered tab strip */
 .topbar-tabs {
   position: absolute;
