@@ -1031,7 +1031,7 @@ export default function Settings() {
 
             {idCfg.mode === 'location' && (
               <div className="text-sub text-sm" style={{ marginBottom: 14, padding: 10, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', borderLeft: '3px solid var(--blue)', background: 'var(--surface-2)' }}>
-                In <strong>Location</strong> mode each tool's ID is its composed physical-location string from the <strong>Location System</strong> (configured below). The segment format and bin numbering are owned there.
+                In <strong>Location</strong> mode each tool's ID is its composed physical-location string from the <strong>Location System</strong> (configured below — it owns the segment format and bin numbering). Assigning or normalizing locations there doesn't write IDs by itself; use <strong>Assign IDs</strong> / <strong>Re-number</strong> here to generate them from each tool's location.
               </div>
             )}
           </>

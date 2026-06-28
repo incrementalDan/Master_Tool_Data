@@ -913,20 +913,17 @@ export function AppProvider({ children }) {
     const freshByGuid = new Map(fusionList.map(f => [f.guid, f]));
     const refreshedRaws = assemblies.map(a => freshByGuid.get(a.instance_guid)).filter(Boolean);
 
-    // A structured location is the single source of truth for the display
-    // string (Fusion vendor), the ProShop Location value, and — in location ID
-    // mode — the tool_id itself. Compose all three here so every write keeps them
-    // in sync. When there's no structured location, the caller's values stand.
+    // A structured location is the single source of truth for the derived
+    // DISPLAY values only — the composed string (Fusion vendor) and the ProShop
+    // Location value. It deliberately does NOT write tool_id: ID generation stays
+    // the explicit job of the Tool ID System's Assign/Re-number actions (which, in
+    // location mode, read this same structured location). This keeps "where a tool
+    // lives" (Location System) cleanly separate from "what it's called" (Tool ID).
     const locSystems = shopSettingsRef.current?.location_config?.systems || [];
     const locSys = tool.tool_location ? findSystem(locSystems, tool.tool_location.system_id) : null;
     const composedLoc = locSys ? resolveLocationString(tool.tool_location, locSystems) : '';
-    const locationIdMode = shopSettingsRef.current?.tool_id_system?.mode === 'location';
     const locExtra = composedLoc
-      ? {
-          location: composedLoc,
-          proshop_location: proShopLocationValue(locSys, composedLoc),
-          ...(locationIdMode ? { tool_id: composedLoc } : {}),
-        }
+      ? { location: composedLoc, proshop_location: proShopLocationValue(locSys, composedLoc) }
       : {};
 
     const toWrite = {
@@ -990,19 +987,15 @@ export function AppProvider({ children }) {
   // writeLogicalTool so the composed string syncs to Fusion's vendor field +
   // metadata in one save. `toolLocation` null clears it.
   const assignToolLocation = useCallback(async (tool, toolLocation, binSizeId = null) => {
-    const locationIdMode = shopSettingsRef.current?.tool_id_system?.mode === 'location';
     dispatch({ type: 'SAVE_START' });
     try {
-      // Setting a location: writeLogicalTool composes the string + ProShop value
-      // (+ tool_id in location mode). Clearing it: explicitly wipe the derived
-      // fields too — otherwise the old composed string lingers in Fusion's vendor
-      // field and (in location mode) as the tool_id.
+      // Setting a location: writeLogicalTool composes the display string + ProShop
+      // value. Clearing it: explicitly wipe those derived fields too — otherwise the
+      // old composed string lingers in Fusion's vendor field. tool_id is left alone
+      // either way (only the Tool ID System's explicit actions write it).
       const patch = toolLocation
         ? { tool_location: toolLocation, bin_size_id: binSizeId }
-        : {
-            tool_location: null, bin_size_id: null, location: '', proshop_location: '',
-            ...(locationIdMode ? { tool_id: '' } : {}),
-          };
+        : { tool_location: null, bin_size_id: null, location: '', proshop_location: '' };
       const updated = await writeLogicalTool({
         ...tool,
         ...patch,
@@ -1032,10 +1025,10 @@ export function AppProvider({ children }) {
     if (!system) throw new Error('Location system not found');
 
     const { matched } = analyzeSystem(toolsRef.current || [], system);
-    // In location ID mode each tool's tool_id IS its composed location, so
-    // normalization assigns the ID alongside the structured location.
-    const locationIdMode = ss.tool_id_system?.mode === 'location';
 
+    // Normalization assigns LOCATION data only — it never writes tool_id. In
+    // location-based Tool ID mode the user generates IDs separately via the Tool
+    // ID System's Assign/Re-number action (which reads this structured location).
     // Optimistic in-memory update: set tool_location + recompose derived fields.
     const byId = new Map(matched.map(m => [m.tool.id, m.location]));
     const updatedTools = (toolsRef.current || []).map(t => {
@@ -1047,7 +1040,6 @@ export function AppProvider({ children }) {
         tool_location: loc,
         location: composed,
         proshop_location: proShopLocationValue(system, composed),
-        ...(locationIdMode && composed ? { tool_id: composed } : {}),
       };
     });
     dispatch({ type: 'SET_TOOLS', tools: updatedTools });
@@ -1064,12 +1056,7 @@ export function AppProvider({ children }) {
         for (const { tool, location } of matched) {
           const key = tool.tracking_id || tool.id;
           const existing = metaById.get(key) || { id: key };
-          const composed = resolveLocationString(location, systems);
-          metaById.set(key, {
-            ...existing,
-            location,
-            ...(locationIdMode && composed ? { tool_id: composed } : {}),
-          });
+          metaById.set(key, { ...existing, location });
         }
         await driveService.saveAllMetadata([...metaById.values()]);
       } catch (err) {
