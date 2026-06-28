@@ -130,7 +130,7 @@ export default function MaterialsEditor() {
       {/* ── Header ── */}
       <div className="flex items-center gap-8 mb-4" style={{ flexWrap: 'wrap' }}>
         <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <FlaskConical size={16} /> Materials
+          <FlaskConical size={16} /> <span className="tab-wordmark">Materials</span>
         </h2>
         <span className="text-sub text-sm">{savingMsg}</span>
       </div>

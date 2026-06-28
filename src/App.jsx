@@ -319,25 +319,25 @@ function TopBar() {
           className={`topbar-tab${onLanding ? ' active' : ''}`}
           onClick={e => { if (onLanding) e.preventDefault(); }}
         >
-          <Library size={14} /> Library
+          <Library size={14} /> <span className="tab-wordmark">In<b>Dex</b></span>
         </a>
         <a
           href="#/materials"
           className={`topbar-tab${location.pathname === '/materials' ? ' active' : ''}`}
         >
-          <FlaskConical size={14} /> Materials
+          <FlaskConical size={14} /> <span className="tab-wordmark">Materials</span>
         </a>
         <a
           href="#/vendors"
           className={`topbar-tab${location.pathname === '/vendors' ? ' active' : ''}`}
         >
-          <Building2 size={14} /> Vendors
+          <Building2 size={14} /> <span className="tab-wordmark">Vendors</span>
         </a>
         <a
           href="#/settings"
           className={`topbar-tab${location.pathname === '/settings' ? ' active' : ''}`}
         >
-          <Settings size={14} /> Settings
+          <Settings size={14} /> <span className="tab-wordmark">Settings</span>
         </a>
       </nav>
       <div className="topbar-actions">
@@ -373,7 +373,7 @@ function LocalModeTopBar({ tools, onExit }) {
         <FolderOpen size={13} /> Local mode (read-only)
       </span>
       <a href="#/" className="topbar-link">
-        <Library size={14} /> Library
+        <Library size={14} /> <span className="tab-wordmark">In<b>Dex</b></span>
       </a>
       <span className="topbar-spacer" />
       <span className="topbar-user">{tools.length} tool{tools.length === 1 ? '' : 's'}</span>

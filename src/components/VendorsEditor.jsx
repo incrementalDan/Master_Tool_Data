@@ -91,7 +91,7 @@ export default function VendorsEditor() {
     <div>
       <div className="flex items-center gap-8 mb-20">
         <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Building2 size={16} /> Vendors &amp; Manufacturers
+          <Building2 size={16} /> <span className="tab-wordmark">Vendors &amp; Manufacturers</span>
         </h2>
         <span className="text-sub text-sm">{savingMsg}</span>
       </div>

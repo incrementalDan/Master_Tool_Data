@@ -559,7 +559,7 @@ export default function Settings() {
     <div>
       <div className="flex items-center gap-8 mb-20">
         <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <SettingsIcon size={16} /> Settings
+          <SettingsIcon size={16} /> <span className="tab-wordmark">Settings</span>
         </h2>
       </div>
 
