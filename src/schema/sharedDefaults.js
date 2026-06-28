@@ -2,6 +2,8 @@
 // (see driveService.loadOrCreateSharedJson). vendor_registry.json's default
 // lives in vendorRegistry.js (it's assembled from the existing registry data).
 
+import { genLocId } from '../utils/locationSystem.js';
+
 // ─── Material code systems ───────────────────────────────────────────────────
 // The material-classification standards we track a code for on each CAM preset
 // (and, via the vendor page, the standard a given manufacturer publishes). A
@@ -170,23 +172,33 @@ export const DEFAULT_SHOP_SETTINGS = {
   // In `location` mode the ID is the composed physical-location string from the
   // Location System (see location_config below) — the Location System owns the
   // segment/identifier format, so there are no per-mode cabinet/drawer settings.
+  //   show_legacy: whether retired IDs (legacy_ids[]) are shown in the UI by
+  //               default. One of the three parallel ID systems' shared toggle —
+  //               Tool ID defaults ON; Location/Assembly default OFF. A search
+  //               that *matches* a legacy value always surfaces it regardless.
   tool_id_system: {
     mode: 'proshop',
     separator: '-',
     start: 1000,
     skip: [],
     digits: 4,
+    show_legacy: true,
   },
   // Location System — how tools are physically stored. Each system is an
   // independent Zone → Station → Drawer → Bin pattern with its own delimiters,
   // ProShop-export rule, and normalization state. Tools reference a system +
   // level option ids (never display strings); the composed location string is
   // derived on read and written to Fusion's vendor field + ProShop Location.
-  // bin_sizes are a shared lookup (capacity-aware suggestion is a future feature).
+  // bin_sizes are a shared lookup (capacity-aware suggestion is a future feature);
+  // each carries a stable UUID so it maps cleanly to a future SQLite table row.
+  // show_legacy mirrors tool_id_system.show_legacy — retired free-text location
+  // strings (legacy_locations[]) are hidden in the UI by default; a search that
+  // matches one still surfaces it.
   location_config: {
     systems: [],
+    show_legacy: false,
     bin_sizes: [
-      { id: 'standard', label: 'Standard', slots: 1, isDefault: true },
+      { id: genLocId(), label: 'Standard', slots: 1, isDefault: true },
     ],
   },
   // Tool presetter integration — reserved placeholder (serial format/start).
@@ -222,5 +234,11 @@ export const DEFAULT_SHOP_SETTINGS = {
     proshopPhotos: null,
     machineNumbers: null,
     proshopExported: null,
+    // The three parallel identification systems, configured as a related group
+    // (see SETUP_STEPS in AppContext). assemblyIdConfigured is a placeholder
+    // until the Assembly ID system ships.
+    toolIdConfigured: null,
+    locationConfigured: null,
+    assemblyIdConfigured: null,
   },
 };

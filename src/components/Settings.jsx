@@ -88,7 +88,7 @@ export default function Settings() {
   }, [shopSettings]);
 
   // ── Tool ID system (shop_settings.tool_id_system) ──────────────────────────
-  const idsDefault = { mode: 'proshop', separator: '-', start: 1000, skip: [], digits: 4 };
+  const idsDefault = { mode: 'proshop', separator: '-', start: 1000, skip: [], digits: 4, show_legacy: true };
   const [idCfg, setIdCfg] = useState({ ...idsDefault, ...(shopSettings?.tool_id_system || {}) });
   const [idSkipInput, setIdSkipInput] = useState('');
   const [savingIds, setSavingIds] = useState(false);
@@ -128,6 +128,7 @@ export default function Settings() {
           skip: idCfg.skip || [],
           digits: Number(idCfg.digits) || 4,
           location: idCfg.location || idsDefault.location,
+          show_legacy: idCfg.show_legacy ?? true,
         },
       };
       // machine_linked drives machine numbering off the same start/skip.
@@ -135,6 +136,7 @@ export default function Settings() {
         next.machine_number = { start: Number(idCfg.start) || 30, skip: idCfg.skip || [] };
       }
       await saveShopSettings(next);
+      markSetupStepInSettings?.('toolIdConfigured');
       notify('Tool ID system saved', 'success');
     } catch { /* notify handled in saveShopSettings */ }
     finally { setSavingIds(false); }
@@ -606,6 +608,7 @@ export default function Settings() {
               display: 'flex', alignItems: 'flex-start', gap: 12,
               padding: '10px 0',
               borderBottom: i < SETUP_STEPS.length - 1 ? '1px solid var(--border)' : 'none',
+              opacity: step.disabled ? 0.6 : 1,
             }}>
               <div style={{ paddingTop: 1, flexShrink: 0 }}>
                 {warn
@@ -1037,6 +1040,21 @@ export default function Settings() {
           </>
         )}
 
+        {/* Show retired IDs — shared toggle across the three ID systems. Tool ID
+            defaults ON; a search match always surfaces a legacy value regardless. */}
+        <label className="radio-row" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 14, cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={idCfg.show_legacy ?? true}
+            onChange={e => setIdField({ show_legacy: e.target.checked })}
+            style={{ marginTop: 3 }}
+          />
+          <span>
+            <strong>Show former (retired) IDs</strong>
+            <div className="text-sub text-xs">Display a muted “Formerly:” line on each tool that has retired IDs. A search that matches an old ID still finds the tool either way.</div>
+          </span>
+        </label>
+
         <button className="btn btn-primary btn-sm" onClick={saveIdSystem} disabled={savingIds} style={{ marginBottom: 16 }}>
           {savingIds ? 'Saving…' : 'Save ID System'}
         </button>
@@ -1438,6 +1456,24 @@ function StepAction({ stepKey, done, warn, onExport, onImport, onGoToLanding, to
         <button className="btn btn-secondary btn-sm" onClick={onImport}>
           {done && !warn ? 'Re-run Import' : 'Open Import'}
         </button>
+      );
+    case 'toolIdConfigured':
+      return (
+        <span className="text-sub" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+          See Tool ID System ↓
+        </span>
+      );
+    case 'locationConfigured':
+      return (
+        <span className="text-sub" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+          See Location System ↓
+        </span>
+      );
+    case 'assemblyIdConfigured':
+      return (
+        <span className="text-sub" style={{ fontSize: 11, whiteSpace: 'nowrap', opacity: 0.7 }}>
+          Coming soon
+        </span>
       );
     case 'machineNumbers':
       return (

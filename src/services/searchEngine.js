@@ -11,6 +11,15 @@ export function matchedLegacyId(tool, query) {
   return tool.legacy_ids.find(l => String(l).toLowerCase().includes(q)) || null;
 }
 
+// The first legacy (retired) location string of `tool` that the query matched,
+// or null. Mirror of matchedLegacyId for the Location System — lets an old
+// free-text cabinet string still surface the tool even after normalization.
+export function matchedLegacyLocation(tool, query) {
+  const q = query?.toLowerCase().trim();
+  if (!q || !Array.isArray(tool?.legacy_locations)) return null;
+  return tool.legacy_locations.find(l => String(l).toLowerCase().includes(q)) || null;
+}
+
 export function textSearch(tools, query) {
   if (!query?.trim()) return tools;
   const q = query.toLowerCase().trim();
@@ -28,6 +37,8 @@ export function textSearch(tools, query) {
     if (Array.isArray(tool.material_suitability) && tool.material_suitability.some(m => m.toLowerCase().includes(q))) return true;
     // Legacy (retired) tool IDs — so an old job number still finds the tool.
     if (Array.isArray(tool.legacy_ids) && tool.legacy_ids.some(l => String(l).toLowerCase().includes(q))) return true;
+    // Legacy (retired) free-text locations — so an old cabinet string still finds it.
+    if (Array.isArray(tool.legacy_locations) && tool.legacy_locations.some(l => String(l).toLowerCase().includes(q))) return true;
     return false;
   });
 }

@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext.jsx';
 import InfoTip from './InfoTip.jsx';
 import {
   newLocationSystem, newLevelOption, levelTypeName, buildPreview,
-  analyzeSystem, libraryLocationStatus,
+  analyzeSystem, libraryLocationStatus, BIN_MODES, binModeOf, applyBinMode,
 } from '../utils/locationSystem.js';
 
 // Level-type and identifier option lists (from the approved prototype).
@@ -289,6 +289,7 @@ function SystemCard({ sys, tools, onUpdate, onDelete, onCommit, defaultOpen }) {
   const [open, setOpen] = useState(defaultOpen);
   const [confirmDel, setConfirmDel] = useState(false);
   const L = sys.levels; const D = sys.delimiters;
+  const mode = binModeOf(sys);
   const upd = (level, patch) => onUpdate({ ...sys, levels: { ...sys.levels, [level]: { ...sys.levels[level], ...patch } } });
   const updD = (key, val) => onUpdate({ ...sys, delimiters: { ...sys.delimiters, [key]: val } });
   const preview = buildPreview(sys);
@@ -310,6 +311,18 @@ function SystemCard({ sys, tools, onUpdate, onDelete, onCommit, defaultOpen }) {
             <Toggle on={sys.allowDuplicates} set={v => onUpdate({ ...sys, allowDuplicates: v })} />
             Allow duplicate locations
           </label>
+
+          {/* Bin numbering mode — explicit, parallel to the Tool ID System's mode.
+              Changing it keeps the bin's fixed/auto config in sync. */}
+          <div style={{ marginBottom: 16 }}>
+            <Lbl>Bin numbering mode</Lbl>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <select className="field-input" style={{ width: 230 }} value={mode} onChange={e => onUpdate(applyBinMode(sys, e.target.value))}>
+                {BIN_MODES.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+              </select>
+              <span className="text-sub text-xs">{BIN_MODES.find(m => m.id === mode)?.desc}</span>
+            </div>
+          </div>
 
           <div style={{ marginBottom: 16 }}>
             <Lbl>ProShop location export</Lbl>
@@ -347,21 +360,16 @@ function SystemCard({ sys, tools, onUpdate, onDelete, onCommit, defaultOpen }) {
           <DelimRow label="drawer → bin" value={D.db} onChange={v => updD('db', v)} active={L.drawer.on} />
 
           <LevelBlock title="Bin" optional={false} active>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <div>
-                <Lbl>Mode</Lbl>
-                <select className="field-input" value={L.bin.fixed ? 'fixed' : 'increment'} onChange={e => upd('bin', { fixed: e.target.value === 'fixed' })}>
-                  <option value="increment">Auto-increment</option>
-                  <option value="fixed">Fixed value</option>
-                </select>
-              </div>
-              <div>
-                <Lbl>{L.bin.fixed ? 'Fixed value' : 'Start at'}</Lbl>
-                <input className="field-input font-mono" value={L.bin.fixed ? L.bin.fixedVal : String(L.bin.start)}
-                  onChange={e => L.bin.fixed ? upd('bin', { fixedVal: e.target.value }) : upd('bin', { start: parseInt(e.target.value) || 1 })}
+            {mode === 'manual' ? (
+              <div className="text-sub text-xs">Bin numbers are entered per tool in the Assign Location picker — no fixed or auto value here.</div>
+            ) : (
+              <div style={{ maxWidth: 240 }}>
+                <Lbl>{mode === 'fixed' ? 'Fixed value' : 'Start at'}</Lbl>
+                <input className="field-input font-mono" value={mode === 'fixed' ? L.bin.fixedVal : String(L.bin.start)}
+                  onChange={e => mode === 'fixed' ? upd('bin', { fixedVal: e.target.value }) : upd('bin', { start: parseInt(e.target.value) || 1 })}
                   placeholder="1000" />
               </div>
-            </div>
+            )}
           </LevelBlock>
 
           <NormalizationStep sys={sys} tools={tools} onCommit={onCommit} onUpdate={onUpdate} />
@@ -460,12 +468,17 @@ function Counter({ n, label, color }) {
 
 // ── Root section (embedded in Settings, adjacent to Tool ID System) ─────────
 export default function LocationSystemSettings() {
-  const { tools, shopSettings, saveLocationConfig, normalizeLocationSystem } = useApp();
+  const { tools, shopSettings, saveLocationConfig, normalizeLocationSystem, markSetupStepInSettings } = useApp();
   const cfg = shopSettings?.location_config || { systems: [], bin_sizes: [] };
   const systems = cfg.systems || [];
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
 
-  const persist = (nextSystems) => saveLocationConfig({ ...cfg, systems: nextSystems });
+  const persist = (nextSystems) => {
+    // Configuring at least one system completes the Location step of the setup guide.
+    if (nextSystems.length > 0) markSetupStepInSettings?.('locationConfigured');
+    return saveLocationConfig({ ...cfg, systems: nextSystems });
+  };
+  const setShowLegacy = (v) => saveLocationConfig({ ...cfg, show_legacy: v });
   const updateSystem = (id, updated) => persist(systems.map(s => s.id === id ? updated : s));
   const deleteSystem = (id) => persist(systems.filter(s => s.id !== id));
   const addSystem = () => persist([...systems, newLocationSystem()]);
@@ -511,6 +524,14 @@ export default function LocationSystemSettings() {
       <button className="btn btn-secondary" style={{ width: '100%', marginTop: 4, borderStyle: 'dashed' }} onClick={addSystem}>
         <Plus size={14} /> Add Location System
       </button>
+
+      {/* Show retired locations — shared toggle across the three ID systems.
+          Location defaults OFF (Tool ID defaults ON). A search match still
+          surfaces a retired location regardless. */}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem', marginTop: 16 }}>
+        <Toggle on={cfg.show_legacy ?? false} set={setShowLegacy} />
+        Show former (retired) location strings on each tool
+      </label>
 
       <LibraryUnmatchedPanel tools={tools} systems={systems} />
     </div>

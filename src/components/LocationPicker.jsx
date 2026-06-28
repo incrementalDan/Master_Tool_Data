@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { LivePreview } from './LocationSystemSettings.jsx';
 import {
   findSystem, levelOptions, levelTypeName, composeLocationString,
-  nextBin, usedBinsForSystem, LEVEL_KEYS,
+  nextBin, usedBinsForSystem, LEVEL_KEYS, binModeOf,
 } from '../utils/locationSystem.js';
 
 // The "Assign Location" picker (prototype tab) bound to a specific tool. Lives
@@ -13,6 +13,10 @@ import {
 export default function LocationPicker({ tool }) {
   const { tools, shopSettings, assignToolLocation, isSaving } = useApp();
   const systems = shopSettings?.location_config?.systems || [];
+  // Retired free-text locations are hidden by default (parallel to the Tool ID
+  // System's show_legacy toggle, but defaulting OFF for Location/Assembly).
+  const showLegacy = shopSettings?.location_config?.show_legacy ?? false;
+  const legacyLocations = Array.isArray(tool.legacy_locations) ? tool.legacy_locations : [];
 
   const current = tool.tool_location || null;
   const [sysId, setSysId] = useState(current?.system_id || systems[0]?.id || '');
@@ -25,9 +29,10 @@ export default function LocationPicker({ tool }) {
 
   const system = findSystem(systems, sysId);
 
-  // Suggested next bin for an auto-increment system (excludes this tool's own bin).
+  // Suggested next bin — only in sequential mode (fixed has no per-tool bin;
+  // manual is entered by hand). Excludes this tool's own bin.
   const suggestedBin = useMemo(() => {
-    if (!system || system.levels.bin.fixed) return '';
+    if (!system || binModeOf(system) !== 'sequential') return '';
     const used = usedBinsForSystem(tools.filter(t => t.id !== tool.id), sysId);
     return String(nextBin(system, used));
   }, [system, tools, tool.id, sysId]);
@@ -156,6 +161,16 @@ export default function LocationPicker({ tool }) {
             )}
           </div>
         </>
+      )}
+
+      {/* Former (retired) free-text locations — muted, gated on the Location
+          System's show_legacy toggle (defaults OFF). A search match still
+          surfaces them on the result card regardless. */}
+      {showLegacy && legacyLocations.length > 0 && (
+        <div className="text-sub text-xs" style={{ marginTop: 12 }}>
+          Formerly:{' '}
+          <span className="font-mono">{legacyLocations.join(', ')}</span>
+        </div>
       )}
     </div>
   );

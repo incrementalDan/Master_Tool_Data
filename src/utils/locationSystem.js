@@ -33,6 +33,7 @@ export function newLocationSystem(name = 'New System') {
   return {
     id: genLocId(),
     name,
+    mode: 'sequential',            // explicit bin-numbering mode — see BIN_MODES
     normalized: false,
     allowDuplicates: false,
     proShopExport: 'number_only',  // number_only | full | fixed
@@ -44,6 +45,34 @@ export function newLocationSystem(name = 'New System') {
       drawer:  blankLevel('Drawer', 'letter'),
       bin:     { fixed: false, start: 1000, fixedVal: '', skip: [] },
     },
+  };
+}
+
+// ─── Bin-numbering modes (explicit, parallel to tool_id_system.mode) ──────────
+// The Location System's user-facing "mode" — the named bin-generation strategy.
+// Like the Tool ID System, the chosen mode only changes how the bin value is
+// produced; every mode still stores the same structured tool_location shape.
+// The implicit bin.fixed boolean is kept in sync with (derived from) the mode.
+export const BIN_MODES = [
+  { id: 'sequential', label: 'Auto-increment', desc: 'Bin numbers come from a running counter (start + skip); the next one is suggested.' },
+  { id: 'fixed',      label: 'Fixed value',     desc: 'Every tool in this system shares one fixed bin value.' },
+  { id: 'manual',     label: 'Manual entry',    desc: 'You type each tool’s bin number — no auto-suggestion.' },
+];
+
+// The system's bin mode, falling back to the implicit bin.fixed boolean for a
+// system saved before `mode` existed.
+export function binModeOf(system) {
+  if (system?.mode) return system.mode;
+  return system?.levels?.bin?.fixed ? 'fixed' : 'sequential';
+}
+
+// The system updated for a chosen bin mode, keeping bin.fixed in sync so the
+// composition helpers (which read bin.fixed) stay correct.
+export function applyBinMode(system, mode) {
+  return {
+    ...system,
+    mode,
+    levels: { ...system.levels, bin: { ...system.levels.bin, fixed: mode === 'fixed' } },
   };
 }
 

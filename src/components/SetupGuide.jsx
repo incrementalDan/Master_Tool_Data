@@ -6,8 +6,15 @@ import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
 // PICO-8-style retro palette for the completion fireworks.
 const PIXEL_COLORS = ['#ff004d', '#00e436', '#29adff', '#ffec27', '#ff77a8', '#ffa300'];
 
+// Disabled steps (e.g. the Assembly ID placeholder until it ships) are excluded
+// from the completion/progress math so setup can still reach 100%.
+const ACTIVE_STEPS = SETUP_STEPS.filter(s => !s.disabled);
+
 function completedCount(progress) {
-  return SETUP_STEPS.filter(s => progress[s.key]).length;
+  return ACTIVE_STEPS.filter(s => progress[s.key]).length;
+}
+function allStepsComplete(progress) {
+  return ACTIVE_STEPS.every(s => progress[s.key]);
 }
 
 // Shared progress visual — a thin fill bar plus a row of numbered circles that
@@ -15,20 +22,25 @@ function completedCount(progress) {
 // the Settings sanity-check card.
 export function SetupStepCircles({ progress, compact = false }) {
   const done = completedCount(progress);
-  const pct = Math.round((done / SETUP_STEPS.length) * 100);
+  const pct = Math.round((done / ACTIVE_STEPS.length) * 100);
+  const firstPendingKey = (ACTIVE_STEPS.find(s => !progress[s.key]) || {}).key;
+  let activeNum = 0; // 1-based number among active (non-disabled) steps
   return (
     <div className={`setup-guide-circles${compact ? ' compact' : ''}`}>
       <div className="setup-guide-bar-track">
         <div className="setup-guide-bar-fill" style={{ width: `${pct}%` }} />
       </div>
       <div className="setup-guide-steps">
-        {SETUP_STEPS.map((step, i) => {
+        {SETUP_STEPS.map((step) => {
           const isDone = !!progress[step.key];
-          const isActive = !isDone && i === done;
+          const isDisabled = !!step.disabled;
+          if (!isDisabled) activeNum += 1;
+          const isActive = !isDone && !isDisabled && step.key === firstPendingKey;
+          const circle = isDisabled ? '…' : isDone ? '✓' : activeNum;
           return (
-            <div key={step.key} className={`setup-guide-step${isDone ? ' done' : isActive ? ' active' : ''}`}>
-              <div className="setup-guide-circle">{isDone ? '✓' : i + 1}</div>
-              <span className="setup-guide-step-label">{step.label}</span>
+            <div key={step.key} className={`setup-guide-step${isDone ? ' done' : isActive ? ' active' : ''}${isDisabled ? ' disabled' : ''}`} style={isDisabled ? { opacity: 0.5 } : undefined}>
+              <div className="setup-guide-circle">{circle}</div>
+              <span className="setup-guide-step-label">{step.label}{isDisabled ? ' (soon)' : ''}</span>
             </div>
           );
         })}
@@ -43,7 +55,7 @@ export function SetupStepCircles({ progress, compact = false }) {
 export function SetupGuideBanner() {
   const { setupProgress } = useApp();
   const navigate = useNavigate();
-  if (SETUP_STEPS.every(s => setupProgress[s.key])) return null;
+  if (allStepsComplete(setupProgress)) return null;
   const goToSettings = () => navigate('/settings');
   return (
     <div
@@ -81,7 +93,7 @@ export function SetupGuideSummary() {
 export function SetupCompleteModal() {
   const { setupProgress, setupCelebrated, markSetupCelebrated } = useApp();
   const [show, setShow] = useState(false);
-  const allDone = SETUP_STEPS.every(s => setupProgress[s.key]);
+  const allDone = allStepsComplete(setupProgress);
   const bursts = useMemo(() => makeBursts(), []);
 
   useEffect(() => {

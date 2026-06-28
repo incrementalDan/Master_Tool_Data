@@ -32,12 +32,20 @@ const REGISTRY_MIRROR_KEY = 'aps_library_registry';
 const SETUP_PROGRESS_KEY = 'tms_setup_progress';
 const SETUP_CELEBRATED_KEY = 'tms_setup_celebrated';
 
-// The 5 steps of the initial setup/normalization/ProShop workflow, in order.
-// Each is toggled on at the moment its triggering action happens — see
-// setLibraryLocation, normalizeLibrary, and ImportFlow's merge/export buttons.
+// The one-time setup/normalization/ProShop workflow, in order. Each step is
+// toggled on at the moment its triggering action happens — see setLibraryLocation,
+// normalizeLibrary, saveIdSystem, Location config save, and ImportFlow's
+// merge/export buttons. The three identification systems (Tool ID, Location,
+// Assembly) are configured as a related group right after the data sources are
+// connected — see THREE SYSTEM CONTEXT PROMPT.md. assemblyIdConfigured is
+// `disabled` (a "coming soon" placeholder) until the Assembly ID system ships;
+// disabled steps are excluded from the completion/progress math (SetupGuide).
 export const SETUP_STEPS = [
   { key: 'fusionConnected', label: 'Connect Fusion library' },
   { key: 'metadataConnected', label: 'Connect tool metadata (Google Drive)' },
+  { key: 'toolIdConfigured', label: 'Choose your Tool ID format' },
+  { key: 'locationConfigured', label: 'Configure your Location System' },
+  { key: 'assemblyIdConfigured', label: 'Configure your Assembly ID format', disabled: true },
   { key: 'normalized', label: 'Normalize the library' },
   { key: 'proshopMerged', label: 'Merge ProShop data' },
   { key: 'machineNumbers', label: 'Configure machine numbers' },
@@ -150,6 +158,12 @@ function loadSetupProgress() {
       let changed = false;
       if (progress.machineNumbers === undefined) { progress.machineNumbers = true; changed = true; }
       if (progress.metadataConnected === undefined) { progress.metadataConnected = true; changed = true; }
+      // Three-ID-systems upgrade: an established shop already has a Tool ID scheme
+      // and (at minimum) had the chance to configure locations — back-fill so the
+      // setup banner doesn't resurrect. assemblyIdConfigured is a disabled step and
+      // is excluded from the completion math, so it needs no back-fill.
+      if (progress.toolIdConfigured === undefined) { progress.toolIdConfigured = true; changed = true; }
+      if (progress.locationConfigured === undefined) { progress.locationConfigured = true; changed = true; }
       if (changed) localStorage.setItem(SETUP_PROGRESS_KEY, JSON.stringify(progress));
     }
     return progress;
@@ -857,6 +871,11 @@ export function AppProvider({ children }) {
         dispatch({ type: 'SET_SETUP_PROGRESS', progress: {
           fusionConnected: true,
           metadataConnected,
+          // The three ID systems: an established shop already has a Tool ID scheme
+          // and had the chance to set up locations — mark done so the banner stays
+          // gone. assemblyIdConfigured is a disabled step (excluded from the math).
+          toolIdConfigured: established,
+          locationConfigured: established,
           normalized,
           proshopMerged,
           machineNumbers,
@@ -1025,21 +1044,30 @@ export function AppProvider({ children }) {
     if (!system) throw new Error('Location system not found');
 
     const { matched } = analyzeSystem(toolsRef.current || [], system);
+    const uniqPush = (arr, v) => (arr.includes(v) ? arr : [...arr, v]);
 
     // Normalization assigns LOCATION data only — it never writes tool_id. In
     // location-based Tool ID mode the user generates IDs separately via the Tool
     // ID System's Assign/Re-number action (which reads this structured location).
     // Optimistic in-memory update: set tool_location + recompose derived fields.
+    // The prior free-text location (Fusion's vendor field) is retired into
+    // legacy_locations[] — mirroring how renumberAllToolIds retires legacy_ids —
+    // so it stays searchable and matchable on a later ProShop import.
     const byId = new Map(matched.map(m => [m.tool.id, m.location]));
     const updatedTools = (toolsRef.current || []).map(t => {
       const loc = byId.get(t.id);
       if (!loc) return t;
       const composed = resolveLocationString(loc, systems);
+      const prior = (t.location || '').trim();
+      const legacy_locations = (prior && prior !== composed)
+        ? uniqPush((t.legacy_locations || []).filter(l => l !== composed), prior)
+        : (t.legacy_locations || []);
       return {
         ...t,
         tool_location: loc,
         location: composed,
         proshop_location: proShopLocationValue(system, composed),
+        legacy_locations,
       };
     });
     dispatch({ type: 'SET_TOOLS', tools: updatedTools });
@@ -1056,7 +1084,12 @@ export function AppProvider({ children }) {
         for (const { tool, location } of matched) {
           const key = tool.tracking_id || tool.id;
           const existing = metaById.get(key) || { id: key };
-          metaById.set(key, { ...existing, location });
+          const composed = resolveLocationString(location, systems);
+          const prior = (tool.location || '').trim();
+          const legacy_locations = (prior && prior !== composed)
+            ? uniqPush((existing.legacy_locations || []).filter(l => l !== composed), prior)
+            : (existing.legacy_locations || []);
+          metaById.set(key, { ...existing, location, legacy_locations });
         }
         await driveService.saveAllMetadata([...metaById.values()]);
       } catch (err) {
