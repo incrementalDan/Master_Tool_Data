@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { LivePreview } from './LocationSystemSettings.jsx';
 import {
   findSystem, levelOptions, levelTypeName, composeLocationString,
-  nextBin, usedBinsForSystem, LEVEL_KEYS, binModeOf,
+  nextBin, usedBinsForSystem, LEVEL_KEYS,
 } from '../utils/locationSystem.js';
 
 // The "Assign Location" picker (prototype tab) bound to a specific tool. Lives
@@ -29,10 +29,9 @@ export default function LocationPicker({ tool }) {
 
   const system = findSystem(systems, sysId);
 
-  // Suggested next bin — only in sequential mode (fixed has no per-tool bin;
-  // manual is entered by hand). Excludes this tool's own bin.
+  // Suggested next bin for an auto-increment system (excludes this tool's own bin).
   const suggestedBin = useMemo(() => {
-    if (!system || binModeOf(system) !== 'sequential') return '';
+    if (!system || system.levels.bin.fixed) return '';
     const used = usedBinsForSystem(tools.filter(t => t.id !== tool.id), sysId);
     return String(nextBin(system, used));
   }, [system, tools, tool.id, sysId]);
