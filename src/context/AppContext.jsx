@@ -326,8 +326,9 @@ export function AppProvider({ children }) {
   const demoModeRef = useRef(state.demoMode);
   const shopSettingsRef = useRef(state.shopSettings);
   const materialsRef = useRef(state.materials);
-  // Per-file debounce timers for shared-Drive-file writes (saveSharedFile) so
-  // typing in the editors coalesces into one Drive write instead of one per key.
+  // Pending debounced shared-Drive-file writes, keyed by file key →
+  // { timer, write(keepalive) }. Lets typing coalesce into one write and lets
+  // flushSharedWrites fire the latest pending write early on page hide/close.
   const sharedSaveTimersRef = useRef({});
   // Caches each library's wrapper-level fields (e.g. `version`), keyed by
   // library id (itemId), from the last download of that library — so a save
@@ -513,18 +514,42 @@ export function AppProvider({ children }) {
     // Demo mode is an in-memory sandbox — never write shared files to Drive.
     if (demoModeRef.current) return;
     const { SHARED_FILES } = driveService;
-    clearTimeout(sharedSaveTimersRef.current[key]);
-    sharedSaveTimersRef.current[key] = setTimeout(() => {
+    const pending = sharedSaveTimersRef.current;
+    // The write closure reads the latest settled state at call time (refs are
+    // render-synced), so flushing early still writes the newest value.
+    const write = (keepalive = false) => {
       const payload = key === 'shopSettings' ? shopSettingsRef.current
         : key === 'materials' ? materialsRef.current
         : fallbackData;
-      driveService.saveSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, payload)
+      return driveService.saveSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, payload, { keepalive })
         .catch(err => {
           if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
           notify(`Save failed: ${err.message}`, 'error', 7000);
         });
-    }, 600);
+    };
+    if (pending[key]?.timer) clearTimeout(pending[key].timer);
+    pending[key] = {
+      write,
+      timer: setTimeout(() => { delete pending[key]; write(false); }, 600),
+    };
   }, [notify]);
+
+  // Fire any pending debounced shared-file writes immediately. Called when the
+  // page is about to be hidden/closed (pagehide / visibilitychange) so an edit
+  // made in the last debounce window isn't lost. Uses fetch keepalive so the
+  // request can complete even as the page unloads. (In-app route changes keep
+  // the provider mounted, so their timers fire normally — this is only for
+  // tab close / refresh / navigate-away.)
+  const flushSharedWrites = useCallback(() => {
+    const pending = sharedSaveTimersRef.current;
+    for (const key of Object.keys(pending)) {
+      const entry = pending[key];
+      if (!entry) continue;
+      if (entry.timer) clearTimeout(entry.timer);
+      delete pending[key];
+      entry.write?.(true); // keepalive
+    }
+  }, []);
 
   const saveSharedFile = useCallback((key, data, dispatchType, onSaved) => {
     const stateKey = key === 'shopSettings' ? 'shopSettings' : key === 'vendorRegistry' ? 'vendorRegistry' : 'materials';
@@ -588,6 +613,23 @@ export function AppProvider({ children }) {
       markSetupStepInSettings('metadataConnected');
     }
   }, [state.googleAuthenticated, state.setupProgress.metadataConnected, markSetupStepInSettings]);
+
+  // Flush any pending debounced shared-file writes when the page is hidden or
+  // closed, so an edit made inside the 600ms debounce window isn't lost on a tab
+  // close / refresh / navigate-away. `visibilitychange → hidden` and `pagehide`
+  // are the reliable "page is going away" signals (more so than `beforeunload`,
+  // esp. on mobile); the write uses fetch keepalive to finish during unload.
+  // In-app (HashRouter) navigation keeps the provider mounted, so those timers
+  // fire normally and don't need this.
+  useEffect(() => {
+    const onVisibility = () => { if (document.visibilityState === 'hidden') flushSharedWrites(); };
+    window.addEventListener('pagehide', flushSharedWrites);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('pagehide', flushSharedWrites);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [flushSharedWrites]);
 
   // One-time-ever flag so the congratulations popup doesn't fire again after dismissal.
   const setupCelebrated = useCallback(() => localStorage.getItem(SETUP_CELEBRATED_KEY) === '1', []);
