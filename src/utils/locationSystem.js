@@ -128,6 +128,78 @@ export function buildPreview(system) {
   return out || '—';
 }
 
+// ─── Duplicate-output detection ──────────────────────────────────────────────
+// Two location systems "clash" when they could produce the same user-visible ID.
+// This is checked on the composed OUTPUT recipe, not the settings labels: a
+// level's *type name* (Drawer / Cabinet / custom type name) never appears in the
+// string, so two systems that label their steps differently but emit the same
+// segments still clash. Each segment is reduced to what actually shows:
+//   • custom level   → its fixed prefix string
+//   • number/letter  → the sorted SET of its option labels (the values that appear)
+//   • bin            → the fixed value, or "auto#" (any auto numeric bin can overlap)
+// Compared two ways: with the junction delimiters (exact-output identity) and
+// without them (structural identity — catches "same except the delimiter").
+const normTok = (s) => String(s ?? '').trim().toLowerCase();
+
+function activeSegmentKeys(system) {
+  const L = system.levels || {};
+  const keys = LEVEL_KEYS.filter(k => L[k]?.on);
+  keys.push('bin');
+  return keys;
+}
+
+function segmentToken(system, key) {
+  const L = system.levels;
+  if (key === 'bin') return L.bin?.fixed ? `fixed:${normTok(L.bin.fixedVal)}` : 'auto#';
+  const lvl = L[key];
+  if (lvl.identFormat === 'custom') return `const:${normTok(lvl.customIdent)}`;
+  const labels = (lvl.options || []).map(o => normTok(o.label)).filter(Boolean).sort();
+  return `${lvl.identFormat}:[${labels.join(',')}]`;
+}
+
+// Output recipe including the junction delimiters — exact-output identity.
+export function systemOutputSignature(system) {
+  const keys = activeSegmentKeys(system);
+  return keys
+    .map((k, i) => `${k}=${segmentToken(system, k)}` + (i < keys.length - 1 ? `<${junctionDelim(system.delimiters, k, keys[i + 1])}>` : ''))
+    .join('');
+}
+
+// Output recipe ignoring delimiters — structural identity (near-duplicate).
+export function systemStructureSignature(system) {
+  return activeSegmentKeys(system).map(k => `${k}=${segmentToken(system, k)}`).join('|');
+}
+
+// Find systems that clash. Returns Map(systemId -> conflict[]), each conflict
+// { type, otherId, otherName }:
+//   'output'    — could produce identical visible IDs (same recipe + delimiters)
+//   'delimiter' — same recipe, only the delimiter differs (near-duplicate)
+//   'name'      — same (case-insensitive) system name
+// A non-blocking warning surfaces these in the UI.
+export function findSystemConflicts(systems) {
+  const list = systems || [];
+  const out = new Map();
+  const push = (id, c) => { if (!out.has(id)) out.set(id, []); out.get(id).push(c); };
+  for (let i = 0; i < list.length; i++) {
+    for (let j = i + 1; j < list.length; j++) {
+      const a = list[i], b = list[j];
+      const aName = normTok(a.name), bName = normTok(b.name);
+      if (aName && aName === bName) {
+        push(a.id, { type: 'name', otherId: b.id, otherName: b.name });
+        push(b.id, { type: 'name', otherId: a.id, otherName: a.name });
+      }
+      if (systemOutputSignature(a) === systemOutputSignature(b)) {
+        push(a.id, { type: 'output', otherId: b.id, otherName: b.name });
+        push(b.id, { type: 'output', otherId: a.id, otherName: a.name });
+      } else if (systemStructureSignature(a) === systemStructureSignature(b)) {
+        push(a.id, { type: 'delimiter', otherId: b.id, otherName: b.name });
+        push(b.id, { type: 'delimiter', otherId: a.id, otherName: a.name });
+      }
+    }
+  }
+  return out;
+}
+
 // Resolve the composed string for a tool given the whole systems list (looks up
 // the tool's system by id). Falls back to '' when unresolvable.
 export function resolveLocationString(loc, systems) {

@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, MapPin, Info } from 'lucide-react';
+import { Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, MapPin, Info, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import InfoTip from './InfoTip.jsx';
 import {
   newLocationSystem, newLevelOption, levelTypeName, buildPreview,
-  analyzeSystem, libraryLocationStatus,
+  analyzeSystem, libraryLocationStatus, findSystemConflicts,
 } from '../utils/locationSystem.js';
 
 // Level-type and identifier option lists (from the approved prototype).
@@ -284,11 +284,43 @@ function NormalizationStep({ sys, tools, onCommit, onUpdate }) {
   );
 }
 
+// ── Duplicate-output / duplicate-name warning ───────────────────────────────
+// Non-blocking. Surfaces when a system could produce the same user-visible ID as
+// another (checked on the composed output, not the settings labels), is identical
+// except for the delimiter, or shares a name. See findSystemConflicts.
+function ConflictWarning({ conflicts }) {
+  const names = (type) => [...new Set(conflicts.filter(c => c.type === type).map(c => c.otherName || 'another system'))];
+  const out = names('output');
+  const delim = names('delimiter');
+  const name = names('name');
+  const lines = [];
+  if (out.length) lines.push(<>Could produce the <strong>same visible IDs</strong> as {joinNames(out)} — a tool in either system could end up with an identical location. Change the levels, option labels, or delimiter so the outputs differ.</>);
+  if (delim.length) lines.push(<>Identical to {joinNames(delim)} <strong>except the delimiter</strong> — effectively the same system. Differentiate or remove one.</>);
+  if (name.length) lines.push(<>Shares its <strong>name</strong> with {joinNames(name)} — give each system a unique name.</>);
+  return (
+    <div style={{ background: 'color-mix(in srgb, var(--orange) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--orange) 40%, transparent)', borderRadius: 7, padding: '10px 12px', marginBottom: 14, display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--orange)', fontSize: '0.8rem' }}>
+      <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {lines.map((l, i) => <span key={i}>{l}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function joinNames(arr) {
+  return arr.map((n, i) => (
+    <span key={i}><strong>{n || '—'}</strong>{i < arr.length - 1 ? ', ' : ''}</span>
+  ));
+}
+
 // ── System card ─────────────────────────────────────────────────────────────
-function SystemCard({ sys, tools, onUpdate, onDelete, onCommit, defaultOpen }) {
+function SystemCard({ sys, tools, conflicts = [], onUpdate, onDelete, onCommit, defaultOpen }) {
   const [open, setOpen] = useState(defaultOpen);
   const [confirmDel, setConfirmDel] = useState(false);
   const L = sys.levels; const D = sys.delimiters;
+  const hasOutputClash = conflicts.some(c => c.type === 'output');
+  const hasDelimClash = conflicts.some(c => c.type === 'delimiter');
+  const hasNameClash = conflicts.some(c => c.type === 'name');
   const upd = (level, patch) => onUpdate({ ...sys, levels: { ...sys.levels, [level]: { ...sys.levels[level], ...patch } } });
   const updD = (key, val) => onUpdate({ ...sys, delimiters: { ...sys.delimiters, [key]: val } });
   const preview = buildPreview(sys);
@@ -299,6 +331,9 @@ function SystemCard({ sys, tools, onUpdate, onDelete, onCommit, defaultOpen }) {
         <EditableName value={sys.name} onChange={name => onUpdate({ ...sys, name })} />
         {sys.normalized && <Badge color="g">Normalized</Badge>}
         {sys.allowDuplicates && <Badge color="b">Dupes OK</Badge>}
+        {hasOutputClash && <Badge color="o">⚠ Duplicate output</Badge>}
+        {!hasOutputClash && hasDelimClash && <Badge color="o">⚠ Near-duplicate</Badge>}
+        {hasNameClash && <Badge color="o">⚠ Name clash</Badge>}
         <div style={{ flex: 1, minWidth: 12 }} />
         <LivePreview value={preview} />
         {open ? <ChevronUp size={15} style={{ color: 'var(--text-sub)' }} /> : <ChevronDown size={15} style={{ color: 'var(--text-sub)' }} />}
@@ -306,6 +341,8 @@ function SystemCard({ sys, tools, onUpdate, onDelete, onCommit, defaultOpen }) {
 
       {open && (
         <div style={{ padding: 16, borderTop: '1px solid var(--border)' }}>
+          {conflicts.length > 0 && <ConflictWarning conflicts={conflicts} />}
+
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem', marginBottom: 14 }}>
             <Toggle on={sys.allowDuplicates} set={v => onUpdate({ ...sys, allowDuplicates: v })} />
             Allow duplicate locations
@@ -475,6 +512,9 @@ export default function LocationSystemSettings() {
   const deleteSystem = (id) => persist(systems.filter(s => s.id !== id));
   const addSystem = () => persist([...systems, newLocationSystem()]);
 
+  // Live duplicate-output / duplicate-name detection across all systems.
+  const systemConflicts = findSystemConflicts(systems);
+
   return (
     <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -506,6 +546,7 @@ export default function LocationSystemSettings() {
           key={sys.id}
           sys={sys}
           tools={tools}
+          conflicts={systemConflicts.get(sys.id) || []}
           defaultOpen={i === 0}
           onUpdate={v => updateSystem(sys.id, v)}
           onDelete={() => deleteSystem(sys.id)}
