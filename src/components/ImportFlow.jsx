@@ -772,8 +772,13 @@ function matchProShopToTools(groups, tools, psUnit = 'inches') {
       if (!tool.coating && r['Coating']) additions.coating = r['Coating'];
       // Location: ProShop's free text wins only until this tool owns a structured
       // Location System assignment. Once normalized (tool_location set), this app
-      // owns location — the ProShop import value is ignored.
-      if (!tool.tool_location && !tool.location && r['Location']) additions.location = r['Location'];
+      // owns location — the ProShop import value is ignored. A value already
+      // retired into legacy_locations is likewise not re-imported (normalization
+      // deliberately replaced it), so an old cabinet string doesn't resurrect.
+      const psLoc = (r['Location'] || '').trim();
+      const isRetiredLoc = Array.isArray(tool.legacy_locations)
+        && tool.legacy_locations.some(l => String(l).trim() === psLoc);
+      if (!tool.tool_location && !tool.location && psLoc && !isRetiredLoc) additions.location = psLoc;
       if (!tool.pitch && (r['Thread'] || r['Pitch'])) {
         const resolved = resolveThreadSize(r['Thread'] || r['Pitch'] || '');
         if (resolved.pitch) additions.pitch = resolved.pitch;

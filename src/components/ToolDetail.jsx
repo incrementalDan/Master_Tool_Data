@@ -447,8 +447,11 @@ export default function ToolDetail() {
                 }}
               />
               {/* Former (retired) IDs — shown only when present, directly below the
-                  photo. Muted, one line. Never shown anywhere else. */}
-              {Array.isArray(tool.legacy_ids) && tool.legacy_ids.length > 0 && (
+                  photo. Muted, one line. Gated on the Tool ID System's show_legacy
+                  toggle (defaults ON). A search match still reveals them on the
+                  result card regardless. Never shown anywhere else. */}
+              {(shopSettings?.tool_id_system?.show_legacy ?? true)
+                && Array.isArray(tool.legacy_ids) && tool.legacy_ids.length > 0 && (
                 <div className="text-sub text-xs" style={{ marginTop: 8 }}>
                   Formerly:{' '}
                   <span className="font-mono">{tool.legacy_ids.join(', ')}</span>

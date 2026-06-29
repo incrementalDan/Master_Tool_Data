@@ -21,6 +21,9 @@
   "setup_steps": {
     "fusionConnected": "2026-05-01T12:00:00.000Z",
     "metadataConnected": "2026-05-01T12:00:00.000Z",
+    "toolIdConfigured": "2026-05-01T12:00:00.000Z",
+    "locationConfigured": "2026-05-01T12:00:00.000Z",
+    "assemblyIdConfigured": null,
     "normalized": "2026-05-01T12:00:00.000Z",
     "proshopMerged": "2026-05-01T12:00:00.000Z",
     "proshopPhotos": null,
