@@ -291,6 +291,14 @@ function reducer(state, action) {
     case 'SET_MATERIALS': return { ...state, materials: action.materials };
     case 'SET_VENDOR_REGISTRY': return { ...state, vendorRegistry: action.vendorRegistry };
     case 'SET_SHOP_SETTINGS': return { ...state, shopSettings: action.shopSettings };
+    // Merge a single sub-object/timestamp into shopSettings off the CURRENT state
+    // (never rebuild-and-replace from a possibly-stale ref) so concurrent edits in
+    // the same tick — a location_config keystroke + a setup-step stamp — compose
+    // instead of clobbering each other.
+    case 'SET_LOCATION_CONFIG':
+      return { ...state, shopSettings: { ...state.shopSettings, location_config: action.locationConfig } };
+    case 'MARK_SETUP_TIMESTAMP':
+      return { ...state, shopSettings: { ...state.shopSettings, setup_steps: { ...(state.shopSettings?.setup_steps || {}), [action.key]: action.ts } } };
     case 'CLEAR_ERROR': return { ...state, error: null };
     case 'ADD_TOAST': return { ...state, toasts: [...state.toasts, action.toast] };
     case 'DISMISS_TOAST': return { ...state, toasts: state.toasts.filter(t => t.id !== action.id) };
@@ -318,6 +326,9 @@ export function AppProvider({ children }) {
   const demoModeRef = useRef(state.demoMode);
   const shopSettingsRef = useRef(state.shopSettings);
   const materialsRef = useRef(state.materials);
+  // Per-file debounce timers for shared-Drive-file writes (saveSharedFile) so
+  // typing in the editors coalesces into one Drive write instead of one per key.
+  const sharedSaveTimersRef = useRef({});
   // Caches each library's wrapper-level fields (e.g. `version`), keyed by
   // library id (itemId), from the last download of that library — so a save
   // writes the file back with the same wrapper shape. One entry per linked
@@ -494,26 +505,47 @@ export function AppProvider({ children }) {
   // Save back to Drive and update in-memory state. Foundation: no UI yet, but
   // any component can read state.{materials,vendorRegistry,shopSettings} and
   // call these to persist edits.
-  const saveSharedFile = useCallback(async (key, data, dispatchType, onSaved) => {
+  // Debounced Drive write for a shared file. Flushes the LATEST settled state at
+  // timer time (the refs are render-synced, so by flush all same-tick optimistic
+  // dispatches have committed) — robust when several writers touch shop_settings
+  // in one tick. Falls back to the captured payload for files without a ref.
+  const scheduleSharedWrite = useCallback((key, fallbackData) => {
+    // Demo mode is an in-memory sandbox — never write shared files to Drive.
+    if (demoModeRef.current) return;
     const { SHARED_FILES } = driveService;
+    clearTimeout(sharedSaveTimersRef.current[key]);
+    sharedSaveTimersRef.current[key] = setTimeout(() => {
+      const payload = key === 'shopSettings' ? shopSettingsRef.current
+        : key === 'materials' ? materialsRef.current
+        : fallbackData;
+      driveService.saveSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, payload)
+        .catch(err => {
+          if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
+          notify(`Save failed: ${err.message}`, 'error', 7000);
+        });
+    }, 600);
+  }, [notify]);
+
+  const saveSharedFile = useCallback((key, data, dispatchType, onSaved) => {
+    const stateKey = key === 'shopSettings' ? 'shopSettings' : key === 'vendorRegistry' ? 'vendorRegistry' : 'materials';
     // Demo mode: update in-memory state only (no Drive write, no Google guard) so
     // the sandbox can edit shop settings / materials / vendors — lost on refresh.
     if (demoModeRef.current) {
       onSaved?.(data);
-      dispatch({ type: dispatchType, [key === 'shopSettings' ? 'shopSettings' : key === 'vendorRegistry' ? 'vendorRegistry' : 'materials']: data });
-      return;
+      dispatch({ type: dispatchType, [stateKey]: data });
+      return Promise.resolve();
     }
-    if (!googleRef.current) { notify('Connect Google Drive to save', 'error'); throw new Error('Google Drive not connected'); }
-    try {
-      await driveService.saveSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, data);
-      onSaved?.(data);
-      dispatch({ type: dispatchType, [key === 'shopSettings' ? 'shopSettings' : key === 'vendorRegistry' ? 'vendorRegistry' : 'materials']: data });
-    } catch (err) {
-      if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
-      notify(`Save failed: ${err.message}`, 'error', 7000);
-      throw err;
-    }
-  }, [notify]);
+    if (!googleRef.current) { notify('Connect Google Drive to save', 'error'); return Promise.reject(new Error('Google Drive not connected')); }
+    // Optimistic, synchronous state update — controlled inputs in the editors
+    // (Location / Materials / Vendors) read their value from this state, so they
+    // must NOT wait on the Drive round-trip or every keystroke lags by the network
+    // latency. Update state now; persist to Drive on a per-file debounce so rapid
+    // typing coalesces into a single write instead of one-per-keystroke.
+    onSaved?.(data);
+    dispatch({ type: dispatchType, [stateKey]: data });
+    scheduleSharedWrite(key, data);
+    return Promise.resolve();
+  }, [notify, scheduleSharedWrite]);
 
   const saveMaterials = useCallback((materials) =>
     saveSharedFile('materials', materials, 'SET_MATERIALS'), [saveSharedFile]);
@@ -523,11 +555,14 @@ export function AppProvider({ children }) {
     saveSharedFile('shopSettings', shopSettings, 'SET_SHOP_SETTINGS'), [saveSharedFile]);
 
   // Persist only the location_config sub-object (the Settings Location System
-  // editor calls this after each add/edit/delete/normalize change).
+  // editor calls this after each add/edit/delete/normalize change). Merges via the
+  // reducer (fresh state) + debounced write so per-keystroke edits don't lag on the
+  // network and don't clobber a concurrent setup-step stamp in the same tick.
   const saveLocationConfig = useCallback((locationConfig) => {
-    const updated = { ...(shopSettingsRef.current || {}), location_config: locationConfig };
-    return saveShopSettings(updated);
-  }, [saveShopSettings]);
+    dispatch({ type: 'SET_LOCATION_CONFIG', locationConfig });
+    scheduleSharedWrite('shopSettings');
+    return Promise.resolve();
+  }, [scheduleSharedWrite]);
 
   // Marks one step of the setup guide as complete (idempotent — see MARK_SETUP_STEP).
   const markSetupStep = useCallback((key) => dispatch({ type: 'MARK_SETUP_STEP', key }), []);
@@ -537,19 +572,13 @@ export function AppProvider({ children }) {
   const markSetupStepInSettings = useCallback((key) => {
     dispatch({ type: 'MARK_SETUP_STEP', key });
     if (!googleRef.current) return;
-    const current = shopSettingsRef.current || {};
-    const updated = {
-      ...current,
-      setup_steps: { ...(current.setup_steps || {}), [key]: new Date().toISOString() },
-    };
-    // Optimistic dispatch so shopSettings state is immediately current — prevents
-    // a concurrent saveShop() read racing against the in-flight Drive write and
-    // overwriting the timestamp with a stale shopSettings value.
-    dispatch({ type: 'SET_SHOP_SETTINGS', shopSettings: updated });
-    const { SHARED_FILES } = driveService;
-    driveService.saveSharedJson(SHARED_FILES.shopSettings.name, SHARED_FILES.shopSettings.cacheKey, updated)
-      .catch(() => {}); // silently ignore — localStorage flag + optimistic state already set
-  }, []);
+    // Merge the timestamp into shopSettings via the reducer (fresh state — never
+    // rebuild-and-replace from a stale ref, which would clobber a concurrent
+    // location_config / id-system edit in the same tick), then debounce-write the
+    // latest settled state.
+    dispatch({ type: 'MARK_SETUP_TIMESTAMP', key, ts: new Date().toISOString() });
+    scheduleSharedWrite('shopSettings');
+  }, [scheduleSharedWrite]);
 
   // The metadataConnected setup step completes the moment Google Drive is
   // connected (live sign-in or a restored session). Declarative so it fires

@@ -497,14 +497,15 @@ function Counter({ n, label, color }) {
 
 // ── Root section (embedded in Settings, adjacent to Tool ID System) ─────────
 export default function LocationSystemSettings() {
-  const { tools, shopSettings, saveLocationConfig, normalizeLocationSystem, markSetupStepInSettings } = useApp();
+  const { tools, shopSettings, saveLocationConfig, normalizeLocationSystem, markSetupStepInSettings, setupProgress } = useApp();
   const cfg = shopSettings?.location_config || { systems: [], bin_sizes: [] };
   const systems = cfg.systems || [];
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
 
   const persist = (nextSystems) => {
-    // Configuring at least one system completes the Location step of the setup guide.
-    if (nextSystems.length > 0) markSetupStepInSettings?.('locationConfigured');
+    // Mark the Location setup step once (not every keystroke) the first time the
+    // shop has a system configured.
+    if (nextSystems.length > 0 && !setupProgress?.locationConfigured) markSetupStepInSettings?.('locationConfigured');
     return saveLocationConfig({ ...cfg, systems: nextSystems });
   };
   const setShowLegacy = (v) => saveLocationConfig({ ...cfg, show_legacy: v });
