@@ -10,14 +10,23 @@ the pattern is essential before touching any of them.
 
 ## The Three Systems
 
-| System | Config key | What it identifies | Mode field | Status |
+| System | Config key | What it identifies | "Which configuration" selector | Status |
 |--------|-----------|-------------------|-----------|--------|
 | Tool ID | `tool_id_system` | The tool itself | `mode`: proshop / location / sequential / type_prefix / size_first / machine_linked / other_erp | Built |
-| Location | `location_config` | Where the tool physically lives | per-system `mode`: sequential / fixed / manual (bin generation) | Built |
+| Location | `location_config` | Where the tool physically lives | the **location *system*** the tool belongs to (`location_config.systems[]`) | Built |
 | Assembly ID | `assembly_id_system` | A specific tool+holder assembly | `mode` (design with an explicit enum from day one) | Pending |
 
 All three live in `shop_settings.json` and are loaded at startup alongside
 `tool_metadata.json`.
+
+**On the word "mode" vs "system":** every identification system has a
+user-chosen selector for *which way an ID is generated/configured*. Tool ID
+calls it `mode`; the Location system calls each option a **"system"** because it
+maps to a real physical place (a tool *belongs to* a cabinet/zone system, it
+isn't "in sequential mode"). **Different words, same role.** The Bin's
+auto-increment-vs-fixed choice is just *one field inside* a location system — it
+is **not** itself a mode/system. Assembly ID, not being tied to a place, will
+use `mode` like Tool ID.
 
 ---
 
@@ -30,13 +39,16 @@ Internal records reference other records by UUID. Display strings are composed
 at read time from those UUID references, never stored. This is the same pattern
 used in `vendor_registry.json` (entity UUIDs) and `materials.json` (group IDs).
 
-**2. Configurable modes — an explicit `mode` enum**
-Each system exposes an explicit `mode` field that the user picks in settings.
-All modes produce the same internal data shape — only the generation logic
-differs. Tool ID's `mode` selects the ID scheme; Location's per-system `mode`
-(`sequential` / `fixed` / `manual`) selects the bin-numbering strategy (and
-keeps the implicit `bin.fixed` flag in sync); Assembly ID should be designed
-with an explicit `mode` from the start, not an implicit config shape.
+**2. Configurable — an explicit, user-chosen selector**
+Each system exposes an explicit selector for *which way an ID is
+generated/configured*, picked in settings. Every option produces the same
+internal data shape — only the generation logic differs. Tool ID names this
+selector `mode` (the ID scheme). The Location system names each option a
+**"system"** — the user picks which physical location system a tool belongs to;
+"system" is used instead of "mode" because it's tied to a real place, but it
+plays the **same role** as Tool ID's `mode`. (The Bin's auto-increment-vs-fixed
+choice is a field *within* a location system, not a mode of its own.) Assembly
+ID should ship with an explicit `mode` from the start, not an implicit shape.
 
 **3. Normalize/migrate action for legacy data**
 When a shop already has location strings or IDs in free text (from ProShop,
@@ -116,8 +128,10 @@ of this pass:
   Location normalize (mirroring how `renumberAllToolIds` retires `legacy_ids`),
   is searchable (`searchEngine.matchedLegacyLocation` + included in `textSearch`),
   and a retired location is no longer re-imported from ProShop.
-- **Explicit `mode` everywhere.** Location gained a per-system `mode`
-  (`sequential` / `fixed` / `manual`) surfaced in settings, parallel to Tool ID.
+- **Selector parallel documented.** Tool ID's `mode` and the Location system's
+  per-tool "which system" choice are the same kind of selector under different
+  words — noted here and in CLAUDE.md. The Bin's auto/fixed picker stays a field
+  inside a system (not elevated to a mode).
 - **`show_legacy` toggle** added to both systems (Tool ID on, Location off).
 - **Setup wizard** now has the three ID/location/assembly steps (assembly
   disabled until it ships).

@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, MapPin, Info } from 'lucide-react';
+import { Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, MapPin, Info, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import InfoTip from './InfoTip.jsx';
 import {
   newLocationSystem, newLevelOption, levelTypeName, buildPreview,
-  analyzeSystem, libraryLocationStatus, BIN_MODES, binModeOf, applyBinMode,
+  analyzeSystem, libraryLocationStatus, findSystemConflicts,
 } from '../utils/locationSystem.js';
 
 // Level-type and identifier option lists (from the approved prototype).
@@ -284,12 +284,43 @@ function NormalizationStep({ sys, tools, onCommit, onUpdate }) {
   );
 }
 
+// ── Duplicate-output / duplicate-name warning ───────────────────────────────
+// Non-blocking. Surfaces when a system could produce the same user-visible ID as
+// another (checked on the composed output, not the settings labels), is identical
+// except for the delimiter, or shares a name. See findSystemConflicts.
+function ConflictWarning({ conflicts }) {
+  const names = (type) => [...new Set(conflicts.filter(c => c.type === type).map(c => c.otherName || 'another system'))];
+  const out = names('output');
+  const delim = names('delimiter');
+  const name = names('name');
+  const lines = [];
+  if (out.length) lines.push(<>Could produce the <strong>same visible IDs</strong> as {joinNames(out)} — a tool in either system could end up with an identical location. Change the levels, option labels, or delimiter so the outputs differ.</>);
+  if (delim.length) lines.push(<>Identical to {joinNames(delim)} <strong>except the delimiter</strong> — effectively the same system. Differentiate or remove one.</>);
+  if (name.length) lines.push(<>Shares its <strong>name</strong> with {joinNames(name)} — give each system a unique name.</>);
+  return (
+    <div style={{ background: 'color-mix(in srgb, var(--orange) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--orange) 40%, transparent)', borderRadius: 7, padding: '10px 12px', marginBottom: 14, display: 'flex', gap: 8, alignItems: 'flex-start', color: 'var(--orange)', fontSize: '0.8rem' }}>
+      <AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {lines.map((l, i) => <span key={i}>{l}</span>)}
+      </div>
+    </div>
+  );
+}
+
+function joinNames(arr) {
+  return arr.map((n, i) => (
+    <span key={i}><strong>{n || '—'}</strong>{i < arr.length - 1 ? ', ' : ''}</span>
+  ));
+}
+
 // ── System card ─────────────────────────────────────────────────────────────
-function SystemCard({ sys, tools, onUpdate, onDelete, onCommit, defaultOpen }) {
+function SystemCard({ sys, tools, conflicts = [], onUpdate, onDelete, onCommit, defaultOpen }) {
   const [open, setOpen] = useState(defaultOpen);
   const [confirmDel, setConfirmDel] = useState(false);
   const L = sys.levels; const D = sys.delimiters;
-  const mode = binModeOf(sys);
+  const hasOutputClash = conflicts.some(c => c.type === 'output');
+  const hasDelimClash = conflicts.some(c => c.type === 'delimiter');
+  const hasNameClash = conflicts.some(c => c.type === 'name');
   const upd = (level, patch) => onUpdate({ ...sys, levels: { ...sys.levels, [level]: { ...sys.levels[level], ...patch } } });
   const updD = (key, val) => onUpdate({ ...sys, delimiters: { ...sys.delimiters, [key]: val } });
   const preview = buildPreview(sys);
@@ -300,6 +331,9 @@ function SystemCard({ sys, tools, onUpdate, onDelete, onCommit, defaultOpen }) {
         <EditableName value={sys.name} onChange={name => onUpdate({ ...sys, name })} />
         {sys.normalized && <Badge color="g">Normalized</Badge>}
         {sys.allowDuplicates && <Badge color="b">Dupes OK</Badge>}
+        {hasOutputClash && <Badge color="o">⚠ Duplicate output</Badge>}
+        {!hasOutputClash && hasDelimClash && <Badge color="o">⚠ Near-duplicate</Badge>}
+        {hasNameClash && <Badge color="o">⚠ Name clash</Badge>}
         <div style={{ flex: 1, minWidth: 12 }} />
         <LivePreview value={preview} />
         {open ? <ChevronUp size={15} style={{ color: 'var(--text-sub)' }} /> : <ChevronDown size={15} style={{ color: 'var(--text-sub)' }} />}
@@ -307,22 +341,12 @@ function SystemCard({ sys, tools, onUpdate, onDelete, onCommit, defaultOpen }) {
 
       {open && (
         <div style={{ padding: 16, borderTop: '1px solid var(--border)' }}>
+          {conflicts.length > 0 && <ConflictWarning conflicts={conflicts} />}
+
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem', marginBottom: 14 }}>
             <Toggle on={sys.allowDuplicates} set={v => onUpdate({ ...sys, allowDuplicates: v })} />
             Allow duplicate locations
           </label>
-
-          {/* Bin numbering mode — explicit, parallel to the Tool ID System's mode.
-              Changing it keeps the bin's fixed/auto config in sync. */}
-          <div style={{ marginBottom: 16 }}>
-            <Lbl>Bin numbering mode</Lbl>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <select className="field-input" style={{ width: 230 }} value={mode} onChange={e => onUpdate(applyBinMode(sys, e.target.value))}>
-                {BIN_MODES.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
-              </select>
-              <span className="text-sub text-xs">{BIN_MODES.find(m => m.id === mode)?.desc}</span>
-            </div>
-          </div>
 
           <div style={{ marginBottom: 16 }}>
             <Lbl>ProShop location export</Lbl>
@@ -360,16 +384,21 @@ function SystemCard({ sys, tools, onUpdate, onDelete, onCommit, defaultOpen }) {
           <DelimRow label="drawer → bin" value={D.db} onChange={v => updD('db', v)} active={L.drawer.on} />
 
           <LevelBlock title="Bin" optional={false} active>
-            {mode === 'manual' ? (
-              <div className="text-sub text-xs">Bin numbers are entered per tool in the Assign Location picker — no fixed or auto value here.</div>
-            ) : (
-              <div style={{ maxWidth: 240 }}>
-                <Lbl>{mode === 'fixed' ? 'Fixed value' : 'Start at'}</Lbl>
-                <input className="field-input font-mono" value={mode === 'fixed' ? L.bin.fixedVal : String(L.bin.start)}
-                  onChange={e => mode === 'fixed' ? upd('bin', { fixedVal: e.target.value }) : upd('bin', { start: parseInt(e.target.value) || 1 })}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <Lbl>Mode</Lbl>
+                <select className="field-input" value={L.bin.fixed ? 'fixed' : 'increment'} onChange={e => upd('bin', { fixed: e.target.value === 'fixed' })}>
+                  <option value="increment">Auto-increment</option>
+                  <option value="fixed">Fixed value</option>
+                </select>
+              </div>
+              <div>
+                <Lbl>{L.bin.fixed ? 'Fixed value' : 'Start at'}</Lbl>
+                <input className="field-input font-mono" value={L.bin.fixed ? L.bin.fixedVal : String(L.bin.start)}
+                  onChange={e => L.bin.fixed ? upd('bin', { fixedVal: e.target.value }) : upd('bin', { start: parseInt(e.target.value) || 1 })}
                   placeholder="1000" />
               </div>
-            )}
+            </div>
           </LevelBlock>
 
           <NormalizationStep sys={sys} tools={tools} onCommit={onCommit} onUpdate={onUpdate} />
@@ -483,6 +512,9 @@ export default function LocationSystemSettings() {
   const deleteSystem = (id) => persist(systems.filter(s => s.id !== id));
   const addSystem = () => persist([...systems, newLocationSystem()]);
 
+  // Live duplicate-output / duplicate-name detection across all systems.
+  const systemConflicts = findSystemConflicts(systems);
+
   return (
     <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -514,6 +546,7 @@ export default function LocationSystemSettings() {
           key={sys.id}
           sys={sys}
           tools={tools}
+          conflicts={systemConflicts.get(sys.id) || []}
           defaultOpen={i === 0}
           onUpdate={v => updateSystem(sys.id, v)}
           onDelete={() => deleteSystem(sys.id)}
