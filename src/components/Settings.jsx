@@ -34,6 +34,7 @@ export default function Settings() {
     fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
     shopSettings, saveShopSettings, signOutAll,
     setupProgress, demoMode,
+    registerNavGuard, maybeBlockNav,
   } = useApp();
 
   // Multi-library registry (from shop_settings). Tool + holder libraries are
@@ -243,6 +244,7 @@ export default function Settings() {
   const [savingAll, setSavingAll] = useState(false);
   const [idlePrompt, setIdlePrompt] = useState(false);
   const [idleKick, setIdleKick] = useState(0); // bump to restart the idle timer ("Keep editing")
+  const [leaveTo, setLeaveTo] = useState(null); // pending navigation (proceed fn) while the leave prompt is open
 
   const buildDraft = () => ({
     ...(shopSettings || {}),
@@ -334,6 +336,15 @@ export default function Settings() {
     window.addEventListener('beforeunload', h);
     return () => window.removeEventListener('beforeunload', h);
   }, [dirty]);
+
+  // In-app navigation guard: while dirty, leaving (top-bar tabs, internal links)
+  // opens the Save / Discard / Stay prompt instead of navigating away.
+  useEffect(() => {
+    registerNavGuard?.({ shouldBlock: () => dirty, onBlocked: (proceed) => setLeaveTo(() => proceed) });
+    return () => registerNavGuard?.(null);
+  }, [registerNavGuard, dirty]);
+  // Guarded version of navigate for this page's own links (Open Import/Library).
+  const guardedNavigate = (to) => { if (!maybeBlockNav(() => navigate(to))) navigate(to); };
 
   // ── Renumber ───────────────────────────────────────────────────────────────
   const [stage, setStage] = useState('idle');
@@ -624,6 +635,26 @@ export default function Settings() {
         </div>
       )}
 
+      {/* Leave prompt — when navigating away (top-bar tab / internal link) with
+          unsaved edits. Save & leave / Discard & leave / Stay. */}
+      {leaveTo && (
+        <div className="modal-backdrop" onClick={() => setLeaveTo(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <h3 className="modal-title">Unsaved settings changes</h3>
+            <div className="modal-body">
+              You have unsaved changes. Save them before leaving, or discard them?
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setLeaveTo(null)}>Stay</button>
+              <button className="btn btn-secondary" onClick={() => { const go = leaveTo; cancelAll(); setLeaveTo(null); go?.(); }}>Discard &amp; leave</button>
+              <button className="btn btn-primary" disabled={savingAll} onClick={async () => { const go = leaveTo; await saveAll(); setLeaveTo(null); go?.(); }}>
+                {savingAll ? 'Saving…' : 'Save & leave'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Idle prompt — fired after a quiet period in edit mode; if unanswered it
           auto-cancels (discards) so an abandoned session doesn't linger. */}
       {idlePrompt && (
@@ -731,8 +762,8 @@ export default function Settings() {
                 <div style={{ flexShrink: 0 }}>
                   <StepAction stepKey={step.key} done={done} warn={warn}
                     onExport={handleExportProShop}
-                    onImport={() => navigate('/import')}
-                    onGoToLanding={() => navigate('/')}
+                    onImport={() => guardedNavigate('/import')}
+                    onGoToLanding={() => guardedNavigate('/')}
                     tools={tools}
                   />
                 </div>

@@ -306,36 +306,45 @@ function GoogleReconnectBanner() {
 
 function TopBar() {
   const location = useLocation();
-  const { loadTools, isLoading } = useApp();
+  const { loadTools, isLoading, maybeBlockNav } = useApp();
   const onLanding = location.pathname === '/';
+  // Intercept tab clicks so a page with a registered nav guard (e.g. Settings
+  // with unsaved edits) can prompt before we change the hash route.
+  const navClick = (e, hash) => {
+    if (window.location.hash === hash || (hash === '#/' && onLanding)) { e.preventDefault(); return; }
+    if (maybeBlockNav(() => { window.location.hash = hash; })) e.preventDefault();
+  };
   return (
     <header className="topbar">
-      <a href="#/" className="topbar-brand" onClick={e => { if (onLanding) e.preventDefault(); }}>
+      <a href="#/" className="topbar-brand" onClick={e => navClick(e, '#/')}>
         <BrandLogo markSize={30} />
       </a>
       <nav className="topbar-tabs">
         <a
           href="#/"
           className={`topbar-tab${onLanding ? ' active' : ''}`}
-          onClick={e => { if (onLanding) e.preventDefault(); }}
+          onClick={e => navClick(e, '#/')}
         >
           <Library size={14} /> <span className="tab-wordmark">In<b>Dex</b></span>
         </a>
         <a
           href="#/materials"
           className={`topbar-tab${location.pathname === '/materials' ? ' active' : ''}`}
+          onClick={e => navClick(e, '#/materials')}
         >
           <FlaskConical size={14} /> <span className="tab-wordmark">Materials</span>
         </a>
         <a
           href="#/vendors"
           className={`topbar-tab${location.pathname === '/vendors' ? ' active' : ''}`}
+          onClick={e => navClick(e, '#/vendors')}
         >
           <Building2 size={14} /> <span className="tab-wordmark">Vendors</span>
         </a>
         <a
           href="#/settings"
           className={`topbar-tab${location.pathname === '/settings' ? ' active' : ''}`}
+          onClick={e => navClick(e, '#/settings')}
         >
           <Settings size={14} /> <span className="tab-wordmark">Settings</span>
         </a>

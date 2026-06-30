@@ -330,6 +330,11 @@ export function AppProvider({ children }) {
   // { timer, write(keepalive) }. Lets typing coalesce into one write and lets
   // flushSharedWrites fire the latest pending write early on page hide/close.
   const sharedSaveTimersRef = useRef({});
+  // In-app navigation guard. A page (e.g. Settings, while editing) registers
+  // { shouldBlock(), onBlocked(proceed) }; nav sources call maybeBlockNav(proceed)
+  // and skip their own navigation when it returns true (blocked). HashRouter isn't
+  // a data router, so React Router's useBlocker isn't available — this is the seam.
+  const navGuardRef = useRef(null);
   // Caches each library's wrapper-level fields (e.g. `version`), keyed by
   // library id (itemId), from the last download of that library — so a save
   // writes the file back with the same wrapper shape. One entry per linked
@@ -588,6 +593,14 @@ export function AppProvider({ children }) {
     scheduleSharedWrite('shopSettings');
     return Promise.resolve();
   }, [scheduleSharedWrite]);
+
+  // Nav guard plumbing (see navGuardRef). registerNavGuard(null) clears it.
+  const registerNavGuard = useCallback((guard) => { navGuardRef.current = guard; }, []);
+  const maybeBlockNav = useCallback((proceed) => {
+    const g = navGuardRef.current;
+    if (g && g.shouldBlock()) { g.onBlocked(proceed); return true; }
+    return false;
+  }, []);
 
   // Marks one step of the setup guide as complete (idempotent — see MARK_SETUP_STEP).
   const markSetupStep = useCallback((key) => dispatch({ type: 'MARK_SETUP_STEP', key }), []);
@@ -2238,6 +2251,8 @@ export function AppProvider({ children }) {
       normalizeLocationSystem,
       markSetupStep,
       markSetupStepInSettings,
+      registerNavGuard,
+      maybeBlockNav,
       setupCelebrated,
       markSetupCelebrated,
       setLibraryLocation,
