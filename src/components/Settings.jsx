@@ -34,6 +34,7 @@ export default function Settings() {
     fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
     shopSettings, saveShopSettings, signOutAll,
     setupProgress, demoMode,
+    registerNavGuard, maybeBlockNav,
   } = useApp();
 
   // Multi-library registry (from shop_settings). Tool + holder libraries are
@@ -67,10 +68,9 @@ export default function Settings() {
     return () => { cancelled = true; };
   }, [googleAuthenticated, fetchMetadataLocation]);
 
-  const changeDefaultUnit = (unit) => {
-    setDefaultUnit(unit);
-    setDefaultUnitState(unit);
-  };
+  // Buffered: update the local draft only; the actual default-unit (localStorage)
+  // is written by Save (saveAll), reverted by Cancel.
+  const changeDefaultUnit = (unit) => setDefaultUnitState(unit);
 
   // ── Shop settings (shop_settings.json) ─────────────────────────────────────
   const [shopName, setShopName] = useState(shopSettings?.shop_name || '');
@@ -78,7 +78,6 @@ export default function Settings() {
   const [skipList, setSkipList] = useState(shopSettings?.machine_number?.skip ?? [98, 99, 100]);
   const [skipInput, setSkipInput] = useState('');
   const [hideUnusedTypes, setHideUnusedTypes] = useState(shopSettings?.hide_unused_tool_types ?? true);
-  const [savingShop, setSavingShop] = useState(false);
 
   useEffect(() => {
     setShopName(shopSettings?.shop_name || '');
@@ -91,7 +90,6 @@ export default function Settings() {
   const idsDefault = { mode: 'proshop', separator: '-', start: 1000, skip: [], digits: 4, show_legacy: true };
   const [idCfg, setIdCfg] = useState({ ...idsDefault, ...(shopSettings?.tool_id_system || {}) });
   const [idSkipInput, setIdSkipInput] = useState('');
-  const [savingIds, setSavingIds] = useState(false);
   // Assign-IDs flow: 'idle' | 'preview' | 'done'
   const [idStage, setIdStage] = useState('idle');
   const [idResultCount, setIdResultCount] = useState(0);
@@ -115,32 +113,6 @@ export default function Settings() {
     setIdSkipInput('');
   };
   const removeIdSkip = (n) => setIdField({ skip: (idCfg.skip || []).filter(x => x !== n) });
-
-  const saveIdSystem = async () => {
-    setSavingIds(true);
-    try {
-      const next = {
-        ...(shopSettings || {}),
-        tool_id_system: {
-          mode: idCfg.mode,
-          separator: idCfg.separator,
-          start: Number(idCfg.start) || 1000,
-          skip: idCfg.skip || [],
-          digits: Number(idCfg.digits) || 4,
-          location: idCfg.location || idsDefault.location,
-          show_legacy: idCfg.show_legacy ?? true,
-        },
-      };
-      // machine_linked drives machine numbering off the same start/skip.
-      if (idCfg.mode === 'machine_linked') {
-        next.machine_number = { start: Number(idCfg.start) || 30, skip: idCfg.skip || [] };
-      }
-      await saveShopSettings(next);
-      markSetupStepInSettings?.('toolIdConfigured');
-      notify('Tool ID system saved', 'success');
-    } catch { /* notify handled in saveShopSettings */ }
-    finally { setSavingIds(false); }
-  };
 
   // Tools that will get an ID, with the value they'd get — used for the preview.
   // Demo mode reassigns ALL tools (repeatable sandbox); a live library assigns
@@ -210,36 +182,6 @@ export default function Settings() {
   };
   const removeSkip = (n) => setSkipList(skipList.filter(x => x !== n));
 
-  const saveShop = async () => {
-    setSavingShop(true);
-    try {
-      await saveShopSettings({
-        ...(shopSettings || {}),
-        shop_name: shopName,
-        default_units: defaultUnit,
-        machine_number: { start: Number(machineStart) || 30, skip: skipList },
-        hide_unused_tool_types: hideUnusedTypes,
-      });
-      setDefaultUnit(defaultUnit);
-      notify('Shop settings saved', 'success');
-    } catch { /* notify handled in saveShopSettings */ }
-    finally { setSavingShop(false); }
-  };
-
-  // Persist just the machine-number config (start + skip), preserving the rest
-  // of shop settings. Lives next to its inputs in the Renumber section.
-  const saveMachineNumbers = async () => {
-    setSavingShop(true);
-    try {
-      await saveShopSettings({
-        ...(shopSettings || {}),
-        machine_number: { start: Number(machineStart) || 30, skip: skipList },
-      });
-      notify('Machine numbers saved', 'success');
-    } catch { /* notify handled in saveShopSettings */ }
-    finally { setSavingShop(false); }
-  };
-
   const fmtDate = (v) => {
     if (!v) return null;
     try { return new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
@@ -252,13 +194,19 @@ export default function Settings() {
   const [expandedMachineId, setExpandedMachineId] = useState(null);
   const [addingMachine, setAddingMachine] = useState(false);
   const [machineDeleteId, setMachineDeleteId] = useState(null);
-  const [savingMachines, setSavingMachines] = useState(false);
 
   // Keep local machine state in sync when shopSettings loads from Drive.
   useEffect(() => {
     setMachines(shopSettings?.machines || []);
     setDefaultMachineId(shopSettings?.default_machine_id || null);
   }, [shopSettings]);
+
+  // ── Location System config draft ───────────────────────────────────────────
+  // The Location editor is buffered into the page draft like every other section
+  // (it no longer auto-saves while Settings owns an edit session). Synced from
+  // shopSettings on load / Save / Cancel.
+  const [locDraft, setLocDraft] = useState(shopSettings?.location_config || null);
+  useEffect(() => { setLocDraft(shopSettings?.location_config || null); }, [shopSettings]);
 
   const blankMachine = () => ({
     id: generateId(),
@@ -272,18 +220,6 @@ export default function Settings() {
     order: machines.length,
   });
 
-  const saveMachines = async (updatedMachines, updatedDefaultId) => {
-    setSavingMachines(true);
-    try {
-      await saveShopSettings({
-        ...(shopSettings || {}),
-        machines: updatedMachines,
-        default_machine_id: updatedDefaultId,
-      });
-      notify('Machines saved', 'success');
-    } catch { /* notify handled in saveShopSettings */ }
-    finally { setSavingMachines(false); }
-  };
 
   const updateMachine = (id, patch) =>
     setMachines(ms => ms.map(m => m.id === id ? { ...m, ...patch } : m));
@@ -298,6 +234,117 @@ export default function Settings() {
     'CAT40', 'CAT40 Dual Contact', 'CAT50', 'CAT50 Dual Contact',
     'HSK-A63', 'HSK-A100', 'HSK-E32', 'HSK-E40', 'Other',
   ];
+
+  // ── Unified edit mode (one draft, one Save/Cancel) ─────────────────────────
+  // Every section writes to local draft state; nothing persists until Save.
+  // `dirty` (any managed field differs from the saved shopSettings) is what puts
+  // the page into edit mode and enables Save/Cancel + the leave guards. Actions
+  // that operate on already-saved data (imports/exports/renumbers) are locked
+  // while dirty.
+  const [savingAll, setSavingAll] = useState(false);
+  const [idlePrompt, setIdlePrompt] = useState(false);
+  const [idleKick, setIdleKick] = useState(0); // bump to restart the idle timer ("Keep editing")
+  const [leaveTo, setLeaveTo] = useState(null); // pending navigation (proceed fn) while the leave prompt is open
+
+  const buildDraft = () => ({
+    ...(shopSettings || {}),
+    shop_name: shopName,
+    default_units: defaultUnit,
+    machine_number: { start: Number(machineStart) || 30, skip: skipList },
+    hide_unused_tool_types: hideUnusedTypes,
+    machines,
+    default_machine_id: defaultMachineId,
+    location_config: locDraft,
+    tool_id_system: {
+      mode: idCfg.mode,
+      separator: idCfg.separator,
+      start: Number(idCfg.start) || 1000,
+      skip: idCfg.skip || [],
+      digits: Number(idCfg.digits) || 4,
+      location: idCfg.location || idsDefault.location,
+      show_legacy: idCfg.show_legacy ?? true,
+    },
+  });
+
+  // Normalized projection of the managed fields, for a stable dirty comparison.
+  const managedSig = (ss) => JSON.stringify({
+    shop_name: ss?.shop_name || '',
+    default_units: ss?.default_units || 'inches',
+    machine_number: { start: ss?.machine_number?.start ?? 30, skip: ss?.machine_number?.skip ?? [98, 99, 100] },
+    hide_unused_tool_types: ss?.hide_unused_tool_types ?? true,
+    machines: ss?.machines || [],
+    default_machine_id: ss?.default_machine_id || null,
+    location_config: ss?.location_config || null,
+    tool_id_system: { ...idsDefault, ...(ss?.tool_id_system || {}) },
+  });
+  const draftSig = managedSig(buildDraft());
+  const dirty = draftSig !== managedSig(shopSettings);
+
+  const cancelAll = () => {
+    setShopName(shopSettings?.shop_name || '');
+    setMachineStart(shopSettings?.machine_number?.start ?? 30);
+    setSkipList(shopSettings?.machine_number?.skip ?? [98, 99, 100]);
+    setHideUnusedTypes(shopSettings?.hide_unused_tool_types ?? true);
+    setIdCfg({ ...idsDefault, ...(shopSettings?.tool_id_system || {}) });
+    setMachines(shopSettings?.machines || []);
+    setDefaultMachineId(shopSettings?.default_machine_id || null);
+    setLocDraft(shopSettings?.location_config || null);
+    setDefaultUnitState(shopSettings?.default_units || getDefaultUnit());
+    setExpandedMachineId(null); setAddingMachine(false); setMachineDeleteId(null);
+    setIdlePrompt(false);
+  };
+
+  const saveAll = async () => {
+    if (!dirty) return;
+    setSavingAll(true);
+    try {
+      // In machine_linked ID mode, the Machine Numbers section IS the source of
+      // the ID start/skip — buildDraft already carries machine_number, so no extra
+      // sync is needed here.
+      const next = buildDraft();
+      await saveShopSettings(next);
+      setDefaultUnit(defaultUnit);
+      markSetupStepInSettings?.('toolIdConfigured');
+      if ((next.location_config?.systems || []).length > 0) markSetupStepInSettings?.('locationConfigured');
+      if (next.machine_number?.start) markSetupStepInSettings?.('machineNumbers');
+      setIdlePrompt(false);
+      notify('Settings saved', 'success');
+    } catch { /* notify handled in saveShopSettings */ }
+    finally { setSavingAll(false); }
+  };
+
+  // Idle auto-exit: while dirty, a quiet period flags the user; if still no
+  // response it cancels (discards) so an abandoned edit session doesn't sit open.
+  const IDLE_MS = 3 * 60 * 1000;   // 3 min of no edits → prompt
+  const IDLE_GRACE_MS = 60 * 1000; // then 60s to respond → auto-cancel
+  useEffect(() => {
+    if (!dirty) { setIdlePrompt(false); return; }
+    setIdlePrompt(false);
+    const t = setTimeout(() => setIdlePrompt(true), IDLE_MS);
+    return () => clearTimeout(t);
+  }, [draftSig, dirty, idleKick]);
+  useEffect(() => {
+    if (!idlePrompt) return;
+    const t = setTimeout(() => { setIdlePrompt(false); cancelAll(); }, IDLE_GRACE_MS);
+    return () => clearTimeout(t);
+  }, [idlePrompt]);
+
+  // Close/refresh guard: native browser prompt while there are unsaved edits.
+  useEffect(() => {
+    if (!dirty) return;
+    const h = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', h);
+    return () => window.removeEventListener('beforeunload', h);
+  }, [dirty]);
+
+  // In-app navigation guard: while dirty, leaving (top-bar tabs, internal links)
+  // opens the Save / Discard / Stay prompt instead of navigating away.
+  useEffect(() => {
+    registerNavGuard?.({ shouldBlock: () => dirty, onBlocked: (proceed) => setLeaveTo(() => proceed) });
+    return () => registerNavGuard?.(null);
+  }, [registerNavGuard, dirty]);
+  // Guarded version of navigate for this page's own links (Open Import/Library).
+  const guardedNavigate = (to) => { if (!maybeBlockNav(() => navigate(to))) navigate(to); };
 
   // ── Renumber ───────────────────────────────────────────────────────────────
   const [stage, setStage] = useState('idle');
@@ -559,11 +606,72 @@ export default function Settings() {
 
   return (
     <div>
-      <div className="flex items-center gap-8 mb-20">
-        <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+      {/* Frozen header — title + one Save/Cancel for the whole page. Buttons are
+          active only when there are unsaved edits (edit mode). */}
+      <div style={{
+        position: 'sticky', top: 0, zIndex: 30,
+        background: 'var(--bg)', borderBottom: '1px solid var(--border)',
+        padding: '12px 0', marginBottom: 20,
+        display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+      }}>
+        <h2 style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
           <SettingsIcon size={16} /> <span className="tab-wordmark">Settings</span>
         </h2>
+        {dirty && (
+          <span className="chip" style={{ gap: 6, color: 'var(--orange)', borderColor: 'color-mix(in srgb, var(--orange) 40%, transparent)' }}>
+            <AlertTriangle size={12} /> Editing — unsaved changes
+          </span>
+        )}
+        <div style={{ flex: 1 }} />
+        <button className="btn btn-secondary btn-sm" onClick={cancelAll} disabled={!dirty || savingAll}>Cancel</button>
+        <button className="btn btn-primary btn-sm" onClick={saveAll} disabled={!dirty || savingAll}>
+          {savingAll ? 'Saving…' : 'Save'}
+        </button>
       </div>
+
+      {dirty && (
+        <div className="text-sub text-xs" style={{ marginTop: -8, marginBottom: 16 }}>
+          Imports, exports, and renumber actions are paused until you <strong>Save</strong> or <strong>Cancel</strong>.
+        </div>
+      )}
+
+      {/* Leave prompt — when navigating away (top-bar tab / internal link) with
+          unsaved edits. Save & leave / Discard & leave / Stay. */}
+      {leaveTo && (
+        <div className="modal-backdrop" onClick={() => setLeaveTo(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <h3 className="modal-title">Unsaved settings changes</h3>
+            <div className="modal-body">
+              You have unsaved changes. Save them before leaving, or discard them?
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-ghost" onClick={() => setLeaveTo(null)}>Stay</button>
+              <button className="btn btn-secondary" onClick={() => { const go = leaveTo; cancelAll(); setLeaveTo(null); go?.(); }}>Discard &amp; leave</button>
+              <button className="btn btn-primary" disabled={savingAll} onClick={async () => { const go = leaveTo; await saveAll(); setLeaveTo(null); go?.(); }}>
+                {savingAll ? 'Saving…' : 'Save & leave'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Idle prompt — fired after a quiet period in edit mode; if unanswered it
+          auto-cancels (discards) so an abandoned session doesn't linger. */}
+      {idlePrompt && (
+        <div className="modal-backdrop" onClick={() => { setIdlePrompt(false); setIdleKick(k => k + 1); }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <h3 className="modal-title">Still editing your settings?</h3>
+            <div className="modal-body">
+              You have unsaved changes and haven’t edited anything in a few minutes. If you don’t
+              respond, your changes will be discarded so they don’t sit open.
+            </div>
+            <div className="modal-actions">
+              <button className="btn btn-secondary" onClick={cancelAll}>Discard changes</button>
+              <button className="btn btn-primary" onClick={() => { setIdlePrompt(false); setIdleKick(k => k + 1); }}>Keep editing</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Account */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
@@ -643,7 +751,7 @@ export default function Settings() {
                         ? ` — done ${fmtDate(stepTimestamp('proshopPhotos'))}`
                         : ''}
                     </span>
-                    <button className="btn btn-ghost btn-sm" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => setShowPhotos(true)}>
+                    <button className="btn btn-ghost btn-sm" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => setShowPhotos(true)} disabled={dirty} title={dirty ? 'Save or cancel your changes first' : undefined}>
                       <ImageIcon size={11} /> {setupProgress.proshopPhotos ? 'Re-import' : 'Import photos…'}
                     </button>
                   </div>
@@ -654,8 +762,8 @@ export default function Settings() {
                 <div style={{ flexShrink: 0 }}>
                   <StepAction stepKey={step.key} done={done} warn={warn}
                     onExport={handleExportProShop}
-                    onImport={() => navigate('/import')}
-                    onGoToLanding={() => navigate('/')}
+                    onImport={() => guardedNavigate('/import')}
+                    onGoToLanding={() => guardedNavigate('/')}
                     tools={tools}
                   />
                 </div>
@@ -710,9 +818,6 @@ export default function Settings() {
           </label>
         </div>
 
-        <button className="btn btn-primary" onClick={saveShop} disabled={savingShop || !googleAuthenticated}>
-          {savingShop ? 'Saving…' : 'Save Shop Settings'}
-        </button>
 
         {/* ── Machines subsection ────────────────────────────────────────── */}
         <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--border)' }}>
@@ -850,7 +955,6 @@ export default function Settings() {
                           setDefaultMachineId(newDefault);
                           setMachineDeleteId(null);
                           setExpandedMachineId(null);
-                          saveMachines(updated, newDefault);
                         }}>Delete</button>
                         <button className="btn btn-ghost btn-sm" onClick={() => setMachineDeleteId(null)}>Cancel</button>
                       </>
@@ -858,12 +962,11 @@ export default function Settings() {
                       <>
                         <button
                           className="btn btn-primary btn-sm"
-                          disabled={!m.model || savingMachines}
-                          onClick={() => { setExpandedMachineId(null); saveMachines(machines, defaultMachineId); }}
+                          disabled={!m.model}
+                          onClick={() => setExpandedMachineId(null)}
                         >
-                          {savingMachines ? 'Saving…' : 'Save'}
+                          Done
                         </button>
-                        <button className="btn btn-ghost btn-sm" onClick={() => setExpandedMachineId(null)}>Cancel</button>
                         <button
                           className="btn btn-ghost btn-sm"
                           style={{ marginLeft: 'auto', color: 'var(--red)' }}
@@ -889,7 +992,6 @@ export default function Settings() {
               const updated = [...machines, { ...m, order: machines.length }];
               setMachines(updated);
               setAddingMachine(false);
-              saveMachines(updated, defaultMachineId);
             }}
             onCancel={() => setAddingMachine(false)}
           />
@@ -901,19 +1003,6 @@ export default function Settings() {
           >
             <Plus size={14} /> Add Machine
           </button>
-        )}
-
-        {/* Save default machine when changed without opening a row editor */}
-        {machines.length > 0 && (
-          <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
-            <button
-              className="btn btn-primary btn-sm"
-              disabled={savingMachines || !googleAuthenticated}
-              onClick={() => saveMachines(machines, defaultMachineId)}
-            >
-              {savingMachines ? 'Saving…' : 'Save Machines'}
-            </button>
-          </div>
         )}
         </div>{/* end Machines subsection */}
       </div>{/* end Shop card */}
@@ -928,7 +1017,7 @@ export default function Settings() {
           Export the full tool library as a ProShop-compatible CSV — for the initial bulk
           import, or anytime afterward to re-sync ProShop with the current library.
         </p>
-        <button className="btn btn-secondary btn-sm" onClick={handleExportProShop} disabled={tools.length === 0}>
+        <button className="btn btn-secondary btn-sm" onClick={handleExportProShop} disabled={tools.length === 0 || dirty} title={dirty ? 'Save or cancel your changes first' : undefined}>
           ↓ Export Full ProShop CSV ({tools.length} tools)
         </button>
       </div>
@@ -944,7 +1033,7 @@ export default function Settings() {
           Each tool shows its current description next to the generated suggestion — uncheck
           any you want to skip or edit the text before applying.
         </p>
-        <button className="btn btn-secondary btn-sm" onClick={() => setShowDescRename(true)} disabled={tools.length === 0}>
+        <button className="btn btn-secondary btn-sm" onClick={() => setShowDescRename(true)} disabled={tools.length === 0 || dirty} title={dirty ? 'Save or cancel your changes first' : undefined}>
           <Wand2 size={13} /> Review &amp; rename descriptions…
         </button>
         {showDescRename && <DescRenameModal onClose={() => setShowDescRename(false)} />}
@@ -1055,10 +1144,6 @@ export default function Settings() {
           </span>
         </label>
 
-        <button className="btn btn-primary btn-sm" onClick={saveIdSystem} disabled={savingIds} style={{ marginBottom: 16 }}>
-          {savingIds ? 'Saving…' : 'Save ID System'}
-        </button>
-
         {/* Assign IDs to unassigned tools */}
         {idCfg.mode !== 'proshop' && idCfg.mode !== 'other_erp' && (
           <div style={{
@@ -1075,7 +1160,7 @@ export default function Settings() {
             </p>
 
             {idStage === 'idle' && (
-              <button className="btn btn-primary" onClick={() => setIdStage('preview')} disabled={idPreviewRows.length === 0 || isSaving}>
+              <button className="btn btn-primary" onClick={() => setIdStage('preview')} disabled={idPreviewRows.length === 0 || isSaving || dirty} title={dirty ? 'Save or cancel your changes first' : undefined}>
                 {idPreviewRows.length === 0 ? 'No unassigned tools' : `Assign IDs to ${idPreviewRows.length} tool${idPreviewRows.length === 1 ? '' : 's'}…`}
               </button>
             )}
@@ -1133,7 +1218,7 @@ export default function Settings() {
             </p>
 
             {renumStage === 'idle' && (
-              <button className="btn btn-secondary" onClick={() => setRenumStage('preview')} disabled={renumPreviewRows.length === 0 || isSaving}>
+              <button className="btn btn-secondary" onClick={() => setRenumStage('preview')} disabled={renumPreviewRows.length === 0 || isSaving || dirty} title={dirty ? 'Save or cancel your changes first' : undefined}>
                 {renumPreviewRows.length === 0 ? 'No tools to re-number' : `Re-number all ${renumPreviewRows.length} tool${renumPreviewRows.length === 1 ? '' : 's'}…`}
               </button>
             )}
@@ -1211,7 +1296,7 @@ export default function Settings() {
       {/* Location System — adjacent to Tool ID System (it drives the ID in
           location mode). Self-contained: configures systems, normalizes, and
           shows the library-wide unmatched panel. */}
-      <LocationSystemSettings />
+      <LocationSystemSettings configOverride={locDraft} onConfigChange={setLocDraft} />
 
       {/* Machine Numbers + Renumber — grouped because the numbers drive the
           renumber (and adding a tool). Set/save the numbering here, then renumber. */}
@@ -1244,9 +1329,6 @@ export default function Settings() {
             onChange={e => setSkipInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSkip()} />
           <button className="btn btn-secondary btn-sm" onClick={addSkip}>Add</button>
         </div>
-        <button className="btn btn-primary btn-sm" onClick={saveMachineNumbers} disabled={savingShop}>
-          {savingShop ? 'Saving…' : 'Save Machine Numbers'}
-        </button>
 
         <div style={{
           marginTop: 20,
@@ -1271,7 +1353,7 @@ export default function Settings() {
                 </span>
               </div>
               {error && <div className="error-banner mb-12">{error}</div>}
-              <button className="btn btn-danger" onClick={startPreview} disabled={tools.length === 0 || loadingPreview}>
+              <button className="btn btn-danger" onClick={startPreview} disabled={tools.length === 0 || loadingPreview || dirty} title={dirty ? 'Save or cancel your changes first' : undefined}>
                 {loadingPreview ? 'Loading library…' : `Renumber ${tools.length} Tools…`}
               </button>
             </>

@@ -223,7 +223,9 @@ export async function loadOrCreateSharedJson(name, cacheKey, defaultContent) {
 }
 
 // Save a shared JSON file by name (re-find/create if the cached ID is stale).
-export async function saveSharedJson(name, cacheKey, content) {
+// `keepalive` lets the PATCH outlive a page unload (used by the flush-on-hide
+// path) — safe here because these files are small (well under the 64KB cap).
+export async function saveSharedJson(name, cacheKey, content, { keepalive = false } = {}) {
   let id = localStorage.getItem(cacheKey);
   if (!id) {
     const parentId = await getMetaParentFolderId();
@@ -237,6 +239,7 @@ export async function saveSharedJson(name, cacheKey, content) {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${_accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(content, null, 2),
+      keepalive,
     }
   );
   if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
