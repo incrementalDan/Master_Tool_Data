@@ -4,6 +4,7 @@ import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, 
 import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
 import { generateMachineNumbers, generateId, duplicateIdClusters } from '../schema/toolSchema.js';
 import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../utils/toolIdSystem.js';
+import { ASM_MODES, previewAsmNumber } from '../utils/assemblyIdSystem.js';
 import { useDragReorder } from './useDragReorder.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
 import { FilePicker } from './LibrarySetup.jsx';
@@ -105,6 +106,12 @@ export default function Settings() {
   }, [shopSettings]);
 
   const setIdField = (patch) => setIdCfg(c => ({ ...c, ...patch }));
+
+  // ── Assembly ID system (shop_settings.assembly_id_system) ──────────────────
+  const asmDefault = { mode: 'auto', separator: null, serial_start: 10000, show_legacy: false };
+  const [asmCfg, setAsmCfg] = useState({ ...asmDefault, ...(shopSettings?.assembly_id_system || {}) });
+  useEffect(() => { setAsmCfg({ ...asmDefault, ...(shopSettings?.assembly_id_system || {}) }); }, [shopSettings]);
+  const setAsmField = (patch) => setAsmCfg(c => ({ ...c, ...patch }));
   const machineLinked = idCfg.mode === 'machine_linked';
 
   const addIdSkip = () => {
@@ -264,6 +271,12 @@ export default function Settings() {
       location: idCfg.location || idsDefault.location,
       show_legacy: idCfg.show_legacy ?? true,
     },
+    assembly_id_system: {
+      mode: asmCfg.mode,
+      separator: asmCfg.separator ?? null,
+      serial_start: Number(asmCfg.serial_start) || 10000,
+      show_legacy: asmCfg.show_legacy ?? false,
+    },
   });
 
   // Normalized projection of the managed fields, for a stable dirty comparison.
@@ -276,6 +289,7 @@ export default function Settings() {
     default_machine_id: ss?.default_machine_id || null,
     location_config: ss?.location_config || null,
     tool_id_system: { ...idsDefault, ...(ss?.tool_id_system || {}) },
+    assembly_id_system: { ...asmDefault, ...(ss?.assembly_id_system || {}) },
   });
   const draftSig = managedSig(buildDraft());
   const dirty = draftSig !== managedSig(shopSettings);
@@ -286,6 +300,7 @@ export default function Settings() {
     setSkipList(shopSettings?.machine_number?.skip ?? [98, 99, 100]);
     setHideUnusedTypes(shopSettings?.hide_unused_tool_types ?? true);
     setIdCfg({ ...idsDefault, ...(shopSettings?.tool_id_system || {}) });
+    setAsmCfg({ ...asmDefault, ...(shopSettings?.assembly_id_system || {}) });
     setMachines(shopSettings?.machines || []);
     setDefaultMachineId(shopSettings?.default_machine_id || null);
     setLocDraft(shopSettings?.location_config || null);
@@ -305,6 +320,7 @@ export default function Settings() {
       await saveShopSettings(next);
       setDefaultUnit(defaultUnit);
       markSetupStepInSettings?.('toolIdConfigured');
+      markSetupStepInSettings?.('assemblyIdConfigured');
       if ((next.location_config?.systems || []).length > 0) markSetupStepInSettings?.('locationConfigured');
       if (next.machine_number?.start) markSetupStepInSettings?.('machineNumbers');
       setIdlePrompt(false);
@@ -1298,6 +1314,74 @@ export default function Settings() {
           shows the library-wide unmatched panel. */}
       <LocationSystemSettings configOverride={locDraft} onConfigChange={setLocDraft} />
 
+      {/* Assembly ID System — third of the three parallel ID systems. Generates a
+          human-readable number per tool+holder assembly (asm_number). */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Hash size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Assembly ID System</h3>
+          <InfoTip text="How each tool+holder assembly's human-readable number (asm_number) is generated. Auto composes it from the holder short-name + Tool ID + OOH and is immutable once set. ProShop RTA# is entered by hand per assembly. Sequential is a plain serial. The number shows on each assembly." alignRight />
+        </div>
+        <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 6 }}>Assembly ID scheme</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
+          {ASM_MODES.map(m => (
+            <label key={m.id} className="radio-row" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', opacity: m.disabled ? 0.5 : 1, cursor: m.disabled ? 'not-allowed' : 'pointer' }}>
+              <input
+                type="radio"
+                name="asm-mode"
+                checked={asmCfg.mode === m.id}
+                disabled={m.disabled}
+                onChange={() => setAsmField({ mode: m.id })}
+                style={{ marginTop: 3 }}
+              />
+              <span>
+                <strong>{m.label}</strong>{m.disabled && <span className="text-sub text-xs"> · coming soon</span>}
+                <div className="text-sub text-xs">{m.desc}</div>
+              </span>
+            </label>
+          ))}
+        </div>
+
+        {asmCfg.mode === 'auto' && (
+          <div className="flex items-center gap-16 flex-wrap" style={{ marginBottom: 14 }}>
+            <div>
+              <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Separator</label>
+              <select className="field-input" style={{ maxWidth: 200 }} value={asmCfg.separator ?? '__inherit'} onChange={e => setAsmField({ separator: e.target.value === '__inherit' ? null : e.target.value })}>
+                <option value="__inherit">Inherit from Tool ID ({idCfg.separator || 'none'})</option>
+                <option value="-">- (dash)</option>
+                <option value=".">. (dot)</option>
+                <option value="/">/ (slash)</option>
+                <option value="_">_ (underscore)</option>
+                <option value="">none</option>
+              </select>
+            </div>
+            <div style={{ alignSelf: 'flex-end' }}>
+              <span className="text-sub text-sm">Preview: </span>
+              <span className="font-mono" style={{ color: 'var(--green)' }}>{previewAsmNumber(asmCfg, idCfg) || '—'}</span>
+            </div>
+          </div>
+        )}
+
+        {asmCfg.mode === 'sequential' && (
+          <div className="flex items-center gap-16 flex-wrap" style={{ marginBottom: 14 }}>
+            <div>
+              <label className="text-sub text-sm" style={{ display: 'block', marginBottom: 4 }}>Start number</label>
+              <input className="field-input" type="number" style={{ maxWidth: 140 }} value={asmCfg.serial_start ?? 10000} onChange={e => setAsmField({ serial_start: e.target.value })} />
+            </div>
+            <div style={{ alignSelf: 'flex-end' }}>
+              <span className="text-sub text-sm">Preview: </span>
+              <span className="font-mono" style={{ color: 'var(--green)' }}>{previewAsmNumber(asmCfg, idCfg)}</span>
+            </div>
+          </div>
+        )}
+
+        {asmCfg.mode === 'proshop_rta' && (
+          <div className="text-sub text-sm" style={{ marginBottom: 14, padding: 10, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', borderLeft: '3px solid var(--blue)', background: 'var(--surface-2)' }}>
+            Each assembly gets a text field to enter its ProShop <strong>RTA#</strong>. ProShop CSV import/export for RTA# is not wired yet.
+          </div>
+        )}
+      </div>
+
       {/* Machine Numbers + Renumber — grouped because the numbers drive the
           renumber (and adding a tool). Set/save the numbering here, then renumber. */}
       <div className="card" style={{ maxWidth: 760 }}>
@@ -1553,8 +1637,8 @@ function StepAction({ stepKey, done, warn, onExport, onImport, onGoToLanding, to
       );
     case 'assemblyIdConfigured':
       return (
-        <span className="text-sub" style={{ fontSize: 11, whiteSpace: 'nowrap', opacity: 0.7 }}>
-          Coming soon
+        <span className="text-sub" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+          See Assembly ID System ↓
         </span>
       );
     case 'machineNumbers':

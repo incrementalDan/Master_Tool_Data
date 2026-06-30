@@ -2,6 +2,11 @@ import { buildProShopCSV, PS_MAIN_COLS, buildBrandRows } from '../../tool-extrac
 import { toolToExtractor } from '../schema/toolSchema.js';
 import { downloadCSV } from '../../tool-extractor.tsx';
 
+// TODO (Assembly ID System — ProShop RTA mode): when assembly_id_system.mode is
+// 'proshop_rta', export/import each assembly's RTA# (asm_number) to/from a ProShop
+// column. The ProShop CSV column + per-assembly row shape is TBD — wire it here
+// and in ImportFlow.matchProShopToTools once the format is confirmed.
+
 function csvCell(v) {
   const s = String(v === null || v === undefined ? '' : v);
   return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g, '""')}"` : s;

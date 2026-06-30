@@ -1630,6 +1630,18 @@ export function buildMetadataTool(tool) {
       notes: a.notes || '',
       source: a.source || 'manual',
       created_at: a.created_at || new Date().toISOString(),
+      // Assembly ID System: human-readable number, generated once (immutable).
+      // Metadata-only.
+      asm_number: a.asm_number || null,
+      // Gauge-length tiers (metadata-only; see THREE SYSTEM CONTEXT PROMPT.md).
+      // Distinct from Fusion's geometry.assemblyGaugeLength (holder gauge + OOH,
+      // never overridden). target = calculated collet correction (formula TBD);
+      // measured_* = pre-setter reading (immutable once set) + provenance.
+      target_gauge_length: a.target_gauge_length ?? null,
+      measured_gauge_length: a.measured_gauge_length ?? null,
+      measured_at: a.measured_at || null,
+      measured_by: a.measured_by || null,
+      measured_serial: a.measured_serial || null,
     })),
     preset_meta,
     notes: tool.notes || '',
@@ -1694,6 +1706,14 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
       notes: m.notes || '',
       source: m.source || 'fusion',
       created_at: m.created_at || merged.created_at,
+      // Assembly ID System + gauge tiers (metadata-only). Auto asm_number is
+      // backfilled in-memory at load (AppContext.backfillAsmNumbers).
+      asm_number: m.asm_number || null,
+      target_gauge_length: m.target_gauge_length ?? null,
+      measured_gauge_length: m.measured_gauge_length ?? null,
+      measured_at: m.measured_at || null,
+      measured_by: m.measured_by || null,
+      measured_serial: m.measured_serial || null,
     };
   });
 

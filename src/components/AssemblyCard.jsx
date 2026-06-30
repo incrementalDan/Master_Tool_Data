@@ -33,6 +33,11 @@ export function holderColor(description) {
   return FALLBACK[Math.abs(hash) % FALLBACK.length];
 }
 
+function fmtMeasured(v) {
+  try { return new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+  catch { return v; }
+}
+
 export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { materials } = useApp();
@@ -46,8 +51,16 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
   return (
     <div style={{ border: '1px solid rgba(100, 116, 139, 0.30)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: 'var(--surface-2)' }}>
 
-      {/* Header: holder pill + OOH + action buttons */}
+      {/* Header: assembly ID (predominant) + holder pill + OOH + action buttons */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', flexWrap: 'wrap' }}>
+        {assembly.asm_number && (
+          <span className="font-mono" title="Assembly ID" style={{
+            fontSize: 13, fontWeight: 700, color: 'var(--blue)',
+            background: 'color-mix(in srgb, var(--blue) 12%, transparent)',
+            border: '1px solid color-mix(in srgb, var(--blue) 35%, transparent)',
+            borderRadius: 6, padding: '2px 8px',
+          }}>{assembly.asm_number}</span>
+        )}
         <span className="holder-pill" style={{ '--badge-color': color }}>
           {holderDescription}
         </span>
@@ -72,6 +85,22 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
           ))}
         </div>
       )}
+
+      {/* Measured gauge length — the pre-setter reading, distinct from OOH and
+          from Fusion's assemblyGaugeLength. Read-only; entry is future presetter
+          work. target_gauge_length / measured_serial are data-only (no UI). */}
+      <div style={{ padding: '5px 10px', borderTop: '1px solid var(--border)', fontSize: 12 }}>
+        <span className="text-sub">Measured gauge length: </span>
+        {assembly.measured_gauge_length != null ? (
+          <span className="font-mono" style={{ color: 'var(--text)' }}>
+            {assembly.measured_gauge_length} {unitAbbr(tool.unit)}
+            {assembly.measured_at && <span className="text-sub" style={{ fontWeight: 400 }}> · {fmtMeasured(assembly.measured_at)}</span>}
+            {assembly.measured_by && <span className="text-sub" style={{ fontWeight: 400 }}> · {assembly.measured_by}</span>}
+          </span>
+        ) : (
+          <span className="text-sub">Not yet measured</span>
+        )}
+      </div>
 
       {/* Delete confirm */}
       {confirmDelete && (
