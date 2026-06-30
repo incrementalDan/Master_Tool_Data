@@ -8,12 +8,16 @@ import HolderPicker from './HolderPicker.jsx';
 import { holderColor } from './AssemblyCard.jsx';
 
 export default function AssemblyForm({ tool, holders, assembly, onSave, onClose }) {
-  const { materials } = useApp();
+  const { materials, shopSettings } = useApp();
   const isNew = !assembly;
+  const asmMode = shopSettings?.assembly_id_system?.mode || 'auto';
 
   const [holderGuid, setHolderGuid] = useState(assembly?.holder_guid || '');
   const [ooh, setOoh] = useState(assembly?.ooh != null ? String(assembly.ooh) : '');
   const [notes, setNotes] = useState(assembly?.notes || '');
+  // ProShop RTA mode: the assembly number is entered by hand here. Other modes
+  // generate it automatically (Assembly ID System) — no field shown.
+  const [asmNumber, setAsmNumber] = useState(assembly?.asm_number || '');
   const [showHolderPicker, setShowHolderPicker] = useState(false);
   const [error, setError] = useState('');
 
@@ -42,6 +46,7 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
     }
 
     const updatedAssembly = {
+      ...assembly,   // preserve asm_number, gauge tiers, linked_preset_guids, etc.
       assembly_id: assembly?.assembly_id || generateAssemblyId(),
       instance_guid: assembly?.instance_guid,   // preserved on edit; assigned on add
       holder_guid: holderGuid,
@@ -51,6 +56,8 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
       created_at: assembly?.created_at || new Date().toISOString(),
       source: assembly?.source || 'manual',
     };
+    // ProShop RTA mode: persist the hand-entered RTA# as the assembly number.
+    if (asmMode === 'proshop_rta') updatedAssembly.asm_number = asmNumber.trim() || null;
 
     const assemblies = [...(tool.assemblies || [])];
     if (isNew) {
@@ -72,6 +79,20 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
           </h3>
           <button className="icon-btn" onClick={onClose}><X size={16} /></button>
         </div>
+
+        {/* ProShop RTA# — manual assembly number (only in proshop_rta mode) */}
+        {asmMode === 'proshop_rta' && (
+          <div className="field-group mb-16">
+            <label className="field-label">ProShop RTA#</label>
+            <input
+              className="field-input font-mono"
+              style={{ maxWidth: 220 }}
+              placeholder="e.g. RTA-1234"
+              value={asmNumber}
+              onChange={e => setAsmNumber(e.target.value)}
+            />
+          </div>
+        )}
 
         {/* Holder */}
         <div className="field-group mb-16">

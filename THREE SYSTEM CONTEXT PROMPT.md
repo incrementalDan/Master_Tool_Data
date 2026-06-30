@@ -14,7 +14,7 @@ the pattern is essential before touching any of them.
 |--------|-----------|-------------------|-----------|--------|
 | Tool ID | `tool_id_system` | The tool itself | `mode`: proshop / location / sequential / type_prefix / size_first / machine_linked / other_erp | Built |
 | Location | `location_config` | Where the tool physically lives | the **location *system*** the tool belongs to (`location_config.systems[]`) | Built |
-| Assembly ID | `assembly_id_system` | A specific tool+holder assembly | `mode` (design with an explicit enum from day one) | Pending |
+| Assembly ID | `assembly_id_system` | A specific tool+holder assembly | `mode`: auto / proshop_rta / sequential / erp_external | Built |
 
 All three live in `shop_settings.json` and are loaded at startup alongside
 `tool_metadata.json`.
@@ -133,11 +133,18 @@ of this pass:
   words — noted here and in CLAUDE.md. The Bin's auto/fixed picker stays a field
   inside a system (not elevated to a mode).
 - **`show_legacy` toggle** added to both systems (Tool ID on, Location off).
-- **Setup wizard** now has the three ID/location/assembly steps (assembly
-  disabled until it ships).
+- **Setup wizard** has the three ID/location/assembly steps (all now real,
+  completable).
 - **SQLite cleanliness:** `bin_sizes` seed id is a UUID, not the old `'standard'`.
 
-**Pending / when Assembly ID is built:** give it a `assembly_id_system` config
-with an explicit `mode`, a `legacy_*` array + `show_legacy: false`, a
-preview→commit normalize, and the now-enabled `assemblyIdConfigured` setup step.
-Cross-reference its CLAUDE.md section to the Tool ID and Location sections.
+**Assembly ID system (built).** `assembly_id_system` config with an explicit
+`mode` (auto / proshop_rta / sequential / erp_external) + `show_legacy: false`
+(no renumber → no `legacy_*` retirement). `asm_number` is stored per assembly,
+immutable, generated once in `writeLogicalTool` (auto backfilled in-memory at
+load). Five gauge-length tiers added per assembly (`target_gauge_length`,
+`measured_gauge_length`, `measured_at`, `measured_by`, `measured_serial`) —
+`geometry.assemblyGaugeLength` (Fusion) is never overridden. Settings has the
+Assembly ID card; the `assemblyIdConfigured` setup step is enabled. See the
+**Assembly ID System** section in CLAUDE.md. Pending: ProShop RTA CSV format,
+the collet-correction `target_gauge_length` formula, and presetter measurement
+entry (all flagged as TODO / data-only).

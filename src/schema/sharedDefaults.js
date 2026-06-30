@@ -201,6 +201,22 @@ export const DEFAULT_SHOP_SETTINGS = {
       { id: genLocId(), label: 'Standard', slots: 1, isDefault: true },
     ],
   },
+  // Assembly ID System — the third parallel identification system. Generates a
+  // human-readable number for each tool+holder assembly (stored on the assembly
+  // record as `asm_number`, immutable once set). `mode`:
+  //   auto         — {holderShort}{sep}{tool_id}{sep}{ooh}, generated at creation
+  //   proshop_rta  — user-entered ProShop RTA# (CSV import/export TBD)
+  //   sequential   — plain incrementing serial from serial_start
+  //   erp_external — placeholder, disabled
+  // separator inherits tool_id_system.separator when null. show_legacy mirrors
+  // the other two systems (default off); assembly IDs are immutable so there's no
+  // renumber/legacy retirement today — the flag is here for parity.
+  assembly_id_system: {
+    mode: 'auto',
+    separator: null,
+    serial_start: 10000,
+    show_legacy: false,
+  },
   // Tool presetter integration — reserved placeholder (serial format/start).
   presetter: { serial_format: null, serial_start: null },
   // CNC machine models. Each entry: id, model, machine_type, taper, max_rpm,

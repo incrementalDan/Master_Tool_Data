@@ -18,12 +18,18 @@
     "last_used_hub_id": null,
     "last_used_project_id": null
   },
+  "assembly_id_system": {
+    "mode": "auto",
+    "separator": null,
+    "serial_start": 10000,
+    "show_legacy": false
+  },
   "setup_steps": {
     "fusionConnected": "2026-05-01T12:00:00.000Z",
     "metadataConnected": "2026-05-01T12:00:00.000Z",
     "toolIdConfigured": "2026-05-01T12:00:00.000Z",
     "locationConfigured": "2026-05-01T12:00:00.000Z",
-    "assemblyIdConfigured": null,
+    "assemblyIdConfigured": "2026-05-01T12:00:00.000Z",
     "normalized": "2026-05-01T12:00:00.000Z",
     "proshopMerged": "2026-05-01T12:00:00.000Z",
     "proshopPhotos": null,

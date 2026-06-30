@@ -9,6 +9,7 @@ import {
   combineToolsByToolId, buildMetadataTool,
 } from '../schema/toolSchema.js';
 import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSystem.js';
+import { composeAsmNumber, nextAsmSerial, usedAsmSerials, backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { resolveLocationString, analyzeSystem, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { composePresetName, opTypeWord, parsePresetName, materialNameCode, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
@@ -34,18 +35,17 @@ const SETUP_CELEBRATED_KEY = 'tms_setup_celebrated';
 
 // The one-time setup/normalization/ProShop workflow, in order. Each step is
 // toggled on at the moment its triggering action happens — see setLibraryLocation,
-// normalizeLibrary, saveIdSystem, Location config save, and ImportFlow's
-// merge/export buttons. The three identification systems (Tool ID, Location,
-// Assembly) are configured as a related group right after the data sources are
-// connected — see THREE SYSTEM CONTEXT PROMPT.md. assemblyIdConfigured is
-// `disabled` (a "coming soon" placeholder) until the Assembly ID system ships;
-// disabled steps are excluded from the completion/progress math (SetupGuide).
+// normalizeLibrary, the Settings Save, and ImportFlow's merge/export buttons. The
+// three identification systems (Tool ID, Location, Assembly) are configured as a
+// related group right after the data sources are connected — see THREE SYSTEM
+// CONTEXT PROMPT.md. (A step may carry `disabled: true` to render as a
+// placeholder excluded from the completion/progress math — none currently do.)
 export const SETUP_STEPS = [
   { key: 'fusionConnected', label: 'Connect Fusion library' },
   { key: 'metadataConnected', label: 'Connect tool metadata (Google Drive)' },
   { key: 'toolIdConfigured', label: 'Choose your Tool ID format' },
   { key: 'locationConfigured', label: 'Configure your Location System' },
-  { key: 'assemblyIdConfigured', label: 'Configure your Assembly ID format', disabled: true },
+  { key: 'assemblyIdConfigured', label: 'Configure your Assembly ID format' },
   { key: 'normalized', label: 'Normalize the library' },
   { key: 'proshopMerged', label: 'Merge ProShop data' },
   { key: 'machineNumbers', label: 'Configure machine numbers' },
@@ -158,12 +158,12 @@ function loadSetupProgress() {
       let changed = false;
       if (progress.machineNumbers === undefined) { progress.machineNumbers = true; changed = true; }
       if (progress.metadataConnected === undefined) { progress.metadataConnected = true; changed = true; }
-      // Three-ID-systems upgrade: an established shop already has a Tool ID scheme
-      // and (at minimum) had the chance to configure locations — back-fill so the
-      // setup banner doesn't resurrect. assemblyIdConfigured is a disabled step and
-      // is excluded from the completion math, so it needs no back-fill.
+      // Three-ID-systems upgrade: an established shop already has Tool ID / Location
+      // / Assembly ID schemes (all default to a working mode) — back-fill so the
+      // setup banner doesn't resurrect.
       if (progress.toolIdConfigured === undefined) { progress.toolIdConfigured = true; changed = true; }
       if (progress.locationConfigured === undefined) { progress.locationConfigured = true; changed = true; }
+      if (progress.assemblyIdConfigured === undefined) { progress.assemblyIdConfigured = true; changed = true; }
       if (changed) localStorage.setItem(SETUP_PROGRESS_KEY, JSON.stringify(progress));
     }
     return progress;
@@ -955,11 +955,12 @@ export function AppProvider({ children }) {
         dispatch({ type: 'SET_SETUP_PROGRESS', progress: {
           fusionConnected: true,
           metadataConnected,
-          // The three ID systems: an established shop already has a Tool ID scheme
-          // and had the chance to set up locations — mark done so the banner stays
-          // gone. assemblyIdConfigured is a disabled step (excluded from the math).
+          // The three ID systems: an established shop already has Tool ID / Location
+          // / Assembly schemes (all default to a working mode) — mark done so the
+          // banner stays gone for an already-set-up library.
           toolIdConfigured: established,
           locationConfigured: established,
+          assemblyIdConfigured: established,
           normalized,
           proshopMerged,
           machineNumbers,
@@ -968,7 +969,11 @@ export function AppProvider({ children }) {
         if (established) localStorage.setItem(SETUP_CELEBRATED_KEY, '1');
       }
 
-      dispatch({ type: 'LOAD_SUCCESS', tools, needsNormalize, normalizeCount: untrackedCount });
+      // Assembly ID System: fill auto-mode asm_number in-memory for any assembly
+      // missing one (deterministic; persisted lazily on the tool's next save).
+      const finalTools = backfillAsmNumbers(tools, effectiveShop);
+
+      dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize, normalizeCount: untrackedCount });
       // Load every holder library alongside tools (non-critical — failure of one
       // won't block). loadHolders tags each holder with its source library. Pass
       // the resolved registry explicitly — the SET_LIBRARIES dispatch above hasn't
@@ -1006,11 +1011,32 @@ export function AppProvider({ children }) {
           source: 'manual',
           created_at: new Date().toISOString(),
         }];
-    const assemblies = baseAssemblies.map(a => ({
-      ...a,
-      assembly_id: a.assembly_id || generateAssemblyId(),
-      instance_guid: a.instance_guid || generateId(),
-    }));
+    // Assembly ID System: stamp a human-readable asm_number on any assembly that
+    // doesn't have one yet (generated once, immutable). Auto = composed string;
+    // sequential = next free serial; proshop_rta/erp = left for the user/UI.
+    const asmCfg = shopSettingsRef.current?.assembly_id_system || {};
+    const idCfg = shopSettingsRef.current?.tool_id_system || {};
+    const usedSerials = usedAsmSerials(toolsRef.current || []);
+    let nextSerial = nextAsmSerial(asmCfg.serial_start ?? 10000, usedSerials);
+    const assemblies = baseAssemblies.map(a => {
+      const withIds = {
+        ...a,
+        assembly_id: a.assembly_id || generateAssemblyId(),
+        instance_guid: a.instance_guid || generateId(),
+      };
+      if (!withIds.asm_number && asmCfg.mode !== 'proshop_rta' && asmCfg.mode !== 'erp_external') {
+        const holderDescription = withIds.holder_description
+          || holders.find(h => h.guid === withIds.holder_guid)?.description || '';
+        const n = composeAsmNumber(asmCfg, idCfg,
+          { holderDescription, tool_id: tool.tool_id, ooh: withIds.ooh, assembly_id: withIds.assembly_id },
+          asmCfg.mode === 'sequential' ? nextSerial : null);
+        if (n) {
+          withIds.asm_number = n;
+          if (asmCfg.mode === 'sequential') { usedSerials.add(nextSerial); nextSerial = nextAsmSerial(nextSerial + 1, usedSerials); }
+        }
+      }
+      return withIds;
+    });
 
     const fusionList = await downloadFusionList(library_id);
     const freshByGuid = new Map(fusionList.map(f => [f.guid, f]));
