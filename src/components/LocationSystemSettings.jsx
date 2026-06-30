@@ -210,11 +210,27 @@ function proShopHint(mode, fixedVal) {
 }
 
 // ── Normalization step (real analysis against the live library) ─────────────
-function NormalizationStep({ sys, tools, onCommit, onUpdate }) {
+function NormalizationStep({ sys, tools, buffered = false, onCommit, onUpdate }) {
   const [phase, setPhase] = useState(sys.normalized ? 'done' : 'idle'); // idle | preview | committing | done
   const [analysis, setAnalysis] = useState(null);
 
   useEffect(() => { setPhase(sys.normalized ? 'done' : 'idle'); }, [sys.normalized]);
+
+  // Normalization commits LOCATION data to the live library — it can't run on an
+  // unsaved (buffered) config. Prompt the user to save first.
+  if (buffered) {
+    return (
+      <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>Location Normalization</span>
+          <Badge color="o">Save settings first</Badge>
+        </div>
+        <p className="text-sub text-sm" style={{ margin: 0 }}>
+          Save your settings changes (top of the page) to analyze and normalize the library against this system.
+        </p>
+      </div>
+    );
+  }
 
   function runAnalysis() {
     setAnalysis(analyzeSystem(tools, sys));
@@ -314,7 +330,7 @@ function joinNames(arr) {
 }
 
 // ── System card ─────────────────────────────────────────────────────────────
-function SystemCard({ sys, tools, conflicts = [], onUpdate, onDelete, onCommit, defaultOpen }) {
+function SystemCard({ sys, tools, conflicts = [], buffered = false, onUpdate, onDelete, onCommit, defaultOpen }) {
   const [open, setOpen] = useState(defaultOpen);
   const [confirmDel, setConfirmDel] = useState(false);
   const L = sys.levels; const D = sys.delimiters;
@@ -401,7 +417,7 @@ function SystemCard({ sys, tools, conflicts = [], onUpdate, onDelete, onCommit, 
             </div>
           </LevelBlock>
 
-          <NormalizationStep sys={sys} tools={tools} onCommit={onCommit} onUpdate={onUpdate} />
+          <NormalizationStep sys={sys} tools={tools} buffered={buffered} onCommit={onCommit} onUpdate={onUpdate} />
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
             {confirmDel ? (
@@ -496,19 +512,25 @@ function Counter({ n, label, color }) {
 }
 
 // ── Root section (embedded in Settings, adjacent to Tool ID System) ─────────
-export default function LocationSystemSettings() {
+// `configOverride` + `onConfigChange` put this editor in **buffered mode**: it
+// reads/writes the passed location_config draft instead of shopSettings, and
+// never persists to Drive itself (the Settings page's Save commits the whole
+// draft). Normalize is disabled while buffered, since it needs the saved config.
+export default function LocationSystemSettings({ configOverride = null, onConfigChange = null }) {
   const { tools, shopSettings, saveLocationConfig, normalizeLocationSystem, markSetupStepInSettings, setupProgress } = useApp();
-  const cfg = shopSettings?.location_config || { systems: [], bin_sizes: [] };
+  const buffered = typeof onConfigChange === 'function';
+  const cfg = (buffered ? configOverride : shopSettings?.location_config) || { systems: [], bin_sizes: [] };
   const systems = cfg.systems || [];
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
 
   const persist = (nextSystems) => {
+    if (buffered) { onConfigChange({ ...cfg, systems: nextSystems }); return; }
     // Mark the Location setup step once (not every keystroke) the first time the
     // shop has a system configured.
     if (nextSystems.length > 0 && !setupProgress?.locationConfigured) markSetupStepInSettings?.('locationConfigured');
     return saveLocationConfig({ ...cfg, systems: nextSystems });
   };
-  const setShowLegacy = (v) => saveLocationConfig({ ...cfg, show_legacy: v });
+  const setShowLegacy = (v) => buffered ? onConfigChange({ ...cfg, show_legacy: v }) : saveLocationConfig({ ...cfg, show_legacy: v });
   const updateSystem = (id, updated) => persist(systems.map(s => s.id === id ? updated : s));
   const deleteSystem = (id) => persist(systems.filter(s => s.id !== id));
   const addSystem = () => persist([...systems, newLocationSystem()]);
@@ -549,6 +571,7 @@ export default function LocationSystemSettings() {
           tools={tools}
           conflicts={systemConflicts.get(sys.id) || []}
           defaultOpen={i === 0}
+          buffered={buffered}
           onUpdate={v => updateSystem(sys.id, v)}
           onDelete={() => deleteSystem(sys.id)}
           onCommit={normalizeLocationSystem}
