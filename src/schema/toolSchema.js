@@ -1630,9 +1630,15 @@ export function buildMetadataTool(tool) {
       notes: a.notes || '',
       source: a.source || 'manual',
       created_at: a.created_at || new Date().toISOString(),
-      // Assembly ID System: human-readable number, generated once (immutable).
-      // Metadata-only.
+      // Assembly ID System: the assembly's human-readable DIGITAL reference
+      // (metadata-only). Mutable — it can be reassigned/renumbered (ProShop RTA#,
+      // ERP, switching to Auto), so retired values live in legacy_asm_numbers[]
+      // (like tool_id → legacy_ids). Auto values are a product of other fields
+      // (holder + tool_id + OOH) and are re-derivable, so they are NOT retired —
+      // only non-derived external values are (see shouldRetireAsmNumber).
+      // (The IMMUTABLE serialized ID is the physical measured_* layer below.)
       asm_number: a.asm_number || null,
+      legacy_asm_numbers: a.legacy_asm_numbers || [],
       // Gauge-length tiers (metadata-only; see THREE SYSTEM CONTEXT PROMPT.md).
       // Distinct from Fusion's geometry.assemblyGaugeLength (holder gauge + OOH,
       // never overridden). target = calculated collet correction (formula TBD);
@@ -1706,9 +1712,12 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
       notes: m.notes || '',
       source: m.source || 'fusion',
       created_at: m.created_at || merged.created_at,
-      // Assembly ID System + gauge tiers (metadata-only). Auto asm_number is
-      // backfilled in-memory at load (AppContext.backfillAsmNumbers).
+      // Assembly ID System + gauge tiers (metadata-only). asm_number is the
+      // mutable DIGITAL reference (retired values → legacy_asm_numbers[]); the
+      // measured_* block below is the IMMUTABLE physical serialized layer.
+      // Auto asm_number is backfilled in-memory at load (backfillAsmNumbers).
       asm_number: m.asm_number || null,
+      legacy_asm_numbers: m.legacy_asm_numbers || [],
       target_gauge_length: m.target_gauge_length ?? null,
       measured_gauge_length: m.measured_gauge_length ?? null,
       measured_at: m.measured_at || null,

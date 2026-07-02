@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   composeAsmNumber, trimOoh, nextAsmSerial, usedAsmSerials,
-  resolveAsmSeparator, backfillAsmNumbers,
+  resolveAsmSeparator, backfillAsmNumbers, autoAsmNumber, shouldRetireAsmNumber,
 } from './assemblyIdSystem.js';
 
 describe('trimOoh', () => {
@@ -55,6 +55,25 @@ describe('serial helpers', () => {
     expect(used.has(10000)).toBe(true);
     expect(used.has(10001)).toBe(true);
     expect(nextAsmSerial(10000, used)).toBe(10002);
+  });
+});
+
+describe('retirement — digital reference vs. re-derivable Auto', () => {
+  const asm = { holderDescription: 'NBT30-SK13C-60', tool_id: '1001', ooh: 2.125 };
+  const auto = autoAsmNumber({ mode: 'proshop_rta', separator: null }, { separator: '-' }, asm);
+
+  it('autoAsmNumber composes the Auto value regardless of the active mode', () => {
+    expect(auto).toBe('30-SK13-60-1001-2.125');
+  });
+  it('retires an externally-assigned value (RTA# ≠ Auto)', () => {
+    expect(shouldRetireAsmNumber('RTA-1234', auto)).toBe(true);
+  });
+  it('does NOT retire a re-derivable Auto value', () => {
+    expect(shouldRetireAsmNumber('30-SK13-60-1001-2.125', auto)).toBe(false);
+  });
+  it('never retires an empty old value', () => {
+    expect(shouldRetireAsmNumber('', auto)).toBe(false);
+    expect(shouldRetireAsmNumber(null, auto)).toBe(false);
   });
 });
 

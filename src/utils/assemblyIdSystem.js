@@ -1,9 +1,18 @@
 // Assembly ID system — generates an assembly's human-readable number from the
 // shop-wide scheme in shop_settings.assembly_id_system. This is the third of the
 // three parallel identification systems (see THREE SYSTEM CONTEXT PROMPT.md); it
-// follows the same shape as the Tool ID system: an explicit `mode`, a composed
-// string built at write time, stored once on the assembly record (`asm_number`)
-// and immutable thereafter.
+// follows the same shape as the Tool ID system: an explicit `mode` and a composed
+// string stored on the assembly record (`asm_number`).
+//
+// `asm_number` is the assembly's DIGITAL reference and is MUTABLE — it can be
+// reassigned/renumbered (a ProShop RTA#, an ERP id, or switching the shop to Auto)
+// — so retired values are kept in legacy_asm_numbers[] exactly like tool_id →
+// legacy_ids. BUT: Auto is a pure product of other fields (holder + tool_id + OOH),
+// so an Auto value is always re-derivable and is NEVER retired. Legacy retention
+// matters only when replacing a NON-derived external value (RTA / ERP / sequential
+// serial) with a new one — e.g. renumbering from ProShop to Auto (see
+// shouldRetireAsmNumber). The IMMUTABLE serialized ID is the separate physical
+// measured_* layer (the presetter reading), not this digital reference.
 //
 // Modes:
 //   auto         — {holderShort}{sep}{tool_id}{sep}{ooh}, generated once at
@@ -75,6 +84,21 @@ export function composeAsmNumber(asmConfig, toolIdConfig, asm, seqNumber) {
     default:
       return '';
   }
+}
+
+// The value Auto WOULD compose for an assembly, regardless of the active mode.
+// Used to decide whether an old asm_number is a re-derivable Auto value (skip
+// retirement) or an externally-assigned one (retire it).
+export function autoAsmNumber(asmConfig, toolIdConfig, asm) {
+  return composeAsmNumber({ ...asmConfig, mode: 'auto' }, toolIdConfig, asm);
+}
+
+// Whether an old asm_number should be retired into legacy_asm_numbers when it's
+// being replaced. Only NON-derived external values (RTA / ERP / sequential) are
+// worth keeping — an Auto value equals what Auto composes, so it's dropped
+// (re-derivable). Empty old values are never retired.
+export function shouldRetireAsmNumber(oldValue, autoComposed) {
+  return !!oldValue && oldValue !== autoComposed;
 }
 
 // Serial numbers already taken across the library (plain integers only — that's

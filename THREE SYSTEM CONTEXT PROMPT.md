@@ -138,13 +138,20 @@ of this pass:
 - **SQLite cleanliness:** `bin_sizes` seed id is a UUID, not the old `'standard'`.
 
 **Assembly ID system (built).** `assembly_id_system` config with an explicit
-`mode` (auto / proshop_rta / sequential / erp_external) + `show_legacy: false`
-(no renumber → no `legacy_*` retirement). `asm_number` is stored per assembly,
-immutable, generated once in `writeLogicalTool` (auto backfilled in-memory at
-load). Five gauge-length tiers added per assembly (`target_gauge_length`,
-`measured_gauge_length`, `measured_at`, `measured_by`, `measured_serial`) —
-`geometry.assemblyGaugeLength` (Fusion) is never overridden. Settings has the
-Assembly ID card; the `assemblyIdConfigured` setup step is enabled. See the
-**Assembly ID System** section in CLAUDE.md. Pending: ProShop RTA CSV format,
-the collet-correction `target_gauge_length` formula, and presetter measurement
-entry (all flagged as TODO / data-only).
+`mode` (auto / proshop_rta / sequential / erp_external). **Two ID layers:**
+`asm_number` is the **mutable digital reference** (how the assembly is referenced
+in software) — reassignable/renumberable, so retired values go to
+`legacy_asm_numbers[]` like `tool_id` → `legacy_ids` (searchable, `show_legacy`
+toggle). Auto is a re-derivable product of fields so it's **never** retired;
+legacy retention applies only when a NON-derived external value (RTA/ERP/serial)
+is replaced (`shouldRetireAsmNumber`). The **immutable** serialized ID is the
+separate **physical** `measured_*` layer (the presetter reading), representing
+the real assembly — no UI yet. `asm_number` is stamped when absent in
+`writeLogicalTool` (auto backfilled at load); the ProShop RTA# edit
+(`AssemblyForm`) is today's only mutation point + retirement site. Five
+gauge-length tiers per assembly; `geometry.assemblyGaugeLength` (Fusion) never
+overridden. Settings has the Assembly ID card (+ `show_legacy`); the
+`assemblyIdConfigured` setup step is enabled. See the **Assembly ID System**
+section in CLAUDE.md. Deferred: a bulk "re-number assemblies" action (external →
+Auto, reuses `shouldRetireAsmNumber`), ProShop RTA CSV, the collet-correction
+`target_gauge_length` formula, and presetter measurement entry.

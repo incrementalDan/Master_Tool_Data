@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Info } from 'lucide-react';
 import { generateAssemblyId } from '../schema/toolSchema.js';
 import { presetMatchesAssembly, presetMaterialColor } from '../utils/presetNaming.js';
+import { autoAsmNumber, shouldRetireAsmNumber } from '../utils/assemblyIdSystem.js';
 import { unitAbbr } from '../utils/units.js';
 import { useApp } from '../context/AppContext.jsx';
 import HolderPicker from './HolderPicker.jsx';
@@ -58,6 +59,22 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
     };
     // ProShop RTA mode: persist the hand-entered RTA# as the assembly number.
     if (asmMode === 'proshop_rta') updatedAssembly.asm_number = asmNumber.trim() || null;
+
+    // Retire a REPLACED digital reference into legacy_asm_numbers — but only when
+    // the old value was externally assigned (RTA / ERP / serial), not a re-derivable
+    // Auto value. Keeps an old ProShop RTA# searchable after a renumber.
+    const oldAsm = assembly?.asm_number || '';
+    const newAsm = updatedAssembly.asm_number || '';
+    if (oldAsm && oldAsm !== newAsm) {
+      const auto = autoAsmNumber(shopSettings?.assembly_id_system, shopSettings?.tool_id_system, {
+        holderDescription: updatedAssembly.holder_description, tool_id: tool.tool_id,
+        ooh: updatedAssembly.ooh, assembly_id: updatedAssembly.assembly_id,
+      });
+      if (shouldRetireAsmNumber(oldAsm, auto)) {
+        const prev = (updatedAssembly.legacy_asm_numbers || []).filter(x => x !== newAsm);
+        updatedAssembly.legacy_asm_numbers = prev.includes(oldAsm) ? prev : [...prev, oldAsm];
+      }
+    }
 
     const assemblies = [...(tool.assemblies || [])];
     if (isNew) {
