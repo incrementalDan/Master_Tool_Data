@@ -1380,6 +1380,22 @@ export default function Settings() {
             Each assembly gets a text field to enter its ProShop <strong>RTA#</strong>. ProShop CSV import/export for RTA# is not wired yet.
           </div>
         )}
+
+        {/* Show retired assembly numbers — shared toggle across the three ID
+            systems. Assembly defaults OFF (like Location). A search match always
+            surfaces a retired number regardless. */}
+        <label className="radio-row" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+          <input
+            type="checkbox"
+            checked={asmCfg.show_legacy ?? false}
+            onChange={e => setAsmField({ show_legacy: e.target.checked })}
+            style={{ marginTop: 3 }}
+          />
+          <span>
+            <strong>Show former (retired) assembly numbers</strong>
+            <div className="text-sub text-xs">Display a muted “Formerly:” line on assemblies whose number was reassigned (e.g. an old ProShop RTA# after switching to Auto). A search that matches an old number still finds the tool either way.</div>
+          </span>
+        </label>
       </div>
 
       {/* Machine Numbers + Renumber — grouped because the numbers drive the

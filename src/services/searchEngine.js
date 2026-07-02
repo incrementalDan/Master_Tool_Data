@@ -20,6 +20,19 @@ export function matchedLegacyLocation(tool, query) {
   return tool.legacy_locations.find(l => String(l).toLowerCase().includes(q)) || null;
 }
 
+// The first retired assembly number (across any of the tool's assemblies) that
+// the query matched, or null. Mirror of matchedLegacyId for the Assembly ID
+// System — lets an old ProShop RTA#/ERP id still surface the tool after a renumber.
+export function matchedLegacyAsmNumber(tool, query) {
+  const q = query?.toLowerCase().trim();
+  if (!q || !Array.isArray(tool?.assemblies)) return null;
+  for (const a of tool.assemblies) {
+    const hit = (a.legacy_asm_numbers || []).find(l => String(l).toLowerCase().includes(q));
+    if (hit) return hit;
+  }
+  return null;
+}
+
 export function textSearch(tools, query) {
   if (!query?.trim()) return tools;
   const q = query.toLowerCase().trim();
@@ -39,6 +52,10 @@ export function textSearch(tools, query) {
     if (Array.isArray(tool.legacy_ids) && tool.legacy_ids.some(l => String(l).toLowerCase().includes(q))) return true;
     // Legacy (retired) free-text locations — so an old cabinet string still finds it.
     if (Array.isArray(tool.legacy_locations) && tool.legacy_locations.some(l => String(l).toLowerCase().includes(q))) return true;
+    // Assembly numbers (current + retired) — so an assembly ID / old RTA# finds the tool.
+    if (Array.isArray(tool.assemblies) && tool.assemblies.some(a =>
+      String(a.asm_number || '').toLowerCase().includes(q)
+      || (a.legacy_asm_numbers || []).some(l => String(l).toLowerCase().includes(q)))) return true;
     return false;
   });
 }

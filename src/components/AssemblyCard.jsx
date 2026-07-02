@@ -40,7 +40,11 @@ function fmtMeasured(v) {
 
 export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const { materials } = useApp();
+  const { materials, shopSettings } = useApp();
+  // Retired assembly numbers are hidden by default (parallel to Tool ID's
+  // show_legacy; a search match still surfaces one on the result card).
+  const showLegacyAsm = shopSettings?.assembly_id_system?.show_legacy ?? false;
+  const legacyAsm = Array.isArray(assembly.legacy_asm_numbers) ? assembly.legacy_asm_numbers : [];
 
   const holder = holders.find(h => h.guid === assembly.holder_guid);
   const holderDescription = assembly.holder_description || holder?.description || '—';
@@ -83,6 +87,15 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
           {linkedPresets.map((p) => (
             <span key={p.guid} className="preset-tag" style={{ '--badge-color': presetMaterialColor(p.material?.query, materials) || undefined }}>{p.name || 'Unnamed'}</span>
           ))}
+        </div>
+      )}
+
+      {/* Former (retired) assembly numbers — e.g. an old ProShop RTA# after a
+          renumber to Auto. Muted, gated on the Assembly ID System's show_legacy
+          toggle (default off); a search match reveals it regardless. */}
+      {showLegacyAsm && legacyAsm.length > 0 && (
+        <div className="text-sub text-xs" style={{ padding: '2px 10px' }}>
+          Formerly: <span className="font-mono">{legacyAsm.join(', ')}</span>
         </div>
       )}
 
