@@ -63,7 +63,7 @@ const NUMERIC_PRESET_FIELDS = new Set([
   'stepdown', 'stepover',
 ]);
 
-const PRESET_FIELD_LABELS = {
+export const PRESET_FIELD_LABELS = {
   n: 'Spindle Speed (RPM)',
   v_c: 'Surface Speed',
   n_ramp: 'Ramp Spindle Speed (RPM)',
@@ -100,12 +100,36 @@ function formatValue(v) {
   return String(v);
 }
 
-function presetTolerance(a, b) {
-  const v = Math.max(Math.abs(Number(a)), Math.abs(Number(b)));
-  if (v < 1)    return 0.0001;
-  if (v < 10)   return 0.5;
-  if (v < 1000) return 10;
-  return 25;
+// ── Significance thresholds ───────────────────────────────────────────────────
+// Differences smaller than these are machining noise, not knowledge: 10 RPM
+// changes nothing, but 0.0001" of chip load can. A preset value counts as
+// "changed" only when |job − master| > max(rel × magnitude, abs). Sub-threshold
+// differences are treated as identical (counted, shown as "minor differences
+// ignored"). abs floors are in inch units; fields marked `len` scale ×25.4 for
+// a millimeters tool.
+const PRESET_SIGNIFICANCE = {
+  n:              { rel: 0.01, abs: 15 },                   // RPM
+  n_ramp:         { rel: 0.01, abs: 15 },
+  v_c:            { rel: 0.01, abs: 1 },                    // surface speed
+  v_f:            { rel: 0.02, abs: 0.1,     len: true },   // feeds
+  v_f_plunge:     { rel: 0.02, abs: 0.1,     len: true },
+  v_f_ramp:       { rel: 0.02, abs: 0.1,     len: true },
+  v_f_leadIn:     { rel: 0.05, abs: 0.1,     len: true },   // followers of v_f — looser
+  v_f_leadOut:    { rel: 0.05, abs: 0.1,     len: true },
+  v_f_transition: { rel: 0.05, abs: 0.1,     len: true },
+  f_z:            { rel: 0.02, abs: 0.00005, len: true },   // chip load — 0.0001" is real
+  f_n:            { rel: 0.02, abs: 0.00005, len: true },
+  'ramp-angle':   { rel: 0,    abs: 0.25 },
+  stepdown:       { rel: 0.10, abs: 0.005,   len: true },   // DOC reference value — coarse
+  stepover:       { rel: 0.02, abs: 0.0005,  len: true },   // WOC — small diffs matter
+};
+
+function presetTolerance(field, a, b, unit) {
+  const sig = PRESET_SIGNIFICANCE[field];
+  if (!sig) return 0.0001;
+  const mag = Math.max(Math.abs(Number(a)), Math.abs(Number(b)));
+  const scale = (sig.len && unit === 'millimeters') ? 25.4 : 1;
+  return Math.max(sig.rel * mag, sig.abs * scale);
 }
 
 function valuesEqual(a, b) {
@@ -114,7 +138,10 @@ function valuesEqual(a, b) {
   const isEmpty = v => v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0);
   if (isEmpty(a) && isEmpty(b)) return true;
   const na = Number(a), nb = Number(b);
-  if (!isNaN(na) && !isNaN(nb) && a !== '' && b !== '') return na === nb;
+  // Numbers that round to the same 4-decimal display are equal — formatValue
+  // shows 4dp, so anything closer would render as "0.5 → 0.5" (float round-trip
+  // noise from Fusion), which is pure confusion in a diff row.
+  if (!isNaN(na) && !isNaN(nb) && a !== '' && b !== '') return Math.abs(na - nb) < 5e-5;
   return false;
 }
 
@@ -145,15 +172,22 @@ function matchPresets(incomingPresets, masterPresets, incomingOoh, incomingHolde
     const master = masterByName.get(key);
     if (master) {
       matchedMasterGuids.add(master.guid);
-      const changedFields = PRESET_DIFF_FIELDS.filter(f => {
+      const changedFields = [];
+      let trivial = 0;   // real-but-insignificant numeric diffs (below threshold, above float dust)
+      for (const f of PRESET_DIFF_FIELDS) {
         if (NUMERIC_PRESET_FIELDS.has(f)) {
           const na = Number(incoming[f]), nb = Number(master[f]);
-          if (!isNaN(na) && !isNaN(nb)) return Math.abs(na - nb) > presetTolerance(na, nb);
+          if (!isNaN(na) && !isNaN(nb)) {
+            const diff = Math.abs(na - nb);
+            if (diff > presetTolerance(f, na, nb, unit)) changedFields.push(f);
+            else if (diff > 5e-6) trivial++;
+            continue;
+          }
         }
-        return !valuesEqual(incoming[f], master[f]);
-      });
+        if (!valuesEqual(incoming[f], master[f])) changedFields.push(f);
+      }
       if (changedFields.length === 0) {
-        unchanged.push({ incoming, master });
+        unchanged.push({ incoming, master, trivial });
       } else if (checkDifferentAssembly(master, incomingOoh, incomingHolderGuid, masterAssemblies, unit)) {
         conflicts.push({ incoming, master, changedFields });
       } else {
@@ -171,8 +205,8 @@ function matchPresets(incomingPresets, masterPresets, incomingOoh, incomingHolde
 // ─── Preset diff sub-component ────────────────────────────────────────────────
 function PresetsDiff({
   presetMatch, incomingOoh, incomingHolderDesc,
-  addedPresets, conflictResolutions,
-  onToggleAddedPreset, onSetConflictResolution,
+  addedPresets, conflictResolutions, blockedResolutions,
+  onToggleAddedPreset, onSetConflictResolution, onSetBlockedResolution,
   masterAssemblies, unit,
   assemblyAction, onSetAssemblyAction,
   linkTargetId, onSetLinkTargetId,
@@ -187,10 +221,11 @@ function PresetsDiff({
 
   const totalChanged = blocked.length + conflicts.length;
   const totalUnchanged = unchanged.length + masterOnly.length;
+  const minorIgnoredCount = unchanged.filter(u => u.trivial > 0).length;
 
   const summaryParts = [];
   if (newPresets.length > 0) summaryParts.push(`${newPresets.length} new`);
-  if (conflicts.length > 0) summaryParts.push(`${conflicts.length} conflict${conflicts.length !== 1 ? 's' : ''}`);
+  if (totalChanged > 0) summaryParts.push(`${totalChanged} changed`);
   if (totalUnchanged > 0) summaryParts.push(`${totalUnchanged} matched`);
 
   return (
@@ -201,7 +236,7 @@ function PresetsDiff({
         <span className="panel-header-title">Speeds &amp; Feeds Presets</span>
         <InfoTip
           alignRight
-          text="Presets are speed/feed settings for each machining operation. Existing preset values in master are never overwritten — you can only add new ones or create variants for different setups."
+          text="Presets are speed/feed settings for each machining operation. Job values proven on the SAME setup (holder + stick-out) can update master directly; values from a DIFFERENT setup are saved as a new preset variant. Differences too small to matter at the machine (a few RPM, float noise) are ignored automatically."
         />
         <span className="diff-section-count">{summaryParts.join(', ') || 'none'}</span>
       </div>
@@ -314,7 +349,7 @@ function PresetsDiff({
         <div className="preset-subsection-header">
           <CheckCircle size={12} style={{ color: 'var(--text-sub)' }} />
           <span>Existing — Identical</span>
-          <InfoTip text="These presets exist in both master and this job with the same values. No action needed." />
+          <InfoTip text="These presets exist in both master and this job with the same values (or differences too small to matter at the machine — a few RPM, float rounding). No action needed." />
           <span className="diff-section-count">
             {totalUnchanged > 0
               ? `${totalUnchanged} preset${totalUnchanged !== 1 ? 's' : ''}`
@@ -329,6 +364,11 @@ function PresetsDiff({
               ...unchanged.map(u => u.master.name || 'Unnamed'),
               ...masterOnly.map(p => p.name || 'Unnamed'),
             ].join(', ')}
+            {minorIgnoredCount > 0 && (
+              <span style={{ display: 'block', marginTop: 4, fontSize: 11, color: 'var(--text-sub)' }}>
+                {minorIgnoredCount} of these had only insignificant differences (ignored)
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -338,7 +378,7 @@ function PresetsDiff({
         <div className="preset-subsection-header">
           <AlertTriangle size={12} style={{ color: totalChanged > 0 ? 'var(--amber)' : 'var(--text-sub)' }} />
           <span style={{ color: totalChanged > 0 ? 'var(--amber)' : undefined }}>Existing — Changed</span>
-          <InfoTip text="Same preset name, different values from this job. Master values are never overwritten. If the job used a different holder/OOH setup, the job values can be saved as a new preset variant." />
+          <InfoTip text="Same preset name, different values from this job. If the job ran the SAME setup as master (or carried no setup info), you can update master with the proven values, or keep master's. If it ran a DIFFERENT holder/stick-out, the values are only comparable as a new preset variant." />
           <span className="diff-section-count">
             {totalChanged > 0
               ? `${totalChanged} preset${totalChanged !== 1 ? 's' : ''}`
@@ -400,15 +440,56 @@ function PresetsDiff({
           );
         })}
 
-        {/* Blocked: same assembly — master values kept, no user action available */}
-        {blocked.length > 0 && (
-          <div className="preset-subsection-names" style={{ borderTop: conflicts.length > 0 ? '1px solid var(--border)' : 'none' }}>
-            <span style={{ color: 'var(--text-sub)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.04em', display: 'block', marginBottom: 4 }}>
-              Same setup — master values kept:
-            </span>
-            {blocked.map(b => b.master.name || 'Unnamed').join(', ')}
-          </div>
-        )}
+        {/* Same setup, different values — the core capture case: the job proved
+            better numbers on the exact setup master already knows. User chooses
+            update (default keep, conservative). */}
+        {blocked.map(({ master, incoming, changedFields }) => {
+          const resolution = blockedResolutions.get(master.guid) || 'keep';
+          return (
+            <div key={master.guid} style={{ borderTop: '1px solid var(--border)' }}>
+              <div className="preset-diff-header" style={{ background: 'rgba(96,165,250,0.06)' }}>
+                <RefreshCw size={13} style={{ color: 'var(--blue)', flexShrink: 0, marginLeft: 14 }} />
+                <span className="preset-diff-name" style={{ color: 'var(--blue)', marginLeft: 6 }}>
+                  {master.name || 'Unnamed'}
+                </span>
+                <span className="text-xs text-sub" style={{ marginLeft: 'auto', marginRight: 14 }}>
+                  Same setup · {changedFields.length} value{changedFields.length !== 1 ? 's' : ''} differ
+                </span>
+              </div>
+              <div className="diff-rows">
+                {changedFields.map(field => (
+                  <div key={field} className="diff-row" style={{ cursor: 'default' }}>
+                    <span style={{ width: 20 }} />
+                    <span className="diff-field-label">{PRESET_FIELD_LABELS[field] || field}</span>
+                    <span className="diff-val diff-val-master">{formatValue(master[field])}</span>
+                    <span className="diff-arrow">→</span>
+                    <span className="diff-val diff-val-job">{formatValue(incoming[field])}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ padding: '10px 16px', display: 'flex', gap: 20, alignItems: 'center', fontSize: 13, borderTop: '1px solid var(--border)', background: 'var(--surface-2)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name={`blocked-${master.guid}`}
+                    checked={resolution === 'update'}
+                    onChange={() => onSetBlockedResolution(master.guid, 'update')}
+                  />
+                  Update master with job values
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name={`blocked-${master.guid}`}
+                    checked={resolution === 'keep'}
+                    onChange={() => onSetBlockedResolution(master.guid, 'keep')}
+                  />
+                  Keep master values
+                </label>
+              </div>
+            </div>
+          );
+        })}
 
         {totalChanged === 0 && (
           <div className="preset-subsection-empty">None</div>
@@ -470,6 +551,13 @@ export default function DiffStep({
     return m;
   });
 
+  // Same-setup presets with different values — 'keep' (default) or 'update'.
+  const [blockedResolutions, setBlockedResolutions] = useState(() => {
+    const m = new Map();
+    for (const { master } of presetMatch.blocked) m.set(master.guid, 'keep');
+    return m;
+  });
+
   // Assembly state — lives here so the decision is made alongside the presets
   const [assemblyAction, setAssemblyAction] = useState('create');
   const [linkTargetId, setLinkTargetId] = useState('');
@@ -503,8 +591,13 @@ export default function DiffStep({
     setConflictResolutions(prev => new Map(prev).set(masterGuid, resolution));
   };
 
+  const setBlockedResolution = (masterGuid, resolution) => {
+    setBlockedResolutions(prev => new Map(prev).set(masterGuid, resolution));
+  };
+
   const conflictCreates = [...conflictResolutions.values()].filter(v => v === 'create').length;
-  const totalSelected = selected.size + addedPresets.size + conflictCreates;
+  const blockedUpdates = [...blockedResolutions.values()].filter(v => v === 'update').length;
+  const totalSelected = selected.size + addedPresets.size + conflictCreates + blockedUpdates;
 
   const hasAnyChange = Object.values(diffs).some(arr => arr.length > 0)
     || presetMatch.conflicts.length > 0
@@ -541,6 +634,17 @@ export default function DiffStep({
 
     const presetsToAdd = [...newPresetsToAdd, ...conflictPresetsToAdd];
 
+    // Same-setup presets the user chose to update in place — mergeTool patches
+    // the selected fields onto the master preset (guid unchanged, so assembly
+    // links survive) and records it in merge_history.presets_changed.
+    const presetChanges = presetMatch.blocked
+      .filter(({ master }) => blockedResolutions.get(master.guid) === 'update')
+      .map(({ master, incoming, changedFields }) => ({
+        masterPresetGuid: master.guid,
+        incomingPreset: incoming,
+        selectedFields: new Set(changedFields),
+      }));
+
     // Build assemblyUpdate here so CommitStep just confirms and writes
     const hasIncomingAssembly = incomingOoh != null && incomingOoh > 0 && presetsToAdd.length > 0;
     let assemblyUpdate = null;
@@ -575,7 +679,7 @@ export default function DiffStep({
       }
     }
 
-    onConfirm({ selectedFields: selected, presetSelections: new Map(), presetsToAdd, assemblyUpdate });
+    onConfirm({ selectedFields: selected, presetChanges, presetsToAdd, assemblyUpdate });
   };
 
   if (isFetchingLive) {
@@ -603,10 +707,11 @@ export default function DiffStep({
   }
 
   const totalFlatChanged = Object.values(diffs).reduce((s, a) => s + a.length, 0);
+  const presetChangedCount = presetMatch.blocked.length + presetMatch.conflicts.length;
   const presetSummaryParts = [];
-  if (presetMatch.unchanged.length > 0) presetSummaryParts.push(`${presetMatch.unchanged.length} matched`);
-  if (presetMatch.conflicts.length > 0) presetSummaryParts.push(`${presetMatch.conflicts.length} conflict${presetMatch.conflicts.length !== 1 ? 's' : ''}`);
   if (presetMatch.newPresets.length > 0) presetSummaryParts.push(`${presetMatch.newPresets.length} new`);
+  if (presetChangedCount > 0) presetSummaryParts.push(`${presetChangedCount} changed`);
+  if (presetMatch.unchanged.length > 0) presetSummaryParts.push(`${presetMatch.unchanged.length} matched`);
 
   return (
     <div>
@@ -682,8 +787,10 @@ export default function DiffStep({
           incomingHolderDesc={incomingHolderDesc}
           addedPresets={addedPresets}
           conflictResolutions={conflictResolutions}
+          blockedResolutions={blockedResolutions}
           onToggleAddedPreset={toggleAddedPreset}
           onSetConflictResolution={setConflictResolution}
+          onSetBlockedResolution={setBlockedResolution}
           masterAssemblies={masterTool.assemblies}
           unit={masterTool.unit}
           assemblyAction={assemblyAction}

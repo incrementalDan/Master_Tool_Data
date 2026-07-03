@@ -1185,12 +1185,16 @@ Presets are matched **by name (case-insensitive)**, not by GUID. This is because
 
 | Category | Condition | Action |
 |----------|-----------|--------|
-| `unchanged` | Same name, values identical | Shown grayed out; nothing to commit |
-| `blocked` | Same name, different values, same assembly context (or no OOH) | Shown grayed out; no update offered — different conditions mean it's not directly comparable |
-| `conflicts` | Same name, different values, **different assembly context** | User asked: "Create new preset" or "Ignore" |
+| `unchanged` | Same name, values identical (or differing only below significance — see below) | Shown grayed out; nothing to commit |
+| `blocked` | Same name, significantly different values, same assembly context (or no OOH) | Per-preset radio: **"Update master with job values"** (patches the significant changed fields onto the master preset via `presetChanges` — the proven-improvement capture path) or **"Keep master values"** (default) |
+| `conflicts` | Same name, significantly different values, **different assembly context** | User asked: "Save as new preset variant" or "Ignore" |
 | `newPresets` | No name match in master | User can select to add; always included in commit |
 
-**Assembly context comparison** (`checkDifferentAssembly`): a preset is considered to have a different assembly context if the incoming OOH differs from every existing assembly linked to that master preset by more than 0.0005" (or if the holder GUID differs). If the incoming tool has no OOH data (`incoming_ooh == null || <= 0`), presets with value differences are always `blocked` (not conflicted).
+**Significance thresholds (`PRESET_SIGNIFICANCE`, DiffStep.jsx)**: a numeric preset value counts as *changed* only when |job − master| > max(`rel` × magnitude, `abs` floor) — machining-relevant thresholds, not exact equality (10 RPM is noise; 0.0001" of chip load is real). Per-field: RPM 1%/15; surface speed 1%; cutting/plunge/ramp feeds 2%; lead-in/out/transition 5% (followers of `v_f`); chip load (`f_z`/`f_n`) 2% with 0.00005 abs floor; ramp angle 0.25°; **stepdown 10%** (DOC is a loose reference value in Fusion) vs. **stepover 2%** (WOC matters); `abs` floors are inch-unit and scale ×25.4 for a millimeters tool (`len: true`). Sub-threshold diffs are treated as identical — the preset lands in `unchanged` with a `trivial` count, surfaced as "N of these had only insignificant differences (ignored)". Tool-level flat fields use `valuesEqual`, where numbers within 5e-5 are equal (anything closer renders identically at the 4-decimal display rounding — kills Fusion float round-trip noise like "0.5 → 0.5" diff rows).
+
+**Assembly context comparison** (`checkDifferentAssembly`): a preset is considered to have a different assembly context if the incoming OOH differs from every existing assembly linked to that master preset by more than 0.0005" (or if the holder GUID differs). If the incoming tool has no OOH data (`incoming_ooh == null || <= 0`), presets with value differences are always `blocked` (not conflicted) — the update-master option still applies.
+
+**Blocked → update semantics**: the master preset keeps its **guid** (assembly `linked_preset_guids` stay valid) and only the user-approved significant fields are patched (`{ masterPresetGuid, incomingPreset, selectedFields }` per change). `mergeTool` records each update in `merge_history[].presets_changed` and a **revision note is required** whenever `presetChanges` is non-empty (same rule as flat tool-field changes). The three-way stepdown/stepover invariant is safe because every preset passes through `normalizePreset` in `internalToFusionTool` on write.
 
 ### Transient fields on imported tools during Phase 2
 
@@ -1223,7 +1227,8 @@ await mergeTool(
   mergedFields,        // { fieldName: incomingValue, ... } for selected flat fields
   revisionNote,
   mergedBy,
-  [],                  // presetChanges — always empty (we never overwrite existing presets)
+  presetChanges,       // [{ masterPresetGuid, incomingPreset, selectedFields:Set }] —
+                       // same-setup presets the user chose to update in place
   newPresetList,       // presetsToAdd from DiffStep
   assemblyUpdate       // { type: 'create'|'link', assembly: {...} } or null
 );

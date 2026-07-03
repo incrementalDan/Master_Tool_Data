@@ -71,7 +71,14 @@ record. (See §6 for the proposed `cut_records` schema and §7 for sequencing.)
 
 ## 4. Specific shortfalls found (against current intent)
 
-### 4.1 The "blocked" preset bucket silently discards proven improvements ⚠
+### 4.1 The "blocked" preset bucket silently discards proven improvements ⚠ — **FIXED 2026-07-03**
+
+> **Status: fixed.** Same-setup presets with significantly different values now get a
+> per-preset "Update master with job values" / "Keep master values" choice in DiffStep.
+> Updates patch only the significant changed fields onto the master preset (guid kept,
+> so assembly links survive), require a revision note, and are recorded in
+> `merge_history[].presets_changed`. Alongside this, machining-relevant significance
+> thresholds were added so trivial differences no longer surface at all — see §8.
 
 `matchPresets` (`src/components/MergeFlow/DiffStep.jsx`): an incoming preset with
 the **same name, different values, same assembly context** is classified `blocked` —
@@ -168,9 +175,8 @@ capture loop (§3) closes end-to-end for *this* shop.
 
 ### 🟢 Low effort — easy wins (days, mostly UI + metadata fields)
 
-1. **Unblock the blocked bucket** (§4.1). Add "Update master preset" as an explicit
-   option for same-setup/different-values, writing `previous_values` to merge
-   history. Highest value-per-line-changed in the codebase.
+1. ~~**Unblock the blocked bucket** (§4.1).~~ ✅ **Done 2026-07-03** — see §4.1 status
+   note and §8.
 2. **Preset provenance** (§4.2). Add `source`, `proven_job`, `proven_at`,
    `proven_by`, `result_note` to `preset_meta`; stamp them automatically in
    CommitStep (job # is already being typed into the revision note — make it a
@@ -303,3 +309,117 @@ be created today from CommitStep; `fusion_addin` is the end state.
 The thesis: the app has already won the hard plumbing battles (Fusion round-trip,
 identity, materials taxonomy). What's left to build is comparatively simple *data
 and workflow* — but it has to be pointed at the cut, not the tool.
+
+---
+
+## 8. Merge/Sync workflow analysis (added 2026-07-03)
+
+A close read of the Sync Job flow (`MergeFlow/` — ImportStep → MatchStep → DiffStep
+→ CommitStep → SummaryStep), prompted by real use: *"I get kind of confused as to
+what I'm looking at and what it's asking me to do. It seems like it might be
+flagging super small differences."*
+
+### 8.1 Where the confusion was coming from
+
+The flow's **structure** is sound (paste → auto-match → per-tool diff → commit with
+a note → summary). The confusion concentrated in **DiffStep**, for three
+compounding reasons:
+
+1. **Float-noise diff rows.** Tool-level fields compared with *exact* numeric
+   equality, but Fusion's JSON round-trip produces float noise (0.5 stored as
+   0.4999999…). The diff then showed rows like **"0.5 → 0.5"** — a "change" where
+   both sides display identically. Nothing erodes trust in a diff screen faster.
+2. **One-size-fits-all preset tolerances.** The old `presetTolerance` was tiered by
+   magnitude only (values <1 → 0.0001; <10 → 0.5; <1000 → 10; ≥1000 → 25) — blind
+   to *what the number is*. It could flag a meaningless 12 in/min → 11 in/min
+   lead-in tweak while a genuinely meaningful 0.0001" chip-load change sat exactly
+   at the flag boundary. Machining significance is per-field, not per-magnitude.
+3. **The three preset buckets were opaque** — "conflicts" got orange warning
+   styling and radio buttons; "blocked" appeared as a grayed-out one-line list with
+   no explanation of why nothing could be done; the summary counts ("N matched, N
+   conflicts") didn't map to what the eye saw.
+
+### 8.2 What was changed (shipped with this analysis)
+
+- **Machining-relevant significance thresholds** (`PRESET_SIGNIFICANCE`,
+  DiffStep.jsx). A value counts as changed only when
+  |job − master| > max(rel × magnitude, abs floor):
+
+  | Field | rel | abs floor | Rationale |
+  |---|---|---|---|
+  | RPM (`n`, `n_ramp`) | 1% | 15 | 10 RPM changes nothing |
+  | Surface speed | 1% | 1 | |
+  | Cutting / plunge / ramp feed | 2% | 0.1 | |
+  | Lead-in/out/transition | 5% | 0.1 | followers of `v_f` — low signal |
+  | Chip load (`f_z`, `f_n`) | 2% | 0.00005 | **0.0001" of chip load is real** — flags |
+  | Ramp angle | — | 0.25° | |
+  | Stepdown (DOC) | **10%** | 0.005 | reference value in Fusion — coarse (see 8.3) |
+  | Stepover (WOC) | **2%** | 0.0005 | engagement — small diffs matter |
+
+  Floors are inch-unit and scale ×25.4 for metric tools. Sub-threshold diffs are
+  treated as identical and reported as *"N of these had only insignificant
+  differences (ignored)"* so the user knows they were seen, not missed.
+- **Float-noise kill on tool fields**: numbers within 5e-5 are equal — anything
+  closer renders identically at the 4-decimal display rounding, so a diff row can
+  never again show two identical-looking values.
+- **The blocked bucket is now actionable** (the §4.1 fix): same-setup presets with
+  significant differences render like conflicts — field-by-field master → job rows —
+  with "Update master with job values" / "Keep master values" (default keep).
+  Updates keep the master preset's guid, patch only the significant fields, require
+  a revision note, and land in `merge_history[].presets_changed`.
+- **Clearer language throughout**: section summary is now "N new, N changed, N
+  matched"; InfoTips explain the same-setup vs. different-setup logic and that
+  trivial diffs are auto-ignored; CommitStep shows updated presets with old → new
+  values alongside added presets.
+
+### 8.3 The stepdown/stepover problem (DOC/WOC are references, not the cut)
+
+The user's observation is exactly right and worth recording as a design principle:
+**Fusion's preset stepdown/stepover are *recipe reference values*, not a record of
+the actual cut.** A preset can say stepdown 1.00" while the pocket it was proven in
+was 0.65" deep — Fusion applies the same preset regardless of part depth, so the
+captured number is "what the recipe requests," not "what the metal saw." Two
+consequences:
+
+1. **Don't over-trust captured DOC; trust WOC more.** Radial engagement (stepover)
+   *is* generally honored by the toolpath strategy (adaptive optimal load, contour
+   stepover), while axial depth is truncated by whatever the part offers. Hence the
+   asymmetric thresholds above (10% vs 2%) — and any future recommendation logic
+   should weight WOC as a hard input and DOC as a soft one.
+2. **Reframe preset stepdown as a proven *envelope*, not an actual.** The useful
+   reading of "stepdown 1.00, proven in a 0.65 pocket" is: *proven safe at up to
+   0.65 engaged, recipe requests 1.00*. Practical convention until better data
+   exists: treat master's stepdown as **max proven DOC** — a job showing a
+   *smaller* stepdown with all else equal is usually just a shallower part (noise;
+   the 10% threshold + user choice covers it), while a *larger* one is real new
+   knowledge (proven deeper — worth committing).
+
+**How to actually capture the real cut** (in order of increasing fidelity, no
+machinist data entry in any of them):
+
+- **Now (done):** loose DOC / tight WOC thresholds + user judgment in the diff.
+- **Fusion add-in v1:** read each operation's *parameters* — adaptive "optimal
+  load", roughing stepdown, axial DOC per pass — which are already closer to the
+  cut than the preset, because they're per-operation.
+- **Fusion add-in v2 (the user's "analyze the part" idea — feasible):** the CAM API
+  exposes each operation's toolpath and its Z-extents; `(op z-top − z-bottom)`
+  gives the **actual engaged depth**, and passes = depth ÷ stepdown gives actual
+  per-pass DOC. Similarly, machining time and stock-remaining queries can
+  approximate true average engagement. This is the right long-term answer: derive
+  actual engagement from the toolpath, never ask a human to type it.
+- **MachineMetrics cross-check (later):** spindle-load profiles validate derived
+  engagement — a "1.00 DOC proven" claim with a 15% load trace is self-evidently a
+  shallow cut.
+
+### 8.4 Remaining friction worth knowing about (not yet addressed)
+
+- **Preset matching is by name.** A preset renamed in the job file shows up as one
+  `newPresets` entry plus one master-only "matched" entry instead of a change. Fine
+  once the naming convention is universal; surprising during transition.
+- **"Skip" at DiffStep skips the whole tool** — there's no "commit nothing but mark
+  reviewed" distinction. Cosmetic, but worth a label tweak someday.
+- **No provenance stamping yet** (§5 Low-#2): the update path now exists, but
+  proven-where/when/by still lives only in the free-text revision note.
+- The **assembly prompt** appears only when new presets are being added with OOH
+  data. An *update* to a same-setup preset never re-touches assembly records — the
+  right behavior, but the asymmetry is worth remembering.
