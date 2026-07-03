@@ -64,7 +64,7 @@ export default function SummaryStep({ queue, onDone }) {
                 <span className="summary-row-desc">{entry.incomingTool.description || '—'}</span>
                 {entry.matchedMasterTool && entry.status === 'committed' && (() => {
                   const flatCount = [...(entry.selectedFields || [])].length;
-                  const presetFieldCount = [...(entry.presetSelections || new Map()).values()]
+                  const presetFieldCount = (entry.presetChanges || [])
                     .reduce((s, { selectedFields: f }) => s + f.size, 0);
                   const newPresetCount = (entry.presetsToAdd || []).length;
                   const total = flatCount + presetFieldCount + newPresetCount;

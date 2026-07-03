@@ -5,6 +5,7 @@ import { TOOL_TYPE_LABELS } from '../../schema/toolSchema.js';
 import { fieldLabel } from '../../schema/fieldRegistry.js';
 import { unitAbbr } from '../../utils/units.js';
 import { presetMaterialColor } from '../../utils/presetNaming.js';
+import { PRESET_FIELD_LABELS } from './DiffStep.jsx';
 import ToolTypeIcon from '../icons/ToolTypeIcon.jsx';
 
 function formatValue(v) {
@@ -18,7 +19,7 @@ function formatValue(v) {
 
 export default function CommitStep({
   importedTool, masterTool, selectedFields,
-  presetSelections,   // kept for interface compatibility — always empty Map from DiffStep
+  presetChanges,      // [{ masterPresetGuid, incomingPreset, selectedFields:Set }] — same-setup updates
   presetsToAdd,       // presetObject[] — new presets + conflict-created presets
   assemblyUpdate,     // { type: 'create'|'link', assembly: {...} } or null — decided in DiffStep
   onCommitted, onBack,
@@ -31,10 +32,13 @@ export default function CommitStep({
 
   const fieldList = [...(selectedFields || [])];
   const newPresetList = presetsToAdd || [];
+  const changeList = presetChanges || [];
+  const masterPresetByGuid = new Map((masterTool.presets || []).map(p => [p.guid, p]));
 
-  // Revision note is only required when committing tool field changes.
-  // Adding presets or an assembly record doesn't need a written justification.
-  const revisionRequired = fieldList.length > 0;
+  // Revision note is required when overwriting anything in master — tool fields
+  // or existing preset values. Adding presets or an assembly record doesn't
+  // need a written justification.
+  const revisionRequired = fieldList.length > 0 || changeList.length > 0;
 
   const handleCommit = async () => {
     if (revisionRequired && !revisionNote.trim()) return;
@@ -44,14 +48,14 @@ export default function CommitStep({
     for (const f of fieldList) mergedFields[f] = importedTool[f];
 
     try {
-      await mergeTool(masterTool, mergedFields, revisionNote.trim(), mergedBy.trim(), [], newPresetList, assemblyUpdate);
+      await mergeTool(masterTool, mergedFields, revisionNote.trim(), mergedBy.trim(), changeList, newPresetList, assemblyUpdate);
       onCommitted();
     } catch (err) {
       setCommitError(err.message);
     }
   };
 
-  const totalChanges = fieldList.length + newPresetList.length;
+  const totalChanges = fieldList.length + changeList.length + newPresetList.length;
 
   return (
     <div>
@@ -96,9 +100,39 @@ export default function CommitStep({
             </div>
           )}
 
+          {/* Existing presets being updated in place (same setup, proven values) */}
+          {changeList.length > 0 && (
+            <div style={{ marginTop: fieldList.length > 0 ? 12 : 0 }}>
+              <div className="text-xs text-sub" style={{ padding: '4px 0 8px', fontWeight: 600 }}>
+                <GitMerge size={11} style={{ display: 'inline', marginRight: 4 }} />
+                Updating {changeList.length} existing preset{changeList.length !== 1 ? 's' : ''} (same setup)
+              </div>
+              {changeList.map(change => {
+                const master = masterPresetByGuid.get(change.masterPresetGuid);
+                return (
+                  <div key={change.masterPresetGuid} style={{ marginBottom: 8 }}>
+                    <span className="preset-tag" style={{ '--badge-color': presetMaterialColor(change.incomingPreset?.material?.query, materials) || undefined }}>
+                      {master?.name || change.incomingPreset?.name || 'Unnamed'}
+                    </span>
+                    <div className="commit-field-list" style={{ marginTop: 6 }}>
+                      {[...change.selectedFields].map(f => (
+                        <div key={f} className="commit-field-row">
+                          <span className="commit-field-name">{PRESET_FIELD_LABELS[f] || f}</span>
+                          <span className="commit-field-old">{formatValue(master?.[f])}</span>
+                          <span className="diff-arrow">→</span>
+                          <span className="commit-field-new">{formatValue(change.incomingPreset?.[f])}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           {/* New presets being added */}
           {newPresetList.length > 0 && (
-            <div style={{ marginTop: fieldList.length > 0 ? 12 : 0 }}>
+            <div style={{ marginTop: (fieldList.length > 0 || changeList.length > 0) ? 12 : 0 }}>
               <div className="text-xs text-sub" style={{ padding: '4px 0 8px', fontWeight: 600 }}>
                 <Plus size={11} style={{ display: 'inline', marginRight: 4 }} />
                 Adding {newPresetList.length} new preset{newPresetList.length !== 1 ? 's' : ''} to master
