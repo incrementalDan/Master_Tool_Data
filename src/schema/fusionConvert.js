@@ -195,6 +195,36 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
   const presetExpr = { ...(p.expressions || {}) };
   if (!useStepdown) delete presetExpr.tool_stepdown;
   if (!useStepover) delete presetExpr.tool_stepover;
+  // When the flag is ON and the numeric value changed, the kept expression must
+  // change with it — otherwise Fusion re-derives the OLD number from the stale
+  // expression on next load and the edit silently reverts (same bug class as the
+  // flag flip above, from the value side). Rewrite only pure literal expressions
+  // (".018 in") by substituting the number and keeping the original unit suffix;
+  // a formula expression is left untouched (never guess at rewriting formulas),
+  // and an unchanged value keeps its expression byte-for-byte (round-trip audit).
+  const syncStepExpr = (key, num) => {
+    const s = presetExpr[key];
+    if (s == null || num == null) return;
+    if (!/^\s*-?\d*\.?\d+\s*[a-zA-Z]*\s*$/.test(String(s))) return;   // literal only
+    const cur = exprNum(s);
+    if (cur != null && Math.abs(cur - num) > 1e-9) {
+      presetExpr[key] = String(s).replace(/-?\d*\.?\d+/, String(num));
+    }
+  };
+  if (useStepdown) syncStepExpr('tool_stepdown', sdNum);
+  if (useStepover) syncStepExpr('tool_stepover', soNum);
+
+  // Coolant is a native+expression pair too: some native presets carry
+  // expressions.tool_coolant ("'flood tool'") mirroring the tool-coolant string.
+  // When the app changes the coolant (editor, merge update, or the
+  // 'flood and through tool' remap below), a present expression must follow —
+  // otherwise Fusion re-derives the old coolant on next load. Never added when
+  // absent; kept byte-for-byte when the value is unchanged.
+  const coolant = ({ 'flood and through tool': 'flood tool' }[p['tool-coolant']] ?? p['tool-coolant']) || (tscCapable ? 'tool' : 'flood');
+  if (presetExpr.tool_coolant != null) {
+    const curCoolant = String(presetExpr.tool_coolant).replace(/^'(.*)'$/, '$1');
+    if (curCoolant !== coolant) presetExpr.tool_coolant = `'${coolant}'`;
+  }
 
   // Base fields present for every tool category. `description` is only written
   // when the source preset has one — Fusion omits it on many native presets.
@@ -205,7 +235,7 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
     name: p.name || 'Default preset',
     material: { category, query: mat.query || '', 'use-hardness': mat['use-hardness'] || false },
     expressions: presetExpr,
-    'tool-coolant': ({ 'flood and through tool': 'flood tool' }[p['tool-coolant']] ?? p['tool-coolant']) || (tscCapable ? 'tool' : 'flood'),
+    'tool-coolant': coolant,
     n: p.n ?? 0,
     v_c: p.v_c ?? 0,
   };

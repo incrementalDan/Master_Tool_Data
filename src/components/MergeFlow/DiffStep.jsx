@@ -625,10 +625,19 @@ export default function DiffStep({
         };
       });
 
+    // GUID collision guard: a preset RENAMED in the job file doesn't name-match,
+    // so it lands in newPresets — but its guid is the MASTER preset's guid (it
+    // was copied from master). Appending it as-is would put two presets with the
+    // same guid in the master array, corrupting preset_meta (keyed by guid) and
+    // making assembly linked_preset_guids ambiguous. Mint a fresh guid for any
+    // new preset whose guid already exists in master — done HERE, before the
+    // assemblyUpdate below captures the guids, so links stay consistent.
+    const masterGuids = new Set((masterTool.presets || []).map(p => p.guid));
     const newPresetsToAdd = presetMatch.newPresets
       .filter(p => addedPresets.has(p.guid))
       .map(p => ({
         ...p,
+        ...(masterGuids.has(p.guid) ? { guid: generateId() } : {}),
         operation_type: p.operation_type ?? parsePresetName(p.name)?.opType ?? null,
       }));
 
