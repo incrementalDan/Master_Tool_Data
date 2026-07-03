@@ -745,20 +745,61 @@ src/
   index.css                       # All styles — single file, CSS custom properties, dark theme
 
   context/
-    AppContext.jsx                 # Global state + all async actions (saveTool, mergeTool, etc.)
-                                  # Exposes: tools, holders, holderLibraryLocation, isSaving,
-                                  #          user, notify, mergeTool, saveTool, deleteTool,
-                                  #          markSetupStep, markSetupStepInSettings, etc.
+    AppContext.jsx                 # Provider wiring ONLY: auth, per-library IO
+                                  # (downloadFusionList/uploadFusionList), shared-Drive-file
+                                  # debounced writes, registry actions, local/demo modes,
+                                  # loadTools. Exposes everything via useApp() — the action
+                                  # implementations live in the sibling modules below and are
+                                  # composed in via useMemo'd factories (stable identities).
+                                  # SETUP_STEPS re-exported from appState.js.
+    appState.js                    # Pure (non-React): initialState, reducer, SETUP_STEPS,
+                                  # localStorage keys, multi-library registry helpers
+                                  # (seedShopSettingsRegistry, defaultToolLibraryId, …)
+    toolActions.js                 # createToolActions(ctx): writeLogicalTool + saveTool,
+                                  # addTool, cloneTool, mergeTool, deleteTool, assembly CRUD,
+                                  # assignToolLocation, normalizeLocationSystem,
+                                  # reconcileTool, applyReconcile
+    libraryOps.js                  # createLibraryOps(ctx): saveFullLibrary, renumberLibrary,
+                                  # assignToolIds, renumberAllToolIds, normalizeLibrary
+                                  # (shop-global bulk ops across all linked libraries)
+    attachmentActions.js           # createAttachmentActions(ctx): uploadToolPhoto,
+                                  # uploadToolAttachment, deleteToolAttachment,
+                                  # importProShopPhotos
+                                  # Factory pattern: each takes { dispatch, notify, IO fns,
+                                  # render-synced refs } so actions never see stale state;
+                                  # factories must never import AppContext.jsx (cycle).
 
   schema/
     fieldRegistry.js              # Central field registry — source of truth for
                                   # all field metadata: labels, types, units,
                                   # Fusion paths, ProShop columns, type applicability.
                                   # Add new fields here first before touching anything else.
-    toolSchema.js                 # Tool types, field labels, fusionToolToInternal,
-                                  # internalToFusionTool, splitToFusionAndMetadata,
-                                  # mergeFusionAndMetadata, validateTool, generateId,
-                                  # generateAssemblyId (alias for generateId)
+    toolSchema.js                 # Thin BARREL — the public entry point everything imports
+                                  # from (import paths unchanged). Re-exports the nine
+                                  # modules below + TOOL_TYPES/labels/FIELD_LABELS.
+                                  # Schema modules import each other DIRECTLY, never the
+                                  # barrel (circular import).
+    identity.js                   # generateId/generateAssemblyId, tracking IDs
+                                  # (generateTrackingId/readTrackingId), stripQuotes,
+                                  # familySignature, groupByTrackingId, readOohFromFusion,
+                                  # machine numbers (generateMachineNumbers, getNext…,
+                                  # applyToolIdToFusion, applyMachineNumberToFusion)
+    extractorConvert.js           # extractorToTool / toolToExtractor, getFacetFields,
+                                  # getRequiredFields
+    combine.js                    # combineToolsByToolId / duplicateIdClusters
+                                  # (load-time duplicate folding)
+    holderGauge.js                # computeGaugeLength, buildGaugeLengthExpression,
+                                  # buildHolderObject (expression-derived gauge length)
+    fusionConvert.js              # fusionToolToInternal / internalToFusionTool /
+                                  # normalizePreset — the round-trip seam the audit exercises
+    threads.js                    # INCH/METRIC_THREAD_SIZES, threadKey, resolveThreadSize,
+                                  # tap limit-tolerance + class-of-fit constants
+    metadataModel.js              # buildMetadataTool / mergeFusionAndMetadata (the
+                                  # tool_metadata.json record shape — add new metadata
+                                  # fields here first)
+    logicalTools.js               # buildLogicalTool / splitToFusionInstances /
+                                  # splitToFusionAndMetadata
+    toolFactory.js                # newTool, validateTool, validateGeometry
 
   services/
     apsService.js                 # APS PKCE OAuth + Data Management API read/write

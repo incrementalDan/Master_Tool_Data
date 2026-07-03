@@ -153,14 +153,21 @@ records. Harmless individually; collectively they blur which field is authoritat
 Worth a deliberate one-off deprecation pass (the project's own "no
 backwards-compatibility code" rule makes this easy).
 
-### 4.8 Code health: two god files
+### 4.8 Code health: two god files — **FIXED 2026-07-03**
 
-`AppContext.jsx` (~2,340 lines) and `toolSchema.js` (~2,050 lines) each carry a
-half-dozen distinct responsibilities (IO, reducers, sync orchestration, ID systems /
-conversion, validation, normalization…). Fine for today; a liability the moment cut
-records, ingestion, and recommendation logic start landing. Split along existing seams
-(e.g. `context/io/`, `context/actions/`, `schema/convert/`, `schema/validate/`)
-*before* the next big domain is added, not after.
+> **Status: fixed.** Both files were split with zero import churn for callers:
+> - `toolSchema.js` (2,055 → 54 lines) is now a thin barrel re-exporting nine
+>   focused modules: `identity`, `extractorConvert`, `combine`, `holderGauge`,
+>   `fusionConvert` (the round-trip seam), `threads`, `metadataModel`,
+>   `logicalTools`, `toolFactory`.
+> - `AppContext.jsx` (2,338 → ~700 lines) keeps only provider wiring (auth, IO,
+>   shared-file plumbing, loadTools); the actions moved to `appState.js` (pure
+>   reducer/state), `toolActions.js`, `libraryOps.js`, `attachmentActions.js` —
+>   factories injected with dispatch/notify/IO + render-synced refs, memoized so
+>   action identities stay stable.
+> Code moved verbatim; verified with lint, full test suite, round-trip audit
+> (0 unexpected diffs), 61-component render smoke, and a production build.
+> Cut-record and ingestion code now has clear homes to land in.
 
 ### 4.9 Configurability outran the core loop (acknowledged)
 
