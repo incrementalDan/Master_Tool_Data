@@ -1,0 +1,162 @@
+// Load-time auto-combine: fold separate logical tools that share a ProShop
+// number (`tool_id`) into ONE logical tool. See CLAUDE.md → Sync & Merge
+// Workflows → Load-time auto-combine.
+import { readTrackingId, round4 } from './identity.js';
+
+// ─── Combine logical tools that share a ProShop number ─────────────────────
+// The ProShop number (Fusion's `product-id`, our `tool_id`) is the
+// authoritative identity of a physical tool. Two library entries carrying the
+// same ProShop number are the same tool — different holder/OOH setups at most —
+// so they are folded into ONE logical tool regardless of any other field
+// (type, diameter, description, …). Instances (assemblies), raw Fusion entries,
+// presets and merge history are unioned; identical assemblies (same holder +
+// OOH) collapse to one. Tools with no ProShop number are left untouched.
+//
+// Used everywhere new entries appear (load, normalize, import, add) so
+// duplicates never split into separate logical tools.
+function mergeLogicalTools(group) {
+  // Prefer an already-tracked tool as the primary so its tracking ID (and the
+  // metadata keyed to it) survives the combine.
+  const primary = group.find(t => t.tracking_id) || group[0];
+  const ordered = [primary, ...group.filter(t => t !== primary)];
+
+  const assemblies = [];
+  const seenAsmSig = new Set();   // collapse identical instances (holder + OOH)
+  const raws = [];
+  const seenRawGuid = new Set();
+  const presets = [];
+  const seenPresetName = new Set();
+  const mergeHistory = [];
+  const registered = [];
+  const seenRegGuid = new Set();
+  let machine = null;
+
+  for (const t of ordered) {
+    for (const ra of (t._registeredAssemblies || [])) {
+      if (ra?.instance_guid && seenRegGuid.has(ra.instance_guid)) continue;
+      if (ra?.instance_guid) seenRegGuid.add(ra.instance_guid);
+      registered.push(ra);
+    }
+    for (const a of (t.assemblies || [])) {
+      const sig = `${a.holder_guid || ''}|${round4(Number(a.ooh) || 0)}`;
+      if (seenAsmSig.has(sig)) continue;
+      seenAsmSig.add(sig);
+      assemblies.push(a);
+    }
+    for (const r of (t._instancesRaw || [])) {
+      if (!r?.guid || seenRawGuid.has(r.guid)) continue;
+      seenRawGuid.add(r.guid);
+      raws.push(r);
+    }
+    for (const p of (t.presets || [])) {
+      const key = String(p.name || '').trim().toLowerCase();
+      if (key && seenPresetName.has(key)) continue;
+      if (key) seenPresetName.add(key);
+      presets.push(p);
+    }
+    if (machine == null && t.machine_tool_number != null) machine = t.machine_tool_number;
+    if (Array.isArray(t.merge_history)) mergeHistory.push(...t.merge_history);
+  }
+
+  // ── Gap-fill + conflict detect ──────────────────────────────────────────────
+  // Start from primary's scalar values. For every other tool in the group:
+  //   - If the current (primary or previously gap-filled) value is empty and
+  //     the other tool has a non-empty value → take it (gap-fill).
+  //   - If both are non-empty primitive values that differ → record a conflict.
+  // The unioned arrays and per-instance / transient / audit fields are excluded.
+  const SKIP_KEYS = new Set([
+    'id', 'tracking_id', 'machine_tool_number', 'no_fusion_link',
+    'assemblies', 'presets', 'merge_history',
+    '_instancesRaw', '_fusionRaw', '_registeredAssemblies', '_combineConflicts',
+    'ooh', 'selected_holder_guid',
+    'created_at', 'updated_at', 'updated_by', 'revision_notes',
+  ]);
+  const isEmpty = (v) => v == null || v === '' || (Array.isArray(v) && v.length === 0);
+  const scalarConflict = (a, b) => {
+    if (typeof a === 'number' && typeof b === 'number') return round4(a) !== round4(b);
+    if (typeof a === 'string' && typeof b === 'string') return a.trim() !== b.trim();
+    return a !== b;
+  };
+
+  const merged = { ...primary };
+  const combineConflicts = [];
+  const allKeys = new Set(group.flatMap(t => Object.keys(t)));
+
+  for (const key of allKeys) {
+    if (SKIP_KEYS.has(key) || key.startsWith('_')) continue;
+    for (const other of ordered.slice(1)) {
+      const curVal = merged[key];
+      const otherVal = other[key];
+      if (isEmpty(curVal) && !isEmpty(otherVal)) {
+        merged[key] = otherVal;                                  // gap-fill
+      } else if (
+        !isEmpty(curVal) && !isEmpty(otherVal) &&
+        (typeof curVal === 'string' || typeof curVal === 'number' || typeof curVal === 'boolean') &&
+        (typeof otherVal === 'string' || typeof otherVal === 'number' || typeof otherVal === 'boolean') &&
+        scalarConflict(curVal, otherVal) &&
+        !combineConflicts.some(c => c.field === key)            // one entry per field
+      ) {
+        combineConflicts.push({
+          field: key,
+          values: [curVal, otherVal],
+          guids: [
+            primary._fusionRaw?.guid || primary.id,
+            other._fusionRaw?.guid || other.id,
+          ],
+        });
+      }
+    }
+  }
+
+  // no_fusion_link: clear the flag if any tool in the group is a real Fusion entry.
+  const no_fusion_link = group.every(t => t.no_fusion_link) ? true : false;
+
+  return {
+    ...merged,
+    no_fusion_link,
+    machine_tool_number: machine,
+    assemblies,
+    presets,
+    merge_history: mergeHistory,
+    _instancesRaw: raws,
+    _fusionRaw: primary._fusionRaw || raws[0] || null,
+    _registeredAssemblies: registered,
+    ...(combineConflicts.length > 0 ? { _combineConflicts: combineConflicts } : {}),
+  };
+}
+
+export function combineToolsByToolId(tools) {
+  const groups = new Map();   // key -> [tool, ...]
+  const order = [];           // preserve first-seen order
+  let anon = 0;
+  for (const tool of (tools || [])) {
+    const pid = String(tool.tool_id || '').trim();
+    const key = pid ? `pid:${pid}` : `anon:${anon++}`;
+    if (!groups.has(key)) { groups.set(key, []); order.push(key); }
+    groups.get(key).push(tool);
+  }
+  return order.map(key => {
+    const group = groups.get(key);
+    return group.length === 1 ? group[0] : mergeLogicalTools(group);
+  });
+}
+
+// Combined tools that are actually MORE THAN ONE Fusion tracking-ID group folded
+// together because they share a tool_id (usually a duplicate from human error in
+// the legacy/Fusion data). These are the tools a bulk re-number would split into
+// separate IDs (it works per tracking group), so the UI surfaces them for an
+// explicit merge-to-one-ID vs split decision. Each cluster's tool_id is unique
+// (the combine already folded same-id tools into one). Returns
+// [{ tool_id, description, count }] where count = distinct tracking IDs folded.
+export function duplicateIdClusters(tools) {
+  const out = [];
+  for (const t of (tools || [])) {
+    const tids = new Set();
+    for (const r of (t._instancesRaw || [])) {
+      const tid = readTrackingId(r);
+      if (tid) tids.add(tid);
+    }
+    if (tids.size > 1) out.push({ tool_id: t.tool_id, description: t.description, count: tids.size });
+  }
+  return out;
+}
