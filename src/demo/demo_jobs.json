@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "jobs": [
     {
       "id": "0d3a1b2c-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
@@ -16,6 +16,81 @@
       "created_at": "2026-06-02T09:15:00.000Z",
       "created_by": "demo",
       "notes": ""
+    }
+  ],
+  "parts": [
+    {
+      "id": "pt-demo-0001",
+      "part_number": "CAD1-114P4344-1",
+      "customer": "Cadrex",
+      "rev": "A",
+      "material_id": "N_6061",
+      "material_custom": "",
+      "created_at": "2026-05-10T12:00:00.000Z",
+      "created_by": "demo"
+    },
+    {
+      "id": "pt-demo-0002",
+      "part_number": "GSE1-08D1404",
+      "customer": "GS Enterprises",
+      "rev": "A",
+      "material_id": "P_1018",
+      "material_custom": "",
+      "created_at": "2026-05-18T12:00:00.000Z",
+      "created_by": "demo"
+    }
+  ],
+  "programs": [
+    {
+      "id": "prg-demo-0001",
+      "program_number": 1108,
+      "part_id": "pt-demo-0001",
+      "operation": "OP50",
+      "description": "Full part - tabbed",
+      "machine_id": null,
+      "machine_label": "Brother M300X3",
+      "is_fixture": false,
+      "internal_external": "External",
+      "fixturing": "125mm Lang Vise Forward",
+      "material_id": null,
+      "material_custom": "",
+      "pallet": "",
+      "created_at": "2026-05-10T12:05:00.000Z",
+      "created_by": "demo"
+    },
+    {
+      "id": "prg-demo-0002",
+      "program_number": 1109,
+      "part_id": "pt-demo-0001",
+      "operation": "OP60",
+      "description": "",
+      "machine_id": null,
+      "machine_label": "Brother R650",
+      "is_fixture": false,
+      "internal_external": "External",
+      "fixturing": "77mm Lang Vise with Soft Jaw",
+      "material_id": null,
+      "material_custom": "",
+      "pallet": "1",
+      "created_at": "2026-05-10T12:06:00.000Z",
+      "created_by": "demo"
+    },
+    {
+      "id": "prg-demo-0003",
+      "program_number": 1110,
+      "part_id": "pt-demo-0002",
+      "operation": "Soft Jaw",
+      "description": "Soft jaw stock",
+      "machine_id": null,
+      "machine_label": "Brother M300X3",
+      "is_fixture": true,
+      "internal_external": "Internal",
+      "fixturing": "77mm Lang Vise with Soft Jaw",
+      "material_id": "N_6061",
+      "material_custom": "",
+      "pallet": "",
+      "created_at": "2026-05-18T12:10:00.000Z",
+      "created_by": "demo"
     }
   ]
 }

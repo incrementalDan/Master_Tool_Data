@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useGoogleLogin } from '@react-oauth/google';
-import { FolderOpen, LogOut, Library, Settings, RefreshCw, AlertTriangle, Download, X, FlaskConical, Building2 } from 'lucide-react';
+import { FolderOpen, LogOut, Library, Settings, RefreshCw, AlertTriangle, Download, X, FlaskConical, Building2, Hash } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import BrandLogo from './components/BrandLogo.jsx';
 import { setAccessToken, fetchUserInfo } from './services/driveService.js';
@@ -20,6 +20,7 @@ import MergeFlow from './components/MergeFlow/index.jsx';
 import SettingsPage from './components/Settings.jsx';
 import MaterialsEditor from './components/MaterialsEditor.jsx';
 import VendorsEditor from './components/VendorsEditor.jsx';
+import ProgramsPage from './components/ProgramsPage.jsx';
 import NormalizeModal from './components/NormalizeModal.jsx';
 import { SetupGuideBanner, SetupCompleteModal } from './components/SetupGuide.jsx';
 
@@ -91,6 +92,7 @@ function AppShell() {
             <Route path="/merge/:id" element={<MergeFlow />} />
             <Route path="/materials" element={<MaterialsEditor />} />
             <Route path="/vendors" element={<VendorsEditor />} />
+            <Route path="/programs" element={<ProgramsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -143,6 +145,7 @@ function AppShell() {
             <Route path="/merge/:id" element={<MergeFlow />} />
             <Route path="/materials" element={<MaterialsEditor />} />
             <Route path="/vendors" element={<VendorsEditor />} />
+            <Route path="/programs" element={<ProgramsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -340,6 +343,13 @@ function TopBar() {
           onClick={e => navClick(e, '#/vendors')}
         >
           <Building2 size={14} /> <span className="tab-wordmark">Vendors</span>
+        </a>
+        <a
+          href="#/programs"
+          className={`topbar-tab${location.pathname === '/programs' ? ' active' : ''}`}
+          onClick={e => navClick(e, '#/programs')}
+        >
+          <Hash size={14} /> <span className="tab-wordmark">Programs</span>
         </a>
         <a
           href="#/settings"

@@ -97,8 +97,15 @@ functional bug against intent.**
 > `jobs.json` registry records (program # + part #, stable UUIDs) — captured in
 > CommitStep during Sync Job, on preset cards, and in the ToolDetail "Jobs /
 > Where Used" panel. This is the *where* of provenance and the seed of the §6
-> cut-record entity + the future jobs page. Still open: `source`
-> (manufacturer/calculated/proven), `proven_at/by`, outcome notes.
+> cut-record entity. Still open: `source` (manufacturer/calculated/proven),
+> `proven_at/by`, outcome notes.
+>
+> **2026-07-04: the "future jobs page" shipped** — the Program Number Manager
+> (`/programs`, jobs.json v2 `parts[]`/`programs[]`): parts (customer/rev/alloy)
+> + permanent auto-assigned program numbers per operation/machine, replacing the
+> Google Sheet. Part material references a SPECIFIC alloy from the materials
+> library. Next unification step: join preset/tool `job_ids` links to program
+> records.
 
 `preset_meta` stores `operation_type` and `machine_id` — nothing about *where a
 preset's numbers came from*. A preset seeded from a guess and a preset proven
