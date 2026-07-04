@@ -912,6 +912,9 @@ src/
     ProgramsPage.jsx              # /programs — Program Number Manager (parts +
                                   # program numbers per operation/machine; see the
                                   # Jobs section). Helpers in src/utils/programs.js
+    ProgramsImportModal.jsx       # One-time CSV import of an existing program list
+                                  # into /programs (Settings → Import Program List).
+                                  # Parser in src/utils/programsImport.js
     Settings.jsx                  # Settings — one of 5 top-bar chrome-style tabs
                                   # Sections: Account (sign-out), Setup & Import (6-step tracker —
                                   # the Fusion Libraries (tool + holder pickers) and Tool Metadata
@@ -1144,6 +1147,7 @@ The page that replaces the manually-managed Google Sheet assigning unique CNC pr
 - **Customer**: free text with datalist autocomplete against existing names; each name hashes to a stable color (`customerColor` → `CUSTOMER_PALETTE`), rendered via the shared `--badge-color` pattern (`.customer-badge`).
 - **Views**: Grouped (Part → Operation → machine rows, collapsible, inline pencil edit) and Table (sortable/filterable, same inline edit). Everything editable after creation EXCEPT `program_number`. Edits gated on `googleAuthenticated || demoMode` (read-only note otherwise). All writes go through `saveJobs` (the shared-file optimistic + debounced layer — that layer IS the data-access seam for the future SQLite swap).
 - **Data tokens**: `.program-num-badge` (dark plate + amber mono — the Program # token, add to the token table below), `.customer-badge`, `.pn-type-pill` (fixture amber / external green / internal neutral).
+- **CSV import (one-time)**: **Settings → Import Program List** loads the shop's existing list. Header (order-independent, aliases tolerated): `Program #, Machine, Fixturing, Internal or external, internal Part #, Rev, Customer, Description, OP #, Fixture Y/N`. Parser + build in `src/utils/programsImport.js` (`parseProgramsCsv`, `buildProgramsImport`; tested in `programsImport.test.js`); modal `ProgramsImportModal.jsx` (file → preview counts/duplicates/errors → commit via `saveJobs`). Rules: each row = one program; rows sharing **(part_number, rev)** group into one part (matched case-insensitively against existing parts → reused by id, never duplicated); `Fixture Y/N` → `is_fixture` (Y/Yes/T/1/…), which forces `internal_external: 'Internal'`; machine string resolved against `shop_settings.machines` (exact→contains, else raw label + null id); **program_number is the dedupe key** — a number already in the registry (or earlier in the file) is skipped; a **blank** Program # is auto-assigned the next available (max+1, running); a non-integer Program # is an error (row skipped, reported). Material/pallet aren't in the CSV (left unset — add material on the part later). Gated on `googleAuthenticated || demoMode`.
 - **Future (deliberately not built)**: linking a program to its actual file on Drive (phase 2); unifying `jobs[]` quick links with `programs[]` records (a preset job link ↔ program record join); ProShop fixture list integration.
 
 -----
