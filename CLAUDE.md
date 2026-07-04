@@ -912,6 +912,13 @@ src/
     ProgramsPage.jsx              # /programs — Program Number Manager (parts +
                                   # program numbers per operation/machine; see the
                                   # Jobs section). Helpers in src/utils/programs.js
+    programsUi.jsx                # Shared Program-manager widgets + select-state
+                                  # helpers (CustomerBadge, ProgramNumBadge,
+                                  # FixtureSwitch, Material/MachineSelect, …) reused
+                                  # by ProgramsPage, AddProgramModal, JobProgramPicker
+    AddProgramModal.jsx           # Self-contained "Add program" flow (search/create
+                                  # part → reserve program numbers). Reused by the
+                                  # Programs page AND the Sync-Job JobProgramPicker
     ProgramsImportModal.jsx       # One-time CSV import of an existing program list
                                   # into /programs (Settings → Import Program List).
                                   # Parser in src/utils/programsImport.js
@@ -932,7 +939,11 @@ src/
       ImportStep.jsx              # Clipboard paste (Ctrl+V) + file upload
       MatchStep.jsx               # Match confirmation (fuzzy matches only)
       DiffStep.jsx                # Side-by-side diff with per-field checkboxes + preset matching
-      CommitStep.jsx              # Revision note + assembly detection + "Commit & Next / Finish"
+      CommitStep.jsx              # Revision note + assembly detection + job/program
+                                  # link (JobProgramPicker) + "Commit & Next / Finish"
+      JobProgramPicker.jsx        # Link the sync to a Program Number Manager record —
+                                  # search program # (exact) / part # (contains) or
+                                  # Add-new; see Jobs section
       NewToolStep.jsx             # No-match detected: add to library or skip
       QueuePanel.jsx              # Batch queue sidebar with status badges
       SummaryStep.jsx             # End-of-batch summary + bulk clipboard copy
@@ -1125,7 +1136,7 @@ A **job = a program number + a part number** — the shop's unit of "where was t
 - **Registry shape** (`jobs.json`, **version 2**): `{ version: 2, jobs: [...], parts: [...], programs: [...] }`. `jobs[]` is the lightweight link registry (`{ id, program_number, part_number, created_at, created_by, notes }`); `parts[]`/`programs[]` are the Program Number Manager's first-class records (below). Job identity = case-insensitive trimmed (program, part) pair — `findOrCreateJob` (AppContext) dedupes, so the same job entered on five tools stays ONE record. Pure helpers in `src/utils/jobs.js` (`jobKey`, `findJob`, `jobById`, `newJob`, `jobLabel` → `"O1042 · PN-1234"`, `collectToolJobs`).
 - **Per-preset links** (the primary association): in-memory `preset.job_ids[]`, persisted in **`preset_meta[guid].job_ids`** in `tool_metadata.json` (only when non-empty), overlaid back in `buildLogicalTool` — the exact `machine_id` pattern. **Never written to Fusion**: `normalizePreset` pulls `operation_type`, `machine_id`, and `job_ids` out of the preset before the Fusion write (every app-only per-preset field MUST be in that destructure — the top-level `isMetadataOnly` guard only sweeps tool-level keys; `machine_id` leaked into Fusion JSON until this rule was enforced). Locked by `fusionConvert.test.js`.
 - **Per-tool links**: metadata `job_ids[]` on the tool record — "used this tool on job X" with no preset context.
-- **Capture — Sync Job (primary)**: CommitStep has optional **Program # / Part #** inputs (both-or-neither validated; disabled without Google Drive). On commit the pair resolves via `findOrCreateJob` and `mergeTool` receives **`jobLink = { job_id, label }` as its 8th arg**: the id is unioned into `job_ids` of every preset the commit touches (`presetChanges` targets + `presetsToAdd`); if NO presets were touched it attaches at tool level instead. History entry gains `job_linked`. The entered values are remembered at queue level (`lastJobInput` in `MergeFlow/index.jsx`) and pre-fill the next tool's commit — a batch sync is usually one job.
+- **Capture — Sync Job (primary)**: CommitStep hosts a **`JobProgramPicker`** (`MergeFlow/JobProgramPicker.jsx`) that connects the sync to a real **program record** from the Program Number Manager (below) — not free text. Type a **program number** (exact) or **part number** (contains) → matching programs list showing the full context (part/rev/op/machine/customer); selecting one links the sync. An **"Add new program"** button opens the shared `AddProgramModal` (same flow as the Programs page) and auto-selects what you create. On commit the selection resolves via `findOrCreateJob(program_number, part_number, by, program_id)` — the `program_id` (optional 4th arg) joins the `jobs[]` link to the `programs[]` record (an existing loose link is enriched with it on first use). `mergeTool` receives **`jobLink = { job_id, label }` as its 8th arg**: the id is unioned into `job_ids` of every preset the commit touches (`presetChanges` targets + `presetsToAdd`); if NO presets were touched it attaches at tool level instead. History entry gains `job_linked`. The selection is remembered at queue level (`lastJobInput` in `MergeFlow/index.jsx`) and pre-fills the next tool's commit. Gated on `googleAuthenticated || demoMode`. Pure search helper: `searchPrograms(jobsFile, query)` (`src/utils/programs.js`, tested) — exact program-number hits first, then part-number contains, joined `{ program, part }` rows.
 - **Capture — manual**: each preset card (collapsed AND edit mode) ends with a **`PresetJobsBlock`** dropdown row — `Briefcase` icon + `Jobs (N)` count always visible **without opening** (so an empty list is obvious at a glance), expanding to job labels; edit mode adds remove `×` and a Program-/Part-# add row. Tool level: the **`JobsSection.jsx`** panel ("Jobs / Where Used", ToolDetail right column) aggregates preset-proven links (shown with `.preset-tag` chips naming the preset, managed on the preset) + tool-level links (add/remove here), deduped by job id via `collectToolJobs`. Count shown in the panel header.
 - **`last_used_job` (free text) is retired from the UI** — removed from ToolDetail display, ToolForm, and DiffStep's Notes section. The field stays in the registry/metadata (data preserved); structured job links supersede it.
 - **Drive-required**: job links live in `jobs.json` + metadata, so the add controls are gated on `googleAuthenticated || demoMode` (demo edits stay in-memory). `findOrCreateJob` never lets a failed Drive save escape as an unhandled rejection.

@@ -2349,6 +2349,24 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   border-radius: 8px; padding: 8px 11px;
 }
 
+/* Sync-Job program picker (CommitStep) */
+.job-pick-selected {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 10px;
+}
+.job-pick-results {
+  display: flex; flex-direction: column; gap: 3px;
+  margin-top: 6px; max-height: 240px; overflow-y: auto;
+}
+.job-pick-row {
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  text-align: left; font-family: inherit; color: var(--text);
+  background: none; border: 1px solid var(--border); border-radius: 7px;
+  padding: 6px 9px; cursor: pointer;
+}
+.job-pick-row:hover { background: var(--surface-2); border-color: var(--blue); }
+
 /* ── Jobs / Where Used panel (ToolDetail) ── */
 .job-row {
   display: flex;

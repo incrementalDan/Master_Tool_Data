@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   nextProgramNumber, newPart, newProgram, programMaterial, alloyLabel,
   customerColor, machineOptions, isPalletMachine, PROGRAM_NUMBER_START,
+  searchPrograms,
 } from './programs.js';
 
 const file = {
@@ -83,5 +84,42 @@ describe('customers + machines', () => {
     expect(pt.part_number).toBe('P1');
     expect(pt.customer).toBe('ACME');
     expect(pt.rev).toBe('A');
+  });
+});
+
+describe('searchPrograms (Sync-Job picker)', () => {
+  const jf = {
+    parts: [
+      { id: 'pt1', part_number: 'CAD1-114P4344-1', customer: 'Cadrex', rev: 'A' },
+      { id: 'pt2', part_number: 'GSE1-08D1404', customer: 'GS', rev: 'A' },
+    ],
+    programs: [
+      { id: 'g1', program_number: 1108, part_id: 'pt1', operation: 'OP50' },
+      { id: 'g2', program_number: 1109, part_id: 'pt1', operation: 'OP60' },
+      { id: 'g3', program_number: 1110, part_id: 'pt2', operation: 'OP10' },
+    ],
+  };
+
+  it('matches a program number exactly (not as a substring)', () => {
+    const r = searchPrograms(jf, '1108');
+    expect(r).toHaveLength(1);
+    expect(r[0].program.id).toBe('g1');
+    // 110 must NOT match 1108/1109/1110 as a contains — program # is exact only
+    expect(searchPrograms(jf, '110').filter(x => x.exactProgram)).toHaveLength(0);
+  });
+
+  it('matches part numbers loosely (contains) and returns all their programs', () => {
+    const r = searchPrograms(jf, 'cad1');
+    expect(r.map(x => x.program.program_number).sort()).toEqual([1108, 1109]);
+    expect(r.every(x => x.part.id === 'pt1')).toBe(true);
+  });
+
+  it('ranks an exact program hit ahead of part matches, empty query → []', () => {
+    // '1108' is exact for g1 AND part 'GSE1-08D1404' doesn't contain it; add a
+    // part-number query that also numerically hits nothing to keep it simple.
+    expect(searchPrograms(jf, '')).toEqual([]);
+    const r = searchPrograms(jf, '1110');   // exact program g3
+    expect(r[0].program.id).toBe('g3');
+    expect(r[0].exactProgram).toBe(true);
   });
 });

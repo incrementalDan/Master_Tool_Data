@@ -7,6 +7,7 @@ import { unitAbbr } from '../../utils/units.js';
 import { presetMaterialColor } from '../../utils/presetNaming.js';
 import { jobLabel } from '../../utils/jobs.js';
 import { PRESET_FIELD_LABELS } from './DiffStep.jsx';
+import JobProgramPicker from './JobProgramPicker.jsx';
 import ToolTypeIcon from '../icons/ToolTypeIcon.jsx';
 import InfoTip from '../InfoTip.jsx';
 
@@ -24,17 +25,17 @@ export default function CommitStep({
   presetChanges,      // [{ masterPresetGuid, incomingPreset, selectedFields:Set }] — same-setup updates
   presetsToAdd,       // presetObject[] — new presets + conflict-created presets
   assemblyUpdate,     // { type: 'create'|'link', assembly: {...} } or null — decided in DiffStep
-  initialJob = null,  // { program, part } remembered at queue level — a batch sync is usually one job
-  onJobInput,         // (job|null) => void — report entered values back up for the next queue item
+  initialJob = null,  // selected program-link, remembered at queue level — a batch sync is usually one job
+  onJobInput,         // (selection|null) => void — carry the selection to the next queue item
   onCommitted, onBack,
   isLastItem = false,
 }) {
-  const { mergeTool, isSaving, user, materials, findOrCreateJob, googleAuthenticated } = useApp();
+  const { mergeTool, isSaving, user, materials, findOrCreateJob, googleAuthenticated, demoMode } = useApp();
   const [revisionNote, setRevisionNote] = useState('');
   const [mergedBy, setMergedBy] = useState(user?.email || user?.name || '');
-  // Job (program # + part #) this sync came from — optional, both-or-neither.
-  const [programNumber, setProgramNumber] = useState(initialJob?.program || '');
-  const [partNumber, setPartNumber] = useState(initialJob?.part || '');
+  // The program this sync came from — a selection from the Program Number
+  // Manager (JobProgramPicker), or null. Carried across the queue.
+  const [jobSel, setJobSel] = useState(initialJob || null);
   const [commitError, setCommitError] = useState('');
 
   const fieldList = [...(selectedFields || [])];
@@ -47,29 +48,23 @@ export default function CommitStep({
   // need a written justification.
   const revisionRequired = fieldList.length > 0 || changeList.length > 0;
 
-  const jobEnabled = googleAuthenticated;   // job links live in metadata/jobs.json (Drive)
-  const prog = programNumber.trim();
-  const part = partNumber.trim();
-  const jobIncomplete = (prog !== '') !== (part !== '');   // exactly one half filled
+  const jobEnabled = googleAuthenticated || demoMode;   // job links live in jobs.json (Drive; demo = in-memory)
 
   const handleCommit = async () => {
     if (revisionRequired && !revisionNote.trim()) return;
-    if (jobIncomplete) {
-      setCommitError('A job needs both a program number and a part number — fill both or clear both.');
-      return;
-    }
     setCommitError('');
 
     const mergedFields = {};
     for (const f of fieldList) mergedFields[f] = importedTool[f];
 
-    // Resolve (or create) the job in the shop-wide registry; mergeTool links its
+    // Resolve the selected program to a job link (carrying program_id so the
+    // preset's job joins back to the full program record); mergeTool links its
     // id to every preset this commit touches (or the tool, if none).
     let jobLink = null;
-    if (jobEnabled && prog && part) {
-      const job = findOrCreateJob(prog, part, mergedBy.trim());
+    if (jobEnabled && jobSel) {
+      const job = findOrCreateJob(jobSel.program_number, jobSel.part_number, mergedBy.trim(), jobSel.program_id);
       jobLink = { job_id: job.id, label: jobLabel(job) };
-      onJobInput?.({ program: prog, part });
+      onJobInput?.(jobSel);
     }
 
     try {
@@ -200,37 +195,18 @@ export default function CommitStep({
       </div>
 
       {/* Job link — the "proven on job X" provenance this whole flow exists to
-          capture. Optional; both halves or neither. Remembered across the queue
-          (a batch sync is usually one job). */}
+          capture. Search the Program Number Manager by program # (exact) or
+          part # (contains), or add a new program. Optional; carried across the
+          queue (a batch sync is usually one job). */}
       <div className="field-group mb-16">
         <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Briefcase size={12} /> Job (optional)
-          <InfoTip text="A job = program number + part number. It links to the presets this commit updates or adds (or to the tool itself when no presets change), and shows up under each preset and in the tool's Jobs panel. Entered once — carried to the next tool in this sync." />
+          <Briefcase size={12} /> Job / program (optional)
+          <InfoTip text="Link this sync to a program (program # + part #) from the Programs page. Type a program number for an exact match, or a part number to see its programs; or add a new one. It links to the presets this commit updates or adds (or the tool itself when no presets change), and shows under each preset + in the tool's Jobs panel. Carried to the next tool in this sync." />
         </label>
         {jobEnabled ? (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              className="field-input font-mono"
-              style={{ maxWidth: 160 }}
-              placeholder="Program #"
-              value={programNumber}
-              onChange={e => setProgramNumber(e.target.value)}
-            />
-            <input
-              className="field-input font-mono"
-              style={{ maxWidth: 200 }}
-              placeholder="Part #"
-              value={partNumber}
-              onChange={e => setPartNumber(e.target.value)}
-            />
-          </div>
+          <JobProgramPicker value={jobSel} onChange={setJobSel} />
         ) : (
           <div className="text-sub text-xs">Connect Google Drive to link jobs (job links are stored in the shop metadata).</div>
-        )}
-        {jobIncomplete && (
-          <div className="text-xs" style={{ color: 'var(--amber)', marginTop: 4 }}>
-            Fill both program # and part # (or clear both).
-          </div>
         )}
       </div>
 

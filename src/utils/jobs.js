@@ -27,11 +27,15 @@ export function jobById(jobsFile, id) {
   return (jobsFile?.jobs || []).find(j => j.id === id) || null;
 }
 
-export function newJob(programNumber, partNumber, createdBy = '') {
+export function newJob(programNumber, partNumber, createdBy = '', programId = null) {
   return {
     id: generateId(),
     program_number: String(programNumber ?? '').trim(),
     part_number: String(partNumber ?? '').trim(),
+    // Optional join to a Program Number Manager record (programs[].id) when the
+    // link was made by selecting a real program (vs. a bare quick-link). Lets a
+    // preset's job resolve to the full program/part/op context.
+    program_id: programId || null,
     created_at: new Date().toISOString(),
     created_by: createdBy || '',
     notes: '',

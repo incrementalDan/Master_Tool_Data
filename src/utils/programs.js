@@ -159,3 +159,28 @@ export function customerColor(customer) {
 export function customerNames(jobsFile) {
   return [...new Set(partsOf(jobsFile).map(p => p.customer).filter(Boolean))];
 }
+
+// Quick search for the Sync-Job program picker: match programs by EXACT program
+// number (when the query is numeric) or by a CONTAINS match on the part number.
+// Returns joined rows { program, part } — exact program-number hits first, then
+// part-number matches, each ordered by program number. `limit` caps the list.
+export function searchPrograms(jobsFile, query, limit = 25) {
+  const q = String(query ?? '').trim().toLowerCase();
+  if (!q) return [];
+  const byId = new Map(partsOf(jobsFile).map(p => [p.id, p]));
+  const isNum = /^\d+$/.test(q);
+  const wantNum = isNum ? Number(q) : null;
+
+  const rows = [];
+  for (const program of programsOf(jobsFile)) {
+    const part = byId.get(program.part_id) || null;
+    const exactProgram = wantNum != null && Number(program.program_number) === wantNum;
+    const partContains = part && String(part.part_number || '').toLowerCase().includes(q);
+    if (exactProgram || partContains) rows.push({ program, part, exactProgram });
+  }
+  rows.sort((a, b) => {
+    if (a.exactProgram !== b.exactProgram) return a.exactProgram ? -1 : 1;   // exact # first
+    return Number(a.program_number ?? a.program.program_number) - Number(b.program.program_number);
+  });
+  return rows.slice(0, limit);
+}
