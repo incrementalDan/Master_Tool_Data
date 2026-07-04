@@ -1,25 +1,27 @@
 import { useMemo, useState } from 'react';
 import { Search, X, Plus } from 'lucide-react';
-import { useApp } from '../../context/AppContext.jsx';
-import { searchPrograms, partById, alloyLabel } from '../../utils/programs.js';
-import { CustomerBadge, ProgramNumBadge, TypePill } from '../programsUi.jsx';
-import AddProgramModal from '../AddProgramModal.jsx';
+import { useApp } from '../context/AppContext.jsx';
+import { searchPrograms, partById, alloyLabel } from '../utils/programs.js';
+import { CustomerBadge, ProgramNumBadge, TypePill } from './programsUi.jsx';
+import AddProgramModal from './AddProgramModal.jsx';
 
-// Connects a Sync-Job commit to a real program record. Type a PROGRAM NUMBER
-// (exact) or PART NUMBER (contains) → matching programs list, each showing the
-// full context (part, op, machine, description). Selecting one links the commit
-// to that program; "Add new" opens the same Add-program flow as the Programs
-// page and auto-selects what you create. `value` = the selected program-link
-// object (or null); `onChange(value)` reports the selection up.
-export default function JobProgramPicker({ value, onChange }) {
+// The one shared control for linking to a program record (Program Number
+// Manager). Type a PROGRAM NUMBER (exact) or PART NUMBER (contains) → matching
+// programs, each with full context (part/rev/op/machine/customer); pick one and
+// `onPick(selection)` fires. "Add new program" opens the same AddProgramModal
+// used on the Programs page and auto-picks what you create. Purely a picker —
+// it holds no selection; consumers decide what to do with each pick (link to a
+// preset, a tool, or a sync commit). selection shape:
+//   { program_id, program_number, part_id, part_number, operation }
+export default function JobProgramPicker({ onPick, placeholder = 'Program # (exact) or part # (contains)', autoFocus = false }) {
   const { jobs: jobsFile, materials } = useApp();
   const [query, setQuery] = useState('');
   const [showAdd, setShowAdd] = useState(false);
 
   const results = useMemo(() => searchPrograms(jobsFile, query), [jobsFile, query]);
 
-  const selectProgram = (program, part) => {
-    onChange({
+  const pick = (program, part) => {
+    onPick({
       program_id: program.id,
       program_number: program.program_number,
       part_id: part?.id || program.part_id || null,
@@ -29,23 +31,6 @@ export default function JobProgramPicker({ value, onChange }) {
     setQuery('');
   };
 
-  // A selection is shown as a compact summary card with a clear button.
-  if (value) {
-    const part = value.part_id ? partById(jobsFile, value.part_id) : null;
-    return (
-      <div className="job-pick-selected">
-        <ProgramNumBadge n={value.program_number} />
-        <span className="pn-part-number">{value.part_number || '—'}</span>
-        {part && <span className="text-xs text-sub">Rev {part.rev}</span>}
-        {value.operation && <span className="text-xs text-sub">· {value.operation}</span>}
-        {part && <CustomerBadge customer={part.customer} />}
-        <button type="button" className="icon-btn" title="Clear job link" style={{ marginLeft: 'auto' }} onClick={() => onChange(null)}>
-          <X size={14} />
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div>
       <div className="pn-search">
@@ -53,7 +38,8 @@ export default function JobProgramPicker({ value, onChange }) {
         <input
           className="field-input"
           value={query}
-          placeholder="Program # (exact) or part # (contains)"
+          autoFocus={autoFocus}
+          placeholder={placeholder}
           onChange={e => setQuery(e.target.value)}
         />
       </div>
@@ -66,7 +52,7 @@ export default function JobProgramPicker({ value, onChange }) {
             </div>
           )}
           {results.map(({ program, part }) => (
-            <button key={program.id} type="button" className="job-pick-row" onClick={() => selectProgram(program, part)}>
+            <button key={program.id} type="button" className="job-pick-row" onClick={() => pick(program, part)}>
               <ProgramNumBadge n={program.program_number} />
               <span className="pn-part-number">{part?.part_number || '—'}</span>
               {part && <span className="text-xs text-sub">Rev {part.rev}</span>}
@@ -88,9 +74,31 @@ export default function JobProgramPicker({ value, onChange }) {
 
       {showAdd && (
         <AddProgramModal
-          onCreated={(program, part) => { selectProgram(program, part); setShowAdd(false); }}
+          onCreated={(program, part) => { pick(program, part); setShowAdd(false); }}
           onClose={() => setShowAdd(false)}
         />
+      )}
+    </div>
+  );
+}
+
+// Compact summary of a chosen program (used where a single selection is held,
+// e.g. the Sync-Job commit step). `value` is a selection object; `onClear`
+// drops it.
+export function SelectedProgramChip({ value, onClear }) {
+  const { jobs: jobsFile } = useApp();
+  const part = value.part_id ? partById(jobsFile, value.part_id) : null;
+  return (
+    <div className="job-pick-selected">
+      <ProgramNumBadge n={value.program_number} />
+      <span className="pn-part-number">{value.part_number || '—'}</span>
+      {part && <span className="text-xs text-sub">Rev {part.rev}</span>}
+      {value.operation && <span className="text-xs text-sub">· {value.operation}</span>}
+      {part && <CustomerBadge customer={part.customer} />}
+      {onClear && (
+        <button type="button" className="icon-btn" title="Clear job link" style={{ marginLeft: 'auto' }} onClick={onClear}>
+          <X size={14} />
+        </button>
       )}
     </div>
   );

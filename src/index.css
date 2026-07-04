@@ -2145,18 +2145,9 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 .preset-jobs-row .preset-jobs-del { margin-left: auto; color: var(--text-sub); padding: 0 2px; }
 .preset-jobs-row .preset-jobs-del:hover { color: var(--red); }
-.preset-jobs-add {
-  display: flex;
-  gap: 4px;
-  margin-top: 4px;
-  flex-wrap: wrap;
-}
-.preset-jobs-add .field-input {
-  flex: 1 1 90px;
-  min-width: 0;
-  font-size: 11px;
-  padding: 4px 6px;
-}
+.preset-jobs-add-picker { margin-top: 6px; }
+.preset-jobs-add-picker .pn-search .field-input { font-size: 11px; padding: 4px 6px 4px 28px; }
+.preset-jobs-add-picker .job-pick-results { max-height: 180px; }
 
 /* ── Program Number Manager (/programs) ─────────────────────────────────── */
 .pn-page { max-width: 1200px; margin: 0 auto; }

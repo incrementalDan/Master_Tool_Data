@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { jobById, jobLabel } from '../utils/jobs.js';
 import { holderColor } from './AssemblyCard.jsx';
 import CamPresetPicker from './CamPresetPicker.jsx';
+import JobProgramPicker from './JobProgramPicker.jsx';
 import {
   composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
   materialNameCode, presetMaterialColor, findMaterialInLibrary, HOLE_MAKING_TYPES, TURNING_TYPES,
@@ -64,19 +65,12 @@ function blankPreset() {
 // ── Jobs dropdown (collapsed + edit modes) ────────────────────────────────────
 // Reference data, deliberately low-key: a one-line toggle showing the linked-job
 // COUNT without opening (so an empty list is obvious at a glance), expanding to
-// the job labels. In edit mode it also removes links and adds a new
-// program # + part # (resolved against the shop-wide jobs.json registry).
-function PresetJobsBlock({ jobIds = [], jobsFile, editable = false, canAdd = true, onAdd, onRemove }) {
+// the job labels. In edit mode it removes links and adds one via the shared
+// JobProgramPicker (search a program # / part # from the Program Number Manager,
+// or add a new program) — the same control the Sync-Job flow uses.
+function PresetJobsBlock({ jobIds = [], jobsFile, editable = false, canAdd = true, onAddProgram, onRemove }) {
   const [open, setOpen] = useState(false);
-  const [prog, setProg] = useState('');
-  const [part, setPart] = useState('');
   const count = jobIds.length;
-
-  const submitAdd = () => {
-    if (!prog.trim() || !part.trim()) return;
-    onAdd(prog.trim(), part.trim());
-    setProg(''); setPart('');
-  };
 
   return (
     <div className="preset-card-jobs">
@@ -102,20 +96,8 @@ function PresetJobsBlock({ jobIds = [], jobsFile, editable = false, canAdd = tru
             );
           })}
           {editable && (canAdd ? (
-            <div className="preset-jobs-add">
-              <input
-                className="field-input font-mono" placeholder="Program #"
-                value={prog} onChange={e => setProg(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitAdd(); } }}
-              />
-              <input
-                className="field-input font-mono" placeholder="Part #"
-                value={part} onChange={e => setPart(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitAdd(); } }}
-              />
-              <button type="button" className="btn btn-secondary btn-sm" disabled={!prog.trim() || !part.trim()} onClick={submitAdd}>
-                <Plus size={11} /> Add
-              </button>
+            <div className="preset-jobs-add-picker">
+              <JobProgramPicker onPick={onAddProgram} />
             </div>
           ) : (
             <div className="text-xs text-sub">Connect Google Drive to link jobs.</div>
@@ -1304,8 +1286,8 @@ function EditCard({
           jobsFile={jobsFile}
           editable
           canAdd={canAddJobs}
-          onAdd={(prog, part) => {
-            const job = findOrCreateJob(prog, part, currentUser);
+          onAddProgram={(sel) => {
+            const job = findOrCreateJob(sel.program_number, sel.part_number, currentUser, sel.program_id);
             touch();
             setDraft(d => (d.job_ids || []).includes(job.id)
               ? d
