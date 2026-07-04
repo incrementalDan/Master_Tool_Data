@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Briefcase, Plus, X, Pencil } from 'lucide-react';
+import { Briefcase, X, Pencil } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { collectToolJobs, jobLabel } from '../utils/jobs.js';
+import JobProgramPicker from './JobProgramPicker.jsx';
 
 // "Jobs / Where Used" — every job (program # + part #) this tool is linked to:
 // preset-proven links (managed on each preset; shown read-only here with the
@@ -14,27 +15,25 @@ export default function JobsSection({ tool, onSave }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [prog, setProg] = useState('');
-  const [part, setPart] = useState('');
 
   const canAdd = googleAuthenticated || demoMode;
   const rows = collectToolJobs(tool, jobs);
   const toolLevelIds = new Set(tool.job_ids || []);
 
-  const handleAdd = async () => {
-    const p = prog.trim(), pn = part.trim();
-    if (!p || !pn) return;
-    const job = findOrCreateJob(p, pn, user?.email || user?.name || '');
+  // Link a program (picked from the Program Number Manager) to this tool. The
+  // program resolves to a jobs[] link (carrying program_id) via findOrCreateJob;
+  // its id joins tool.job_ids. Already-linked programs (tool- or preset-level)
+  // are a no-op with a nudge.
+  const handlePick = async (sel) => {
+    const job = findOrCreateJob(sel.program_number, sel.part_number, user?.email || user?.name || '', sel.program_id);
     if ((tool.job_ids || []).includes(job.id) ||
         (tool.presets || []).some(pr => (pr.job_ids || []).includes(job.id))) {
       notify('This job is already linked to the tool', 'info');
-      setProg(''); setPart('');
       return;
     }
     setSaving(true);
     try {
       await onSave({ ...tool, job_ids: [...(tool.job_ids || []), job.id] });
-      setProg(''); setPart('');
     } catch { /* toast handled in context */ }
     finally { setSaving(false); }
   };
@@ -91,21 +90,13 @@ export default function JobsSection({ tool, onSave }) {
 
           {editing && (
             canAdd ? (
-              <div className="job-add-row">
-                <input
-                  className="field-input font-mono" placeholder="Program #"
-                  value={prog} onChange={e => setProg(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
-                />
-                <input
-                  className="field-input font-mono" placeholder="Part #"
-                  value={part} onChange={e => setPart(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
-                />
-                <button type="button" className="btn btn-secondary btn-sm" disabled={saving || !prog.trim() || !part.trim()} onClick={handleAdd}>
-                  {saving ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : <Plus size={13} />} Add
-                </button>
-                <button type="button" className="btn btn-ghost btn-sm" disabled={saving} onClick={() => setEditing(false)}>Done</button>
+              <div style={{ marginTop: 10 }}>
+                <div className="field-label" style={{ marginBottom: 4 }}>Link a program</div>
+                <JobProgramPicker onPick={handlePick} />
+                <div style={{ marginTop: 8 }}>
+                  <button type="button" className="btn btn-ghost btn-sm" disabled={saving} onClick={() => setEditing(false)}>Done</button>
+                  {saving && <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2, marginLeft: 8, display: 'inline-block' }} />}
+                </div>
               </div>
             ) : (
               <div className="text-xs text-sub" style={{ marginTop: 8 }}>Connect Google Drive to link jobs.</div>

@@ -7,7 +7,7 @@ import { unitAbbr } from '../../utils/units.js';
 import { presetMaterialColor } from '../../utils/presetNaming.js';
 import { jobLabel } from '../../utils/jobs.js';
 import { PRESET_FIELD_LABELS } from './DiffStep.jsx';
-import JobProgramPicker from './JobProgramPicker.jsx';
+import JobProgramPicker, { SelectedProgramChip } from '../JobProgramPicker.jsx';
 import ToolTypeIcon from '../icons/ToolTypeIcon.jsx';
 import InfoTip from '../InfoTip.jsx';
 
@@ -204,7 +204,9 @@ export default function CommitStep({
           <InfoTip text="Link this sync to a program (program # + part #) from the Programs page. Type a program number for an exact match, or a part number to see its programs; or add a new one. It links to the presets this commit updates or adds (or the tool itself when no presets change), and shows under each preset + in the tool's Jobs panel. Carried to the next tool in this sync." />
         </label>
         {jobEnabled ? (
-          <JobProgramPicker value={jobSel} onChange={setJobSel} />
+          jobSel
+            ? <SelectedProgramChip value={jobSel} onClear={() => setJobSel(null)} />
+            : <JobProgramPicker onPick={setJobSel} />
         ) : (
           <div className="text-sub text-xs">Connect Google Drive to link jobs (job links are stored in the shop metadata).</div>
         )}
