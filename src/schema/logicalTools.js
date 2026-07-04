@@ -63,6 +63,7 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
       ...p,
       operation_type: parsePresetName(p.name)?.opType ?? presetMeta[p.guid]?.operation_type ?? null,
       machine_id: presetMeta[p.guid]?.machine_id ?? null,
+      job_ids: presetMeta[p.guid]?.job_ids ?? [],
       material: inferredMat
         ? { ...(p.material || {}), query: inferredMat, category: materialCategory(inferredMat) }
         : p.material,

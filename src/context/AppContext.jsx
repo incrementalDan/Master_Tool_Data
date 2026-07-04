@@ -14,8 +14,9 @@ import * as aps from '../services/apsService.js';
 import { groupByTrackingId, buildLogicalTool, combineToolsByToolId } from '../schema/toolSchema.js';
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
-import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS } from '../schema/sharedDefaults.js';
+import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry } from '../schema/vendorRegistry.js';
+import { findJob, newJob } from '../utils/jobs.js';
 import { setDefaultUnit } from '../utils/units.js';
 import { getDemoData, isDemoRequested } from '../demo/index.js';
 import {
@@ -52,6 +53,7 @@ export function AppProvider({ children }) {
   const demoModeRef = useRef(state.demoMode);
   const shopSettingsRef = useRef(state.shopSettings);
   const materialsRef = useRef(state.materials);
+  const jobsRef = useRef(state.jobs);
   // Pending debounced shared-Drive-file writes, keyed by file key →
   // { timer, write(keepalive) }. Lets typing coalesce into one write and lets
   // flushSharedWrites fire the latest pending write early on page hide/close.
@@ -75,6 +77,7 @@ export function AppProvider({ children }) {
   demoModeRef.current = state.demoMode;
   shopSettingsRef.current = state.shopSettings;
   materialsRef.current = state.materials;
+  jobsRef.current = state.jobs;
 
   // Tracks whether we've already seeded setup-progress flags for an established
   // library this session — seeding should run at most once, and only when no
@@ -245,6 +248,7 @@ export function AppProvider({ children }) {
     const write = (keepalive = false) => {
       const payload = key === 'shopSettings' ? shopSettingsRef.current
         : key === 'materials' ? materialsRef.current
+        : key === 'jobs' ? jobsRef.current
         : fallbackData;
       return driveService.saveSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, payload, { keepalive })
         .catch(err => {
@@ -277,7 +281,10 @@ export function AppProvider({ children }) {
   }, []);
 
   const saveSharedFile = useCallback((key, data, dispatchType, onSaved) => {
-    const stateKey = key === 'shopSettings' ? 'shopSettings' : key === 'vendorRegistry' ? 'vendorRegistry' : 'materials';
+    const stateKey = key === 'shopSettings' ? 'shopSettings'
+      : key === 'vendorRegistry' ? 'vendorRegistry'
+      : key === 'jobs' ? 'jobs'
+      : 'materials';
     // Demo mode: update in-memory state only (no Drive write, no Google guard) so
     // the sandbox can edit shop settings / materials / vendors — lost on refresh.
     if (demoModeRef.current) {
@@ -303,6 +310,23 @@ export function AppProvider({ children }) {
     saveSharedFile('vendorRegistry', vendorRegistry, 'SET_VENDOR_REGISTRY', setActiveVendorRegistry), [saveSharedFile]);
   const saveShopSettings = useCallback((shopSettings) =>
     saveSharedFile('shopSettings', shopSettings, 'SET_SHOP_SETTINGS'), [saveSharedFile]);
+  const saveJobs = useCallback((jobs) =>
+    saveSharedFile('jobs', jobs, 'SET_JOBS'), [saveSharedFile]);
+
+  // Resolve a (program #, part #) pair to its job record, creating it in the
+  // registry if new. Identity is the case-insensitive trimmed pair (jobKey) —
+  // the same job entered on five tools stays ONE record; references are by id.
+  // Optimistic + debounced Drive write via saveJobs; demo mode stays in-memory.
+  const findOrCreateJob = useCallback((programNumber, partNumber, createdBy = '') => {
+    const file = jobsRef.current || DEFAULT_JOBS;
+    const existing = findJob(file, programNumber, partNumber);
+    if (existing) return existing;
+    const job = newJob(programNumber, partNumber, createdBy);
+    // saveJobs rejects when Drive isn't connected (callers gate the UI on that,
+    // but never let the rejection escape as an unhandled promise).
+    Promise.resolve(saveJobs({ ...file, jobs: [...(file.jobs || []), job] })).catch(() => {});
+    return job;
+  }, [saveJobs]);
 
   // Persist only the location_config sub-object (the Settings Location System
   // editor calls this after each add/edit/delete/normalize change). Merges via the
@@ -518,7 +542,7 @@ export function AppProvider({ children }) {
   // downloadFusionList/uploadFusionList make every save path fail gracefully
   // (the "Demo Mode — changes are not saved" banner sets the expectation).
   const enterDemoMode = useCallback(() => {
-    const { fusionList, metaList, holders, materials, vendorRegistry, shopSettings } = getDemoData();
+    const { fusionList, metaList, holders, materials, vendorRegistry, shopSettings, jobs } = getDemoData();
     // Build logical tools through the exact same pipeline as a live load.
     const metaByTracking = new Map(metaList.map(m => [m.id, m]));
     const { groups, untracked } = groupByTrackingId(fusionList);
@@ -535,7 +559,7 @@ export function AppProvider({ children }) {
     setActiveVendorRegistry(vendorRegistry);
     if (shopSettings?.default_units) setDefaultUnit(shopSettings.default_units);
 
-    dispatch({ type: 'ENTER_DEMO_MODE', tools, holders: taggedHolders, materials, vendorRegistry, shopSettings });
+    dispatch({ type: 'ENTER_DEMO_MODE', tools, holders: taggedHolders, materials, vendorRegistry, shopSettings, jobs });
   }, []);
 
   const exitDemoMode = useCallback(() => {
@@ -576,11 +600,12 @@ export function AppProvider({ children }) {
           driveService.loadOrCreateSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, def)
             .catch(e => { if (e.code === 'TOKEN_EXPIRED') throw e; return def; });
         try {
-          const [meta, materials, vendorRegistry, shopSettings] = await Promise.all([
+          const [meta, materials, vendorRegistry, shopSettings, jobs] = await Promise.all([
             driveService.loadMetadata(),
             sharedSafe('materials', DEFAULT_MATERIALS),
             sharedSafe('vendorRegistry', DEFAULT_VENDOR_REGISTRY),
             sharedSafe('shopSettings', DEFAULT_SHOP_SETTINGS),
+            sharedSafe('jobs', DEFAULT_JOBS),
           ]);
           metaList = meta;
           setActiveVendorRegistry(vendorRegistry);
@@ -600,7 +625,7 @@ export function AppProvider({ children }) {
           }
           effectiveShop = ss;
           saveRegistryMirror(ss);
-          dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings: ss });
+          dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings: ss, jobs });
           dispatch({ type: 'SET_LIBRARIES', shopSettings: ss }); // sync pointers
         } catch (err) {
           if (err.code === 'TOKEN_EXPIRED') {
@@ -744,6 +769,8 @@ export function AppProvider({ children }) {
       saveMaterials,
       saveVendorRegistry,
       saveShopSettings,
+      saveJobs,
+      findOrCreateJob,
       saveLocationConfig,
       markSetupStep,
       markSetupStepInSettings,

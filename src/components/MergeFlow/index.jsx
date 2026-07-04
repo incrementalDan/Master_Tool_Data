@@ -49,6 +49,9 @@ export default function MergeFlow() {
   const [liveMasterTool, setLiveMasterTool] = useState(null);
   const [masterUpdated, setMasterUpdated] = useState(false);
   const [isFetchingLive, setIsFetchingLive] = useState(false);
+  // Last job (program # + part #) entered in CommitStep — carried to the next
+  // queue item's commit screen, since a batch sync is usually all one job.
+  const [lastJobInput, setLastJobInput] = useState(null);
 
   // Cache for live APS fetches (60-second TTL), keyed by source library so a tool
   // is always compared against its OWN library (multi-library).
@@ -312,6 +315,8 @@ export default function MergeFlow() {
                 presetChanges={activeEntry.presetChanges}
                 presetsToAdd={activeEntry.presetsToAdd}
                 assemblyUpdate={activeEntry.assemblyUpdate}
+                initialJob={lastJobInput}
+                onJobInput={setLastJobInput}
                 onCommitted={handleCommitted}
                 onBack={() => setSubStep('diff')}
                 isLastItem={isLastItem}

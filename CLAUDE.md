@@ -356,7 +356,8 @@ Google Drive (shared team folder)
 ├── tool_metadata.json           ← Extra fields Fusion doesn't support (optional, can be skipped)
 ├── materials.json               ← Material taxonomy: groups → CAM presets → alloys + colors (shared)
 ├── vendor_registry.json         ← Unified manufacturer/vendor entity list (shared)
-└── shop_settings.json           ← Shop-wide settings (shared)
+├── shop_settings.json           ← Shop-wide settings (shared)
+└── jobs.json                    ← Jobs registry: program # + part # pairs w/ UUIDs (shared)
 
 Web App (GitHub Pages, client-side only)
 ├── APS PKCE OAuth login (required — gates all library access)
@@ -1111,11 +1112,26 @@ A collapsible "Purchasing" panel in `ToolDetail`'s right column. Nested table: o
 
 -----
 
-## Shared Drive Files (materials / vendor registry / shop settings)
+## Jobs (program # + part #) — preset & tool job links
 
-Three shop-wide JSON files live in the **same Drive root as `tool_metadata.json`** and are loaded at startup **in parallel** with the metadata (in `loadTools`, when Google is connected). Each is **created from its default content if it doesn't exist yet**; a load failure on any one falls back to its default and never blocks the library load. All three are exposed via `useApp()` as `state.materials` / `state.vendorRegistry` / `state.shopSettings` (defaulting to their seeds before load), with save functions `saveMaterials` / `saveVendorRegistry` / `saveShopSettings`. **Foundation only — no UI yet.**
+A **job = a program number + a part number** — the shop's unit of "where was this used." Jobs are **shop-level entities with stable UUIDs** in **`jobs.json`** (the 4th shared Drive file); presets and tools reference jobs **by id only**, never by copying the strings. This is the foundation for a future jobs page (assigning program numbers to part numbers and operations, replacing the manually-managed Google Sheet): that page will edit the registry directly and every reference follows. Reference data today — deliberately low-key in the UI.
 
-**How they are found (never need separate selection):** `loadOrCreateSharedJson` calls `getMetaParentFolderId()` (the parent folder of the connected `tool_metadata.json`) to locate them. Their Drive file IDs are cached in localStorage under the keys in `SHARED_FILES`; on a fresh machine (empty cache) the function searches the metadata folder by name and re-caches. A missing file is created from its default seed. This means connecting `tool_metadata.json` once is sufficient — the other three files auto-join on the next `loadTools`. The `MetadataConnect.jsx` folder picker checks for all four files in parallel during browsing and shows a ✓/— status grid in the callout so users can confirm all files are present before connecting (see **Google Drive — Shared Drive Support** below).
+- **Registry shape** (`jobs.json`): `{ version: 1, jobs: [{ id, program_number, part_number, created_at, created_by, notes }] }`. Identity = case-insensitive trimmed (program, part) pair — `findOrCreateJob` (AppContext) dedupes, so the same job entered on five tools stays ONE record. Pure helpers in `src/utils/jobs.js` (`jobKey`, `findJob`, `jobById`, `newJob`, `jobLabel` → `"O1042 · PN-1234"`, `collectToolJobs`).
+- **Per-preset links** (the primary association): in-memory `preset.job_ids[]`, persisted in **`preset_meta[guid].job_ids`** in `tool_metadata.json` (only when non-empty), overlaid back in `buildLogicalTool` — the exact `machine_id` pattern. **Never written to Fusion**: `normalizePreset` pulls `operation_type`, `machine_id`, and `job_ids` out of the preset before the Fusion write (every app-only per-preset field MUST be in that destructure — the top-level `isMetadataOnly` guard only sweeps tool-level keys; `machine_id` leaked into Fusion JSON until this rule was enforced). Locked by `fusionConvert.test.js`.
+- **Per-tool links**: metadata `job_ids[]` on the tool record — "used this tool on job X" with no preset context.
+- **Capture — Sync Job (primary)**: CommitStep has optional **Program # / Part #** inputs (both-or-neither validated; disabled without Google Drive). On commit the pair resolves via `findOrCreateJob` and `mergeTool` receives **`jobLink = { job_id, label }` as its 8th arg**: the id is unioned into `job_ids` of every preset the commit touches (`presetChanges` targets + `presetsToAdd`); if NO presets were touched it attaches at tool level instead. History entry gains `job_linked`. The entered values are remembered at queue level (`lastJobInput` in `MergeFlow/index.jsx`) and pre-fill the next tool's commit — a batch sync is usually one job.
+- **Capture — manual**: each preset card (collapsed AND edit mode) ends with a **`PresetJobsBlock`** dropdown row — `Briefcase` icon + `Jobs (N)` count always visible **without opening** (so an empty list is obvious at a glance), expanding to job labels; edit mode adds remove `×` and a Program-/Part-# add row. Tool level: the **`JobsSection.jsx`** panel ("Jobs / Where Used", ToolDetail right column) aggregates preset-proven links (shown with `.preset-tag` chips naming the preset, managed on the preset) + tool-level links (add/remove here), deduped by job id via `collectToolJobs`. Count shown in the panel header.
+- **`last_used_job` (free text) is retired from the UI** — removed from ToolDetail display, ToolForm, and DiffStep's Notes section. The field stays in the registry/metadata (data preserved); structured job links supersede it.
+- **Drive-required**: job links live in `jobs.json` + metadata, so the add controls are gated on `googleAuthenticated || demoMode` (demo edits stay in-memory). `findOrCreateJob` never lets a failed Drive save escape as an unhandled rejection.
+- **Demo**: `src/demo/demo_jobs.json` seeds two jobs, linked to FTL-000001's presets and FTL-000002 (tool-level) so the dropdown/panel render with data in `?demo=true`.
+
+-----
+
+## Shared Drive Files (materials / vendor registry / shop settings / jobs)
+
+Four shop-wide JSON files live in the **same Drive root as `tool_metadata.json`** and are loaded at startup **in parallel** with the metadata (in `loadTools`, when Google is connected). Each is **created from its default content if it doesn't exist yet**; a load failure on any one falls back to its default and never blocks the library load. All four are exposed via `useApp()` as `state.materials` / `state.vendorRegistry` / `state.shopSettings` / `state.jobs` (defaulting to their seeds before load), with save functions `saveMaterials` / `saveVendorRegistry` / `saveShopSettings` / `saveJobs`.
+
+**How they are found (never need separate selection):** `loadOrCreateSharedJson` calls `getMetaParentFolderId()` (the parent folder of the connected `tool_metadata.json`) to locate them. Their Drive file IDs are cached in localStorage under the keys in `SHARED_FILES`; on a fresh machine (empty cache) the function searches the metadata folder by name and re-caches. A missing file is created from its default seed. This means connecting `tool_metadata.json` once is sufficient — the other shared files auto-join on the next `loadTools`. The `MetadataConnect.jsx` folder picker checks for all of them in parallel during browsing and shows a ✓/— status grid in the callout so users can confirm all files are present before connecting (see **Google Drive — Shared Drive Support** below).
 
 - **Generic Drive-file plumbing** lives in `driveService.js`: `loadOrCreateSharedJson(name, cacheKey, default)` and `saveSharedJson(name, cacheKey, content)`, with the file names + localStorage cache keys in `SHARED_FILES`. Content is pretty-printed (`JSON.stringify(data, null, 2)`) like all Drive JSON. Cache keys are cleared on `signOut()`.
 
@@ -1131,6 +1147,8 @@ Three shop-wide JSON files live in the **same Drive root as `tool_metadata.json`
 - **`vendor_registry.json`** (default = `DEFAULT_VENDOR_REGISTRY` in `vendorRegistry.js`) — the unified entity list (see `vendorRegistry.js` above). Each entity carries a preferred `name` + `aliases[]` (match-only alternates). Manufacturers also carry **`material_code_system`** (`'iso_513' | 'kennametal' | 'vdi_3323' | null`, from `MATERIAL_CODE_SYSTEMS`) — which material-classification standard that manufacturer publishes, so its catalog's material codes map to the CAM presets' code columns. Each tool's `purchasing.manufacturers[]` / `vendors[]` are intended to reference entity IDs from this list; the `is_manufacturer` / `is_vendor` flags determine which picker an entity appears in.
 
 - **`shop_settings.json`** (default in `sharedDefaults.js`) — `{ shop_name, default_units, machine_number:{start,skip}, machines:[], default_machine_id:null, tool_id_system:{mode,separator,start,skip,digits,show_legacy,location:{cabinet_identifier,drawer_identifier}}, location_config:{show_legacy,systems:[…],bin_sizes:[…{uuid id}]}, assembly_id_system:{mode,separator,serial_start,show_legacy}, presetter:{serial_format,serial_start}, import:{...}, aps:{...}, setup_steps:{fusionConnected,metadataConnected,toolIdConfigured,locationConfigured,assemblyIdConfigured,normalized,proshopMerged,proshopPhotos,machineNumbers,proshopExported} }`. **Wired into behavior**: `default_units` is mirrored to `setDefaultUnit` on load; `machine_number.{start,skip}` drives renumber/add-tool; `tool_id_system` drives the configurable Tool ID System (see that section) — `mode` controls ID generation/display and `machine_linked` mode keeps `machine_number` in sync. `setup_steps` holds ISO timestamps written by `markSetupStepInSettings()` (AppContext) each time a setup step completes — shared across devices via Drive. The **canonical `SETUP_STEPS`** (exported from AppContext, in order) are: `fusionConnected`, `metadataConnected`, `toolIdConfigured`, `locationConfigured`, `assemblyIdConfigured`, `normalized`, `proshopMerged`, `machineNumbers`, `proshopExported`. `toolIdConfigured`/`locationConfigured` are the three-ID-systems group (configured in their Settings cards; `assemblyIdConfigured` is a **disabled "coming soon" placeholder** — `disabled: true`, excluded from the completion/progress math in `SetupGuide`); `proshopPhotos` is a sub-step tracked in `setup_steps` but not in `SETUP_STEPS`. **`metadataConnected`** completes the moment Google Drive connects (a declarative effect in AppContext marks it for both live sign-in and a restored session); seeding derives it from `googleRef.current`, and `loadSetupProgress`'s migration back-fills it (plus `machineNumbers`, `toolIdConfigured`, `locationConfigured`) on an established library (`proshopExported` true). **Still NOT wired**: the `import` and `aps` sub-objects (the import/APS flows don't write them back yet).
+- **`jobs.json`** (default `DEFAULT_JOBS` in `sharedDefaults.js`) — the shop-wide jobs registry (see the **Jobs** section above). Uses the ref-based debounce payload pattern (`jobsRef`, like materials/shopSettings — not vendorRegistry's captured-payload path).
+
 ### Machine Configuration
 
 CNC machines are configured in `shop_settings.json` under `machines[]` (each with a `default_machine_id` for pre-selection). Machine data is informational — it never drives toolpath behavior or blocks saves.
@@ -1272,7 +1290,9 @@ await mergeTool(
   presetChanges,       // [{ masterPresetGuid, incomingPreset, selectedFields:Set }] —
                        // same-setup presets the user chose to update in place
   newPresetList,       // presetsToAdd from DiffStep
-  assemblyUpdate       // { type: 'create'|'link', assembly: {...} } or null
+  assemblyUpdate,      // { type: 'create'|'link', assembly: {...} } or null
+  jobLink              // { job_id, label } or null — the job (program # + part #)
+                       // this sync came from; see the Jobs section
 );
 ```
 

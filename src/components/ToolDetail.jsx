@@ -13,6 +13,7 @@ import ReconcileModal from './ReconcileModal.jsx';
 import FilesSection from './FilesSection.jsx';
 import PurchasingSection from './PurchasingSection.jsx';
 import SpeedFeedSection from './SpeedFeedSection.jsx';
+import JobsSection from './JobsSection.jsx';
 import AttachmentUploadModal from './AttachmentUploadModal.jsx';
 import { fetchFileBlob } from '../services/driveService.js';
 import InfoTip from './InfoTip.jsx';
@@ -473,6 +474,15 @@ export default function ToolDetail() {
               }}
             />
 
+            {/* Structured job links (program # + part #) — supersedes the old
+                free-text "Last Used Job" display (data kept, no longer shown). */}
+            <JobsSection
+              tool={tool}
+              onSave={async (updatedTool) => {
+                await saveTool(updatedTool);
+              }}
+            />
+
             <Section title="Notes & Tags" icon={StickyNote}>
               {tool.notes && (
                 <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, marginBottom: 10 }}>{tool.notes}</p>
@@ -482,9 +492,8 @@ export default function ToolDetail() {
                   {tool.tags.map(t => <span key={t} className="tag">{t}</span>)}
                 </div>
               )}
-              {tool.last_used_job && <Field label="Last Used Job" value={tool.last_used_job} />}
               {tool.revision_notes && <Field label="Revision Notes" value={tool.revision_notes} />}
-              {!tool.notes && !(tool.tags || []).length && !tool.last_used_job && !tool.revision_notes && (
+              {!tool.notes && !(tool.tags || []).length && !tool.revision_notes && (
                 <span className="detail-field-empty text-sm">No notes yet.</span>
               )}
             </Section>

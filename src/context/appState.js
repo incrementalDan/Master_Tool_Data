@@ -1,7 +1,7 @@
 // Pure (non-React) state layer for AppContext: localStorage keys and readers,
 // the multi-library registry helpers, the setup-steps list, initialState, and
 // the reducer. No side effects beyond localStorage.
-import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS } from '../schema/sharedDefaults.js';
+import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY } from '../schema/vendorRegistry.js';
 
 const LOCATION_KEY = 'aps_library_location';
@@ -194,6 +194,7 @@ export const initialState = {
   materials: DEFAULT_MATERIALS,
   vendorRegistry: DEFAULT_VENDOR_REGISTRY,
   shopSettings: SEEDED_SHOP_SETTINGS,
+  jobs: DEFAULT_JOBS,         // jobs.json — shop-wide job registry (program # + part #)
   isLoading: false,
   isSaving: false,
   error: null,
@@ -252,6 +253,7 @@ export function reducer(state, action) {
         materials: action.materials,
         vendorRegistry: action.vendorRegistry,
         shopSettings: action.shopSettings,
+        jobs: action.jobs || DEFAULT_JOBS,
         needsNormalize: false,
         metadataFileWarning: null,
         isLoading: false,
@@ -277,8 +279,9 @@ export function reducer(state, action) {
     case 'SET_TOOLS': return { ...state, tools: action.tools, ...(action.needsNormalize !== undefined ? { needsNormalize: action.needsNormalize } : {}), ...(action.normalizeCount !== undefined ? { normalizeCount: action.normalizeCount } : {}) };
     case 'METADATA_FILE_WARNING': return { ...state, metadataFileWarning: action.warning };
     case 'SET_SHARED_FILES':
-      return { ...state, materials: action.materials, vendorRegistry: action.vendorRegistry, shopSettings: action.shopSettings };
+      return { ...state, materials: action.materials, vendorRegistry: action.vendorRegistry, shopSettings: action.shopSettings, jobs: action.jobs };
     case 'SET_MATERIALS': return { ...state, materials: action.materials };
+    case 'SET_JOBS': return { ...state, jobs: action.jobs };
     case 'SET_VENDOR_REGISTRY': return { ...state, vendorRegistry: action.vendorRegistry };
     case 'SET_SHOP_SETTINGS': return { ...state, shopSettings: action.shopSettings };
     // Merge a single sub-object/timestamp into shopSettings off the CURRENT state

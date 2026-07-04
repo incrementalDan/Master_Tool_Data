@@ -238,7 +238,8 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
 
           <Section title="Notes & Tags" icon={StickyNote}>
             <div className="form-grid">
-              <FieldInput field="last_used_job" label="Last Used Job" data={data} setField={setField} />
+              {/* Last Used Job (free text) retired — structured job links live in
+                  ToolDetail's Jobs / Where Used panel + on presets. */}
               <FieldInput field="updated_by" label="Updated By" data={data} setField={setField} />
             </div>
 

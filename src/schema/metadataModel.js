@@ -75,6 +75,7 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
       ? null
       : Number(meta.machine_tool_number ?? fusionInternal.machine_tool_number),
     no_fusion_link: Boolean(meta.no_fusion_link),
+    job_ids: meta.job_ids || [],
     notes: meta.notes || '',
     last_used_job: meta.last_used_job || '',
     preferred_machine: meta.preferred_machine || '',
@@ -101,10 +102,13 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
 export function buildMetadataTool(tool) {
   const preset_meta = {};
   for (const p of (tool.presets || [])) {
-    if (p.guid && (p.operation_type || p.machine_id)) {
+    if (p.guid && (p.operation_type || p.machine_id || p.job_ids?.length)) {
       preset_meta[p.guid] = {
         ...(p.operation_type ? { operation_type: p.operation_type } : {}),
         ...(p.machine_id    ? { machine_id: p.machine_id }         : {}),
+        // Job links (jobs.json registry ids) proven on this preset — see
+        // src/utils/jobs.js. Metadata-only, never written to Fusion.
+        ...(p.job_ids?.length ? { job_ids: p.job_ids } : {}),
       };
     }
   }
@@ -214,6 +218,9 @@ export function buildMetadataTool(tool) {
       measured_serial: a.measured_serial || null,
     })),
     preset_meta,
+    // Tool-level job links (jobs.json registry ids) — "this tool was used on
+    // job X" without preset context. Preset-proven links live in preset_meta.
+    job_ids: tool.job_ids || [],
     notes: tool.notes || '',
     last_used_job: tool.last_used_job || '',
     preferred_machine: tool.preferred_machine || '',

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, Check, GripVertical, Trash2, ChevronDown, Cpu } from 'lucide-react';
+import { Plus, X, Check, GripVertical, Trash2, ChevronDown, Cpu, Briefcase } from 'lucide-react';
 import { generateId, COOLANT_OPTS } from '../schema/toolSchema.js';
 import { useApp } from '../context/AppContext.jsx';
+import { jobById, jobLabel } from '../utils/jobs.js';
 import { holderColor } from './AssemblyCard.jsx';
 import CamPresetPicker from './CamPresetPicker.jsx';
 import {
@@ -56,11 +57,80 @@ function blankPreset() {
     stepdown: null, stepover: null,
     'ramp-spindle-speed': 'n',
     machine_id: null,
+    job_ids: [],
   };
 }
 
+// ── Jobs dropdown (collapsed + edit modes) ────────────────────────────────────
+// Reference data, deliberately low-key: a one-line toggle showing the linked-job
+// COUNT without opening (so an empty list is obvious at a glance), expanding to
+// the job labels. In edit mode it also removes links and adds a new
+// program # + part # (resolved against the shop-wide jobs.json registry).
+function PresetJobsBlock({ jobIds = [], jobsFile, editable = false, canAdd = true, onAdd, onRemove }) {
+  const [open, setOpen] = useState(false);
+  const [prog, setProg] = useState('');
+  const [part, setPart] = useState('');
+  const count = jobIds.length;
+
+  const submitAdd = () => {
+    if (!prog.trim() || !part.trim()) return;
+    onAdd(prog.trim(), part.trim());
+    setProg(''); setPart('');
+  };
+
+  return (
+    <div className="preset-card-jobs">
+      <button type="button" className="preset-jobs-toggle" onClick={() => setOpen(o => !o)}>
+        <Briefcase size={10} />
+        <span>Jobs ({count})</span>
+        <ChevronDown size={11} className={`preset-jobs-chev${open ? ' open' : ''}`} />
+      </button>
+      {open && (
+        <div className="preset-jobs-list">
+          {count === 0 && <div className="text-xs text-sub">No jobs linked yet.</div>}
+          {jobIds.map(id => {
+            const job = jobById(jobsFile, id);
+            return (
+              <div key={id} className="preset-jobs-row">
+                <span className="font-mono">{job ? jobLabel(job) : '(job removed from registry)'}</span>
+                {editable && (
+                  <button type="button" className="icon-btn preset-jobs-del" title="Unlink job" onClick={() => onRemove(id)}>
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          {editable && (canAdd ? (
+            <div className="preset-jobs-add">
+              <input
+                className="field-input font-mono" placeholder="Program #"
+                value={prog} onChange={e => setProg(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitAdd(); } }}
+              />
+              <input
+                className="field-input font-mono" placeholder="Part #"
+                value={part} onChange={e => setPart(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); submitAdd(); } }}
+              />
+              <button type="button" className="btn btn-secondary btn-sm" disabled={!prog.trim() || !part.trim()} onClick={submitAdd}>
+                <Plus size={11} /> Add
+              </button>
+            </div>
+          ) : (
+            <div className="text-xs text-sub">Connect Google Drive to link jobs.</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
-  const { holders, materials, shopSettings } = useApp();
+  const { holders, materials, shopSettings, jobs, findOrCreateJob, user, googleAuthenticated, demoMode } = useApp();
+  // Job links persist in metadata (jobs.json + preset_meta on Drive), so adding
+  // them needs Drive (or the demo sandbox, which keeps everything in memory).
+  const canAddJobs = googleAuthenticated || demoMode;
   // Resolve a preset's material to its group color (from the Materials library).
   const groupColorOf = (query) => presetMaterialColor(query, materials);
   const isMetric = tool.unit === 'millimeters';
@@ -339,6 +409,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
                   )}
                   holders={holders}
                   machines={machines}
+                  jobsFile={jobs}
                   onEdit={() => handleEditClick(preset.guid)}
                   onDelete={() => setDeleteConfirmId(preset.guid)}
                   onDragStart={e => handleDragStart(e, globalIdx)}
@@ -436,6 +507,10 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
             holders={holders}
             materials={materials}
             shopSettings={shopSettings}
+            jobsFile={jobs}
+            findOrCreateJob={findOrCreateJob}
+            canAddJobs={canAddJobs}
+            currentUser={user?.email || user?.name || ''}
             onSave={handlePresetSave}
             onCancel={handleCancelEdit}
             onDirtyChange={setEditorDirty}
@@ -451,7 +526,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
 function CollapsedCard({
   preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
   isEditing, pickMode, picked, onPick, isDragOver, dragEnabled,
-  linkedAssemblies, holders, machines,
+  linkedAssemblies, holders, machines, jobsFile,
   onEdit, onDelete,
   onDragStart, onDragOver, onDrop, onDragEnd,
 }) {
@@ -552,6 +627,9 @@ function CollapsedCard({
           </div>
         )}
       </div>
+      {!pickMode && (
+        <PresetJobsBlock jobIds={preset.job_ids || []} jobsFile={jobsFile} />
+      )}
       <div className="preset-card-footer">
         {pickMode ? (
           <span className="preset-pick-hint">{picked ? 'Selected to copy' : 'Click to copy'}</span>
@@ -623,6 +701,7 @@ function EditCard({
   preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
   diameter, fluteLength, numberOfFlutes,
   assemblies = [], holders = [], materials, shopSettings,
+  jobsFile, findOrCreateJob, canAddJobs = false, currentUser = '',
   onSave, onCancel, onDirtyChange, isSaving,
 }) {
   const isTap = toolType === 'tap';
@@ -665,6 +744,7 @@ function EditCard({
     const d = computeFormulaDraft({ ...preset }, initialFx, diameter, numberOfFlutes);
     d.operation_type = preset.operation_type ?? parsePresetName(preset.name)?.opType ?? null;
     d.machine_id = preset.machine_id ?? null;
+    d.job_ids = preset.job_ids ?? [];
     return d;
   });
 
@@ -1214,6 +1294,29 @@ function EditCard({
           </div>
         </div>
       )}
+
+      {/* Jobs — reference links to the jobs this preset was proven on. Adding
+          resolves against the shop-wide jobs.json registry (same job entered
+          twice = one record); saved with the preset via preset_meta. */}
+      <div className="preset-edit-section preset-edit-section--wide">
+        <PresetJobsBlock
+          jobIds={draft.job_ids || []}
+          jobsFile={jobsFile}
+          editable
+          canAdd={canAddJobs}
+          onAdd={(prog, part) => {
+            const job = findOrCreateJob(prog, part, currentUser);
+            touch();
+            setDraft(d => (d.job_ids || []).includes(job.id)
+              ? d
+              : { ...d, job_ids: [...(d.job_ids || []), job.id] });
+          }}
+          onRemove={(id) => {
+            touch();
+            setDraft(d => ({ ...d, job_ids: (d.job_ids || []).filter(j => j !== id) }));
+          }}
+        />
+      </div>
       </div>
 
       {pickerOpen && (

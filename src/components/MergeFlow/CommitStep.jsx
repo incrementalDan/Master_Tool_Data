@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { ArrowLeft, GitMerge, Plus, Wrench } from 'lucide-react';
+import { ArrowLeft, GitMerge, Plus, Wrench, Briefcase } from 'lucide-react';
 import { useApp } from '../../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS } from '../../schema/toolSchema.js';
 import { fieldLabel } from '../../schema/fieldRegistry.js';
 import { unitAbbr } from '../../utils/units.js';
 import { presetMaterialColor } from '../../utils/presetNaming.js';
+import { jobLabel } from '../../utils/jobs.js';
 import { PRESET_FIELD_LABELS } from './DiffStep.jsx';
 import ToolTypeIcon from '../icons/ToolTypeIcon.jsx';
+import InfoTip from '../InfoTip.jsx';
 
 function formatValue(v) {
   if (v === null || v === undefined || v === '') return '—';
@@ -22,12 +24,17 @@ export default function CommitStep({
   presetChanges,      // [{ masterPresetGuid, incomingPreset, selectedFields:Set }] — same-setup updates
   presetsToAdd,       // presetObject[] — new presets + conflict-created presets
   assemblyUpdate,     // { type: 'create'|'link', assembly: {...} } or null — decided in DiffStep
+  initialJob = null,  // { program, part } remembered at queue level — a batch sync is usually one job
+  onJobInput,         // (job|null) => void — report entered values back up for the next queue item
   onCommitted, onBack,
   isLastItem = false,
 }) {
-  const { mergeTool, isSaving, user, materials } = useApp();
+  const { mergeTool, isSaving, user, materials, findOrCreateJob, googleAuthenticated } = useApp();
   const [revisionNote, setRevisionNote] = useState('');
   const [mergedBy, setMergedBy] = useState(user?.email || user?.name || '');
+  // Job (program # + part #) this sync came from — optional, both-or-neither.
+  const [programNumber, setProgramNumber] = useState(initialJob?.program || '');
+  const [partNumber, setPartNumber] = useState(initialJob?.part || '');
   const [commitError, setCommitError] = useState('');
 
   const fieldList = [...(selectedFields || [])];
@@ -40,15 +47,33 @@ export default function CommitStep({
   // need a written justification.
   const revisionRequired = fieldList.length > 0 || changeList.length > 0;
 
+  const jobEnabled = googleAuthenticated;   // job links live in metadata/jobs.json (Drive)
+  const prog = programNumber.trim();
+  const part = partNumber.trim();
+  const jobIncomplete = (prog !== '') !== (part !== '');   // exactly one half filled
+
   const handleCommit = async () => {
     if (revisionRequired && !revisionNote.trim()) return;
+    if (jobIncomplete) {
+      setCommitError('A job needs both a program number and a part number — fill both or clear both.');
+      return;
+    }
     setCommitError('');
 
     const mergedFields = {};
     for (const f of fieldList) mergedFields[f] = importedTool[f];
 
+    // Resolve (or create) the job in the shop-wide registry; mergeTool links its
+    // id to every preset this commit touches (or the tool, if none).
+    let jobLink = null;
+    if (jobEnabled && prog && part) {
+      const job = findOrCreateJob(prog, part, mergedBy.trim());
+      jobLink = { job_id: job.id, label: jobLabel(job) };
+      onJobInput?.({ program: prog, part });
+    }
+
     try {
-      await mergeTool(masterTool, mergedFields, revisionNote.trim(), mergedBy.trim(), changeList, newPresetList, assemblyUpdate);
+      await mergeTool(masterTool, mergedFields, revisionNote.trim(), mergedBy.trim(), changeList, newPresetList, assemblyUpdate, jobLink);
       onCommitted();
     } catch (err) {
       setCommitError(err.message);
@@ -172,6 +197,41 @@ export default function CommitStep({
           onChange={e => setRevisionNote(e.target.value)}
           autoFocus
         />
+      </div>
+
+      {/* Job link — the "proven on job X" provenance this whole flow exists to
+          capture. Optional; both halves or neither. Remembered across the queue
+          (a batch sync is usually one job). */}
+      <div className="field-group mb-16">
+        <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Briefcase size={12} /> Job (optional)
+          <InfoTip text="A job = program number + part number. It links to the presets this commit updates or adds (or to the tool itself when no presets change), and shows up under each preset and in the tool's Jobs panel. Entered once — carried to the next tool in this sync." />
+        </label>
+        {jobEnabled ? (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              className="field-input font-mono"
+              style={{ maxWidth: 160 }}
+              placeholder="Program #"
+              value={programNumber}
+              onChange={e => setProgramNumber(e.target.value)}
+            />
+            <input
+              className="field-input font-mono"
+              style={{ maxWidth: 200 }}
+              placeholder="Part #"
+              value={partNumber}
+              onChange={e => setPartNumber(e.target.value)}
+            />
+          </div>
+        ) : (
+          <div className="text-sub text-xs">Connect Google Drive to link jobs (job links are stored in the shop metadata).</div>
+        )}
+        {jobIncomplete && (
+          <div className="text-xs" style={{ color: 'var(--amber)', marginTop: 4 }}>
+            Fill both program # and part # (or clear both).
+          </div>
+        )}
       </div>
 
       <div className="field-group mb-20">
