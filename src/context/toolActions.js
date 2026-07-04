@@ -354,7 +354,11 @@ export function createToolActions(ctx) {
   // Merge selected job-tool fields back into a master tool with history tracking.
   // presetChanges: Array<{ masterPresetGuid, incomingPreset, selectedFields: Set }>
   // presetsToAdd:  Array<presetObject> — new presets to append
-  const mergeTool = async (masterTool, mergedFields, revisionNote, mergedBy, presetChanges = [], presetsToAdd = [], assemblyUpdate = null) => {
+  // jobLink: { job_id, label } | null — the job (program # + part #, resolved
+  //   to a jobs.json registry id by CommitStep) this sync came from. Linked to
+  //   every preset touched by this commit (updated in place or added); when the
+  //   commit touches NO presets, linked at tool level instead so it isn't lost.
+  const mergeTool = async (masterTool, mergedFields, revisionNote, mergedBy, presetChanges = [], presetsToAdd = [], assemblyUpdate = null, jobLink = null) => {
     dispatch({ type: 'SAVE_START' });
     try {
       const previousValues = {};
@@ -376,6 +380,7 @@ export function createToolActions(ctx) {
         ...(presetsToAdd.length > 0 ? {
           presets_added: presetsToAdd.map(p => p.name || 'Unnamed'),
         } : {}),
+        ...(jobLink ? { job_linked: jobLink.label || jobLink.job_id } : {}),
       };
       let updated = {
         ...masterTool,
@@ -388,15 +393,25 @@ export function createToolActions(ctx) {
 
       // Apply preset field patches and append new presets
       if (presetChanges.length > 0 || presetsToAdd.length > 0) {
+        // Presets touched by this commit — the ones a job link attaches to.
+        const touchedGuids = new Set([
+          ...presetChanges.filter(c => c.selectedFields.size > 0).map(c => c.masterPresetGuid),
+          ...presetsToAdd.map(p => p.guid),
+        ]);
+        const withJob = (p) => {
+          if (!jobLink || !touchedGuids.has(p.guid)) return p;
+          const ids = p.job_ids || [];
+          return ids.includes(jobLink.job_id) ? p : { ...p, job_ids: [...ids, jobLink.job_id] };
+        };
         const updatedPresets = (updated.presets || []).map(p => {
           const change = presetChanges.find(c => c.masterPresetGuid === p.guid);
-          if (!change || change.selectedFields.size === 0) return p;
+          if (!change || change.selectedFields.size === 0) return withJob(p);
           const patch = {};
           for (const f of change.selectedFields) patch[f] = change.incomingPreset[f];
-          return { ...p, ...patch };
+          return withJob({ ...p, ...patch });
         });
         for (const preset of presetsToAdd) {
-          updatedPresets.push({ ...preset }); // preserve incoming guid (used for assembly linking)
+          updatedPresets.push(withJob({ ...preset })); // preserve incoming guid (used for assembly linking)
         }
         updated.presets = updatedPresets;
         // Keep flat speed/feed fields in sync with first preset
@@ -411,6 +426,13 @@ export function createToolActions(ctx) {
           updated.feed_per_rev = p0.f_n     ?? updated.feed_per_rev;
           updated.cutting_speed = p0.v_c    ?? updated.cutting_speed;
         }
+      }
+
+      // A job link with no presets touched attaches at tool level — "this tool
+      // was used on job X" is still worth keeping when only flat fields synced.
+      if (jobLink && presetChanges.length === 0 && presetsToAdd.length === 0) {
+        const ids = updated.job_ids || [];
+        if (!ids.includes(jobLink.job_id)) updated.job_ids = [...ids, jobLink.job_id];
       }
 
       // Apply assembly create/link update (metadata only — included in the same write)

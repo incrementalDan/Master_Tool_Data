@@ -2110,6 +2110,79 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .preset-card-del { margin-left: auto; color: var(--text-sub); }
 .preset-card-del:hover { color: var(--red); }
 
+/* ── Preset job links (collapsed dropdown row above the card footer) ── */
+.preset-card-jobs {
+  border-top: 1px solid var(--border);
+}
+.preset-jobs-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 5px 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 10.5px;
+  color: var(--text-sub);
+  font-family: inherit;
+}
+.preset-jobs-toggle:hover { color: var(--text); }
+.preset-jobs-chev { margin-left: auto; transition: transform 0.15s ease; }
+.preset-jobs-chev.open { transform: rotate(180deg); }
+.preset-jobs-list {
+  padding: 0 10px 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.preset-jobs-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--text);
+}
+.preset-jobs-row .preset-jobs-del { margin-left: auto; color: var(--text-sub); padding: 0 2px; }
+.preset-jobs-row .preset-jobs-del:hover { color: var(--red); }
+.preset-jobs-add {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.preset-jobs-add .field-input {
+  flex: 1 1 90px;
+  min-width: 0;
+  font-size: 11px;
+  padding: 4px 6px;
+}
+
+/* ── Jobs / Where Used panel (ToolDetail) ── */
+.job-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+.job-row:last-of-type { border-bottom: none; }
+.job-row-scope {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+.job-add-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.job-add-row .field-input { flex: 1 1 110px; min-width: 0; }
+
 /* ── Material group separator (vertical divider with rotated label) ── */
 .preset-group-sep {
   align-self: stretch;

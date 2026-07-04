@@ -91,7 +91,14 @@ is fair — but the answer is an explicit user choice ("Update master preset" wi
 revision note + `previous_values` in merge history), not silence. **This is the #1
 functional bug against intent.**
 
-### 4.2 Presets have no provenance
+### 4.2 Presets have no provenance — **PARTIALLY ADDRESSED 2026-07-04**
+
+> **Status: job links shipped.** Presets (and tools) now link to jobs — shop-level
+> `jobs.json` registry records (program # + part #, stable UUIDs) — captured in
+> CommitStep during Sync Job, on preset cards, and in the ToolDetail "Jobs /
+> Where Used" panel. This is the *where* of provenance and the seed of the §6
+> cut-record entity + the future jobs page. Still open: `source`
+> (manufacturer/calculated/proven), `proven_at/by`, outcome notes.
 
 `preset_meta` stores `operation_type` and `machine_id` — nothing about *where a
 preset's numbers came from*. A preset seeded from a guess and a preset proven

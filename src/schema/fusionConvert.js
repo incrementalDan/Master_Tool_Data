@@ -143,11 +143,14 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
   const isTurning = TURNING_TYPES.has(toolType);
   const isMilling = !isHoleMaking && !isTurning && !isSpotDrill;
 
-  // operation_type is an app-only field encoded in the preset name + metadata.
-  // It must never be written into the Fusion JSON (Fusion validates strictly).
-  // stepdown/stepover are pulled out of `rest` so a disabled flag leaves NO
-  // leftover numeric key (Fusion omits the key entirely when disabled).
-  const { operation_type, stepdown: _sd, stepover: _so, ...rest } = p;
+  // operation_type, machine_id, and job_ids are app-only per-preset fields
+  // (stored in preset_meta in tool_metadata.json, overlaid by buildLogicalTool).
+  // They must never be written into the Fusion JSON (Fusion validates strictly)
+  // — every app-only field stamped onto in-memory presets MUST be pulled out of
+  // `rest` here, since the top-level isMetadataOnly guard only sweeps tool-level
+  // keys, not preset keys. stepdown/stepover are pulled out so a disabled flag
+  // leaves NO leftover numeric key (Fusion omits the key entirely when disabled).
+  const { operation_type, machine_id, job_ids, stepdown: _sd, stepover: _so, ...rest } = p;
 
   // Strip step flags from non-milling presets (native Fusion never writes them
   // there, and a flag with no numeric/expression triggers the three-way-sync
@@ -195,6 +198,36 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
   const presetExpr = { ...(p.expressions || {}) };
   if (!useStepdown) delete presetExpr.tool_stepdown;
   if (!useStepover) delete presetExpr.tool_stepover;
+  // When the flag is ON and the numeric value changed, the kept expression must
+  // change with it — otherwise Fusion re-derives the OLD number from the stale
+  // expression on next load and the edit silently reverts (same bug class as the
+  // flag flip above, from the value side). Rewrite only pure literal expressions
+  // (".018 in") by substituting the number and keeping the original unit suffix;
+  // a formula expression is left untouched (never guess at rewriting formulas),
+  // and an unchanged value keeps its expression byte-for-byte (round-trip audit).
+  const syncStepExpr = (key, num) => {
+    const s = presetExpr[key];
+    if (s == null || num == null) return;
+    if (!/^\s*-?\d*\.?\d+\s*[a-zA-Z]*\s*$/.test(String(s))) return;   // literal only
+    const cur = exprNum(s);
+    if (cur != null && Math.abs(cur - num) > 1e-9) {
+      presetExpr[key] = String(s).replace(/-?\d*\.?\d+/, String(num));
+    }
+  };
+  if (useStepdown) syncStepExpr('tool_stepdown', sdNum);
+  if (useStepover) syncStepExpr('tool_stepover', soNum);
+
+  // Coolant is a native+expression pair too: some native presets carry
+  // expressions.tool_coolant ("'flood tool'") mirroring the tool-coolant string.
+  // When the app changes the coolant (editor, merge update, or the
+  // 'flood and through tool' remap below), a present expression must follow —
+  // otherwise Fusion re-derives the old coolant on next load. Never added when
+  // absent; kept byte-for-byte when the value is unchanged.
+  const coolant = ({ 'flood and through tool': 'flood tool' }[p['tool-coolant']] ?? p['tool-coolant']) || (tscCapable ? 'tool' : 'flood');
+  if (presetExpr.tool_coolant != null) {
+    const curCoolant = String(presetExpr.tool_coolant).replace(/^'(.*)'$/, '$1');
+    if (curCoolant !== coolant) presetExpr.tool_coolant = `'${coolant}'`;
+  }
 
   // Base fields present for every tool category. `description` is only written
   // when the source preset has one — Fusion omits it on many native presets.
@@ -205,7 +238,7 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
     name: p.name || 'Default preset',
     material: { category, query: mat.query || '', 'use-hardness': mat['use-hardness'] || false },
     expressions: presetExpr,
-    'tool-coolant': ({ 'flood and through tool': 'flood tool' }[p['tool-coolant']] ?? p['tool-coolant']) || (tscCapable ? 'tool' : 'flood'),
+    'tool-coolant': coolant,
     n: p.n ?? 0,
     v_c: p.v_c ?? 0,
   };

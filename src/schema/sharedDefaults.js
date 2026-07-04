@@ -4,6 +4,12 @@
 
 import { genLocId } from '../utils/locationSystem.js';
 
+// jobs.json — the shop-wide jobs registry. A job = program number + part
+// number, with a stable UUID; presets/tools reference jobs by id (see
+// src/utils/jobs.js). Starts empty — jobs are created on first link (Sync Job
+// commit, preset editor, or the tool Jobs panel).
+export const DEFAULT_JOBS = { version: 1, jobs: [] };
+
 // ─── Material code systems ───────────────────────────────────────────────────
 // The material-classification standards we track a code for on each CAM preset
 // (and, via the vendor page, the standard a given manufacturer publishes). A
