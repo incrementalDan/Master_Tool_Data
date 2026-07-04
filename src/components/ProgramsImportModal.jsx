@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, UploadCloud, FileText, AlertTriangle, CheckCircle2, Hash } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { buildProgramsImport } from '../utils/programsImport.js';
+import { formatProgramNumber } from '../utils/programs.js';
 
 // One-time CSV import of the shop's existing program-number list into the
 // Program Number Manager. Reached from Settings. File → preview (counts,
@@ -98,11 +99,11 @@ export default function ProgramsImportModal({ onClose }) {
                   <div className="pn-import-stat"><span className="program-num-badge">{s.programsNew}</span> program{s.programsNew !== 1 ? 's' : ''} to import</div>
                   <div className="pn-import-stat"><strong>{s.partsNew}</strong> new part{s.partsNew !== 1 ? 's' : ''}{s.partsReused > 0 && <span className="text-sub"> · {s.partsReused} row{s.partsReused !== 1 ? 's' : ''} matched existing parts</span>}</div>
                   {s.autoAssigned.length > 0 && (
-                    <div className="pn-import-stat text-sub">{s.autoAssigned.length} blank number{s.autoAssigned.length !== 1 ? 's' : ''} auto-assigned (from {s.autoAssigned[0]})</div>
+                    <div className="pn-import-stat text-sub">{s.autoAssigned.length} blank number{s.autoAssigned.length !== 1 ? 's' : ''} auto-assigned (from {formatProgramNumber(s.autoAssigned[0])})</div>
                   )}
                   {s.duplicates.length > 0 && (
                     <div className="pn-import-stat" style={{ color: 'var(--amber)' }}>
-                      <AlertTriangle size={12} /> {s.duplicates.length} skipped — already in the app: {s.duplicates.slice(0, 8).map(d => d.program_number).join(', ')}{s.duplicates.length > 8 ? '…' : ''}
+                      <AlertTriangle size={12} /> {s.duplicates.length} skipped — already in the app: {s.duplicates.slice(0, 8).map(d => formatProgramNumber(d.program_number)).join(', ')}{s.duplicates.length > 8 ? '…' : ''}
                     </div>
                   )}
                   {s.errors.length > 0 && (

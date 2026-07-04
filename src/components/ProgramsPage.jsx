@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import {
-  INT_EXT, FIXTURING_OPTIONS, nextProgramNumber,
+  INT_EXT, FIXTURING_OPTIONS, nextProgramNumber, formatProgramNumber,
   partsOf, programsOf, programMaterial, alloyLabel, alloyOptions,
   machineOptions, isPalletMachine, customerNames,
 } from '../utils/programs.js';
@@ -287,7 +287,7 @@ function TableView({ jobsFile, materials, machines, alloys, canEdit, customers, 
     const q = filterText.trim().toLowerCase();
     if (q) {
       r = r.filter(x =>
-        String(x.program_number).includes(q) ||
+        formatProgramNumber(x.program_number).toLowerCase().includes(q) ||
         (x.part?.part_number || '').toLowerCase().includes(q) ||
         (x.part?.customer || '').toLowerCase().includes(q) ||
         (x.operation || '').toLowerCase().includes(q) ||
@@ -496,7 +496,7 @@ export default function ProgramsPage() {
         <div className="pn-header-right">
           <div className="pn-next">
             <span className="pn-next-label">Next #</span>
-            <span className="pn-next-num">{nextNum}</span>
+            <span className="pn-next-num">{formatProgramNumber(nextNum)}</span>
           </div>
           {canEdit && (
             <button className="btn btn-primary" onClick={() => setShowAdd(true)}>

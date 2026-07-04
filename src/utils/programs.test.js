@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   nextProgramNumber, newPart, newProgram, programMaterial, alloyLabel,
   customerColor, machineOptions, isPalletMachine, PROGRAM_NUMBER_START,
-  searchPrograms,
+  searchPrograms, formatProgramNumber,
 } from './programs.js';
 
 const file = {
@@ -121,5 +121,29 @@ describe('searchPrograms (Sync-Job picker)', () => {
     const r = searchPrograms(jf, '1110');   // exact program g3
     expect(r[0].program.id).toBe('g3');
     expect(r[0].exactProgram).toBe(true);
+  });
+
+  it('tolerates the primary "O" reference form for an exact number search', () => {
+    const r = searchPrograms(jf, 'O1108');
+    expect(r).toHaveLength(1);
+    expect(r[0].program.id).toBe('g1');
+    expect(r[0].exactProgram).toBe(true);
+    expect(searchPrograms(jf, 'o1110')[0].program.id).toBe('g3');
+  });
+});
+
+describe('formatProgramNumber (primary "O" reference form)', () => {
+  it('prefixes a plain number', () => {
+    expect(formatProgramNumber(1108)).toBe('O1108');
+    expect(formatProgramNumber('2352')).toBe('O2352');
+  });
+  it('is idempotent on an already-prefixed legacy value, normalizing case', () => {
+    expect(formatProgramNumber('O1042')).toBe('O1042');
+    expect(formatProgramNumber('o1042')).toBe('O1042');
+  });
+  it('returns empty string for nullish/blank input', () => {
+    expect(formatProgramNumber(null)).toBe('');
+    expect(formatProgramNumber(undefined)).toBe('');
+    expect(formatProgramNumber('')).toBe('');
   });
 });

@@ -1,7 +1,7 @@
 // Shared presentational pieces + select-state helpers for the Program Number
 // Manager, used by ProgramsPage, AddProgramModal, and JobProgramPicker so the
 // "add program" UI and the row chrome stay identical everywhere.
-import { FIXTURING_OPTIONS, customerColor } from '../utils/programs.js';
+import { FIXTURING_OPTIONS, customerColor, formatProgramNumber } from '../utils/programs.js';
 
 export function CustomerBadge({ customer }) {
   const color = customerColor(customer);
@@ -18,7 +18,7 @@ export function TypePill({ isFixture, internalExternal }) {
 }
 
 export function ProgramNumBadge({ n }) {
-  return <span className="program-num-badge">{n}</span>;
+  return <span className="program-num-badge">{formatProgramNumber(n)}</span>;
 }
 
 // The "Fixture OP?" slider switch — label text is exactly that, per spec.

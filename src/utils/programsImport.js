@@ -146,7 +146,10 @@ export function buildProgramsImport(csvText, { jobsFile = {}, shopSettings = {},
   // row states explicitly: explicit numbers first, blanks after.
   const explicit = [], blanks = [];
   for (const row of rows) {
-    const rawNum = String(row.program_number ?? '').trim();
+    // Strip a leading "O" (the shop's primary program-number reference form,
+    // e.g. "O1108") — the underlying value stored/compared is always the
+    // plain integer.
+    const rawNum = String(row.program_number ?? '').trim().replace(/^o(?=\d)/i, '');
     if (rawNum === '') { blanks.push(row); continue; }
     const n = Number(rawNum);
     if (!Number.isInteger(n)) {

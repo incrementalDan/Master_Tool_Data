@@ -9,6 +9,7 @@
 // edits one central record and every reference follows. SQLite-ready: one jobs
 // table, join tables for the references.
 import { generateId } from '../schema/identity.js';
+import { formatProgramNumber } from './programs.js';
 
 // Identity: a job is uniquely the (program_number, part_number) pair,
 // case-insensitive and whitespace-trimmed.
@@ -42,10 +43,14 @@ export function newJob(programNumber, partNumber, createdBy = '', programId = nu
   };
 }
 
-// Display label: "O1042 · PN-1234" (whichever halves are present).
+// Display label: "O1042 · PN-1234" (whichever halves are present). The
+// program number is shown in its primary "O"-prefixed reference form —
+// formatProgramNumber is idempotent, so a legacy stored value that's already
+// prefixed (typed by hand before the Program Number Manager existed) isn't
+// double-prefixed.
 export function jobLabel(job) {
   if (!job) return '';
-  return [job.program_number, job.part_number].filter(Boolean).join(' · ');
+  return [formatProgramNumber(job.program_number), job.part_number].filter(Boolean).join(' · ');
 }
 
 // Resolve a tool's job links into display rows for the "Jobs / Where Used"
