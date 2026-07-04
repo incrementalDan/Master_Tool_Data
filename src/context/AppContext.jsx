@@ -316,12 +316,21 @@ export function AppProvider({ children }) {
   // Resolve a (program #, part #) pair to its job record, creating it in the
   // registry if new. Identity is the case-insensitive trimmed pair (jobKey) —
   // the same job entered on five tools stays ONE record; references are by id.
+  // `programId` (optional) joins the job to a Program Number Manager record; an
+  // existing loose link is enriched with it the first time we learn it.
   // Optimistic + debounced Drive write via saveJobs; demo mode stays in-memory.
-  const findOrCreateJob = useCallback((programNumber, partNumber, createdBy = '') => {
+  const findOrCreateJob = useCallback((programNumber, partNumber, createdBy = '', programId = null) => {
     const file = jobsRef.current || DEFAULT_JOBS;
     const existing = findJob(file, programNumber, partNumber);
-    if (existing) return existing;
-    const job = newJob(programNumber, partNumber, createdBy);
+    if (existing) {
+      if (programId && !existing.program_id) {
+        const enriched = { ...existing, program_id: programId };
+        Promise.resolve(saveJobs({ ...file, jobs: file.jobs.map(j => j.id === existing.id ? enriched : j) })).catch(() => {});
+        return enriched;
+      }
+      return existing;
+    }
+    const job = newJob(programNumber, partNumber, createdBy, programId);
     // saveJobs rejects when Drive isn't connected (callers gate the UI on that,
     // but never let the rejection escape as an unhandled promise).
     Promise.resolve(saveJobs({ ...file, jobs: [...(file.jobs || []), job] })).catch(() => {});

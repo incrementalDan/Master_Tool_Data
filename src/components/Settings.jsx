@@ -12,6 +12,7 @@ import LocationSystemSettings from './LocationSystemSettings.jsx';
 import DescRenameModal from './DescRenameModal.jsx';
 import InfoTip from './InfoTip.jsx';
 import ImportPhotosModal from './ImportPhotosModal.jsx';
+import ProgramsImportModal from './ProgramsImportModal.jsx';
 import { exportFullLibrary } from '../utils/proShopExport.js';
 
 const ID_MODES = [
@@ -48,6 +49,7 @@ export default function Settings() {
   const [showToolPicker, setShowToolPicker] = useState(false);
   const [showHolderPicker, setShowHolderPicker] = useState(false);
   const [showDescRename, setShowDescRename] = useState(false);
+  const [showProgramsImport, setShowProgramsImport] = useState(false);
   const [showPhotos, setShowPhotos] = useState(false);
   const [defaultUnit, setDefaultUnitState] = useState(getDefaultUnit());
 
@@ -1053,6 +1055,30 @@ export default function Settings() {
           <Wand2 size={13} /> Review &amp; rename descriptions…
         </button>
         {showDescRename && <DescRenameModal onClose={() => setShowDescRename(false)} />}
+      </div>
+
+      {/* Program list import — one-time CSV load into the Program Number
+          Manager (/programs). Writes to jobs.json, so it needs Drive/demo. */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Hash size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Import Program List</h3>
+          <InfoTip text="One-time CSV import of your existing program-number list into the Programs page. Columns: Program #, Machine, Fixturing, Internal or external, internal Part #, Rev, Customer, Description, OP #, Fixture Y/N. Existing numbers are skipped; the app assigns the next available number to any blank." alignRight />
+        </div>
+        <p className="text-sub text-sm mb-16">
+          Bulk-load the shop's current program list (from the Google Sheet) into the
+          Program Numbers page. Rows sharing a Part # + Rev group into one part;
+          program numbers already in the app are skipped.
+        </p>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => setShowProgramsImport(true)}
+          disabled={(!googleAuthenticated && !demoMode) || dirty}
+          title={dirty ? 'Save or cancel your changes first' : (!googleAuthenticated && !demoMode ? 'Connect Google Drive first' : undefined)}
+        >
+          <Hash size={13} /> Import program list CSV…
+        </button>
+        {showProgramsImport && <ProgramsImportModal onClose={() => setShowProgramsImport(false)} />}
       </div>
 
       {/* Tool ID System — how each tool's displayed ID is generated/labelled.
