@@ -17,7 +17,10 @@ import JobsSection from './JobsSection.jsx';
 import AttachmentUploadModal from './AttachmentUploadModal.jsx';
 import PhotoSlot from './PhotoSlot.jsx';
 import PairingSections, { PairingSetupPanel } from './PairingSections.jsx';
-import { INSERT_FAMILY_BY_ID, INSERT_CAPABLE_TYPES } from '../schema/insertFamilies.js';
+import {
+  INSERT_FAMILY_BY_ID, INSERT_CAPABLE_TYPES, ALWAYS_INSERT_TYPES,
+  autoInsertFamily, newPairing,
+} from '../schema/insertFamilies.js';
 import InfoTip from './InfoTip.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS, validateGeometry, fusionToolToInternal, readOohFromFusion } from '../schema/toolSchema.js';
@@ -189,11 +192,22 @@ export default function ToolDetail() {
 
   // Insert-style pairing (holder body + insert — see insertFamilies.js). When
   // paired, the component groups own Geometry/Photo/Location/Purchasing per
-  // component; the tool-level Photo/Location/Purchasing panels are hidden and
-  // the Assemblies section only shows for tier-3 (milling) families.
-  const pairing = tool.pairing || null;
+  // component; the Assemblies section only shows for tier-3 (milling) families.
+  //
+  // Always-insert tool types (face mill / turning general / boring head) open
+  // the paired view by DEFAULT with a derived family, before any pairing is
+  // stored — so the operator doesn't have to hunt for a setup panel. That
+  // default (`autoInsert`) pairing isn't written until they link a component.
+  const storedPairing = tool.pairing || null;
+  const autoInsert = !storedPairing && ALWAYS_INSERT_TYPES.has(tool.tool_type);
+  const pairing = storedPairing || (autoInsert ? newPairing(autoInsertFamily(tool.tool_type)) : null);
   const pairingFamily = pairing ? INSERT_FAMILY_BY_ID[pairing.family] : null;
   const showAssemblies = !pairing || !!pairingFamily?.hasTier3Assembly;
+  // The tool-level Photo/Location/Purchasing panels hide only once data has
+  // actually started moving onto a component — so an existing insert tool's
+  // tool-level data stays visible during setup, not the instant the paired
+  // view appears.
+  const hasComponents = !!(pairing && (pairing.holder_component_id || pairing.insert_component_id));
   const sectionSave = async (updatedTool) => {
     try { await saveTool(updatedTool); }
     catch { /* toast handled in context */ }
@@ -380,7 +394,10 @@ export default function ToolDetail() {
             Purchasing). Everything below stays shared. */}
         {pairing && (
           <PairingSections
+            key={tool.id}
             tool={tool}
+            pairing={pairing}
+            stored={!!storedPairing}
             onSaveTool={async (updatedTool) => { await saveTool(updatedTool); }}
           />
         )}
@@ -478,10 +495,12 @@ export default function ToolDetail() {
           </div>
 
           <div className="detail-layout-right">
-            {/* For paired (insert-style) tools the Photo / Location / Purchasing
+            {/* Once a component is linked, the Photo / Location / Purchasing
                 panels live per-component in the groups above — the pairing is a
-                relationship, not a physical object with its own drawer. */}
-            {!pairing && (
+                relationship, not a physical object with its own drawer. Until
+                then (including an always-insert tool's default paired view) the
+                tool-level panels stay so existing data isn't hidden mid-setup. */}
+            {!hasComponents && (
               <>
                 <Section title="Photo" icon={Camera}>
                   <PhotoSlot

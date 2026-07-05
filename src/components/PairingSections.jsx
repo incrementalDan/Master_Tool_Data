@@ -32,23 +32,45 @@ const ROLE_ACCENT = {
 };
 const ROLE_ICON = { holder_body: Box, insert: Diamond };
 
-export default function PairingSections({ tool, onSaveTool }) {
+export default function PairingSections({ tool, pairing: incomingPairing, stored, onSaveTool }) {
   const {
     components, shopSettings, isSaving, saveComponent, assignComponentLocation,
     uploadComponentPhoto, deleteComponentPhoto, googleAuthenticated,
   } = useApp();
-  const pairing = tool.pairing;
-  const familyDef = INSERT_FAMILY_BY_ID[pairing.family] || null;
+  // `incomingPairing` may be UNSAVED — for always-insert tool types the paired
+  // view opens by default with a derived family before anything is stored (see
+  // ToolDetail). `stored` tells the two apart. While unsaved, the family is a
+  // local draft the user can correct via the pairing-bar dropdown; it's
+  // persisted together with the first linked component.
+  const [draftFamily, setDraftFamily] = useState(incomingPairing.family);
+  const family = stored ? incomingPairing.family : draftFamily;
+  const pairing = { ...incomingPairing, family };
+  const familyDef = INSERT_FAMILY_BY_ID[family] || null;
   const compList = components?.components || [];
   const holderComp = componentById(compList, pairing.holder_component_id);
   const insertComp = componentById(compList, pairing.insert_component_id);
+  // The family is only editable until a component is linked — after that it's
+  // baked into the combined ID / assembly number semantics.
+  const familyEditable = !holderComp && !insertComp;
   const asmMode = shopSettings?.assembly_id_system?.mode || 'auto';
 
   const [confirmUnlink, setConfirmUnlink] = useState(false);
   const [rtaDraft, setRtaDraft] = useState(null); // null = not editing
 
+  // Linking a component persists the pairing (with the current draft family) —
+  // this is the moment an unsaved auto-pairing becomes a real stored one.
   const setComponent = async (roleKey, comp) => {
     await onSaveTool({ ...tool, pairing: { ...pairing, [roleKey]: comp.id } });
+  };
+
+  const changeFamily = async (f) => {
+    if (stored) {
+      // A stored-but-empty pairing (no components yet) — persist the change.
+      try { await onSaveTool({ ...tool, pairing: { ...pairing, family: f } }); }
+      catch { /* toast handled in context */ }
+    } else {
+      setDraftFamily(f); // unsaved — stays local until the first component links
+    }
   };
 
   // Pairing-level assembly number: turning families only (tier-3 families keep
@@ -65,8 +87,24 @@ export default function PairingSections({ tool, onSaveTool }) {
       {/* ── Pairing bar: family, assembly / RTA number, combined ProShop ID ── */}
       <div className="pairing-bar">
         <Link2 size={14} style={{ color: 'var(--blue)', flexShrink: 0 }} />
-        <span className="pairing-family-pill">{familyDef?.label || pairing.family}</span>
+        {familyEditable ? (
+          <select
+            className="field-input pairing-family-select"
+            value={family}
+            onChange={e => changeFamily(e.target.value)}
+            title="Insert-tool family — pick the one that matches this holder"
+          >
+            {INSERT_FAMILIES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+          </select>
+        ) : (
+          <span className="pairing-family-pill">{familyDef?.label || family}</span>
+        )}
         <InfoTip text="An insert-style tool: a holder body and an insert are separate physical tools (each with its own ID, location and purchasing) paired into the one entity Fusion sees. The sections below show each component; everything else on this page describes the combined tool." />
+        {!stored && (
+          <span className="text-sub" style={{ fontSize: 12 }}>
+            Link the holder body and insert below to finish setting this up.
+          </span>
+        )}
 
         {pairAsm && (
           <span className="pairing-asm-badge font-mono" title="Assembly ID — holder body / insert">
@@ -124,26 +162,30 @@ export default function PairingSections({ tool, onSaveTool }) {
           </span>
         )}
 
-        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          {!confirmUnlink ? (
-            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, color: 'var(--text-sub)' }}
-              title="Remove the holder body + insert pairing (component records are kept)"
-              onClick={() => setConfirmUnlink(true)}>
-              <Unlink size={12} /> Unpair
-            </button>
-          ) : (
-            <>
-              <span className="text-sub" style={{ fontSize: 12 }}>Remove pairing?</span>
-              <button className="btn btn-danger btn-sm" disabled={isSaving}
-                onClick={async () => {
-                  try { await onSaveTool({ ...tool, pairing: null }); }
-                  catch { /* toast handled in context */ }
-                  setConfirmUnlink(false);
-                }}>Remove</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setConfirmUnlink(false)}>Keep</button>
-            </>
-          )}
-        </span>
+        {/* Unpair only removes a STORED pairing. An unsaved auto-pairing (an
+            always-insert type's default view) has nothing to remove. */}
+        {stored && (
+          <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {!confirmUnlink ? (
+              <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, color: 'var(--text-sub)' }}
+                title="Remove the holder body + insert pairing (component records are kept)"
+                onClick={() => setConfirmUnlink(true)}>
+                <Unlink size={12} /> Unpair
+              </button>
+            ) : (
+              <>
+                <span className="text-sub" style={{ fontSize: 12 }}>Remove pairing?</span>
+                <button className="btn btn-danger btn-sm" disabled={isSaving}
+                  onClick={async () => {
+                    try { await onSaveTool({ ...tool, pairing: null }); }
+                    catch { /* toast handled in context */ }
+                    setConfirmUnlink(false);
+                  }}>Remove</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setConfirmUnlink(false)}>Keep</button>
+              </>
+            )}
+          </span>
+        )}
       </div>
 
       {/* ── The two component groups ── */}
