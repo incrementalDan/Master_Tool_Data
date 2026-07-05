@@ -39,6 +39,7 @@ export const SHARED_FILES = {
   vendorRegistry:  { name: 'vendor_registry.json', cacheKey: 'drive_vendor_registry_file_id' },
   shopSettings:    { name: 'shop_settings.json',   cacheKey: 'drive_shop_settings_file_id' },
   jobs:            { name: 'jobs.json',            cacheKey: 'drive_jobs_file_id' },
+  components:      { name: 'tool_components.json', cacheKey: 'drive_tool_components_file_id' },
 };
 
 // Use localStorage-cached ID first (set after auto-create), then env var.

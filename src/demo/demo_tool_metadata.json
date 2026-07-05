@@ -652,6 +652,12 @@
     "coating": "None",
     "cabinet": "5",
     "drawer": "D",
+    "pairing": {
+      "family": "boring_bar",
+      "holder_component_id": "3f6c2a10-9d4e-4b7a-8c11-demo0holder1",
+      "insert_component_id": "5d8e4b21-7f6a-4c3d-b912-demo0insert1",
+      "rta_number": ""
+    },
     "purchasing": {
       "manufacturers": [
         {

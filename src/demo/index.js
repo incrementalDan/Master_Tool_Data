@@ -16,6 +16,7 @@ import demoMaterials from './demo_materials.json';
 import demoVendorRegistry from './demo_vendor_registry.json';
 import demoShopSettings from './demo_shop_settings.json';
 import demoJobs from './demo_jobs.json';
+import demoComponents from './demo_components.json';
 
 // True when the current URL requests demo mode (`?demo=true`). HashRouter puts
 // the route after `#`, so the query lives in window.location.search as usual.
@@ -43,5 +44,6 @@ export function getDemoData() {
     vendorRegistry: demoVendorRegistry,
     shopSettings: demoShopSettings,
     jobs: demoJobs,
+    components: demoComponents,
   };
 }

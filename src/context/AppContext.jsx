@@ -14,7 +14,7 @@ import * as aps from '../services/apsService.js';
 import { groupByTrackingId, buildLogicalTool, combineToolsByToolId } from '../schema/toolSchema.js';
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
-import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS } from '../schema/sharedDefaults.js';
+import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry } from '../schema/vendorRegistry.js';
 import { findJob, newJob } from '../utils/jobs.js';
 import { setDefaultUnit } from '../utils/units.js';
@@ -28,6 +28,7 @@ import {
 import { createToolActions } from './toolActions.js';
 import { createLibraryOps } from './libraryOps.js';
 import { createAttachmentActions } from './attachmentActions.js';
+import { createComponentActions } from './componentActions.js';
 
 export { SETUP_STEPS, defaultToolLibraryId };
 
@@ -54,6 +55,7 @@ export function AppProvider({ children }) {
   const shopSettingsRef = useRef(state.shopSettings);
   const materialsRef = useRef(state.materials);
   const jobsRef = useRef(state.jobs);
+  const componentsRef = useRef(state.components);
   // Pending debounced shared-Drive-file writes, keyed by file key →
   // { timer, write(keepalive) }. Lets typing coalesce into one write and lets
   // flushSharedWrites fire the latest pending write early on page hide/close.
@@ -78,6 +80,7 @@ export function AppProvider({ children }) {
   shopSettingsRef.current = state.shopSettings;
   materialsRef.current = state.materials;
   jobsRef.current = state.jobs;
+  componentsRef.current = state.components;
 
   // Tracks whether we've already seeded setup-progress flags for an established
   // library this session — seeding should run at most once, and only when no
@@ -249,6 +252,7 @@ export function AppProvider({ children }) {
       const payload = key === 'shopSettings' ? shopSettingsRef.current
         : key === 'materials' ? materialsRef.current
         : key === 'jobs' ? jobsRef.current
+        : key === 'components' ? componentsRef.current
         : fallbackData;
       return driveService.saveSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, payload, { keepalive })
         .catch(err => {
@@ -284,6 +288,7 @@ export function AppProvider({ children }) {
     const stateKey = key === 'shopSettings' ? 'shopSettings'
       : key === 'vendorRegistry' ? 'vendorRegistry'
       : key === 'jobs' ? 'jobs'
+      : key === 'components' ? 'components'
       : 'materials';
     // Demo mode: update in-memory state only (no Drive write, no Google guard) so
     // the sandbox can edit shop settings / materials / vendors — lost on refresh.
@@ -312,6 +317,8 @@ export function AppProvider({ children }) {
     saveSharedFile('shopSettings', shopSettings, 'SET_SHOP_SETTINGS'), [saveSharedFile]);
   const saveJobs = useCallback((jobs) =>
     saveSharedFile('jobs', jobs, 'SET_JOBS'), [saveSharedFile]);
+  const saveComponents = useCallback((components) =>
+    saveSharedFile('components', components, 'SET_COMPONENTS'), [saveSharedFile]);
 
   // Resolve a (program #, part #) pair to its job record, creating it in the
   // registry if new. Identity is the case-insensitive trimmed pair (jobKey) —
@@ -551,7 +558,7 @@ export function AppProvider({ children }) {
   // downloadFusionList/uploadFusionList make every save path fail gracefully
   // (the "Demo Mode — changes are not saved" banner sets the expectation).
   const enterDemoMode = useCallback(() => {
-    const { fusionList, metaList, holders, materials, vendorRegistry, shopSettings, jobs } = getDemoData();
+    const { fusionList, metaList, holders, materials, vendorRegistry, shopSettings, jobs, components } = getDemoData();
     // Build logical tools through the exact same pipeline as a live load.
     const metaByTracking = new Map(metaList.map(m => [m.id, m]));
     const { groups, untracked } = groupByTrackingId(fusionList);
@@ -568,7 +575,7 @@ export function AppProvider({ children }) {
     setActiveVendorRegistry(vendorRegistry);
     if (shopSettings?.default_units) setDefaultUnit(shopSettings.default_units);
 
-    dispatch({ type: 'ENTER_DEMO_MODE', tools, holders: taggedHolders, materials, vendorRegistry, shopSettings, jobs });
+    dispatch({ type: 'ENTER_DEMO_MODE', tools, holders: taggedHolders, materials, vendorRegistry, shopSettings, jobs, components });
   }, []);
 
   const exitDemoMode = useCallback(() => {
@@ -594,6 +601,9 @@ export function AppProvider({ children }) {
     dispatch({ type: 'LOAD_START' });
     try {
       let metaList = [];
+      // Component records (holder body / insert) — refreshed from Drive below;
+      // falls back to whatever is already in state (APS-only sessions).
+      let componentsFile = componentsRef.current;
       // Resolve the registry FIRST (multi-library needs to know which libraries to
       // download before downloading). When Drive is connected, shop_settings.json
       // is the shared source of truth; otherwise we fall back to the registry
@@ -609,14 +619,16 @@ export function AppProvider({ children }) {
           driveService.loadOrCreateSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, def)
             .catch(e => { if (e.code === 'TOKEN_EXPIRED') throw e; return def; });
         try {
-          const [meta, materials, vendorRegistry, shopSettings, jobs] = await Promise.all([
+          const [meta, materials, vendorRegistry, shopSettings, jobs, components] = await Promise.all([
             driveService.loadMetadata(),
             sharedSafe('materials', DEFAULT_MATERIALS),
             sharedSafe('vendorRegistry', DEFAULT_VENDOR_REGISTRY),
             sharedSafe('shopSettings', DEFAULT_SHOP_SETTINGS),
             sharedSafe('jobs', DEFAULT_JOBS),
+            sharedSafe('components', DEFAULT_COMPONENTS),
           ]);
           metaList = meta;
+          componentsFile = components;
           setActiveVendorRegistry(vendorRegistry);
           // shop_settings.json is the source of truth for the default unit —
           // mirror it into the localStorage cache the pure units helper reads.
@@ -634,7 +646,7 @@ export function AppProvider({ children }) {
           }
           effectiveShop = ss;
           saveRegistryMirror(ss);
-          dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings: ss, jobs });
+          dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings: ss, jobs, components });
           dispatch({ type: 'SET_LIBRARIES', shopSettings: ss }); // sync pointers
         } catch (err) {
           if (err.code === 'TOKEN_EXPIRED') {
@@ -725,7 +737,7 @@ export function AppProvider({ children }) {
 
       // Assembly ID System: fill auto-mode asm_number in-memory for any assembly
       // missing one (deterministic; persisted lazily on the tool's next save).
-      const finalTools = backfillAsmNumbers(tools, effectiveShop);
+      const finalTools = backfillAsmNumbers(tools, effectiveShop, componentsFile);
 
       dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize, normalizeCount: untrackedCount });
       // Load every holder library alongside tools (non-critical — failure of one
@@ -748,7 +760,7 @@ export function AppProvider({ children }) {
     dispatch, notify,
     downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary,
     saveLocationConfig,
-    toolsRef, holdersRef, shopSettingsRef, googleRef,
+    toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef,
   }), [notify, downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary, saveLocationConfig]);
 
   const libraryOps = useMemo(() => createLibraryOps({
@@ -762,6 +774,10 @@ export function AppProvider({ children }) {
     writeLogicalTool: toolActions.writeLogicalTool,
     toolsRef, googleRef,
   }), [notify, markSetupStepInSettings, toolActions]);
+
+  const componentActions = useMemo(() => createComponentActions({
+    dispatch, notify, googleRef, componentsRef, saveComponents,
+  }), [notify, saveComponents]);
 
   const clearError = useCallback(() => dispatch({ type: 'CLEAR_ERROR' }), []);
 
@@ -779,6 +795,7 @@ export function AppProvider({ children }) {
       saveVendorRegistry,
       saveShopSettings,
       saveJobs,
+      saveComponents,
       findOrCreateJob,
       saveLocationConfig,
       markSetupStep,
@@ -815,6 +832,8 @@ export function AppProvider({ children }) {
       ...libraryOps,
       // Photos / attachments / ProShop photo import (attachmentActions.js)
       ...attachmentActions,
+      // Holder body / insert component records (componentActions.js)
+      ...componentActions,
       clearError,
       notify,
       dismissToast,

@@ -10,6 +10,13 @@ import { genLocId } from '../utils/locationSystem.js';
 // commit, preset editor, or the tool Jobs panel).
 export const DEFAULT_JOBS = { version: 1, jobs: [] };
 
+// tool_components.json — holder body / insert component records for
+// insert-style tools (see src/schema/insertFamilies.js). Each component is a
+// stable-UUID record with the tool-record essentials (tool_id, location,
+// purchasing, photo) but NO Fusion entry — Fusion sees one entity per pairing.
+// Starts empty — components are created inline from the pairing picker.
+export const DEFAULT_COMPONENTS = { version: 1, components: [] };
+
 // ─── Material code systems ───────────────────────────────────────────────────
 // The material-classification standards we track a code for on each CAM preset
 // (and, via the vendor page, the standard a given manufacturer publishes). A
