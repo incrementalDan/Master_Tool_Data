@@ -2257,6 +2257,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .pn-op-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 3px 0; }
 .pn-op-desc { font-style: italic; }
 .pn-op-edit-btn { margin-left: auto; }
+.pn-op-delete-confirm { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 
 /* Inline edit blocks (amber-tinted, like the prototype's edit state) */
 .pn-part-edit, .pn-op-edit {

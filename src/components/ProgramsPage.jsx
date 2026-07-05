@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  Plus, X, Check, Search, ChevronDown, ChevronRight, Pencil,
+  Plus, X, Check, Search, ChevronDown, ChevronRight, Pencil, Trash2,
   ArrowUp, ArrowDown, ArrowUpDown, LayoutGrid, Table2, Hash,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
@@ -168,9 +168,10 @@ function ProgramEditForm({ draft, setDraft, machines, alloys, onSave, onCancel }
   );
 }
 
-function OperationRow({ program, part, materials, machines, alloys, canEdit, onUpdateProgram }) {
+function OperationRow({ program, part, materials, machines, alloys, canEdit, onUpdateProgram, onDeleteProgram }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   if (editing) {
     return (
@@ -195,15 +196,28 @@ function OperationRow({ program, part, materials, machines, alloys, canEdit, onU
       )}
       {program.description && <span className="text-xs text-sub pn-op-desc">{program.description}</span>}
       {canEdit && (
-        <span className="icon-btn pn-op-edit-btn" title="Edit operation" onClick={() => { setDraft(programDraftOf(program)); setEditing(true); }}>
-          <Pencil size={12} />
-        </span>
+        confirmDelete ? (
+          <span className="pn-op-delete-confirm">
+            <span className="text-xs" style={{ color: 'var(--red)' }}>Delete {formatProgramNumber(program.program_number)}?</span>
+            <button type="button" className="btn btn-danger btn-sm" onClick={() => onDeleteProgram(program.id)}>Delete</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(false)}>Cancel</button>
+          </span>
+        ) : (
+          <>
+            <span className="icon-btn pn-op-edit-btn" title="Edit operation" onClick={() => { setDraft(programDraftOf(program)); setEditing(true); }}>
+              <Pencil size={12} />
+            </span>
+            <span className="icon-btn" title="Delete program" style={{ color: 'var(--red)' }} onClick={() => setConfirmDelete(true)}>
+              <Trash2 size={12} />
+            </span>
+          </>
+        )
       )}
     </div>
   );
 }
 
-function GroupedView({ jobsFile, materials, machines, alloys, canEdit, customers, expanded, onToggle, onUpdatePart, onUpdateProgram }) {
+function GroupedView({ jobsFile, materials, machines, alloys, canEdit, customers, expanded, onToggle, onUpdatePart, onUpdateProgram, onDeleteProgram }) {
   const parts = partsOf(jobsFile);
   if (parts.length === 0) {
     return <div className="pn-empty">No parts yet — click <strong>Add program</strong> to create the first one.</div>;
@@ -233,7 +247,8 @@ function GroupedView({ jobsFile, materials, machines, alloys, canEdit, customers
                     <div className="pn-op-label">{formatOperation(op)}</div>
                     {ps.map(p => (
                       <OperationRow key={p.id} program={p} part={part} materials={materials}
-                        machines={machines} alloys={alloys} canEdit={canEdit} onUpdateProgram={onUpdateProgram} />
+                        machines={machines} alloys={alloys} canEdit={canEdit} onUpdateProgram={onUpdateProgram}
+                        onDeleteProgram={onDeleteProgram} />
                     ))}
                   </div>
                 ))}
@@ -264,7 +279,7 @@ const COLUMNS = [
   { key: 'pallet', label: 'Pallet' },
 ];
 
-function TableView({ jobsFile, materials, machines, alloys, canEdit, customers, onUpdatePart, onUpdateProgram }) {
+function TableView({ jobsFile, materials, machines, alloys, canEdit, customers, onUpdatePart, onUpdateProgram, onDeleteProgram }) {
   const [filterText, setFilterText] = useState('');
   const [filterMachine, setFilterMachine] = useState('All');
   const [filterType, setFilterType] = useState('All');
@@ -272,6 +287,7 @@ function TableView({ jobsFile, materials, machines, alloys, canEdit, customers, 
   const [sortDir, setSortDir] = useState('desc');
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState(null);
+  const [deleteId, setDeleteId] = useState(null);
 
   const rows = useMemo(() => {
     const byId = new Map(partsOf(jobsFile).map(p => [p.id, p]));
@@ -369,7 +385,7 @@ function TableView({ jobsFile, materials, machines, alloys, canEdit, customers, 
         <table className="pn-table">
           <thead>
             <tr>
-              <th style={{ width: 30 }} />
+              <th style={{ width: 56 }} />
               {COLUMNS.map(col => (
                 <th key={col.key} onClick={() => onSort(col.key)}>
                   <span>
@@ -409,11 +425,26 @@ function TableView({ jobsFile, materials, machines, alloys, canEdit, customers, 
                     />
                   </td>
                 </tr>
+              ) : deleteId === row.id ? (
+                <tr key={row.id} className="pn-row-editing">
+                  <td colSpan={COLUMNS.length + 1}>
+                    <div className="flex items-center gap-8">
+                      <span className="text-sm" style={{ color: 'var(--red)' }}>
+                        Delete program {formatProgramNumber(row.program_number)}? This can't be undone.
+                      </span>
+                      <button className="btn btn-danger btn-sm" onClick={() => { onDeleteProgram(row.id); setDeleteId(null); }}>Delete</button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => setDeleteId(null)}>Cancel</button>
+                    </div>
+                  </td>
+                </tr>
               ) : (
                 <tr key={row.id}>
                   <td>
                     {canEdit && (
-                      <span className="icon-btn" title="Edit row" onClick={() => startEdit(row)}><Pencil size={12} /></span>
+                      <span className="flex items-center" style={{ gap: 4 }}>
+                        <span className="icon-btn" title="Edit row" onClick={() => startEdit(row)}><Pencil size={12} /></span>
+                        <span className="icon-btn" title="Delete row" style={{ color: 'var(--red)' }} onClick={() => setDeleteId(row.id)}><Trash2 size={12} /></span>
+                      </span>
                     )}
                   </td>
                   <td><ProgramNumBadge n={row.program_number} /></td>
@@ -482,6 +513,17 @@ export default function ProgramsPage() {
     });
   };
 
+  // Deleting a program never renumbers anything else — "next #" is always
+  // computed live as max(existing) + 1 (nextProgramNumber), never stored. So
+  // removing a non-max entry leaves the max (and "next") untouched; removing
+  // the current highest entry naturally recomputes "next" down to reclaim it.
+  const deleteProgram = (id) => {
+    saveJobs({
+      ...jobsFile, version: 2,
+      programs: programsOf(jobsFile).filter(p => p.id !== id),
+    });
+  };
+
   const totalParts = partsOf(jobsFile).length;
   const totalPrograms = programsOf(jobsFile).length;
 
@@ -524,13 +566,13 @@ export default function ProgramsPage() {
           jobsFile={jobsFile} materials={materials} machines={machines} alloys={alloys}
           canEdit={canEdit} customers={customers}
           expanded={expanded} onToggle={toggleExpand}
-          onUpdatePart={updatePart} onUpdateProgram={updateProgram}
+          onUpdatePart={updatePart} onUpdateProgram={updateProgram} onDeleteProgram={deleteProgram}
         />
       ) : (
         <TableView
           jobsFile={jobsFile} materials={materials} machines={machines} alloys={alloys}
           canEdit={canEdit} customers={customers}
-          onUpdatePart={updatePart} onUpdateProgram={updateProgram}
+          onUpdatePart={updatePart} onUpdateProgram={updateProgram} onDeleteProgram={deleteProgram}
         />
       )}
 

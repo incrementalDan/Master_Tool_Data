@@ -27,6 +27,17 @@ describe('program number assignment', () => {
     expect(nextProgramNumber({ programs: [] })).toBe(PROGRAM_NUMBER_START);
     expect(nextProgramNumber({})).toBe(PROGRAM_NUMBER_START);
   });
+
+  it('deleting a program only changes "next" when the deleted one was the highest', () => {
+    // file has 1108 (prg1) and 1110 (prg2, the max) -> next is 1111.
+    // Deleting the non-max entry (1108) must leave "next" untouched.
+    const afterDeletingNonMax = { ...file, programs: file.programs.filter(p => p.id !== 'prg1') };
+    expect(nextProgramNumber(afterDeletingNonMax)).toBe(nextProgramNumber(file));
+    // Deleting the max entry (1110) must recompute "next" down.
+    const afterDeletingMax = { ...file, programs: file.programs.filter(p => p.id !== 'prg2') };
+    expect(nextProgramNumber(afterDeletingMax)).toBe(1109);
+    expect(nextProgramNumber(afterDeletingMax)).not.toBe(nextProgramNumber(file));
+  });
 });
 
 describe('material rules (specific alloy, derive for non-fixture)', () => {
