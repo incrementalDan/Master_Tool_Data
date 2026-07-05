@@ -4,21 +4,25 @@ import {
   splitCombinedProShopId, composeCombinedProShopId, ensureProShopPrefix,
   pairedAsmIdPart, pairingAsmNumber, newComponent, newPairing,
   componentById, defaultFamilyForType,
-  ALWAYS_INSERT_TYPES, autoInsertFamily,
+  ALWAYS_INSERT_TYPES, autoInsertFamily, defaultActivationFamily,
 } from './insertFamilies.js';
 
 describe('family list ↔ ProShop map', () => {
-  it('every family has a ProShop translation row', () => {
+  it('every syncable family has a ProShop translation row (generic is exempt)', () => {
     for (const fam of INSERT_FAMILIES) {
+      if (fam.id === 'generic_insert') {
+        expect(PROSHOP_FAMILY_MAP[fam.id]).toBeUndefined(); // no ProShop convention
+        continue;
+      }
       expect(PROSHOP_FAMILY_MAP[fam.id], fam.id).toBeTruthy();
       expect(PROSHOP_FAMILY_MAP[fam.id].holder_prefix).toBeTruthy();
       expect(PROSHOP_FAMILY_MAP[fam.id].insert_prefix).toBeTruthy();
     }
   });
 
-  it('only the milling families carry a tier-3 assembly', () => {
+  it('tier-3 families are the milling/indexable ones plus the generic catch-all', () => {
     const tier3 = INSERT_FAMILIES.filter(f => f.hasTier3Assembly).map(f => f.id);
-    expect(tier3.sort()).toEqual(['indexable_drill', 'milling_insert']);
+    expect(tier3.sort()).toEqual(['generic_insert', 'indexable_drill', 'milling_insert']);
   });
 
   it('defaultFamilyForType suggests by tool type', () => {
@@ -46,6 +50,28 @@ describe('always-insert auto view', () => {
     expect(INSERT_FAMILY_BY_ID['milling_insert'].hasTier3Assembly).toBe(true);
     expect(INSERT_FAMILY_BY_ID['boring_bar'].hasTier3Assembly).toBe(false);
     expect(INSERT_FAMILY_BY_ID['od_turning'].hasTier3Assembly).toBe(false);
+  });
+});
+
+describe('manual activation on any tool type', () => {
+  it('the generic catch-all family is tier-3 with no ProShop mapping', () => {
+    const generic = INSERT_FAMILY_BY_ID['generic_insert'];
+    expect(generic).toBeTruthy();
+    expect(generic.hasTier3Assembly).toBe(true);
+    expect(PROSHOP_FAMILY_MAP['generic_insert']).toBeUndefined();
+  });
+
+  it('composeCombinedProShopId returns "" for the generic family (no prefixes)', () => {
+    expect(composeCombinedProShopId('generic_insert', { tool_id: '10' }, { tool_id: '20' })).toBe('');
+  });
+
+  it('defaultActivationFamily picks the natural family, else the generic catch-all', () => {
+    expect(defaultActivationFamily('face mill')).toBe('milling_insert');
+    expect(defaultActivationFamily('boring head')).toBe('boring_bar');
+    expect(defaultActivationFamily('turning general')).toBe('od_turning');
+    expect(defaultActivationFamily('drill')).toBe('indexable_drill');
+    expect(defaultActivationFamily('slot/key cutter')).toBe('generic_insert');
+    expect(defaultActivationFamily('ball end mill')).toBe('generic_insert');
   });
 });
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Tag, Ruler, Layers, Save, X, AlertTriangle, Wand2, ChevronDown, ChevronRight, StickyNote } from 'lucide-react';
+import { Tag, Ruler, Layers, Save, X, AlertTriangle, Wand2, ChevronDown, ChevronRight, StickyNote, Link2 } from 'lucide-react';
 import {
   validateTool, validateGeometry, getNextMachineNumber, toolToExtractor,
   INCH_THREAD_SIZES, METRIC_THREAD_SIZES,
@@ -14,6 +14,10 @@ import { buildDesc } from '../utils/toolNaming.js';
 import { useApp } from '../context/AppContext.jsx';
 import ToolTypeDropdown from './ToolTypeDropdown.jsx';
 import ToolFields from './ToolFields.jsx';
+import {
+  INSERT_FAMILIES, INSERT_FAMILY_BY_ID, ALWAYS_INSERT_TYPES,
+  defaultActivationFamily, newPairing,
+} from '../schema/insertFamilies.js';
 
 function derivePitchFromThreadSize(pitchStr, toolUnit = 'inches') {
   const str = (pitchStr || '').trim();
@@ -64,6 +68,20 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
     }
     return next;
   });
+
+  // Insert-style activation (holder body + insert). Available on any tool type
+  // that isn't already always-insert — turning it on sets a pairing (default
+  // family from the tool type, refinable in the dropdown); the tool page then
+  // splits into Holder Body / Insert sections. Nothing changes in Fusion.
+  const togglePairing = (on) => {
+    if (on) {
+      setField('pairing', data.pairing || newPairing(defaultActivationFamily(data.tool_type)));
+    } else {
+      const linked = data.pairing && (data.pairing.holder_component_id || data.pairing.insert_component_id);
+      if (linked && !window.confirm('Turn off insert-style? The holder body and insert records are kept, but they will be unlinked from this tool.')) return;
+      setField('pairing', null);
+    }
+  };
 
   const dirty = useMemo(() => JSON.stringify(data) !== JSON.stringify(tool), [data, tool]);
 
@@ -162,6 +180,37 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
             <AlertTriangle size={13} style={{ flexShrink: 0 }} />
             Speeds &amp; feeds are managed per preset. {isNew ? 'Add presets from the tool page after saving.' : 'Edit them in the Speeds & Feeds section on the tool page.'}
           </div>
+
+          {/* Insert-style activation. Always-insert types (face mill / turning /
+              boring head) already open the paired view automatically, so the
+              toggle is only offered on the other types (the ~5% opt-in case). */}
+          {!ALWAYS_INSERT_TYPES.has(data.tool_type) && (
+            <Section title="Insert-Style Tool" icon={Link2}>
+              <label className="checkbox-row">
+                <input type="checkbox" checked={!!data.pairing} onChange={e => togglePairing(e.target.checked)} />
+                <span className="text-sub text-sm">Insert-style tool — separate holder body + insert</span>
+                <InfoTip text="Turn on when this tool is physically two pieces — a holder body and an insert tip — each with its own Tool ID, location and purchasing. The tool page then splits into Holder Body / Insert sections. Nothing changes in Fusion; the two components are tracked only in the app." />
+              </label>
+              {data.pairing && (
+                <div className="field-group mt-12" style={{ maxWidth: 340 }}>
+                  <label className="field-label">Insert-tool family</label>
+                  <select
+                    className="field-input"
+                    value={data.pairing.family}
+                    onChange={e => setField('pairing', { ...data.pairing, family: e.target.value })}
+                  >
+                    {INSERT_FAMILIES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
+                  </select>
+                  <p className="text-sub text-xs mt-6">
+                    {INSERT_FAMILY_BY_ID[data.pairing.family]?.hasTier3Assembly === false
+                      ? 'The pairing itself is the finished tool (no holder assembly).'
+                      : 'Keeps its holder + OOH assembly.'}{' '}
+                    Link the holder body and insert on the tool page after saving.
+                  </p>
+                </div>
+              )}
+            </Section>
+          )}
         </div>
 
         <div className="detail-layout-right">

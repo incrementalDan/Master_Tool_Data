@@ -19,7 +19,7 @@ import InfoTip from './InfoTip.jsx';
 import {
   INSERT_FAMILIES, INSERT_FAMILY_BY_ID, COMPONENT_ROLE_LABELS,
   COMPONENT_SPEC_FIELDS, componentById, pairingAsmNumber,
-  composeCombinedProShopId, newPairing, defaultFamilyForType,
+  composeCombinedProShopId,
 } from '../schema/insertFamilies.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
 import { unitAbbr } from '../utils/units.js';
@@ -436,42 +436,7 @@ function SubSection({ title, icon: Icon, children, defaultOpen = true }) {
   );
 }
 
-// ─── "Set up as insert-style tool" panel (unpaired, eligible tool types) ────
-export function PairingSetupPanel({ tool, onSaveTool, isSaving }) {
-  const [open, setOpen] = useState(false);
-  const [family, setFamily] = useState(defaultFamilyForType(tool.tool_type));
-
-  return (
-    <div className={`panel ${open ? 'open' : ''}`}>
-      <button className="panel-header" onClick={() => setOpen(o => !o)}>
-        <Link2 size={15} className="panel-header-icon" />
-        <span className="panel-header-title">Insert-Style Tool</span>
-        <span className="panel-chevron">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
-      </button>
-      {open && (
-        <div className="panel-body">
-          <p className="text-sub text-sm" style={{ marginBottom: 10, lineHeight: 1.5 }}>
-            Pair this tool as a <strong>holder body + insert</strong> — the two components are
-            separate physical tools (each with its own ID, location and purchasing) that this
-            entry combines into the single tool Fusion sees.
-          </p>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-            <div className="field-group" style={{ minWidth: 220 }}>
-              <label className="field-label">Family</label>
-              <select className="field-input" value={family} onChange={e => setFamily(e.target.value)}>
-                {INSERT_FAMILIES.map(f => <option key={f.id} value={f.id}>{f.label}</option>)}
-              </select>
-            </div>
-            <button className="btn btn-primary btn-sm" disabled={isSaving}
-              onClick={async () => {
-                try { await onSaveTool({ ...tool, pairing: newPairing(family) }); }
-                catch { /* toast handled in context */ }
-              }}>
-              {isSaving ? 'Saving…' : 'Set up pairing'}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+// NOTE: insert-style activation for opt-in tool types lives in the ToolForm
+// edit-mode "Insert-Style Tool" toggle (it sets tool.pairing). Always-insert
+// types (face mill / turning / boring head) open the paired view automatically.
+// There is no separate view-mode "set up pairing" panel.

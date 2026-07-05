@@ -44,6 +44,13 @@ export const INSERT_FAMILIES = [
   { id: 'id_groover',      label: 'ID Groover',                       hasTier3Assembly: false, suggestedTypes: ['turning general'] },
   { id: 'face_groover',    label: 'Face Groover',                     hasTier3Assembly: false, suggestedTypes: ['turning general'] },
   { id: 'part_off',        label: 'Part-Off',                         hasTier3Assembly: false, suggestedTypes: ['turning general'] },
+  // Generic catch-all for the ~5% of otherwise-solid tools that happen to run
+  // an insert tip (an insert-tipped key cutter / ball mill, etc.). Tier-3 so it
+  // keeps the holder + OOH assembly like a milling insert; NO ProShop prefix
+  // (arbitrary types have no combined-ID convention — each component still
+  // carries its own ProShop number). It's the default when a pairing is
+  // activated on a tool type with no more-specific family.
+  { id: 'generic_insert',  label: 'Insert-Tipped / Indexable (other)', hasTier3Assembly: true, suggestedTypes: [] },
 ];
 
 export const INSERT_FAMILY_BY_ID = Object.fromEntries(INSERT_FAMILIES.map(f => [f.id, f]));
@@ -76,6 +83,18 @@ export function autoInsertFamily(toolType) {
 export function defaultFamilyForType(toolType) {
   const hit = INSERT_FAMILIES.find(f => f.suggestedTypes.includes(toolType));
   return hit ? hit.id : 'od_turning';
+}
+
+// The family a pairing defaults to when it's activated (manually, via the
+// ToolForm toggle) on ANY tool type. Known insert types get their natural
+// family; everything else (an insert-tipped key cutter, ball mill, …) gets the
+// generic catch-all, which the user can refine via the pairing-bar dropdown.
+export function defaultActivationFamily(toolType) {
+  if (toolType === 'face mill') return 'milling_insert';
+  if (toolType === 'boring head') return 'boring_bar';
+  if (toolType === 'turning general') return 'od_turning';
+  if (toolType === 'drill') return 'indexable_drill';
+  return 'generic_insert';
 }
 
 // ─── ProShop translation table (sync boundary ONLY) ─────────────────────────
@@ -149,7 +168,11 @@ export function ensureProShopPrefix(id, prefix) {
 // care about order; consistency helps humans reading it). '' until both
 // components are linked and have tool_ids.
 export function composeCombinedProShopId(familyId, holderComp, insertComp) {
-  const map = PROSHOP_FAMILY_MAP[familyId] || {};
+  // Families without a ProShop convention (e.g. the generic catch-all used for
+  // arbitrary insert-tipped tools) don't compose a combined id — each component
+  // still carries its own ProShop number.
+  const map = PROSHOP_FAMILY_MAP[familyId];
+  if (!map) return '';
   const h = ensureProShopPrefix(holderComp?.tool_id, map.holder_prefix);
   const i = ensureProShopPrefix(insertComp?.tool_id, map.insert_prefix);
   if (!h || !i) return '';

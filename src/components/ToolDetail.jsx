@@ -16,10 +16,9 @@ import SpeedFeedSection from './SpeedFeedSection.jsx';
 import JobsSection from './JobsSection.jsx';
 import AttachmentUploadModal from './AttachmentUploadModal.jsx';
 import PhotoSlot from './PhotoSlot.jsx';
-import PairingSections, { PairingSetupPanel } from './PairingSections.jsx';
+import PairingSections from './PairingSections.jsx';
 import {
-  INSERT_FAMILY_BY_ID, INSERT_CAPABLE_TYPES, ALWAYS_INSERT_TYPES,
-  autoInsertFamily, newPairing,
+  INSERT_FAMILY_BY_ID, ALWAYS_INSERT_TYPES, autoInsertFamily, newPairing,
 } from '../schema/insertFamilies.js';
 import InfoTip from './InfoTip.jsx';
 import { useApp } from '../context/AppContext.jsx';
@@ -483,15 +482,6 @@ export default function ToolDetail() {
                 </>
               )}
             </Section>
-
-            {/* Offer the holder body + insert pairing setup on eligible types. */}
-            {!pairing && INSERT_CAPABLE_TYPES.has(tool.tool_type) && (
-              <PairingSetupPanel
-                tool={tool}
-                onSaveTool={async (updatedTool) => { await saveTool(updatedTool); }}
-                isSaving={isSaving}
-              />
-            )}
           </div>
 
           <div className="detail-layout-right">
