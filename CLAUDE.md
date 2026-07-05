@@ -325,6 +325,21 @@ All metadata-only, added to the assembly record (`buildMetadataTool` / `buildLog
 
 -----
 
+## Insert-Style Tools (holder body + insert pairings)
+
+An insert-style tool (turning holders, boring bars, groovers, threaders, face mills, indexable drills, …) is **two separate physical objects paired for use**: a **holder body** and an **insert** — each with its own `tool_id`, location, and purchasing — plus a **pairing** (not a physical object) connecting one of each into the single unit Fusion sees as one tool entity. Canonical intent doc: `INSERT_TOOL_ARCHITECTURE_PROMPT` (the spec this was built from); pure logic + config: **`src/schema/insertFamilies.js`** (tested in `insertFamilies.test.js`).
+
+- **The pairing IS the logical tool.** The spec sketched a separate `tool_pairings[]` array, but a pairing is 1:1 with the Fusion entity (which already carries description, presets, machine links, history), so it's an embedded **`pairing` object on the tool's metadata record** instead: `{ family, holder_component_id, insert_component_id, rta_number }` (in `buildMetadataTool` / `mergeFusionAndMetadata`; `null` for regular tools). One card in the library grid per pairing, exactly as Fusion sees it.
+- **Components are metadata-only records — NEVER written to Fusion** (Fusion sees one entity per pairing; component entries would pollute the CAM library). They live in **`tool_components.json`**, the 5th shared Drive file (`{ version: 1, components: [] }`, seeded by `DEFAULT_COMPONENTS`, loaded/saved through the standard shared-file plumbing — `state.components` / `saveComponents`). Each record: stable UUID `id`, `role` (`holder_body` | `insert`), `family`, plus the tool-record essentials — `tool_id`, `description`, `designation` + a small per-role spec set (`COMPONENT_SPEC_FIELDS`), `unit`, structured `tool_location` / `bin_size_id` / `legacy_locations`, `purchasing` (same normalized shape as tools), primary photo, `notes`. Actions in `src/context/componentActions.js`: `saveComponent` (upsert), `assignComponentLocation` (metadata-only — never a Fusion round-trip), `uploadComponentPhoto` / `deleteComponentPhoto` (photos in `tool_files/{component id}/`). **No standalone browse page** (per spec) — components are reached only through the picker.
+- **Internal family vocabulary** (`INSERT_FAMILIES`): `milling_insert`, `indexable_drill` (**`hasTier3Assembly: true`** — the existing Assembly system layers on top), and the turning families (`od_turning`, `boring_bar`, `back_boring_bar`, `id_threader`, `od_threader`, `od_groover`, `id_groover`, `face_groover`, `part_off`, `knurling` — all `hasTier3Assembly: false`; the pairing itself is the turret-ready tool). `suggestedTypes` maps families to Fusion tool types for pre-selection only. `INSERT_CAPABLE_TYPES` (`face mill`, `drill`, `turning general`, `boring head`) gates where the setup panel appears.
+- **ProShop's letter prefixes live ONLY in `PROSHOP_FAMILY_MAP`** (sync boundary — never in UI labels, family ids, or search). `splitCombinedProShopId('TF-194/TO-195')` classifies a combined id **order-insensitively** into `{ family, holder_id, insert_id }`; `composeCombinedProShopId` emits holder-first, running each component `tool_id` through `ensureProShopPrefix` (keeps an existing prefix, prepends for bare numbers). `back_boring_bar`'s `TL` insert prefix is assumed shared with `boring_bar` — verify against a real ProShop export.
+- **Assembly numbers — both component ids ALWAYS included** (the operator needs both drawers): tier-3 families keep per-assembly `asm_number` with the id token `{holder_id}+{insert_id}` (`pairedAsmIdPart` — fed into the normal `composeAsmNumber`; `writeLogicalTool` and `backfillAsmNumbers` are pairing-aware and now take components). Non-tier-3 families get a **pairing-level** number `{holder_id}/{insert_id}` (`pairingAsmNumber`) — **derived at render, never stamped/stored** (re-derivable like any Auto value); their single instance is skipped by asm stamping/backfill. In `proshop_rta` mode the manual **RTA# lives on the pairing** (`pairing.rta_number`, edited in the pairing bar) — RTA is structurally the 2-tier pairing, regardless of whether a tier-3 assembly also exists.
+- **UI (`ToolDetail`)**: when `tool.pairing` is set, **`PairingSections.jsx`** renders a **pairing bar** (family pill, pairing asm# / RTA# field, the composed **Combined ID** with an explicit "Apply as Tool ID" action — generation never auto-runs — and Unpair) plus **two component group cards** (Holder Body / Insert), each duplicating **Geometry & setup (specs), Photo, Location, Purchasing** for its component. Groups are told apart by `--pairing-accent` (holder body = `--holder-default` teal, insert = `--orange`; `.pairing-*` CSS block). The tool-level Photo/Location/Purchasing panels are **hidden** when paired (the pairing isn't a physical object); Jobs, Notes & Tags, Files, Presets, History stay shared; the Geometry section is retitled **"Combined Geometry (Fusion)"**; the Assemblies section renders only for `hasTier3Assembly` families. `PairingSetupPanel` (collapsed, bottom of left column) offers "Set up pairing" on eligible unpaired types. **`ComponentPicker.jsx`** is the searchable select-or-create-inline modal (same reusable-entity pattern as purchasing manufacturers). `PhotoSlot` was extracted to `PhotoSlot.jsx` (generic `record` prop); `LocationPicker` gained `record` + `onAssign` props and counts component bins in suggestions/collision checks.
+- **Demo**: `src/demo/demo_components.json` + a `pairing` on FTL-00000A (the boring bar) render the full paired view in `?demo=true`; the face mill (FTL-00000B) shows the setup panel. Tool saves stay read-only in demo, but component/shared-file edits use the in-memory demo branch.
+- **Deferred (not built)**: ProShop CSV import/export wiring for pairings (the translation helpers are ready + tested; confirm the two-rows-per-pairing format against a real ProShop export first — per the spec's own caveat), search matching on component `tool_id`s, component delete/cleanup, the rare dual-insert-per-body case, `Q` (saw arbor) / `T` (hardware) prefixes.
+
+-----
+
 ## The Problem Being Solved
 
 Current workflow:
@@ -357,7 +372,8 @@ Google Drive (shared team folder)
 ├── materials.json               ← Material taxonomy: groups → CAM presets → alloys + colors (shared)
 ├── vendor_registry.json         ← Unified manufacturer/vendor entity list (shared)
 ├── shop_settings.json           ← Shop-wide settings (shared)
-└── jobs.json                    ← Jobs registry: program # + part # pairs w/ UUIDs (shared)
+├── jobs.json                    ← Jobs registry: program # + part # pairs w/ UUIDs (shared)
+└── tool_components.json         ← Holder body / insert component records for insert-style tools (shared)
 
 Web App (GitHub Pages, client-side only)
 ├── APS PKCE OAuth login (required — gates all library access)
@@ -767,6 +783,10 @@ src/
     attachmentActions.js           # createAttachmentActions(ctx): uploadToolPhoto,
                                   # uploadToolAttachment, deleteToolAttachment,
                                   # importProShopPhotos
+    componentActions.js            # createComponentActions(ctx): saveComponent,
+                                  # assignComponentLocation, uploadComponentPhoto,
+                                  # deleteComponentPhoto (holder body / insert records —
+                                  # metadata-only writes to tool_components.json)
                                   # Factory pattern: each takes { dispatch, notify, IO fns,
                                   # render-synced refs } so actions never see stale state;
                                   # factories must never import AppContext.jsx (cycle).
@@ -801,6 +821,10 @@ src/
                                   # fields here first)
     logicalTools.js               # buildLogicalTool / splitToFusionInstances /
                                   # splitToFusionAndMetadata
+    insertFamilies.js             # Insert-style tools: internal family list
+                                  # (hasTier3Assembly), PROSHOP_FAMILY_MAP (sync boundary
+                                  # only), combined-ID split/compose, component factory,
+                                  # pairing asm-number helpers
     toolFactory.js                # newTool, validateTool, validateGeometry
 
   services/
@@ -850,7 +874,16 @@ src/
                                   # Ported from docs/LocationSystemUI.tsx. Exports LivePreview.
     LocationPicker.jsx            # ToolDetail "Assign Location" picker — pick system +
                                   # level options + bin (auto-suggested), writes via
-                                  # AppContext.assignToolLocation
+                                  # AppContext.assignToolLocation; `record`/`onAssign`
+                                  # props make it reusable for component records
+    PairingSections.jsx           # Insert-style tool view: pairing bar (family, asm#/RTA#,
+                                  # combined ID) + the Holder Body / Insert group cards
+                                  # (each: specs, photo, location, purchasing) +
+                                  # PairingSetupPanel. See Insert-Style Tools section
+    ComponentPicker.jsx           # Searchable holder-body/insert picker modal with
+                                  # inline create — the only way components are browsed
+    PhotoSlot.jsx                 # Primary-photo slot (display + add/change/remove),
+                                  # shared by ToolDetail and the component groups
     ToolCard.jsx                  # Grid and list card variants with hover actions
                                   # Uses data-field tokens: .description-badge, .tool-id-pill,
                                   # .machine-num-badge, .location-tag
@@ -1170,7 +1203,7 @@ The page that replaces the manually-managed Google Sheet assigning unique CNC pr
 
 ## Shared Drive Files (materials / vendor registry / shop settings / jobs)
 
-Four shop-wide JSON files live in the **same Drive root as `tool_metadata.json`** and are loaded at startup **in parallel** with the metadata (in `loadTools`, when Google is connected). Each is **created from its default content if it doesn't exist yet**; a load failure on any one falls back to its default and never blocks the library load. All four are exposed via `useApp()` as `state.materials` / `state.vendorRegistry` / `state.shopSettings` / `state.jobs` (defaulting to their seeds before load), with save functions `saveMaterials` / `saveVendorRegistry` / `saveShopSettings` / `saveJobs`.
+Five shop-wide JSON files live in the **same Drive root as `tool_metadata.json`** and are loaded at startup **in parallel** with the metadata (in `loadTools`, when Google is connected). Each is **created from its default content if it doesn't exist yet**; a load failure on any one falls back to its default and never blocks the library load. All five are exposed via `useApp()` as `state.materials` / `state.vendorRegistry` / `state.shopSettings` / `state.jobs` / `state.components` (defaulting to their seeds before load), with save functions `saveMaterials` / `saveVendorRegistry` / `saveShopSettings` / `saveJobs` / `saveComponents` (the fifth, `tool_components.json`, holds the holder body / insert component records — see **Insert-Style Tools**).
 
 **How they are found (never need separate selection):** `loadOrCreateSharedJson` calls `getMetaParentFolderId()` (the parent folder of the connected `tool_metadata.json`) to locate them. Their Drive file IDs are cached in localStorage under the keys in `SHARED_FILES`; on a fresh machine (empty cache) the function searches the metadata folder by name and re-caches. A missing file is created from its default seed. This means connecting `tool_metadata.json` once is sufficient — the other shared files auto-join on the next `loadTools`. The `MetadataConnect.jsx` folder picker checks for all of them in parallel during browsing and shows a ✓/— status grid in the callout so users can confirm all files are present before connecting (see **Google Drive — Shared Drive Support** below).
 

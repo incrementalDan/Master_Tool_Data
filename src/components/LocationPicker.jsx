@@ -10,15 +10,28 @@ import {
 // The "Assign Location" picker (prototype tab) bound to a specific tool. Lives
 // in the tool detail. Writes a structured location to the tool via
 // assignToolLocation (which composes the string into Fusion vendor + metadata).
-export default function LocationPicker({ tool }) {
-  const { tools, shopSettings, assignToolLocation, isSaving } = useApp();
+//
+// Also reusable for holder body / insert component records (insertFamilies.js):
+// pass `record` (anything carrying tool_location / bin_size_id /
+// legacy_locations) and an `onAssign(toolLocation, binSizeId)` save handler —
+// component saves are metadata-only, so they must NOT route through
+// assignToolLocation (a full Fusion round-trip).
+export default function LocationPicker({ tool, record, onAssign }) {
+  const { tools, components, shopSettings, assignToolLocation, isSaving } = useApp();
+  const rec = record || tool;
   const systems = shopSettings?.location_config?.systems || [];
   // Retired free-text locations are hidden by default (parallel to the Tool ID
   // System's show_legacy toggle, but defaulting OFF for Location/Assembly).
   const showLegacy = shopSettings?.location_config?.show_legacy ?? false;
-  const legacyLocations = Array.isArray(tool.legacy_locations) ? tool.legacy_locations : [];
+  const legacyLocations = Array.isArray(rec.legacy_locations) ? rec.legacy_locations : [];
 
-  const current = tool.tool_location || null;
+  // Bins are occupied by tools AND component records (both carry tool_location).
+  const locRecords = useMemo(
+    () => [...tools, ...((components?.components) || [])],
+    [tools, components]
+  );
+
+  const current = rec.tool_location || null;
   const [sysId, setSysId] = useState(current?.system_id || systems[0]?.id || '');
   const [picks, setPicks] = useState({
     zone_id: current?.zone_id || null,
@@ -29,12 +42,12 @@ export default function LocationPicker({ tool }) {
 
   const system = findSystem(systems, sysId);
 
-  // Suggested next bin for an auto-increment system (excludes this tool's own bin).
+  // Suggested next bin for an auto-increment system (excludes this record's own bin).
   const suggestedBin = useMemo(() => {
     if (!system || system.levels.bin.fixed) return '';
-    const used = usedBinsForSystem(tools.filter(t => t.id !== tool.id), sysId);
+    const used = usedBinsForSystem(locRecords.filter(t => t.id !== rec.id), sysId);
     return String(nextBin(system, used));
-  }, [system, tools, tool.id, sysId]);
+  }, [system, locRecords, rec.id, sysId]);
 
   function selectSystem(id) {
     setSysId(id);
@@ -64,26 +77,30 @@ export default function LocationPicker({ tool }) {
     const val = (bin.trim() || suggestedBin);
     if (!val) return false;
     const n = Number(val);
-    return tools.some(t => t.id !== tool.id
+    return locRecords.some(t => t.id !== rec.id
       && t.tool_location?.system_id === sysId
       && Number(t.tool_location?.bin) === n);
-  }, [system, bin, suggestedBin, tools, tool.id, sysId]);
+  }, [system, bin, suggestedBin, locRecords, rec.id, sysId]);
 
   async function setLocation() {
     const loc = draftLocation();
-    try { await assignToolLocation(tool, loc, tool.bin_size_id || null); }
-    catch { /* toast handled in context */ }
+    try {
+      if (onAssign) await onAssign(loc, rec.bin_size_id || null);
+      else await assignToolLocation(rec, loc, rec.bin_size_id || null);
+    } catch { /* toast handled in context */ }
   }
   async function clearLocation() {
-    try { await assignToolLocation(tool, null, null); }
-    catch { /* toast handled in context */ }
+    try {
+      if (onAssign) await onAssign(null, null);
+      else await assignToolLocation(rec, null, null);
+    } catch { /* toast handled in context */ }
   }
 
   if (systems.length === 0) {
     return (
       <div className="text-sub text-sm">
         No location systems configured yet. Set one up in <strong>Settings → Location System</strong> to assign structured locations.
-        {tool.location && <div style={{ marginTop: 6 }}>Current location text: <span className="font-mono location-tag">{tool.location}</span></div>}
+        {rec.location && <div style={{ marginTop: 6 }}>Current location text: <span className="font-mono location-tag">{rec.location}</span></div>}
       </div>
     );
   }

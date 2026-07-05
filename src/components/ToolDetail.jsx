@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
-  Ruler, StickyNote, Clock, Wrench, AlertTriangle, Camera, X,
+  Ruler, StickyNote, Clock, Wrench, AlertTriangle, Camera,
   ChevronDown, ChevronRight, FileJson, MapPin,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
@@ -15,7 +15,9 @@ import PurchasingSection from './PurchasingSection.jsx';
 import SpeedFeedSection from './SpeedFeedSection.jsx';
 import JobsSection from './JobsSection.jsx';
 import AttachmentUploadModal from './AttachmentUploadModal.jsx';
-import { fetchFileBlob } from '../services/driveService.js';
+import PhotoSlot from './PhotoSlot.jsx';
+import PairingSections, { PairingSetupPanel } from './PairingSections.jsx';
+import { INSERT_FAMILY_BY_ID, INSERT_CAPABLE_TYPES } from '../schema/insertFamilies.js';
 import InfoTip from './InfoTip.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS, validateGeometry, fusionToolToInternal, readOohFromFusion } from '../schema/toolSchema.js';
@@ -184,6 +186,18 @@ export default function ToolDetail() {
   const typeLabel = TOOL_TYPE_LABELS[tool.tool_type] || tool.tool_type;
   const assemblies = tool.assemblies || [];
   const hasMachineNum = tool.machine_tool_number !== null && tool.machine_tool_number !== undefined && tool.machine_tool_number !== '';
+
+  // Insert-style pairing (holder body + insert — see insertFamilies.js). When
+  // paired, the component groups own Geometry/Photo/Location/Purchasing per
+  // component; the tool-level Photo/Location/Purchasing panels are hidden and
+  // the Assemblies section only shows for tier-3 (milling) families.
+  const pairing = tool.pairing || null;
+  const pairingFamily = pairing ? INSERT_FAMILY_BY_ID[pairing.family] : null;
+  const showAssemblies = !pairing || !!pairingFamily?.hasTier3Assembly;
+  const sectionSave = async (updatedTool) => {
+    try { await saveTool(updatedTool); }
+    catch { /* toast handled in context */ }
+  };
 
   if (editing) {
     return (
@@ -361,9 +375,29 @@ export default function ToolDetail() {
           </div>
         )}
 
+        {/* Insert-style tool: pairing bar + the Holder Body / Insert component
+            groups (each with its own Geometry & setup, Photo, Location and
+            Purchasing). Everything below stays shared. */}
+        {pairing && (
+          <PairingSections
+            tool={tool}
+            onSaveTool={async (updatedTool) => { await saveTool(updatedTool); }}
+          />
+        )}
+
         <div className="detail-layout">
           <div className="detail-layout-left">
-            <Section title="Geometry & Setup" icon={Ruler}>
+            <Section
+              title={pairing ? 'Combined Geometry (Fusion)' : 'Geometry & Setup'}
+              icon={Ruler}
+            >
+              {pairing && (
+                <div className="text-sub text-xs" style={{ marginBottom: 10, lineHeight: 1.5 }}>
+                  The Fusion entry's cutting geometry for the combined holder&nbsp;body&nbsp;+&nbsp;insert
+                  unit — what CAM programs against. Component-specific specs live in the
+                  Holder Body / Insert sections above.
+                </div>
+              )}
               <ToolFields tool={tool} mode="view" />
               {geoIssues.length > 0 && (
                 <div className="warn-banner" style={{ marginTop: 8 }}>
@@ -377,15 +411,13 @@ export default function ToolDetail() {
               )}
             </Section>
 
-            <AssembliesSection
-              tool={tool}
-              holders={holders}
-              onSave={async (updatedTool) => {
-                try {
-                  await saveTool(updatedTool);
-                } catch { /* toast handled in context */ }
-              }}
-            />
+            {showAssemblies && (
+              <AssembliesSection
+                tool={tool}
+                holders={holders}
+                onSave={sectionSave}
+              />
+            )}
 
             <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving}
               onDirtyChange={(d) => { presetDirtyRef.current = d; }} />
@@ -434,45 +466,57 @@ export default function ToolDetail() {
                 </>
               )}
             </Section>
+
+            {/* Offer the holder body + insert pairing setup on eligible types. */}
+            {!pairing && INSERT_CAPABLE_TYPES.has(tool.tool_type) && (
+              <PairingSetupPanel
+                tool={tool}
+                onSaveTool={async (updatedTool) => { await saveTool(updatedTool); }}
+                isSaving={isSaving}
+              />
+            )}
           </div>
 
           <div className="detail-layout-right">
-            <Section title="Photo" icon={Camera}>
-              <PhotoSlot
-                tool={tool}
-                googleAuthenticated={googleAuthenticated}
-                onChangePhoto={() => setShowPhotoUpload(true)}
-                onDeletePhoto={async () => {
-                  try { await deleteToolAttachment(tool, tool.primary_photo_id, true); }
-                  catch { /* toast handled in context */ }
-                }}
-              />
-              {/* Former (retired) IDs — shown only when present, directly below the
-                  photo. Muted, one line. Gated on the Tool ID System's show_legacy
-                  toggle (defaults ON). A search match still reveals them on the
-                  result card regardless. Never shown anywhere else. */}
-              {(shopSettings?.tool_id_system?.show_legacy ?? true)
-                && Array.isArray(tool.legacy_ids) && tool.legacy_ids.length > 0 && (
-                <div className="text-sub text-xs" style={{ marginTop: 8 }}>
-                  Formerly:{' '}
-                  <span className="font-mono">{tool.legacy_ids.join(', ')}</span>
-                </div>
-              )}
-            </Section>
+            {/* For paired (insert-style) tools the Photo / Location / Purchasing
+                panels live per-component in the groups above — the pairing is a
+                relationship, not a physical object with its own drawer. */}
+            {!pairing && (
+              <>
+                <Section title="Photo" icon={Camera}>
+                  <PhotoSlot
+                    record={tool}
+                    googleAuthenticated={googleAuthenticated}
+                    onChangePhoto={() => setShowPhotoUpload(true)}
+                    onDeletePhoto={async () => {
+                      try { await deleteToolAttachment(tool, tool.primary_photo_id, true); }
+                      catch { /* toast handled in context */ }
+                    }}
+                  />
+                  {/* Former (retired) IDs — shown only when present, directly below the
+                      photo. Muted, one line. Gated on the Tool ID System's show_legacy
+                      toggle (defaults ON). A search match still reveals them on the
+                      result card regardless. Never shown anywhere else. */}
+                  {(shopSettings?.tool_id_system?.show_legacy ?? true)
+                    && Array.isArray(tool.legacy_ids) && tool.legacy_ids.length > 0 && (
+                    <div className="text-sub text-xs" style={{ marginTop: 8 }}>
+                      Formerly:{' '}
+                      <span className="font-mono">{tool.legacy_ids.join(', ')}</span>
+                    </div>
+                  )}
+                </Section>
 
-            <Section title="Location" icon={MapPin} defaultOpen={false}>
-              <LocationPicker tool={tool} />
-            </Section>
+                <Section title="Location" icon={MapPin} defaultOpen={false}>
+                  <LocationPicker tool={tool} />
+                </Section>
 
-            <PurchasingSection
-              tool={tool}
-              isSaving={isSaving}
-              onSave={async (updatedTool) => {
-                try {
-                  await saveTool(updatedTool);
-                } catch { /* toast handled in context */ }
-              }}
-            />
+                <PurchasingSection
+                  tool={tool}
+                  isSaving={isSaving}
+                  onSave={sectionSave}
+                />
+              </>
+            )}
 
             {/* Structured job links (program # + part #) — supersedes the old
                 free-text "Last Used Job" display (data kept, no longer shown). */}
@@ -885,100 +929,3 @@ function Field({ label, value, unit, mono, href }) {
   );
 }
 
-function PhotoSlot({ tool, googleAuthenticated, onChangePhoto, onDeletePhoto }) {
-  const [photoUrl, setPhotoUrl] = useState(null);
-  const [photoLoading, setPhotoLoading] = useState(false);
-  const [confirmRemove, setConfirmRemove] = useState(false);
-  const objectUrlRef = useRef(null);
-
-  useEffect(() => {
-    setPhotoUrl(null);
-    setPhotoLoading(false);
-    if (!tool.primary_photo_id || !googleAuthenticated) return;
-    let cancelled = false;
-    setPhotoLoading(true);
-    fetchFileBlob(tool.primary_photo_id)
-      .then(blob => {
-        if (cancelled) return;
-        const url = URL.createObjectURL(blob);
-        objectUrlRef.current = url;
-        setPhotoUrl(url);
-      })
-      .catch(() => { if (!cancelled) setPhotoUrl(null); })
-      .finally(() => { if (!cancelled) setPhotoLoading(false); });
-    return () => {
-      cancelled = true;
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-        objectUrlRef.current = null;
-      }
-    };
-  }, [tool.primary_photo_id, googleAuthenticated]);
-
-  const hasPhoto = !!photoUrl;
-
-  return (
-    <div>
-      <div
-        className="identity-photo-slot"
-        onClick={!hasPhoto && googleAuthenticated ? onChangePhoto : undefined}
-        style={{ cursor: !hasPhoto && googleAuthenticated ? 'pointer' : 'default' }}
-        title={!hasPhoto && googleAuthenticated ? 'Add photo' : undefined}
-      >
-        {photoLoading ? (
-          <div className="identity-photo-placeholder">
-            <Camera size={24} />
-            <span style={{ fontSize: 11 }}>Loading…</span>
-          </div>
-        ) : hasPhoto ? (
-          <img src={photoUrl} alt={tool.description || 'Tool'} className="identity-photo-img" />
-        ) : (
-          <div className="identity-photo-placeholder">
-            <Camera size={24} />
-            {googleAuthenticated && <span style={{ fontSize: 11 }}>Add photo</span>}
-          </div>
-        )}
-      </div>
-
-      {googleAuthenticated && (
-        <div style={{ display: 'flex', gap: 4, marginTop: 6 }}>
-          <button
-            className="btn btn-ghost btn-sm"
-            style={{ flex: 1, fontSize: 11, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
-            onClick={onChangePhoto}
-          >
-            <Camera size={12} /> {hasPhoto ? 'Change' : 'Add photo'}
-          </button>
-          {hasPhoto && !confirmRemove && (
-            <button
-              className="btn btn-ghost btn-sm"
-              style={{ fontSize: 11, color: 'var(--text-sub)' }}
-              title="Remove photo"
-              onClick={() => setConfirmRemove(true)}
-            >
-              <X size={12} />
-            </button>
-          )}
-          {hasPhoto && confirmRemove && (
-            <>
-              <button
-                className="btn btn-ghost btn-sm"
-                style={{ fontSize: 11, color: 'var(--red)' }}
-                onClick={async () => { setConfirmRemove(false); await onDeletePhoto(); }}
-              >
-                Remove
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
-                style={{ fontSize: 11 }}
-                onClick={() => setConfirmRemove(false)}
-              >
-                <X size={12} />
-              </button>
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}

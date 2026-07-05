@@ -92,6 +92,10 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     attachments: meta.attachments || [],
     // Previously-assigned tool IDs retired by a bulk re-number (metadata-only).
     legacy_ids: meta.legacy_ids || [],
+    // Insert-style tool pairing (holder body + insert) — references component
+    // records in tool_components.json by UUID. null for regular tools. See
+    // src/schema/insertFamilies.js.
+    pairing: meta.pairing || null,
   };
 }
 
@@ -253,5 +257,16 @@ export function buildMetadataTool(tool) {
     // files / CSVs that still reference an old ID can match, and so search finds
     // the tool by it. Never written to Fusion (no native field).
     legacy_ids: Array.isArray(tool.legacy_ids) ? tool.legacy_ids : [],
+    // Insert-style tool pairing — { family, holder_component_id,
+    // insert_component_id, rta_number }. Metadata-only; the components
+    // themselves live in tool_components.json. null for regular tools.
+    pairing: tool.pairing
+      ? {
+          family: tool.pairing.family || null,
+          holder_component_id: tool.pairing.holder_component_id || null,
+          insert_component_id: tool.pairing.insert_component_id || null,
+          rta_number: tool.pairing.rta_number || '',
+        }
+      : null,
   };
 }

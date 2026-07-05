@@ -4041,3 +4041,82 @@ input.sf-ref-num { text-align: right; }
   padding: 2px 6px;
 }
 .upload-change-btn:hover { text-decoration: underline; }
+
+/* ─── Insert-style tool pairing (holder body + insert) ───────────────────────
+   The pairing bar + the two component group cards on ToolDetail. Each group
+   sets --pairing-accent per role (holder body = --holder-default teal,
+   insert = --orange) so the two section groups read apart at a glance. */
+.pairing-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  margin: 12px 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.pairing-family-pill {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
+  border-radius: var(--radius-pill);
+  padding: 3px 12px;
+  white-space: nowrap;
+}
+/* Pairing-level assembly number — same visual language as the assembly-card
+   asm_number badge (mono blue plate). */
+.pairing-asm-badge {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent);
+  border-radius: 6px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.pairing-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 14px;
+}
+.pairing-group {
+  --pairing-accent: var(--blue);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--pairing-accent) 45%, var(--border));
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.pairing-group-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--pairing-accent) 10%, var(--surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--pairing-accent) 30%, transparent);
+}
+.pairing-group-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--pairing-accent);
+  white-space: nowrap;
+}
+.pairing-group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+}
+@media (max-width: 900px) {
+  .pairing-groups { grid-template-columns: 1fr; }
+}

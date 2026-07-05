@@ -10,6 +10,7 @@ import {
   getNextMachineNumber, combineToolsByToolId,
 } from '../schema/toolSchema.js';
 import { composeAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
+import { INSERT_FAMILY_BY_ID, pairedAsmIdPart } from '../schema/insertFamilies.js';
 import { resolveLocationString, analyzeSystem, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { classifyStrays } from '../services/reconcile.js';
 import { defaultToolLibraryId, machineNumberArgs } from './appState.js';
@@ -19,7 +20,7 @@ export function createToolActions(ctx) {
     dispatch, notify,
     downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary,
     saveLocationConfig,
-    toolsRef, holdersRef, shopSettingsRef, googleRef,
+    toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef,
   } = ctx;
 
   // ─── Core write: reconcile a logical tool's instances into the library ────
@@ -56,17 +57,27 @@ export function createToolActions(ctx) {
     const idCfg = shopSettingsRef.current?.tool_id_system || {};
     const usedSerials = usedAsmSerials(toolsRef.current || []);
     let nextSerial = nextAsmSerial(asmCfg.serial_start ?? 10000, usedSerials);
+    // Insert-style pairings (insertFamilies.js): turning families have no tier-3
+    // assembly — their number is the pairing-level "{holder_id}/{insert_id}",
+    // derived at render — so their instance never gets an asm_number stamped.
+    // Tier-3 (milling) families keep per-assembly numbers, with the id token
+    // carrying BOTH component ids ("1001+1042").
+    const pairingFamily = tool.pairing ? INSERT_FAMILY_BY_ID[tool.pairing.family] : null;
+    const skipAsmStamp = !!(pairingFamily && !pairingFamily.hasTier3Assembly);
+    const asmIdToken = tool.pairing
+      ? (pairedAsmIdPart(tool.pairing, componentsRef?.current) || tool.tool_id)
+      : tool.tool_id;
     const assemblies = baseAssemblies.map(a => {
       const withIds = {
         ...a,
         assembly_id: a.assembly_id || generateAssemblyId(),
         instance_guid: a.instance_guid || generateId(),
       };
-      if (!withIds.asm_number && asmCfg.mode !== 'proshop_rta' && asmCfg.mode !== 'erp_external') {
+      if (!withIds.asm_number && !skipAsmStamp && asmCfg.mode !== 'proshop_rta' && asmCfg.mode !== 'erp_external') {
         const holderDescription = withIds.holder_description
           || holders.find(h => h.guid === withIds.holder_guid)?.description || '';
         const n = composeAsmNumber(asmCfg, idCfg,
-          { holderDescription, tool_id: tool.tool_id, ooh: withIds.ooh, assembly_id: withIds.assembly_id },
+          { holderDescription, tool_id: asmIdToken, ooh: withIds.ooh, assembly_id: withIds.assembly_id },
           asmCfg.mode === 'sequential' ? nextSerial : null);
         if (n) {
           withIds.asm_number = n;

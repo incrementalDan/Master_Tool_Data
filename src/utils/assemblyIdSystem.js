@@ -23,6 +23,7 @@
 //   erp_external — reserved placeholder; not selectable yet.
 
 import { holderShortName } from './holderNaming.js';
+import { INSERT_FAMILY_BY_ID, pairedAsmIdPart } from '../schema/insertFamilies.js';
 
 export const ASM_MODES = [
   { id: 'auto', label: 'Auto', desc: 'Composed from holder + Tool ID + OOH, e.g. 30-SK13-60-1001-2.125. Generated once, immutable.' },
@@ -135,17 +136,27 @@ export function previewAsmNumber(asmConfig, toolIdConfig) {
 // deterministic (composed from holder/tool_id/ooh) so it's stable across loads;
 // sequential/RTA are NOT backfilled here (they need stored state / user input —
 // they get their number at assembly creation / entry). Returns a new tools array.
-export function backfillAsmNumbers(tools, shopSettings) {
+export function backfillAsmNumbers(tools, shopSettings, components = null) {
   const asmConfig = shopSettings?.assembly_id_system;
   if (!asmConfig || asmConfig.mode !== 'auto') return tools;
   const toolIdConfig = shopSettings?.tool_id_system;
   let changed = false;
   const next = (tools || []).map(t => {
+    // Insert-style pairings: turning families (no tier-3 assembly) carry their
+    // number at pairing level ("{holder_id}/{insert_id}", derived at render —
+    // see insertFamilies.js) — never stamp their instance. Tier-3 families
+    // compose the normal per-assembly number with both component ids as the
+    // id token ("1001+1042").
+    const pairingFamily = t.pairing ? INSERT_FAMILY_BY_ID[t.pairing.family] : null;
+    if (pairingFamily && !pairingFamily.hasTier3Assembly) return t;
+    const idToken = t.pairing
+      ? (pairedAsmIdPart(t.pairing, components) || t.tool_id)
+      : t.tool_id;
     let touched = false;
     const assemblies = (t.assemblies || []).map(a => {
       if (a.asm_number) return a;
       const asm_number = composeAsmNumber(asmConfig, toolIdConfig, {
-        holderDescription: a.holder_description, tool_id: t.tool_id, ooh: a.ooh, assembly_id: a.assembly_id,
+        holderDescription: a.holder_description, tool_id: idToken, ooh: a.ooh, assembly_id: a.assembly_id,
       });
       if (!asm_number) return a;
       touched = true;
