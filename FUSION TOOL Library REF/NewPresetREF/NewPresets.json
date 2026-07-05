@@ -1,0 +1,372 @@
+{
+    "data": [
+        {
+            "BMC": "carbide",
+            "GRADE": "Mill Generic",
+            "description": ".25 60 Chamfer",
+            "expressions": {
+                "holder_description": "'NBT30-SK13C-60'",
+                "tool_bodyLength": ".6 in",
+                "tool_description": "'.25 60 Chamfer'",
+                "tool_diameter": ".25 in",
+                "tool_fluteLength": ".22 in",
+                "tool_material": "'carbide'",
+                "tool_numberOfFlutes": "5",
+                "tool_overallLength": "2.5 in",
+                "tool_productId": "''",
+                "tool_productLink": "'https://www.mcmaster.com/8190N117/'",
+                "tool_shaftDiameter": "((tool_type == 'reamer') ? (tool_diameter * 0.9) : ((tool_type == 'counter bore') ? (tool_diameter * 0.8) : ((tool_type == 'counter sink') ? (tool_diameter * 0.6) : ((tool_type == 'dovetail mill' || tool_type == 'lollipop mill' || tool_type == 'circle segment barrel') ? (tool_diameter * 0.5) : ((tool_type == 'slot mill') ? (tool_diameter / 3) : ((tool_type == 'face mill' || tool_type == 'radius mill' || tool_type == 'tapered mill') ? (tool_shoulderDiameter) : ((tool_type == 'probe') ? (4mm) : (tool_diameter))))))))",
+                "tool_shoulderLength": ".6 in",
+                "tool_taperAngle": "30 degrees",
+                "tool_tipDiameter": ".055 in"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.25,
+                "HAND": true,
+                "LB": 0.6,
+                "LCF": 0.22,
+                "NOF": 5,
+                "NT": 1,
+                "OAL": 2.5,
+                "RE": 0,
+                "SFDM": 0.25,
+                "TA": 30,
+                "TP": 0,
+                "assemblyGaugeLength": 2.765315,
+                "shoulder-diameter": 0.25,
+                "shoulder-length": 0.6,
+                "thread-profile-angle": 60,
+                "tip-diameter": 0.055,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "6c88fe7a-616c-4bcb-b875-6cf15c36fc72",
+            "holder": {
+                "description": "NBT30-SK13C-60",
+                "gaugeLength": 2.165315,
+                "guid": "5f52f738-7099-4cdc-8bf7-a93859237490",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 1.3779527559055118,
+                        "lower-diameter": 1.2992125984251968,
+                        "upper-diameter": 1.2992125984251968
+                    },
+                    {
+                        "height": 0.03937007874015748,
+                        "lower-diameter": 1.7322834645669292,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.13385826771653542,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.09090551181102365,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.4960629921259845
+                    },
+                    {
+                        "height": 0.13311023622047244,
+                        "lower-diameter": 1.4960629921259845,
+                        "upper-diameter": 1.4960629921259845
+                    },
+                    {
+                        "height": 0.09090551181102365,
+                        "lower-diameter": 1.4960629921259845,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.25984251968503935,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.811023622047244
+                    },
+                    {
+                        "height": 0.03937007874015748,
+                        "lower-diameter": 1.811023622047244,
+                        "upper-diameter": 1.7322834645669292
+                    },
+                    {
+                        "height": 0.07874015748031496,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "last_modified": 1782417181294,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 2,
+                "length-offset": 2,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 2,
+                "turret": 0
+            },
+            "product-id": "",
+            "product-link": "https://www.mcmaster.com/8190N117/",
+            "reference_guid": "{00000000-0000-0000-0000-000000000009}",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_feedPlunge": "50 inpm",
+                            "tool_feedRamp": "5 inpm",
+                            "tool_surfaceSpeed": "300 fpm"
+                        },
+                        "f_n": 0.01090830782496456,
+                        "f_z": 0.0017453292519943294,
+                        "guid": "0b27b034-716c-457e-aad7-0aa9d6305ac9",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 4583.662361046586,
+                        "n_ramp": 4583.662361046586,
+                        "name": "SS FIN",
+                        "ramp-angle": 2,
+                        "stock-materials": [
+                            "SS Harder"
+                        ],
+                        "strategies": {
+                            "finishing": [
+                                "chamfer2d",
+                                "contour2d"
+                            ],
+                            "roughing": [
+                            ]
+                        },
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 300,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 50,
+                        "v_f_ramp": 5,
+                        "v_f_transition": 40
+                    }
+                ]
+            },
+            "type": "chamfer mill",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "carbide",
+            "GRADE": "Mill Generic",
+            "description": "1/2 4FL EM 1.625LOC ST Rough",
+            "geometry": {
+                "CSP": false,
+                "DC": 0.5,
+                "HAND": true,
+                "LB": 2.35,
+                "LCF": 1.625,
+                "NOF": 4,
+                "OAL": 4,
+                "SFDM": 0.5,
+                "assemblyGaugeLength": 6.87752,
+                "shoulder-diameter": 0.5,
+                "shoulder-length": 1.7
+            },
+            "guid": "d5c0680e-2d58-405e-a952-193f82fd7614",
+            "holder": {
+                "description": "NBT30-SK13C-120",
+                "gaugeLength": 4.52752,
+                "guid": "",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 3.740157,
+                        "lower-diameter": 1.299213,
+                        "upper-diameter": 1.299213
+                    },
+                    {
+                        "height": 0.03937,
+                        "lower-diameter": 1.732283,
+                        "upper-diameter": 1.811024
+                    },
+                    {
+                        "height": 0.133858,
+                        "lower-diameter": 1.811024,
+                        "upper-diameter": 1.811024
+                    },
+                    {
+                        "height": 0.090906,
+                        "lower-diameter": 1.811024,
+                        "upper-diameter": 1.496063
+                    },
+                    {
+                        "height": 0.13311,
+                        "lower-diameter": 1.496063,
+                        "upper-diameter": 1.496063
+                    },
+                    {
+                        "height": 0.090906,
+                        "lower-diameter": 1.496063,
+                        "upper-diameter": 1.811024
+                    },
+                    {
+                        "height": 0.259843,
+                        "lower-diameter": 1.811024,
+                        "upper-diameter": 1.811024
+                    },
+                    {
+                        "height": 0.03937,
+                        "lower-diameter": 1.811024,
+                        "upper-diameter": 1.732283
+                    },
+                    {
+                        "height": 0.07874,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "post-process": {
+                "break-control": false,
+                "comment": "FTL-97D413",
+                "diameter-offset": 180,
+                "length-offset": 180,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 180,
+                "turret": 0
+            },
+            "product-id": "A-205",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-205$hour=15&page=2BC4665D-0C77-65E8-FDBB-5C8E7BFB0A77&token=0A272C77-F643-1135-F6AA-8E74CE9E3E31",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "f_n": 0.02945243112740431,
+                        "f_z": 0.0048,
+                        "guid": "7dd4df33-de42-f6d5-a631-77aa0f662bd5",
+                        "material": {
+                            "category": "metal",
+                            "query": "SS",
+                            "use-hardness": false
+                        },
+                        "n": 1527.8874536821952,
+                        "n_ramp": 1527.8874536821952,
+                        "name": "SS316L-.4step",
+                        "ramp-angle": 2,
+                        "stepdown": 0.425,
+                        "stepover": 0.035,
+                        "stock-materials": [
+                            "SS Harder",
+                            "Steel, High-Carbon"
+                        ],
+                        "strategies": {
+                            "finishing": [
+                            ],
+                            "roughing": [
+                                "adaptive2d",
+                                "adaptive"
+                            ]
+                        },
+                        "tool-coolant": "flood",
+                        "use-stepdown": true,
+                        "use-stepover": true,
+                        "v_c": 200,
+                        "v_f": 29.335439110698147,
+                        "v_f_leadIn": 29.335439110698147,
+                        "v_f_leadOut": 29.335439110698147,
+                        "v_f_plunge": 45,
+                        "v_f_ramp": 10,
+                        "v_f_transition": 400
+                    },
+                    {
+                        "description": "",
+                        "f_n": 0.02945243112740431,
+                        "f_z": 0.0023,
+                        "guid": "dfc5bb49-564a-682f-5ce3-69905323991c",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 1527.8874536821952,
+                        "n_ramp": 1527.8874536821952,
+                        "name": "GEN 2.350 30-SK13-120 - Finish",
+                        "ramp-angle": 2,
+                        "stock-materials": [
+                            "SS Harder"
+                        ],
+                        "strategies": {
+                            "finishing": [
+                                "contour2d",
+                                "pocket2d"
+                            ],
+                            "roughing": [
+                            ]
+                        },
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 200,
+                        "v_f": 14.056564573876194,
+                        "v_f_leadIn": 14.056564573876194,
+                        "v_f_leadOut": 14.056564573876194,
+                        "v_f_plunge": 45,
+                        "v_f_ramp": 10,
+                        "v_f_transition": 400
+                    },
+                    {
+                        "description": "",
+                        "f_n": 0.0607266621183594,
+                        "f_z": 0.0015,
+                        "guid": "f1836b2c-7841-d78a-1730-aba751aad902",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 741.0254150358646,
+                        "n_ramp": 741.0254150358646,
+                        "name": "GEN 2.350 30-SK13-120 - Small Bore",
+                        "ramp-angle": 2,
+                        "stock-materials": [
+                            "SS Harder"
+                        ],
+                        "strategies": {
+                            "finishing": [
+                                "bore"
+                            ],
+                            "roughing": [
+                            ]
+                        },
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 96.99999999999996,
+                        "v_f": 4.446152490215188,
+                        "v_f_leadIn": 4.446152490215188,
+                        "v_f_leadOut": 4.446152490215188,
+                        "v_f_plunge": 45,
+                        "v_f_ramp": 6,
+                        "v_f_transition": 400
+                    }
+                ]
+            },
+            "type": "flat end mill",
+            "unit": "inches",
+            "vendor": "LC-196"
+        }
+    ],
+    "version": 36
+}
