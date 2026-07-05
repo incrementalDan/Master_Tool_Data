@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   nextProgramNumber, newPart, newProgram, programMaterial, alloyLabel,
   customerColor, machineOptions, isPalletMachine, PROGRAM_NUMBER_START,
-  searchPrograms, formatProgramNumber,
+  searchPrograms, formatProgramNumber, formatOperation,
 } from './programs.js';
 
 const file = {
@@ -26,6 +26,17 @@ describe('program number assignment', () => {
   it('starts at PROGRAM_NUMBER_START when empty', () => {
     expect(nextProgramNumber({ programs: [] })).toBe(PROGRAM_NUMBER_START);
     expect(nextProgramNumber({})).toBe(PROGRAM_NUMBER_START);
+  });
+
+  it('deleting a program only changes "next" when the deleted one was the highest', () => {
+    // file has 1108 (prg1) and 1110 (prg2, the max) -> next is 1111.
+    // Deleting the non-max entry (1108) must leave "next" untouched.
+    const afterDeletingNonMax = { ...file, programs: file.programs.filter(p => p.id !== 'prg1') };
+    expect(nextProgramNumber(afterDeletingNonMax)).toBe(nextProgramNumber(file));
+    // Deleting the max entry (1110) must recompute "next" down.
+    const afterDeletingMax = { ...file, programs: file.programs.filter(p => p.id !== 'prg2') };
+    expect(nextProgramNumber(afterDeletingMax)).toBe(1109);
+    expect(nextProgramNumber(afterDeletingMax)).not.toBe(nextProgramNumber(file));
   });
 });
 
@@ -145,5 +156,32 @@ describe('formatProgramNumber (primary "O" reference form)', () => {
     expect(formatProgramNumber(null)).toBe('');
     expect(formatProgramNumber(undefined)).toBe('');
     expect(formatProgramNumber('')).toBe('');
+  });
+});
+
+describe('formatOperation ("OP" prefix)', () => {
+  it('prefixes a plain numeric operation', () => {
+    expect(formatOperation('50')).toBe('OP50');
+    expect(formatOperation(60)).toBe('OP60');
+  });
+  it('is idempotent / normalizes case+spacing on an already-prefixed value', () => {
+    expect(formatOperation('OP50')).toBe('OP50');
+    expect(formatOperation('op 50')).toBe('OP50');
+    expect(formatOperation('Op50')).toBe('OP50');
+  });
+  it('handles a numeric operation with letter suffix(es)', () => {
+    expect(formatOperation('50A')).toBe('OP50A');
+    expect(formatOperation('OP50A')).toBe('OP50A');
+    expect(formatOperation('50R')).toBe('OP50R');
+    expect(formatOperation('51M')).toBe('OP51M');
+    expect(formatOperation('160RB')).toBe('OP160RB');
+  });
+  it('leaves non-numeric free text alone (nothing to prefix)', () => {
+    expect(formatOperation('Soft Jaw')).toBe('Soft Jaw');
+  });
+  it('returns empty string for nullish/blank input', () => {
+    expect(formatOperation(null)).toBe('');
+    expect(formatOperation(undefined)).toBe('');
+    expect(formatOperation('')).toBe('');
   });
 });

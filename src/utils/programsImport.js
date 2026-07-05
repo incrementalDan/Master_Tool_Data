@@ -40,39 +40,68 @@ function headerToField(h) {
   return null;
 }
 
-function splitCsvLine(line) {
-  const cells = [];
-  let cur = '', inQ = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
-      else inQ = !inQ;
-    } else if (ch === ',' && !inQ) {
-      cells.push(cur); cur = '';
+// Full-file CSV tokenizer that honors quotes ACROSS newlines. A quoted field
+// may contain commas, escaped quotes (""), AND embedded line breaks — real
+// exports do this (this shop's export wraps the "Program #" header cell with a
+// leading newline: `"\nProgram #"`). Splitting on \n before parsing quotes
+// would shatter that cell and lose every column, so we scan char-by-char and
+// only treat a \n as a row break when we're NOT inside quotes. Returns rows of
+// `{ cells: string[], line }`, where `line` is the 1-based physical line the
+// row started on (for error messages).
+function parseCsvRows(text) {
+  const s = String(text ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const rows = [];
+  let row = [];
+  let cur = '';
+  let inQ = false;
+  let line = 1;
+  let rowStartLine = 1;
+  const pushCell = () => { row.push(cur); cur = ''; };
+  const pushRow = () => {
+    pushCell();
+    rows.push({ cells: row, line: rowStartLine });
+    row = [];
+    rowStartLine = line;
+  };
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (s[i + 1] === '"') { cur += '"'; i++; }   // escaped quote
+        else inQ = false;
+      } else {
+        if (ch === '\n') line++;                      // newline inside a quoted field
+        cur += ch;
+      }
+    } else if (ch === '"') {
+      inQ = true;
+    } else if (ch === ',') {
+      pushCell();
+    } else if (ch === '\n') {
+      line++;
+      pushRow();
     } else {
       cur += ch;
     }
   }
-  cells.push(cur);
-  return cells;
+  if (cur !== '' || row.length > 0) pushRow();   // trailing row (no final newline)
+  return rows;
 }
 
 export function parseProgramsCsv(text) {
-  const lines = String(text ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
-  // First non-empty line is the header.
-  let headerIdx = lines.findIndex(l => l.trim() !== '');
+  const allRows = parseCsvRows(text);
+  // First row with any non-empty cell is the header.
+  const headerIdx = allRows.findIndex(r => r.cells.some(c => String(c).trim() !== ''));
   if (headerIdx < 0) return { fields: [], rows: [], missingColumns: ['part_number', 'program_number'] };
-  const headerCells = splitCsvLine(lines[headerIdx]);
-  const fields = headerCells.map(headerToField);   // canonical field per column (null = ignored)
+  const fields = allRows[headerIdx].cells.map(headerToField);   // canonical field per column (null = ignored)
 
   const rows = [];
-  for (let i = headerIdx + 1; i < lines.length; i++) {
-    if (lines[i].trim() === '') continue;
-    const cells = splitCsvLine(lines[i]);
+  for (let i = headerIdx + 1; i < allRows.length; i++) {
+    const { cells, line } = allRows[i];
+    if (cells.every(c => String(c).trim() === '')) continue;
     const row = {};
     fields.forEach((f, idx) => { if (f) row[f] = (cells[idx] ?? '').trim(); });
-    row._line = i + 1;   // 1-based line number for error messages
+    row._line = line;
     rows.push(row);
   }
   // part_number is the only hard-required column; program_number is nice but

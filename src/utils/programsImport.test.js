@@ -29,6 +29,27 @@ describe('parseProgramsCsv', () => {
     expect(rows[0].program_number).toBe('1200');
   });
 
+  it('parses a header cell that has an embedded newline inside quotes', () => {
+    // Real export: the "Program #" header is written as `"\nProgram #"` — the
+    // quoted field spans two physical lines. A line-split-first parser would
+    // shatter it and lose every column.
+    const t = '"\nProgram #",Machine ,internal Part #,Rev,OP #\n1108,Brother M300,CAD1-114P4344-1,A,50';
+    const { rows, missingColumns } = parseProgramsCsv(t);
+    expect(missingColumns).toEqual([]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].program_number).toBe('1108');
+    expect(rows[0].part_number).toBe('CAD1-114P4344-1');
+    expect(rows[0].operation).toBe('50');
+  });
+
+  it('keeps a data field that itself contains an embedded newline', () => {
+    const t = 'Program #,internal Part #,Description,OP #\n1300,PN-1,"line one\nline two",OP10';
+    const { rows } = parseProgramsCsv(t);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].description).toBe('line one\nline two');
+    expect(rows[0].program_number).toBe('1300');
+  });
+
   it('flags a missing Part # column', () => {
     const { missingColumns } = parseProgramsCsv('Program #,Machine\n1,Brother M300X3');
     expect(missingColumns).toContain('part_number');

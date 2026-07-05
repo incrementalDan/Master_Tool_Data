@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Search, X, Plus } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { searchPrograms, partById, alloyLabel } from '../utils/programs.js';
+import { searchPrograms, partById, alloyLabel, formatOperation } from '../utils/programs.js';
 import { CustomerBadge, ProgramNumBadge, TypePill } from './programsUi.jsx';
 import AddProgramModal from './AddProgramModal.jsx';
 
@@ -56,7 +56,7 @@ export default function JobProgramPicker({ onPick, placeholder = 'Program # (exa
               <ProgramNumBadge n={program.program_number} />
               <span className="pn-part-number">{part?.part_number || '—'}</span>
               {part && <span className="text-xs text-sub">Rev {part.rev}</span>}
-              <span className="text-xs text-sub">· {program.operation || '—'}</span>
+              <span className="text-xs text-sub">· {formatOperation(program.operation) || '—'}</span>
               <TypePill isFixture={program.is_fixture} internalExternal={program.internal_external} />
               <span className="text-xs text-sub">{program.machine_label}</span>
               {program.is_fixture && (program.material_id || program.material_custom) && (
@@ -93,7 +93,7 @@ export function SelectedProgramChip({ value, onClear }) {
       <ProgramNumBadge n={value.program_number} />
       <span className="pn-part-number">{value.part_number || '—'}</span>
       {part && <span className="text-xs text-sub">Rev {part.rev}</span>}
-      {value.operation && <span className="text-xs text-sub">· {value.operation}</span>}
+      {value.operation && <span className="text-xs text-sub">· {formatOperation(value.operation)}</span>}
       {part && <CustomerBadge customer={part.customer} />}
       {onClear && (
         <button type="button" className="icon-btn" title="Clear job link" style={{ marginLeft: 'auto' }} onClick={onClear}>

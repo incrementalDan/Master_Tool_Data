@@ -172,6 +172,19 @@ export function formatProgramNumber(n) {
   return /^o/i.test(s) ? `O${s.slice(1)}` : `O${s}`;
 }
 
+// Operation values are usually a short numeric identifier (e.g. "50", "60",
+// "50R", "51M", "160RB") that the shop always refers to with an "OP" prefix —
+// same idea as the program number's "O" prefix. Idempotent (an already-prefixed
+// "OP50" is normalized, not double-prefixed). Free-text operations that aren't
+// a number+optional-letters token (e.g. a fixture step like "Soft Jaw" or
+// "PRE OP") are left exactly as typed — there's nothing to prefix.
+export function formatOperation(op) {
+  const s = String(op ?? '').trim();
+  if (!s) return '';
+  const stripped = s.replace(/^op\s*/i, '');
+  return /^\d+[a-z]*$/i.test(stripped) ? `OP${stripped.toUpperCase()}` : s;
+}
+
 // Quick search for the Sync-Job program picker: match programs by EXACT program
 // number (when the query is numeric) or by a CONTAINS match on the part number.
 // Returns joined rows { program, part } — exact program-number hits first, then
