@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext.jsx';
 import {
   INT_EXT, FIXTURING_OPTIONS, nextProgramNumber, newPart, newProgram,
   partsOf, programsOf, partById, alloyLabel, alloyOptions,
-  machineOptions, isPalletMachine, customerNames, formatProgramNumber,
+  machineOptions, isPalletMachine, customerNames, formatProgramNumber, formatOperation,
 } from '../utils/programs.js';
 import {
   CustomerBadge, ProgramNumBadge, FixtureSwitch, SelectWithCustom,
@@ -202,7 +202,7 @@ export default function AddProgramModal({ onClose, onCreated }) {
                     <div key={i} className="pn-session-row">
                       <Check size={13} style={{ color: 'var(--green)' }} />
                       <ProgramNumBadge n={s.program_number} />
-                      <span className="text-sm">{s.operation}</span>
+                      <span className="text-sm">{formatOperation(s.operation)}</span>
                       <span className="text-xs text-sub">· {s.machine_label}</span>
                       {s.is_fixture && <span className="pn-type-pill fixture">Fixture</span>}
                     </div>

@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import {
-  INT_EXT, FIXTURING_OPTIONS, nextProgramNumber, formatProgramNumber,
+  INT_EXT, FIXTURING_OPTIONS, nextProgramNumber, formatProgramNumber, formatOperation,
   partsOf, programsOf, programMaterial, alloyLabel, alloyOptions,
   machineOptions, isPalletMachine, customerNames,
 } from '../utils/programs.js';
@@ -230,7 +230,7 @@ function GroupedView({ jobsFile, materials, machines, alloys, canEdit, customers
               <div className="pn-part-body">
                 {[...byOp.entries()].map(([op, ps]) => (
                   <div key={op} className="pn-op-group">
-                    <div className="pn-op-label">{op}</div>
+                    <div className="pn-op-label">{formatOperation(op)}</div>
                     {ps.map(p => (
                       <OperationRow key={p.id} program={p} part={part} materials={materials}
                         machines={machines} alloys={alloys} canEdit={canEdit} onUpdateProgram={onUpdateProgram} />
@@ -422,7 +422,7 @@ function TableView({ jobsFile, materials, machines, alloys, canEdit, customers, 
                     {row.part && <span className="text-xs text-sub" style={{ marginLeft: 5 }}>Rev {row.part.rev}</span>}
                   </td>
                   <td><CustomerBadge customer={row.part?.customer} /></td>
-                  <td>{row.operation}</td>
+                  <td>{formatOperation(row.operation)}</td>
                   <td className="text-sub">{row.description || '—'}</td>
                   <td>{row.machine_label || '—'}</td>
                   <td><TypePill isFixture={row.is_fixture} internalExternal={row.internal_external} /></td>

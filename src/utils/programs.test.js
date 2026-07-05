@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   nextProgramNumber, newPart, newProgram, programMaterial, alloyLabel,
   customerColor, machineOptions, isPalletMachine, PROGRAM_NUMBER_START,
-  searchPrograms, formatProgramNumber,
+  searchPrograms, formatProgramNumber, formatOperation,
 } from './programs.js';
 
 const file = {
@@ -145,5 +145,29 @@ describe('formatProgramNumber (primary "O" reference form)', () => {
     expect(formatProgramNumber(null)).toBe('');
     expect(formatProgramNumber(undefined)).toBe('');
     expect(formatProgramNumber('')).toBe('');
+  });
+});
+
+describe('formatOperation ("OP" prefix)', () => {
+  it('prefixes a plain numeric operation', () => {
+    expect(formatOperation('50')).toBe('OP50');
+    expect(formatOperation(60)).toBe('OP60');
+  });
+  it('is idempotent / normalizes case+spacing on an already-prefixed value', () => {
+    expect(formatOperation('OP50')).toBe('OP50');
+    expect(formatOperation('op 50')).toBe('OP50');
+    expect(formatOperation('Op50')).toBe('OP50');
+  });
+  it('handles a numeric operation with a single letter suffix', () => {
+    expect(formatOperation('50A')).toBe('OP50A');
+    expect(formatOperation('OP50A')).toBe('OP50A');
+  });
+  it('leaves non-numeric free text alone (nothing to prefix)', () => {
+    expect(formatOperation('Soft Jaw')).toBe('Soft Jaw');
+  });
+  it('returns empty string for nullish/blank input', () => {
+    expect(formatOperation(null)).toBe('');
+    expect(formatOperation(undefined)).toBe('');
+    expect(formatOperation('')).toBe('');
   });
 });
