@@ -160,16 +160,31 @@ export function customerNames(jobsFile) {
   return [...new Set(partsOf(jobsFile).map(p => p.customer).filter(Boolean))];
 }
 
+// Program numbers are referenced the same way the machine control and the
+// G-code file names do — the classic Fanuc-style "O" prefix (O1108, O2352).
+// Storage stays a plain integer everywhere (sort / max+1 / dedupe / CSV);
+// this is purely the display/reference form. Idempotent: a value that
+// already carries the prefix (e.g. a legacy jobs[] entry typed by hand) is
+// normalized, not double-prefixed.
+export function formatProgramNumber(n) {
+  if (n == null || n === '') return '';
+  const s = String(n).trim();
+  return /^o/i.test(s) ? `O${s.slice(1)}` : `O${s}`;
+}
+
 // Quick search for the Sync-Job program picker: match programs by EXACT program
 // number (when the query is numeric) or by a CONTAINS match on the part number.
 // Returns joined rows { program, part } — exact program-number hits first, then
 // part-number matches, each ordered by program number. `limit` caps the list.
+// A leading "O" (the primary reference format, e.g. "O1108") is tolerated on
+// the numeric side so typing it the way it's stamped on the part still hits.
 export function searchPrograms(jobsFile, query, limit = 25) {
   const q = String(query ?? '').trim().toLowerCase();
   if (!q) return [];
   const byId = new Map(partsOf(jobsFile).map(p => [p.id, p]));
-  const isNum = /^\d+$/.test(q);
-  const wantNum = isNum ? Number(q) : null;
+  const numQuery = q.replace(/^o(?=\d)/, '');
+  const isNum = /^\d+$/.test(numQuery);
+  const wantNum = isNum ? Number(numQuery) : null;
 
   const rows = [];
   for (const program of programsOf(jobsFile)) {

@@ -27,6 +27,9 @@ describe('jobs helpers', () => {
     expect(jobLabel(file.jobs[0])).toBe('O1042 · PN-4417-A');
     expect(jobLabel({ program_number: 'O5', part_number: '' })).toBe('O5');
     expect(jobLabel(null)).toBe('');
+    // A job linked via the Program Number Manager picker stores the plain
+    // digits (program.program_number is an int) — still shown with the "O".
+    expect(jobLabel({ program_number: '1108', part_number: 'PN-1' })).toBe('O1108 · PN-1');
   });
 
   it('newJob trims inputs and mints a uuid', () => {

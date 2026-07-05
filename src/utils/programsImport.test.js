@@ -86,6 +86,13 @@ describe('buildProgramsImport', () => {
     expect(summary.programsNew).toBe(1);
   });
 
+  it('strips a leading "O" from the Program # column (the shop\'s primary reference form)', () => {
+    const t = `${HEADER}\nO1500,Brother M300X3,,External,PN-1,A,ACME,,OP10,N`;
+    const { programs, summary } = buildProgramsImport(t, { jobsFile: { version: 2, jobs: [], parts: [], programs: [] }, shopSettings });
+    expect(summary.errors).toHaveLength(0);
+    expect(programs[0].program_number).toBe(1500);
+  });
+
   it('falls back to the raw machine label when unmatched', () => {
     const t = `${HEADER}\n1400,Haas VF2,,External,PN-1,A,ACME,,OP10,N`;
     const { programs } = buildProgramsImport(t, { jobsFile: { version: 2, jobs: [], parts: [], programs: [] }, shopSettings });

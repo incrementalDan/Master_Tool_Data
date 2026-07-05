@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext.jsx';
 import {
   INT_EXT, FIXTURING_OPTIONS, nextProgramNumber, newPart, newProgram,
   partsOf, programsOf, partById, alloyLabel, alloyOptions,
-  machineOptions, isPalletMachine, customerNames,
+  machineOptions, isPalletMachine, customerNames, formatProgramNumber,
 } from '../utils/programs.js';
 import {
   CustomerBadge, ProgramNumBadge, FixtureSwitch, SelectWithCustom,
@@ -287,7 +287,7 @@ export default function AddProgramModal({ onClose, onCreated }) {
 
               <button className="btn btn-primary" style={{ width: '100%' }}
                 disabled={!opForm.operation.trim()} onClick={reserve}>
-                <Plus size={14} /> Reserve program number {effectiveNext}
+                <Plus size={14} /> Reserve program number {formatProgramNumber(effectiveNext)}
               </button>
             </div>
           )}
