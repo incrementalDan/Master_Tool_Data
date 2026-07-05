@@ -4,6 +4,7 @@ import {
   splitCombinedProShopId, composeCombinedProShopId, ensureProShopPrefix,
   pairedAsmIdPart, pairingAsmNumber, newComponent, newPairing,
   componentById, defaultFamilyForType,
+  ALWAYS_INSERT_TYPES, autoInsertFamily,
 } from './insertFamilies.js';
 
 describe('family list ↔ ProShop map', () => {
@@ -25,6 +26,26 @@ describe('family list ↔ ProShop map', () => {
     expect(defaultFamilyForType('drill')).toBe('indexable_drill');
     expect(defaultFamilyForType('turning general')).toBe('id_threader'); // first turning family
     expect(defaultFamilyForType('flat end mill')).toBe('od_turning');    // fallback
+  });
+});
+
+describe('always-insert auto view', () => {
+  it('flags the tool types that are always insert-style (not drill)', () => {
+    expect([...ALWAYS_INSERT_TYPES].sort()).toEqual(['boring head', 'face mill', 'turning general']);
+    expect(ALWAYS_INSERT_TYPES.has('drill')).toBe(false);
+    expect(ALWAYS_INSERT_TYPES.has('flat end mill')).toBe(false);
+  });
+
+  it('autoInsertFamily is unambiguous for milling/boring, OD turning for turning', () => {
+    expect(autoInsertFamily('face mill')).toBe('milling_insert');
+    expect(autoInsertFamily('boring head')).toBe('boring_bar');
+    expect(autoInsertFamily('turning general')).toBe('od_turning');
+  });
+
+  it('every auto family resolves and carries the expected tier-3 flag', () => {
+    expect(INSERT_FAMILY_BY_ID['milling_insert'].hasTier3Assembly).toBe(true);
+    expect(INSERT_FAMILY_BY_ID['boring_bar'].hasTier3Assembly).toBe(false);
+    expect(INSERT_FAMILY_BY_ID['od_turning'].hasTier3Assembly).toBe(false);
   });
 });
 

@@ -57,6 +57,22 @@ export function insertFamilyById(id) {
 // user's.
 export const INSERT_CAPABLE_TYPES = new Set(['face mill', 'drill', 'turning general', 'boring head']);
 
+// Tool types that are ALWAYS insert-style (a holder body + an insert) — the
+// paired view opens by DEFAULT for these instead of a manual "set up pairing"
+// panel. `drill` is deliberately NOT here: only indexable drills are
+// insert-style, most drills are solid carbide, so a drill stays opt-in.
+export const ALWAYS_INSERT_TYPES = new Set(['face mill', 'turning general', 'boring head']);
+
+// The family an always-insert tool's paired view defaults to when it opens
+// with no stored pairing. Milling and boring are unambiguous; a plain turning
+// tool (`turning general`) could be any of ~9 turning families, so it defaults
+// to OD turning for the user to correct via the pairing-bar dropdown.
+export function autoInsertFamily(toolType) {
+  if (toolType === 'face mill') return 'milling_insert';
+  if (toolType === 'boring head') return 'boring_bar';
+  return 'od_turning';
+}
+
 export function defaultFamilyForType(toolType) {
   const hit = INSERT_FAMILIES.find(f => f.suggestedTypes.includes(toolType));
   return hit ? hit.id : 'od_turning';

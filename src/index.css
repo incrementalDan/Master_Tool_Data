@@ -4068,6 +4068,17 @@ input.sf-ref-num { text-align: right; }
   padding: 3px 12px;
   white-space: nowrap;
 }
+/* Editable family selector shown in the pairing bar while the family is still
+   changeable (no component linked yet) — sized to sit inline with the bar. */
+.pairing-family-select {
+  width: auto;
+  min-width: 190px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--blue);
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--border));
+}
 /* Pairing-level assembly number — same visual language as the assembly-card
    asm_number badge (mono blue plate). */
 .pairing-asm-badge {
