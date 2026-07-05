@@ -158,9 +158,12 @@ describe('formatOperation ("OP" prefix)', () => {
     expect(formatOperation('op 50')).toBe('OP50');
     expect(formatOperation('Op50')).toBe('OP50');
   });
-  it('handles a numeric operation with a single letter suffix', () => {
+  it('handles a numeric operation with letter suffix(es)', () => {
     expect(formatOperation('50A')).toBe('OP50A');
     expect(formatOperation('OP50A')).toBe('OP50A');
+    expect(formatOperation('50R')).toBe('OP50R');
+    expect(formatOperation('51M')).toBe('OP51M');
+    expect(formatOperation('160RB')).toBe('OP160RB');
   });
   it('leaves non-numeric free text alone (nothing to prefix)', () => {
     expect(formatOperation('Soft Jaw')).toBe('Soft Jaw');
