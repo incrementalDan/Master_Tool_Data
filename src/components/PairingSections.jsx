@@ -19,7 +19,7 @@ import InfoTip from './InfoTip.jsx';
 import {
   INSERT_FAMILIES, INSERT_FAMILY_BY_ID, COMPONENT_ROLE_LABELS,
   COMPONENT_SPEC_FIELDS, componentById, pairingAsmNumber,
-  composeCombinedProShopId,
+  composeCombinedProShopId, isCombinedProShopId,
 } from '../schema/insertFamilies.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
 import { unitAbbr } from '../utils/units.js';
@@ -163,8 +163,11 @@ export default function PairingSections({ tool, pairing: incomingPairing, stored
         )}
 
         {/* Unpair only removes a STORED pairing. An unsaved auto-pairing (an
-            always-insert type's default view) has nothing to remove. */}
-        {stored && (
+            always-insert type's default view) has nothing to remove — and a
+            tool whose Fusion product-id is a combined "holder/insert" id is
+            insert-style intrinsically, so unpairing it would just re-derive on
+            the next load; hide Unpair there rather than offer a no-op. */}
+        {stored && !isCombinedProShopId(tool.tool_id) && (
           <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             {!confirmUnlink ? (
               <button className="btn btn-ghost btn-sm" style={{ fontSize: 11, color: 'var(--text-sub)' }}

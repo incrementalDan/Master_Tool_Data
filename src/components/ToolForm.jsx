@@ -16,7 +16,7 @@ import ToolTypeDropdown from './ToolTypeDropdown.jsx';
 import ToolFields from './ToolFields.jsx';
 import {
   INSERT_FAMILIES, INSERT_FAMILY_BY_ID, ALWAYS_INSERT_TYPES,
-  defaultActivationFamily, newPairing,
+  defaultActivationFamily, newPairing, isCombinedProShopId,
 } from '../schema/insertFamilies.js';
 
 function derivePitchFromThreadSize(pitchStr, toolUnit = 'inches') {
@@ -183,9 +183,22 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
 
           {/* Insert-style activation. Always-insert types (face mill / turning /
               boring head) already open the paired view automatically, so the
-              toggle is only offered on the other types (the ~5% opt-in case). */}
+              toggle is only offered on the other types (the ~5% opt-in case).
+              A slash in the Fusion product-id makes a tool insert-style
+              intrinsically — the toggle can't turn that off (it would just
+              re-derive on the next load), so we show a read-only note instead. */}
           {!ALWAYS_INSERT_TYPES.has(data.tool_type) && (
             <Section title="Insert-Style Tool" icon={Link2}>
+              {isCombinedProShopId(data.tool_id) ? (
+                <p className="text-sub text-sm" style={{ lineHeight: 1.5 }}>
+                  Insert-style — detected from the Fusion product-id
+                  {' '}(<span className="font-mono">{data.tool_id}</span>), which combines the
+                  holder body and insert ProShop numbers with a “/”. Set the family and
+                  link the components on the tool page; to change whether it's insert-style,
+                  edit the product-id in Fusion.
+                </p>
+              ) : (
+              <>
               <label className="checkbox-row">
                 <input type="checkbox" checked={!!data.pairing} onChange={e => togglePairing(e.target.checked)} />
                 <span className="text-sub text-sm">Insert-style tool — separate holder body + insert</span>
@@ -208,6 +221,8 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
                     Link the holder body and insert on the tool page after saving.
                   </p>
                 </div>
+              )}
+              </>
               )}
             </Section>
           )}
