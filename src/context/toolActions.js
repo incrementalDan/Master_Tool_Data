@@ -63,10 +63,15 @@ export function createToolActions(ctx) {
     // Tier-3 (milling) families keep per-assembly numbers, with the id token
     // carrying BOTH component ids ("1001+1042").
     const pairingFamily = tool.pairing ? INSERT_FAMILY_BY_ID[tool.pairing.family] : null;
-    const skipAsmStamp = !!(pairingFamily && !pairingFamily.hasTier3Assembly);
-    const asmIdToken = tool.pairing
-      ? (pairedAsmIdPart(tool.pairing, componentsRef?.current) || tool.tool_id)
-      : tool.tool_id;
+    // Tier-3 (milling) paired tool: the asm-number id token is BOTH component ids
+    // ("1001+1042"). When the components aren't linked yet, pairedAsmIdPart is ''
+    // — do NOT fall back to the combined tool_id, which would bake the raw
+    // "1001/1042" slash form into an immutable Auto number that never re-derives.
+    // Skip stamping until the components link (see F2 in the decoupling audit).
+    const pairedIdPart = tool.pairing ? pairedAsmIdPart(tool.pairing, componentsRef?.current) : null;
+    const skipAsmStamp = !!(pairingFamily && !pairingFamily.hasTier3Assembly)
+      || !!(tool.pairing && !pairedIdPart);
+    const asmIdToken = tool.pairing ? pairedIdPart : tool.tool_id;
     const assemblies = baseAssemblies.map(a => {
       const withIds = {
         ...a,

@@ -233,6 +233,39 @@ describe('Fusion-side auto-detection (combined product-id)', () => {
     expect(t.pairing).toBe(stored);
   });
 
+  // F1: an auto-detected pairing can be persisted with NULL links before the
+  // component records exist (saved between first load and the ProShop import).
+  // Once the components exist, derivePairings must FILL those null links.
+  it('derivePairings fills null component links on a stored pairing once components exist', () => {
+    const components = [
+      { id: 'h', role: 'holder_body', tool_id: 'TF-194' },
+      { id: 'i', role: 'insert', tool_id: 'TO-195' },
+    ];
+    const stored = { family: 'od_turning', holder_component_id: null, insert_component_id: null, rta_number: '' };
+    const [t] = derivePairings([{ id: 't', tool_id: 'TF-194/TO-195', tool_type: 'turning general', pairing: stored }], components);
+    expect(t.pairing.holder_component_id).toBe('h');
+    expect(t.pairing.insert_component_id).toBe('i');
+    expect(t.pairing.family).toBe('od_turning'); // stored family preserved
+  });
+
+  it('derivePairings preserves a manual link and only fills the null side', () => {
+    const components = [
+      { id: 'h', role: 'holder_body', tool_id: 'TF-194' },
+      { id: 'i', role: 'insert', tool_id: 'TO-195' },
+    ];
+    const stored = { family: 'od_turning', holder_component_id: 'manual', insert_component_id: null, rta_number: '' };
+    const [t] = derivePairings([{ id: 't', tool_id: 'TF-194/TO-195', tool_type: 'turning general', pairing: stored }], components);
+    expect(t.pairing.holder_component_id).toBe('manual'); // user's link untouched
+    expect(t.pairing.insert_component_id).toBe('i');       // null side filled
+  });
+
+  it('derivePairings leaves a fully-linked stored pairing as the same reference', () => {
+    const components = [{ id: 'h', role: 'holder_body', tool_id: 'TF-194' }];
+    const stored = { family: 'od_turning', holder_component_id: 'a', insert_component_id: 'b', rta_number: '' };
+    const [t] = derivePairings([{ id: 't', tool_id: 'TF-194/TO-195', tool_type: 'turning general', pairing: stored }], components);
+    expect(t.pairing).toBe(stored);
+  });
+
   it('normProShopId is dash/space/case-insensitive', () => {
     expect(normProShopId('TF-194')).toBe('TF194');
     expect(normProShopId('tf 194')).toBe('TF194');

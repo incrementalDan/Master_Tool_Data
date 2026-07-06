@@ -2,8 +2,8 @@
 
 **Date:** 2026-07-06
 **Scope:** (1) audit the insert holder/insert component feature, (2) audit the program/job ↔ tool/preset link feature, (3) a concrete plan for letting tools exist *without* a Fusion entry (the "zero Fusion instances" TODO).
-**Status:** findings + plan only — nothing implemented.
-**Baseline:** all 177 unit tests pass; the round-trip audit runs clean (232 tools, 0 unexpected diffs).
+**Status:** findings + plan. **F1, F2, F5 are now FIXED** (with regression tests); the rest of the findings and the whole Part-3 plan remain proposals only.
+**Baseline:** all unit tests pass (182 after the F1/F2 regression tests were added); the round-trip audit runs clean (232 tools, 0 unexpected diffs).
 
 ---
 
@@ -19,7 +19,7 @@
 
 ### Findings (ordered by severity)
 
-#### 🔴 F1 — Stored pairings never re-link to their components ("re-linked on next load" is broken)
+#### 🔴 F1 — Stored pairings never re-link to their components ("re-linked on next load" is broken) — ✅ FIXED
 
 **What happens:** `derivePairings` (`src/schema/insertFamilies.js`) skips any tool that already has a stored pairing (`if (t.pairing) return t` — "stored pairing wins"). But the pairing gets *stored with null component links* before the components exist:
 
@@ -31,13 +31,13 @@ The same thing happens with any ordinary save (`writeLogicalTool` → `upsertMet
 
 **Impact:** no data loss — the component records exist and are manually linkable via `ComponentPicker` — but the documented auto-link workflow silently doesn't work, and after a full ProShop import the operator has to hand-link two components on every insert tool.
 
-**Suggested fix (~10 lines):** in `derivePairings`, for tools **with** a stored pairing, fill (never overwrite) null `holder_component_id`/`insert_component_id` by re-resolving `pairingFromCombinedId(tool.tool_id)` against the component maps. Fill-only keeps user-made manual links authoritative.
+**Fix applied:** `derivePairings` (`src/schema/insertFamilies.js`) now, for tools **with** a stored pairing, fills (never overwrites) null `holder_component_id`/`insert_component_id` by re-resolving `pairingFromCombinedId(tool.tool_id)` against the component maps. Fill-only keeps user-made manual links authoritative; a fully-linked or non-combined-id pairing is returned by the same reference (untouched). Covered by 3 new tests in `insertFamilies.test.js`.
 
-#### 🟠 F2 — Assembly numbers can permanently bake the raw combined ID (with the slash)
+#### 🟠 F2 — Assembly numbers can permanently bake the raw combined ID (with the slash) — ✅ FIXED
 
 **What happens:** for a tier-3 (milling/indexable/generic) paired tool whose components aren't linked yet, `pairedAsmIdPart` returns `''`, and both `writeLogicalTool` (`src/context/toolActions.js`) and `backfillAsmNumbers` (`src/utils/assemblyIdSystem.js`) fall back to `tool.tool_id` — the combined string like `I-167/G-168`. The composed asm number (e.g. `SK13-I-167/G-168-2.125`) is **stamped once and never overwritten**, and Auto values are by design never retired — so after the components link, the asm number stays in the wrong form forever (it should be `…I-167+G-168…`).
 
-**Suggested fix:** when `tool.pairing` is set and `pairedAsmIdPart` returns `''`, **skip stamping** (leave `asm_number` null) so the backfill composes it correctly once the components link. One condition in each of the two call sites.
+**Fix applied:** both call sites (`writeLogicalTool` in `src/context/toolActions.js` and `backfillAsmNumbers` in `src/utils/assemblyIdSystem.js`) now **skip stamping** when `tool.pairing` is set and `pairedAsmIdPart` returns `''` (leaving `asm_number` unset), so the correct `{holder}+{insert}` token composes once the components link. Covered by 2 new tests in `assemblyIdSystem.test.js`.
 
 #### 🟠 F3 — Component-row routing misses components whose parent tool has no combined ID
 
@@ -69,11 +69,11 @@ The same thing happens with any ordinary save (`writeLogicalTool` → `upsertMet
 
 ### Findings
 
-#### 🟠 F5 — Copying a preset copies its proven-job history
+#### 🟠 F5 — Copying a preset copies its proven-job history — ✅ FIXED
 
 `PresetPanel`'s "copy from preset" builds the new preset as `{ ...src, guid: generateId(), name: … }` — which **carries `job_ids`**. A brand-new, unproven preset then claims "proven on job O1042," which is false provenance and pollutes the tool's *Jobs / Where Used* panel. (Keeping `machine_id` on copy is documented and intentional; keeping `job_ids` is not.)
 
-**Suggested fix:** clear `job_ids: []` in the copy branch, one line.
+**Fix applied:** the "copy from preset" branch in `PresetPanel.jsx` now sets `job_ids: []` on the copy (`machine_id` is still carried, as before — that's intentional).
 
 #### 🟡 F6 — Small dangling-reference window between metadata and `jobs.json`
 
