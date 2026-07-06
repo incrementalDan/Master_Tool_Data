@@ -149,9 +149,12 @@ export function backfillAsmNumbers(tools, shopSettings, components = null) {
     // id token ("1001+1042").
     const pairingFamily = t.pairing ? INSERT_FAMILY_BY_ID[t.pairing.family] : null;
     if (pairingFamily && !pairingFamily.hasTier3Assembly) return t;
-    const idToken = t.pairing
-      ? (pairedAsmIdPart(t.pairing, components) || t.tool_id)
-      : t.tool_id;
+    // Tier-3 paired tool with unlinked components: pairedAsmIdPart is '' — don't
+    // fall back to the combined slash tool_id (that would bake the wrong,
+    // immutable form). Leave the number unstamped until the components link (F2).
+    const pairedIdPart = t.pairing ? pairedAsmIdPart(t.pairing, components) : null;
+    if (t.pairing && !pairedIdPart) return t;
+    const idToken = t.pairing ? pairedIdPart : t.tool_id;
     let touched = false;
     const assemblies = (t.assemblies || []).map(a => {
       if (a.asm_number) return a;

@@ -95,4 +95,33 @@ describe('backfillAsmNumbers', () => {
     const tools = [{ tool_id: '1', assemblies: [{ assembly_id: 'a', holder_description: 'X', ooh: 1 }] }];
     expect(backfillAsmNumbers(tools, { assembly_id_system: { mode: 'sequential' } })).toBe(tools);
   });
+
+  // F2: a tier-3 paired tool whose components aren't linked yet must NOT bake the
+  // combined slash tool_id into an immutable Auto number — leave it unstamped so
+  // the real "{holder}+{insert}" token composes once the components link.
+  it('does not stamp a tier-3 paired tool with unlinked components', () => {
+    const tools = [{
+      tool_id: 'I-167/G-168', tool_type: 'face mill',
+      pairing: { family: 'milling_insert', holder_component_id: null, insert_component_id: null },
+      assemblies: [{ assembly_id: 'a', holder_description: 'NBT30-SK13C-60', ooh: 2.125 }],
+    }];
+    const out = backfillAsmNumbers(tools, shop);
+    // Unchanged reference — nothing stamped (would otherwise be the slash form).
+    expect(out).toBe(tools);
+    expect(out[0].assemblies[0].asm_number).toBeUndefined();
+  });
+
+  it('stamps the both-ids token once a tier-3 pairing is linked to components', () => {
+    const components = [
+      { id: 'h', role: 'holder_body', tool_id: '1001' },
+      { id: 'i', role: 'insert', tool_id: '1042' },
+    ];
+    const tools = [{
+      tool_id: 'I-167/G-168', tool_type: 'face mill',
+      pairing: { family: 'milling_insert', holder_component_id: 'h', insert_component_id: 'i' },
+      assemblies: [{ assembly_id: 'a', holder_description: 'NBT30-SK13C-60', ooh: 2.125 }],
+    }];
+    const out = backfillAsmNumbers(tools, shop, { components });
+    expect(out[0].assemblies[0].asm_number).toBe('30-SK13-60-1001+1042-2.125');
+  });
 });

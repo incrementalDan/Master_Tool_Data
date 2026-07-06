@@ -327,7 +327,31 @@ export function derivePairings(tools, components = []) {
   }
   let changed = false;
   const next = (tools || []).map(t => {
-    if (t.pairing) return t; // stored pairing wins
+    if (t.pairing) {
+      // A stored pairing wins for the family + any links the user already set.
+      // But an auto-detected pairing can be persisted with NULL component links
+      // before the component records exist (e.g. the tool is saved between its
+      // first load and its ProShop component import). Once the components exist,
+      // FILL — never overwrite — a null link by re-resolving the combined id.
+      // Manual links stay authoritative; a fully-linked (or non-combined-id)
+      // pairing is left untouched.
+      const cur = t.pairing;
+      if ((cur.holder_component_id && cur.insert_component_id) || !isCombinedProShopId(t.tool_id)) return t;
+      const p = pairingFromCombinedId(t.tool_id, t.tool_type);
+      if (!p) return t;
+      const holder = cur.holder_component_id ? null : (holderByNum.get(normProShopId(p.holder_id)) || null);
+      const insert = cur.insert_component_id ? null : (insertByNum.get(normProShopId(p.insert_id)) || null);
+      if (!holder && !insert) return t;
+      changed = true;
+      return {
+        ...t,
+        pairing: {
+          ...cur,
+          holder_component_id: cur.holder_component_id || holder?.id || null,
+          insert_component_id: cur.insert_component_id || insert?.id || null,
+        },
+      };
+    }
     const p = pairingFromCombinedId(t.tool_id, t.tool_type);
     if (!p) return t;
     changed = true;

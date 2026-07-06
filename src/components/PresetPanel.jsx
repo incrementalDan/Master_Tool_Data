@@ -257,7 +257,9 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
     let np;
     if (copySrc.type === 'preset') {
       const src = presets.find(p => p.guid === copySrc.id);
-      if (src) np = { ...src, guid: generateId(), name: `${src.name || 'Preset'} (copy)` };
+      // Clear job_ids on the copy — proven-job provenance belongs to the original
+      // preset, not a fresh unproven copy of it (machine_id IS carried, by design).
+      if (src) np = { ...src, guid: generateId(), name: `${src.name || 'Preset'} (copy)`, job_ids: [] };
     }
     if (!np && copySrc.type === 'ref') {
       const ref = sfRefs.find(r => r.preset_id === copySrc.id);
