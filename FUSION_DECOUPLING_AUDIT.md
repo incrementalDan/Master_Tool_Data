@@ -126,10 +126,26 @@ This is the standard ERP pattern and it's where this app is already heading (the
 - **Fusion linkage becomes per-tool state**, not an app-wide assumption: a tool is either *linked* (has N Fusion instances — behaves **exactly** as today, same code path, byte-for-byte) or *unlinked* (zero instances — metadata-only, like component records already are).
 - **A shop-level setting** `shop_settings.integrations.fusion.enabled` (set in onboarding, changeable later) controls whether the Fusion sync layer is active at all. Turning it off doesn't delete anything — it just stops the sync adapter, so tools keep their stored Fusion linkage and pick it back up when re-enabled. This gives you the "start with Fusion, turn it off/on later" requirement for free.
 
+### Design decisions (resolved with the shop owner, 2026-07-06)
+
+These pin down the two questions that shape Phase A. Both should be treated as settled inputs to the schema design.
+
+**D1 — The app record is complete in ALL modes (not just no-Fusion mode).**
+The workflow is **identical** with or without Fusion: you always create/edit/manage tools *in the app*, and the app's own record holds everything (identity, geometry, unit, presets, …). Fusion — or any other CAM — is a **push/sync target**, not the store the app reads its identity from. Concretely, this means **Fusion-native data is duplicated into the app record even in Fusion mode** (today it lives "only in Fusion" with metadata as sticky-notes on top; after Phase A the app record is the real binder and Fusion is a printout of it). "Working with another CAM" = push to that CAM instead of Fusion; "no CAM" = the app stands alone with nothing to push.
+
+- **Caveat that keeps Fusion special:** Fusion is *co-edited* today — programmers edit tools directly in Fusion 360, and the Sync Job / reconcile-on-open machinery exists to pull those edits back. So **Fusion mode is two-way** (push out **+** keep today's pull-back/reconcile); a brand-new CAM starts **push-only** until a pull-back importer is built for it; **no CAM** is app-only.
+
+**D2 — Who wins on conflict is a user-selectable, guarded setting.**
+When the app record and Fusion disagree (someone edited a tool directly in Fusion 360), the winner is chosen by a shop setting — call it `integrations.fusion.authority: 'fusion' | 'app'` — **switchable at any time**, so the shop can start Fusion-authoritative (safe during migration) and flip to app-authoritative once it fully lives in the app as the front door.
+
+- **Mechanism is cheap and contained:** it's one setting + one branch at the load/merge seam (`mergeFusionAndMetadata`). It does **not** touch the editing workflow or the write path (writes always go to both stores). It's essentially **free once D1 lands**, because it only needs the app record to already hold the Fusion-native fields.
+- **Scope:** the setting governs only the fields **both stores hold** (the currently Fusion-native ones). Metadata-owned fields (`tool_id`, `machine_tool_number`, notes, tags, jobs, locations, …) stay app-owned in every mode — they never conflict.
+- **Not a free toggle — flip is a guarded migration action.** Each flip decides who gets *overwritten*: flipping to app-wins discards any un-reconciled Fusion-side edit on the next push (and the reverse flip has the mirror risk). So expose it as **"Make ToolDex the source of truth" / "Hand authority back to Fusion"** actions that **reconcile/pull from Fusion first** (nothing lost), then flip — not a raw checkbox that silently changes behavior.
+
 ### Phasing (each phase ships independently, current behavior preserved throughout)
 
 **Phase A — make the record complete (do this together with the SQLite schema design).**
-Extend the app's tool record to carry identity + geometry + unit + presets (i.e., everything `fusionToolToInternal` currently supplies). On read, **Fusion still wins** for Fusion-native fields on linked tools (unchanged behavior); the record is simply no longer amnesiac. This step is ~zero behavioral risk and is *literally the same work* as designing the SQLite `tools`/`presets` tables — do it once, not twice.
+Extend the app's tool record to carry identity + geometry + unit + presets (i.e., everything `fusionToolToInternal` currently supplies) — see D1. On read, **Fusion still wins by default** for Fusion-native fields on linked tools (unchanged behavior); this is exactly the `authority: 'fusion'` branch of D2, so the winner setting drops out of Phase A for free rather than being extra work. The record is simply no longer amnesiac. This step is ~zero behavioral risk and is *literally the same work* as designing the SQLite `tools`/`presets` tables — do it once, not twice.
 
 **Phase B — support zero-instance tools.**
 - `loadTools`: build tools from Fusion groups as today, **then** append metadata records with no live Fusion instances as unlinked tools. Delete the "no library linked" hard error when Fusion is disabled.
@@ -168,11 +184,11 @@ Reasoning, as the ERP/database call:
 
 ### Suggested order of operations
 
-1. **Fix F1, F2, F5 now** (small, independent, all data-integrity adjacent — under an hour of changes combined).
-2. **Design the full tool record + SQLite schema together** (Phase A) — a short design doc listing every field, its owner (app vs Fusion), and its table.
-3. **Implement Phase A on JSON**, keeping behavior identical.
-4. **Implement Phase B** behind the `integrations.fusion.enabled` setting + per-tool linkage.
-5. **Phase C cleanups** (retire `no_fusion_link`, placeholder warnings, tighten the insert-component intercept — F3 partly falls out for free).
+1. ~~**Fix F1, F2, F5**~~ ✅ done — plus F3, F4, F6 (F7 = deliberate won't-fix). All the audit's tactical findings are cleared; the branch is green.
+2. **Design the full tool record + SQLite schema together** (Phase A) — a short design doc listing every field, its owner (app vs Fusion vs shared/conflict-governed by D2), and its table. Incorporates D1 (complete record in all modes) and D2 (authority setting). **← next step.**
+3. **Implement Phase A on JSON**, keeping behavior identical (`authority: 'fusion'` default = today's behavior).
+4. **Implement Phase B** behind the `integrations.fusion.enabled` setting + per-tool linkage, and wire the guarded authority flip (D2).
+5. **Phase C cleanups** (retire `no_fusion_link`, placeholder warnings, tighten the insert-component intercept — F3's fix stops being load-bearing).
 6. SQLite storage swap when ready — at that point it's "replace the file layer," not "redesign the data."
 
 ---
