@@ -13,6 +13,7 @@ import * as driveService from '../services/driveService.js';
 import * as aps from '../services/apsService.js';
 import { groupByTrackingId, buildLogicalTool, combineToolsByToolId } from '../schema/toolSchema.js';
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
+import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry } from '../schema/vendorRegistry.js';
@@ -540,8 +541,11 @@ export function AppProvider({ children }) {
       const built = [];
       for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
       for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
-      const tools = combineToolsByToolId(built)
-        .map(t => ({ ...t, library_id: 'local', library_name: file.name || 'Local file' }));
+      const tools = derivePairings(
+        combineToolsByToolId(built)
+          .map(t => ({ ...t, library_id: 'local', library_name: file.name || 'Local file' })),
+        [], // local mode has no component records — pairings derive with empty slots
+      );
 
       dispatch({ type: 'ENTER_LOCAL_MODE', tools });
       notify(`Loaded ${tools.length} tool${tools.length === 1 ? '' : 's'} (local mode — read-only)`, 'success');
@@ -565,8 +569,11 @@ export function AppProvider({ children }) {
     const built = [];
     for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
     for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
-    const tools = combineToolsByToolId(built)
-      .map(t => ({ ...t, library_id: 'demo', library_name: 'Demo library' }));
+    const tools = derivePairings(
+      combineToolsByToolId(built)
+        .map(t => ({ ...t, library_id: 'demo', library_name: 'Demo library' })),
+      components?.components || [],
+    );
     // Tag demo holders with a single synthetic library so the picker grouping works.
     const taggedHolders = (holders || []).map(h => ({ ...h, _libraryId: 'demo', _libraryName: 'Demo holders' }));
 
@@ -735,9 +742,16 @@ export function AppProvider({ children }) {
         if (established) localStorage.setItem(SETUP_CELEBRATED_KEY, '1');
       }
 
+      // Insert-style auto-detect (read-only, no writes): a tool whose Fusion
+      // product-id is a combined "holder/insert" id (a "/" — see insertFamilies)
+      // gets an in-memory pairing, with its two components linked by ProShop
+      // number when they already exist. Persisted lazily on the tool's next save;
+      // components are created/filled on ProShop upload. Runs BEFORE the asm
+      // backfill so paired tools get the combined id token in their asm numbers.
+      const pairedTools = derivePairings(tools, componentsFile?.components || []);
       // Assembly ID System: fill auto-mode asm_number in-memory for any assembly
       // missing one (deterministic; persisted lazily on the tool's next save).
-      const finalTools = backfillAsmNumbers(tools, effectiveShop, componentsFile);
+      const finalTools = backfillAsmNumbers(pairedTools, effectiveShop, componentsFile);
 
       dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize, normalizeCount: untrackedCount });
       // Load every holder library alongside tools (non-critical — failure of one

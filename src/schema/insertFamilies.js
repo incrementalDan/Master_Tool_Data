@@ -273,6 +273,75 @@ export function pairingAsmNumber(pairing, components) {
   return `${h || '?'}/${i || '?'}`;
 }
 
+// ─── Fusion-side auto-detection ─────────────────────────────────────────────
+// Fusion carries an insert tool as ONE entry whose product-id is the two
+// ProShop numbers joined with a slash (e.g. "TF-194/TO-195", "A-103/ I-98").
+// The slash IS the insert-tool indicator — true for any tool type; ProShop
+// itself never uses the slash (each component is its own row / Tool #).
+export function isCombinedProShopId(id) {
+  return String(id || '').includes('/');
+}
+
+// Match ProShop ids interchangeably regardless of dashes/spaces/case
+// ("TF-194", "TF 194", "tf194" all compare equal) — same rule as the photo
+// importer's id matching.
+export function normProShopId(id) {
+  return String(id || '').replace(/[\s-]/g, '').toUpperCase();
+}
+
+// Derive a pairing's family + the two component ProShop numbers from a combined
+// product-id. Known prefix pairs classify to their family (holder/insert
+// assigned by prefix, order-insensitive); anything else falls back to the tool
+// type's natural family (→ generic_insert for arbitrary types), with holder =
+// first token, insert = second (Fusion's holder-first convention). Returns null
+// when the id isn't a two-part combined id.
+export function pairingFromCombinedId(toolId, toolType) {
+  if (!isCombinedProShopId(toolId)) return null;
+  const classified = splitCombinedProShopId(toolId);
+  if (classified) return classified;
+  const halves = String(toolId).split('/').map(h => h.trim()).filter(Boolean);
+  if (halves.length !== 2) return null;
+  return { family: defaultActivationFamily(toolType), holder_id: halves[0], insert_id: halves[1] };
+}
+
+// Load-time derive (read-only, no writes — like backfillAsmNumbers): for each
+// tool whose product-id is a combined id and that has NO stored pairing yet,
+// set an in-memory `pairing` with the family + component links resolved by
+// ProShop number against the existing component records. Unlinked sides stay
+// null (they're created/filled on ProShop upload). A tool that already carries
+// a stored pairing (from metadata) is left untouched. Returns a new array only
+// when something changed.
+export function derivePairings(tools, components = []) {
+  const list = Array.isArray(components) ? components : (components?.components || []);
+  const holderByNum = new Map();
+  const insertByNum = new Map();
+  for (const c of list) {
+    const key = normProShopId(c.tool_id);
+    if (!key) continue;
+    if (c.role === 'holder_body') holderByNum.set(key, c);
+    else if (c.role === 'insert') insertByNum.set(key, c);
+  }
+  let changed = false;
+  const next = (tools || []).map(t => {
+    if (t.pairing) return t; // stored pairing wins
+    const p = pairingFromCombinedId(t.tool_id, t.tool_type);
+    if (!p) return t;
+    changed = true;
+    const holder = holderByNum.get(normProShopId(p.holder_id)) || null;
+    const insert = insertByNum.get(normProShopId(p.insert_id)) || null;
+    return {
+      ...t,
+      pairing: {
+        family: p.family,
+        holder_component_id: holder?.id || null,
+        insert_component_id: insert?.id || null,
+        rta_number: '',
+      },
+    };
+  });
+  return changed ? next : tools;
+}
+
 // A blank pairing object as stored on the tool's metadata record.
 export function newPairing(family) {
   return {

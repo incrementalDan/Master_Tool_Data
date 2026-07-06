@@ -5,6 +5,7 @@ import {
   pairedAsmIdPart, pairingAsmNumber, newComponent, newPairing,
   componentById, defaultFamilyForType,
   ALWAYS_INSERT_TYPES, autoInsertFamily, defaultActivationFamily,
+  isCombinedProShopId, pairingFromCombinedId, derivePairings, normProShopId,
 } from './insertFamilies.js';
 
 describe('family list ↔ ProShop map', () => {
@@ -168,6 +169,72 @@ describe('pairing assembly numbers', () => {
     expect(componentById(components, 'h1')?.tool_id).toBe('1001');
     expect(componentById({ components }, 'i1')?.tool_id).toBe('1042');
     expect(componentById(components, 'nope')).toBeNull();
+  });
+});
+
+describe('Fusion-side auto-detection (combined product-id)', () => {
+  it('the slash is the insert-tool indicator', () => {
+    expect(isCombinedProShopId('TF-194/TO-195')).toBe(true);
+    expect(isCombinedProShopId('A-103/ I-98')).toBe(true);
+    expect(isCombinedProShopId('A-3')).toBe(false);
+    expect(isCombinedProShopId('')).toBe(false);
+  });
+
+  // The exact strings from the Fusion InsertToolREF export (with their
+  // inconsistent spacing), across the tool types that carry a slash id.
+  it('derives family + both component numbers for every reference case', () => {
+    expect(pairingFromCombinedId('TF-194/ TO-195', 'turning general'))
+      .toEqual({ family: 'od_turning', holder_id: 'TF-194', insert_id: 'TO-195' });
+    expect(pairingFromCombinedId('I-224/ G-223', 'face mill'))
+      .toEqual({ family: 'milling_insert', holder_id: 'I-224', insert_id: 'G-223' });
+    expect(pairingFromCombinedId('I-126 / G-125', 'face mill'))
+      .toEqual({ family: 'milling_insert', holder_id: 'I-126', insert_id: 'G-125' });
+    expect(pairingFromCombinedId('TT-79 / TC-82', 'drill'))
+      .toEqual({ family: 'indexable_drill', holder_id: 'TC-82', insert_id: 'TT-79' });
+    // Unknown prefix pairs fall back to the tool type's family (generic here),
+    // holder = first token, insert = second.
+    expect(pairingFromCombinedId('N-31 / Q-134', 'slot mill'))
+      .toEqual({ family: 'generic_insert', holder_id: 'N-31', insert_id: 'Q-134' });
+    expect(pairingFromCombinedId('A-103/ I-98', 'flat end mill'))
+      .toEqual({ family: 'generic_insert', holder_id: 'A-103', insert_id: 'I-98' });
+  });
+
+  it('returns null for a non-combined id', () => {
+    expect(pairingFromCombinedId('A-3', 'flat end mill')).toBeNull();
+  });
+
+  it('derivePairings sets an in-memory pairing and links existing components by number', () => {
+    const components = [
+      { id: 'h', role: 'holder_body', tool_id: 'TF-194' },
+      { id: 'i', role: 'insert', tool_id: 'TO 195' }, // space variant — still matches
+    ];
+    const tools = [
+      { id: 't1', tool_id: 'TF-194/ TO-195', tool_type: 'turning general' },
+      { id: 't2', tool_id: 'A-42', tool_type: 'flat end mill' }, // no slash — untouched
+    ];
+    const [paired, plain] = derivePairings(tools, components);
+    expect(paired.pairing).toEqual({
+      family: 'od_turning', holder_component_id: 'h', insert_component_id: 'i', rta_number: '',
+    });
+    expect(plain.pairing).toBeUndefined();
+  });
+
+  it('derivePairings leaves component links null when no component exists yet', () => {
+    const [t] = derivePairings([{ id: 't', tool_id: 'I-224/ G-223', tool_type: 'face mill' }], []);
+    expect(t.pairing.family).toBe('milling_insert');
+    expect(t.pairing.holder_component_id).toBeNull();
+    expect(t.pairing.insert_component_id).toBeNull();
+  });
+
+  it('derivePairings never overrides a stored pairing', () => {
+    const stored = { family: 'generic_insert', holder_component_id: 'x', insert_component_id: 'y', rta_number: 'RTA-9' };
+    const [t] = derivePairings([{ id: 't', tool_id: 'TF-194/TO-195', tool_type: 'turning general', pairing: stored }], []);
+    expect(t.pairing).toBe(stored);
+  });
+
+  it('normProShopId is dash/space/case-insensitive', () => {
+    expect(normProShopId('TF-194')).toBe('TF194');
+    expect(normProShopId('tf 194')).toBe('TF194');
   });
 });
 
