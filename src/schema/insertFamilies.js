@@ -203,6 +203,10 @@ export function newComponent(role, family = null, extra = {}) {
     coating: '',
     unit: getDefaultUnit(),
     notes: '',
+    // Free-text location (from ProShop's Location column, or manual) — the
+    // fallback shown until a structured tool_location is assigned. Mirrors how a
+    // tool carries both `location` (string) and `tool_location` (structured).
+    location: '',
     // Structured physical location — same shape as a tool's tool_location
     // ({ system_id, zone_id, station_id, drawer_id, bin }); composed to a
     // display string at render via resolveLocationString.
@@ -340,6 +344,23 @@ export function derivePairings(tools, components = []) {
     };
   });
   return changed ? next : tools;
+}
+
+// Build a lookup from ProShop component number → { role, family, tool_id } for
+// every insert tool in the library (a tool whose tool_id is a combined
+// holder/insert id). Keyed by normProShopId. The ProShop import uses this to
+// route a component's row to its component record instead of matching a tool or
+// minting a Fusion-only placeholder.
+export function insertComponentIndex(tools) {
+  const index = new Map();
+  for (const t of (tools || [])) {
+    if (!isCombinedProShopId(t?.tool_id)) continue;
+    const p = pairingFromCombinedId(t.tool_id, t.tool_type);
+    if (!p) continue;
+    index.set(normProShopId(p.holder_id), { role: 'holder_body', family: p.family, tool_id: t.tool_id });
+    index.set(normProShopId(p.insert_id), { role: 'insert', family: p.family, tool_id: t.tool_id });
+  }
+  return index;
 }
 
 // A blank pairing object as stored on the tool's metadata record.

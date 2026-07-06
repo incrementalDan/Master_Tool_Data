@@ -6,6 +6,7 @@ import {
   componentById, defaultFamilyForType,
   ALWAYS_INSERT_TYPES, autoInsertFamily, defaultActivationFamily,
   isCombinedProShopId, pairingFromCombinedId, derivePairings, normProShopId,
+  insertComponentIndex,
 } from './insertFamilies.js';
 
 describe('family list ↔ ProShop map', () => {
@@ -235,6 +236,21 @@ describe('Fusion-side auto-detection (combined product-id)', () => {
   it('normProShopId is dash/space/case-insensitive', () => {
     expect(normProShopId('TF-194')).toBe('TF194');
     expect(normProShopId('tf 194')).toBe('TF194');
+  });
+
+  it('insertComponentIndex maps each component number to its role/family', () => {
+    const tools = [
+      { tool_id: 'TF-194/ TO-195', tool_type: 'turning general' },
+      { tool_id: 'A-103/ I-98', tool_type: 'flat end mill' },
+      { tool_id: 'A-42', tool_type: 'flat end mill' }, // normal tool — not indexed
+    ];
+    const idx = insertComponentIndex(tools);
+    expect(idx.get('TF194')).toEqual({ role: 'holder_body', family: 'od_turning', tool_id: 'TF-194/ TO-195' });
+    expect(idx.get('TO195')).toEqual({ role: 'insert', family: 'od_turning', tool_id: 'TF-194/ TO-195' });
+    // generic-family insert endmill: holder = first token, insert = second
+    expect(idx.get('A103')).toEqual({ role: 'holder_body', family: 'generic_insert', tool_id: 'A-103/ I-98' });
+    expect(idx.get('I98')).toEqual({ role: 'insert', family: 'generic_insert', tool_id: 'A-103/ I-98' });
+    expect(idx.has('A42')).toBe(false);
   });
 });
 
