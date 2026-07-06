@@ -7,7 +7,7 @@ import { useState, useMemo } from 'react';
 import { Search, Plus } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import {
-  newComponent, COMPONENT_ROLE_LABELS, INSERT_FAMILY_BY_ID,
+  newComponent, COMPONENT_ROLE_LABELS, INSERT_FAMILY_BY_ID, normProShopId,
 } from '../schema/insertFamilies.js';
 
 export default function ComponentPicker({ role, family, currentId, onSelect, onClose }) {
@@ -41,6 +41,19 @@ export default function ComponentPicker({ role, family, currentId, onSelect, onC
     if (!draft.description.trim() && !draft.designation.trim()) {
       setError('Give the new component a description or designation.');
       return;
+    }
+    // Guard against duplicating a Tool ID that another component already owns —
+    // component numbers are their identity for pairing links / ProShop routing, so
+    // two records sharing one would resolve to the wrong drawer. Checked across
+    // BOTH roles (the same number as a holder in one pairing and an insert in
+    // another also collides). The user should select the existing record instead.
+    const newId = draft.tool_id.trim();
+    if (newId) {
+      const dup = (components?.components || []).find(c => normProShopId(c.tool_id) === normProShopId(newId));
+      if (dup) {
+        setError(`Tool ID “${newId}” is already used by ${COMPONENT_ROLE_LABELS[dup.role] || 'a component'} “${dup.description || dup.designation || dup.tool_id}”. Search for it above and select it instead of creating a duplicate.`);
+        return;
+      }
     }
     setError('');
     try {

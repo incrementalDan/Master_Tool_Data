@@ -767,10 +767,20 @@ function matchProShopToTools(groups, tools, psUnit = 'inches', existingComponent
 
     // Insert-tool component row → route to its component record (never a tool /
     // placeholder). Purchasing is built the same way as for a tool; the free-
-    // text location fills only until a structured location is assigned.
-    const compMeta = toolNum ? componentIndex.get(normProShopId(toolNum)) : null;
+    // text location fills only until a structured location is assigned. A row
+    // matches a component when EITHER (a) its number is one side of a combined-id
+    // tool in the library (componentIndex), OR (b) an existing component record
+    // already carries this number (existingCompByNum) — the latter covers
+    // components whose parent pairing has no combined tool_id (a generic_insert,
+    // or one where "Apply as Tool ID" was never run), which componentIndex misses
+    // and which would otherwise fall through and mint a Fusion-only placeholder.
+    const normNum = toolNum ? normProShopId(toolNum) : '';
+    const existing = normNum ? existingCompByNum.get(normNum) : null;
+    const compMeta = normNum
+      ? (componentIndex.get(normNum)
+          || (existing ? { role: existing.role, family: existing.family } : null))
+      : null;
     if (compMeta) {
-      const existing = existingCompByNum.get(normProShopId(toolNum));
       const base = existing || newComponent(compMeta.role, compMeta.family, { tool_id: toolNum });
       const purchasing = buildPurchasingFromGroup(group);
       const psLoc = (r['Location'] || '').trim();

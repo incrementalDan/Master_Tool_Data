@@ -2,8 +2,8 @@
 
 **Date:** 2026-07-06
 **Scope:** (1) audit the insert holder/insert component feature, (2) audit the program/job ↔ tool/preset link feature, (3) a concrete plan for letting tools exist *without* a Fusion entry (the "zero Fusion instances" TODO).
-**Status:** findings + plan. **F1, F2, F5 are now FIXED** (with regression tests); the rest of the findings and the whole Part-3 plan remain proposals only.
-**Baseline:** all unit tests pass (182 after the F1/F2 regression tests were added); the round-trip audit runs clean (232 tools, 0 unexpected diffs).
+**Status:** findings + plan. **F1–F6 are FIXED** (F1/F2 with regression tests); **F7 is a deliberate won't-fix** (see below). The whole Part-3 decoupling plan remains a proposal only.
+**Baseline:** all unit tests pass (182); the round-trip audit runs clean (232 tools, 0 unexpected diffs).
 
 ---
 
@@ -39,15 +39,17 @@ The same thing happens with any ordinary save (`writeLogicalTool` → `upsertMet
 
 **Fix applied:** both call sites (`writeLogicalTool` in `src/context/toolActions.js` and `backfillAsmNumbers` in `src/utils/assemblyIdSystem.js`) now **skip stamping** when `tool.pairing` is set and `pairedAsmIdPart` returns `''` (leaving `asm_number` unset), so the correct `{holder}+{insert}` token composes once the components link. Covered by 2 new tests in `assemblyIdSystem.test.js`.
 
-#### 🟠 F3 — Component-row routing misses components whose parent tool has no combined ID
+#### 🟠 F3 — Component-row routing misses components whose parent tool has no combined ID — ✅ FIXED
 
 `insertComponentIndex` only indexes tools whose `tool_id` contains a `/`. A component record that exists but belongs to a pairing without a combined ID (any `generic_insert`, or a shop that never clicked "Apply as Tool ID") is invisible to the import intercept — its ProShop row falls through to tool matching and can **mint a Fusion placeholder tool** for a component number (the exact thing the intercept exists to prevent).
 
-**Suggested fix:** in `matchProShopToTools`, also check `existingCompByNum` (the map already built from existing component records) *before* the tool-match path — any row whose Tool # matches an existing component record routes to that component regardless of the parent tool's ID shape.
+**Fix applied:** `matchProShopToTools` (`src/components/ImportFlow.jsx`) now derives `compMeta` from an existing component record (via `existingCompByNum`, using its own `role`/`family`) when `insertComponentIndex` misses — so any row whose Tool # matches an existing component routes to that component regardless of the parent tool's ID shape, and can never mint a Fusion placeholder.
 
-#### 🟡 F4 — No duplicate-`tool_id` guard on component records
+#### 🟡 F4 — No duplicate-`tool_id` guard on component records — ✅ FIXED (create path)
 
 `ComponentPicker` inline-create and the ProShop import don't check whether another component already carries the same Tool #. `derivePairings`/`insertComponentIndex` key by normalized number in a `Map`, so on a collision **last-write-wins silently** — two pairings could resolve to the wrong physical drawer. Low likelihood (ProShop numbers are its primary key), but a cheap warn-on-create check would close it. Related edge: the same number registered as a *holder* in one tool and an *insert* in another also collides.
+
+**Fix applied:** `ComponentPicker.handleCreate` (`src/components/ComponentPicker.jsx`) now blocks inline-creating a component whose Tool ID (normalized) already belongs to another component **of any role**, with a message pointing the user to select the existing record instead. (The ProShop-import side already upserts by number via `existingCompByNum`, so it updates rather than duplicates; a genuinely conflicting *cross-role* number in a ProShop export remains an inherent source-data issue, not something this app can invent an answer for.)
 
 #### Notes (working as designed, keep on the radar)
 
@@ -75,13 +77,17 @@ The same thing happens with any ordinary save (`writeLogicalTool` → `upsertMet
 
 **Fix applied:** the "copy from preset" branch in `PresetPanel.jsx` now sets `job_ids: []` on the copy (`machine_id` is still carried, as before — that's intentional).
 
-#### 🟡 F6 — Small dangling-reference window between metadata and `jobs.json`
+#### 🟡 F6 — Small dangling-reference window between metadata and `jobs.json` — ✅ FIXED
 
-`findOrCreateJob` returns the job immediately and schedules the `jobs.json` write on the 600 ms debounce, while `mergeTool`/`saveTool` write the referencing `job_id` into `tool_metadata.json` right away. A crash, forced tab kill, or failed Drive write in that window leaves a `job_id` in metadata with no job record — and `collectToolJobs` hides dangling ids *silently*, so the link just vanishes without a trace. Acceptable risk at today's scale (the flush-on-pagehide covers normal closes, and failures do toast); a transactional SQLite backend eliminates it. Consider flushing the jobs write *before* the metadata write in `mergeTool`'s path if you want belt-and-suspenders now.
+`findOrCreateJob` returned the job immediately and scheduled the `jobs.json` write on the 600 ms debounce, while `mergeTool`/`saveTool` write the referencing `job_id` into `tool_metadata.json` right away. A crash, forced tab kill, or failed Drive write in that window leaves a `job_id` in metadata with no job record — and `collectToolJobs` hides dangling ids *silently*, so the link just vanishes without a trace.
 
-#### 🟡 F7 — Cancelling a preset edit can orphan a freshly-created job record
+**Fix applied:** `findOrCreateJob` (`src/context/AppContext.jsx`) now persists a **created or enriched** job via a new `persistJobsNow` helper that writes `jobs.json` to Drive **immediately** (cancelling any pending debounced jobs write, and writing the *explicit* next-file object rather than the render-lagged `jobsRef` so the new job isn't dropped) — so the job record is durable before its id is referenced. An unchanged existing job needs no write; demo/no-Drive stays in-memory. This is a strict narrowing of the window, not a transaction — the complete guarantee still comes with the planned SQLite backend.
 
-In the preset editor's Jobs block, picking a program calls `findOrCreateJob` immediately (creating the `jobs[]` record), then adds the id to the *draft*. Cancelling the edit abandons the reference but the registry record stays. Harmless (jobs are legitimate shop-level entities even with zero references) — just know that "jobs with no links" can exist.
+#### 🟡 F7 — Cancelling a preset edit can orphan a freshly-created job record — ⚪ WON'T FIX (by design)
+
+In the preset editor's Jobs block, picking a program calls `findOrCreateJob` immediately (creating the `jobs[]` record), then adds the id to the *draft*. Cancelling the edit abandons the reference but the registry record stays.
+
+**Decision (after implementing F3/F4/F6): not worth a code change.** A job (program # + part #) is a legitimate shop-level entity that stands on its own — a job record with zero current tool/preset references is valid data, not corruption, and the future Programs page manages the registry directly. The only real "fix" is to defer job creation until the preset is *saved*, which means threading pending, id-less selections through the preset editor's draft + save path (a non-trivial refactor of a ~1,300-line component) for zero data-integrity benefit — nothing breaks, nothing resolves wrong, and `collectToolJobs` already tolerates any dangling id. Left as-is deliberately; revisit only if orphan-job accumulation ever becomes a real UX problem on the Programs page (at which point a "prune unreferenced jobs" action there is the cleaner answer than editor-side deferral).
 
 #### ⚪ Trivia
 

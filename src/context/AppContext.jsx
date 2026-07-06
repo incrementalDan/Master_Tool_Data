@@ -321,29 +321,51 @@ export function AppProvider({ children }) {
   const saveComponents = useCallback((components) =>
     saveSharedFile('components', components, 'SET_COMPONENTS'), [saveSharedFile]);
 
+  // Persist the jobs registry to Drive IMMEDIATELY (not on the shared-file 600ms
+  // debounce). Used when a job is CREATED/enriched and its id is about to be
+  // written into a tool/preset metadata record in the SAME user action: the
+  // debounced path could leave that reference durable on Drive while the
+  // jobs.json write is still pending, so a crash in the window would orphan the
+  // reference (and dangling job ids are hidden silently by collectToolJobs).
+  // Writes the explicit `nextFile` rather than reading jobsRef — the ref lags
+  // this tick's optimistic dispatch, so a ref-based write would drop the new job.
+  // Supersedes any pending debounced jobs write. Demo / no-Drive: state only.
+  const persistJobsNow = useCallback((nextFile) => {
+    dispatch({ type: 'SET_JOBS', jobs: nextFile });
+    if (demoModeRef.current || !googleRef.current) return;
+    const pending = sharedSaveTimersRef.current['jobs'];
+    if (pending?.timer) { clearTimeout(pending.timer); delete sharedSaveTimersRef.current['jobs']; }
+    const { SHARED_FILES } = driveService;
+    driveService.saveSharedJson(SHARED_FILES.jobs.name, SHARED_FILES.jobs.cacheKey, nextFile)
+      .catch(err => {
+        if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
+        notify(`Job save failed: ${err.message}`, 'error', 7000);
+      });
+  }, [notify]);
+
   // Resolve a (program #, part #) pair to its job record, creating it in the
   // registry if new. Identity is the case-insensitive trimmed pair (jobKey) —
   // the same job entered on five tools stays ONE record; references are by id.
   // `programId` (optional) joins the job to a Program Number Manager record; an
   // existing loose link is enriched with it the first time we learn it.
-  // Optimistic + debounced Drive write via saveJobs; demo mode stays in-memory.
+  // A created/enriched record is written to Drive IMMEDIATELY (persistJobsNow) so
+  // it's durable before its id is referenced; an unchanged existing record needs
+  // no write. Demo mode stays in-memory.
   const findOrCreateJob = useCallback((programNumber, partNumber, createdBy = '', programId = null) => {
     const file = jobsRef.current || DEFAULT_JOBS;
     const existing = findJob(file, programNumber, partNumber);
     if (existing) {
       if (programId && !existing.program_id) {
         const enriched = { ...existing, program_id: programId };
-        Promise.resolve(saveJobs({ ...file, jobs: file.jobs.map(j => j.id === existing.id ? enriched : j) })).catch(() => {});
+        persistJobsNow({ ...file, jobs: file.jobs.map(j => j.id === existing.id ? enriched : j) });
         return enriched;
       }
       return existing;
     }
     const job = newJob(programNumber, partNumber, createdBy, programId);
-    // saveJobs rejects when Drive isn't connected (callers gate the UI on that,
-    // but never let the rejection escape as an unhandled promise).
-    Promise.resolve(saveJobs({ ...file, jobs: [...(file.jobs || []), job] })).catch(() => {});
+    persistJobsNow({ ...file, jobs: [...(file.jobs || []), job] });
     return job;
-  }, [saveJobs]);
+  }, [persistJobsNow]);
 
   // Persist only the location_config sub-object (the Settings Location System
   // editor calls this after each add/edit/delete/normalize change). Merges via the
