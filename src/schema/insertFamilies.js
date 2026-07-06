@@ -44,6 +44,13 @@ export const INSERT_FAMILIES = [
   { id: 'id_groover',      label: 'ID Groover',                       hasTier3Assembly: false, suggestedTypes: ['turning general'] },
   { id: 'face_groover',    label: 'Face Groover',                     hasTier3Assembly: false, suggestedTypes: ['turning general'] },
   { id: 'part_off',        label: 'Part-Off',                         hasTier3Assembly: false, suggestedTypes: ['turning general'] },
+  // Generic catch-all for the ~5% of otherwise-solid tools that happen to run
+  // an insert tip (an insert-tipped key cutter / ball mill, etc.). Tier-3 so it
+  // keeps the holder + OOH assembly like a milling insert; NO ProShop prefix
+  // (arbitrary types have no combined-ID convention — each component still
+  // carries its own ProShop number). It's the default when a pairing is
+  // activated on a tool type with no more-specific family.
+  { id: 'generic_insert',  label: 'Insert-Tipped / Indexable (other)', hasTier3Assembly: true, suggestedTypes: [] },
 ];
 
 export const INSERT_FAMILY_BY_ID = Object.fromEntries(INSERT_FAMILIES.map(f => [f.id, f]));
@@ -76,6 +83,18 @@ export function autoInsertFamily(toolType) {
 export function defaultFamilyForType(toolType) {
   const hit = INSERT_FAMILIES.find(f => f.suggestedTypes.includes(toolType));
   return hit ? hit.id : 'od_turning';
+}
+
+// The family a pairing defaults to when it's activated (manually, via the
+// ToolForm toggle) on ANY tool type. Known insert types get their natural
+// family; everything else (an insert-tipped key cutter, ball mill, …) gets the
+// generic catch-all, which the user can refine via the pairing-bar dropdown.
+export function defaultActivationFamily(toolType) {
+  if (toolType === 'face mill') return 'milling_insert';
+  if (toolType === 'boring head') return 'boring_bar';
+  if (toolType === 'turning general') return 'od_turning';
+  if (toolType === 'drill') return 'indexable_drill';
+  return 'generic_insert';
 }
 
 // ─── ProShop translation table (sync boundary ONLY) ─────────────────────────
@@ -149,7 +168,11 @@ export function ensureProShopPrefix(id, prefix) {
 // care about order; consistency helps humans reading it). '' until both
 // components are linked and have tool_ids.
 export function composeCombinedProShopId(familyId, holderComp, insertComp) {
-  const map = PROSHOP_FAMILY_MAP[familyId] || {};
+  // Families without a ProShop convention (e.g. the generic catch-all used for
+  // arbitrary insert-tipped tools) don't compose a combined id — each component
+  // still carries its own ProShop number.
+  const map = PROSHOP_FAMILY_MAP[familyId];
+  if (!map) return '';
   const h = ensureProShopPrefix(holderComp?.tool_id, map.holder_prefix);
   const i = ensureProShopPrefix(insertComp?.tool_id, map.insert_prefix);
   if (!h || !i) return '';
@@ -180,6 +203,10 @@ export function newComponent(role, family = null, extra = {}) {
     coating: '',
     unit: getDefaultUnit(),
     notes: '',
+    // Free-text location (from ProShop's Location column, or manual) — the
+    // fallback shown until a structured tool_location is assigned. Mirrors how a
+    // tool carries both `location` (string) and `tool_location` (structured).
+    location: '',
     // Structured physical location — same shape as a tool's tool_location
     // ({ system_id, zone_id, station_id, drawer_id, bin }); composed to a
     // display string at render via resolveLocationString.
@@ -248,6 +275,92 @@ export function pairingAsmNumber(pairing, components) {
   const i = compIdToken(componentById(components, pairing?.insert_component_id));
   if (!h && !i) return '';
   return `${h || '?'}/${i || '?'}`;
+}
+
+// ─── Fusion-side auto-detection ─────────────────────────────────────────────
+// Fusion carries an insert tool as ONE entry whose product-id is the two
+// ProShop numbers joined with a slash (e.g. "TF-194/TO-195", "A-103/ I-98").
+// The slash IS the insert-tool indicator — true for any tool type; ProShop
+// itself never uses the slash (each component is its own row / Tool #).
+export function isCombinedProShopId(id) {
+  return String(id || '').includes('/');
+}
+
+// Match ProShop ids interchangeably regardless of dashes/spaces/case
+// ("TF-194", "TF 194", "tf194" all compare equal) — same rule as the photo
+// importer's id matching.
+export function normProShopId(id) {
+  return String(id || '').replace(/[\s-]/g, '').toUpperCase();
+}
+
+// Derive a pairing's family + the two component ProShop numbers from a combined
+// product-id. Known prefix pairs classify to their family (holder/insert
+// assigned by prefix, order-insensitive); anything else falls back to the tool
+// type's natural family (→ generic_insert for arbitrary types), with holder =
+// first token, insert = second (Fusion's holder-first convention). Returns null
+// when the id isn't a two-part combined id.
+export function pairingFromCombinedId(toolId, toolType) {
+  if (!isCombinedProShopId(toolId)) return null;
+  const classified = splitCombinedProShopId(toolId);
+  if (classified) return classified;
+  const halves = String(toolId).split('/').map(h => h.trim()).filter(Boolean);
+  if (halves.length !== 2) return null;
+  return { family: defaultActivationFamily(toolType), holder_id: halves[0], insert_id: halves[1] };
+}
+
+// Load-time derive (read-only, no writes — like backfillAsmNumbers): for each
+// tool whose product-id is a combined id and that has NO stored pairing yet,
+// set an in-memory `pairing` with the family + component links resolved by
+// ProShop number against the existing component records. Unlinked sides stay
+// null (they're created/filled on ProShop upload). A tool that already carries
+// a stored pairing (from metadata) is left untouched. Returns a new array only
+// when something changed.
+export function derivePairings(tools, components = []) {
+  const list = Array.isArray(components) ? components : (components?.components || []);
+  const holderByNum = new Map();
+  const insertByNum = new Map();
+  for (const c of list) {
+    const key = normProShopId(c.tool_id);
+    if (!key) continue;
+    if (c.role === 'holder_body') holderByNum.set(key, c);
+    else if (c.role === 'insert') insertByNum.set(key, c);
+  }
+  let changed = false;
+  const next = (tools || []).map(t => {
+    if (t.pairing) return t; // stored pairing wins
+    const p = pairingFromCombinedId(t.tool_id, t.tool_type);
+    if (!p) return t;
+    changed = true;
+    const holder = holderByNum.get(normProShopId(p.holder_id)) || null;
+    const insert = insertByNum.get(normProShopId(p.insert_id)) || null;
+    return {
+      ...t,
+      pairing: {
+        family: p.family,
+        holder_component_id: holder?.id || null,
+        insert_component_id: insert?.id || null,
+        rta_number: '',
+      },
+    };
+  });
+  return changed ? next : tools;
+}
+
+// Build a lookup from ProShop component number → { role, family, tool_id } for
+// every insert tool in the library (a tool whose tool_id is a combined
+// holder/insert id). Keyed by normProShopId. The ProShop import uses this to
+// route a component's row to its component record instead of matching a tool or
+// minting a Fusion-only placeholder.
+export function insertComponentIndex(tools) {
+  const index = new Map();
+  for (const t of (tools || [])) {
+    if (!isCombinedProShopId(t?.tool_id)) continue;
+    const p = pairingFromCombinedId(t.tool_id, t.tool_type);
+    if (!p) continue;
+    index.set(normProShopId(p.holder_id), { role: 'holder_body', family: p.family, tool_id: t.tool_id });
+    index.set(normProShopId(p.insert_id), { role: 'insert', family: p.family, tool_id: t.tool_id });
+  }
+  return index;
 }
 
 // A blank pairing object as stored on the tool's metadata record.

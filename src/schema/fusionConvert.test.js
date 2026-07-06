@@ -52,6 +52,21 @@ function makePreset(overrides = {}) {
 
 const outPreset = (fusionObj) => fusionObj['start-values'].presets[0];
 
+// Insert-style tools push back to Fusion as ONE entry — the pairing/components
+// are metadata-only and must never leak, and the combined "holder/insert"
+// product-id must round-trip verbatim so the Fusion entry stays recognizable.
+describe('insert-style tool → Fusion round-trip', () => {
+  it('preserves the combined product-id and never writes the pairing', () => {
+    const tool = makeTool({ preset: makePreset(), rawPreset: makePreset() });
+    tool.tool_id = 'TF-194/TO-195';
+    tool.pairing = { family: 'od_turning', holder_component_id: 'h', insert_component_id: 'i', rta_number: '' };
+    const out = internalToFusionTool(tool);
+    expect(out['product-id']).toBe('TF-194/TO-195');
+    expect(out.expressions.tool_productId).toBe("'TF-194/TO-195'");
+    expect('pairing' in out).toBe(false);
+  });
+});
+
 describe('stepdown/stepover three-way sync (normalizePreset via internalToFusionTool)', () => {
   it('rewrites the stepdown expression literal when the numeric value changed', () => {
     const rawPreset = makePreset();                       // stored: 0.018 + ".018 in"

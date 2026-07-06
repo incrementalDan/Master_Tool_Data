@@ -4,6 +4,7 @@ import { UploadCloud, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import ImportPhotosModal from './ImportPhotosModal.jsx';
 import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers, typeFromProShopGroup, resolveThreadSize } from '../schema/toolSchema.js';
+import { insertComponentIndex, newComponent, normProShopId } from '../schema/insertFamilies.js';
 import { vendorHasOwnCatalogNumber, resolveVendorName } from '../schema/vendorRegistry.js';
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
@@ -24,7 +25,7 @@ function mergeImportedTools(current, imported) {
 
 export default function ImportFlow() {
   const navigate = useNavigate();
-  const { tools, saveFullLibrary, isSaving, markSetupStepInSettings, shopSettings } = useApp();
+  const { tools, saveFullLibrary, isSaving, markSetupStepInSettings, shopSettings, components, saveComponents } = useApp();
   const toolLibraries = shopSettings?.tool_libraries || [];
   const defaultLibId = shopSettings?.default_tool_library_id || toolLibraries[0]?.id || null;
   const [targetLibraryId, setTargetLibraryId] = useState(defaultLibId);
@@ -34,6 +35,11 @@ export default function ImportFlow() {
   const [fusionPreview, setFusionPreview] = useState(null);
   const [proShopMatches, setProShopMatches] = useState(null);
   const [psUnit, setPsUnit] = useState(getDefaultUnit());
+  // Component records (holder body / insert) filled from ProShop rows that
+  // matched one side of an insert tool's combined id — saved to
+  // tool_components.json on commit (the pairings re-link them by number on the
+  // next load via derivePairings).
+  const [psComponents, setPsComponents] = useState([]);
   const [saving, setSaving] = useState(false);
   const [showPhotos, setShowPhotos] = useState(false);
   const fusionFileRef = useRef(null);
@@ -118,7 +124,7 @@ export default function ImportFlow() {
           if (!groupMap.has(key)) groupMap.set(key, []);
           groupMap.get(key).push(row);
         }
-        const matches = matchProShopToTools([...groupMap.values()], fusionTools, psUnit);
+        const matches = matchProShopToTools([...groupMap.values()], fusionTools, psUnit, components?.components || []);
         setProShopMatches(matches);
       } catch (err) {
         setParseError(`ProShop CSV parse error: ${err.message}`);
@@ -141,6 +147,11 @@ export default function ImportFlow() {
         merged.push(psRowToTool(psGroup, psUnit));
       }
     });
+
+    // Insert-tool component records (holder body / insert) filled from their
+    // ProShop rows — carried to the save step. They link back to their pairing
+    // by ProShop number on the next load (derivePairings).
+    setPsComponents((proShopMatches.components || []).map(c => c.record));
 
     setFusionTools(merged);
     setStep(3);
@@ -170,6 +181,15 @@ export default function ImportFlow() {
         library_id: t.library_id || targetLibraryId,
       }));
       await saveFullLibrary(numbered);
+      // Persist any insert-tool component records filled from ProShop rows
+      // (metadata-only, tool_components.json). Upsert by id so a re-import
+      // updates rather than duplicates.
+      if (psComponents.length) {
+        const existing = components?.components || [];
+        const byId = new Map(existing.map(c => [c.id, c]));
+        for (const rec of psComponents) byId.set(rec.id, rec);
+        await saveComponents({ ...(components || { version: 1 }), components: [...byId.values()] });
+      }
       navigate('/');
     } catch (err) {
       setParseError(err.message);
@@ -304,6 +324,11 @@ export default function ImportFlow() {
                 <div style={{ padding: '8px 14px', background: 'var(--surface-2)', borderRadius: 'var(--radius-sm)', fontSize: 13 }}>
                   <strong style={{ color: 'var(--text-sub)' }}>{fusionTools.length - proShopMatches.matched.length}</strong> library tools without ProShop match
                 </div>
+                {(proShopMatches.components?.length > 0) && (
+                  <div style={{ padding: '8px 14px', background: 'var(--surface-2)', borderRadius: 'var(--radius-sm)', fontSize: 13 }}>
+                    <strong style={{ color: 'var(--blue)' }}>{proShopMatches.components.length}</strong> insert-tool component{proShopMatches.components.length === 1 ? '' : 's'} (holder / insert)
+                  </div>
+                )}
               </div>
 
               {proShopMatches.unmatched.length > 0 && (
@@ -404,6 +429,15 @@ export default function ImportFlow() {
           <p className="text-sub text-sm mb-16">
             {fusionTools.length} tools ready to save. Export as needed, then save to Drive.
           </p>
+
+          {psComponents.length > 0 && (
+            <div style={{ marginBottom: 16, padding: 12, background: 'var(--surface-2)', borderRadius: 'var(--radius-sm)', fontSize: 13 }}>
+              <strong style={{ color: 'var(--blue)' }}>{psComponents.length}</strong> insert-tool
+              component record{psComponents.length === 1 ? '' : 's'} (holder&nbsp;body / insert) will be
+              saved with their own location &amp; purchasing. They link to their combined tool by ProShop
+              number on the next load.
+            </div>
+          )}
 
           {newPlaceholderCount > 0 && (
             <div className="warn-banner mb-16">
@@ -712,15 +746,47 @@ function buildPurchasingFromGroup(group) {
 // psUnit is the unit of the ProShop file; lengths merged onto an existing tool
 // (min_ooh, tip_to_first_thread) are converted from it into the matched tool's
 // own unit.
-function matchProShopToTools(groups, tools, psUnit = 'inches') {
+function matchProShopToTools(groups, tools, psUnit = 'inches', existingComponents = []) {
   const matched = [];
   const usedToolIdxs = new Set();
+
+  // Insert tools carry a combined "holder/insert" tool_id; each side's ProShop
+  // number identifies a COMPONENT record, not a tool. Index them so a component
+  // row fills/creates its component instead of matching a tool or minting a
+  // placeholder. Existing components are looked up so a re-import updates rather
+  // than duplicates.
+  const componentIndex = insertComponentIndex(tools);
+  const existingCompByNum = new Map((existingComponents || []).map(c => [normProShopId(c.tool_id), c]));
+  const components = [];
 
   for (const group of groups) {
     const r = group[0];
     const toolNum = (r['Tool #'] || '').trim();
     const desc = (r['Description'] || '').toLowerCase().trim();
     const diam = psNum(r['Cut Dia']);
+
+    // Insert-tool component row → route to its component record (never a tool /
+    // placeholder). Purchasing is built the same way as for a tool; the free-
+    // text location fills only until a structured location is assigned.
+    const compMeta = toolNum ? componentIndex.get(normProShopId(toolNum)) : null;
+    if (compMeta) {
+      const existing = existingCompByNum.get(normProShopId(toolNum));
+      const base = existing || newComponent(compMeta.role, compMeta.family, { tool_id: toolNum });
+      const purchasing = buildPurchasingFromGroup(group);
+      const psLoc = (r['Location'] || '').trim();
+      const record = {
+        ...base,
+        role: compMeta.role,
+        family: compMeta.family,
+        tool_id: toolNum,
+        description: existing?.description || r['Description'] || base.description || '',
+        unit: existing?.unit || psUnit,
+      };
+      if (purchasing.manufacturers.length || purchasing.vendors.length) record.purchasing = purchasing;
+      if (!base.tool_location && psLoc) record.location = psLoc;
+      components.push({ record, isNew: !existing, psGroup: group });
+      continue;
+    }
 
     let toolIdx = -1;
 
@@ -794,10 +860,10 @@ function matchProShopToTools(groups, tools, psUnit = 'inches') {
     }
   }
 
-  const matchedGroups = new Set(matched.map(m => m.psGroup));
+  const routedGroups = new Set([...matched.map(m => m.psGroup), ...components.map(c => c.psGroup)]);
   const unmatched = groups
-    .filter(g => !matchedGroups.has(g))
+    .filter(g => !routedGroups.has(g))
     .map(g => ({ psGroup: g, action: 'skip' }));
 
-  return { matched, unmatched };
+  return { matched, unmatched, components };
 }
