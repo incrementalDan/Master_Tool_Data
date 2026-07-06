@@ -39,15 +39,17 @@ The same thing happens with any ordinary save (`writeLogicalTool` → `upsertMet
 
 **Fix applied:** both call sites (`writeLogicalTool` in `src/context/toolActions.js` and `backfillAsmNumbers` in `src/utils/assemblyIdSystem.js`) now **skip stamping** when `tool.pairing` is set and `pairedAsmIdPart` returns `''` (leaving `asm_number` unset), so the correct `{holder}+{insert}` token composes once the components link. Covered by 2 new tests in `assemblyIdSystem.test.js`.
 
-#### 🟠 F3 — Component-row routing misses components whose parent tool has no combined ID
+#### 🟠 F3 — Component-row routing misses components whose parent tool has no combined ID — ✅ FIXED
 
 `insertComponentIndex` only indexes tools whose `tool_id` contains a `/`. A component record that exists but belongs to a pairing without a combined ID (any `generic_insert`, or a shop that never clicked "Apply as Tool ID") is invisible to the import intercept — its ProShop row falls through to tool matching and can **mint a Fusion placeholder tool** for a component number (the exact thing the intercept exists to prevent).
 
-**Suggested fix:** in `matchProShopToTools`, also check `existingCompByNum` (the map already built from existing component records) *before* the tool-match path — any row whose Tool # matches an existing component record routes to that component regardless of the parent tool's ID shape.
+**Fix applied:** `matchProShopToTools` (`src/components/ImportFlow.jsx`) now derives `compMeta` from an existing component record (via `existingCompByNum`, using its own `role`/`family`) when `insertComponentIndex` misses — so any row whose Tool # matches an existing component routes to that component regardless of the parent tool's ID shape, and can never mint a Fusion placeholder.
 
-#### 🟡 F4 — No duplicate-`tool_id` guard on component records
+#### 🟡 F4 — No duplicate-`tool_id` guard on component records — ✅ FIXED (create path)
 
 `ComponentPicker` inline-create and the ProShop import don't check whether another component already carries the same Tool #. `derivePairings`/`insertComponentIndex` key by normalized number in a `Map`, so on a collision **last-write-wins silently** — two pairings could resolve to the wrong physical drawer. Low likelihood (ProShop numbers are its primary key), but a cheap warn-on-create check would close it. Related edge: the same number registered as a *holder* in one tool and an *insert* in another also collides.
+
+**Fix applied:** `ComponentPicker.handleCreate` (`src/components/ComponentPicker.jsx`) now blocks inline-creating a component whose Tool ID (normalized) already belongs to another component **of any role**, with a message pointing the user to select the existing record instead. (The ProShop-import side already upserts by number via `existingCompByNum`, so it updates rather than duplicates; a genuinely conflicting *cross-role* number in a ProShop export remains an inherent source-data issue, not something this app can invent an answer for.)
 
 #### Notes (working as designed, keep on the radar)
 
