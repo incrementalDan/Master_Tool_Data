@@ -2,8 +2,8 @@
 
 **Date:** 2026-07-06
 **Scope:** (1) audit the insert holder/insert component feature, (2) audit the program/job ↔ tool/preset link feature, (3) a concrete plan for letting tools exist *without* a Fusion entry (the "zero Fusion instances" TODO).
-**Status:** findings + plan. **F1, F2, F5 are now FIXED** (with regression tests); the rest of the findings and the whole Part-3 plan remain proposals only.
-**Baseline:** all unit tests pass (182 after the F1/F2 regression tests were added); the round-trip audit runs clean (232 tools, 0 unexpected diffs).
+**Status:** findings + plan. **F1–F6 are FIXED** (F1/F2 with regression tests); **F7 is a deliberate won't-fix** (see below). The whole Part-3 decoupling plan remains a proposal only.
+**Baseline:** all unit tests pass (182); the round-trip audit runs clean (232 tools, 0 unexpected diffs).
 
 ---
 
@@ -77,13 +77,17 @@ The same thing happens with any ordinary save (`writeLogicalTool` → `upsertMet
 
 **Fix applied:** the "copy from preset" branch in `PresetPanel.jsx` now sets `job_ids: []` on the copy (`machine_id` is still carried, as before — that's intentional).
 
-#### 🟡 F6 — Small dangling-reference window between metadata and `jobs.json`
+#### 🟡 F6 — Small dangling-reference window between metadata and `jobs.json` — ✅ FIXED
 
-`findOrCreateJob` returns the job immediately and schedules the `jobs.json` write on the 600 ms debounce, while `mergeTool`/`saveTool` write the referencing `job_id` into `tool_metadata.json` right away. A crash, forced tab kill, or failed Drive write in that window leaves a `job_id` in metadata with no job record — and `collectToolJobs` hides dangling ids *silently*, so the link just vanishes without a trace. Acceptable risk at today's scale (the flush-on-pagehide covers normal closes, and failures do toast); a transactional SQLite backend eliminates it. Consider flushing the jobs write *before* the metadata write in `mergeTool`'s path if you want belt-and-suspenders now.
+`findOrCreateJob` returned the job immediately and scheduled the `jobs.json` write on the 600 ms debounce, while `mergeTool`/`saveTool` write the referencing `job_id` into `tool_metadata.json` right away. A crash, forced tab kill, or failed Drive write in that window leaves a `job_id` in metadata with no job record — and `collectToolJobs` hides dangling ids *silently*, so the link just vanishes without a trace.
 
-#### 🟡 F7 — Cancelling a preset edit can orphan a freshly-created job record
+**Fix applied:** `findOrCreateJob` (`src/context/AppContext.jsx`) now persists a **created or enriched** job via a new `persistJobsNow` helper that writes `jobs.json` to Drive **immediately** (cancelling any pending debounced jobs write, and writing the *explicit* next-file object rather than the render-lagged `jobsRef` so the new job isn't dropped) — so the job record is durable before its id is referenced. An unchanged existing job needs no write; demo/no-Drive stays in-memory. This is a strict narrowing of the window, not a transaction — the complete guarantee still comes with the planned SQLite backend.
 
-In the preset editor's Jobs block, picking a program calls `findOrCreateJob` immediately (creating the `jobs[]` record), then adds the id to the *draft*. Cancelling the edit abandons the reference but the registry record stays. Harmless (jobs are legitimate shop-level entities even with zero references) — just know that "jobs with no links" can exist.
+#### 🟡 F7 — Cancelling a preset edit can orphan a freshly-created job record — ⚪ WON'T FIX (by design)
+
+In the preset editor's Jobs block, picking a program calls `findOrCreateJob` immediately (creating the `jobs[]` record), then adds the id to the *draft*. Cancelling the edit abandons the reference but the registry record stays.
+
+**Decision (after implementing F3/F4/F6): not worth a code change.** A job (program # + part #) is a legitimate shop-level entity that stands on its own — a job record with zero current tool/preset references is valid data, not corruption, and the future Programs page manages the registry directly. The only real "fix" is to defer job creation until the preset is *saved*, which means threading pending, id-less selections through the preset editor's draft + save path (a non-trivial refactor of a ~1,300-line component) for zero data-integrity benefit — nothing breaks, nothing resolves wrong, and `collectToolJobs` already tolerates any dangling id. Left as-is deliberately; revisit only if orphan-job accumulation ever becomes a real UX problem on the Programs page (at which point a "prune unreferenced jobs" action there is the cleaner answer than editor-side deferral).
 
 #### ⚪ Trivia
 
