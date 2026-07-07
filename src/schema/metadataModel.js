@@ -263,6 +263,19 @@ export function buildMetadataTool(tool) {
       measured_serial: a.measured_serial || null,
     })),
     preset_meta,
+    // ── Complete-record presets (Fusion-decoupling Phase A, increment 2) ──────
+    // The FULL preset set, persisted so the app record is standalone: a no-Fusion
+    // tool carries its own presets (Fusion has none to read from). Each entry is
+    // the whole preset object — the modeled speeds/feeds AND the un-modeled
+    // Fusion-native keys ('use-stepdown', 'ramp-angle', 'tool-coolant', …) — the
+    // JSON-storage equivalent of the tool_presets row + its raw_json blob.
+    // For a LINKED tool presets still come from Fusion on read (buildLogicalTool),
+    // so this copy is written-but-not-read today; it's the source for the no-Fusion
+    // path (Phase B) and app-vs-Fusion drift diffing (D3). preset_meta above is the
+    // per-guid app-only overlay the linked read still uses — a subset of these,
+    // redundant-but-retained until the SQLite migration folds both into columns.
+    // Both are written from the same tool.presets here, so they can't drift.
+    presets: (tool.presets || []).map(p => ({ ...p })),
     // Tool-level job links (jobs.json registry ids) — "this tool was used on
     // job X" without preset context. Preset-proven links live in preset_meta.
     job_ids: tool.job_ids || [],

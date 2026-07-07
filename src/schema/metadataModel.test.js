@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildMetadataTool, mergeFusionAndMetadata } from './metadataModel.js';
+import { buildLogicalTool } from './logicalTools.js';
 
 // Fusion-decoupling Phase A (increment 1): the app's metadata record now carries
 // the Fusion-native SCALAR fields (identity + geometry + unit + material) so it's
@@ -75,5 +76,80 @@ describe('Phase A — mergeFusionAndMetadata keeps LINKED-tool reads Fusion-auth
     expect(merged.diameter).toBe(0.5);
     expect(merged.number_of_flutes).toBe(4);
     expect(merged.material).toBe('carbide');
+  });
+});
+
+// ── Increment 2: presets into the app record ────────────────────────────────
+const toolWithPresets = {
+  ...sampleTool,
+  presets: [
+    {
+      guid: 'preset-guid-1', name: 'AL 2.0 SK13 - Rough',
+      material: { category: 'all', query: 'Aluminum', 'use-hardness': false },
+      n: 12000, v_c: 900, v_f: 120, f_z: 0.0025, f_n: 0,
+      'use-stepdown': true, stepdown: 0.05, 'use-stepover': false, stepover: null,
+      'tool-coolant': 'flood', 'ramp-angle': 2,
+      operation_type: 'rough', machine_id: 'machine-uuid-1', job_ids: ['job-1'],
+    },
+  ],
+};
+
+describe('Phase A increment 2 — presets in the complete record', () => {
+  it('buildMetadataTool persists the full preset set (modeled + Fusion-native keys + app-only fields)', () => {
+    const meta = buildMetadataTool(toolWithPresets);
+    expect(meta.presets).toHaveLength(1);
+    const p = meta.presets[0];
+    expect(p.guid).toBe('preset-guid-1');
+    expect(p.n).toBe(12000);
+    expect(p['use-stepdown']).toBe(true);   // un-modeled Fusion-native key preserved
+    expect(p.stepdown).toBe(0.05);
+    expect(p.operation_type).toBe('rough'); // app-only fields carried too
+    expect(p.machine_id).toBe('machine-uuid-1');
+    expect(p.job_ids).toEqual(['job-1']);
+    // preset_meta (the linked-read overlay) is still written and consistent
+    expect(meta.preset_meta['preset-guid-1']).toMatchObject({
+      operation_type: 'rough', machine_id: 'machine-uuid-1', job_ids: ['job-1'],
+    });
+  });
+
+  it('a LINKED tool still reads presets from Fusion (metadata copy is inert)', () => {
+    // Raw Fusion instance carrying its own presets; metadata carries a DIFFERENT
+    // preset set. Fusion must win for a linked tool — no behavior change.
+    const raw = {
+      guid: 'inst-1',
+      'post-process': { comment: 'FTL-ABC123' },
+      type: 'flat end mill', unit: 'inches',
+      geometry: { DC: 0.5, LCF: 1, OAL: 3, NOF: 4 },
+      'start-values': { presets: [{ guid: 'fusion-preset', name: 'FUSION PRESET', n: 8000 }] },
+    };
+    const meta = buildMetadataTool(toolWithPresets); // has 'preset-guid-1'
+    const metaByTracking = new Map([['FTL-ABC123', { ...meta, id: 'FTL-ABC123' }]]);
+    const tool = buildLogicalTool([raw], metaByTracking);
+    expect(tool.presets).toHaveLength(1);
+    expect(tool.presets[0].guid).toBe('fusion-preset'); // Fusion's, not metadata's
+    expect(tool.presets[0].n).toBe(8000);
+  });
+
+  it('a NO-FUSION tool reconstructs its presets from metadata', () => {
+    // Raw Fusion instance with NO presets (start-values empty) — stands in for a
+    // tool that has no real Fusion cutting data. The complete metadata presets
+    // fill in, app-only fields intact.
+    const raw = {
+      guid: 'inst-1',
+      'post-process': { comment: 'FTL-ABC123' },
+      type: 'flat end mill', unit: 'inches',
+      geometry: { DC: 0.5, LCF: 1, OAL: 3, NOF: 4 },
+      'start-values': { presets: [] },
+    };
+    const meta = buildMetadataTool(toolWithPresets);
+    const metaByTracking = new Map([['FTL-ABC123', { ...meta, id: 'FTL-ABC123' }]]);
+    const tool = buildLogicalTool([raw], metaByTracking);
+    expect(tool.presets).toHaveLength(1);
+    expect(tool.presets[0].guid).toBe('preset-guid-1');
+    expect(tool.presets[0].n).toBe(12000);
+    expect(tool.presets[0]['use-stepdown']).toBe(true);
+    expect(tool.presets[0].operation_type).toBe('rough');
+    expect(tool.presets[0].machine_id).toBe('machine-uuid-1');
+    expect(tool.presets[0].job_ids).toEqual(['job-1']);
   });
 });

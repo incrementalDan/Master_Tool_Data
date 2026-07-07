@@ -57,13 +57,22 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
   // blank — the shop's presets encode the material only in the name ("AL FIN",
   // "SS316 SM HOLE FIN"), so without this the material would be lost on rename.
   const presetMeta = meta?.preset_meta || {};
-  const presets = (merged.presets || []).map(p => {
+  // Presets come from Fusion for a LINKED tool (the only case today). When the
+  // Fusion side has none — a no-Fusion tool (Phase B) — fall back to the complete
+  // presets persisted in metadata (see buildMetadataTool). Inert for linked tools:
+  // Fusion presets are present, so this is exactly today's source. The `?? p.<field>`
+  // tails preserve a metadata-sourced preset's own app-only values when there's no
+  // name-parse or preset_meta entry (a linked Fusion preset carries none, so the
+  // tails are inert there too).
+  const fusionPresets = merged.presets || [];
+  const sourcePresets = fusionPresets.length > 0 ? fusionPresets : (meta?.presets || []);
+  const presets = sourcePresets.map(p => {
     const inferredMat = !p.material?.query ? matchMaterial(p.name) : null;
     return {
       ...p,
-      operation_type: parsePresetName(p.name)?.opType ?? presetMeta[p.guid]?.operation_type ?? null,
-      machine_id: presetMeta[p.guid]?.machine_id ?? null,
-      job_ids: presetMeta[p.guid]?.job_ids ?? [],
+      operation_type: parsePresetName(p.name)?.opType ?? presetMeta[p.guid]?.operation_type ?? p.operation_type ?? null,
+      machine_id: presetMeta[p.guid]?.machine_id ?? p.machine_id ?? null,
+      job_ids: presetMeta[p.guid]?.job_ids ?? p.job_ids ?? [],
       material: inferredMat
         ? { ...(p.material || {}), query: inferredMat, category: materialCategory(inferredMat) }
         : p.material,
