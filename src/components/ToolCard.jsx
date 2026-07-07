@@ -75,8 +75,8 @@ export default function ToolCard({ tool, variant = 'grid', matchedLegacyId = nul
         )
       )}
       {tool.no_fusion_link && (
-        <span className="no-fusion-pill" style={{ fontSize: 10, padding: '1px 7px' }} title="Added from ProShop with no Fusion match — Fusion entry is a placeholder and needs setup">
-          <AlertTriangle size={10} /> No Fusion Link
+        <span className="no-fusion-pill" style={{ fontSize: 10, padding: '1px 7px' }} title="Not in Fusion — this tool lives in the app & metadata only (no Fusion library entry). Open it to create it in Fusion.">
+          <AlertTriangle size={10} /> Not in Fusion
         </span>
       )}
       {/* Only shown when the search matched a former (retired) ID. */}

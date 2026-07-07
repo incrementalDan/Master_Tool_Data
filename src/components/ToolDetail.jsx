@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
   Ruler, StickyNote, Clock, Wrench, AlertTriangle, Camera,
-  ChevronDown, ChevronRight, FileJson, MapPin,
+  ChevronDown, ChevronRight, FileJson, MapPin, Link2, Unlink, CloudOff,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
 import LocationPicker from './LocationPicker.jsx';
@@ -45,7 +45,7 @@ export default function ToolDetail() {
   const {
     tools, saveTool, deleteTool, cloneTool, isSaving, notify, holders, holderLibraryLocation,
     reconcileTool, googleAuthenticated, uploadToolPhoto, uploadToolAttachment, deleteToolAttachment,
-    shopSettings,
+    shopSettings, promoteToolToFusion, detachToolFromFusion,
   } = useApp();
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
   const [editing, setEditing] = useState(searchParams.get('edit') === '1');
@@ -78,6 +78,7 @@ export default function ToolDetail() {
   const reconciledRef = useRef(null);
   useEffect(() => {
     if (!tool || editing) return;
+    if (tool.no_fusion_link) return; // no Fusion entry — nothing to reconcile against
     if (reconciledRef.current === tool.id) return;
     reconciledRef.current = tool.id;
     let cancelled = false;
@@ -131,6 +132,22 @@ export default function ToolDetail() {
       </div>
     );
   }
+
+  // No-Fusion tool (Fusion-decoupling Phase B): lives in the app/metadata only,
+  // with no Fusion library entry. Fusion-workflow actions (Sync Job, reconcile,
+  // Copy to Fusion) are hidden; a Promote action creates it in Fusion, and a
+  // linked tool can be Detached back to no-Fusion.
+  const noFusion = !!tool.no_fusion_link;
+
+  const handlePromote = async () => {
+    try { await promoteToolToFusion(tool.id); }
+    catch { /* toast handled in context */ }
+  };
+  const handleDetach = async () => {
+    if (!window.confirm('Detach this tool from Fusion? Its Fusion library entry is removed; all app data (specs, presets, purchasing, location, photos) is kept. You can re-create it in Fusion later.')) return;
+    try { await detachToolFromFusion(tool.id); }
+    catch { /* toast handled in context */ }
+  };
 
   const clearEditParam = () => {
     if (searchParams.get('edit')) {
@@ -271,15 +288,26 @@ export default function ToolDetail() {
         <div className="tool-sidebar-divider" />
         <SidebarBtn icon={Pencil} label="Edit" tip="Edit this tool" onClick={guardLeave(() => setEditing(true))} />
         <SidebarBtn icon={Copy} label="Duplicate" tip="Duplicate tool" onClick={handleClone} />
-        <SidebarBtn icon={GitMerge} label="Sync Job" tip="Sync proven values from a job file" onClick={() => navigate(`/merge/${tool.id}`)} />
+        {/* Sync Job is a Fusion-library workflow — hidden for a no-Fusion tool. */}
+        {!noFusion && (
+          <SidebarBtn icon={GitMerge} label="Sync Job" tip="Sync proven values from a job file" onClick={() => navigate(`/merge/${tool.id}`)} />
+        )}
         <div className="tool-sidebar-divider" />
-        <SidebarBtn
-          icon={Copy}
-          label={copied ? 'Copied!' : 'Copy to Fusion'}
-          tip="Copy Fusion JSON to clipboard (Ctrl+V into Fusion library)"
-          className={copied ? 'copied' : ''}
-          onClick={() => setShowExportPicker('copy')}
-        />
+        {/* Promote a no-Fusion tool into the Fusion library, or detach a linked one. */}
+        {noFusion ? (
+          <SidebarBtn icon={Link2} label="Create in Fusion" tip="Create this tool in the Fusion library (promote from no-Fusion)" onClick={handlePromote} />
+        ) : (
+          <SidebarBtn icon={Unlink} label="Detach" tip="Remove from the Fusion library (keeps all app data)" onClick={handleDetach} />
+        )}
+        {!noFusion && (
+          <SidebarBtn
+            icon={Copy}
+            label={copied ? 'Copied!' : 'Copy to Fusion'}
+            tip="Copy Fusion JSON to clipboard (Ctrl+V into Fusion library)"
+            className={copied ? 'copied' : ''}
+            onClick={() => setShowExportPicker('copy')}
+          />
+        )}
         <SidebarBtn
           icon={Download}
           label="Download"
@@ -568,7 +596,12 @@ export default function ToolDetail() {
 
         {/* Which library this tool lives in (multi-library). Reads and writes go
             back to this library. Muted one-liner at the bottom of the page. */}
-        {tool.library_name && (
+        {noFusion ? (
+          <div className="text-sub text-xs" style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <CloudOff size={13} style={{ flexShrink: 0, color: 'var(--orange)' }} />
+            Not in Fusion — this tool lives in the app &amp; metadata only. Use <strong>Create in Fusion</strong> to add it to the library.
+          </div>
+        ) : tool.library_name && (
           <div className="text-sub text-xs" style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
             <FileJson size={13} style={{ flexShrink: 0 }} />
             In library: <span className="font-mono">{tool.library_name}</span>
