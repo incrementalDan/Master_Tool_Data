@@ -241,6 +241,11 @@ export const DEFAULT_SHOP_SETTINGS = {
   // Phase A — the app record is being made complete first; read/write behavior is
   // unchanged until Phase B wires these.
   integrations: {
+    // enabled: whether the Fusion sync adapter is active at all.
+    // authority: the DEFAULT winner when a linked tool's app record and its live
+    //   Fusion entry disagree on a shared field ('fusion' = Fusion wins, today's
+    //   behavior; 'app' = the app record wins). It only PRE-SELECTS the choice in
+    //   the always-shown drift review (D3) — it never resolves silently.
     fusion: { enabled: true, authority: 'fusion' },
   },
   // CNC machine models. Each entry: id, model, machine_type, taper, max_rpm,

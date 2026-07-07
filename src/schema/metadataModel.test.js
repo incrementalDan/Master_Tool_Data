@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildMetadataTool, mergeFusionAndMetadata } from './metadataModel.js';
+import { buildMetadataTool, mergeFusionAndMetadata, detectFusionDrift } from './metadataModel.js';
 import { buildLogicalTool, buildUnlinkedTool, isUnlinkedMeta, materializeUnlinkedTools } from './logicalTools.js';
 
 // Fusion-decoupling Phase A (increment 1): the app's metadata record now carries
@@ -22,6 +22,9 @@ const sampleTool = {
   taper_angle: null,
   thread_pitch: null,
   material: 'carbide',
+  // fusionToolToInternal always populates this (defaults to Right Hand), so both
+  // sides carry it in real data — set it here so drift compares like-for-like.
+  cutting_direction: 'Right Hand',
 };
 
 describe('Phase A — buildMetadataTool persists the complete scalar record', () => {
@@ -214,6 +217,56 @@ describe('Phase B increment 1 — no-Fusion tools (build from metadata alone)', 
     expect(tool.no_fusion_link).toBe(false);
     expect(tool.tool_type).toBe('flat end mill'); // still fully reconstructed from metadata
     expect(tool.diameter).toBe(0.5);
+  });
+});
+
+describe('Phase B increment 5a — Fusion drift detection (D3)', () => {
+  it('reports no drift when the app copy matches Fusion', () => {
+    const meta = buildMetadataTool(sampleTool);
+    const fusionInternal = { ...sampleTool };
+    expect(detectFusionDrift(fusionInternal, meta)).toEqual([]);
+  });
+
+  it('detects a differing numeric field (someone changed diameter in Fusion)', () => {
+    const meta = buildMetadataTool(sampleTool);           // diameter 0.5 stored
+    const fusionInternal = { ...sampleTool, diameter: 0.375 }; // Fusion now says 0.375
+    const drift = detectFusionDrift(fusionInternal, meta);
+    expect(drift).toEqual([{ field: 'diameter', fusionValue: 0.375, appValue: 0.5 }]);
+  });
+
+  it('detects a differing string field (description edited in Fusion)', () => {
+    const meta = buildMetadataTool(sampleTool);
+    const fusionInternal = { ...sampleTool, description: 'CHANGED IN FUSION' };
+    const drift = detectFusionDrift(fusionInternal, meta);
+    expect(drift).toEqual([{ field: 'description', fusionValue: 'CHANGED IN FUSION', appValue: '1/2 4FL EM' }]);
+  });
+
+  it('does NOT flag a field the app has not populated yet (no false alarm on old metadata)', () => {
+    // Pre-complete-record metadata: no stored diameter → not drift even though
+    // Fusion has one.
+    const meta = { id: 'FTL-OLD', description: '1/2 4FL EM', tool_type: 'flat end mill' };
+    const fusionInternal = { ...sampleTool, description: '1/2 4FL EM', tool_type: 'flat end mill' };
+    expect(detectFusionDrift(fusionInternal, meta)).toEqual([]);
+  });
+
+  it('absorbs Fusion float round-trip noise below significance', () => {
+    const meta = buildMetadataTool({ ...sampleTool, diameter: 0.5 });
+    const fusionInternal = { ...sampleTool, diameter: 0.5000002 };
+    expect(detectFusionDrift(fusionInternal, meta)).toEqual([]);
+  });
+
+  it('buildLogicalTool attaches _drift for a linked tool whose Fusion geometry diverged', () => {
+    const meta = buildMetadataTool(sampleTool);           // diameter 0.5
+    const raw = {
+      guid: 'inst-1', 'post-process': { comment: 'FTL-ABC123' },
+      type: 'flat end mill', unit: 'inches',
+      geometry: { DC: 0.375, LCF: 1, OAL: 3, NOF: 4 },    // Fusion diameter differs
+      'start-values': { presets: [] },
+    };
+    const metaByTracking = new Map([['FTL-ABC123', { ...meta, id: 'FTL-ABC123' }]]);
+    const tool = buildLogicalTool([raw], metaByTracking);
+    const dia = tool._drift.find(d => d.field === 'diameter');
+    expect(dia).toEqual({ field: 'diameter', fusionValue: 0.375, appValue: 0.5 });
   });
 });
 

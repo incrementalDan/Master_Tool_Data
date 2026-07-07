@@ -6,7 +6,7 @@ import {
   applyMachineNumberToFusion,
 } from './identity.js';
 import { fusionToolToInternal, internalToFusionTool } from './fusionConvert.js';
-import { mergeFusionAndMetadata, buildMetadataTool } from './metadataModel.js';
+import { mergeFusionAndMetadata, buildMetadataTool, detectFusionDrift } from './metadataModel.js';
 import { buildHolderObject } from './holderGauge.js';
 import { parsePresetName, materialCategory, matchMaterial } from '../utils/presetNaming.js';
 import { convertLength } from '../utils/units.js';
@@ -80,6 +80,10 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
     // acknowledged. Used by reconciliation to tell app-known instances from
     // entries dumped straight into the Fusion library.
     _registeredAssemblies: (meta?.assemblies || []).filter(Boolean),
+    // Field-level drift (D3): shared fields where the live Fusion value differs
+    // from the app's stored copy — someone edited this tool directly in Fusion.
+    // Runtime-only (never persisted), surfaced on the tool page for confirmation.
+    _drift: detectFusionDrift(internal, meta),
   };
 }
 

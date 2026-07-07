@@ -3,6 +3,44 @@
 // and mergeFusionAndMetadata reads them back onto the internal tool object.
 import { generateId, generateAssemblyId } from './identity.js';
 
+// ─── Fusion drift detection (Fusion-decoupling Phase B — D3) ───────────────
+// The shared, Fusion-native fields the app now ALSO stores in metadata. When a
+// linked tool's live Fusion value differs from the app's stored copy, someone
+// edited the tool directly in Fusion 360 (or the app, in app-authority mode) —
+// that difference is surfaced for confirmation, never silently overwritten.
+export const DRIFT_FIELDS = [
+  'tool_type', 'description', 'unit', 'diameter', 'flute_length', 'overall_length',
+  'number_of_flutes', 'shank_diameter', 'corner_radius', 'taper_angle', 'thread_pitch',
+  'material', 'tip_angle', 'tip_diameter', 'shoulder_length', 'cutting_direction',
+];
+
+function driftEqual(a, b) {
+  if (typeof a === 'number' || typeof b === 'number') {
+    const na = Number(a), nb = Number(b);
+    if (Number.isNaN(na) || Number.isNaN(nb)) return String(a) === String(b);
+    return Math.abs(na - nb) < 5e-5;   // absorbs Fusion float round-trip noise
+  }
+  return String(a ?? '').trim() === String(b ?? '').trim();
+}
+
+// Compare the app's stored metadata copy against the live Fusion values for each
+// shared field. Returns [{ field, fusionValue, appValue }] for every field where
+// the app has a populated value that differs. A field the app hasn't stored yet
+// (pre-complete-record metadata) is skipped — that's "not populated", not drift,
+// so an established library raises no false alarms until a tool is next saved.
+export function detectFusionDrift(fusionInternal, meta) {
+  if (!meta || !fusionInternal) return [];
+  const drift = [];
+  for (const f of DRIFT_FIELDS) {
+    const appVal = meta[f];
+    if (appVal === null || appVal === undefined || appVal === '') continue;
+    if (!driftEqual(appVal, fusionInternal[f])) {
+      drift.push({ field: f, fusionValue: fusionInternal[f] ?? null, appValue: appVal });
+    }
+  }
+  return drift;
+}
+
 // ─── Merge Fusion tool + metadata into single object ──────────────────────
 export function mergeFusionAndMetadata(fusionInternal, meta) {
   if (!meta) return fusionInternal;
