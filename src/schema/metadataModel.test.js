@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildMetadataTool, mergeFusionAndMetadata, detectFusionDrift } from './metadataModel.js';
-import { buildLogicalTool, buildUnlinkedTool, isUnlinkedMeta, materializeUnlinkedTools, mergePresetsWithFusion } from './logicalTools.js';
+import { buildMetadataTool, mergeFusionAndMetadata, detectFusionDrift, mergeSharedFieldsWithFusion } from './metadataModel.js';
+import { buildLogicalTool, buildUnlinkedTool, isUnlinkedMeta, materializeUnlinkedTools, mergePresetsWithFusion, mergeInstanceFieldsWithFusion } from './logicalTools.js';
 
 // Fusion-decoupling Phase A (increment 1): the app's metadata record now carries
 // the Fusion-native SCALAR fields (identity + geometry + unit + material) so it's
@@ -318,6 +318,51 @@ describe('mergePresetsWithFusion — never wipe a concurrent Fusion preset edit'
     const added = [{ guid: 'p2', name: 'Finish', n: 12000, v_f: 60 }];
     const out = mergePresetsWithFusion(added, base, base);
     expect(out[0].guid).toBe('p2');
+  });
+});
+
+describe('mergeSharedFieldsWithFusion — never wipe a concurrent Fusion geometry edit', () => {
+  const base = { diameter: 0.5, flute_length: 1.0, description: 'EM', material: 'carbide' };
+
+  it('adopts a Fusion field edit the app did not touch', () => {
+    const tool = { diameter: 0.5, flute_length: 1.0, description: 'EM', material: 'carbide' };
+    const remote = { ...base, flute_length: 1.25 };   // Fusion changed flute length
+    const out = mergeSharedFieldsWithFusion(tool, base, remote);
+    expect(out.flute_length).toBe(1.25);   // preserved — not wiped
+    expect(out.diameter).toBe(0.5);
+  });
+
+  it('keeps the app edit when Fusion did not change the field', () => {
+    const tool = { diameter: 0.5, flute_length: 1.5, description: 'EM', material: 'carbide' }; // app edited flute
+    const remote = { ...base };  // Fusion unchanged
+    const out = mergeSharedFieldsWithFusion(tool, base, remote);
+    expect(out.flute_length).toBe(1.5);
+  });
+
+  it('keeps the app version when BOTH changed the same field', () => {
+    const tool = { ...base, diameter: 0.375 };
+    const remote = { ...base, diameter: 0.25 };
+    const out = mergeSharedFieldsWithFusion(tool, base, remote);
+    expect(out.diameter).toBe(0.375);
+  });
+});
+
+describe('mergeInstanceFieldsWithFusion — never wipe a concurrent Fusion OOH edit', () => {
+  it('adopts a Fusion OOH edit the app did not touch', () => {
+    // base OOH 2.0 (geometry.LB), Fusion changed it to 2.5; app assembly still 2.0.
+    const baseRaws = [{ guid: 'g1', geometry: { LB: 2.0 } }];
+    const remoteRaws = [{ guid: 'g1', geometry: { LB: 2.5 } }];
+    const assemblies = [{ assembly_id: 'a1', instance_guid: 'g1', ooh: 2.0 }];
+    const out = mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws);
+    expect(out[0].ooh).toBe(2.5);   // Fusion's OOH edit preserved
+  });
+
+  it('keeps the app OOH when the app changed it', () => {
+    const baseRaws = [{ guid: 'g1', geometry: { LB: 2.0 } }];
+    const remoteRaws = [{ guid: 'g1', geometry: { LB: 2.5 } }];
+    const assemblies = [{ assembly_id: 'a1', instance_guid: 'g1', ooh: 3.0 }]; // app changed to 3.0
+    const out = mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws);
+    expect(out[0].ooh).toBe(3.0);
   });
 });
 

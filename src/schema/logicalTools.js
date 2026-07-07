@@ -167,6 +167,41 @@ export function mergePresetsWithFusion(localPresets, basePresets, remotePresets)
   });
 }
 
+// Write-time 3-way merge for PER-INSTANCE fields (OOH / holder) — same principle
+// as the shared-field and preset merges. If Fusion changed an assembly's stick-out
+// (geometry.LB) or holder since the app loaded, and the app did NOT change it,
+// adopt Fusion's value so a save never wipes it. base/remote are the load-time and
+// freshly-downloaded raw instances, matched by instance guid.
+function oohEqual(a, b) {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  return Math.abs(Number(a) - Number(b)) < 5e-6;
+}
+
+export function mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws) {
+  const baseByGuid = new Map((baseRaws || []).map(r => [r.guid, r]));
+  const remoteByGuid = new Map((remoteRaws || []).map(r => [r.guid, r]));
+  let changed = false;
+  const next = (assemblies || []).map(a => {
+    const base = baseByGuid.get(a.instance_guid);
+    const remote = remoteByGuid.get(a.instance_guid);
+    if (!base || !remote) return a;   // new assembly / not in Fusion yet → keep app's
+    const patch = {};
+    const baseOoh = readOohFromFusion(base);
+    const remoteOoh = readOohFromFusion(remote);
+    if (!oohEqual(remoteOoh, baseOoh) && oohEqual(a.ooh, baseOoh)) patch.ooh = remoteOoh;
+    const baseHolder = base.holder?.guid || null;
+    const remoteHolder = remote.holder?.guid || null;
+    if (remoteHolder !== baseHolder && (a.holder_guid || null) === baseHolder) {
+      patch.holder_guid = remoteHolder;
+      patch.holder_description = remote.holder?.description || '';
+    }
+    if (Object.keys(patch).length) { changed = true; return { ...a, ...patch }; }
+    return a;
+  });
+  return changed ? next : assemblies;
+}
+
 // ─── No-Fusion (unlinked) tools — Fusion-decoupling Phase B ─────────────────
 // A metadata record is an INTENTIONAL no-Fusion tool only when it's explicitly
 // marked (no_fusion_link). This is the guard against resurrecting orphaned

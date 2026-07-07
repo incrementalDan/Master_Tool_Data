@@ -50,6 +50,26 @@ export function detectFusionDrift(internals, meta) {
   return drift;
 }
 
+// Write-time 3-way merge for SHARED fields — the general form of the preset-wipe
+// fix. Prevents a save from silently overwriting a shared field (geometry,
+// identity, material, …) edited directly in Fusion since the app loaded the tool,
+// WITHOUT needing a reload (the drift banner is load-time; this is the write-time
+// safety net). base = the tool as the app last saw/wrote it (from _instancesRaw),
+// remote = the freshly-downloaded Fusion tool, `tool` = the app's in-memory tool.
+// For each field: if Fusion changed it and the app did NOT, adopt Fusion's value;
+// otherwise keep the app's. Returns a patched tool (or the same reference).
+export function mergeSharedFieldsWithFusion(tool, baseInternal, remoteInternal) {
+  if (!tool || !baseInternal || !remoteInternal) return tool;
+  const patch = {};
+  for (const f of DRIFT_FIELDS) {
+    const baseVal = baseInternal[f];
+    if (driftEqual(remoteInternal[f], baseVal)) continue;  // Fusion didn't change it
+    if (!driftEqual(tool[f], baseVal)) continue;           // app changed it → app wins
+    patch[f] = remoteInternal[f];                          // Fusion changed it, app didn't → adopt
+  }
+  return Object.keys(patch).length ? { ...tool, ...patch } : tool;
+}
+
 // ─── Merge Fusion tool + metadata into single object ──────────────────────
 export function mergeFusionAndMetadata(fusionInternal, meta) {
   if (!meta) return fusionInternal;
