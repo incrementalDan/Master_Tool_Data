@@ -255,6 +255,22 @@ describe('Phase B increment 5a — Fusion drift detection (D3)', () => {
     expect(detectFusionDrift(fusionInternal, meta)).toEqual([]);
   });
 
+  it('flags drift when ANY instance diverged — even a non-canonical assembly', () => {
+    // Multi-instance tool: instance 0 (canonical) still matches the app; instance
+    // 1 was edited in Fusion. Detection must catch it and report the diverged value.
+    const meta = buildMetadataTool(sampleTool);  // flute_length 1.0
+    const canonical = { ...sampleTool, flute_length: 1.0 };
+    const editedInstance = { ...sampleTool, flute_length: 1.5 };
+    const drift = detectFusionDrift([canonical, editedInstance], meta);
+    expect(drift).toEqual([{ field: 'flute_length', fusionValue: 1.5, appValue: 1.0 }]);
+  });
+
+  it('accepts a single object too (back-compat)', () => {
+    const meta = buildMetadataTool(sampleTool);
+    expect(detectFusionDrift({ ...sampleTool, diameter: 0.375 }, meta))
+      .toEqual([{ field: 'diameter', fusionValue: 0.375, appValue: 0.5 }]);
+  });
+
   it('buildLogicalTool attaches _drift for a linked tool whose Fusion geometry diverged', () => {
     const meta = buildMetadataTool(sampleTool);           // diameter 0.5
     const raw = {

@@ -24,19 +24,28 @@ function driftEqual(a, b) {
 }
 
 // Compare the app's stored metadata copy against the live Fusion values for each
-// shared field. Returns [{ field, fusionValue, appValue }] for every field where
-// the app has a populated value that differs. A field the app hasn't stored yet
-// (pre-complete-record metadata) is skipped — that's "not populated", not drift,
-// so an established library raises no false alarms until a tool is next saved.
-export function detectFusionDrift(fusionInternal, meta) {
-  if (!meta || !fusionInternal) return [];
+// shared field. `internals` is EVERY instance's Fusion-internal object (a logical
+// tool = N Fusion instances, one per assembly, sharing all fields except holder
+// and OOH). A single object is accepted too (back-compat). Returns
+// [{ field, fusionValue, appValue }] for every field where the app has a
+// populated value that differs from ANY instance — so an edit made to just one
+// assembly in Fusion is caught even when it isn't the canonical (instance 0).
+// A field the app hasn't stored yet (pre-complete-record metadata) is skipped —
+// that's "not populated", not drift — so an established library raises no false
+// alarms until a tool is next saved.
+export function detectFusionDrift(internals, meta) {
+  if (!meta) return [];
+  const list = (Array.isArray(internals) ? internals : [internals]).filter(Boolean);
+  if (list.length === 0) return [];
   const drift = [];
   for (const f of DRIFT_FIELDS) {
     const appVal = meta[f];
     if (appVal === null || appVal === undefined || appVal === '') continue;
-    if (!driftEqual(appVal, fusionInternal[f])) {
-      drift.push({ field: f, fusionValue: fusionInternal[f] ?? null, appValue: appVal });
+    let found = false, fusionVal = null;
+    for (const inst of list) {
+      if (!driftEqual(appVal, inst?.[f])) { found = true; fusionVal = inst?.[f] ?? null; break; }
     }
+    if (found) drift.push({ field: f, fusionValue: fusionVal, appValue: appVal });
   }
   return drift;
 }
