@@ -105,6 +105,46 @@ describe('Phase B increment 3 — no-Fusion write path (metadata only)', () => {
   });
 });
 
+describe('writeLogicalTool does not wipe a concurrent Fusion preset edit', () => {
+  it('preserves a preset the app never touched but Fusion changed', async () => {
+    // Base (what the app loaded): preset p1 with v_f 100.
+    const basePreset = { guid: 'p1', name: 'Rough', n: 8000, v_f: 100 };
+    // Live Fusion (edited since load): p1 now v_f 130.
+    const liveEntry = {
+      guid: 'g1', 'post-process': { comment: 'FTL-W' }, type: 'flat end mill', unit: 'inches',
+      geometry: { DC: 0.5, LCF: 1, OAL: 3, NOF: 4 },
+      'start-values': { presets: [{ guid: 'p1', name: 'Rough', n: 8000, v_f: 130 }] },
+    };
+    let uploaded = null;
+    const ctx = {
+      dispatch: vi.fn(), notify: vi.fn(),
+      downloadFusionList: vi.fn(async () => [{ ...liveEntry }]),
+      uploadFusionList: vi.fn(async (_id, list) => { uploaded = list; }),
+      downloadAllLibraries: vi.fn(), fetchRawLibrary: vi.fn(), saveLocationConfig: vi.fn(),
+      toolsRef: { current: [] }, holdersRef: { current: [] },
+      shopSettingsRef: { current: { assembly_id_system: { mode: 'auto' }, tool_id_system: {}, location_config: { systems: [] }, tool_libraries: [{ id: 'lib-1' }], default_tool_library_id: 'lib-1' } },
+      googleRef: { current: true }, componentsRef: { current: { components: [] } },
+    };
+    const { writeLogicalTool } = createToolActions(ctx);
+    // The in-memory tool the app is saving (e.g. a geometry/notes edit): its
+    // presets are the STALE loaded copy (v_f 100), and _instancesRaw is the
+    // load-time base (also v_f 100).
+    const tool = {
+      id: 'FTL-W', tracking_id: 'FTL-W', tool_type: 'flat end mill', unit: 'inches',
+      diameter: 0.5, flute_length: 1, overall_length: 3, number_of_flutes: 4,
+      presets: [{ ...basePreset, operation_type: 'rough' }],
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'g1', ooh: 2 }],
+      _instancesRaw: [{ guid: 'g1', 'post-process': { comment: 'FTL-W' }, type: 'flat end mill', unit: 'inches', geometry: { DC: 0.5, LCF: 1, OAL: 3, NOF: 4 }, 'start-values': { presets: [{ ...basePreset }] } }],
+      _fusionRaw: null,
+    };
+    const written = await writeLogicalTool(tool);
+    const uploadedPreset = uploaded[0]['start-values'].presets[0];
+    expect(uploadedPreset.v_f).toBe(130);       // Fusion's edit survived the save
+    expect(written.presets[0].v_f).toBe(130);   // and the in-memory tool reflects it
+    expect(written.presets[0].operation_type).toBe('rough'); // app overlay kept
+  });
+});
+
 describe('Phase B increment 4 — promote / detach', () => {
   // A ctx whose Fusion IO works (returns/records), for the linked-path transitions.
   function makeIoCtx(overrides = {}) {

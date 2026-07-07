@@ -6,7 +6,8 @@
 import * as driveService from '../services/driveService.js';
 import {
   validateTool, generateId, generateAssemblyId, generateTrackingId,
-  splitToFusionInstances, buildMetadataTool, readTrackingId, readOohFromFusion,
+  splitToFusionInstances, buildMetadataTool, mergePresetsWithFusion,
+  readTrackingId, readOohFromFusion,
   getNextMachineNumber, combineToolsByToolId,
 } from '../schema/toolSchema.js';
 import { composeAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
@@ -139,9 +140,19 @@ export function createToolActions(ctx) {
       return toWrite;
     }
 
+    // Base = what the app last saw/wrote as this tool's Fusion state (its shared
+    // presets are identical across instances, so instance 0 is representative).
+    const basePresets = tool._instancesRaw?.[0]?.['start-values']?.presets || [];
+
     const fusionList = await downloadFusionList(library_id);
     const freshByGuid = new Map(fusionList.map(f => [f.guid, f]));
     const refreshedRaws = assemblies.map(a => freshByGuid.get(a.instance_guid)).filter(Boolean);
+
+    // Preserve any preset edited directly in Fusion since the app loaded this
+    // tool — never let a stale in-memory preset silently overwrite it (see
+    // mergePresetsWithFusion). remote = the freshly-downloaded Fusion presets.
+    const remotePresets = refreshedRaws?.[0]?.['start-values']?.presets || [];
+    const mergedPresets = mergePresetsWithFusion(tool.presets, basePresets, remotePresets);
 
     const toWrite = {
       ...tool,
@@ -149,6 +160,7 @@ export function createToolActions(ctx) {
       library_id,
       library_name,
       assemblies,
+      presets: mergedPresets,
       _instancesRaw: refreshedRaws,
       _fusionRaw: refreshedRaws[0] || tool._fusionRaw || null,
       ...locExtra,
