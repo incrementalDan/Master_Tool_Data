@@ -11,6 +11,26 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     // tool_id is metadata-owned (the TMS manages it); metadata wins, falling back
     // to Fusion's product-id only for tools that predate the TMS assigning an ID.
     tool_id: meta.tool_id || fusionInternal.tool_id,
+    // ── Complete-record scalars (Fusion-decoupling Phase A) ──────────────────
+    // Fusion-native fields, now ALSO persisted in metadata (see buildMetadataTool).
+    // For a LINKED tool Fusion still wins — fusionInternal always carries these, so
+    // `?? meta` is an inert fallback that only fills a genuine gap (a tool with no
+    // Fusion value, i.e. a future no-Fusion tool). Same "Fusion wins, metadata is a
+    // transition fallback" pattern already used for tip_angle / tip_diameter below.
+    // The D2 authority setting (which side wins on a real conflict) + D3 drift
+    // surfacing are Phase B — this stays Fusion-authoritative and behavior-identical.
+    tool_type: fusionInternal.tool_type ?? meta.tool_type,
+    description: fusionInternal.description ?? meta.description ?? '',
+    unit: fusionInternal.unit ?? meta.unit,
+    diameter: fusionInternal.diameter ?? meta.diameter ?? null,
+    flute_length: fusionInternal.flute_length ?? meta.flute_length ?? null,
+    overall_length: fusionInternal.overall_length ?? meta.overall_length ?? null,
+    number_of_flutes: fusionInternal.number_of_flutes ?? meta.number_of_flutes ?? null,
+    shank_diameter: fusionInternal.shank_diameter ?? meta.shank_diameter ?? null,
+    corner_radius: fusionInternal.corner_radius ?? meta.corner_radius ?? null,
+    taper_angle: fusionInternal.taper_angle ?? meta.taper_angle ?? null,
+    thread_pitch: fusionInternal.thread_pitch ?? meta.thread_pitch ?? null,
+    material: fusionInternal.material ?? meta.material ?? 'carbide',
     vendor: meta.vendor || '',
     coating: meta.coating || '',
     purchasing: meta.purchasing || { manufacturers: [], vendors: [] },
@@ -120,6 +140,27 @@ export function buildMetadataTool(tool) {
     id: tool.tracking_id || tool.id,
     // tool_id is metadata-owned (mirrored to Fusion's product-id on write).
     tool_id: tool.tool_id || '',
+    // ── Complete-record scalars (Fusion-decoupling Phase A) ──────────────────
+    // These are Fusion-native fields (they live in the Fusion JSON and, for a
+    // linked tool, Fusion still wins on read — see mergeFusionAndMetadata). They
+    // are ALSO persisted here so the app record is complete and standalone: it
+    // can reconstruct a tool with no Fusion entry (Phase B) and can diff app-vs-
+    // Fusion to surface drift (D3). Writing them changes nothing for a linked
+    // tool today — the metadata copy is kept in sync with Fusion on every save.
+    // Presets are deliberately NOT here yet (next Phase-A increment — they carry
+    // the round-trip/preset_meta machinery). See PHASE_A_TOOL_RECORD_SCHEMA.md.
+    tool_type: tool.tool_type || null,
+    description: tool.description || '',
+    unit: tool.unit || null,
+    diameter: tool.diameter ?? null,
+    flute_length: tool.flute_length ?? null,
+    overall_length: tool.overall_length ?? null,
+    number_of_flutes: tool.number_of_flutes ?? null,
+    shank_diameter: tool.shank_diameter ?? null,
+    corner_radius: tool.corner_radius ?? null,
+    taper_angle: tool.taper_angle ?? null,
+    thread_pitch: tool.thread_pitch ?? null,
+    material: tool.material || null,
     vendor: tool.vendor || '',
     coating: tool.coating || '',
     purchasing: {
@@ -222,6 +263,19 @@ export function buildMetadataTool(tool) {
       measured_serial: a.measured_serial || null,
     })),
     preset_meta,
+    // ── Complete-record presets (Fusion-decoupling Phase A, increment 2) ──────
+    // The FULL preset set, persisted so the app record is standalone: a no-Fusion
+    // tool carries its own presets (Fusion has none to read from). Each entry is
+    // the whole preset object — the modeled speeds/feeds AND the un-modeled
+    // Fusion-native keys ('use-stepdown', 'ramp-angle', 'tool-coolant', …) — the
+    // JSON-storage equivalent of the tool_presets row + its raw_json blob.
+    // For a LINKED tool presets still come from Fusion on read (buildLogicalTool),
+    // so this copy is written-but-not-read today; it's the source for the no-Fusion
+    // path (Phase B) and app-vs-Fusion drift diffing (D3). preset_meta above is the
+    // per-guid app-only overlay the linked read still uses — a subset of these,
+    // redundant-but-retained until the SQLite migration folds both into columns.
+    // Both are written from the same tool.presets here, so they can't drift.
+    presets: (tool.presets || []).map(p => ({ ...p })),
     // Tool-level job links (jobs.json registry ids) — "this tool was used on
     // job X" without preset context. Preset-proven links live in preset_meta.
     job_ids: tool.job_ids || [],

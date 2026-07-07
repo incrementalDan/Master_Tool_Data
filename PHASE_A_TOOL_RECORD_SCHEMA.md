@@ -2,7 +2,12 @@
 
 **Date:** 2026-07-06
 **Companion to:** `FUSION_DECOUPLING_AUDIT.md` (Part 3). This is the "design the full tool record + SQLite schema together" deliverable that Part 3's order-of-operations calls for.
-**Status:** design only — no implementation. Field set is extracted verbatim from `src/schema/fieldRegistry.js` (81 tool-level fields), `metadataModel.js`, `PresetPanel.blankPreset`, `insertFamilies.newComponent/newPairing`, and `jobs.json` v2 — **not invented**.
+**Field set** is extracted verbatim from `src/schema/fieldRegistry.js` (81 tool-level fields), `metadataModel.js`, `PresetPanel.blankPreset`, `insertFamilies.newComponent/newPairing`, and `jobs.json` v2 — **not invented**.
+
+**Implementation status:**
+- ✅ **Increment 1 — complete scalar record (done).** `buildMetadataTool` now persists the Fusion-native identity + geometry + unit + material scalars (§4a/§4b); `mergeFusionAndMetadata` reads them back with Fusion still winning for linked tools (the `tip_angle` fallback pattern). `integrations.fusion.{enabled, authority}` scaffolded in `DEFAULT_SHOP_SETTINGS`. **Behavior byte-for-byte unchanged.**
+- ✅ **Increment 2 — presets into the app record (done).** `buildMetadataTool` persists the FULL preset set (modeled speeds/feeds + un-modeled Fusion-native keys + app-only fields — the JSON equivalent of the `tool_presets` row + its `raw_json`); `buildLogicalTool` sources presets from Fusion for a linked tool and **falls back to the metadata presets when the Fusion side has none** (a no-Fusion tool). `preset_meta` is retained as the linked-read overlay (redundant-but-consistent subset; folds into columns at the SQLite migration). **Linked-tool reads byte-for-byte unchanged** — 189 tests + round-trip audit green. **The app record is now complete** (scalars + presets); it can reconstruct a tool with no Fusion entry.
+- ⏳ **Phase B (next)** — actually *load* no-Fusion tools (append metadata-only records in `loadTools`), the `writeLogicalTool` metadata-only branch, the D2 authority read-branch, D3 drift surfacing, and the onboarding/settings toggle. This is where behavior deliberately extends (see Part-3 phasing in the audit).
 
 **What this locks in:** every field the app models, *who owns it* (app vs. Fusion vs. shared), what happens on a Fusion conflict (D2), and the SQLite table/column it maps to. Implement this shape on today's JSON storage first (behavior-identical), then swap the storage layer to SQLite later.
 
@@ -112,7 +117,7 @@ App-owned geometry-ish (Category 1, `metadataOnly`, no Fusion field): `lower_rad
 
 ### 4d. Flat speed/feed mirror (Category 3 — mirror of `presets[0]`, kept for non-editor forms)
 
-`spindle_speed`(n), `cutting_feedrate`(v_f), `plunge_feedrate`(v_f_plunge), `ramp_feedrate`(v_f_ramp), `lead_in_feedrate`(v_f_leadIn), `lead_out_feedrate`(v_f_leadOut), `feed_per_tooth`(f_z), `feed_per_rev`(f_n), `cutting_speed`(v_c). **Open question O1:** keep these denormalized on `tools`, or derive from preset row 0? (Recommend: keep — they're a cheap read cache and some forms use them without loading presets.)
+`spindle_speed`(n), `cutting_feedrate`(v_f), `plunge_feedrate`(v_f_plunge), `ramp_feedrate`(v_f_ramp), `lead_in_feedrate`(v_f_leadIn), `lead_out_feedrate`(v_f_leadOut), `feed_per_tooth`(f_z), `feed_per_rev`(f_n), `cutting_speed`(v_c). **O1 (resolved): keep as columns, but as an explicitly DERIVED cache of `tool_presets` row 0** — always recomputed from preset 0 on write, never independently editable (like an invoice header's `total` that's defined by its line items). `tool_presets` is the source of truth; if the mirror ever disagrees, preset 0 wins. Preserves today's convenience (forms/exports/cards read one "primary rpm/feed" without loading presets) without a second editable source that can drift.
 
 ### 4e. Provenance & housekeeping (Category 1)
 
@@ -120,7 +125,7 @@ App-owned geometry-ish (Category 1, `metadataOnly`, no Fusion field): `lower_rad
 
 ### 4f. → child tables (arrays/objects, NOT columns on `tools`)
 
-`presets` → **tool_presets**; `assemblies` → **assemblies**; `purchasing` → **purchasing_manufacturers/vendors**; `tags`, `material_suitability` → **tool_tags / tool_material_suitability** (or a JSON column — see O2); `job_ids` → **tool_jobs**; `speed_feed_refs` → **speed_feed_refs**; `merge_history` → **merge_history**; `attachments` → **attachments**; `legacy_ids` → **legacy_ids**; `tool_location` → **columns** (system_id, zone_id, station_id, drawer_id, bin) or a small **tool_location** 1:1 table; `bin_size_id` → column; `pairing` → **tool_pairings**; `primary_photo_id`/`primary_photo_name` → columns.
+`presets` → **tool_presets**; `assemblies` → **assemblies**; `purchasing` → **purchasing_manufacturers/vendors**; `tags` → **tool_tags**, `material_suitability` → **tool_material_suitability** (O2 resolved: **child tables**, so search facets can query them); `job_ids` → **tool_jobs**; `speed_feed_refs` → **speed_feed_refs**; `merge_history` → **merge_history**; `attachments` → **attachments**; `legacy_ids` → **legacy_ids**; `tool_location` → **columns** (system_id, zone_id, station_id, drawer_id, bin) or a small **tool_location** 1:1 table; `bin_size_id` → column; `pairing` → **tool_pairings**; `primary_photo_id`/`primary_photo_name` → columns.
 
 ---
 
@@ -177,7 +182,7 @@ Today presets live **only** in Fusion. Phase A moves them into the app record; `
 | `raw_json` | blob | 4 | un-modeled Fusion preset fields + expressions |
 | → `preset_jobs` | | 1 | M:N join to jobs (the `job_ids`) |
 
-**Open question O3:** `operation_type`/`machine_id`/`job_ids` are app-only and must **never** serialize into `raw_json` or the Fusion write (today enforced by `normalizePreset`'s destructure). In SQLite they're just columns/joins, so the leak risk goes away — but the Fusion *writer* must still strip them. Keep that rule in the adapter.
+**O3 (resolved):** `operation_type`/`machine_id`/`job_ids` are app-only and must **never** serialize into `raw_json` or the Fusion write (today enforced by `normalizePreset`'s destructure). In SQLite they're just columns/joins, so the leak risk goes away — but the Fusion *writer* must still strip them. **Forward note (owner):** Fusion has since added fields that may let some of this currently app-only data (e.g. operation type) be pushed legitimately. That doesn't change Phase A — they stay app-owned columns now — but the adapter can adopt those Fusion fields later, moving a field from Category 1 → Category 3 with no schema change. Deferred.
 
 ---
 
@@ -214,23 +219,32 @@ Today presets live **only** in Fusion. Phase A moves them into the app record; `
 
 ---
 
-## 10. How D2 (authority) actually resolves — the one load-time branch
+## 10. How D2 (authority) resolves + D3 (drift is never silent)
 
-On load, per tool, per **Category-3** field, pick the value:
+On load, per tool, per **Category-3** field, the authority setting picks the **default** value shown:
 
 ```
 value = (authority === 'app' && appRecord.hasValue(field))
-          ? appRecord[field]                     // app wins → push to Fusion on next write
-          : fusionInstance ? fusionValue(field)  // fusion wins (today's default)
+          ? appRecord[field]                     // app value is the default
+          : fusionInstance ? fusionValue(field)  // fusion value is the default (today's behavior)
                            : appRecord[field];   // no Fusion entry → app is sole source
 ```
 
 - Categories 1 & 2: **always** `appRecord[field]` (2 is mirrored out on write).
 - Category 4: always from `fusion_instances.raw_json`.
-- No-Fusion tool: no fusion_instance, so every field resolves to the app record regardless of `authority` — the toggle is a no-op for it, exactly as it should be.
-- The **guarded flip** (D2): before switching `authority` to `'app'`, run the existing reconcile/Sync-Job pull so nothing Fusion-side is lost, *then* flip. Switching back runs the reverse. This is a settings action, not a schema concern.
+- No-Fusion tool: no fusion_instance, so every field resolves to the app record regardless of `authority` — the toggle is a no-op for it, and drift can't exist.
 
-**This is the whole D2 cost:** one branch here + the guarded-flip settings action. Everything else is unchanged.
+### D3 — drift is always surfaced, never silently applied (owner requirement)
+
+The `authority` setting picks the **default winner, not a silent overwrite.** Whenever a linked tool's app record and its live Fusion entry differ on any field (either authority mode), opening the tool raises a **banner + per-field diff** (app value vs Fusion value) that the user confirms — nothing is silently overwritten in either direction.
+
+- **Phase A is the enabler:** field-level drift detection is only possible because the app record now holds its own copy of every field (D1). Today the app can't diff geometry/presets at all — it has no independent value. So D3 is a *payoff* of the complete record, not extra scaffolding.
+- **The `authority` setting = the pre-selected choice** in that diff (one click to accept if the user agrees), so it stays low-friction while never being silent.
+- **Reuses existing machinery:** the reconcile-on-open + Sync Job `DiffStep` UI, extended from structural strays to **field-level** drift, with the same significance tolerances (`PRESET_SIGNIFICANCE` / `valuesEqual`) so Fusion float noise isn't flagged.
+- **Cost model:** detected on tool open (same per-tool live-fetch as today's reconcile-on-open). Until reviewed, the app does not push app values over the differing Fusion fields. **Bulk full-library rewrites** (import / normalize) keep their own existing Review step — the per-tool open is the primary drift surface.
+- **The guarded flip** (D2): before switching `authority` to `'app'`, run the reconcile/pull so nothing Fusion-side is lost, *then* flip. Switching back runs the reverse. Settings action, not a schema concern.
+
+**Total D2+D3 cost:** the one default-picking branch above, the drift-diff on open (mostly existing UI), and the guarded-flip settings action. Everything else is unchanged.
 
 ---
 
@@ -243,13 +257,15 @@ value = (authority === 'app' && appRecord.hasValue(field))
 
 ---
 
-## 12. Open questions for the owner (decide during implementation, not blocking)
+## 12. Open questions — RESOLVED with the owner (2026-07-06)
 
-- **O1 — flat speed/feed mirror on `tools`:** keep denormalized (recommended, cheap read cache) or derive from `tool_presets` row 0?
-- **O2 — `tags` / `material_suitability`:** child tables (queryable/faceted) vs. a JSON column (simpler). Search facets on them today suggest **child tables**.
-- **O3 — app-only preset fields:** confirmed they must never reach the Fusion write; the adapter keeps stripping them (schema makes them plain columns).
-- **O4 — location systems / bin sizes:** keep nested in `shop_settings` config (recommended for now) or normalize into tables?
-- **O5 — unify `tools` + `components`?** Both are "tool-like records with tool_id + location + purchasing + photo." A future single `items` table with a `kind` could simplify purchasing/attachments (drop the polymorphic `owner_type`). **Recommendation: don't unify in Phase A** — components are deliberately Fusion-invisible and browse-only; keep them separate, revisit only if the "component = unlinked tool" idea from the audit's Phase C is pursued.
+- **O1 — flat speed/feed mirror on `tools`:** ✅ **keep as a derived cache** of `tool_presets` row 0 (recomputed on write, not independently editable). `tool_presets` is source of truth.
+- **O2 — `tags` / `material_suitability`:** ✅ **child tables** (`tool_tags`, `tool_material_suitability`) so search facets can query them.
+- **O3 — app-only preset fields:** ✅ stay app-owned columns; the Fusion writer keeps stripping them. Forward note: Fusion has added fields that may let some (e.g. operation type) be pushed later — Category 1 → 3 with no schema change, deferred.
+- **O4 — location systems / bin sizes:** ✅ **keep nested in `shop_settings` config** (edited as a unit, referenced by UUID). Normalize later only if a UI needs to query across them.
+- **O5 — unify `tools` + `components`?** ✅ **do not unify in Phase A** — components are deliberately Fusion-invisible and browse-only; keep separate. Revisit only if the "component = unlinked tool" idea from the audit's Phase C is pursued.
+
+All five are settled inputs to implementation; none remain blocking.
 
 ---
 

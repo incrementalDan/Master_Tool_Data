@@ -232,6 +232,17 @@ export const DEFAULT_SHOP_SETTINGS = {
   },
   // Tool presetter integration — reserved placeholder (serial format/start).
   presetter: { serial_format: null, serial_start: null },
+  // CAM / external integrations (Fusion-decoupling — see FUSION_DECOUPLING_AUDIT.md
+  // + PHASE_A_TOOL_RECORD_SCHEMA.md). `fusion.enabled` controls whether the Fusion
+  // sync adapter is active at all; `fusion.authority` is the DEFAULT winner when a
+  // tool's app record and its live Fusion entry disagree ('fusion' = today's
+  // behavior, Fusion wins; 'app' = the app record wins and is pushed). Drift is
+  // always surfaced for confirmation (D3), never silently applied. Scaffold only in
+  // Phase A — the app record is being made complete first; read/write behavior is
+  // unchanged until Phase B wires these.
+  integrations: {
+    fusion: { enabled: true, authority: 'fusion' },
+  },
   // CNC machine models. Each entry: id, model, machine_type, taper, max_rpm,
   // horsepower, through_coolant, through_coolant_psi, order.
   // machine_id on presets links to these entries.
