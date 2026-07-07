@@ -60,24 +60,10 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
   // Presets come from Fusion for a LINKED tool (the only case today). When the
   // Fusion side has none — a no-Fusion tool (Phase B) — fall back to the complete
   // presets persisted in metadata (see buildMetadataTool). Inert for linked tools:
-  // Fusion presets are present, so this is exactly today's source. The `?? p.<field>`
-  // tails preserve a metadata-sourced preset's own app-only values when there's no
-  // name-parse or preset_meta entry (a linked Fusion preset carries none, so the
-  // tails are inert there too).
+  // Fusion presets are present, so this is exactly today's source.
   const fusionPresets = merged.presets || [];
   const sourcePresets = fusionPresets.length > 0 ? fusionPresets : (meta?.presets || []);
-  const presets = sourcePresets.map(p => {
-    const inferredMat = !p.material?.query ? matchMaterial(p.name) : null;
-    return {
-      ...p,
-      operation_type: parsePresetName(p.name)?.opType ?? presetMeta[p.guid]?.operation_type ?? p.operation_type ?? null,
-      machine_id: presetMeta[p.guid]?.machine_id ?? p.machine_id ?? null,
-      job_ids: presetMeta[p.guid]?.job_ids ?? p.job_ids ?? [],
-      material: inferredMat
-        ? { ...(p.material || {}), query: inferredMat, category: materialCategory(inferredMat) }
-        : p.material,
-    };
-  });
+  const presets = overlayPresets(sourcePresets, presetMeta);
 
   const mtn = meta?.machine_tool_number ?? canonical['post-process']?.number ?? null;
 
@@ -95,6 +81,143 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
     // entries dumped straight into the Fusion library.
     _registeredAssemblies: (meta?.assemblies || []).filter(Boolean),
   };
+}
+
+// Overlay the app-only per-preset fields (operation_type / machine_id / job_ids)
+// and infer a blank material from the name. Shared by buildLogicalTool (source =
+// Fusion presets, overlay from preset_meta by guid) and buildUnlinkedTool (source
+// = the complete metadata presets, which already carry these — the `?? p.<field>`
+// tails preserve them when preset_meta has no entry). Name-parsed operation_type
+// wins; then preset_meta; then the preset's own value.
+export function overlayPresets(sourcePresets, presetMeta = {}) {
+  return (sourcePresets || []).map(p => {
+    const inferredMat = !p.material?.query ? matchMaterial(p.name) : null;
+    return {
+      ...p,
+      operation_type: parsePresetName(p.name)?.opType ?? presetMeta[p.guid]?.operation_type ?? p.operation_type ?? null,
+      machine_id: presetMeta[p.guid]?.machine_id ?? p.machine_id ?? null,
+      job_ids: presetMeta[p.guid]?.job_ids ?? p.job_ids ?? [],
+      material: inferredMat
+        ? { ...(p.material || {}), query: inferredMat, category: materialCategory(inferredMat) }
+        : p.material,
+    };
+  });
+}
+
+// ─── No-Fusion (unlinked) tools — Fusion-decoupling Phase B ─────────────────
+// A metadata record is an INTENTIONAL no-Fusion tool only when it's explicitly
+// marked (no_fusion_link). This is the guard against resurrecting orphaned
+// metadata: a tool deleted directly in Fusion 360 leaves an UNMARKED metadata
+// record behind (it was Fusion-linked), which must stay dormant — never
+// materialized as a ghost tool. Only marked records are built as unlinked tools.
+export function isUnlinkedMeta(meta) {
+  return !!meta?.no_fusion_link;
+}
+
+// The Fusion-native fields as an all-null internal object, so
+// mergeFusionAndMetadata's `?? meta` fallbacks resolve every field to the
+// metadata value (there is no Fusion side to win). Deliberately NOT built via
+// fusionToolToInternal — that fills defaults (unit 'inches', material 'carbide',
+// tool_type 'flat end mill') which would mask the real metadata values.
+function emptyFusionInternal() {
+  return {
+    id: null, tracking_id: null,
+    tool_type: null, unit: null, description: null,
+    diameter: null, flute_length: null, overall_length: null, number_of_flutes: null,
+    corner_radius: null, shank_diameter: null, taper_angle: null, tip_angle: null,
+    tip_diameter: null, thread_pitch: null, shoulder_length: null,
+    material: null, tool_id: '', product_link: '', location: '',
+    spindle_speed: null, cutting_feedrate: null, plunge_feedrate: null, ramp_feedrate: null,
+    lead_in_feedrate: null, lead_out_feedrate: null, feed_per_tooth: null, feed_per_rev: null,
+    cutting_speed: null, presets: [],
+    machine_tool_number: null, cutting_direction: null,
+    created_at: null, updated_at: null, _fusionRaw: null,
+  };
+}
+
+// Build a complete logical tool from metadata ALONE — no Fusion instance.
+// Metadata is authoritative for every field. Mirrors buildLogicalTool's output
+// shape so the rest of the app treats it identically, except _instancesRaw is
+// empty, _fusionRaw is null, and library_id is null. asm-number backfill /
+// pairing-derive still run at load (loadTools), as for linked tools.
+export function buildUnlinkedTool(meta) {
+  const merged = mergeFusionAndMetadata(emptyFusionInternal(), meta);
+  const presets = overlayPresets(meta?.presets || [], meta?.preset_meta || {});
+  const p0 = presets[0] || {};
+
+  const assemblies = (meta?.assemblies || []).map(a => ({
+    assembly_id: a.assembly_id || generateAssemblyId(),
+    instance_guid: a.instance_guid || null,   // null = no Fusion entry for this assembly
+    holder_guid: a.holder_guid || null,
+    holder_description: a.holder_description || '',
+    ooh: a.ooh ?? null,
+    linked_preset_guids: a.linked_preset_guids || [],
+    notes: a.notes || '',
+    source: a.source || 'manual',
+    created_at: a.created_at || merged.created_at,
+    asm_number: a.asm_number || null,
+    legacy_asm_numbers: a.legacy_asm_numbers || [],
+    target_gauge_length: a.target_gauge_length ?? null,
+    measured_gauge_length: a.measured_gauge_length ?? null,
+    measured_at: a.measured_at || null,
+    measured_by: a.measured_by || null,
+    measured_serial: a.measured_serial || null,
+  }));
+
+  return {
+    ...merged,
+    id: meta.id,
+    tracking_id: meta.id,
+    // Flat speed/feed mirror = derived cache of preset 0 (O1). No Fusion side to
+    // read them from, so recompute from the primary preset.
+    spindle_speed: p0.n ?? null,
+    cutting_feedrate: p0.v_f ?? null,
+    plunge_feedrate: p0.v_f_plunge ?? null,
+    ramp_feedrate: p0.v_f_ramp ?? null,
+    lead_in_feedrate: p0.v_f_leadIn ?? null,
+    lead_out_feedrate: p0.v_f_leadOut ?? null,
+    feed_per_tooth: p0.f_z ?? null,
+    feed_per_rev: p0.f_n ?? null,
+    cutting_speed: p0.v_c ?? null,
+    presets,
+    assemblies,
+    machine_tool_number: (meta?.machine_tool_number ?? null) === null ? null : Number(meta.machine_tool_number),
+    // Preserve the stored intent. In the ENABLED-mode materialize path the meta is
+    // always marked (isUnlinkedMeta gates it), so this is true. In DISABLED mode
+    // buildUnlinkedTool runs for EVERY record, including formerly-linked ones — they
+    // keep no_fusion_link:false so re-enabling Fusion doesn't spuriously detach them.
+    no_fusion_link: !!meta?.no_fusion_link,
+    library_id: null,
+    library_name: null,
+    _instancesRaw: [],
+    _fusionRaw: null,
+    _registeredAssemblies: (meta?.assemblies || []).filter(Boolean),
+  };
+}
+
+// Materialize intentional no-Fusion tools alongside the Fusion-built ones
+// (Fusion-decoupling Phase B). For each metadata record that is EXPLICITLY marked
+// unlinked (isUnlinkedMeta) and is NOT already represented by a Fusion-built tool
+// (its tracking id wasn't produced from a Fusion instance), append a
+// buildUnlinkedTool. Guarded three ways so it can never resurrect a ghost:
+//   1. only marked (no_fusion_link) records — a deleted-in-Fusion tool's orphan
+//      metadata is UNMARKED and stays dormant;
+//   2. skip any record whose id already backs a built (linked) tool;
+//   3. a malformed record is skipped, never blocks the load.
+// A no-op on today's data (every no_fusion_link tool still has a Fusion
+// placeholder, so none are orphaned) — it activates once placeholder-minting is
+// retired (Phase C) or a tool is created/demoted as no-Fusion (Phase B4).
+export function materializeUnlinkedTools(builtTools, metaList) {
+  const built = new Set((builtTools || []).map(t => t.tracking_id).filter(Boolean));
+  const seen = new Set();
+  const extra = [];
+  for (const meta of (metaList || [])) {
+    if (!isUnlinkedMeta(meta)) continue;
+    if (!meta.id || built.has(meta.id) || seen.has(meta.id)) continue;
+    seen.add(meta.id);
+    try { extra.push(buildUnlinkedTool(meta)); } catch { /* skip a malformed record */ }
+  }
+  return extra.length ? [...(builtTools || []), ...extra] : builtTools;
 }
 
 // ─── Split a logical tool into N raw Fusion instances + its metadata ───────

@@ -9,7 +9,7 @@ import {
   groupByTrackingId, buildLogicalTool, splitToFusionInstances, readTrackingId,
   generateMachineNumbers, applyMachineNumberToFusion, applyToolIdToFusion,
   fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
-  combineToolsByToolId,
+  combineToolsByToolId, buildMetadataTool, materializeUnlinkedTools,
 } from '../schema/toolSchema.js';
 import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSystem.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
@@ -40,8 +40,16 @@ export function createLibraryOps(ctx) {
       const byLibrary = new Map();
       const allMeta = [];
       for (const tool of combinedTools) {
-        const libId = tool.library_id || defaultLib;
         const tracking_id = tool.tracking_id || generateTrackingId();
+        // No-Fusion tool (Fusion-decoupling Phase B): metadata only — no Fusion
+        // instances minted, so a ProShop-imported no-match row no longer creates a
+        // placeholder entry in the Fusion library. It's rebuilt below via
+        // materializeUnlinkedTools so it still shows in the library.
+        if (tool.no_fusion_link === true) {
+          allMeta.push(buildMetadataTool({ ...tool, tracking_id }));
+          continue;
+        }
+        const libId = tool.library_id || defaultLib;
         const assemblies = (tool.assemblies && tool.assemblies.length > 0)
           ? tool.assemblies
           : [{
@@ -83,9 +91,14 @@ export function createLibraryOps(ctx) {
         for (const raw of untracked) rebuilt.push(tag(buildLogicalTool([raw], metaByTracking)));
       }
 
-      dispatch({ type: 'SET_TOOLS', tools: rebuilt, needsNormalize: untrackedTotal > 0 });
+      // Re-materialize the no-Fusion tools (partitioned out of the Fusion writes
+      // above) from their metadata so they stay in the in-memory library. Guarded
+      // by isUnlinkedMeta inside the helper, deduped against the rebuilt set.
+      const finalRebuilt = materializeUnlinkedTools(rebuilt, allMeta);
+
+      dispatch({ type: 'SET_TOOLS', tools: finalRebuilt, needsNormalize: untrackedTotal > 0 });
       dispatch({ type: 'SAVE_SUCCESS' });
-      notify(`Saved ${rebuilt.length} tools to library`, 'success');
+      notify(`Saved ${finalRebuilt.length} tools to library`, 'success');
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
       notify(`Save failed: ${err.message}`, 'error', 7000);

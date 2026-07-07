@@ -6,7 +6,7 @@
 import * as driveService from '../services/driveService.js';
 import {
   validateTool, generateId, generateAssemblyId, generateTrackingId,
-  splitToFusionInstances, readTrackingId, readOohFromFusion,
+  splitToFusionInstances, buildMetadataTool, readTrackingId, readOohFromFusion,
   getNextMachineNumber, combineToolsByToolId,
 } from '../schema/toolSchema.js';
 import { composeAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
@@ -33,6 +33,12 @@ export function createToolActions(ctx) {
   const writeLogicalTool = async (tool) => {
     const holders = holdersRef.current || [];
     const tracking_id = tool.tracking_id || generateTrackingId();
+    // A tool is written metadata-only when it's a per-tool no-Fusion tool OR the
+    // whole Fusion integration is disabled (shop-wide). Either way its assemblies
+    // keep a null instance_guid (the Fusion-entry link) — only a linked tool with
+    // Fusion enabled mints one.
+    const fusionDisabled = shopSettingsRef.current?.integrations?.fusion?.enabled === false;
+    const isUnlinked = tool.no_fusion_link === true || fusionDisabled;
     // Route this tool's read+write to the library it belongs to (multi-library).
     // A new/untagged tool goes to the configured default library.
     const library_id = tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
@@ -76,7 +82,7 @@ export function createToolActions(ctx) {
       const withIds = {
         ...a,
         assembly_id: a.assembly_id || generateAssemblyId(),
-        instance_guid: a.instance_guid || generateId(),
+        instance_guid: isUnlinked ? (a.instance_guid ?? null) : (a.instance_guid || generateId()),
       };
       if (!withIds.asm_number && !skipAsmStamp && asmCfg.mode !== 'proshop_rta' && asmCfg.mode !== 'erp_external') {
         const holderDescription = withIds.holder_description
@@ -92,22 +98,50 @@ export function createToolActions(ctx) {
       return withIds;
     });
 
-    const fusionList = await downloadFusionList(library_id);
-    const freshByGuid = new Map(fusionList.map(f => [f.guid, f]));
-    const refreshedRaws = assemblies.map(a => freshByGuid.get(a.instance_guid)).filter(Boolean);
-
     // A structured location is the single source of truth for the derived
     // DISPLAY values only — the composed string (Fusion vendor) and the ProShop
     // Location value. It deliberately does NOT write tool_id: ID generation stays
     // the explicit job of the Tool ID System's Assign/Re-number actions (which, in
     // location mode, read this same structured location). This keeps "where a tool
     // lives" (Location System) cleanly separate from "what it's called" (Tool ID).
+    // Needs no Fusion download, so it's computed before the linked/no-Fusion split.
     const locSystems = shopSettingsRef.current?.location_config?.systems || [];
     const locSys = tool.tool_location ? findSystem(locSystems, tool.tool_location.system_id) : null;
     const composedLoc = locSys ? resolveLocationString(tool.tool_location, locSystems) : '';
     const locExtra = composedLoc
       ? { location: composedLoc, proshop_location: proShopLocationValue(locSys, composedLoc) }
       : {};
+
+    // No-Fusion tool (Fusion-decoupling Phase B): write metadata ONLY — no Fusion
+    // library round-trip, no placeholder minted. The tool intentionally has no
+    // Fusion entry (no_fusion_link — set by ProShop import for unmatched rows, or
+    // by a future create/demote action), so it belongs to no library (library_id
+    // null). Metadata is its sole store, so Drive is required.
+    if (isUnlinked) {
+      const toWrite = {
+        ...tool, tracking_id, library_id: null, library_name: null,
+        assemblies, ...locExtra,
+        // Preserve the tool's own intent: a per-tool no-Fusion tool stays marked;
+        // a formerly-linked tool saved only because Fusion is disabled keeps its
+        // flag (false), so re-enabling Fusion doesn't spuriously detach it.
+        no_fusion_link: !!tool.no_fusion_link,
+        _instancesRaw: [], _fusionRaw: null,
+      };
+      if (!googleRef.current) {
+        throw new Error('Connect Google Drive to save (metadata is the tool\'s store when it is not in Fusion)');
+      }
+      try {
+        await driveService.upsertMetadata(buildMetadataTool({ ...toWrite, tracking_id }));
+      } catch (err) {
+        if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
+        throw err;
+      }
+      return toWrite;
+    }
+
+    const fusionList = await downloadFusionList(library_id);
+    const freshByGuid = new Map(fusionList.map(f => [f.guid, f]));
+    const refreshedRaws = assemblies.map(a => freshByGuid.get(a.instance_guid)).filter(Boolean);
 
     const toWrite = {
       ...tool,
@@ -480,6 +514,17 @@ export function createToolActions(ctx) {
     try {
       const tool = toolsRef.current.find(t => t.id === id);
       const tid = tool?.tracking_id || id;
+
+      // No-Fusion tool: nothing to remove from any Fusion library — delete the
+      // metadata record only.
+      if (tool?.no_fusion_link === true) {
+        if (googleRef.current) await driveService.deleteMetadata(tid);
+        dispatch({ type: 'DELETE_TOOL', id });
+        dispatch({ type: 'SAVE_SUCCESS' });
+        notify('Tool deleted', 'success');
+        return;
+      }
+
       const library_id = tool?.library_id || defaultToolLibraryId(shopSettingsRef.current);
       const fusionList = await downloadFusionList(library_id);
       let remaining;
@@ -655,11 +700,75 @@ export function createToolActions(ctx) {
     }
   };
 
+  // ─── Promote / detach (no-Fusion ↔ Fusion) — Fusion-decoupling Phase B ─────
+  // Promote: a no-Fusion tool becomes Fusion-linked. Flip the flag and save — the
+  // LINKED writeLogicalTool path mints the Fusion instances and stores their guids.
+  const promoteToolToFusion = async (toolId) => {
+    const tool = toolsRef.current.find(t => t.id === toolId);
+    if (!tool) throw new Error('Tool not found');
+    if (!tool.no_fusion_link) return tool; // already linked
+    const library_id = tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
+    if (!library_id) throw new Error('Link a Fusion library first (Settings → Fusion Libraries)');
+    dispatch({ type: 'SAVE_START' });
+    try {
+      const written = await writeLogicalTool({
+        ...tool, no_fusion_link: false, library_id, updated_at: new Date().toISOString(),
+      });
+      dispatch({ type: 'UPDATE_TOOL', tool: written });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify('Created in the Fusion library', 'success');
+      return written;
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Create in Fusion failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  };
+
+  // Detach: a Fusion-linked tool becomes no-Fusion. Remove its Fusion instances
+  // from the library, then write it metadata-only (instance guids cleared so a
+  // later promote mints fresh entries). All app/metadata data is untouched.
+  const detachToolFromFusion = async (toolId) => {
+    const tool = toolsRef.current.find(t => t.id === toolId);
+    if (!tool) throw new Error('Tool not found');
+    if (tool.no_fusion_link) return tool; // already detached
+    if (!googleRef.current) throw new Error('Connect Google Drive to detach (the tool becomes metadata-only)');
+    dispatch({ type: 'SAVE_START' });
+    try {
+      // Remove this tool's entries from its Fusion library (by tracking ID + the
+      // guids of the instances it currently owns).
+      const library_id = tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
+      const fusionList = await downloadFusionList(library_id);
+      const tid = tool.tracking_id || null;
+      const dropGuids = new Set((tool._instancesRaw || []).map(r => r.guid));
+      const remaining = fusionList.filter(f =>
+        !(tid && readTrackingId(f) === tid) && !dropGuids.has(f.guid));
+      await uploadFusionList(library_id, remaining);
+      // Now write metadata-only (writeLogicalTool takes the no_fusion_link branch).
+      const written = await writeLogicalTool({
+        ...tool,
+        no_fusion_link: true,
+        library_id: null,
+        assemblies: (tool.assemblies || []).map(a => ({ ...a, instance_guid: null })),
+        updated_at: new Date().toISOString(),
+      });
+      dispatch({ type: 'UPDATE_TOOL', tool: written });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify('Detached from Fusion — now a no-Fusion tool', 'success');
+      return written;
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Detach failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  };
+
   return {
     writeLogicalTool,
     saveTool, assignToolLocation, normalizeLocationSystem,
     addTool, cloneTool, mergeTool, deleteTool,
     addAssembly, updateAssembly, deleteAssembly,
     reconcileTool, applyReconcile,
+    promoteToolToFusion, detachToolFromFusion,
   };
 }

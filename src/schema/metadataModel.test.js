@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildMetadataTool, mergeFusionAndMetadata } from './metadataModel.js';
-import { buildLogicalTool } from './logicalTools.js';
+import { buildLogicalTool, buildUnlinkedTool, isUnlinkedMeta, materializeUnlinkedTools } from './logicalTools.js';
 
 // Fusion-decoupling Phase A (increment 1): the app's metadata record now carries
 // the Fusion-native SCALAR fields (identity + geometry + unit + material) so it's
@@ -151,5 +151,99 @@ describe('Phase A increment 2 — presets in the complete record', () => {
     expect(tool.presets[0].operation_type).toBe('rough');
     expect(tool.presets[0].machine_id).toBe('machine-uuid-1');
     expect(tool.presets[0].job_ids).toEqual(['job-1']);
+  });
+});
+
+// ── Phase B increment 1: buildUnlinkedTool + the orphan-ghost guard ──────────
+const unlinkedSourceTool = {
+  ...toolWithPresets,
+  tracking_id: 'FTL-NOFUS1',
+  no_fusion_link: true,
+  assemblies: [{
+    assembly_id: 'asm-1', instance_guid: null, holder_guid: 'holder-1',
+    holder_description: 'ER32 100mm', ooh: 2.0, source: 'manual',
+  }],
+};
+
+describe('Phase B increment 1 — no-Fusion tools (build from metadata alone)', () => {
+  it('isUnlinkedMeta only flags EXPLICITLY marked records (orphan-ghost guard)', () => {
+    expect(isUnlinkedMeta({ no_fusion_link: true })).toBe(true);
+    // A tool deleted in Fusion leaves an UNMARKED metadata record — must stay
+    // dormant, never materialized as a ghost.
+    expect(isUnlinkedMeta({ no_fusion_link: false })).toBe(false);
+    expect(isUnlinkedMeta({})).toBe(false);
+    expect(isUnlinkedMeta(null)).toBe(false);
+  });
+
+  it('buildUnlinkedTool reconstructs a complete tool from metadata with no Fusion side', () => {
+    const meta = buildMetadataTool(unlinkedSourceTool);
+    const tool = buildUnlinkedTool(meta);
+    // Identity + geometry from metadata (no Fusion defaults masking them)
+    expect(tool.id).toBe('FTL-NOFUS1');
+    expect(tool.tracking_id).toBe('FTL-NOFUS1');
+    expect(tool.tool_type).toBe('flat end mill');
+    expect(tool.unit).toBe('inches');
+    expect(tool.diameter).toBe(0.5);
+    expect(tool.number_of_flutes).toBe(4);
+    expect(tool.material).toBe('carbide');
+    // Presets reconstructed with app-only fields intact
+    expect(tool.presets).toHaveLength(1);
+    expect(tool.presets[0].n).toBe(12000);
+    expect(tool.presets[0].operation_type).toBe('rough');
+    // Flat speed/feed mirror derived from preset 0 (O1)
+    expect(tool.spindle_speed).toBe(12000);
+    expect(tool.cutting_feedrate).toBe(120);
+    expect(tool.feed_per_tooth).toBe(0.0025);
+    // Assemblies carried from metadata; no Fusion instance
+    expect(tool.assemblies).toHaveLength(1);
+    expect(tool.assemblies[0].holder_guid).toBe('holder-1');
+    expect(tool.assemblies[0].instance_guid).toBeNull();
+    // Unlinked markers
+    expect(tool.no_fusion_link).toBe(true);
+    expect(tool.library_id).toBeNull();
+    expect(tool._instancesRaw).toEqual([]);
+    expect(tool._fusionRaw).toBeNull();
+  });
+
+  it('buildUnlinkedTool PRESERVES a stored no_fusion_link:false (Fusion-disabled-mode build)', () => {
+    // In disabled mode buildUnlinkedTool runs for every record, including
+    // formerly-linked ones — they must keep their flag so re-enabling Fusion
+    // doesn't spuriously detach them.
+    const meta = buildMetadataTool({ ...sampleTool, tracking_id: 'FTL-LINKED2', no_fusion_link: false });
+    const tool = buildUnlinkedTool(meta);
+    expect(tool.no_fusion_link).toBe(false);
+    expect(tool.tool_type).toBe('flat end mill'); // still fully reconstructed from metadata
+    expect(tool.diameter).toBe(0.5);
+  });
+});
+
+describe('Phase B increment 2 — materializeUnlinkedTools (load-append + guards)', () => {
+  const markedMeta = buildMetadataTool(unlinkedSourceTool); // id FTL-NOFUS1, no_fusion_link true
+  const orphanMeta = buildMetadataTool({ ...sampleTool, tracking_id: 'FTL-ORPHAN', no_fusion_link: false });
+  const builtLinked = [{ tracking_id: 'FTL-LINKED1' }];
+
+  it('appends a marked, unrepresented no-Fusion tool', () => {
+    const out = materializeUnlinkedTools(builtLinked, [markedMeta]);
+    expect(out).toHaveLength(2);
+    expect(out[1].tracking_id).toBe('FTL-NOFUS1');
+    expect(out[1].no_fusion_link).toBe(true);
+  });
+
+  it('does NOT materialize an unmarked orphan (deleted-in-Fusion metadata stays dormant)', () => {
+    const out = materializeUnlinkedTools(builtLinked, [orphanMeta]);
+    expect(out).toBe(builtLinked);            // same reference — nothing added
+    expect(out).toHaveLength(1);
+  });
+
+  it('does NOT double-add a marked record already backed by a built (linked) tool', () => {
+    const built = [{ tracking_id: 'FTL-NOFUS1' }]; // same id is already linked
+    const out = materializeUnlinkedTools(built, [markedMeta]);
+    expect(out).toBe(built);
+    expect(out).toHaveLength(1);
+  });
+
+  it('is a no-op (same reference) when there is nothing marked to add', () => {
+    const out = materializeUnlinkedTools(builtLinked, [orphanMeta, {}, null].filter(Boolean));
+    expect(out).toBe(builtLinked);
   });
 });

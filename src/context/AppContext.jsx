@@ -11,7 +11,7 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, useMemo, useRef } from 'react';
 import * as driveService from '../services/driveService.js';
 import * as aps from '../services/apsService.js';
-import { groupByTrackingId, buildLogicalTool, combineToolsByToolId } from '../schema/toolSchema.js';
+import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeUnlinkedTools, buildUnlinkedTool } from '../schema/toolSchema.js';
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
@@ -703,6 +703,19 @@ export function AppProvider({ children }) {
         } catch { /* inconclusive — leave any existing warning as-is */ }
       }
 
+      // Fusion sync disabled (Fusion-decoupling Phase B): metadata is the whole
+      // library. Build every tool from its metadata record — no Fusion download,
+      // no library requirement, no holder load (holders are an APS/Fusion concept).
+      // buildUnlinkedTool preserves each record's own no_fusion_link flag.
+      const fusionEnabled = effectiveShop.integrations?.fusion?.enabled !== false;
+      if (!fusionEnabled) {
+        const built = metaList.map(m => buildUnlinkedTool(m));
+        const paired = derivePairings(built, componentsFile?.components || []);
+        const finalTools = backfillAsmNumbers(paired, effectiveShop, componentsFile);
+        dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize: false, normalizeCount: 0 });
+        return;
+      }
+
       // Download and build EACH linked tool library, tagging every tool with its
       // source library (library_id / library_name) so writes route back to the
       // right file and the landing page can filter/note by library. combine runs
@@ -764,13 +777,16 @@ export function AppProvider({ children }) {
         if (established) localStorage.setItem(SETUP_CELEBRATED_KEY, '1');
       }
 
-      // Insert-style auto-detect (read-only, no writes): a tool whose Fusion
-      // product-id is a combined "holder/insert" id (a "/" — see insertFamilies)
-      // gets an in-memory pairing, with its two components linked by ProShop
-      // number when they already exist. Persisted lazily on the tool's next save;
-      // components are created/filled on ProShop upload. Runs BEFORE the asm
-      // backfill so paired tools get the combined id token in their asm numbers.
-      const pairedTools = derivePairings(tools, componentsFile?.components || []);
+      // No-Fusion tools (Fusion-decoupling Phase B): materialize any metadata
+      // record EXPLICITLY marked unlinked (no_fusion_link) that no Fusion instance
+      // represents. Orphan-ghost-guarded (see materializeUnlinkedTools) — a
+      // tool deleted directly in Fusion leaves UNMARKED orphan metadata that stays
+      // dormant. A no-op on today's data (marked tools still carry a Fusion
+      // placeholder); activates once placeholder-minting retires / a tool is
+      // created as no-Fusion. Runs before pairing/backfill so unlinked tools get
+      // the same in-memory treatment as linked ones.
+      const withUnlinked = materializeUnlinkedTools(tools, metaList);
+      const pairedTools = derivePairings(withUnlinked, componentsFile?.components || []);
       // Assembly ID System: fill auto-mode asm_number in-memory for any assembly
       // missing one (deterministic; persisted lazily on the tool's next save).
       const finalTools = backfillAsmNumbers(pairedTools, effectiveShop, componentsFile);
@@ -821,6 +837,9 @@ export function AppProvider({ children }) {
     <AppContext.Provider value={{
       ...state,
       holderLibrarySetupComplete: !!state.holderLibraryLocation,
+      // Whether the Fusion sync adapter is active (shop-wide). Off = tools live in
+      // metadata only; writes are metadata-only and the load reads from metadata.
+      fusionEnabled: state.shopSettings?.integrations?.fusion?.enabled !== false,
       setGoogleUser,
       skipMetadata,
       reconnectMetadata,

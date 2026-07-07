@@ -34,7 +34,7 @@ export default function Settings() {
     addHolderLibrary, removeHolderLibrary, notify,
     googleAuthenticated, metadataSkipped, user: googleUser,
     fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
-    shopSettings, saveShopSettings, signOutAll,
+    shopSettings, saveShopSettings, signOutAll, fusionEnabled,
     setupProgress, demoMode,
     registerNavGuard, maybeBlockNav,
   } = useApp();
@@ -449,6 +449,42 @@ export default function Settings() {
   // so the FilePicker's internal navigation state survives re-renders.
   const renderFusionLibrariesPanel = () => (
     <div style={{ marginTop: 10, paddingLeft: 12, borderLeft: '2px solid var(--border)' }}>
+      {/* Fusion sync master switch (Fusion-decoupling). Off = the app runs
+          independently of Fusion — tools live in the app + Drive metadata only and
+          nothing syncs to/from the Fusion library. Persisted in shop_settings
+          (integrations.fusion.enabled); managedSig excludes it, so it doesn't
+          collide with the page's draft/dirty state. */}
+      <label className="flex items-center gap-8" style={{ marginBottom: 14, cursor: googleAuthenticated ? 'pointer' : 'not-allowed', opacity: googleAuthenticated ? 1 : 0.6 }}>
+        <input
+          type="checkbox"
+          checked={fusionEnabled}
+          disabled={!googleAuthenticated}
+          onChange={e => {
+            const enabled = e.target.checked;
+            saveShopSettings({
+              ...(shopSettings || {}),
+              integrations: {
+                ...(shopSettings?.integrations || {}),
+                fusion: { ...(shopSettings?.integrations?.fusion || {}), enabled },
+              },
+            });
+            notify(
+              enabled
+                ? 'Fusion sync ON — reload to load tools from the Fusion library'
+                : 'Fusion sync OFF — tools now save to metadata only; reload to view in no-Fusion mode',
+              'info', 6000,
+            );
+          }}
+        />
+        <span className="text-sm" style={{ fontWeight: 600 }}>Sync with Fusion 360</span>
+        <InfoTip text="On: tools read from and write to your Fusion tool library (the normal mode). Off: the app runs independently of Fusion — tools live in the app + Google Drive metadata only, nothing is written to Fusion, and no-match ProShop rows / new tools stay app-only. Use this when moving to another CAM or working without Fusion. You can switch back any time; it takes full effect on the next reload." />
+      </label>
+      {!fusionEnabled && (
+        <div className="text-xs" style={{ marginBottom: 12, padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 'var(--radius-sm)', color: 'var(--orange)' }}>
+          Fusion sync is off — the libraries below are kept but not read or written until you turn it back on.
+        </div>
+      )}
+
       <p className="text-sub text-xs" style={{ marginBottom: 12 }}>
         Link one or more <strong>tool libraries</strong> (read &amp; written — each tool writes back to the one it came from)
         and one or more <strong>holder libraries</strong> (read-only, shared across all tools). A file can be linked only
