@@ -11,7 +11,7 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, useMemo, useRef } from 'react';
 import * as driveService from '../services/driveService.js';
 import * as aps from '../services/apsService.js';
-import { groupByTrackingId, buildLogicalTool, combineToolsByToolId } from '../schema/toolSchema.js';
+import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeUnlinkedTools } from '../schema/toolSchema.js';
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
@@ -764,13 +764,16 @@ export function AppProvider({ children }) {
         if (established) localStorage.setItem(SETUP_CELEBRATED_KEY, '1');
       }
 
-      // Insert-style auto-detect (read-only, no writes): a tool whose Fusion
-      // product-id is a combined "holder/insert" id (a "/" — see insertFamilies)
-      // gets an in-memory pairing, with its two components linked by ProShop
-      // number when they already exist. Persisted lazily on the tool's next save;
-      // components are created/filled on ProShop upload. Runs BEFORE the asm
-      // backfill so paired tools get the combined id token in their asm numbers.
-      const pairedTools = derivePairings(tools, componentsFile?.components || []);
+      // No-Fusion tools (Fusion-decoupling Phase B): materialize any metadata
+      // record EXPLICITLY marked unlinked (no_fusion_link) that no Fusion instance
+      // represents. Orphan-ghost-guarded (see materializeUnlinkedTools) — a
+      // tool deleted directly in Fusion leaves UNMARKED orphan metadata that stays
+      // dormant. A no-op on today's data (marked tools still carry a Fusion
+      // placeholder); activates once placeholder-minting retires / a tool is
+      // created as no-Fusion. Runs before pairing/backfill so unlinked tools get
+      // the same in-memory treatment as linked ones.
+      const withUnlinked = materializeUnlinkedTools(tools, metaList);
+      const pairedTools = derivePairings(withUnlinked, componentsFile?.components || []);
       // Assembly ID System: fill auto-mode asm_number in-memory for any assembly
       // missing one (deterministic; persisted lazily on the tool's next save).
       const finalTools = backfillAsmNumbers(pairedTools, effectiveShop, componentsFile);

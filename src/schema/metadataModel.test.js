@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildMetadataTool, mergeFusionAndMetadata } from './metadataModel.js';
-import { buildLogicalTool, buildUnlinkedTool, isUnlinkedMeta } from './logicalTools.js';
+import { buildLogicalTool, buildUnlinkedTool, isUnlinkedMeta, materializeUnlinkedTools } from './logicalTools.js';
 
 // Fusion-decoupling Phase A (increment 1): the app's metadata record now carries
 // the Fusion-native SCALAR fields (identity + geometry + unit + material) so it's
@@ -203,5 +203,36 @@ describe('Phase B increment 1 — no-Fusion tools (build from metadata alone)', 
     expect(tool.library_id).toBeNull();
     expect(tool._instancesRaw).toEqual([]);
     expect(tool._fusionRaw).toBeNull();
+  });
+});
+
+describe('Phase B increment 2 — materializeUnlinkedTools (load-append + guards)', () => {
+  const markedMeta = buildMetadataTool(unlinkedSourceTool); // id FTL-NOFUS1, no_fusion_link true
+  const orphanMeta = buildMetadataTool({ ...sampleTool, tracking_id: 'FTL-ORPHAN', no_fusion_link: false });
+  const builtLinked = [{ tracking_id: 'FTL-LINKED1' }];
+
+  it('appends a marked, unrepresented no-Fusion tool', () => {
+    const out = materializeUnlinkedTools(builtLinked, [markedMeta]);
+    expect(out).toHaveLength(2);
+    expect(out[1].tracking_id).toBe('FTL-NOFUS1');
+    expect(out[1].no_fusion_link).toBe(true);
+  });
+
+  it('does NOT materialize an unmarked orphan (deleted-in-Fusion metadata stays dormant)', () => {
+    const out = materializeUnlinkedTools(builtLinked, [orphanMeta]);
+    expect(out).toBe(builtLinked);            // same reference — nothing added
+    expect(out).toHaveLength(1);
+  });
+
+  it('does NOT double-add a marked record already backed by a built (linked) tool', () => {
+    const built = [{ tracking_id: 'FTL-NOFUS1' }]; // same id is already linked
+    const out = materializeUnlinkedTools(built, [markedMeta]);
+    expect(out).toBe(built);
+    expect(out).toHaveLength(1);
+  });
+
+  it('is a no-op (same reference) when there is nothing marked to add', () => {
+    const out = materializeUnlinkedTools(builtLinked, [orphanMeta, {}, null].filter(Boolean));
+    expect(out).toBe(builtLinked);
   });
 });

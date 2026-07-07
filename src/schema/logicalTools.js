@@ -191,6 +191,31 @@ export function buildUnlinkedTool(meta) {
   };
 }
 
+// Materialize intentional no-Fusion tools alongside the Fusion-built ones
+// (Fusion-decoupling Phase B). For each metadata record that is EXPLICITLY marked
+// unlinked (isUnlinkedMeta) and is NOT already represented by a Fusion-built tool
+// (its tracking id wasn't produced from a Fusion instance), append a
+// buildUnlinkedTool. Guarded three ways so it can never resurrect a ghost:
+//   1. only marked (no_fusion_link) records — a deleted-in-Fusion tool's orphan
+//      metadata is UNMARKED and stays dormant;
+//   2. skip any record whose id already backs a built (linked) tool;
+//   3. a malformed record is skipped, never blocks the load.
+// A no-op on today's data (every no_fusion_link tool still has a Fusion
+// placeholder, so none are orphaned) — it activates once placeholder-minting is
+// retired (Phase C) or a tool is created/demoted as no-Fusion (Phase B4).
+export function materializeUnlinkedTools(builtTools, metaList) {
+  const built = new Set((builtTools || []).map(t => t.tracking_id).filter(Boolean));
+  const seen = new Set();
+  const extra = [];
+  for (const meta of (metaList || [])) {
+    if (!isUnlinkedMeta(meta)) continue;
+    if (!meta.id || built.has(meta.id) || seen.has(meta.id)) continue;
+    seen.add(meta.id);
+    try { extra.push(buildUnlinkedTool(meta)); } catch { /* skip a malformed record */ }
+  }
+  return extra.length ? [...(builtTools || []), ...extra] : builtTools;
+}
+
 // ─── Split a logical tool into N raw Fusion instances + its metadata ───────
 // Produces one Fusion entry per assembly. All entries share every field except
 // guid, holder, and geometry.LB (per-instance OOH). holders is the holder
