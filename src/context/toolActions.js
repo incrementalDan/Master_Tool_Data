@@ -33,9 +33,12 @@ export function createToolActions(ctx) {
   const writeLogicalTool = async (tool) => {
     const holders = holdersRef.current || [];
     const tracking_id = tool.tracking_id || generateTrackingId();
-    // A no-Fusion tool has no Fusion entries, so its assemblies keep a null
-    // instance_guid (the Fusion-entry link) — only linked tools mint one.
-    const isUnlinked = tool.no_fusion_link === true;
+    // A tool is written metadata-only when it's a per-tool no-Fusion tool OR the
+    // whole Fusion integration is disabled (shop-wide). Either way its assemblies
+    // keep a null instance_guid (the Fusion-entry link) — only a linked tool with
+    // Fusion enabled mints one.
+    const fusionDisabled = shopSettingsRef.current?.integrations?.fusion?.enabled === false;
+    const isUnlinked = tool.no_fusion_link === true || fusionDisabled;
     // Route this tool's read+write to the library it belongs to (multi-library).
     // A new/untagged tool goes to the configured default library.
     const library_id = tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
@@ -114,14 +117,18 @@ export function createToolActions(ctx) {
     // Fusion entry (no_fusion_link — set by ProShop import for unmatched rows, or
     // by a future create/demote action), so it belongs to no library (library_id
     // null). Metadata is its sole store, so Drive is required.
-    if (tool.no_fusion_link === true) {
+    if (isUnlinked) {
       const toWrite = {
         ...tool, tracking_id, library_id: null, library_name: null,
-        assemblies, ...locExtra, no_fusion_link: true,
+        assemblies, ...locExtra,
+        // Preserve the tool's own intent: a per-tool no-Fusion tool stays marked;
+        // a formerly-linked tool saved only because Fusion is disabled keeps its
+        // flag (false), so re-enabling Fusion doesn't spuriously detach it.
+        no_fusion_link: !!tool.no_fusion_link,
         _instancesRaw: [], _fusionRaw: null,
       };
       if (!googleRef.current) {
-        throw new Error('Connect Google Drive to save a tool that is not in Fusion');
+        throw new Error('Connect Google Drive to save (metadata is the tool\'s store when it is not in Fusion)');
       }
       try {
         await driveService.upsertMetadata(buildMetadataTool({ ...toWrite, tracking_id }));

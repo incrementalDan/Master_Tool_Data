@@ -45,7 +45,7 @@ export default function ToolDetail() {
   const {
     tools, saveTool, deleteTool, cloneTool, isSaving, notify, holders, holderLibraryLocation,
     reconcileTool, googleAuthenticated, uploadToolPhoto, uploadToolAttachment, deleteToolAttachment,
-    shopSettings, promoteToolToFusion, detachToolFromFusion,
+    shopSettings, promoteToolToFusion, detachToolFromFusion, fusionEnabled,
   } = useApp();
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
   const [editing, setEditing] = useState(searchParams.get('edit') === '1');
@@ -135,9 +135,12 @@ export default function ToolDetail() {
 
   // No-Fusion tool (Fusion-decoupling Phase B): lives in the app/metadata only,
   // with no Fusion library entry. Fusion-workflow actions (Sync Job, reconcile,
-  // Copy to Fusion) are hidden; a Promote action creates it in Fusion, and a
-  // linked tool can be Detached back to no-Fusion.
-  const noFusion = !!tool.no_fusion_link;
+  // Copy to Fusion) are hidden. `toolIsNoFusion` is this tool's own flag; `noFusion`
+  // ALSO covers the shop-wide Fusion-sync-off mode (every tool is metadata-only
+  // then). Promote/Detach only make sense when Fusion is on, so they gate on
+  // `fusionEnabled` and pick by the per-tool flag.
+  const toolIsNoFusion = !!tool.no_fusion_link;
+  const noFusion = toolIsNoFusion || !fusionEnabled;
 
   const handlePromote = async () => {
     try { await promoteToolToFusion(tool.id); }
@@ -293,11 +296,14 @@ export default function ToolDetail() {
           <SidebarBtn icon={GitMerge} label="Sync Job" tip="Sync proven values from a job file" onClick={() => navigate(`/merge/${tool.id}`)} />
         )}
         <div className="tool-sidebar-divider" />
-        {/* Promote a no-Fusion tool into the Fusion library, or detach a linked one. */}
-        {noFusion ? (
-          <SidebarBtn icon={Link2} label="Create in Fusion" tip="Create this tool in the Fusion library (promote from no-Fusion)" onClick={handlePromote} />
-        ) : (
-          <SidebarBtn icon={Unlink} label="Detach" tip="Remove from the Fusion library (keeps all app data)" onClick={handleDetach} />
+        {/* Promote a no-Fusion tool into the Fusion library, or detach a linked one.
+            Only when the Fusion integration is on (both are no-ops when it's off). */}
+        {fusionEnabled && (
+          toolIsNoFusion ? (
+            <SidebarBtn icon={Link2} label="Create in Fusion" tip="Create this tool in the Fusion library (promote from no-Fusion)" onClick={handlePromote} />
+          ) : (
+            <SidebarBtn icon={Unlink} label="Detach" tip="Remove from the Fusion library (keeps all app data)" onClick={handleDetach} />
+          )
         )}
         {!noFusion && (
           <SidebarBtn
@@ -596,7 +602,12 @@ export default function ToolDetail() {
 
         {/* Which library this tool lives in (multi-library). Reads and writes go
             back to this library. Muted one-liner at the bottom of the page. */}
-        {noFusion ? (
+        {!fusionEnabled ? (
+          <div className="text-sub text-xs" style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <CloudOff size={13} style={{ flexShrink: 0, color: 'var(--orange)' }} />
+            Fusion sync is off — tools live in the app &amp; metadata only. Turn it back on in Settings → Fusion Libraries.
+          </div>
+        ) : toolIsNoFusion ? (
           <div className="text-sub text-xs" style={{ marginTop: 20, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 6 }}>
             <CloudOff size={13} style={{ flexShrink: 0, color: 'var(--orange)' }} />
             Not in Fusion — this tool lives in the app &amp; metadata only. Use <strong>Create in Fusion</strong> to add it to the library.

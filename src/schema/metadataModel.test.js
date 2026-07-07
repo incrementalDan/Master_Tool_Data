@@ -204,6 +204,17 @@ describe('Phase B increment 1 — no-Fusion tools (build from metadata alone)', 
     expect(tool._instancesRaw).toEqual([]);
     expect(tool._fusionRaw).toBeNull();
   });
+
+  it('buildUnlinkedTool PRESERVES a stored no_fusion_link:false (Fusion-disabled-mode build)', () => {
+    // In disabled mode buildUnlinkedTool runs for every record, including
+    // formerly-linked ones — they must keep their flag so re-enabling Fusion
+    // doesn't spuriously detach them.
+    const meta = buildMetadataTool({ ...sampleTool, tracking_id: 'FTL-LINKED2', no_fusion_link: false });
+    const tool = buildUnlinkedTool(meta);
+    expect(tool.no_fusion_link).toBe(false);
+    expect(tool.tool_type).toBe('flat end mill'); // still fully reconstructed from metadata
+    expect(tool.diameter).toBe(0.5);
+  });
 });
 
 describe('Phase B increment 2 — materializeUnlinkedTools (load-append + guards)', () => {

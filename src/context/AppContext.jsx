@@ -11,7 +11,7 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, useMemo, useRef } from 'react';
 import * as driveService from '../services/driveService.js';
 import * as aps from '../services/apsService.js';
-import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeUnlinkedTools } from '../schema/toolSchema.js';
+import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeUnlinkedTools, buildUnlinkedTool } from '../schema/toolSchema.js';
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
@@ -703,6 +703,19 @@ export function AppProvider({ children }) {
         } catch { /* inconclusive — leave any existing warning as-is */ }
       }
 
+      // Fusion sync disabled (Fusion-decoupling Phase B): metadata is the whole
+      // library. Build every tool from its metadata record — no Fusion download,
+      // no library requirement, no holder load (holders are an APS/Fusion concept).
+      // buildUnlinkedTool preserves each record's own no_fusion_link flag.
+      const fusionEnabled = effectiveShop.integrations?.fusion?.enabled !== false;
+      if (!fusionEnabled) {
+        const built = metaList.map(m => buildUnlinkedTool(m));
+        const paired = derivePairings(built, componentsFile?.components || []);
+        const finalTools = backfillAsmNumbers(paired, effectiveShop, componentsFile);
+        dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize: false, normalizeCount: 0 });
+        return;
+      }
+
       // Download and build EACH linked tool library, tagging every tool with its
       // source library (library_id / library_name) so writes route back to the
       // right file and the landing page can filter/note by library. combine runs
@@ -824,6 +837,9 @@ export function AppProvider({ children }) {
     <AppContext.Provider value={{
       ...state,
       holderLibrarySetupComplete: !!state.holderLibraryLocation,
+      // Whether the Fusion sync adapter is active (shop-wide). Off = tools live in
+      // metadata only; writes are metadata-only and the load reads from metadata.
+      fusionEnabled: state.shopSettings?.integrations?.fusion?.enabled !== false,
       setGoogleUser,
       skipMetadata,
       reconnectMetadata,

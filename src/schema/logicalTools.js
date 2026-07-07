@@ -182,7 +182,11 @@ export function buildUnlinkedTool(meta) {
     presets,
     assemblies,
     machine_tool_number: (meta?.machine_tool_number ?? null) === null ? null : Number(meta.machine_tool_number),
-    no_fusion_link: true,
+    // Preserve the stored intent. In the ENABLED-mode materialize path the meta is
+    // always marked (isUnlinkedMeta gates it), so this is true. In DISABLED mode
+    // buildUnlinkedTool runs for EVERY record, including formerly-linked ones — they
+    // keep no_fusion_link:false so re-enabling Fusion doesn't spuriously detach them.
+    no_fusion_link: !!meta?.no_fusion_link,
     library_id: null,
     library_name: null,
     _instancesRaw: [],

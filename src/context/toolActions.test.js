@@ -72,6 +72,27 @@ describe('Phase B increment 3 — no-Fusion write path (metadata only)', () => {
     expect(ctx.uploadFusionList).not.toHaveBeenCalled();
   });
 
+  it('writeLogicalTool writes metadata-only when Fusion is DISABLED, even for a linked tool', async () => {
+    const ctx = makeCtx({
+      shopSettingsRef: { current: {
+        assembly_id_system: { mode: 'auto' }, tool_id_system: {}, location_config: { systems: [] },
+        integrations: { fusion: { enabled: false } },
+      } },
+    });
+    const { writeLogicalTool } = createToolActions(ctx);
+    const result = await writeLogicalTool({
+      tracking_id: 'FTL-DIS1', tool_type: 'drill', no_fusion_link: false,
+      assemblies: [{ assembly_id: 'a1', ooh: 1 }],
+    });
+    expect(ctx.downloadFusionList).not.toHaveBeenCalled();
+    expect(ctx.uploadFusionList).not.toHaveBeenCalled();
+    expect(upsertMetadata).toHaveBeenCalledOnce();
+    // The tool's own flag is preserved (false) — re-enabling Fusion later won't
+    // spuriously treat it as detached.
+    expect(result.no_fusion_link).toBe(false);
+    expect(upsertMetadata.mock.calls[0][0].no_fusion_link).toBe(false);
+  });
+
   it('deleteTool removes metadata only for a no-Fusion tool (no Fusion round-trip)', async () => {
     const ctx = makeCtx({
       toolsRef: { current: [{ id: 'FTL-NOFUS1', tracking_id: 'FTL-NOFUS1', no_fusion_link: true }] },
