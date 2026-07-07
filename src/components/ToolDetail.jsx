@@ -153,13 +153,17 @@ export default function ToolDetail() {
     catch { /* toast handled in context */ }
   };
 
-  // D3 — resolve field-level drift: for each field the user chose "keep app",
-  // set the tool to the app value (Fusion-won values are already in memory);
-  // saving writes the chosen value to both Fusion and metadata, clearing drift.
+  // D3 — resolve field-level drift. Set the chosen value EXPLICITLY for every
+  // resolved field (both directions), so saving pushes it to ALL Fusion instances
+  // of this logical tool — not just the canonical one. Critical for multi-assembly
+  // tools: a logical tool maps to N Fusion instances, and when the app value wins
+  // it must overwrite every instance (a normal save already does this; a drift
+  // resolution must too). Keep app → app value; Keep Fusion → the diverged Fusion
+  // value (adopts the Fusion edit onto all instances).
   const handleApplyDrift = async (resolutions) => {
     const patch = {};
     for (const d of (tool._drift || [])) {
-      if (resolutions[d.field] === 'app') patch[d.field] = d.appValue;
+      patch[d.field] = resolutions[d.field] === 'app' ? d.appValue : d.fusionValue;
     }
     try { await saveTool({ ...tool, ...patch, _drift: [] }); }
     catch { /* toast handled in context */ }

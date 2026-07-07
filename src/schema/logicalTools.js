@@ -82,8 +82,13 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
     _registeredAssemblies: (meta?.assemblies || []).filter(Boolean),
     // Field-level drift (D3): shared fields where the live Fusion value differs
     // from the app's stored copy — someone edited this tool directly in Fusion.
-    // Runtime-only (never persisted), surfaced on the tool page for confirmation.
-    _drift: detectFusionDrift(internal, meta),
+    // Scans EVERY instance (a shared-field edit to any one assembly counts), not
+    // just the canonical. Runtime-only (never persisted); surfaced on the tool
+    // page for confirmation, and the chosen value is pushed to ALL instances.
+    _drift: detectFusionDrift(
+      rawInstances.map(r => (r === canonical ? internal : fusionToolToInternal(r))),
+      meta,
+    ),
   };
 }
 
