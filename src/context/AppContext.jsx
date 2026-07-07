@@ -840,6 +840,9 @@ export function AppProvider({ children }) {
       // Whether the Fusion sync adapter is active (shop-wide). Off = tools live in
       // metadata only; writes are metadata-only and the load reads from metadata.
       fusionEnabled: state.shopSettings?.integrations?.fusion?.enabled !== false,
+      // Default winner (D2) when a tool's app record and live Fusion differ. Only
+      // pre-selects the drift-review choice (D3) — never a silent overwrite.
+      fusionAuthority: state.shopSettings?.integrations?.fusion?.authority || 'fusion',
       setGoogleUser,
       skipMetadata,
       reconnectMetadata,

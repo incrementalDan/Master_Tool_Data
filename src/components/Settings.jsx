@@ -485,6 +485,35 @@ export default function Settings() {
         </div>
       )}
 
+      {/* D2 — default winner when a tool's app record and its live Fusion entry
+          disagree. Only pre-selects the choice in the always-shown drift review
+          (D3); it never resolves silently, so switching it is safe. */}
+      {fusionEnabled && (
+        <div style={{ marginBottom: 14, paddingLeft: 2 }}>
+          <div className="flex items-center gap-6" style={{ marginBottom: 6 }}>
+            <span className="text-sm" style={{ fontWeight: 600 }}>On a Fusion vs. app conflict, default to</span>
+            <InfoTip text="When someone edits a tool directly in Fusion 360, the difference is always shown on the tool page for you to confirm — nothing is overwritten silently. This setting only pre-selects which side wins by default in that review. 'Fusion' matches today's behavior; switch to 'App' once ToolDex is your source of truth." />
+          </div>
+          {[['fusion', 'Fusion (Fusion 360 wins)'], ['app', 'App (ToolDex wins)']].map(([val, label]) => (
+            <label key={val} className="flex items-center gap-6 text-sm" style={{ paddingLeft: 4, marginBottom: 3, cursor: 'pointer' }}>
+              <input
+                type="radio"
+                name="fusionAuthority"
+                checked={(shopSettings?.integrations?.fusion?.authority || 'fusion') === val}
+                onChange={() => saveShopSettings({
+                  ...(shopSettings || {}),
+                  integrations: {
+                    ...(shopSettings?.integrations || {}),
+                    fusion: { ...(shopSettings?.integrations?.fusion || {}), authority: val },
+                  },
+                })}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      )}
+
       <p className="text-sub text-xs" style={{ marginBottom: 12 }}>
         Link one or more <strong>tool libraries</strong> (read &amp; written — each tool writes back to the one it came from)
         and one or more <strong>holder libraries</strong> (read-only, shared across all tools). A file can be linked only

@@ -17,6 +17,7 @@ import JobsSection from './JobsSection.jsx';
 import AttachmentUploadModal from './AttachmentUploadModal.jsx';
 import PhotoSlot from './PhotoSlot.jsx';
 import PairingSections from './PairingSections.jsx';
+import DriftBanner from './DriftBanner.jsx';
 import {
   INSERT_FAMILY_BY_ID, ALWAYS_INSERT_TYPES, autoInsertFamily, newPairing,
 } from '../schema/insertFamilies.js';
@@ -45,7 +46,7 @@ export default function ToolDetail() {
   const {
     tools, saveTool, deleteTool, cloneTool, isSaving, notify, holders, holderLibraryLocation,
     reconcileTool, googleAuthenticated, uploadToolPhoto, uploadToolAttachment, deleteToolAttachment,
-    shopSettings, promoteToolToFusion, detachToolFromFusion, fusionEnabled,
+    shopSettings, promoteToolToFusion, detachToolFromFusion, fusionEnabled, fusionAuthority,
   } = useApp();
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
   const [editing, setEditing] = useState(searchParams.get('edit') === '1');
@@ -149,6 +150,18 @@ export default function ToolDetail() {
   const handleDetach = async () => {
     if (!window.confirm('Detach this tool from Fusion? Its Fusion library entry is removed; all app data (specs, presets, purchasing, location, photos) is kept. You can re-create it in Fusion later.')) return;
     try { await detachToolFromFusion(tool.id); }
+    catch { /* toast handled in context */ }
+  };
+
+  // D3 — resolve field-level drift: for each field the user chose "keep app",
+  // set the tool to the app value (Fusion-won values are already in memory);
+  // saving writes the chosen value to both Fusion and metadata, clearing drift.
+  const handleApplyDrift = async (resolutions) => {
+    const patch = {};
+    for (const d of (tool._drift || [])) {
+      if (resolutions[d.field] === 'app') patch[d.field] = d.appValue;
+    }
+    try { await saveTool({ ...tool, ...patch, _drift: [] }); }
     catch { /* toast handled in context */ }
   };
 
@@ -411,15 +424,17 @@ export default function ToolDetail() {
           )}
         </div>
 
-        {tool.no_fusion_link && (
-          <div className="warn-banner" style={{ margin: '12px 0' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <AlertTriangle size={12} style={{ flexShrink: 0 }} />
-              Added from ProShop with no matching Fusion entry — its Fusion library entry is a
-              placeholder and needs geometry, presets, and holder/assembly setup before use.
-              <InfoTip text={'Edit this tool and uncheck "No Fusion Link" in Setup & Notes once its Fusion entry has everything it needs (geometry, presets, holder/assembly).'} />
-            </div>
-          </div>
+        {/* D3 — field-level Fusion drift review. Only for linked tools (a no-Fusion
+            tool has no Fusion side to differ from). Keyed by tool.id so the
+            per-field choices reset when navigating between tools. */}
+        {!noFusion && (
+          <DriftBanner
+            key={tool.id}
+            tool={tool}
+            authority={fusionAuthority}
+            isSaving={isSaving}
+            onApply={handleApplyDrift}
+          />
         )}
 
         {/* Insert-style tool: pairing bar + the Holder Body / Insert component
