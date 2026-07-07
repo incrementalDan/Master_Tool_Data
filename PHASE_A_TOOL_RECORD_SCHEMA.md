@@ -2,7 +2,12 @@
 
 **Date:** 2026-07-06
 **Companion to:** `FUSION_DECOUPLING_AUDIT.md` (Part 3). This is the "design the full tool record + SQLite schema together" deliverable that Part 3's order-of-operations calls for.
-**Status:** design only — no implementation. Field set is extracted verbatim from `src/schema/fieldRegistry.js` (81 tool-level fields), `metadataModel.js`, `PresetPanel.blankPreset`, `insertFamilies.newComponent/newPairing`, and `jobs.json` v2 — **not invented**.
+**Field set** is extracted verbatim from `src/schema/fieldRegistry.js` (81 tool-level fields), `metadataModel.js`, `PresetPanel.blankPreset`, `insertFamilies.newComponent/newPairing`, and `jobs.json` v2 — **not invented**.
+
+**Implementation status:**
+- ✅ **Increment 1 — complete scalar record (done).** `buildMetadataTool` now persists the Fusion-native identity + geometry + unit + material scalars (§4a/§4b); `mergeFusionAndMetadata` reads them back with Fusion still winning for linked tools (the `tip_angle` fallback pattern). `integrations.fusion.{enabled, authority}` scaffolded in `DEFAULT_SHOP_SETTINGS`. **Behavior byte-for-byte unchanged** — 186 tests + round-trip audit green. The app record is no longer amnesiac for scalar fields.
+- ⏳ **Increment 2 — presets into the app record (next).** The `tool_presets` shape (§6) — the risky part (round-trip invariants, guid stability, `preset_meta`), isolated on purpose.
+- ⏳ **Phase B** — no-Fusion tools, the D2 authority read-branch, D3 drift surfacing.
 
 **What this locks in:** every field the app models, *who owns it* (app vs. Fusion vs. shared), what happens on a Fusion conflict (D2), and the SQLite table/column it maps to. Implement this shape on today's JSON storage first (behavior-identical), then swap the storage layer to SQLite later.
 

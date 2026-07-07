@@ -11,6 +11,26 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     // tool_id is metadata-owned (the TMS manages it); metadata wins, falling back
     // to Fusion's product-id only for tools that predate the TMS assigning an ID.
     tool_id: meta.tool_id || fusionInternal.tool_id,
+    // ── Complete-record scalars (Fusion-decoupling Phase A) ──────────────────
+    // Fusion-native fields, now ALSO persisted in metadata (see buildMetadataTool).
+    // For a LINKED tool Fusion still wins — fusionInternal always carries these, so
+    // `?? meta` is an inert fallback that only fills a genuine gap (a tool with no
+    // Fusion value, i.e. a future no-Fusion tool). Same "Fusion wins, metadata is a
+    // transition fallback" pattern already used for tip_angle / tip_diameter below.
+    // The D2 authority setting (which side wins on a real conflict) + D3 drift
+    // surfacing are Phase B — this stays Fusion-authoritative and behavior-identical.
+    tool_type: fusionInternal.tool_type ?? meta.tool_type,
+    description: fusionInternal.description ?? meta.description ?? '',
+    unit: fusionInternal.unit ?? meta.unit,
+    diameter: fusionInternal.diameter ?? meta.diameter ?? null,
+    flute_length: fusionInternal.flute_length ?? meta.flute_length ?? null,
+    overall_length: fusionInternal.overall_length ?? meta.overall_length ?? null,
+    number_of_flutes: fusionInternal.number_of_flutes ?? meta.number_of_flutes ?? null,
+    shank_diameter: fusionInternal.shank_diameter ?? meta.shank_diameter ?? null,
+    corner_radius: fusionInternal.corner_radius ?? meta.corner_radius ?? null,
+    taper_angle: fusionInternal.taper_angle ?? meta.taper_angle ?? null,
+    thread_pitch: fusionInternal.thread_pitch ?? meta.thread_pitch ?? null,
+    material: fusionInternal.material ?? meta.material ?? 'carbide',
     vendor: meta.vendor || '',
     coating: meta.coating || '',
     purchasing: meta.purchasing || { manufacturers: [], vendors: [] },
@@ -120,6 +140,27 @@ export function buildMetadataTool(tool) {
     id: tool.tracking_id || tool.id,
     // tool_id is metadata-owned (mirrored to Fusion's product-id on write).
     tool_id: tool.tool_id || '',
+    // ── Complete-record scalars (Fusion-decoupling Phase A) ──────────────────
+    // These are Fusion-native fields (they live in the Fusion JSON and, for a
+    // linked tool, Fusion still wins on read — see mergeFusionAndMetadata). They
+    // are ALSO persisted here so the app record is complete and standalone: it
+    // can reconstruct a tool with no Fusion entry (Phase B) and can diff app-vs-
+    // Fusion to surface drift (D3). Writing them changes nothing for a linked
+    // tool today — the metadata copy is kept in sync with Fusion on every save.
+    // Presets are deliberately NOT here yet (next Phase-A increment — they carry
+    // the round-trip/preset_meta machinery). See PHASE_A_TOOL_RECORD_SCHEMA.md.
+    tool_type: tool.tool_type || null,
+    description: tool.description || '',
+    unit: tool.unit || null,
+    diameter: tool.diameter ?? null,
+    flute_length: tool.flute_length ?? null,
+    overall_length: tool.overall_length ?? null,
+    number_of_flutes: tool.number_of_flutes ?? null,
+    shank_diameter: tool.shank_diameter ?? null,
+    corner_radius: tool.corner_radius ?? null,
+    taper_angle: tool.taper_angle ?? null,
+    thread_pitch: tool.thread_pitch ?? null,
+    material: tool.material || null,
     vendor: tool.vendor || '',
     coating: tool.coating || '',
     purchasing: {
