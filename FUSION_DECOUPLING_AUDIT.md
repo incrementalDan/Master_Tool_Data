@@ -142,6 +142,13 @@ When the app record and Fusion disagree (someone edited a tool directly in Fusio
 - **Scope:** the setting governs only the fields **both stores hold** (the currently Fusion-native ones). Metadata-owned fields (`tool_id`, `machine_tool_number`, notes, tags, jobs, locations, …) stay app-owned in every mode — they never conflict.
 - **Not a free toggle — flip is a guarded migration action.** Each flip decides who gets *overwritten*: flipping to app-wins discards any un-reconciled Fusion-side edit on the next push (and the reverse flip has the mirror risk). So expose it as **"Make ToolDex the source of truth" / "Hand authority back to Fusion"** actions that **reconcile/pull from Fusion first** (nothing lost), then flip — not a raw checkbox that silently changes behavior.
 
+**D3 — Drift is always surfaced on the tool page; nothing is silently overwritten (either direction, either mode).**
+Whenever a linked tool's app record and its live Fusion entry differ on any field, **opening that tool shows a banner + per-field diff** (app value vs Fusion value) to confirm — the app never quietly clobbers a change someone made in Fusion (nor silently discards a deliberate app edit). The D2 `authority` setting becomes the **pre-selected/default** choice in that diff (one click to accept if you agree), *not* a silent auto-resolve.
+
+- **Enabled by D1, not extra scaffolding:** field-level diffing is only possible once the app record holds its own copy of every field. Today the app can't diff geometry/presets — it has no independent value — so this is a *payoff* of the complete record.
+- **Reuses existing machinery:** the reconcile-on-open + Sync Job `DiffStep` UI, extended from structural strays to **field-level** drift, with today's significance tolerances (`PRESET_SIGNIFICANCE` / `valuesEqual`) so Fusion float noise isn't flagged.
+- **Cost model:** detected on tool open (same per-tool live-fetch as today's reconcile-on-open); until reviewed, the app doesn't push over the differing Fusion fields. Bulk full-library rewrites keep their existing Review step. Full spec in `PHASE_A_TOOL_RECORD_SCHEMA.md` §10.
+
 ### Phasing (each phase ships independently, current behavior preserved throughout)
 
 **Phase A — make the record complete (do this together with the SQLite schema design).**
@@ -153,6 +160,7 @@ Extend the app's tool record to carry identity + geometry + unit + presets (i.e.
 - `deleteTool`, bulk ops (`saveFullLibrary`, renumber, assign IDs): partition unlinked tools out of the Fusion writes; they still participate in numbering/ID assignment (they're real tools).
 - `App.jsx` gates + `LibrarySetup`: branch on the integration setting ("Use Fusion 360? yes/no" in onboarding).
 - Reconcile / Sync Job: no-op for unlinked tools (nothing to reconcile against).
+- **Drift diff (D3):** extend reconcile-on-open to field-level — on opening a linked tool, diff the app record vs the live Fusion entry and surface any differences as a confirm-banner (authority setting pre-selects the default winner). No silent overwrite in either direction.
 - UI: a "Not in Fusion" badge (the inverse of today's "In library: …" note), plus two explicit actions — **"Create Fusion entry"** (promote: split instances, write, store guids) and optionally **"Detach from Fusion"** (demote: remove instances, keep the record). Promote/demote are just the two halves of `writeLogicalTool` you already have.
 
 **Phase C — collect the payoffs.**
