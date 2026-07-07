@@ -6,7 +6,7 @@
 import * as driveService from '../services/driveService.js';
 import {
   validateTool, generateId, generateAssemblyId, generateTrackingId,
-  splitToFusionInstances, readTrackingId, readOohFromFusion,
+  splitToFusionInstances, buildMetadataTool, readTrackingId, readOohFromFusion,
   getNextMachineNumber, combineToolsByToolId,
 } from '../schema/toolSchema.js';
 import { composeAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
@@ -92,22 +92,46 @@ export function createToolActions(ctx) {
       return withIds;
     });
 
-    const fusionList = await downloadFusionList(library_id);
-    const freshByGuid = new Map(fusionList.map(f => [f.guid, f]));
-    const refreshedRaws = assemblies.map(a => freshByGuid.get(a.instance_guid)).filter(Boolean);
-
     // A structured location is the single source of truth for the derived
     // DISPLAY values only — the composed string (Fusion vendor) and the ProShop
     // Location value. It deliberately does NOT write tool_id: ID generation stays
     // the explicit job of the Tool ID System's Assign/Re-number actions (which, in
     // location mode, read this same structured location). This keeps "where a tool
     // lives" (Location System) cleanly separate from "what it's called" (Tool ID).
+    // Needs no Fusion download, so it's computed before the linked/no-Fusion split.
     const locSystems = shopSettingsRef.current?.location_config?.systems || [];
     const locSys = tool.tool_location ? findSystem(locSystems, tool.tool_location.system_id) : null;
     const composedLoc = locSys ? resolveLocationString(tool.tool_location, locSystems) : '';
     const locExtra = composedLoc
       ? { location: composedLoc, proshop_location: proShopLocationValue(locSys, composedLoc) }
       : {};
+
+    // No-Fusion tool (Fusion-decoupling Phase B): write metadata ONLY — no Fusion
+    // library round-trip, no placeholder minted. The tool intentionally has no
+    // Fusion entry (no_fusion_link — set by ProShop import for unmatched rows, or
+    // by a future create/demote action), so it belongs to no library (library_id
+    // null). Metadata is its sole store, so Drive is required.
+    if (tool.no_fusion_link === true) {
+      const toWrite = {
+        ...tool, tracking_id, library_id: null, library_name: null,
+        assemblies, ...locExtra, no_fusion_link: true,
+        _instancesRaw: [], _fusionRaw: null,
+      };
+      if (!googleRef.current) {
+        throw new Error('Connect Google Drive to save a tool that is not in Fusion');
+      }
+      try {
+        await driveService.upsertMetadata(buildMetadataTool({ ...toWrite, tracking_id }));
+      } catch (err) {
+        if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
+        throw err;
+      }
+      return toWrite;
+    }
+
+    const fusionList = await downloadFusionList(library_id);
+    const freshByGuid = new Map(fusionList.map(f => [f.guid, f]));
+    const refreshedRaws = assemblies.map(a => freshByGuid.get(a.instance_guid)).filter(Boolean);
 
     const toWrite = {
       ...tool,
@@ -480,6 +504,17 @@ export function createToolActions(ctx) {
     try {
       const tool = toolsRef.current.find(t => t.id === id);
       const tid = tool?.tracking_id || id;
+
+      // No-Fusion tool: nothing to remove from any Fusion library — delete the
+      // metadata record only.
+      if (tool?.no_fusion_link === true) {
+        if (googleRef.current) await driveService.deleteMetadata(tid);
+        dispatch({ type: 'DELETE_TOOL', id });
+        dispatch({ type: 'SAVE_SUCCESS' });
+        notify('Tool deleted', 'success');
+        return;
+      }
+
       const library_id = tool?.library_id || defaultToolLibraryId(shopSettingsRef.current);
       const fusionList = await downloadFusionList(library_id);
       let remaining;

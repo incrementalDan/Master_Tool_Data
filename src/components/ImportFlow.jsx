@@ -159,10 +159,11 @@ export default function ImportFlow() {
 
   const skipProShop = () => setStep(3);
 
-  // Tools added from unmatched ProShop rows (no_fusion_link) get a brand-new
-  // placeholder entry created in the Fusion library on save — surfaced as a
-  // heads-up on the Review step so it isn't a surprise.
-  const newPlaceholderCount = fusionTools.filter(t => t.no_fusion_link).length;
+  // Tools added from unmatched ProShop rows (no_fusion_link) are saved as
+  // metadata-only "no-Fusion" tools — they do NOT create a Fusion library entry
+  // (Fusion-decoupling Phase B). Surfaced on the Review step so it's clear they
+  // won't appear in Fusion until promoted.
+  const newNoFusionCount = fusionTools.filter(t => t.no_fusion_link).length;
 
   // ── Step 4: Assign machine numbers, then save ─────────────────────────
   // Numbers are assigned in current import (array) order, starting at #30 and
@@ -439,13 +440,14 @@ export default function ImportFlow() {
             </div>
           )}
 
-          {newPlaceholderCount > 0 && (
+          {newNoFusionCount > 0 && (
             <div className="warn-banner mb-16">
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <AlertTriangle size={12} style={{ flexShrink: 0 }} />
-                {newPlaceholderCount} {newPlaceholderCount === 1 ? 'tool has' : 'tools have'} no matching
-                Fusion entry ("No Fusion Link"). Saving will create a placeholder entry in your Fusion
-                library for each one — they'll need geometry, presets, and holder/assembly setup before use.
+                {newNoFusionCount} {newNoFusionCount === 1 ? 'tool has' : 'tools have'} no matching
+                Fusion entry ("No Fusion Link"). {newNoFusionCount === 1 ? 'It' : 'They'} will be saved as
+                no-Fusion tools (in the app + metadata only) — no entry is created in your Fusion library.
+                Connect Google Drive to save them, and promote them to Fusion later if needed.
               </div>
             </div>
           )}
