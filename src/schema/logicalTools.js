@@ -113,6 +113,95 @@ export function overlayPresets(sourcePresets, presetMeta = {}) {
   });
 }
 
+// ─── Preserve concurrent Fusion preset edits on write (3-way merge) ─────────
+// A save writes the tool's IN-MEMORY presets to Fusion. If someone edited a
+// preset directly in Fusion after the app loaded the tool, the app's stale copy
+// would silently overwrite (WIPE) that edit. This merges: for each preset,
+//   base   = presets the app last saw/wrote as Fusion state (tool._instancesRaw),
+//   remote = the freshly-downloaded Fusion presets (may carry a new edit),
+//   local  = the app's in-memory presets (may carry an intentional app edit).
+// If Fusion changed a preset the app did NOT change → adopt Fusion's version
+// (its values + expressions), keeping only the app-only overlay
+// (operation_type / machine_id / job_ids). Otherwise keep the app's version.
+// The rare both-edited conflict keeps the app's version (matches the pre-fix
+// behavior for that case); the common "only Fusion changed it" case no longer
+// wipes. Speed/feed fields are compared raw-vs-raw so the material-name inference
+// overlayPresets adds never trips a false "app changed it".
+const PRESET_CMP_FIELDS = [
+  'name', 'n', 'v_c', 'n_ramp', 'v_f', 'f_z', 'v_f_leadIn', 'v_f_leadOut',
+  'v_f_transition', 'v_f_ramp', 'v_f_plunge', 'f_n', 'v_f_retract',
+  'tool-coolant', 'use-stepdown', 'stepdown', 'use-stepover', 'stepover', 'ramp-angle',
+];
+
+function presetSpeedFeedChanged(a, b) {
+  for (const k of PRESET_CMP_FIELDS) {
+    const av = a?.[k], bv = b?.[k];
+    if (typeof av === 'number' || typeof bv === 'number') {
+      if (Math.abs(Number(av || 0) - Number(bv || 0)) > 5e-6) return true;
+    } else if (String(av ?? '') !== String(bv ?? '')) return true;
+  }
+  return false;
+}
+
+export function mergePresetsWithFusion(localPresets, basePresets, remotePresets) {
+  if (!localPresets?.length) return localPresets;
+  const baseByGuid = new Map((basePresets || []).map(p => [p.guid, p]));
+  const remoteByGuid = new Map((remotePresets || []).map(p => [p.guid, p]));
+  return localPresets.map(local => {
+    const base = baseByGuid.get(local.guid);
+    const remote = remoteByGuid.get(local.guid);
+    if (!base || !remote) return local;   // app-added, or gone from Fusion → keep app's
+    const appChanged = presetSpeedFeedChanged(local, base);
+    const fusionChanged = presetSpeedFeedChanged(remote, base);
+    if (fusionChanged && !appChanged) {
+      // Fusion edited this preset, the app didn't → adopt Fusion's values +
+      // expressions (no wipe); keep the app-only overlay fields.
+      return {
+        ...remote,
+        operation_type: local.operation_type ?? null,
+        machine_id: local.machine_id ?? null,
+        job_ids: local.job_ids ?? [],
+      };
+    }
+    return local;
+  });
+}
+
+// Write-time 3-way merge for PER-INSTANCE fields (OOH / holder) — same principle
+// as the shared-field and preset merges. If Fusion changed an assembly's stick-out
+// (geometry.LB) or holder since the app loaded, and the app did NOT change it,
+// adopt Fusion's value so a save never wipes it. base/remote are the load-time and
+// freshly-downloaded raw instances, matched by instance guid.
+function oohEqual(a, b) {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  return Math.abs(Number(a) - Number(b)) < 5e-6;
+}
+
+export function mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws) {
+  const baseByGuid = new Map((baseRaws || []).map(r => [r.guid, r]));
+  const remoteByGuid = new Map((remoteRaws || []).map(r => [r.guid, r]));
+  let changed = false;
+  const next = (assemblies || []).map(a => {
+    const base = baseByGuid.get(a.instance_guid);
+    const remote = remoteByGuid.get(a.instance_guid);
+    if (!base || !remote) return a;   // new assembly / not in Fusion yet → keep app's
+    const patch = {};
+    const baseOoh = readOohFromFusion(base);
+    const remoteOoh = readOohFromFusion(remote);
+    if (!oohEqual(remoteOoh, baseOoh) && oohEqual(a.ooh, baseOoh)) patch.ooh = remoteOoh;
+    const baseHolder = base.holder?.guid || null;
+    const remoteHolder = remote.holder?.guid || null;
+    if (remoteHolder !== baseHolder && (a.holder_guid || null) === baseHolder) {
+      patch.holder_guid = remoteHolder;
+      patch.holder_description = remote.holder?.description || '';
+    }
+    if (Object.keys(patch).length) { changed = true; return { ...a, ...patch }; }
+    return a;
+  });
+  return changed ? next : assemblies;
+}
+
 // ─── No-Fusion (unlinked) tools — Fusion-decoupling Phase B ─────────────────
 // A metadata record is an INTENTIONAL no-Fusion tool only when it's explicitly
 // marked (no_fusion_link). This is the guard against resurrecting orphaned

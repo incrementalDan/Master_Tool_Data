@@ -6,7 +6,9 @@
 import * as driveService from '../services/driveService.js';
 import {
   validateTool, generateId, generateAssemblyId, generateTrackingId,
-  splitToFusionInstances, buildMetadataTool, readTrackingId, readOohFromFusion,
+  splitToFusionInstances, buildMetadataTool, mergePresetsWithFusion,
+  mergeSharedFieldsWithFusion, mergeInstanceFieldsWithFusion, fusionToolToInternal,
+  readTrackingId, readOohFromFusion,
   getNextMachineNumber, combineToolsByToolId,
 } from '../schema/toolSchema.js';
 import { composeAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
@@ -139,16 +141,36 @@ export function createToolActions(ctx) {
       return toWrite;
     }
 
+    // Base = what the app last saw/wrote as this tool's Fusion state (its shared
+    // presets are identical across instances, so instance 0 is representative).
+    const basePresets = tool._instancesRaw?.[0]?.['start-values']?.presets || [];
+
     const fusionList = await downloadFusionList(library_id);
     const freshByGuid = new Map(fusionList.map(f => [f.guid, f]));
     const refreshedRaws = assemblies.map(a => freshByGuid.get(a.instance_guid)).filter(Boolean);
 
+    // Preserve any edit made directly in Fusion since the app loaded this tool —
+    // never let a stale in-memory value silently overwrite it (the write-time net
+    // for the "app didn't reload" case). remote = the freshly-downloaded Fusion
+    // state; base = what the app last saw/wrote (tool._instancesRaw). For each
+    // preset / shared field / per-instance OOH+holder: if Fusion changed it and
+    // the app did NOT, adopt Fusion's value; otherwise keep the app's.
+    const remotePresets = refreshedRaws?.[0]?.['start-values']?.presets || [];
+    const mergedPresets = mergePresetsWithFusion(tool.presets, basePresets, remotePresets);
+    const baseRaw = tool._instancesRaw?.[0];
+    const remoteRaw = refreshedRaws?.[0];
+    const sharedMerged = (baseRaw && remoteRaw)
+      ? mergeSharedFieldsWithFusion(tool, fusionToolToInternal(baseRaw), fusionToolToInternal(remoteRaw))
+      : tool;
+    const mergedAssemblies = mergeInstanceFieldsWithFusion(assemblies, tool._instancesRaw, refreshedRaws);
+
     const toWrite = {
-      ...tool,
+      ...sharedMerged,
       tracking_id,
       library_id,
       library_name,
-      assemblies,
+      assemblies: mergedAssemblies,
+      presets: mergedPresets,
       _instancesRaw: refreshedRaws,
       _fusionRaw: refreshedRaws[0] || tool._fusionRaw || null,
       ...locExtra,
