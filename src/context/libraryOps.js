@@ -12,6 +12,7 @@ import {
   combineToolsByToolId, buildMetadataTool, materializeUnlinkedTools,
 } from '../schema/toolSchema.js';
 import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSystem.js';
+import { isExcludedFrom } from '../utils/idSystems.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
 import { composePresetName, opTypeWord, parsePresetName, materialNameCode, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
@@ -131,17 +132,34 @@ export function createLibraryOps(ctx) {
       // first, then each untracked entry as its own group.
       const { groups, untracked } = groupByTrackingId(fusionList);
       const orderedGroups = [...groups.values(), ...untracked.map(r => [r])];
-      const numbers = generateMachineNumbers(orderedGroups.length, ...machineNumberArgs(shopSettingsRef.current));
 
-      orderedGroups.forEach((raws, i) => {
-        const num = numbers[i];
-        raws.forEach(r => applyMachineNumberToFusion(r, num));
-        const tid = readTrackingId(raws[0]);
+      // Build the ordered list of logical tools to renumber = Fusion groups +
+      // no-Fusion (metadata-only) tools, MINUS any excluded from the Machine Number
+      // system (they keep their current number and don't consume one in the run).
+      const fusionItems = orderedGroups
+        .map(raws => ({ raws, logical: buildLogicalTool(raws, metaByTracking) }))
+        .filter(it => !isExcludedFrom(it.logical, 'machine_number'));
+      const noFusionItems = (toolsRef.current || [])
+        .filter(t => t.no_fusion_link && !isExcludedFrom(t, 'machine_number'));
+      const renumberCount = fusionItems.length + noFusionItems.length;
+      const numbers = generateMachineNumbers(renumberCount, ...machineNumberArgs(shopSettingsRef.current));
+
+      let ni = 0;
+      for (const it of fusionItems) {
+        const num = numbers[ni++];
+        it.raws.forEach(r => applyMachineNumberToFusion(r, num));
+        const tid = readTrackingId(it.raws[0]);
         if (tid) {
           const meta = metaByTracking.get(tid) || { id: tid };
           metaByTracking.set(tid, { ...meta, machine_tool_number: num });
         }
-      });
+      }
+      for (const t of noFusionItems) {
+        const num = numbers[ni++];
+        const tid = t.tracking_id || t.id;
+        const meta = metaByTracking.get(tid) || { id: tid };
+        metaByTracking.set(tid, { ...meta, machine_tool_number: num, no_fusion_link: true });
+      }
 
       // Write each library back (partition entries by their source library).
       for (const { libraryId } of perLib) {
@@ -149,15 +167,17 @@ export function createLibraryOps(ctx) {
       }
       if (googleRef.current) await driveService.saveAllMetadata([...metaByTracking.values()]);
 
-      // Rebuild the in-memory library so the UI reflects the new numbers.
+      // Rebuild the in-memory library so the UI reflects the new numbers (incl. the
+      // no-Fusion tools, rebuilt from their updated metadata).
       const tools = [];
       const tagOf = (raws) => { const lib = entryLib.get(raws[0]); return { library_id: lib, library_name: libNameById.get(lib) }; };
       for (const [, raws] of groups) tools.push({ ...buildLogicalTool(raws, metaByTracking), ...tagOf(raws) });
       for (const raw of untracked) tools.push({ ...buildLogicalTool([raw], metaByTracking), ...tagOf([raw]) });
-      dispatch({ type: 'SET_TOOLS', tools });
+      const finalTools = materializeUnlinkedTools(tools, [...metaByTracking.values()]);
+      dispatch({ type: 'SET_TOOLS', tools: finalTools });
       dispatch({ type: 'SAVE_SUCCESS' });
-      notify(`Renumbered ${orderedGroups.length} tools starting at #30`, 'success');
-      return orderedGroups.length;
+      notify(`Renumbered ${renumberCount} tools starting at #30`, 'success');
+      return renumberCount;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
       notify(`Renumber failed: ${err.message}`, 'error', 7000);
@@ -184,6 +204,7 @@ export function createLibraryOps(ctx) {
       let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip) : null;
       let assigned = 0;
       const tools = toolsRef.current.map(t => {
+        if (isExcludedFrom(t, 'tool_id')) return t;   // excluded from the Tool ID system
         const value = composeToolId(config, t, counter);
         if (!value) return t;
         assigned++;
@@ -218,6 +239,7 @@ export function createLibraryOps(ctx) {
       for (const raws of orderedGroups) {
         const logical = buildLogicalTool(raws, metaByTracking);
         if (logical.tool_id) continue;          // already has an ID — skip
+        if (isExcludedFrom(logical, 'tool_id')) continue;   // excluded from the Tool ID system
         // location mode: derive the ID from the structured location, not the
         // (possibly stale) Fusion vendor string carried on the raw entry.
         if (logical.tool_location) {
@@ -238,6 +260,26 @@ export function createLibraryOps(ctx) {
         if (counter !== null) counter = nextSequential(counter + 1, config.skip);
       }
 
+      // No-Fusion tools (metadata-only) are real tools — assign IDs to them too,
+      // continuing the same counter sequence. Excluded tools are skipped. They
+      // have no Fusion entry, so only their metadata is updated.
+      for (const t of (toolsRef.current || [])) {
+        if (!t.no_fusion_link || t.tool_id) continue;
+        if (isExcludedFrom(t, 'tool_id')) continue;
+        const logical = { ...t };
+        if (logical.tool_location) {
+          const composed = resolveLocationString(logical.tool_location, idLocSystems);
+          if (composed) logical.location = composed;
+        }
+        const value = composeToolId(config, logical, counter);
+        if (!value) continue;
+        const tid = t.tracking_id || t.id;
+        const meta = metaByTracking.get(tid) || { id: tid };
+        metaByTracking.set(tid, { ...meta, tool_id: value, no_fusion_link: true });
+        assigned++;
+        if (counter !== null) counter = nextSequential(counter + 1, config.skip);
+      }
+
       if (assigned === 0) { dispatch({ type: 'SAVE_SUCCESS' }); notify('No unassigned tools to ID', 'info'); return 0; }
 
       for (const { libraryId } of perLib) {
@@ -246,12 +288,14 @@ export function createLibraryOps(ctx) {
       // tool_id is metadata-owned (mirrored to Fusion's product-id) — persist it.
       if (googleRef.current) await driveService.saveAllMetadata([...metaByTracking.values()]);
 
-      // Rebuild the in-memory library so the new IDs show immediately.
+      // Rebuild the in-memory library so the new IDs show immediately. Include the
+      // no-Fusion tools (rebuilt from their updated metadata via the marker guard).
       const tools = [];
       const tagOf = (raws) => { const lib = entryLib.get(raws[0]); return { library_id: lib, library_name: libNameById.get(lib) }; };
       for (const [, raws] of groups) tools.push({ ...buildLogicalTool(raws, metaByTracking), ...tagOf(raws) });
       for (const raw of untracked) tools.push({ ...buildLogicalTool([raw], metaByTracking), ...tagOf([raw]) });
-      dispatch({ type: 'SET_TOOLS', tools });
+      const finalTools = materializeUnlinkedTools(tools, [...metaByTracking.values()]);
+      dispatch({ type: 'SET_TOOLS', tools: finalTools });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify(`Assigned IDs to ${assigned} tool${assigned === 1 ? '' : 's'}`, 'success');
       return assigned;
@@ -289,6 +333,7 @@ export function createLibraryOps(ctx) {
       let counter = isCounterMode(mode) ? nextSequential(config.start, config.skip) : null;
       let assigned = 0;
       const tools = toolsRef.current.map(t => {
+        if (isExcludedFrom(t, 'tool_id')) return t;   // excluded from the Tool ID system
         const value = composeToolId(config, t, counter);
         if (!value) return t;
         if (counter !== null) counter = nextSequential(counter + 1, config.skip);
@@ -340,6 +385,7 @@ export function createLibraryOps(ctx) {
       let assigned = 0;
       for (const raws of orderedGroups) {
         const logical = buildLogicalTool(raws, metaByTracking);
+        if (isExcludedFrom(logical, 'tool_id')) continue;   // excluded from the Tool ID system
         const oldId = logical.tool_id;
         // location mode: derive the ID from the structured location (authoritative),
         // not the raw Fusion vendor string.
@@ -379,6 +425,33 @@ export function createLibraryOps(ctx) {
         raws.forEach(r => applyToolIdToFusion(r, value));
       }
 
+      // No-Fusion tools (metadata-only) — re-number them too, continuing the same
+      // counter, retiring old IDs into legacy_ids. Excluded tools are skipped.
+      for (const t of (toolsRef.current || [])) {
+        if (!t.no_fusion_link) continue;
+        if (isExcludedFrom(t, 'tool_id')) continue;
+        const oldId = t.tool_id;
+        const logical = { ...t };
+        if (logical.tool_location) {
+          const composed = resolveLocationString(logical.tool_location, idLocSystems);
+          if (composed) logical.location = composed;
+        }
+        let value = composeToolId(config, logical, counter);
+        if (!value) continue;
+        while (counter !== null && retiredExact.has(value)) {
+          counter = nextSequential(counter + 1, config.skip);
+          value = composeToolId(config, logical, counter);
+        }
+        if (counter !== null) counter = nextSequential(counter + 1, config.skip);
+        assigned++;
+        const tid = t.tracking_id || t.id;
+        const meta = metaByTracking.get(tid) || { id: tid };
+        const legacy_ids = (oldId && oldId !== value)
+          ? uniqPush((meta.legacy_ids || []).filter(l => l !== value), oldId)
+          : (meta.legacy_ids || []);
+        metaByTracking.set(tid, { ...meta, tool_id: value, legacy_ids, no_fusion_link: true });
+      }
+
       if (assigned === 0) { dispatch({ type: 'SAVE_SUCCESS' }); notify('No tools to re-number', 'info'); return 0; }
 
       for (const { libraryId } of perLib) {
@@ -391,7 +464,8 @@ export function createLibraryOps(ctx) {
       const tagOf = (raws) => { const lib = entryLib.get(raws[0]); return { library_id: lib, library_name: libNameById.get(lib) }; };
       for (const [, raws] of groups) tools.push({ ...buildLogicalTool(raws, metaByTracking), ...tagOf(raws) });
       for (const raw of untracked) tools.push({ ...buildLogicalTool([raw], metaByTracking), ...tagOf([raw]) });
-      dispatch({ type: 'SET_TOOLS', tools });
+      const finalTools = materializeUnlinkedTools(tools, [...metaByTracking.values()]);
+      dispatch({ type: 'SET_TOOLS', tools: finalTools });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify(`Re-numbered ${assigned} tool${assigned === 1 ? '' : 's'}`, 'success');
       return assigned;

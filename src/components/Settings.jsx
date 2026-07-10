@@ -13,6 +13,7 @@ import DescRenameModal from './DescRenameModal.jsx';
 import InfoTip from './InfoTip.jsx';
 import ImportPhotosModal from './ImportPhotosModal.jsx';
 import ProgramsImportModal from './ProgramsImportModal.jsx';
+import IdSystemMembership, { ExclusionNotice } from './IdSystemMembership.jsx';
 import { exportFullLibrary } from '../utils/proShopExport.js';
 
 const ID_MODES = [
@@ -1090,6 +1091,12 @@ export default function Settings() {
         </div>{/* end Machines subsection */}
       </div>{/* end Shop card */}
 
+      {/* ID system membership — which tools are in/excluded from Tool ID /
+          Machine Number / Location bulk actions. */}
+      <div style={{ maxWidth: 760, marginBottom: 16 }}>
+        <IdSystemMembership />
+      </div>
+
       {/* ProShop export */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -1290,6 +1297,7 @@ export default function Settings() {
                     </tbody>
                   </table>
                 </div>
+                <ExclusionNotice system="tool_id" />
                 <div className="flex gap-8">
                   <button className="btn btn-primary" onClick={handleAssignIds} disabled={isSaving}>
                     {isSaving ? 'Assigning…' : 'Assign IDs'}
@@ -1381,6 +1389,7 @@ export default function Settings() {
                     </tbody>
                   </table>
                 </div>
+                <ExclusionNotice system="tool_id" />
                 <div className="flex gap-8">
                   <button className="btn btn-primary" onClick={handleRenumberAll} disabled={isSaving}>
                     {isSaving ? 'Re-numbering…' : 'Re-number all'}
@@ -1584,6 +1593,8 @@ export default function Settings() {
               </div>
 
               {error && <div className="error-banner mb-12">{error}</div>}
+
+              <ExclusionNotice system="machine_number" />
 
               <label className="field-label">Type <code>RENUMBER</code> to confirm</label>
               <input

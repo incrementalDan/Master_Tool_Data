@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, MapPin, Info, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import InfoTip from './InfoTip.jsx';
+import { ExclusionNotice } from './IdSystemMembership.jsx';
 import {
   newLocationSystem, newLevelOption, levelTypeName, buildPreview,
   analyzeSystem, libraryLocationStatus, findSystemConflicts,
@@ -275,6 +276,7 @@ function NormalizationStep({ sys, tools, buffered = false, onCommit, onUpdate })
           <div className="text-sub text-xs" style={{ marginBottom: 10 }}>
             {analysis.unmatched.length} location-text tool{analysis.unmatched.length === 1 ? '' : 's'} and {analysis.noLocation} with no location won't match — they stay in the unmatched list below all systems.
           </div>
+          <ExclusionNotice system="location" />
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn btn-primary btn-sm" onClick={commit} disabled={matched === 0}>Normalize {matched} tool{matched === 1 ? '' : 's'}</button>
             <button className="btn btn-ghost btn-sm" onClick={() => setPhase('idle')}>Cancel</button>

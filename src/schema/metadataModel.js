@@ -162,6 +162,15 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
       ? null
       : Number(meta.machine_tool_number ?? fusionInternal.machine_tool_number),
     no_fusion_link: Boolean(meta.no_fusion_link),
+    // Per-system ID membership (Tool ID / Machine Number / Location). A tool is a
+    // member of every system by default; `true` = explicitly excluded, so bulk
+    // ID/number/normalize actions skip it. Metadata-only, reversible. See
+    // src/utils/idSystems.js.
+    id_system_exclusions: {
+      tool_id: !!meta.id_system_exclusions?.tool_id,
+      machine_number: !!meta.id_system_exclusions?.machine_number,
+      location: !!meta.id_system_exclusions?.location,
+    },
     job_ids: meta.job_ids || [],
     notes: meta.notes || '',
     last_used_job: meta.last_used_job || '',
@@ -297,6 +306,13 @@ export function buildMetadataTool(tool) {
     // of what gets written to the Fusion JSON.
     machine_tool_number: (tool.machine_tool_number ?? null) === null ? null : Number(tool.machine_tool_number),
     no_fusion_link: tool.no_fusion_link || false,
+    // Per-system ID membership (see src/utils/idSystems.js). Default = member
+    // (all false); a bulk action or Settings can exclude a tool from a system.
+    id_system_exclusions: {
+      tool_id: !!tool.id_system_exclusions?.tool_id,
+      machine_number: !!tool.id_system_exclusions?.machine_number,
+      location: !!tool.id_system_exclusions?.location,
+    },
     // Holder selection + proven assemblies. Each assembly carries instance_guid
     // (the Fusion entry it maps to); supplementary notes live here.
     selected_holder_guid: tool.selected_holder_guid || null,

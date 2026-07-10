@@ -48,6 +48,16 @@ describe('Phase A — buildMetadataTool persists the complete scalar record', ()
     expect(meta.taper_angle).toBeNull();
     expect(meta.thread_pitch).toBeNull();
   });
+
+  it('defaults ID-system membership to included and round-trips explicit exclusions', () => {
+    const def = buildMetadataTool({ tracking_id: 'FTL-1', tool_type: 'drill' });
+    expect(def.id_system_exclusions).toEqual({ tool_id: false, machine_number: false, location: false });
+    const excluded = buildMetadataTool({ tracking_id: 'FTL-2', tool_type: 'drill', id_system_exclusions: { machine_number: true } });
+    expect(excluded.id_system_exclusions).toEqual({ tool_id: false, machine_number: true, location: false });
+    // read back onto the internal tool
+    const merged = mergeFusionAndMetadata({ tool_type: 'drill' }, excluded);
+    expect(merged.id_system_exclusions.machine_number).toBe(true);
+  });
 });
 
 describe('Phase A — mergeFusionAndMetadata keeps LINKED-tool reads Fusion-authoritative', () => {
