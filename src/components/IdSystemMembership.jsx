@@ -1,7 +1,41 @@
 import { useState, useMemo } from 'react';
-import { Search, X, Plus, ChevronDown, ChevronRight, ShieldOff } from 'lucide-react';
+import { Search, X, Plus, ChevronDown, ChevronRight, ShieldOff, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { ID_SYSTEMS, excludedTools, isExcludedFrom } from '../utils/idSystems.js';
+import { ID_SYSTEMS, excludedTools, isExcludedFrom, idSystemLabel } from '../utils/idSystems.js';
+
+// Pre-op reminder embedded in each bulk action's preview: if any tools are
+// excluded from that system, list them (so nothing is skipped silently) with a
+// one-click "Include all in this run" that clears their exclusion before the
+// action runs. Renders nothing when every tool is a member.
+export function ExclusionNotice({ system }) {
+  const { tools, setIdSystemExclusion } = useApp();
+  const [busy, setBusy] = useState(false);
+  const excluded = useMemo(() => excludedTools(tools, system), [tools, system]);
+  if (excluded.length === 0) return null;
+
+  const includeAll = async () => {
+    setBusy(true);
+    try { for (const t of excluded) await setIdSystemExclusion(t.id, system, false); }
+    catch { /* toast handled in context */ }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="warn-banner" style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+        <span><strong>{excluded.length}</strong> tool{excluded.length === 1 ? '' : 's'} excluded from {idSystemLabel(system)} — will be skipped:</span>
+        {excluded.slice(0, 6).map(t => (
+          <span key={t.id} className="tool-id-pill" style={{ fontSize: 11 }}>{t.tool_id || t.description || '—'}</span>
+        ))}
+        {excluded.length > 6 && <span className="text-xs text-sub">+{excluded.length - 6} more (see ID System Membership)</span>}
+        <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto' }} disabled={busy} onClick={includeAll}>
+          {busy ? 'Including…' : 'Include all in this run'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // Settings → ID System Membership. Every tool is a member of the three ID systems
 // (Tool ID / Machine Number / Location) by default, so bulk actions (Assign IDs /
