@@ -14,7 +14,7 @@ import {
 import { composeAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
 import { INSERT_FAMILY_BY_ID, pairedAsmIdPart } from '../schema/insertFamilies.js';
 import { resolveLocationString, analyzeSystem, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
-import { isExcludedFrom } from '../utils/idSystems.js';
+import { isExcludedFrom, setToolExclusion } from '../utils/idSystems.js';
 import { classifyStrays } from '../services/reconcile.js';
 import { defaultToolLibraryId, machineNumberArgs } from './appState.js';
 
@@ -789,6 +789,31 @@ export function createToolActions(ctx) {
     }
   };
 
+  // Include/exclude a tool from one of the three ID systems (Tool ID / Machine
+  // Number / Location). Membership is a metadata-only field — this NEVER touches
+  // the Fusion library, just patches the tool's metadata record and updates memory.
+  const setIdSystemExclusion = async (toolId, system, excluded) => {
+    const tool = toolsRef.current.find(t => t.id === toolId);
+    if (!tool) throw new Error('Tool not found');
+    const id_system_exclusions = setToolExclusion(tool, system, excluded);
+    if (googleRef.current) {
+      try {
+        const metaList = await driveService.loadMetadata();
+        const tid = tool.tracking_id || tool.id;
+        const idx = metaList.findIndex(m => m.id === tid);
+        if (idx >= 0) metaList[idx] = { ...metaList[idx], id_system_exclusions };
+        else metaList.push(buildMetadataTool({ ...tool, id_system_exclusions }));
+        await driveService.saveAllMetadata(metaList);
+      } catch (err) {
+        if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
+        notify(`Could not update membership: ${err.message}`, 'error', 7000);
+        throw err;
+      }
+    }
+    dispatch({ type: 'UPDATE_TOOL', tool: { ...tool, id_system_exclusions } });
+    return { ...tool, id_system_exclusions };
+  };
+
   return {
     writeLogicalTool,
     saveTool, assignToolLocation, normalizeLocationSystem,
@@ -796,5 +821,6 @@ export function createToolActions(ctx) {
     addAssembly, updateAssembly, deleteAssembly,
     reconcileTool, applyReconcile,
     promoteToolToFusion, detachToolFromFusion,
+    setIdSystemExclusion,
   };
 }

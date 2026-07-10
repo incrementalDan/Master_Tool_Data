@@ -13,6 +13,7 @@ import DescRenameModal from './DescRenameModal.jsx';
 import InfoTip from './InfoTip.jsx';
 import ImportPhotosModal from './ImportPhotosModal.jsx';
 import ProgramsImportModal from './ProgramsImportModal.jsx';
+import IdSystemMembership from './IdSystemMembership.jsx';
 import { exportFullLibrary } from '../utils/proShopExport.js';
 
 const ID_MODES = [
@@ -1089,6 +1090,12 @@ export default function Settings() {
         )}
         </div>{/* end Machines subsection */}
       </div>{/* end Shop card */}
+
+      {/* ID system membership — which tools are in/excluded from Tool ID /
+          Machine Number / Location bulk actions. */}
+      <div style={{ maxWidth: 760, marginBottom: 16 }}>
+        <IdSystemMembership />
+      </div>
 
       {/* ProShop export */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
