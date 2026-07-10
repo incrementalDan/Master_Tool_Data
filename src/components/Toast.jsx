@@ -1,9 +1,10 @@
-import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, AlertTriangle, Info, X } from 'lucide-react';
 
 // Fixed bottom-right toast stack. Driven by the toasts array + dismiss fn from context.
 const ICONS = {
   success: CheckCircle2,
   error: AlertCircle,
+  warning: AlertTriangle,
   info: Info,
 };
 

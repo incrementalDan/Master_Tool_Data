@@ -2,8 +2,8 @@
 
 **Date:** 2026-07-06
 **Scope:** (1) audit the insert holder/insert component feature, (2) audit the program/job ↔ tool/preset link feature, (3) a concrete plan for letting tools exist *without* a Fusion entry (the "zero Fusion instances" TODO).
-**Status:** findings + plan. **F1–F6 are FIXED** (F1/F2 with regression tests); **F7 is a deliberate won't-fix** (see below). The whole Part-3 decoupling plan remains a proposal only.
-**Baseline:** all unit tests pass (182); the round-trip audit runs clean (232 tools, 0 unexpected diffs).
+**Status:** findings + plan. **F1–F6 are FIXED** (F1/F2 with regression tests); **F7 is a deliberate won't-fix** (see below). The Part-3 decoupling plan is **largely built** — Phase A (complete record) and Phase B (no-Fusion tools, promote/detach, Fusion-off toggle, drift review incl. write-time conflict surfacing, ID-system membership) are all implemented; only B4b-2 (never-connect-Autodesk onboarding gate) and the SQLite storage swap remain deferred. See the implementation-status block in `PHASE_A_TOOL_RECORD_SCHEMA.md`.
+**Baseline:** all unit tests pass (234); the round-trip audit runs clean (232 tools, 0 unexpected diffs).
 
 ---
 
@@ -148,6 +148,7 @@ Whenever a linked tool's app record and its live Fusion entry differ on any fiel
 - **Enabled by D1, not extra scaffolding:** field-level diffing is only possible once the app record holds its own copy of every field. Today the app can't diff geometry/presets — it has no independent value — so this is a *payoff* of the complete record.
 - **Reuses existing machinery:** the reconcile-on-open + Sync Job `DiffStep` UI, extended from structural strays to **field-level** drift, with today's significance tolerances (`PRESET_SIGNIFICANCE` / `valuesEqual`) so Fusion float noise isn't flagged.
 - **Cost model:** detected on tool open (same per-tool live-fetch as today's reconcile-on-open); until reviewed, the app doesn't push over the differing Fusion fields. Bulk full-library rewrites keep their existing Review step. Full spec in `PHASE_A_TOOL_RECORD_SCHEMA.md` §10.
+- **Write-time surface too (implemented):** the save-time 3-way merge nets a Fusion edit made after load. Only-Fusion-changed → adopt (no wipe). Both-edited-the-same-thing → keep the app's active edit **but never silently** — a warning toast summarizes what Fusion also changed and the scalar-field conflicts re-appear in the `DriftBanner` for one-click restore. So D3 holds on both the load and write paths.
 
 ### Phasing (each phase ships independently, current behavior preserved throughout)
 

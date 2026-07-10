@@ -156,14 +156,28 @@ export function createToolActions(ctx) {
     // state; base = what the app last saw/wrote (tool._instancesRaw). For each
     // preset / shared field / per-instance OOH+holder: if Fusion changed it and
     // the app did NOT, adopt Fusion's value; otherwise keep the app's.
+    // Collect every "both edited the same thing" conflict across all three merges.
+    // On a conflict we keep the app's active edit (it's what the user is saving),
+    // but we NEVER take Fusion's change silently — the conflicts are surfaced as a
+    // toast and, for shared scalar fields, attached to the tool's _drift so the
+    // DriftBanner offers a one-click restore of Fusion's value (D3).
+    const conflicts = [];
     const remotePresets = refreshedRaws?.[0]?.['start-values']?.presets || [];
-    const mergedPresets = mergePresetsWithFusion(tool.presets, basePresets, remotePresets);
+    const mergedPresets = mergePresetsWithFusion(tool.presets, basePresets, remotePresets, conflicts);
     const baseRaw = tool._instancesRaw?.[0];
     const remoteRaw = refreshedRaws?.[0];
     const sharedMerged = (baseRaw && remoteRaw)
-      ? mergeSharedFieldsWithFusion(tool, fusionToolToInternal(baseRaw), fusionToolToInternal(remoteRaw))
+      ? mergeSharedFieldsWithFusion(tool, fusionToolToInternal(baseRaw), fusionToolToInternal(remoteRaw), conflicts)
       : tool;
-    const mergedAssemblies = mergeInstanceFieldsWithFusion(assemblies, tool._instancesRaw, refreshedRaws);
+    const mergedAssemblies = mergeInstanceFieldsWithFusion(assemblies, tool._instancesRaw, refreshedRaws, conflicts);
+
+    // Shared scalar-field conflicts (from mergeSharedFieldsWithFusion) carry a
+    // `field` — surface them via the DriftBanner so Fusion's value stays one click
+    // away. Preset/OOH/holder conflicts have no scalar drift row; the toast is
+    // their surfacing.
+    const fieldConflicts = conflicts
+      .filter(c => c.field)
+      .map(c => ({ field: c.field, appValue: c.appValue, fusionValue: c.fusionValue }));
 
     const toWrite = {
       ...sharedMerged,
@@ -174,6 +188,7 @@ export function createToolActions(ctx) {
       presets: mergedPresets,
       _instancesRaw: refreshedRaws,
       _fusionRaw: refreshedRaws[0] || tool._fusionRaw || null,
+      _drift: fieldConflicts,
       ...locExtra,
     };
 
@@ -200,6 +215,20 @@ export function createToolActions(ctx) {
         if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
         throw err; // Still fail the save so the user knows metadata didn't persist
       }
+    }
+
+    if (conflicts.length) {
+      const parts = [];
+      const nField = conflicts.filter(c => c.field).length;
+      const nPreset = conflicts.filter(c => c.kind === 'preset').length;
+      const nInst = conflicts.filter(c => c.kind === 'ooh' || c.kind === 'holder').length;
+      if (nField) parts.push(`${nField} field${nField === 1 ? '' : 's'}`);
+      if (nPreset) parts.push(`${nPreset} preset${nPreset === 1 ? '' : 's'}`);
+      if (nInst) parts.push(`${nInst} assembly value${nInst === 1 ? '' : 's'}`);
+      notify(
+        `Kept your edits — Fusion also changed ${parts.join(', ')} since you loaded this tool. Review flagged above.`,
+        'warning', 8000,
+      );
     }
 
     return { ...toWrite, _instancesRaw: fusionInstances, _fusionRaw: fusionInstances[0] };
