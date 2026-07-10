@@ -14,6 +14,7 @@ import {
 import { composeAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
 import { INSERT_FAMILY_BY_ID, pairedAsmIdPart } from '../schema/insertFamilies.js';
 import { resolveLocationString, analyzeSystem, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
+import { isExcludedFrom } from '../utils/idSystems.js';
 import { classifyStrays } from '../services/reconcile.js';
 import { defaultToolLibraryId, machineNumberArgs } from './appState.js';
 
@@ -263,7 +264,10 @@ export function createToolActions(ctx) {
     const system = systems.find(s => s.id === systemId);
     if (!system) throw new Error('Location system not found');
 
-    const { matched } = analyzeSystem(toolsRef.current || [], system);
+    const { matched: matchedAll } = analyzeSystem(toolsRef.current || [], system);
+    // Skip tools explicitly excluded from the Location system — they keep their
+    // current location and aren't assigned/normalized into this system.
+    const matched = matchedAll.filter(m => !isExcludedFrom(m.tool, 'location'));
     const uniqPush = (arr, v) => (arr.includes(v) ? arr : [...arr, v]);
 
     // Normalization assigns LOCATION data only — it never writes tool_id. In
