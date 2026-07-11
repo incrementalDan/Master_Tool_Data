@@ -162,11 +162,11 @@ CLAUDE.md ("Key Constraints → Orphaned metadata is harmless but permanent — 
 
 - ✅ Phase A complete record: `buildMetadataTool` persists all §4a/4b scalars + full `presets[]`; `mergeFusionAndMetadata` reads them back Fusion-wins (`?? meta` fallbacks) — matches Increment 1/2 exactly.
 - ✅ B1/B2: `buildUnlinkedTool` / `isUnlinkedMeta` orphan-ghost guard / `materializeUnlinkedTools` triple guard — as documented.
-- ✅ B3: `writeLogicalTool` early metadata-only branch, Drive required, `library_id` nulled; `saveFullLibrary` partitions no-Fusion tools out of the Fusion writes (placeholder-minting retired). *(But see G1/G3 for the metadata half of that partition.)*
-- ✅ B4a: promote/detach exist and mint/clear instance guids as documented *(see G7 edges)*.
-- ✅ B4b-1: `writeLogicalTool` honors `fusionDisabled`; `buildUnlinkedTool` preserves `no_fusion_link: false` so re-enable doesn't spuriously detach. *(But `deleteTool` was missed — G2.)*
-- ✅ B5a/B5b + write-time net (D3): `detectFusionDrift` scans every instance; the three 3-way merges (`mergePresetsWithFusion`, `mergeSharedFieldsWithFusion`, `mergeInstanceFieldsWithFusion`) adopt Fusion-only changes and accumulate both-edited conflicts; `writeLogicalTool` toasts + re-attaches scalar conflicts to `_drift`; a clean save clears `_drift`. Matches the doc's description.
-- ✅ ID-system membership: bulk ops process no-Fusion tools and skip only excluded ones *(see G4 for the Drive-disconnected hole)*.
+- ✅ B3: `writeLogicalTool` early metadata-only branch, Drive required, `library_id` nulled; `saveFullLibrary` partitions no-Fusion tools out of the Fusion writes (placeholder-minting retired). *(The metadata half — G1/G3 — is now fixed: merge-by-id via the toolStore seam + a Drive-required guard.)*
+- ✅ B4a: promote/detach exist and mint/clear instance guids as documented *(the G7 edges — detach ordering, no-library, Fusion-off — are now fixed)*.
+- ✅ B4b-1: `writeLogicalTool` honors `fusionDisabled`; `buildUnlinkedTool` preserves `no_fusion_link: false` so re-enable doesn't spuriously detach. *(The missed `deleteTool` case — G2 — is now fixed.)*
+- ✅ B5a/B5b + write-time net (D3): `detectFusionDrift` scans every instance; the three 3-way merges (`mergePresetsWithFusion`, `mergeSharedFieldsWithFusion`, `mergeInstanceFieldsWithFusion`) adopt Fusion-only changes and accumulate both-edited conflicts; `writeLogicalTool` toasts (conflicts AND now adopted) + re-attaches scalar conflicts and preset/OOH/holder info rows to `_drift`; a clean save clears `_drift`. Matches the doc's description.
+- ✅ ID-system membership: bulk ops process no-Fusion tools and skip only excluded ones *(the Drive-disconnected hole — G4 — is now fixed)*.
 - ✅ F1–F6 fixes from the audit are present in code (`derivePairings` fill-only re-link, asm-stamp skip, component-row intercept via `existingCompByNum`, ComponentPicker duplicate guard, preset-copy clears `job_ids`, `persistJobsNow`).
 - ⏳ B4b-2 (never-connect-Autodesk gate) confirmed still deferred — `App.jsx` gates unchanged. This remains the biggest UX gap for a truly Fusion-optional shop.
 
