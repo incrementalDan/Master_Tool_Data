@@ -1,7 +1,12 @@
 // Shared presentational pieces + select-state helpers for the Program Number
 // Manager, used by ProgramsPage, AddProgramModal, and JobProgramPicker so the
 // "add program" UI and the row chrome stay identical everywhere.
+import { useState } from 'react';
+import { X } from 'lucide-react';
 import { FIXTURING_OPTIONS, customerColor, formatProgramNumber } from '../utils/programs.js';
+import AlloyPicker from './AlloyPicker.jsx';
+
+const tint = (color, alpha) => (color || '#888') + alpha;
 
 export function CustomerBadge({ customer }) {
   const color = customerColor(customer);
@@ -81,15 +86,51 @@ export const fixturingSelOf = (fixturing) =>
     : { sel: 'custom', custom: fixturing };
 export const fixturingValueOf = (v) => (v.sel === 'custom' ? v.custom.trim() : v.sel);
 
-export function MaterialSelect({ value, onChange, alloys, placeholder = '— Select material —' }) {
+// Material (specific alloy) picker — a field-button that opens AlloyPicker, a
+// searchable "mini Materials page" listing alloys as pills of their group color
+// (the job/part picks the exact alloy). Custom free text is handled inside the
+// picker. Keeps the { sel, custom } value contract so call sites are unchanged
+// apart from passing the full `materials` doc instead of a flat alloy list.
+export function MaterialSelect({ value, onChange, materials, placeholder = '— Select material —' }) {
+  const [open, setOpen] = useState(false);
+  const alloys = materials?.materials || [];
+  const groups = materials?.groups || [];
+  const selAlloy = value.sel && value.sel !== 'custom' ? alloys.find(a => a.id === value.sel) : null;
+  const color = selAlloy ? (groups.find(g => g.id === selAlloy.group_id)?.color) : null;
+  const isCustom = value.sel === 'custom';
+  const hasValue = !!selAlloy || (isCustom && !!value.custom);
+
+  const clear = (e) => { e.stopPropagation(); onChange({ sel: '', custom: '' }); };
+
   return (
-    <SelectWithCustom
-      value={value}
-      onChange={onChange}
-      options={alloys.map(a => ({ value: a.id, label: a.label }))}
-      placeholder={placeholder}
-      customPlaceholder="Material name"
-    />
+    <>
+      <button type="button" className="field-input mat-picker-field" onClick={() => setOpen(true)}>
+        {hasValue ? (
+          <span className="mat-picker-val">
+            {selAlloy ? (
+              <span
+                className="cam-chip"
+                style={color ? { background: tint(color, '22'), color, borderColor: tint(color, '44') } : undefined}
+              >{selAlloy.label}</span>
+            ) : (
+              <span className="mat-picker-custom">{value.custom} <span className="text-sub text-xs">(custom)</span></span>
+            )}
+          </span>
+        ) : (
+          <span className="text-sub">{placeholder}</span>
+        )}
+        {hasValue && <span className="mat-picker-clear" role="button" tabIndex={-1} onClick={clear} title="Clear"><X size={13} /></span>}
+      </button>
+      {open && (
+        <AlloyPicker
+          materials={materials}
+          currentId={selAlloy?.id || null}
+          onSelect={a => { onChange({ sel: a.id, custom: '' }); setOpen(false); }}
+          onCustom={txt => { onChange({ sel: 'custom', custom: txt }); setOpen(false); }}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   );
 }
 

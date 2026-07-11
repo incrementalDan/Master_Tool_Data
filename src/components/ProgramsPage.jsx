@@ -6,7 +6,7 @@ import {
 import { useApp } from '../context/AppContext.jsx';
 import {
   INT_EXT, FIXTURING_OPTIONS, nextProgramNumber, formatProgramNumber, formatOperation,
-  partsOf, programsOf, programMaterial, alloyLabel, alloyOptions,
+  partsOf, programsOf, programMaterial, alloyLabel,
   machineOptions, isPalletMachine, customerNames,
 } from '../utils/programs.js';
 import {
@@ -24,7 +24,7 @@ import AddProgramModal from './AddProgramModal.jsx';
 
 // ── Grouped view ──────────────────────────────────────────────────────────────
 
-function PartHeader({ part, programCount, expanded, onToggle, alloys, materials, canEdit, customers, onUpdatePart }) {
+function PartHeader({ part, programCount, expanded, onToggle, materials, canEdit, customers, onUpdatePart }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
 
@@ -61,7 +61,7 @@ function PartHeader({ part, programCount, expanded, onToggle, alloys, materials,
         <input className="field-input" list="pn-customers" value={draft.customer} placeholder="Customer"
           onChange={e => setDraft({ ...draft, customer: e.target.value })} />
         <datalist id="pn-customers">{customers.map(c => <option key={c} value={c} />)}</datalist>
-        <MaterialSelect value={draft.material} onChange={v => setDraft({ ...draft, material: v })} alloys={alloys} />
+        <MaterialSelect value={draft.material} onChange={v => setDraft({ ...draft, material: v })} materials={materials} />
         <div className="pn-edit-actions">
           <button className="btn btn-primary btn-sm" onClick={save}><Check size={13} /> Save</button>
           <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}><X size={13} /> Cancel</button>
@@ -119,7 +119,7 @@ function programFieldsOf(draft, fallback) {
 }
 
 // The inline edit form for a program (grouped view + table view share it).
-function ProgramEditForm({ draft, setDraft, machines, alloys, onSave, onCancel }) {
+function ProgramEditForm({ draft, setDraft, machines, materials, onSave, onCancel }) {
   return (
     <div className="pn-op-edit">
       <div className="pn-edit-row">
@@ -158,7 +158,7 @@ function ProgramEditForm({ draft, setDraft, machines, alloys, onSave, onCancel }
       />
       {draft.is_fixture && (
         <MaterialSelect value={draft.material} onChange={v => setDraft({ ...draft, material: v })}
-          alloys={alloys} placeholder="— Select fixture material —" />
+          materials={materials} placeholder="— Select fixture material —" />
       )}
       <div className="pn-edit-actions">
         <button className="btn btn-primary btn-sm" onClick={onSave}><Check size={13} /> Save</button>
@@ -168,7 +168,7 @@ function ProgramEditForm({ draft, setDraft, machines, alloys, onSave, onCancel }
   );
 }
 
-function OperationRow({ program, part, materials, machines, alloys, canEdit, onUpdateProgram, onDeleteProgram }) {
+function OperationRow({ program, part, materials, machines, canEdit, onUpdateProgram, onDeleteProgram }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -176,7 +176,7 @@ function OperationRow({ program, part, materials, machines, alloys, canEdit, onU
   if (editing) {
     return (
       <ProgramEditForm
-        draft={draft} setDraft={setDraft} machines={machines} alloys={alloys}
+        draft={draft} setDraft={setDraft} machines={machines} materials={materials}
         onSave={() => { onUpdateProgram(program.id, programFieldsOf(draft, program)); setEditing(false); }}
         onCancel={() => setEditing(false)}
       />
@@ -217,7 +217,7 @@ function OperationRow({ program, part, materials, machines, alloys, canEdit, onU
   );
 }
 
-function GroupedView({ jobsFile, materials, machines, alloys, canEdit, customers, expanded, onToggle, onUpdatePart, onUpdateProgram, onDeleteProgram }) {
+function GroupedView({ jobsFile, materials, machines, canEdit, customers, expanded, onToggle, onUpdatePart, onUpdateProgram, onDeleteProgram }) {
   const parts = partsOf(jobsFile);
   if (parts.length === 0) {
     return <div className="pn-empty">No parts yet — click <strong>Add program</strong> to create the first one.</div>;
@@ -237,7 +237,7 @@ function GroupedView({ jobsFile, materials, machines, alloys, canEdit, customers
             <PartHeader
               part={part} programCount={progs.length} expanded={isOpen}
               onToggle={() => onToggle(part.id)}
-              alloys={alloys} materials={materials} canEdit={canEdit} customers={customers}
+              materials={materials} canEdit={canEdit} customers={customers}
               onUpdatePart={onUpdatePart}
             />
             {isOpen && progs.length > 0 && (
@@ -247,7 +247,7 @@ function GroupedView({ jobsFile, materials, machines, alloys, canEdit, customers
                     <div className="pn-op-label">{formatOperation(op)}</div>
                     {ps.map(p => (
                       <OperationRow key={p.id} program={p} part={part} materials={materials}
-                        machines={machines} alloys={alloys} canEdit={canEdit} onUpdateProgram={onUpdateProgram}
+                        machines={machines} canEdit={canEdit} onUpdateProgram={onUpdateProgram}
                         onDeleteProgram={onDeleteProgram} />
                     ))}
                   </div>
@@ -279,7 +279,7 @@ const COLUMNS = [
   { key: 'pallet', label: 'Pallet' },
 ];
 
-function TableView({ jobsFile, materials, machines, alloys, canEdit, customers, onUpdatePart, onUpdateProgram, onDeleteProgram }) {
+function TableView({ jobsFile, materials, machines, canEdit, customers, onUpdatePart, onUpdateProgram, onDeleteProgram }) {
   const [filterText, setFilterText] = useState('');
   const [filterMachine, setFilterMachine] = useState('All');
   const [filterType, setFilterType] = useState('All');
@@ -416,11 +416,11 @@ function TableView({ jobsFile, materials, machines, alloys, canEdit, customers, 
                       <div style={{ marginBottom: 8, maxWidth: 320 }}>
                         <MaterialSelect value={draft.part_material}
                           onChange={v => setDraft({ ...draft, part_material: v })}
-                          alloys={alloys} placeholder="— Part material —" />
+                          materials={materials} placeholder="— Part material —" />
                       </div>
                     )}
                     <ProgramEditForm
-                      draft={draft} setDraft={setDraft} machines={machines} alloys={alloys}
+                      draft={draft} setDraft={setDraft} machines={machines} materials={materials}
                       onSave={() => saveRow(row)} onCancel={() => setEditingId(null)}
                     />
                   </td>
@@ -484,7 +484,6 @@ export default function ProgramsPage() {
   const [expanded, setExpanded] = useState(() => new Set());
 
   const machines = machineOptions(shopSettings);
-  const alloys = alloyOptions(materials);
   const customers = customerNames(jobsFile);
   const nextNum = nextProgramNumber(jobsFile);
   const userName = user?.email || user?.name || '';
@@ -563,14 +562,14 @@ export default function ProgramsPage() {
 
       {view === 'grouped' ? (
         <GroupedView
-          jobsFile={jobsFile} materials={materials} machines={machines} alloys={alloys}
+          jobsFile={jobsFile} materials={materials} machines={machines}
           canEdit={canEdit} customers={customers}
           expanded={expanded} onToggle={toggleExpand}
           onUpdatePart={updatePart} onUpdateProgram={updateProgram} onDeleteProgram={deleteProgram}
         />
       ) : (
         <TableView
-          jobsFile={jobsFile} materials={materials} machines={machines} alloys={alloys}
+          jobsFile={jobsFile} materials={materials} machines={machines}
           canEdit={canEdit} customers={customers}
           onUpdatePart={updatePart} onUpdateProgram={updateProgram} onDeleteProgram={deleteProgram}
         />

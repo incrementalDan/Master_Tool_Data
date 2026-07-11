@@ -3,7 +3,7 @@ import { Plus, X, Check, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import {
   INT_EXT, FIXTURING_OPTIONS, nextProgramNumber, newPart, newProgram,
-  partsOf, programsOf, partById, alloyLabel, alloyOptions,
+  partsOf, programsOf, partById, alloyLabel,
   machineOptions, isPalletMachine, customerNames, formatProgramNumber, formatOperation,
 } from '../utils/programs.js';
 import {
@@ -21,7 +21,6 @@ import InfoTip from './InfoTip.jsx';
 export default function AddProgramModal({ onClose, onCreated }) {
   const { jobs: jobsFile, saveJobs, materials, shopSettings, user } = useApp();
   const machines = machineOptions(shopSettings);
-  const alloys = alloyOptions(materials);
   const customers = customerNames(jobsFile);
   const userName = user?.email || user?.name || '';
   const seedable = programsOf(jobsFile).length === 0;
@@ -170,7 +169,7 @@ export default function AddProgramModal({ onClose, onCreated }) {
                   <InfoTip text="The specific alloy from the Materials library (add new alloys on the Materials page). Applies to every operation on this part, unless that operation makes a fixture." />
                 </label>
                 <MaterialSelect value={newPartDraft.material}
-                  onChange={v => setNewPartDraft({ ...newPartDraft, material: v })} alloys={alloys} />
+                  onChange={v => setNewPartDraft({ ...newPartDraft, material: v })} materials={materials} />
               </div>
               <div className="pn-edit-actions">
                 <button className="btn btn-ghost btn-sm" onClick={() => setStep('search')}>Back</button>
@@ -281,7 +280,7 @@ export default function AddProgramModal({ onClose, onCreated }) {
                   <label className="field-label">Fixture material</label>
                   <MaterialSelect value={opForm.material}
                     onChange={v => setOpForm({ ...opForm, material: v })}
-                    alloys={alloys} placeholder="— Select fixture material —" />
+                    materials={materials} placeholder="— Select fixture material —" />
                 </div>
               )}
 
