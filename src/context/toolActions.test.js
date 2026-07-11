@@ -245,6 +245,24 @@ describe('Phase B increment 4 — promote / detach', () => {
     expect(result.library_id).toBe('lib-1');
   });
 
+  it('promoteToolToFusion routes to the chosen target library (#5)', async () => {
+    const tool = { id: 'FTL-P3', tracking_id: 'FTL-P3', tool_type: 'drill', no_fusion_link: true,
+      unit: 'inches', assemblies: [{ assembly_id: 'a1', ooh: 1.0 }] };
+    const ctx = makeIoCtx({
+      toolsRef: { current: [tool] },
+      shopSettingsRef: { current: {
+        assembly_id_system: { mode: 'auto' }, tool_id_system: {}, location_config: { systems: [] },
+        tool_libraries: [{ id: 'lib-1', fileName: 'a.json' }, { id: 'lib-2', fileName: 'b.json' }],
+        default_tool_library_id: 'lib-1',
+      } },
+    });
+    const { promoteToolToFusion } = createToolActions(ctx);
+    const result = await promoteToolToFusion('FTL-P3', 'lib-2');   // pick the non-default library
+    const [libId] = ctx.uploadFusionList.mock.calls[0];
+    expect(libId).toBe('lib-2');
+    expect(result.library_id).toBe('lib-2');
+  });
+
   it('promoteToolToFusion refuses when no Fusion library is linked', async () => {
     const tool = { id: 'FTL-P2', tracking_id: 'FTL-P2', no_fusion_link: true, assemblies: [{ assembly_id: 'a', ooh: 1 }] };
     const ctx = makeIoCtx({

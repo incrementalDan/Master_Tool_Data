@@ -56,6 +56,7 @@ export default function ToolDetail() {
   const [showExportPicker, setShowExportPicker] = useState(null); // null | 'copy' | 'download'
   const [reconcileResults, setReconcileResults] = useState(null);
   const [showPhotoUpload, setShowPhotoUpload] = useState(false);
+  const [promoteLibId, setPromoteLibId] = useState(null); // non-null = target-library picker open
 
   // True while the inline preset editor has unsaved changes — used to warn
   // before navigating away or switching into the tool edit form.
@@ -143,8 +144,19 @@ export default function ToolDetail() {
   const toolIsNoFusion = !!tool.no_fusion_link;
   const noFusion = toolIsNoFusion || !fusionEnabled;
 
+  // Multi-library shops choose which Fusion library to create the tool in;
+  // single-library shops promote straight into it (no picker).
+  const toolLibraries = shopSettings?.tool_libraries || [];
+  const defaultLibId = shopSettings?.default_tool_library_id || toolLibraries[0]?.id || null;
   const handlePromote = async () => {
+    if (toolLibraries.length > 1) { setPromoteLibId(defaultLibId); return; }
     try { await promoteToolToFusion(tool.id); }
+    catch { /* toast handled in context */ }
+  };
+  const confirmPromote = async () => {
+    const libId = promoteLibId;
+    setPromoteLibId(null);
+    try { await promoteToolToFusion(tool.id, libId); }
     catch { /* toast handled in context */ }
   };
   const handleDetach = async () => {
@@ -699,6 +711,31 @@ export default function ToolDetail() {
                 <button className="btn btn-secondary" onClick={() => setShowDeleteModal(false)}>Cancel</button>
                 <button className="btn btn-danger" onClick={handleDelete} disabled={isSaving}>
                   {isSaving ? 'Deleting…' : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {promoteLibId !== null && (
+          <div className="modal-backdrop" onClick={() => setPromoteLibId(null)}>
+            <div className="modal" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+              <h3 className="modal-title">Create in which Fusion library?</h3>
+              <p className="modal-body">
+                <strong>{tool.description || 'This tool'}</strong> will be created as a real entry in the library you pick.
+              </p>
+              <div style={{ display: 'grid', gap: 8, marginBottom: 8 }}>
+                {toolLibraries.map(lib => (
+                  <label key={lib.id} className="radio-row" style={{ display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer', padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                    <input type="radio" name="promote-lib" checked={promoteLibId === lib.id} onChange={() => setPromoteLibId(lib.id)} />
+                    <span>{lib.fileName || lib.id}{lib.id === defaultLibId ? <span className="text-sub text-sm"> (default)</span> : null}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="modal-actions">
+                <button className="btn btn-secondary" onClick={() => setPromoteLibId(null)}>Cancel</button>
+                <button className="btn btn-primary" onClick={confirmPromote} disabled={isSaving || !promoteLibId}>
+                  {isSaving ? 'Creating…' : 'Create in Fusion'}
                 </button>
               </div>
             </div>

@@ -778,14 +778,16 @@ export function createToolActions(ctx) {
   // ─── Promote / detach (no-Fusion ↔ Fusion) — Fusion-decoupling Phase B ─────
   // Promote: a no-Fusion tool becomes Fusion-linked. Flip the flag and save — the
   // LINKED writeLogicalTool path mints the Fusion instances and stores their guids.
-  const promoteToolToFusion = async (toolId) => {
+  const promoteToolToFusion = async (toolId, targetLibraryId = null) => {
     const tool = toolsRef.current.find(t => t.id === toolId);
     if (!tool) throw new Error('Tool not found');
     if (!tool.no_fusion_link) return tool; // already linked
     if (shopSettingsRef.current?.integrations?.fusion?.enabled === false) {
       throw new Error('Fusion sync is off — re-enable it in Settings → Fusion Libraries to create this tool in Fusion');
     }
-    const library_id = tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
+    // Destination: the caller's chosen library (multi-library shops), else the
+    // tool's own, else the shop default.
+    const library_id = targetLibraryId || tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
     if (!library_id) throw new Error('Link a Fusion library first (Settings → Fusion Libraries)');
     dispatch({ type: 'SAVE_START' });
     try {

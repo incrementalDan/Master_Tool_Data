@@ -4,6 +4,7 @@ import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, 
 import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
 import { generateMachineNumbers, generateId, duplicateIdClusters } from '../schema/toolSchema.js';
 import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../utils/toolIdSystem.js';
+import { resolveLocationString } from '../utils/locationSystem.js';
 import { ASM_MODES, previewAsmNumber } from '../utils/assemblyIdSystem.js';
 import { useDragReorder } from './useDragReorder.js';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
@@ -173,6 +174,24 @@ export default function Settings() {
   const setAllDecisions = (d) => setRenumDecisions(
     Object.fromEntries(renumClusters.map(c => [c.tool_id, d]))
   );
+
+  // In `location` ID mode, a tool's ID should be its composed physical-location
+  // string. Assigning/normalizing locations updates the location but never the
+  // Tool ID (generation is deliberately explicit), so IDs can lag behind. Count
+  // tools whose current tool_id no longer matches their location, to nudge a
+  // Re-number (#7).
+  const staleLocationIdCount = (() => {
+    if (idCfg.mode !== 'location') return 0;
+    const locSystems = shopSettings?.location_config?.systems || [];
+    if (!locSystems.length) return 0;
+    let n = 0;
+    for (const t of (tools || [])) {
+      if (!t.tool_location) continue;
+      const composed = resolveLocationString(t.tool_location, locSystems);
+      if (composed && composed !== (t.tool_id || '')) n++;
+    }
+    return n;
+  })();
 
   const handleRenumberAll = async () => {
     try {
@@ -1238,6 +1257,15 @@ export default function Settings() {
             {idCfg.mode === 'location' && (
               <div className="text-sub text-sm" style={{ marginBottom: 14, padding: 10, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', borderLeft: '3px solid var(--blue)', background: 'var(--surface-2)' }}>
                 In <strong>Location</strong> mode each tool's ID is its composed physical-location string from the <strong>Location System</strong> (configured below — it owns the segment format and bin numbering). Assigning or normalizing locations there doesn't write IDs by itself; use <strong>Assign IDs</strong> / <strong>Re-number</strong> here to generate them from each tool's location.
+              </div>
+            )}
+
+            {idCfg.mode === 'location' && staleLocationIdCount > 0 && (
+              <div className="text-sm" style={{ marginBottom: 14, padding: 10, borderRadius: 'var(--radius-sm)', border: '1px solid color-mix(in srgb, var(--orange) 45%, transparent)', borderLeft: '3px solid var(--orange)', background: 'color-mix(in srgb, var(--orange) 8%, transparent)', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                <AlertTriangle size={15} style={{ color: 'var(--orange)', flexShrink: 0, marginTop: 1 }} />
+                <span>
+                  <strong>{staleLocationIdCount} tool{staleLocationIdCount === 1 ? '' : 's'}</strong> {staleLocationIdCount === 1 ? 'has a location' : 'have locations'} newer than {staleLocationIdCount === 1 ? 'its' : 'their'} Tool ID. Run <strong>Re-number all tools</strong> below to bring the IDs in line with the current locations.
+                </span>
               </div>
             )}
           </>
