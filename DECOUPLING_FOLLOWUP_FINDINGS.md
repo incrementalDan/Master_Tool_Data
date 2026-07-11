@@ -18,8 +18,8 @@
 | G4 | 🟠 Data loss (silent) — ✅ **FIXED** | `assignToolIds` / `renumberAllToolIds` / `renumberLibrary` counted no-Fusion tools as assigned even when Drive is disconnected — their new IDs/numbers existed only in memory and vanished on reload | `libraryOps.js` |
 | G5 | 🟡 Staleness — ✅ **FIXED** | O1 violation: the flat speed/feed mirror was not recomputed from preset 0 on the no-Fusion write path (self-healed on reload, stale in memory until then) | `toolActions.js`, `logicalTools.js` |
 | G6 | 🟠 Data loss (confirmed) — ✅ **FIXED** | `normalizeLibrary`'s "conflict tools' raw entries left untouched" claim was FALSE — `saveFullLibrary`'s full-replace **deleted** conflict tools' Fusion entries during migration whenever their library also held a clean tool | `libraryOps.js` |
-| G7 | 🟡 Edge | `detachToolFromFusion` / `promoteToolToFusion` edge cases: no default library, Drive-token expiry mid-two-step detach (Fusion entries already deleted, metadata write fails → tool state inconsistent until retry) | `toolActions.js` |
-| G8 | ⚪ Doc drift | CLAUDE.md "Orphaned metadata is harmless but **permanent** — no prune exists" is no longer true (`saveFullLibrary` prunes by whole-file replace); update the doc + decide if pruning dormant orphans is wanted | CLAUDE.md |
+| G7 | 🟡 Edge — ✅ **FIXED** | `detachToolFromFusion` two-step ordering (a metadata-write failure after Fusion removal could turn the tool into an invisible dormant orphan) + no-library guard + Fusion-off guard | `toolActions.js` |
+| G8 | ⚪ Doc drift — ✅ **FIXED** | CLAUDE.md "Orphaned metadata is never pruned" was false; updated in the G1 commit to state bulk saves merge-by-id and never prune | CLAUDE.md |
 
 ---
 
@@ -138,7 +138,9 @@ Pick one consistently (recommend a):
 
 ---
 
-## G7 — Promote/detach edge hardening 🟡
+## G7 — Promote/detach edge hardening 🟡 ✅ FIXED
+
+> **Fixed 2026-07-11.** (1) **Reordered detach to metadata-first:** `detachToolFromFusion` now writes the no-Fusion metadata mark *before* removing the Fusion entries. On analysis this is strictly safer than the original order — if the second step fails, the tool is already marked no-Fusion, so a reload shows it (as no-Fusion, or linked again from the still-present entries); it never becomes an invisible dormant orphan (no Fusion entries + unmarked metadata), which the original order risked on a metadata-write failure. In-memory state updates only after both steps succeed, so a failure leaves the tool linked and detach is safely re-runnable. (2) **No-library guard (G7.2):** the Fusion-removal step is skipped when there is no library to target. (3) **Fusion-off guard (G7.3):** added in the G2 commit. Two regression tests (the existing detach test still passes under the new order; a new no-library test). The original text below stands as the analysis record.
 
 **Where:** `toolActions.js` `promoteToolToFusion` / `detachToolFromFusion` (~758–819).
 

@@ -807,16 +807,14 @@ export function createToolActions(ctx) {
     if (!googleRef.current) throw new Error('Connect Google Drive to detach (the tool becomes metadata-only)');
     dispatch({ type: 'SAVE_START' });
     try {
-      // Remove this tool's entries from its Fusion library (by tracking ID + the
-      // guids of the instances it currently owns).
-      const library_id = tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
-      const fusionList = await downloadFusionList(library_id);
-      const tid = tool.tracking_id || null;
-      const dropGuids = new Set((tool._instancesRaw || []).map(r => r.guid));
-      const remaining = fusionList.filter(f =>
-        !(tid && readTrackingId(f) === tid) && !dropGuids.has(f.guid));
-      await uploadFusionList(library_id, remaining);
-      // Now write metadata-only (writeLogicalTool takes the no_fusion_link branch).
+      // Order matters — write the metadata mark FIRST, then remove the Fusion
+      // entries. If the second step fails, the tool is already marked no-Fusion in
+      // metadata, so a reload shows it (either as no-Fusion, or linked again from
+      // the still-present entries) — it never becomes an invisible dormant orphan
+      // (no Fusion entries + unmarked metadata), which is what the reverse order
+      // risked on a metadata-write failure. In-memory state is only updated after
+      // BOTH steps succeed, so a failure leaves the tool linked and detach is
+      // safely re-runnable. (G7)
       const written = await writeLogicalTool({
         ...tool,
         no_fusion_link: true,
@@ -824,6 +822,20 @@ export function createToolActions(ctx) {
         assemblies: (tool.assemblies || []).map(a => ({ ...a, instance_guid: null })),
         updated_at: new Date().toISOString(),
       });
+
+      // Remove this tool's entries from its Fusion library (by tracking ID + the
+      // guids of the instances it owned). Skip when there's no library to target
+      // (e.g. the tool never had one) — there's nothing to remove. (G7.2)
+      const library_id = tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
+      if (library_id) {
+        const fusionList = await downloadFusionList(library_id);
+        const tid = tool.tracking_id || null;
+        const dropGuids = new Set((tool._instancesRaw || []).map(r => r.guid));
+        const remaining = fusionList.filter(f =>
+          !(tid && readTrackingId(f) === tid) && !dropGuids.has(f.guid));
+        await uploadFusionList(library_id, remaining);
+      }
+
       dispatch({ type: 'UPDATE_TOOL', tool: written });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify('Detached from Fusion — now a no-Fusion tool', 'success');

@@ -282,4 +282,25 @@ describe('Phase B increment 4 — promote / detach', () => {
     expect(result.library_id).toBeNull();
     expect(result.assemblies[0].instance_guid).toBeNull();
   });
+
+  it('detachToolFromFusion with no library skips Fusion IO but still detaches (G7.2)', async () => {
+    const tool = {
+      id: 'FTL-D2', tracking_id: 'FTL-D2', tool_type: 'drill', no_fusion_link: false,
+      library_id: null, unit: 'inches', assemblies: [{ assembly_id: 'a1', instance_guid: null, ooh: 1 }],
+      _instancesRaw: [],
+    };
+    const ctx = makeIoCtx({
+      toolsRef: { current: [tool] },
+      // No default library either — nothing to target.
+      shopSettingsRef: { current: { assembly_id_system: { mode: 'auto' }, tool_id_system: {}, location_config: { systems: [] }, tool_libraries: [] } },
+      downloadFusionList: vi.fn(() => { throw new Error('must not download when there is no library'); }),
+      uploadFusionList: vi.fn(() => { throw new Error('must not upload when there is no library'); }),
+    });
+    const { detachToolFromFusion } = createToolActions(ctx);
+    const result = await detachToolFromFusion('FTL-D2');
+    expect(ctx.downloadFusionList).not.toHaveBeenCalled();
+    expect(ctx.uploadFusionList).not.toHaveBeenCalled();
+    expect(upsertMetadata).toHaveBeenCalledOnce();   // metadata mark still written
+    expect(result.no_fusion_link).toBe(true);
+  });
 });
