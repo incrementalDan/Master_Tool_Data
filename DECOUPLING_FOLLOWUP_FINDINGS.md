@@ -12,7 +12,7 @@
 
 | # | Severity | Finding | Files |
 |---|---|---|---|
-| G1 | 🔴 Data loss | `normalizeLibrary` → `saveFullLibrary(cleanTools)` wipes metadata records not in the passed set — **no-Fusion tools' metadata is their ONLY store**, so they are permanently deleted | `libraryOps.js` |
+| G1 | 🔴 Data loss — ✅ **FIXED** | `normalizeLibrary` → `saveFullLibrary(cleanTools)` wiped metadata records not in the passed set — **no-Fusion tools' metadata is their ONLY store**, so they were permanently deleted | `libraryOps.js` |
 | G2 | 🔴 Consistency | `deleteTool` ignores the shop-wide `integrations.fusion.enabled === false` mode — it round-trips APS (and deletes Fusion entries) while "Fusion sync is off" | `toolActions.js` |
 | G3 | 🟠 Data loss (silent) | `saveFullLibrary` with Google Drive not connected silently drops every no-Fusion tool's data (metadata write is skipped, but the tool is re-materialized in memory and looks saved) | `libraryOps.js` |
 | G4 | 🟠 Data loss (silent) | `assignToolIds` / `renumberAllToolIds` / `renumberLibrary` count no-Fusion tools as assigned even when Drive is disconnected — their new IDs/numbers exist only in memory and vanish on reload | `libraryOps.js` |
@@ -23,7 +23,9 @@
 
 ---
 
-## G1 — `normalizeLibrary` permanently deletes no-Fusion tools' metadata 🔴
+## G1 — `normalizeLibrary` permanently deletes no-Fusion tools' metadata 🔴 ✅ FIXED
+
+> **Fixed 2026-07-11.** `saveFullLibrary` (`libraryOps.js`) now loads the existing `tool_metadata.json`, overlays this save's records by `id`, and writes the merged set — so records not in the passed set (no-Fusion tools, conflict tools, dormant orphans) survive. In-memory re-materialization (`materializeUnlinkedTools`) now runs against the full merged set, so no-Fusion tools also survive a normalize on screen. Covered by a new `libraryOps.test.js` case; CLAUDE.md's "orphaned metadata" bullet updated (closes G8). Always-merge is safe because no caller relies on replace-to-delete (deletion is `deleteTool`'s job), and a first-run import file is empty (merge == replace), so no `replaceAllMetadata` option was needed. Full suite 235 green, round-trip audit 0 diffs.
 
 **The chain (all verified in code):**
 

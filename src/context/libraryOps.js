@@ -76,11 +76,29 @@ export function createLibraryOps(ctx) {
       for (const [libId, fusionList] of byLibrary) {
         await uploadFusionList(libId, fusionList);
       }
-      if (googleRef.current) await driveService.saveAllMetadata(allMeta);
+
+      // Merge-by-id into the existing metadata file rather than replacing it.
+      // saveAllMetadata rewrites the WHOLE file, but this bulk save only carries
+      // the Fusion-built tools it was handed. A blind replace would delete every
+      // record NOT in this set: no-Fusion tools (metadata is their ONLY store),
+      // conflict tools held back for review, and dormant orphan metadata the
+      // orphan-ghost guard (isUnlinkedMeta) relies on persisting. So load the
+      // current file and overlay this save's records on top of it. (See G1 in
+      // DECOUPLING_FOLLOWUP_FINDINGS.md.) Deletion still happens explicitly via
+      // deleteTool's own deleteMetadata call — never as a side effect of a save.
+      let effectiveMeta = allMeta;
+      if (googleRef.current) {
+        const existing = await driveService.loadMetadata();
+        const metaById = new Map((existing || []).map(m => [m.id, m]));
+        for (const m of allMeta) metaById.set(m.id, m);
+        effectiveMeta = [...metaById.values()];
+        await driveService.saveAllMetadata(effectiveMeta);
+      }
 
       // Rebuild logical tools from what we wrote so in-memory state matches,
-      // re-tagging each with its source library.
-      const metaByTracking = new Map(allMeta.map(m => [m.id, m]));
+      // re-tagging each with its source library. Uses the full merged set so a
+      // Fusion tool's freshly-written metadata wins over any stale copy.
+      const metaByTracking = new Map(effectiveMeta.map(m => [m.id, m]));
       const rebuilt = [];
       let untrackedTotal = 0;
       for (const [libId, fusionList] of byLibrary) {
@@ -92,10 +110,12 @@ export function createLibraryOps(ctx) {
         for (const raw of untracked) rebuilt.push(tag(buildLogicalTool([raw], metaByTracking)));
       }
 
-      // Re-materialize the no-Fusion tools (partitioned out of the Fusion writes
-      // above) from their metadata so they stay in the in-memory library. Guarded
-      // by isUnlinkedMeta inside the helper, deduped against the rebuilt set.
-      const finalRebuilt = materializeUnlinkedTools(rebuilt, allMeta);
+      // Re-materialize the no-Fusion tools from the FULL metadata set — not just
+      // this save's records — so no-Fusion tools that weren't part of this save
+      // (e.g. during a Fusion-only normalizeLibrary, or when a single-tool bulk
+      // save is run) still survive in the in-memory library. Guarded by
+      // isUnlinkedMeta inside the helper, deduped against the rebuilt set.
+      const finalRebuilt = materializeUnlinkedTools(rebuilt, effectiveMeta);
 
       dispatch({ type: 'SET_TOOLS', tools: finalRebuilt, needsNormalize: untrackedTotal > 0 });
       dispatch({ type: 'SAVE_SUCCESS' });
