@@ -25,7 +25,13 @@ export function createLibraryOps(ctx) {
     toolsRef, holdersRef, shopSettingsRef, googleRef, demoModeRef, materialsRef,
   } = ctx;
 
-  const saveFullLibrary = async (tools) => {
+  // `extraRawByLibrary` (Map libraryId → raw Fusion entries): entries appended to
+  // a library's upload VERBATIM — not re-split — and rebuilt into memory as-is.
+  // Used by normalizeLibrary to preserve conflict tools' Fusion entries, which are
+  // held back from the normalized set: since each represented library is
+  // full-replaced, they would otherwise be dropped from the library (G6). Empty
+  // for every other caller (no behavior change).
+  const saveFullLibrary = async (tools, { extraRawByLibrary = new Map() } = {}) => {
     dispatch({ type: 'SAVE_START' });
     try {
       const holders = holdersRef.current || [];
@@ -79,6 +85,16 @@ export function createLibraryOps(ctx) {
         if (!byLibrary.has(libId)) byLibrary.set(libId, []);
         byLibrary.get(libId).push(...fusionInstances);
         allMeta.push(metadataTool);
+      }
+
+      // Append any verbatim passthrough entries (e.g. conflict tools held back
+      // from normalization) so a full-replace upload doesn't drop them. They are
+      // NOT re-split — the raw entry is preserved exactly as it lives in Fusion.
+      for (const [libId, raws] of extraRawByLibrary) {
+        if (!raws?.length) continue;
+        if (!byLibrary.has(libId)) byLibrary.set(libId, []);
+        const present = new Set(byLibrary.get(libId).map(f => f.guid));
+        for (const r of raws) if (r?.guid && !present.has(r.guid)) byLibrary.get(libId).push(r);
       }
 
       // Write each represented library, then persist all metadata once (global).
@@ -649,7 +665,19 @@ export function createLibraryOps(ctx) {
       }
       } // end per-library loop
 
-      await saveFullLibrary(cleanTools);
+      // Preserve the conflict tools' Fusion entries verbatim: they're held back
+      // from the normalized set for manual review, but saveFullLibrary full-
+      // replaces each represented library, so without this passthrough their raw
+      // entries would be deleted from the library (G6). Keyed by source library.
+      const extraRawByLibrary = new Map();
+      for (const t of conflictTools) {
+        const raws = (t._instancesRaw || []).filter(r => r?.guid);
+        if (!raws.length) continue;
+        if (!extraRawByLibrary.has(t.library_id)) extraRawByLibrary.set(t.library_id, []);
+        extraRawByLibrary.get(t.library_id).push(...raws);
+      }
+
+      await saveFullLibrary(cleanTools, { extraRawByLibrary });
       markSetupStepInSettings('normalized');
       const base = `Normalized ${untrackedCount} tool${untrackedCount === 1 ? '' : 's'} to the multi-instance model`;
       const conflictSuffix = conflictTools.length > 0

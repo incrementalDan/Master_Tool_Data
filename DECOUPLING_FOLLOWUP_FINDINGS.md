@@ -17,7 +17,7 @@
 | G3 | 🟠 Data loss (silent) — ✅ **FIXED** | `saveFullLibrary` with Google Drive not connected silently dropped every no-Fusion tool's data (metadata write skipped, but the tool re-materialized in memory and looked saved) | `libraryOps.js` |
 | G4 | 🟠 Data loss (silent) — ✅ **FIXED** | `assignToolIds` / `renumberAllToolIds` / `renumberLibrary` counted no-Fusion tools as assigned even when Drive is disconnected — their new IDs/numbers existed only in memory and vanished on reload | `libraryOps.js` |
 | G5 | 🟡 Staleness — ✅ **FIXED** | O1 violation: the flat speed/feed mirror was not recomputed from preset 0 on the no-Fusion write path (self-healed on reload, stale in memory until then) | `toolActions.js`, `logicalTools.js` |
-| G6 | 🟡 Doc contradiction | `normalizeLibrary`'s "conflict tools' raw entries left untouched" claim conflicts with `saveFullLibrary`'s full-replace semantics — verify conflict tools' Fusion entries actually survive a normalize | `libraryOps.js`, `combine.js` |
+| G6 | 🟠 Data loss (confirmed) — ✅ **FIXED** | `normalizeLibrary`'s "conflict tools' raw entries left untouched" claim was FALSE — `saveFullLibrary`'s full-replace **deleted** conflict tools' Fusion entries during migration whenever their library also held a clean tool | `libraryOps.js` |
 | G7 | 🟡 Edge | `detachToolFromFusion` / `promoteToolToFusion` edge cases: no default library, Drive-token expiry mid-two-step detach (Fusion entries already deleted, metadata write fails → tool state inconsistent until retry) | `toolActions.js` |
 | G8 | ⚪ Doc drift | CLAUDE.md "Orphaned metadata is harmless but **permanent** — no prune exists" is no longer true (`saveFullLibrary` prunes by whole-file replace); update the doc + decide if pruning dormant orphans is wanted | CLAUDE.md |
 
@@ -126,7 +126,11 @@ Pick one consistently (recommend a):
 
 ---
 
-## G6 — Verify: do conflict tools' Fusion entries actually survive `normalizeLibrary`? 🟡
+## G6 — Conflict tools' Fusion entries deleted by `normalizeLibrary` 🟠 ✅ FIXED (upgraded from 🟡)
+
+> **Confirmed a real data-loss bug, then fixed (2026-07-11).** A regression test proved it: with a clean tracked tool + a conflict pair (two tracked entries sharing a `product-id`, differing on a scalar) in one library, `normalizeLibrary` uploaded a library missing the conflict pair's entries — because `saveFullLibrary` full-replaces each represented library and conflict tools are held back from the passed set. **Fix:** `saveFullLibrary` gained an `extraRawByLibrary` option (Map libraryId → raw entries) that appends those entries **verbatim** (not re-split) to each library's upload and includes them in the in-memory rebuild; `normalizeLibrary` passes the conflict tools' `_instancesRaw` through it. The conflict pair now survives in Fusion and is re-flagged for reconcile on the next load. Other `saveFullLibrary` callers pass nothing → no behavior change. Test verified to fail without the fix. *(The metadata half of this loss was already covered by G1's merge-by-id.)*
+
+**Original investigation note (kept for context):**
 
 **Where:** `libraryOps.js:597–606`. The comment says conflict tools' "raw entries [are left] untouched in the library so nothing is destroyed" — but `saveFullLibrary` **full-replaces each represented library** with the instances of the tools passed, and `conflictTools` are excluded from that set. If a conflict tool's raw entries live in a library that IS represented by `cleanTools` (the normal case — same file), the full-replace upload would drop them.
 
