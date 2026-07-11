@@ -22,8 +22,6 @@ const FACET_LABEL = {
   class_of_fit: 'Class of Fit',
 };
 
-const MULTI_SELECT_FIELDS = new Set(['flute_design']);
-
 // Numeric facets (diameter, flute length, OAL, …) get the ≤ = ≥ operator dial —
 // their filter value is { value, op } rather than a bare string. Driven by the
 // field registry so any field typed `number` picks it up automatically.
@@ -90,9 +88,8 @@ export default function FacetFilters({ tools, activeFilters, onFilterChange, exa
             label={FACET_LABEL[field] || FIELD_LABELS[field] || field}
             tools={tools}
             activeFilters={activeFilters}
-            value={MULTI_SELECT_FIELDS.has(field) ? (facets[field] ?? []) : (facets[field] ?? '')}
+            value={facets[field] ?? ''}
             onChange={val => setFacet(field, val)}
-            isMulti={MULTI_SELECT_FIELDS.has(field)}
             tolerances={tolerances}
           />
         ))}
@@ -121,24 +118,26 @@ export default function FacetFilters({ tools, activeFilters, onFilterChange, exa
   );
 }
 
-function FacetControl({ field, label, tools, activeFilters, value, onChange, isMulti, tolerances }) {
+function FacetControl({ field, label, tools, activeFilters, value, onChange, tolerances }) {
   const { options, showAsChips } = getAvailableOptions(tools, activeFilters, field, tolerances);
   const numeric = isNumericFacet(field);
-  // Numeric facets carry { value, op }; everything below works against the bare
-  // value, with the chosen operator handled separately (see `op` below).
-  const isOperatorValue = numeric && value !== null && typeof value === 'object';
-  const rawValue = isOperatorValue ? (value.value ?? '') : value;
+  // Numeric facets carry { value, op } in the autocomplete path; a multi-select
+  // chip facet carries an array. Everything below works against the bare value.
+  const isOperatorValue = numeric && value !== null && typeof value === 'object' && !Array.isArray(value);
+  const rawValue = isOperatorValue ? (value.value ?? '') : (Array.isArray(value) ? '' : value);
 
-  const [inputVal, setInputVal] = useState(!isMulti && rawValue !== undefined && rawValue !== null ? String(rawValue) : '');
+  const [inputVal, setInputVal] = useState(rawValue !== undefined && rawValue !== null ? String(rawValue) : '');
   const [open, setOpen] = useState(false);
   // The operator is "sticky" — it lives in local state so a chosen comparison
   // (e.g. ≥) survives the user clearing the value, rather than resetting to =.
   const [op, setOp] = useState((isOperatorValue && value.op) || '=');
   const wrapRef = useRef(null);
+  // Anchor index for shift+click range selection in the chip group.
+  const anchorRef = useRef(null);
 
   useEffect(() => {
-    if (!isMulti) setInputVal(rawValue !== undefined && rawValue !== null ? String(rawValue) : '');
-  }, [rawValue, isMulti]);
+    setInputVal(rawValue !== undefined && rawValue !== null ? String(rawValue) : '');
+  }, [rawValue]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -148,24 +147,59 @@ function FacetControl({ field, label, tools, activeFilters, value, onChange, isM
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const commitValue = (val) => (numeric ? { value: val, op } : val);
+  // A numeric facet in '=' mode holds an ARRAY of discrete values (multi-select,
+  // e.g. show 1/4" AND 1/2" tools); in range mode ('<='/'>=') it holds a single
+  // { value, op } bound. matchesFacet ORs the array, so both shapes just work.
+  const eqMode = numeric && op === '=';
+  const eqValues = numeric && Array.isArray(value) ? value.map(String) : [];
+
+  const addEqValue = (val) => {
+    const v = String(val).trim();
+    if (!v) return;
+    if (!eqValues.includes(v)) onChange([...eqValues, v]);
+    setInputVal('');
+    setOpen(false);
+  };
+  const removeEqValue = (val) => onChange(eqValues.filter(x => x !== String(val)));
 
   const handleCommit = (val) => {
     const trimmed = val.trim();
-    onChange(commitValue(trimmed === '' ? '' : trimmed));
+    if (eqMode) { addEqValue(trimmed); return; }
+    onChange(numeric ? { value: trimmed, op } : (trimmed === '' ? '' : trimmed));
     setOpen(false);
   };
 
   const handleOpChange = (newOp) => {
     setOp(newOp);
-    onChange({ value: rawValue, op: newOp });
+    if (!numeric) return;
+    if (newOp === '=') {
+      // → discrete multi-select: seed the array from any existing single bound
+      const seed = Array.isArray(value) ? value : (isFacetEmpty(rawValue) ? [] : [String(rawValue)]);
+      onChange(seed);
+    } else {
+      // → range bound: collapse a discrete array down to its last value
+      const bound = Array.isArray(value) ? (value.length ? value[value.length - 1] : '') : rawValue;
+      onChange({ value: bound, op: newOp });
+    }
   };
 
-  // Multi-select chip group (e.g. flute_design)
-  if (isMulti && showAsChips && options.length > 0) {
-    const selected = Array.isArray(value) ? value : [];
-    const toggle = (opt) => {
-      const next = selected.includes(opt) ? selected.filter(v => v !== opt) : [...selected, opt];
+  // Multi-select chip group — every chip-rendered facet (flute count, material,
+  // corner radius, small option sets, …). Click toggles a value; shift+click
+  // selects the whole range from the last-clicked chip. OR semantics.
+  if (showAsChips && options.length > 0) {
+    const optStrs = options.map(String);
+    const selected = Array.isArray(value)
+      ? value.map(String)
+      : (isFacetEmpty(value) ? [] : [String(rawValue)]);
+    const clickChip = (opt, idx, shiftKey) => {
+      let next;
+      if (shiftKey && anchorRef.current != null) {
+        const [a, b] = [anchorRef.current, idx].sort((x, y) => x - y);
+        next = [...new Set([...selected, ...optStrs.slice(a, b + 1)])];
+      } else {
+        next = selected.includes(opt) ? selected.filter(v => v !== opt) : [...selected, opt];
+        anchorRef.current = idx;
+      }
       onChange(next);
     };
     return (
@@ -176,18 +210,18 @@ function FacetControl({ field, label, tools, activeFilters, value, onChange, isM
             <button
               className="btn btn-ghost btn-sm"
               style={{ fontSize: 10, padding: '0 5px', lineHeight: '16px', height: 16 }}
-              onClick={() => onChange([])}
-            >All</button>
+              onClick={() => { anchorRef.current = null; onChange([]); }}
+            >Clear</button>
           )}
         </div>
         <div className="chip-group">
-          {options.map(opt => (
+          {optStrs.map((opt, idx) => (
             <button
               key={opt}
-              className={`chip ${selected.includes(String(opt)) ? 'active' : ''}`}
-              onClick={() => toggle(String(opt))}
+              className={`chip ${selected.includes(opt) ? 'active' : ''}`}
+              onClick={(e) => clickChip(opt, idx, e.shiftKey)}
             >
-              {String(opt)}
+              {opt}
             </button>
           ))}
         </div>
@@ -195,44 +229,33 @@ function FacetControl({ field, label, tools, activeFilters, value, onChange, isM
     );
   }
 
-  // Single-select chip group (e.g. tsc_capable, small option sets)
-  if (!isMulti && showAsChips && options.length > 0) {
-    return (
-      <div className="facet-item">
-        <div className="facet-label">{label}</div>
-        <div className="chip-group">
-          {options.map(opt => (
-            <button
-              key={opt}
-              className={`chip ${String(value) === String(opt) ? 'active' : ''}`}
-              onClick={() => onChange(String(value) === String(opt) ? '' : opt)}
-            >
-              {String(opt)}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  const filtered = options.filter(o => {
+    const s = String(o);
+    if (!s.toLowerCase().includes(inputVal.toLowerCase())) return false;
+    return eqMode ? !eqValues.includes(s) : s !== String(rawValue);
+  });
 
-  const filtered = options.filter(o =>
-    String(o).toLowerCase().includes(inputVal.toLowerCase()) && String(o) !== String(rawValue)
-  );
+  const selectOption = (opt) => {
+    if (eqMode) { addEqValue(opt); return; }
+    onChange(numeric ? { value: String(opt), op } : opt);
+    setInputVal(String(opt));
+    setOpen(false);
+  };
 
   const input = (
     <input
       className="facet-input"
       style={{
-        borderColor: rawValue ? 'var(--blue)' : undefined,
+        borderColor: (eqMode ? eqValues.length : rawValue) ? 'var(--blue)' : undefined,
         ...(numeric ? { borderLeft: 'none', borderRadius: '0 var(--radius-sm) var(--radius-sm) 0' } : {}),
       }}
-      placeholder={`${options.length} available`}
+      placeholder={eqMode ? `add — ${options.length} sizes` : `${options.length} available`}
       value={inputVal}
       onChange={e => { setInputVal(e.target.value); setOpen(true); }}
       onFocus={() => setOpen(true)}
       onKeyDown={e => {
         if (e.key === 'Enter') handleCommit(inputVal);
-        if (e.key === 'Escape') { setOpen(false); setInputVal(String(rawValue ?? '')); }
+        if (e.key === 'Escape') { setOpen(false); setInputVal(eqMode ? '' : String(rawValue ?? '')); }
       }}
       onBlur={() => setTimeout(() => { if (!wrapRef.current?.querySelector(':focus')) setOpen(false); }, 150)}
     />
@@ -247,13 +270,23 @@ function FacetControl({ field, label, tools, activeFilters, value, onChange, isM
           {input}
         </div>
       ) : input}
+      {/* Discrete values picked in '=' mode — click a chip to remove it. */}
+      {eqMode && eqValues.length > 0 && (
+        <div className="chip-group" style={{ marginTop: 6 }}>
+          {eqValues.map(v => (
+            <button key={v} className="chip active" onClick={() => removeEqValue(v)} title="Remove">
+              {v} <span aria-hidden>×</span>
+            </button>
+          ))}
+        </div>
+      )}
       {open && filtered.length > 0 && (
         <div className="autocomplete-list">
           {filtered.slice(0, 30).map(opt => (
             <div
               key={opt}
               className="autocomplete-item"
-              onMouseDown={e => { e.preventDefault(); onChange(commitValue(opt)); setInputVal(String(opt)); setOpen(false); }}
+              onMouseDown={e => { e.preventDefault(); selectOption(opt); }}
             >
               {String(opt)}
             </div>

@@ -107,13 +107,6 @@ export function alloyLabel(materials, material_id, material_custom) {
   return material_custom || '';
 }
 
-// Alloys for the material dropdowns, sorted by label.
-export function alloyOptions(materials) {
-  return [...(materials?.materials || [])]
-    .sort((a, b) => String(a.label).localeCompare(String(b.label)))
-    .map(a => ({ id: a.id, label: a.label, group_id: a.group_id }));
-}
-
 // Machines for the machine dropdown: the shop's configured machines
 // (shop_settings.machines[], stable UUIDs) or the hardcoded fallback pair when
 // none are configured yet. Programs store machine_id + a machine_label cache

@@ -363,7 +363,7 @@ export default function Settings() {
     return () => registerNavGuard?.(null);
   }, [registerNavGuard, dirty]);
   // Guarded version of navigate for this page's own links (Open Import/Library).
-  const guardedNavigate = (to) => { if (!maybeBlockNav(() => navigate(to))) navigate(to); };
+  const guardedNavigate = (to, opts) => { if (!maybeBlockNav(() => navigate(to, opts))) navigate(to, opts); };
 
   // ── Renumber ───────────────────────────────────────────────────────────────
   const [stage, setStage] = useState('idle');
@@ -846,7 +846,7 @@ export default function Settings() {
                 <div style={{ flexShrink: 0 }}>
                   <StepAction stepKey={step.key} done={done} warn={warn}
                     onExport={handleExportProShop}
-                    onImport={() => guardedNavigate('/import')}
+                    onImport={() => guardedNavigate('/import', { state: { startStep: 2 } })}
                     onGoToLanding={() => guardedNavigate('/')}
                     tools={tools}
                   />

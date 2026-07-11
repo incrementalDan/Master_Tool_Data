@@ -19,7 +19,7 @@ export function getFacetFields(toolTypes) {
   const extras = [];
   const addExtra = (f) => { if (!extras.includes(f)) extras.push(f); };
   for (const toolType of types) {
-    if (toolType === 'bull nose end mill' || toolType === 'radius mill' || toolType === 'lollipop mill') {
+    if (toolType === 'bull nose end mill' || toolType === 'radius mill' || toolType === 'lollipop mill' || toolType === 'slot/key cutter') {
       addExtra('corner_radius');
     }
     if (toolType === 'tap') {
