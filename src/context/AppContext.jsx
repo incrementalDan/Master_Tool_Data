@@ -10,6 +10,7 @@
 // dispatch/notify/IO + the render-synced refs and return plain async actions.
 import { createContext, useContext, useReducer, useCallback, useEffect, useMemo, useRef } from 'react';
 import * as driveService from '../services/driveService.js';
+import * as toolStore from '../services/toolStore.js';
 import * as aps from '../services/apsService.js';
 import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeUnlinkedTools, buildUnlinkedTool } from '../schema/toolSchema.js';
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
@@ -649,7 +650,7 @@ export function AppProvider({ children }) {
             .catch(e => { if (e.code === 'TOKEN_EXPIRED') throw e; return def; });
         try {
           const [meta, materials, vendorRegistry, shopSettings, jobs, components] = await Promise.all([
-            driveService.loadMetadata(),
+            toolStore.loadAll(),
             sharedSafe('materials', DEFAULT_MATERIALS),
             sharedSafe('vendorRegistry', DEFAULT_VENDOR_REGISTRY),
             sharedSafe('shopSettings', DEFAULT_SHOP_SETTINGS),

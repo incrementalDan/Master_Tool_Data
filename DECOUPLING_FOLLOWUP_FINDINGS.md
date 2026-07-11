@@ -178,10 +178,10 @@ CLAUDE.md ("Key Constraints → Orphaned metadata is harmless but permanent — 
 
 1. ✅ **DONE** — **Make "Fusion off / no-Fusion" state visible at the library level.** Today the "Not in Fusion" pill is per-card and the Fusion-off note is per-tool. Add one persistent topbar chip when `integrations.fusion.enabled === false` ("Fusion sync off") — the G2 class of confusion ("why did/didn't this touch Fusion?") is much cheaper to prevent with an always-visible mode indicator. Cheap: a small badge in `TopBar` reading `fusionEnabled` from context.
 2. ✅ **DONE** — **Drift for presets in the DriftBanner.** `_drift` now carries `{kind}` info rows (preset/OOH/holder), rendered non-actionable so both-edited conflicts survive past the toast.
-3. ⏳ **PENDING (own change)** — **Formalize the repository seam before SQLite.** Introduce `src/services/toolStore.js` (`upsertMany` / `deleteById` / `loadAll`) and route every metadata read/write through it. Persistence-layer refactor touching `libraryOps`, `toolActions`, `attachmentActions`, `componentActions`, `AppContext` — best as its own focused change with a dedicated regression pass, not bundled with UX work.
-4. ⏳ **PENDING (needs a UX decision)** — **`modifiedTime` conflict stamp for multi-device.** Store the metadata file's Drive `modifiedTime` at load; on save, if it changed, either **block** ("someone else saved — reload first") or **warn-and-proceed**. Touches `driveService` (thread `modifiedTime` through `driveGet`/`loadMetadata`), `AppContext` (hold the stamp), and the save path. Note: `upsertMetadata`/`deleteMetadata` already re-read before writing, and G1 made `saveFullLibrary` merge-by-id, so the remaining exposure is narrower than before.
+3. ✅ **DONE** — **Formalize the repository seam before SQLite.** `src/services/toolStore.js` (`loadAll` / `upsertMany` / `upsertOne` / `deleteById`) now fronts every metadata read/write across `libraryOps`, `toolActions`, `attachmentActions`, and `AppContext`. `upsertMany` merges by id (the G1 invariant now lives in the seam, not each caller). Dedicated `toolStore.test.js`; 245 tests + audit + build green; existing tests unchanged (they mock `driveService`, which the seam delegates to). One swap point for SQLite.
+4. ⏳ **PENDING (decided: BLOCK on conflict + notify why).** **`modifiedTime` conflict stamp for multi-device.** Store the metadata file's Drive `modifiedTime` at load; on save, if it changed, **block the write** and notify the user why ("Someone else saved metadata since you loaded — reload to get their changes, then retry"). Owner chose block-not-warn. Touches `driveService` (thread `modifiedTime` through `driveGet`/`loadMetadata` and return it from the write), `toolStore`/`AppContext` (hold the stamp; compare in `upsertMany`/`upsertOne`), and surface a clear toast. Note: `upsertOne`/`deleteById` already re-read before writing and `upsertMany` merges by id, so this is the *last-mile* guard against a same-record concurrent clobber, not the whole safety net.
 5. ✅ **DONE** — **Promote flow: pick the target library.** `promoteToolToFusion(toolId, targetLibraryId)` + a picker modal for multi-library shops.
-6. ⏳ **DEFERRED (recommend: do at SQLite migration)** — **Retire `no_fusion_link` → `is_linked`.** Pure rename of a *persisted* field across ~15 sites for zero functional benefit and nonzero regression risk. The schema doc itself says flip it "in one pass" at the SQLite swap; doing it in isolation now is cost without payoff.
+6. ⏳ **DEFERRED to the SQLite migration.** **Retire `no_fusion_link` → `is_linked`.** Pure rename of a *persisted* field across ~15 sites for zero functional benefit and nonzero regression risk. The schema doc says flip it "in one pass" at the SQLite swap; doing it in isolation now is cost without payoff. (Owner: "your call" → deferred.)
 7. ✅ **DONE** — **"IDs out of date" nudge** in location ID mode (Settings Tool ID card).
 8. ✅ **DONE (already present)** — **DriftBanner bulk actions** ("Keep all Fusion" / "Keep all app").
 
@@ -202,3 +202,36 @@ They're infrastructure/cleanup, not user-facing features: #3 is a persistence-la
 7. **G8** (doc update) + suggestions as owner-approved follow-ups.
 
 After each: `npm run lint && npm test` and `node scripts/roundtrip-audit.mjs` must stay green; none of these fixes may touch the linked-tool write path's byte-for-byte behavior (the "linked tools = current code path" rule from the decoupling audit).
+
+---
+
+## Future feature — Universal Change Log / Audit Trail (owner idea, 2026-07-11)
+
+**Goal (owner's words, lightly structured):** capture *every* change and event so the shop can see what happened, when, and who did it — across the whole app, not just tools. Two views of the same log:
+
+1. **Scoped, in-context history** — per-tool history in the tool view (this partly exists via `merge_history`), shop settings changes on the Settings page, vendor changes on the Vendors page, materials on the Materials page, programs on the Programs page, and so on for every page.
+2. **A "mega" change log in Settings** — one global feed of everything, filterable by **category** (Tools / Settings / Vendors / Materials / Programs / Jobs / Locations / …).
+
+**What each entry should capture:** the **fields that changed** (old → new), **things added**, **things deleted**, plus **who** and **when**. For a change **pushed in from Fusion** (detected via drift / reconcile / the write-time 3-way merge), the actor is simply **"Fusion"** — we can't know the real person who edited it in Fusion 360.
+
+**Status:** partially implemented today and **not fully working** — `merge_history[]` on tools (Sync Job commits) and the drift/conflict surfaces are the closest existing pieces, but there is no unified event log, no coverage of settings/vendors/materials/programs edits, and no global feed. **Held for later** per the owner; capturing here so it isn't lost.
+
+### Engineering notes for when this is picked up (this IS a big feature — flag scope before building)
+
+- **It's a genuinely large, cross-cutting feature** (touches every write path and every editor page + a new data store + new UI) — treat it as its own project with an explicit scope sign-off, not a quick add. The current `merge_history` is tool-only and merge-only; generalizing it is the bulk of the work.
+- **Sequence it *with or after* the SQLite migration, not before.** An append-only `audit_log` table `(id, at, actor, category, entity_type, entity_id, action ['create'|'update'|'delete'], field, old_value, new_value, source ['app'|'fusion'|'proshop'|'import'])` is the natural shape — one row per changed field. Building this on the current whole-file-JSON Drive storage would mean rewriting a growing log file on every edit (slow, and last-writer-wins would *lose* concurrent log entries — the exact multi-device problem #4 flags). **The repository seam (#3, now built) is the right capture point**: every metadata write already funnels through `toolStore`, and the shared-file writes through `saveSharedFile` — those two seams are where change events can be emitted once, centrally, instead of hand-instrumenting every action.
+- **Actor identity:** app edits already carry `updated_by` (Google account); wire that through as the log actor. Fusion-sourced changes (from `detectFusionDrift` / the write-time `conflicts` accumulator / reconcile) log actor `"Fusion"`. ProShop import logs `"ProShop import"`.
+- **Diffing:** the field-level diff machinery already exists for tools (`detectFusionDrift` / `DRIFT_FIELDS`, the combine `_combineConflicts`) — reuse the same shape (`{field, old, new}`) so the log format is consistent across sources.
+- **Open questions to refine with the owner later:** (a) retention — keep forever, or cap/rotate? (b) do settings/vendor/material edits need per-field granularity or is "X edited the vendor registry" enough? (c) should the global feed be searchable by entity (e.g. "everything that touched tool A-3")? (d) is the actor always the signed-in Google user, or should there be a shop-user concept?
+
+## Future UX — Surface the non-obvious "what just happened" moments (owner ask, 2026-07-11)
+
+The owner's related point: we've worked hard on the *correctness* of sync/conflict handling; the complement is making sure the user can *see* what the app is doing. We already toast most actions, but several behaviors are currently **silent or non-obvious** and worth an explicit surface (small, do opportunistically):
+
+- **Load-time auto-combine** (`combineToolsByToolId`) silently folds same-`tool_id` duplicates into one tool on every load — the user never sees that two entries became one. A one-line "Combined N duplicate entries on load" notice (like normalize already shows) would make it visible.
+- **Load-time backfills** run invisibly: `backfillAsmNumbers` (assembly numbers), `derivePairings` (insert-tool auto-detection from a combined product-id), and `materializeUnlinkedTools` (no-Fusion tools). None announce themselves.
+- **Metadata-only vs. Fusion writes:** with the new "Fusion sync off" badge (#1) this is better, but even in normal mode a no-Fusion tool's save doesn't make clear "this did NOT go to Fusion." The per-tool "Not in Fusion" note covers the tool page; a save toast could say "Saved (app only — not in Fusion)".
+- **Lazy re-sync after normalize:** location normalization writes metadata only and re-syncs to Fusion's vendor field on each tool's *next individual save* — the user isn't told the Fusion side is briefly behind.
+- **Write-time drift adoption:** when a save silently adopts a Fusion-only change (the "only Fusion changed it" branch of the 3-way merge), there's no toast — only the both-edited conflict toasts. Adopting a Fusion edit is arguably worth a quiet "Also pulled in N change(s) made in Fusion" note.
+
+These overlap heavily with the change-log feature above — the audit trail is the durable version, and these toasts are the in-the-moment version. Recommend doing the toasts opportunistically (cheap) and the log as the larger project.

@@ -3,6 +3,7 @@
 // AppProvider via createAttachmentActions(ctx); writeLogicalTool is injected
 // from the tool-actions factory.
 import * as driveService from '../services/driveService.js';
+import * as toolStore from '../services/toolStore.js';
 import { buildMetadataTool } from '../schema/toolSchema.js';
 
 export function createAttachmentActions(ctx) {
@@ -138,7 +139,7 @@ export function createAttachmentActions(ctx) {
     if (photos.length === 0) return summary;
 
     // Load metadata once; modify in place; write once at the end.
-    const metaList = await driveService.loadMetadata();
+    const metaList = await toolStore.loadAll();
     const metaById = new Map(metaList.map(m => [m.id, m]));
     const updatedTools = [];
     const importedToolIds = new Set(); // guard against two photos for one tool in a run
@@ -176,7 +177,7 @@ export function createAttachmentActions(ctx) {
 
     if (updatedTools.length > 0) {
       onProgress?.({ phase: 'saving', done: photos.length, total: photos.length, current: '' });
-      await driveService.saveAllMetadata([...metaById.values()]);
+      await toolStore.upsertMany([...metaById.values()]);
       for (const t of updatedTools) dispatch({ type: 'UPDATE_TOOL', tool: t });
       markSetupStepInSettings('proshopPhotos');
     }

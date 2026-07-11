@@ -3,7 +3,7 @@
 // assign/normalize, reconcile-on-open). Created once by AppProvider via
 // createToolActions(ctx) — ctx supplies dispatch, notify, the per-library IO
 // helpers, and the render-synced refs, so these functions never see stale state.
-import * as driveService from '../services/driveService.js';
+import * as toolStore from '../services/toolStore.js';
 import {
   validateTool, generateId, generateAssemblyId, generateTrackingId,
   splitToFusionInstances, buildMetadataTool, mergePresetsWithFusion,
@@ -138,7 +138,7 @@ export function createToolActions(ctx) {
         throw new Error('Connect Google Drive to save (metadata is the tool\'s store when it is not in Fusion)');
       }
       try {
-        await driveService.upsertMetadata(buildMetadataTool({ ...toWrite, tracking_id }));
+        await toolStore.upsertOne(buildMetadataTool({ ...toWrite, tracking_id }));
       } catch (err) {
         if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
         throw err;
@@ -223,7 +223,7 @@ export function createToolActions(ctx) {
     await uploadFusionList(library_id, next);
     if (googleRef.current) {
       try {
-        await driveService.upsertMetadata(metadataTool);
+        await toolStore.upsertOne(metadataTool);
       } catch (err) {
         if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
         throw err; // Still fail the save so the user knows metadata didn't persist
@@ -345,7 +345,7 @@ export function createToolActions(ctx) {
     // Batch metadata write (Drive only — skipped when Google not connected).
     if (googleRef.current && matched.length) {
       try {
-        const metaList = await driveService.loadMetadata();
+        const metaList = await toolStore.loadAll();
         const metaById = new Map(metaList.map(m => [m.id, m]));
         for (const { tool, location } of matched) {
           const key = tool.tracking_id || tool.id;
@@ -357,7 +357,7 @@ export function createToolActions(ctx) {
             : (existing.legacy_locations || []);
           metaById.set(key, { ...existing, location, legacy_locations });
         }
-        await driveService.saveAllMetadata([...metaById.values()]);
+        await toolStore.upsertMany([...metaById.values()]);
       } catch (err) {
         notify(`Saved system but metadata write failed: ${err.message}`, 'error', 7000);
         throw err;
@@ -593,7 +593,7 @@ export function createToolActions(ctx) {
       // reconciled, rather than mutating the Fusion library while sync is off.
       const fusionDisabled = shopSettingsRef.current?.integrations?.fusion?.enabled === false;
       if (tool?.no_fusion_link === true || fusionDisabled) {
-        if (googleRef.current) await driveService.deleteMetadata(tid);
+        if (googleRef.current) await toolStore.deleteById(tid);
         dispatch({ type: 'DELETE_TOOL', id });
         dispatch({ type: 'SAVE_SUCCESS' });
         notify('Tool deleted', 'success');
@@ -612,7 +612,7 @@ export function createToolActions(ctx) {
         remaining = fusionList.filter(f => !guids.has(f.guid));
       }
       await uploadFusionList(library_id, remaining);
-      if (googleRef.current) await driveService.deleteMetadata(tid);
+      if (googleRef.current) await toolStore.deleteById(tid);
       dispatch({ type: 'DELETE_TOOL', id });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify('Tool deleted', 'success');
@@ -867,12 +867,12 @@ export function createToolActions(ctx) {
     const id_system_exclusions = setToolExclusion(tool, system, excluded);
     if (googleRef.current) {
       try {
-        const metaList = await driveService.loadMetadata();
+        const metaList = await toolStore.loadAll();
         const tid = tool.tracking_id || tool.id;
         const idx = metaList.findIndex(m => m.id === tid);
         if (idx >= 0) metaList[idx] = { ...metaList[idx], id_system_exclusions };
         else metaList.push(buildMetadataTool({ ...tool, id_system_exclusions }));
-        await driveService.saveAllMetadata(metaList);
+        await toolStore.upsertMany(metaList);
       } catch (err) {
         if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
         notify(`Could not update membership: ${err.message}`, 'error', 7000);

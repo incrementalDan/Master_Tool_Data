@@ -3,7 +3,7 @@
 // normalization. Each downloads ALL linked libraries, operates across the
 // union, then writes each library back partitioned. Created once by
 // AppProvider via createLibraryOps(ctx).
-import * as driveService from '../services/driveService.js';
+import * as toolStore from '../services/toolStore.js';
 import {
   generateId, generateAssemblyId, generateTrackingId,
   groupByTrackingId, buildLogicalTool, splitToFusionInstances, readTrackingId,
@@ -102,22 +102,15 @@ export function createLibraryOps(ctx) {
         await uploadFusionList(libId, fusionList);
       }
 
-      // Merge-by-id into the existing metadata file rather than replacing it.
-      // saveAllMetadata rewrites the WHOLE file, but this bulk save only carries
-      // the Fusion-built tools it was handed. A blind replace would delete every
-      // record NOT in this set: no-Fusion tools (metadata is their ONLY store),
-      // conflict tools held back for review, and dormant orphan metadata the
-      // orphan-ghost guard (isUnlinkedMeta) relies on persisting. So load the
-      // current file and overlay this save's records on top of it. (See G1 in
-      // DECOUPLING_FOLLOWUP_FINDINGS.md.) Deletion still happens explicitly via
-      // deleteTool's own deleteMetadata call — never as a side effect of a save.
+      // Persist through the repository seam: upsertMany MERGES by id, so this bulk
+      // save preserves every record NOT in the passed set — no-Fusion tools
+      // (metadata is their ONLY store), conflict tools held back for review, and
+      // dormant orphan metadata the orphan-ghost guard (isUnlinkedMeta) relies on
+      // (the G1 invariant, now enforced in toolStore rather than here). Deletion
+      // stays explicit via deleteTool's deleteById — never a save side effect.
       let effectiveMeta = allMeta;
       if (googleRef.current) {
-        const existing = await driveService.loadMetadata();
-        const metaById = new Map((existing || []).map(m => [m.id, m]));
-        for (const m of allMeta) metaById.set(m.id, m);
-        effectiveMeta = [...metaById.values()];
-        await driveService.saveAllMetadata(effectiveMeta);
+        effectiveMeta = await toolStore.upsertMany(allMeta);
       }
 
       // Rebuild logical tools from what we wrote so in-memory state matches,
@@ -176,7 +169,7 @@ export function createLibraryOps(ctx) {
         libNameById.set(libraryId, library.fileName);
         for (const f of list) { entryLib.set(f, libraryId); fusionList.push(f); }
       }
-      const metaList = googleRef.current ? await driveService.loadMetadata() : [];
+      const metaList = googleRef.current ? await toolStore.loadAll() : [];
       const metaByTracking = new Map(metaList.map(m => [m.id, m]));
 
       // One number per logical tool. Tracking-ID groups (in encounter order)
@@ -216,7 +209,7 @@ export function createLibraryOps(ctx) {
       for (const { libraryId } of perLib) {
         await uploadFusionList(libraryId, fusionList.filter(f => entryLib.get(f) === libraryId));
       }
-      if (googleRef.current) await driveService.saveAllMetadata([...metaByTracking.values()]);
+      if (googleRef.current) await toolStore.upsertMany([...metaByTracking.values()]);
 
       // Rebuild the in-memory library so the UI reflects the new numbers (incl. the
       // no-Fusion tools, rebuilt from their updated metadata).
@@ -283,7 +276,7 @@ export function createLibraryOps(ctx) {
         libNameById.set(libraryId, library.fileName);
         for (const f of list) { entryLib.set(f, libraryId); fusionList.push(f); }
       }
-      const metaList = googleRef.current ? await driveService.loadMetadata() : [];
+      const metaList = googleRef.current ? await toolStore.loadAll() : [];
       const metaByTracking = new Map(metaList.map(m => [m.id, m]));
 
       const { groups, untracked } = groupByTrackingId(fusionList);
@@ -342,7 +335,7 @@ export function createLibraryOps(ctx) {
         await uploadFusionList(libraryId, fusionList.filter(f => entryLib.get(f) === libraryId));
       }
       // tool_id is metadata-owned (mirrored to Fusion's product-id) — persist it.
-      if (googleRef.current) await driveService.saveAllMetadata([...metaByTracking.values()]);
+      if (googleRef.current) await toolStore.upsertMany([...metaByTracking.values()]);
 
       // Rebuild the in-memory library so the new IDs show immediately. Include the
       // no-Fusion tools (rebuilt from their updated metadata via the marker guard).
@@ -422,7 +415,7 @@ export function createLibraryOps(ctx) {
         libNameById.set(libraryId, library.fileName);
         for (const f of list) { entryLib.set(f, libraryId); fusionList.push(f); }
       }
-      const metaList = googleRef.current ? await driveService.loadMetadata() : [];
+      const metaList = googleRef.current ? await toolStore.loadAll() : [];
       const metaByTracking = new Map(metaList.map(m => [m.id, m]));
 
       const { groups, untracked } = groupByTrackingId(fusionList);
@@ -520,7 +513,7 @@ export function createLibraryOps(ctx) {
         await uploadFusionList(libraryId, fusionList.filter(f => entryLib.get(f) === libraryId));
       }
       // tool_id (metadata-owned) and legacy_ids both live in metadata — persist them.
-      if (googleRef.current) await driveService.saveAllMetadata([...metaByTracking.values()]);
+      if (googleRef.current) await toolStore.upsertMany([...metaByTracking.values()]);
 
       const tools = [];
       const tagOf = (raws) => { const lib = entryLib.get(raws[0]); return { library_id: lib, library_name: libNameById.get(lib) }; };
@@ -549,7 +542,7 @@ export function createLibraryOps(ctx) {
     try {
       const holders = holdersRef.current || [];
       const perLib = await downloadAllLibraries();
-      const metaList = googleRef.current ? await driveService.loadMetadata() : [];
+      const metaList = googleRef.current ? await toolStore.loadAll() : [];
       const metaByGuid = new Map(metaList.map(m => [m.id, m]));
       const metaByTracking = new Map(metaList.map(m => [m.id, m]));
 
