@@ -324,6 +324,21 @@ describe('mergePresetsWithFusion — never wipe a concurrent Fusion preset edit'
     expect(out[0].v_f).toBe(150);
   });
 
+  it('surfaces the both-edited conflict via the accumulator (never silent)', () => {
+    const appEdit = [{ guid: 'p1', name: 'Rough', n: 8000, v_f: 150 }];
+    const remote  = [{ guid: 'p1', name: 'Rough', n: 8000, v_f: 130 }];
+    const conflicts = [];
+    mergePresetsWithFusion(appEdit, base, remote, conflicts);
+    expect(conflicts).toEqual([{ kind: 'preset', preset: 'Rough' }]);
+  });
+
+  it('records no conflict when only Fusion changed the preset', () => {
+    const remote = [{ guid: 'p1', name: 'Rough', n: 8000, v_f: 130 }];
+    const conflicts = [];
+    mergePresetsWithFusion(local, base, remote, conflicts);
+    expect(conflicts).toHaveLength(0);
+  });
+
   it('keeps an app-added preset not present in Fusion', () => {
     const added = [{ guid: 'p2', name: 'Finish', n: 12000, v_f: 60 }];
     const out = mergePresetsWithFusion(added, base, base);
@@ -355,6 +370,14 @@ describe('mergeSharedFieldsWithFusion — never wipe a concurrent Fusion geometr
     const out = mergeSharedFieldsWithFusion(tool, base, remote);
     expect(out.diameter).toBe(0.375);
   });
+
+  it('surfaces the both-edited field conflict via the accumulator (never silent)', () => {
+    const tool = { ...base, diameter: 0.375 };
+    const remote = { ...base, diameter: 0.25 };
+    const conflicts = [];
+    mergeSharedFieldsWithFusion(tool, base, remote, conflicts);
+    expect(conflicts).toEqual([{ field: 'diameter', appValue: 0.375, fusionValue: 0.25 }]);
+  });
 });
 
 describe('mergeInstanceFieldsWithFusion — never wipe a concurrent Fusion OOH edit', () => {
@@ -373,6 +396,15 @@ describe('mergeInstanceFieldsWithFusion — never wipe a concurrent Fusion OOH e
     const assemblies = [{ assembly_id: 'a1', instance_guid: 'g1', ooh: 3.0 }]; // app changed to 3.0
     const out = mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws);
     expect(out[0].ooh).toBe(3.0);
+  });
+
+  it('surfaces the both-edited OOH conflict via the accumulator (never silent)', () => {
+    const baseRaws = [{ guid: 'g1', geometry: { LB: 2.0 } }];
+    const remoteRaws = [{ guid: 'g1', geometry: { LB: 2.5 } }];   // Fusion → 2.5
+    const assemblies = [{ assembly_id: 'a1', instance_guid: 'g1', ooh: 3.0, holder_description: 'ER32' }]; // app → 3.0
+    const conflicts = [];
+    mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws, conflicts);
+    expect(conflicts).toEqual([{ kind: 'ooh', assembly: 'ER32' }]);
   });
 });
 

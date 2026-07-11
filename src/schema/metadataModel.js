@@ -58,13 +58,20 @@ export function detectFusionDrift(internals, meta) {
 // remote = the freshly-downloaded Fusion tool, `tool` = the app's in-memory tool.
 // For each field: if Fusion changed it and the app did NOT, adopt Fusion's value;
 // otherwise keep the app's. Returns a patched tool (or the same reference).
-export function mergeSharedFieldsWithFusion(tool, baseInternal, remoteInternal) {
+// `conflicts` (optional) collects the both-edited-the-same-field cases so the
+// caller can surface them — a conflict keeps the app's value (the user's active
+// edit) but is NEVER silently discarded: Fusion's value is recorded so it can be
+// shown/restored (see writeLogicalTool + the drift banner).
+export function mergeSharedFieldsWithFusion(tool, baseInternal, remoteInternal, conflicts = null) {
   if (!tool || !baseInternal || !remoteInternal) return tool;
   const patch = {};
   for (const f of DRIFT_FIELDS) {
     const baseVal = baseInternal[f];
     if (driftEqual(remoteInternal[f], baseVal)) continue;  // Fusion didn't change it
-    if (!driftEqual(tool[f], baseVal)) continue;           // app changed it → app wins
+    if (!driftEqual(tool[f], baseVal)) {                   // app ALSO changed it → conflict
+      if (conflicts) conflicts.push({ field: f, appValue: tool[f], fusionValue: remoteInternal[f] ?? null });
+      continue;                                            // keep the app's value
+    }
     patch[f] = remoteInternal[f];                          // Fusion changed it, app didn't → adopt
   }
   return Object.keys(patch).length ? { ...tool, ...patch } : tool;

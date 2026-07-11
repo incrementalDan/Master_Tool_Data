@@ -1434,6 +1434,8 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .toast-error .toast-icon { color: var(--red); }
 .toast-info { border-left-color: var(--blue); }
 .toast-info .toast-icon { color: var(--blue); }
+.toast-warning { border-left-color: var(--orange); }
+.toast-warning .toast-icon { color: var(--orange); }
 .toast-icon { flex-shrink: 0; }
 .toast-msg { flex: 1; line-height: 1.4; }
 .toast-close {

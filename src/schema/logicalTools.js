@@ -143,7 +143,7 @@ function presetSpeedFeedChanged(a, b) {
   return false;
 }
 
-export function mergePresetsWithFusion(localPresets, basePresets, remotePresets) {
+export function mergePresetsWithFusion(localPresets, basePresets, remotePresets, conflicts = null) {
   if (!localPresets?.length) return localPresets;
   const baseByGuid = new Map((basePresets || []).map(p => [p.guid, p]));
   const remoteByGuid = new Map((remotePresets || []).map(p => [p.guid, p]));
@@ -163,6 +163,11 @@ export function mergePresetsWithFusion(localPresets, basePresets, remotePresets)
         job_ids: local.job_ids ?? [],
       };
     }
+    // Both edited the same preset → keep the app's active edit, but surface it so
+    // the user knows Fusion's change was not silently taken (D3: never silent).
+    if (fusionChanged && appChanged && conflicts) {
+      conflicts.push({ kind: 'preset', preset: local.name || local.guid });
+    }
     return local;
   });
 }
@@ -178,7 +183,7 @@ function oohEqual(a, b) {
   return Math.abs(Number(a) - Number(b)) < 5e-6;
 }
 
-export function mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws) {
+export function mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws, conflicts = null) {
   const baseByGuid = new Map((baseRaws || []).map(r => [r.guid, r]));
   const remoteByGuid = new Map((remoteRaws || []).map(r => [r.guid, r]));
   let changed = false;
@@ -189,12 +194,17 @@ export function mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws) 
     const patch = {};
     const baseOoh = readOohFromFusion(base);
     const remoteOoh = readOohFromFusion(remote);
-    if (!oohEqual(remoteOoh, baseOoh) && oohEqual(a.ooh, baseOoh)) patch.ooh = remoteOoh;
+    if (!oohEqual(remoteOoh, baseOoh)) {
+      if (oohEqual(a.ooh, baseOoh)) patch.ooh = remoteOoh;                 // only Fusion changed → adopt
+      else if (conflicts) conflicts.push({ kind: 'ooh', assembly: a.holder_description || a.assembly_id });
+    }
     const baseHolder = base.holder?.guid || null;
     const remoteHolder = remote.holder?.guid || null;
-    if (remoteHolder !== baseHolder && (a.holder_guid || null) === baseHolder) {
-      patch.holder_guid = remoteHolder;
-      patch.holder_description = remote.holder?.description || '';
+    if (remoteHolder !== baseHolder) {
+      if ((a.holder_guid || null) === baseHolder) {                       // only Fusion changed → adopt
+        patch.holder_guid = remoteHolder;
+        patch.holder_description = remote.holder?.description || '';
+      } else if (conflicts) conflicts.push({ kind: 'holder', assembly: a.holder_description || a.assembly_id });
     }
     if (Object.keys(patch).length) { changed = true; return { ...a, ...patch }; }
     return a;
