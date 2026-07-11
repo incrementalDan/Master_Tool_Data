@@ -7,6 +7,8 @@ import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../
 import { resolveLocationString } from '../utils/locationSystem.js';
 import { ASM_MODES, previewAsmNumber } from '../utils/assemblyIdSystem.js';
 import { useDragReorder } from './useDragReorder.js';
+import { MACHINE_COLOR_PALETTE, machineColor, nextMachineColor } from '../utils/machineColors.js';
+import MachinePill from './MachinePill.jsx';
 import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
 import { FilePicker } from './LibrarySetup.jsx';
 import LocationSystemSettings from './LocationSystemSettings.jsx';
@@ -974,7 +976,11 @@ export default function Settings() {
                 {...machDragHandlers(idx)}
               >
                 <GripVertical size={14} style={{ color: 'var(--text-sub)', flexShrink: 0, cursor: 'grab' }} />
-                <span style={{ flex: 1, fontWeight: 500, fontSize: 13 }}>{m.model || <span className="text-sub">Unnamed machine</span>}</span>
+                <span style={{ flex: 1 }}>
+                  {m.model
+                    ? <MachinePill label={m.model} color={machineColor(m, machines)} />
+                    : <span className="text-sub" style={{ fontSize: 13 }}>Unnamed machine</span>}
+                </span>
                 {m.taper && <span className="chip" style={{ fontSize: 11, padding: '2px 7px' }}>{m.taper}</span>}
                 {m.machine_type && <span className="text-sub text-xs">{m.machine_type}</span>}
                 {isExpanded ? <ChevronDown size={14} className="text-sub" /> : <ChevronRight size={14} className="text-sub" />}
@@ -1006,6 +1012,13 @@ export default function Settings() {
                         <option value="">—</option>
                         {TAPER_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
+                    </div>
+                    <div>
+                      <label className="field-label">Color</label>
+                      <MachineColorPicker
+                        value={machineColor(m, machines)}
+                        onChange={c => updateMachine(m.id, { color: c })}
+                      />
                     </div>
                     <div>
                       <label className="field-label">Max RPM</label>
@@ -1091,6 +1104,7 @@ export default function Settings() {
           <AddMachineForm
             machineTypes={MACHINE_TYPES}
             taperTypes={TAPER_TYPES}
+            suggestedColor={nextMachineColor(machines)}
             onSave={(m) => {
               const updated = [...machines, { ...m, order: machines.length }];
               setMachines(updated);
@@ -1653,7 +1667,34 @@ export default function Settings() {
   );
 }
 
-function AddMachineForm({ machineTypes, taperTypes, onSave, onCancel }) {
+// Swatch row for picking a machine's display color — the palette (blue and
+// green first) plus a custom color input. Used by the machine editor and
+// AddMachineForm.
+function MachineColorPicker({ value, onChange }) {
+  return (
+    <div className="machine-color-row">
+      {MACHINE_COLOR_PALETTE.map(c => (
+        <button
+          key={c}
+          type="button"
+          className={`machine-color-swatch${value === c ? ' selected' : ''}`}
+          style={{ background: c }}
+          title={c}
+          onClick={() => onChange(c)}
+        />
+      ))}
+      <input
+        type="color"
+        className="machine-color-custom"
+        value={value || MACHINE_COLOR_PALETTE[0]}
+        title="Custom color"
+        onChange={e => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+function AddMachineForm({ machineTypes, taperTypes, suggestedColor, onSave, onCancel }) {
   const [draft, setDraft] = useState({
     model: '',
     machine_type: 'Machining Center',
@@ -1662,6 +1703,7 @@ function AddMachineForm({ machineTypes, taperTypes, onSave, onCancel }) {
     horsepower: null,
     through_coolant: false,
     through_coolant_psi: null,
+    color: suggestedColor || MACHINE_COLOR_PALETTE[0],
   });
   const set = (patch) => setDraft(d => ({ ...d, ...patch }));
 
@@ -1697,6 +1739,10 @@ function AddMachineForm({ machineTypes, taperTypes, onSave, onCancel }) {
             <option value="">—</option>
             {taperTypes.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
+        </div>
+        <div>
+          <label className="field-label">Color</label>
+          <MachineColorPicker value={draft.color} onChange={c => set({ color: c })} />
         </div>
         <div>
           <label className="field-label">Max RPM</label>

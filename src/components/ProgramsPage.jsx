@@ -15,6 +15,8 @@ import {
   fixturingSelOf, fixturingValueOf,
 } from './programsUi.jsx';
 import AddProgramModal from './AddProgramModal.jsx';
+import MachinePill from './MachinePill.jsx';
+import { machineColorFor } from '../utils/machineColors.js';
 
 // Program Number Manager — replaces the manually-managed Google Sheet that
 // assigns unique CNC program numbers per part / operation / machine.
@@ -24,9 +26,10 @@ import AddProgramModal from './AddProgramModal.jsx';
 
 // ── Grouped view ──────────────────────────────────────────────────────────────
 
-function PartHeader({ part, programCount, expanded, onToggle, materials, canEdit, customers, onUpdatePart }) {
+function PartHeader({ part, programCount, expanded, onToggle, materials, canEdit, customers, onUpdatePart, onDeletePart }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const startEdit = (e) => {
     e.stopPropagation();
@@ -83,7 +86,23 @@ function PartHeader({ part, programCount, expanded, onToggle, materials, canEdit
         {programCount} program{programCount !== 1 ? 's' : ''}
       </span>
       {canEdit && (
-        <span className="icon-btn" title="Edit part" onClick={startEdit}><Pencil size={12} /></span>
+        confirmDelete ? (
+          <span className="pn-op-delete-confirm" onClick={e => e.stopPropagation()}>
+            <span className="text-xs" style={{ color: 'var(--red)' }}>
+              Delete {part.part_number}{programCount > 0 ? ` and its ${programCount} program${programCount !== 1 ? 's' : ''}` : ''}?
+            </span>
+            <button type="button" className="btn btn-danger btn-sm" onClick={() => onDeletePart(part.id)}>Delete</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(false)}>Cancel</button>
+          </span>
+        ) : (
+          <>
+            <span className="icon-btn" title="Edit part" onClick={startEdit}><Pencil size={12} /></span>
+            <span className="icon-btn" title="Delete part" style={{ color: 'var(--red)' }}
+              onClick={e => { e.stopPropagation(); setConfirmDelete(true); }}>
+              <Trash2 size={12} />
+            </span>
+          </>
+        )
       )}
     </div>
   );
@@ -187,7 +206,9 @@ function OperationRow({ program, part, materials, machines, canEdit, onUpdatePro
   return (
     <div className="pn-op-row">
       <ProgramNumBadge n={program.program_number} />
-      <span className="text-sm">{program.machine_label || '—'}</span>
+      {program.machine_label
+        ? <MachinePill label={program.machine_label} color={machineColorFor(program.machine_id, program.machine_label, machines)} />
+        : <span className="text-sm">—</span>}
       <TypePill isFixture={program.is_fixture} internalExternal={program.internal_external} />
       {program.pallet && <span className="text-xs text-sub">Pallet {program.pallet}</span>}
       {program.fixturing && <span className="text-xs text-sub">{program.fixturing}</span>}
@@ -217,7 +238,7 @@ function OperationRow({ program, part, materials, machines, canEdit, onUpdatePro
   );
 }
 
-function GroupedView({ jobsFile, materials, machines, canEdit, customers, expanded, onToggle, onUpdatePart, onUpdateProgram, onDeleteProgram }) {
+function GroupedView({ jobsFile, materials, machines, canEdit, customers, collapsed, onToggle, onUpdatePart, onDeletePart, onUpdateProgram, onDeleteProgram }) {
   const parts = partsOf(jobsFile);
   if (parts.length === 0) {
     return <div className="pn-empty">No parts yet — click <strong>Add program</strong> to create the first one.</div>;
@@ -226,7 +247,9 @@ function GroupedView({ jobsFile, materials, machines, canEdit, customers, expand
     <div className="pn-grouped">
       {parts.map(part => {
         const progs = programsOf(jobsFile).filter(p => p.part_id === part.id);
-        const isOpen = expanded.has(part.id);
+        // Parts render EXPANDED by default — the program numbers are the main
+        // thing the page exists to show. `collapsed` tracks the exceptions.
+        const isOpen = !collapsed.has(part.id);
         const byOp = new Map();
         for (const p of progs) {
           if (!byOp.has(p.operation)) byOp.set(p.operation, []);
@@ -238,7 +261,7 @@ function GroupedView({ jobsFile, materials, machines, canEdit, customers, expand
               part={part} programCount={progs.length} expanded={isOpen}
               onToggle={() => onToggle(part.id)}
               materials={materials} canEdit={canEdit} customers={customers}
-              onUpdatePart={onUpdatePart}
+              onUpdatePart={onUpdatePart} onDeletePart={onDeletePart}
             />
             {isOpen && progs.length > 0 && (
               <div className="pn-part-body">
@@ -455,7 +478,11 @@ function TableView({ jobsFile, materials, machines, canEdit, customers, onUpdate
                   <td><CustomerBadge customer={row.part?.customer} /></td>
                   <td>{formatOperation(row.operation)}</td>
                   <td className="text-sub">{row.description || '—'}</td>
-                  <td>{row.machine_label || '—'}</td>
+                  <td>
+                    {row.machine_label
+                      ? <MachinePill label={row.machine_label} color={machineColorFor(row.machine_id, row.machine_label, machines)} />
+                      : '—'}
+                  </td>
                   <td><TypePill isFixture={row.is_fixture} internalExternal={row.internal_external} /></td>
                   <td className="text-sub">{row.fixturing || '—'}</td>
                   <td className="text-sub">{row.materialLabel || '—'}</td>
@@ -481,14 +508,16 @@ export default function ProgramsPage() {
   const canEdit = googleAuthenticated || demoMode;
   const [view, setView] = useState('grouped');
   const [showAdd, setShowAdd] = useState(false);
-  const [expanded, setExpanded] = useState(() => new Set());
+  // Parts are expanded by default (program numbers front and center) — this
+  // set tracks the parts the user has explicitly collapsed.
+  const [collapsed, setCollapsed] = useState(() => new Set());
 
   const machines = machineOptions(shopSettings);
   const customers = customerNames(jobsFile);
   const nextNum = nextProgramNumber(jobsFile);
   const userName = user?.email || user?.name || '';
 
-  const toggleExpand = (id) => setExpanded(prev => {
+  const toggleExpand = (id) => setCollapsed(prev => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
@@ -520,6 +549,16 @@ export default function ProgramsPage() {
     saveJobs({
       ...jobsFile, version: 2,
       programs: programsOf(jobsFile).filter(p => p.id !== id),
+    });
+  };
+
+  // Deleting a part removes the part AND all of its programs (the numbers are
+  // freed the same way deleteProgram frees them — "next #" recomputes live).
+  const deletePart = (id) => {
+    saveJobs({
+      ...jobsFile, version: 2,
+      parts: partsOf(jobsFile).filter(p => p.id !== id),
+      programs: programsOf(jobsFile).filter(p => p.part_id !== id),
     });
   };
 
@@ -564,8 +603,9 @@ export default function ProgramsPage() {
         <GroupedView
           jobsFile={jobsFile} materials={materials} machines={machines}
           canEdit={canEdit} customers={customers}
-          expanded={expanded} onToggle={toggleExpand}
-          onUpdatePart={updatePart} onUpdateProgram={updateProgram} onDeleteProgram={deleteProgram}
+          collapsed={collapsed} onToggle={toggleExpand}
+          onUpdatePart={updatePart} onDeletePart={deletePart}
+          onUpdateProgram={updateProgram} onDeleteProgram={deleteProgram}
         />
       ) : (
         <TableView
@@ -577,7 +617,10 @@ export default function ProgramsPage() {
 
       {showAdd && (
         <AddProgramModal
-          onCreated={(_prg, part) => { if (part) setExpanded(prev => new Set(prev).add(part.id)); }}
+          onCreated={(_prg, part) => {
+            // Make sure the part the new program landed in is open.
+            if (part) setCollapsed(prev => { const next = new Set(prev); next.delete(part.id); return next; });
+          }}
           onClose={() => setShowAdd(false)}
         />
       )}

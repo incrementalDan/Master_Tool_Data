@@ -4,6 +4,7 @@ import { Search, X, Plus, LayoutGrid, List, PackageOpen, FolderOpen, GitMerge } 
 import { useApp } from '../context/AppContext.jsx';
 import { applyFilters, matchedLegacyId } from '../services/searchEngine.js';
 import { getDefaultUnit } from '../utils/units.js';
+import { machineColor } from '../utils/machineColors.js';
 import ToolTypeGrid from './ToolTypeGrid.jsx';
 import FacetFilters from './FacetFilters.jsx';
 import ToolCard from './ToolCard.jsx';
@@ -252,7 +253,8 @@ export default function LandingPage() {
             {machines.map(m => (
               <button
                 key={m.id}
-                className={`chip ${machineFilter.machineId === m.id ? 'active' : ''}`}
+                className={`chip machine-chip ${machineFilter.machineId === m.id ? 'active' : ''}`}
+                style={{ '--badge-color': machineColor(m, machines) }}
                 onClick={() => setMachineFilter(f => ({
                   machineId: f.machineId === m.id ? null : m.id,
                   strict: f.machineId === m.id ? false : f.strict,
