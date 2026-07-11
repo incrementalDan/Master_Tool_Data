@@ -2,6 +2,28 @@
 
 const TEXT_FIELDS = ['description', 'vendor', 'material', 'coating', 'notes', 'location', 'tool_id', 'preferred_machine'];
 
+// Tool-MATERIAL search synonyms (what the tool is made of — carbide/hss/cobalt/
+// ceramic; see fieldRegistry.material "Tool Material"). SEARCH-ONLY: merges
+// Cobalt and HSS so a query for either surfaces both, without touching the
+// stored value, the facet option list, or any other field's matching.
+const MATERIAL_SEARCH_SYNONYMS = [
+  new Set(['cobalt', 'hss']),
+];
+
+function materialSynonymGroup(term) {
+  const t = String(term || '').toLowerCase().trim();
+  return MATERIAL_SEARCH_SYNONYMS.find(group => group.has(t)) || null;
+}
+
+// True if a tool's `material` value should match search term `q` — exact
+// substring match, or (Cobalt/HSS only) a cross-synonym substring match.
+function materialMatchesQuery(toolMaterial, q) {
+  const tv = String(toolMaterial || '').toLowerCase();
+  if (tv.includes(q)) return true;
+  const group = materialSynonymGroup(q);
+  return group ? [...group].some(term => term !== q && tv.includes(term)) : false;
+}
+
 // The first legacy (retired) ID of `tool` that the search query matched, or null.
 // Used to show a "formerly …" line on a result card ONLY when the match was on a
 // legacy ID (never otherwise).
@@ -38,6 +60,10 @@ export function textSearch(tools, query) {
   const q = query.toLowerCase().trim();
   return tools.filter(tool => {
     for (const field of TEXT_FIELDS) {
+      if (field === 'material') {
+        if (materialMatchesQuery(tool.material, q)) return true;
+        continue;
+      }
       if (String(tool[field] || '').toLowerCase().includes(q)) return true;
     }
     // Machine tool number — match the bare number ("31") or the "T31" form.
@@ -151,6 +177,13 @@ function matchesFacetSingle(tool, field, value, tolerances = null) {
   }
   if (field === 'flute_design') {
     return String(value).toLowerCase() === String(tool.flute_design || '').toLowerCase();
+  }
+  if (field === 'material') {
+    const tv = String(tool.material || '').toLowerCase().trim();
+    const v = String(value).toLowerCase().trim();
+    if (tv === v) return true;
+    const group = materialSynonymGroup(v);
+    return group ? group.has(tv) : false;
   }
   // Numeric exact or close match (bare-value path — e.g. chip-selected small option sets)
   if (['diameter', 'flute_length', 'overall_length', 'number_of_flutes', 'corner_radius'].includes(field)) {
