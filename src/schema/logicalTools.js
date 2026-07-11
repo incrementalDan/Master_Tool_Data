@@ -143,7 +143,7 @@ function presetSpeedFeedChanged(a, b) {
   return false;
 }
 
-export function mergePresetsWithFusion(localPresets, basePresets, remotePresets, conflicts = null) {
+export function mergePresetsWithFusion(localPresets, basePresets, remotePresets, conflicts = null, adopted = null) {
   if (!localPresets?.length) return localPresets;
   const baseByGuid = new Map((basePresets || []).map(p => [p.guid, p]));
   const remoteByGuid = new Map((remotePresets || []).map(p => [p.guid, p]));
@@ -156,6 +156,7 @@ export function mergePresetsWithFusion(localPresets, basePresets, remotePresets,
     if (fusionChanged && !appChanged) {
       // Fusion edited this preset, the app didn't → adopt Fusion's values +
       // expressions (no wipe); keep the app-only overlay fields.
+      if (adopted) adopted.push({ kind: 'preset', label: local.name || local.guid });
       return {
         ...remote,
         operation_type: local.operation_type ?? null,
@@ -183,7 +184,7 @@ function oohEqual(a, b) {
   return Math.abs(Number(a) - Number(b)) < 5e-6;
 }
 
-export function mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws, conflicts = null) {
+export function mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws, conflicts = null, adopted = null) {
   const baseByGuid = new Map((baseRaws || []).map(r => [r.guid, r]));
   const remoteByGuid = new Map((remoteRaws || []).map(r => [r.guid, r]));
   let changed = false;
@@ -195,8 +196,10 @@ export function mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws, 
     const baseOoh = readOohFromFusion(base);
     const remoteOoh = readOohFromFusion(remote);
     if (!oohEqual(remoteOoh, baseOoh)) {
-      if (oohEqual(a.ooh, baseOoh)) patch.ooh = remoteOoh;                 // only Fusion changed → adopt
-      else if (conflicts) conflicts.push({ kind: 'ooh', assembly: a.holder_description || a.assembly_id });
+      if (oohEqual(a.ooh, baseOoh)) {                                      // only Fusion changed → adopt
+        patch.ooh = remoteOoh;
+        if (adopted) adopted.push({ kind: 'ooh', label: a.holder_description || a.assembly_id });
+      } else if (conflicts) conflicts.push({ kind: 'ooh', assembly: a.holder_description || a.assembly_id });
     }
     const baseHolder = base.holder?.guid || null;
     const remoteHolder = remote.holder?.guid || null;
@@ -204,6 +207,7 @@ export function mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws, 
       if ((a.holder_guid || null) === baseHolder) {                       // only Fusion changed → adopt
         patch.holder_guid = remoteHolder;
         patch.holder_description = remote.holder?.description || '';
+        if (adopted) adopted.push({ kind: 'holder', label: a.holder_description || a.assembly_id });
       } else if (conflicts) conflicts.push({ kind: 'holder', assembly: a.holder_description || a.assembly_id });
     }
     if (Object.keys(patch).length) { changed = true; return { ...a, ...patch }; }

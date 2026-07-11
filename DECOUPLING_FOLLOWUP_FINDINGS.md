@@ -226,12 +226,12 @@ After each: `npm run lint && npm test` and `node scripts/roundtrip-audit.mjs` mu
 
 ## Future UX — Surface the non-obvious "what just happened" moments (owner ask, 2026-07-11)
 
-The owner's related point: we've worked hard on the *correctness* of sync/conflict handling; the complement is making sure the user can *see* what the app is doing. We already toast most actions, but several behaviors are currently **silent or non-obvious** and worth an explicit surface (small, do opportunistically):
+The owner's related point: we've worked hard on the *correctness* of sync/conflict handling; the complement is making sure the user can *see* what the app is doing. We already toast most actions, but several behaviors were **silent or non-obvious**. The three highest-value, low-noise ones were implemented (2026-07-11):
 
-- **Load-time auto-combine** (`combineToolsByToolId`) silently folds same-`tool_id` duplicates into one tool on every load — the user never sees that two entries became one. A one-line "Combined N duplicate entries on load" notice (like normalize already shows) would make it visible.
-- **Load-time backfills** run invisibly: `backfillAsmNumbers` (assembly numbers), `derivePairings` (insert-tool auto-detection from a combined product-id), and `materializeUnlinkedTools` (no-Fusion tools). None announce themselves.
-- **Metadata-only vs. Fusion writes:** with the new "Fusion sync off" badge (#1) this is better, but even in normal mode a no-Fusion tool's save doesn't make clear "this did NOT go to Fusion." The per-tool "Not in Fusion" note covers the tool page; a save toast could say "Saved (app only — not in Fusion)".
-- **Lazy re-sync after normalize:** location normalization writes metadata only and re-syncs to Fusion's vendor field on each tool's *next individual save* — the user isn't told the Fusion side is briefly behind.
-- **Write-time drift adoption:** when a save silently adopts a Fusion-only change (the "only Fusion changed it" branch of the 3-way merge), there's no toast — only the both-edited conflict toasts. Adopting a Fusion edit is arguably worth a quiet "Also pulled in N change(s) made in Fusion" note.
+- ✅ **DONE** — **Load-time auto-combine** (`combineToolsByToolId`): `loadTools` now counts folded entries per library and shows "Combined N duplicate library entries sharing a Tool #" (only when it actually folded something), so two entries silently becoming one is visible.
+- ✅ **DONE** — **Metadata-only vs. Fusion writes:** `saveTool` now says "Saved (app only — not in Fusion)" for a no-Fusion tool or Fusion-off mode, instead of always implying it reached Fusion.
+- ✅ **DONE** — **Write-time drift adoption:** the "only Fusion changed it → adopt" branch of the 3-way merge is no longer silent — `writeLogicalTool` now toasts "Also pulled in N change(s) made in Fusion since you loaded this tool" (an `adopted` accumulator threaded through all three merge functions, mirroring the existing `conflicts` one). Locked by a test assertion on the geometry-drift case.
+- ⏳ **LEFT for the log** — **Load-time backfills** (`backfillAsmNumbers`, `derivePairings`, `materializeUnlinkedTools`) run invisibly. Toasting each on every load would be noise; these belong in the durable audit log, not a toast.
+- ⏳ **LEFT (minor)** — **Lazy re-sync after location normalize:** the metadata-only write re-syncs to Fusion's vendor field on each tool's next individual save; the user isn't told the Fusion side is briefly behind. Low-stakes; fold into the log.
 
-These overlap heavily with the change-log feature above — the audit trail is the durable version, and these toasts are the in-the-moment version. Recommend doing the toasts opportunistically (cheap) and the log as the larger project.
+These overlap heavily with the change-log feature above — the audit trail is the durable version, and these toasts are the in-the-moment version.

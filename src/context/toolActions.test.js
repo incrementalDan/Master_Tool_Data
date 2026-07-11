@@ -206,6 +206,10 @@ describe('writeLogicalTool does not wipe a concurrent Fusion geometry edit', () 
     const written = await writeLogicalTool(tool);
     expect(uploaded[0].geometry.LCF).toBe(1.25);   // Fusion's edit survived the save
     expect(written.flute_length).toBe(1.25);       // and the in-memory tool reflects it
+    // The adopt is no longer silent — the user is told a Fusion change was pulled in.
+    expect(ctx.notify).toHaveBeenCalledWith(
+      expect.stringMatching(/pulled in 1 change/i), 'info', expect.anything(),
+    );
   });
 });
 

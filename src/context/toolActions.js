@@ -165,15 +165,18 @@ export function createToolActions(ctx) {
     // but we NEVER take Fusion's change silently — the conflicts are surfaced as a
     // toast and, for shared scalar fields, attached to the tool's _drift so the
     // DriftBanner offers a one-click restore of Fusion's value (D3).
+    // `adopted` collects the "only Fusion changed it → adopt" cases so the save can
+    // tell the user it quietly pulled in an edit made in Fusion (not just conflicts).
     const conflicts = [];
+    const adopted = [];
     const remotePresets = refreshedRaws?.[0]?.['start-values']?.presets || [];
-    const mergedPresets = mergePresetsWithFusion(tool.presets, basePresets, remotePresets, conflicts);
+    const mergedPresets = mergePresetsWithFusion(tool.presets, basePresets, remotePresets, conflicts, adopted);
     const baseRaw = tool._instancesRaw?.[0];
     const remoteRaw = refreshedRaws?.[0];
     const sharedMerged = (baseRaw && remoteRaw)
-      ? mergeSharedFieldsWithFusion(tool, fusionToolToInternal(baseRaw), fusionToolToInternal(remoteRaw), conflicts)
+      ? mergeSharedFieldsWithFusion(tool, fusionToolToInternal(baseRaw), fusionToolToInternal(remoteRaw), conflicts, adopted)
       : tool;
-    const mergedAssemblies = mergeInstanceFieldsWithFusion(assemblies, tool._instancesRaw, refreshedRaws, conflicts);
+    const mergedAssemblies = mergeInstanceFieldsWithFusion(assemblies, tool._instancesRaw, refreshedRaws, conflicts, adopted);
 
     // Shared scalar-field conflicts (from mergeSharedFieldsWithFusion) carry a
     // `field` — surface them via the DriftBanner so Fusion's value stays one click
@@ -244,6 +247,16 @@ export function createToolActions(ctx) {
       );
     }
 
+    // Quietly-adopted Fusion edits (only Fusion changed it, the app didn't) used to
+    // be silent. Tell the user their save pulled them in, so a change appearing
+    // "out of nowhere" is explained. (Conflicts are the louder warning above.)
+    if (adopted.length) {
+      notify(
+        `Also pulled in ${adopted.length} change${adopted.length === 1 ? '' : 's'} made in Fusion since you loaded this tool.`,
+        'info', 6000,
+      );
+    }
+
     return { ...toWrite, _instancesRaw: fusionInstances, _fusionRaw: fusionInstances[0] };
   };
 
@@ -256,7 +269,11 @@ export function createToolActions(ctx) {
       const updated = await writeLogicalTool({ ...tool, updated_at: new Date().toISOString() });
       dispatch({ type: 'UPDATE_TOOL', tool: updated });
       dispatch({ type: 'SAVE_SUCCESS' });
-      notify('Saved to Fusion library', 'success');
+      // Make the destination explicit: a no-Fusion tool (or Fusion-off mode) is
+      // saved to metadata only — say so rather than implying it reached Fusion.
+      const fusionDisabled = shopSettingsRef.current?.integrations?.fusion?.enabled === false;
+      const appOnly = updated.no_fusion_link === true || fusionDisabled;
+      notify(appOnly ? 'Saved (app only — not in Fusion)' : 'Saved to Fusion library', 'success');
       return updated;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });

@@ -62,7 +62,7 @@ export function detectFusionDrift(internals, meta) {
 // caller can surface them — a conflict keeps the app's value (the user's active
 // edit) but is NEVER silently discarded: Fusion's value is recorded so it can be
 // shown/restored (see writeLogicalTool + the drift banner).
-export function mergeSharedFieldsWithFusion(tool, baseInternal, remoteInternal, conflicts = null) {
+export function mergeSharedFieldsWithFusion(tool, baseInternal, remoteInternal, conflicts = null, adopted = null) {
   if (!tool || !baseInternal || !remoteInternal) return tool;
   const patch = {};
   for (const f of DRIFT_FIELDS) {
@@ -73,6 +73,7 @@ export function mergeSharedFieldsWithFusion(tool, baseInternal, remoteInternal, 
       continue;                                            // keep the app's value
     }
     patch[f] = remoteInternal[f];                          // Fusion changed it, app didn't → adopt
+    if (adopted) adopted.push({ kind: 'field', label: f });
   }
   return Object.keys(patch).length ? { ...tool, ...patch } : tool;
 }
