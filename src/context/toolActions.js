@@ -8,7 +8,7 @@ import {
   validateTool, generateId, generateAssemblyId, generateTrackingId,
   splitToFusionInstances, buildMetadataTool, mergePresetsWithFusion,
   mergeSharedFieldsWithFusion, mergeInstanceFieldsWithFusion, fusionToolToInternal,
-  readTrackingId, readOohFromFusion,
+  readTrackingId, readOohFromFusion, presetZeroMirror,
   getNextMachineNumber, combineToolsByToolId,
 } from '../schema/toolSchema.js';
 import { composeAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
@@ -124,6 +124,10 @@ export function createToolActions(ctx) {
       const toWrite = {
         ...tool, tracking_id, library_id: null, library_name: null,
         assemblies, ...locExtra,
+        // Keep the flat speed/feed mirror = preset 0 (O1) — it isn't stored in
+        // metadata, so a stale in-memory value would otherwise linger on cards /
+        // search / ProShop export until the next reload rebuilds it.
+        ...presetZeroMirror(tool.presets),
         // Preserve the tool's own intent: a per-tool no-Fusion tool stays marked;
         // a formerly-linked tool saved only because Fusion is disabled keeps its
         // flag (false), so re-enabling Fusion doesn't spuriously detach it.

@@ -243,6 +243,29 @@ function emptyFusionInternal() {
   };
 }
 
+// The flat speed/feed fields on a tool are a DERIVED cache of preset 0 (O1 in
+// PHASE_A_TOOL_RECORD_SCHEMA.md) — never an independent editable source. This is
+// the single point of that derivation, so it can't drift between the places that
+// recompute it (buildUnlinkedTool at load, the no-Fusion write path on save).
+// Returns the 9 mirror fields from preset 0, or {} when there are no presets (so
+// spreading it never nulls out flat values on a preset-less tool, e.g. one whose
+// speeds/feeds came straight from a ProShop row).
+export function presetZeroMirror(presets) {
+  const p0 = presets?.[0];
+  if (!p0) return {};
+  return {
+    spindle_speed: p0.n ?? null,
+    cutting_feedrate: p0.v_f ?? null,
+    plunge_feedrate: p0.v_f_plunge ?? null,
+    ramp_feedrate: p0.v_f_ramp ?? null,
+    lead_in_feedrate: p0.v_f_leadIn ?? null,
+    lead_out_feedrate: p0.v_f_leadOut ?? null,
+    feed_per_tooth: p0.f_z ?? null,
+    feed_per_rev: p0.f_n ?? null,
+    cutting_speed: p0.v_c ?? null,
+  };
+}
+
 // Build a complete logical tool from metadata ALONE — no Fusion instance.
 // Metadata is authoritative for every field. Mirrors buildLogicalTool's output
 // shape so the rest of the app treats it identically, except _instancesRaw is
@@ -251,7 +274,6 @@ function emptyFusionInternal() {
 export function buildUnlinkedTool(meta) {
   const merged = mergeFusionAndMetadata(emptyFusionInternal(), meta);
   const presets = overlayPresets(meta?.presets || [], meta?.preset_meta || {});
-  const p0 = presets[0] || {};
 
   const assemblies = (meta?.assemblies || []).map(a => ({
     assembly_id: a.assembly_id || generateAssemblyId(),
@@ -277,16 +299,8 @@ export function buildUnlinkedTool(meta) {
     id: meta.id,
     tracking_id: meta.id,
     // Flat speed/feed mirror = derived cache of preset 0 (O1). No Fusion side to
-    // read them from, so recompute from the primary preset.
-    spindle_speed: p0.n ?? null,
-    cutting_feedrate: p0.v_f ?? null,
-    plunge_feedrate: p0.v_f_plunge ?? null,
-    ramp_feedrate: p0.v_f_ramp ?? null,
-    lead_in_feedrate: p0.v_f_leadIn ?? null,
-    lead_out_feedrate: p0.v_f_leadOut ?? null,
-    feed_per_tooth: p0.f_z ?? null,
-    feed_per_rev: p0.f_n ?? null,
-    cutting_speed: p0.v_c ?? null,
+    // read them from, so recompute from the primary preset (shared helper).
+    ...presetZeroMirror(presets),
     presets,
     assemblies,
     machine_tool_number: (meta?.machine_tool_number ?? null) === null ? null : Number(meta.machine_tool_number),

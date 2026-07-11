@@ -62,6 +62,20 @@ describe('Phase B increment 3 — no-Fusion write path (metadata only)', () => {
     expect(savedMeta.no_fusion_link).toBe(true);
   });
 
+  it('writeLogicalTool recomputes the flat speed/feed mirror from preset 0 (G5, O1)', async () => {
+    const ctx = makeCtx();
+    const { writeLogicalTool } = createToolActions(ctx);
+    const result = await writeLogicalTool({
+      tracking_id: 'FTL-MIR', tool_type: 'flat end mill', no_fusion_link: true,
+      spindle_speed: 8000, cutting_feedrate: 50,          // STALE flat values
+      presets: [{ guid: 'p0', name: 'Rough', n: 12000, v_f: 90 }],
+      assemblies: [{ assembly_id: 'a1', ooh: 1 }],
+    });
+    // Flat mirror follows preset 0, not the stale values passed in.
+    expect(result.spindle_speed).toBe(12000);
+    expect(result.cutting_feedrate).toBe(90);
+  });
+
   it('writeLogicalTool refuses a no-Fusion save when Drive is not connected', async () => {
     const ctx = makeCtx({ googleRef: { current: false } });
     const { writeLogicalTool } = createToolActions(ctx);

@@ -16,7 +16,7 @@
 | G2 | 🔴 Consistency — ✅ **FIXED** | `deleteTool` ignored the shop-wide `integrations.fusion.enabled === false` mode — it round-tripped APS (and deleted Fusion entries) while "Fusion sync is off" | `toolActions.js` |
 | G3 | 🟠 Data loss (silent) — ✅ **FIXED** | `saveFullLibrary` with Google Drive not connected silently dropped every no-Fusion tool's data (metadata write skipped, but the tool re-materialized in memory and looked saved) | `libraryOps.js` |
 | G4 | 🟠 Data loss (silent) — ✅ **FIXED** | `assignToolIds` / `renumberAllToolIds` / `renumberLibrary` counted no-Fusion tools as assigned even when Drive is disconnected — their new IDs/numbers existed only in memory and vanished on reload | `libraryOps.js` |
-| G5 | 🟡 Staleness | O1 violation: the flat speed/feed mirror is not recomputed from preset 0 on the no-Fusion write path (self-heals on reload, stale in memory until then) | `toolActions.js` |
+| G5 | 🟡 Staleness — ✅ **FIXED** | O1 violation: the flat speed/feed mirror was not recomputed from preset 0 on the no-Fusion write path (self-healed on reload, stale in memory until then) | `toolActions.js`, `logicalTools.js` |
 | G6 | 🟡 Doc contradiction | `normalizeLibrary`'s "conflict tools' raw entries left untouched" claim conflicts with `saveFullLibrary`'s full-replace semantics — verify conflict tools' Fusion entries actually survive a normalize | `libraryOps.js`, `combine.js` |
 | G7 | 🟡 Edge | `detachToolFromFusion` / `promoteToolToFusion` edge cases: no default library, Drive-token expiry mid-two-step detach (Fusion entries already deleted, metadata write fails → tool state inconsistent until retry) | `toolActions.js` |
 | G8 | ⚪ Doc drift | CLAUDE.md "Orphaned metadata is harmless but **permanent** — no prune exists" is no longer true (`saveFullLibrary` prunes by whole-file replace); update the doc + decide if pruning dormant orphans is wanted | CLAUDE.md |
@@ -108,7 +108,9 @@ Pick one consistently (recommend a):
 
 ---
 
-## G5 — O1 (flat mirror = derived cache of preset 0) not enforced on the no-Fusion write path 🟡
+## G5 — O1 (flat mirror = derived cache of preset 0) not enforced on the no-Fusion write path 🟡 ✅ FIXED
+
+> **Fixed 2026-07-11.** Extracted the 9-field mirror recompute into a shared pure helper `presetZeroMirror(presets)` (`logicalTools.js`, re-exported via the schema barrel). It returns `{}` when there are no presets, so it never nulls flat values on a preset-less tool (e.g. one whose speeds/feeds came straight from a ProShop row). `buildUnlinkedTool` now uses it (load path), and the no-Fusion branch of `writeLogicalTool` spreads it into the written tool (save path). The linked path and `mergeTool`'s existing ad-hoc mirror block were left untouched (their `?? updated.x` keep-semantics differ intentionally; not worth changing the byte-for-byte linked path). Regression test in `toolActions.test.js`.
 
 **Where:** `toolActions.js` `writeLogicalTool` unlinked branch (~line 123–143). It writes `{ ...tool }` metadata without recomputing `spindle_speed`/`cutting_feedrate`/… from `presets[0]`. `PHASE_A_TOOL_RECORD_SCHEMA.md` §4d says the mirror is "always recomputed from preset 0 on write, never independently editable."
 
