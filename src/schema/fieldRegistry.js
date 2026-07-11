@@ -300,7 +300,7 @@ export const FIELD_REGISTRY = {
     metadataOnly: false,
     appliesToTypes: [
       'bull nose end mill', 'tapered mill', 'radius mill',
-      'dovetail', 'lollipop mill', 'circle segment lens',
+      'dovetail', 'lollipop mill', 'circle segment lens', 'slot/key cutter',
     ],
     required: false,
     precision: 4,

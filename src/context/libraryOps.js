@@ -544,7 +544,13 @@ export function createLibraryOps(ctx) {
         // Units: min_ooh, per-assembly OOH and shoulder_length are all stored in
         // the tool's own unit, so they compare/assign directly — no conversion.
         const minOoh = merged.min_ooh ?? null;
-        const shoulder_length = minOoh != null ? minOoh : merged.shoulder_length;
+        // Slot/key cutters (slitting saws): the unbroken shoulder is the cutter
+        // width (flute length / kerf), NOT the MIN OOH stick-out — so don't
+        // override it from min_ooh like other tool types.
+        const isKeyCutter = merged.tool_type === 'slot/key cutter';
+        const shoulder_length = isKeyCutter
+          ? (merged.flute_length ?? merged.shoulder_length ?? null)
+          : (minOoh != null ? minOoh : merged.shoulder_length);
         const assemblies = minOoh != null
           ? rawAssemblies.map(a => ({ ...a, ooh: (a.ooh != null && a.ooh < minOoh) ? minOoh : a.ooh }))
           : rawAssemblies;

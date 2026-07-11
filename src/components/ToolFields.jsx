@@ -68,6 +68,10 @@ function NumInput({ value, step, precision, className, placeholder, onChange }) 
 function labelFor(field, tool) {
   if (field === 'diameter' && tool.tool_type === 'tapered mill') return fieldLabel('tip_diameter', tool.unit);
   if (field === 'taper_angle' && INCLUSIVE_ANGLE_TYPES.has(tool.tool_type)) return 'Included/Inclusive Tip Angle (°)';
+  // Slot/key cutters (aka slitting saws): the flute length IS the kerf (cutter width).
+  if (field === 'flute_length' && tool.tool_type === 'slot/key cutter') {
+    return `${fieldLabel('flute_length', tool.unit)} (Kerf)`;
+  }
   return fieldLabel(field, tool.unit) || field;
 }
 

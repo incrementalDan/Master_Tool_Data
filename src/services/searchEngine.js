@@ -130,9 +130,19 @@ export function applyFilters(tools, activeFilters, machineFilter = null, toleran
 }
 
 function matchesFacet(tool, field, value, tolerances = null) {
+  // Operator filters ({ value, op }) are always single-valued (the numeric dial).
   if (isOperatorFilter(value)) {
     return matchesNumericFacet(tool[field], value, tolerances?.[field] ?? null);
   }
+  // Any facet may hold an array of selected values (multi-select chips) — OR them.
+  if (Array.isArray(value)) {
+    return value.some(v => matchesFacetSingle(tool, field, v, tolerances));
+  }
+  return matchesFacetSingle(tool, field, value, tolerances);
+}
+
+// Match a tool against a single bare facet value for `field`.
+function matchesFacetSingle(tool, field, value, tolerances = null) {
   if (field === 'tags') {
     return Array.isArray(tool.tags) && tool.tags.includes(value);
   }
@@ -140,9 +150,7 @@ function matchesFacet(tool, field, value, tolerances = null) {
     return Array.isArray(tool.material_suitability) && tool.material_suitability.includes(value);
   }
   if (field === 'flute_design') {
-    // value is an array of selected designs (OR semantics); tool field is a string
-    const filterValues = Array.isArray(value) ? value : [value];
-    return filterValues.some(v => String(v).toLowerCase() === String(tool.flute_design || '').toLowerCase());
+    return String(value).toLowerCase() === String(tool.flute_design || '').toLowerCase();
   }
   // Numeric exact or close match (bare-value path — e.g. chip-selected small option sets)
   if (['diameter', 'flute_length', 'overall_length', 'number_of_flutes', 'corner_radius'].includes(field)) {
