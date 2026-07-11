@@ -16,10 +16,10 @@
 | G2 | 🔴 Consistency — ✅ **FIXED** | `deleteTool` ignored the shop-wide `integrations.fusion.enabled === false` mode — it round-tripped APS (and deleted Fusion entries) while "Fusion sync is off" | `toolActions.js` |
 | G3 | 🟠 Data loss (silent) — ✅ **FIXED** | `saveFullLibrary` with Google Drive not connected silently dropped every no-Fusion tool's data (metadata write skipped, but the tool re-materialized in memory and looked saved) | `libraryOps.js` |
 | G4 | 🟠 Data loss (silent) — ✅ **FIXED** | `assignToolIds` / `renumberAllToolIds` / `renumberLibrary` counted no-Fusion tools as assigned even when Drive is disconnected — their new IDs/numbers existed only in memory and vanished on reload | `libraryOps.js` |
-| G5 | 🟡 Staleness | O1 violation: the flat speed/feed mirror is not recomputed from preset 0 on the no-Fusion write path (self-heals on reload, stale in memory until then) | `toolActions.js` |
-| G6 | 🟡 Doc contradiction | `normalizeLibrary`'s "conflict tools' raw entries left untouched" claim conflicts with `saveFullLibrary`'s full-replace semantics — verify conflict tools' Fusion entries actually survive a normalize | `libraryOps.js`, `combine.js` |
-| G7 | 🟡 Edge | `detachToolFromFusion` / `promoteToolToFusion` edge cases: no default library, Drive-token expiry mid-two-step detach (Fusion entries already deleted, metadata write fails → tool state inconsistent until retry) | `toolActions.js` |
-| G8 | ⚪ Doc drift | CLAUDE.md "Orphaned metadata is harmless but **permanent** — no prune exists" is no longer true (`saveFullLibrary` prunes by whole-file replace); update the doc + decide if pruning dormant orphans is wanted | CLAUDE.md |
+| G5 | 🟡 Staleness — ✅ **FIXED** | O1 violation: the flat speed/feed mirror was not recomputed from preset 0 on the no-Fusion write path (self-healed on reload, stale in memory until then) | `toolActions.js`, `logicalTools.js` |
+| G6 | 🟠 Data loss (confirmed) — ✅ **FIXED** | `normalizeLibrary`'s "conflict tools' raw entries left untouched" claim was FALSE — `saveFullLibrary`'s full-replace **deleted** conflict tools' Fusion entries during migration whenever their library also held a clean tool | `libraryOps.js` |
+| G7 | 🟡 Edge — ✅ **FIXED** | `detachToolFromFusion` two-step ordering (a metadata-write failure after Fusion removal could turn the tool into an invisible dormant orphan) + no-library guard + Fusion-off guard | `toolActions.js` |
+| G8 | ⚪ Doc drift — ✅ **FIXED** | CLAUDE.md "Orphaned metadata is never pruned" was false; updated in the G1 commit to state bulk saves merge-by-id and never prune | CLAUDE.md |
 
 ---
 
@@ -108,7 +108,9 @@ Pick one consistently (recommend a):
 
 ---
 
-## G5 — O1 (flat mirror = derived cache of preset 0) not enforced on the no-Fusion write path 🟡
+## G5 — O1 (flat mirror = derived cache of preset 0) not enforced on the no-Fusion write path 🟡 ✅ FIXED
+
+> **Fixed 2026-07-11.** Extracted the 9-field mirror recompute into a shared pure helper `presetZeroMirror(presets)` (`logicalTools.js`, re-exported via the schema barrel). It returns `{}` when there are no presets, so it never nulls flat values on a preset-less tool (e.g. one whose speeds/feeds came straight from a ProShop row). `buildUnlinkedTool` now uses it (load path), and the no-Fusion branch of `writeLogicalTool` spreads it into the written tool (save path). The linked path and `mergeTool`'s existing ad-hoc mirror block were left untouched (their `?? updated.x` keep-semantics differ intentionally; not worth changing the byte-for-byte linked path). Regression test in `toolActions.test.js`.
 
 **Where:** `toolActions.js` `writeLogicalTool` unlinked branch (~line 123–143). It writes `{ ...tool }` metadata without recomputing `spindle_speed`/`cutting_feedrate`/… from `presets[0]`. `PHASE_A_TOOL_RECORD_SCHEMA.md` §4d says the mirror is "always recomputed from preset 0 on write, never independently editable."
 
@@ -124,7 +126,11 @@ Pick one consistently (recommend a):
 
 ---
 
-## G6 — Verify: do conflict tools' Fusion entries actually survive `normalizeLibrary`? 🟡
+## G6 — Conflict tools' Fusion entries deleted by `normalizeLibrary` 🟠 ✅ FIXED (upgraded from 🟡)
+
+> **Confirmed a real data-loss bug, then fixed (2026-07-11).** A regression test proved it: with a clean tracked tool + a conflict pair (two tracked entries sharing a `product-id`, differing on a scalar) in one library, `normalizeLibrary` uploaded a library missing the conflict pair's entries — because `saveFullLibrary` full-replaces each represented library and conflict tools are held back from the passed set. **Fix:** `saveFullLibrary` gained an `extraRawByLibrary` option (Map libraryId → raw entries) that appends those entries **verbatim** (not re-split) to each library's upload and includes them in the in-memory rebuild; `normalizeLibrary` passes the conflict tools' `_instancesRaw` through it. The conflict pair now survives in Fusion and is re-flagged for reconcile on the next load. Other `saveFullLibrary` callers pass nothing → no behavior change. Test verified to fail without the fix. *(The metadata half of this loss was already covered by G1's merge-by-id.)*
+
+**Original investigation note (kept for context):**
 
 **Where:** `libraryOps.js:597–606`. The comment says conflict tools' "raw entries [are left] untouched in the library so nothing is destroyed" — but `saveFullLibrary` **full-replaces each represented library** with the instances of the tools passed, and `conflictTools` are excluded from that set. If a conflict tool's raw entries live in a library that IS represented by `cleanTools` (the normal case — same file), the full-replace upload would drop them.
 
@@ -132,7 +138,9 @@ Pick one consistently (recommend a):
 
 ---
 
-## G7 — Promote/detach edge hardening 🟡
+## G7 — Promote/detach edge hardening 🟡 ✅ FIXED
+
+> **Fixed 2026-07-11.** (1) **Reordered detach to metadata-first:** `detachToolFromFusion` now writes the no-Fusion metadata mark *before* removing the Fusion entries. On analysis this is strictly safer than the original order — if the second step fails, the tool is already marked no-Fusion, so a reload shows it (as no-Fusion, or linked again from the still-present entries); it never becomes an invisible dormant orphan (no Fusion entries + unmarked metadata), which the original order risked on a metadata-write failure. In-memory state updates only after both steps succeed, so a failure leaves the tool linked and detach is safely re-runnable. (2) **No-library guard (G7.2):** the Fusion-removal step is skipped when there is no library to target. (3) **Fusion-off guard (G7.3):** added in the G2 commit. Two regression tests (the existing detach test still passes under the new order; a new no-library test). The original text below stands as the analysis record.
 
 **Where:** `toolActions.js` `promoteToolToFusion` / `detachToolFromFusion` (~758–819).
 
@@ -154,11 +162,11 @@ CLAUDE.md ("Key Constraints → Orphaned metadata is harmless but permanent — 
 
 - ✅ Phase A complete record: `buildMetadataTool` persists all §4a/4b scalars + full `presets[]`; `mergeFusionAndMetadata` reads them back Fusion-wins (`?? meta` fallbacks) — matches Increment 1/2 exactly.
 - ✅ B1/B2: `buildUnlinkedTool` / `isUnlinkedMeta` orphan-ghost guard / `materializeUnlinkedTools` triple guard — as documented.
-- ✅ B3: `writeLogicalTool` early metadata-only branch, Drive required, `library_id` nulled; `saveFullLibrary` partitions no-Fusion tools out of the Fusion writes (placeholder-minting retired). *(But see G1/G3 for the metadata half of that partition.)*
-- ✅ B4a: promote/detach exist and mint/clear instance guids as documented *(see G7 edges)*.
-- ✅ B4b-1: `writeLogicalTool` honors `fusionDisabled`; `buildUnlinkedTool` preserves `no_fusion_link: false` so re-enable doesn't spuriously detach. *(But `deleteTool` was missed — G2.)*
-- ✅ B5a/B5b + write-time net (D3): `detectFusionDrift` scans every instance; the three 3-way merges (`mergePresetsWithFusion`, `mergeSharedFieldsWithFusion`, `mergeInstanceFieldsWithFusion`) adopt Fusion-only changes and accumulate both-edited conflicts; `writeLogicalTool` toasts + re-attaches scalar conflicts to `_drift`; a clean save clears `_drift`. Matches the doc's description.
-- ✅ ID-system membership: bulk ops process no-Fusion tools and skip only excluded ones *(see G4 for the Drive-disconnected hole)*.
+- ✅ B3: `writeLogicalTool` early metadata-only branch, Drive required, `library_id` nulled; `saveFullLibrary` partitions no-Fusion tools out of the Fusion writes (placeholder-minting retired). *(The metadata half — G1/G3 — is now fixed: merge-by-id via the toolStore seam + a Drive-required guard.)*
+- ✅ B4a: promote/detach exist and mint/clear instance guids as documented *(the G7 edges — detach ordering, no-library, Fusion-off — are now fixed)*.
+- ✅ B4b-1: `writeLogicalTool` honors `fusionDisabled`; `buildUnlinkedTool` preserves `no_fusion_link: false` so re-enable doesn't spuriously detach. *(The missed `deleteTool` case — G2 — is now fixed.)*
+- ✅ B5a/B5b + write-time net (D3): `detectFusionDrift` scans every instance; the three 3-way merges (`mergePresetsWithFusion`, `mergeSharedFieldsWithFusion`, `mergeInstanceFieldsWithFusion`) adopt Fusion-only changes and accumulate both-edited conflicts; `writeLogicalTool` toasts (conflicts AND now adopted) + re-attaches scalar conflicts and preset/OOH/holder info rows to `_drift`; a clean save clears `_drift`. Matches the doc's description.
+- ✅ ID-system membership: bulk ops process no-Fusion tools and skip only excluded ones *(the Drive-disconnected hole — G4 — is now fixed)*.
 - ✅ F1–F6 fixes from the audit are present in code (`derivePairings` fill-only re-link, asm-stamp skip, component-row intercept via `existingCompByNum`, ComponentPicker duplicate guard, preset-copy clears `job_ids`, `persistJobsNow`).
 - ⏳ B4b-2 (never-connect-Autodesk gate) confirmed still deferred — `App.jsx` gates unchanged. This remains the biggest UX gap for a truly Fusion-optional shop.
 
@@ -166,14 +174,20 @@ CLAUDE.md ("Key Constraints → Orphaned metadata is harmless but permanent — 
 
 ## Suggestions (workflow / data structure / user clarity) — not bugs, prioritized
 
-1. **Make "Fusion off / no-Fusion" state visible at the library level.** Today the "Not in Fusion" pill is per-card and the Fusion-off note is per-tool. Add one persistent topbar chip when `integrations.fusion.enabled === false` ("Fusion sync off") — the G2 class of confusion ("why did/didn't this touch Fusion?") is much cheaper to prevent with an always-visible mode indicator. Cheap: a small badge in `TopBar` reading `fusionEnabled` from context.
-2. **Drift for presets in the DriftBanner.** The write-time merge records preset conflicts only as a toast; toasts expire. Extend `_drift` to carry `{kind:'preset'}` rows rendered as a non-actionable "Fusion also changed preset X — open Sync Job to review" line, so the D3 promise ("nothing silent") survives the 8-second toast.
-3. **Formalize the repository seam before SQLite.** The G1 class of bug exists because callers hand-assemble whole-file writes. Introduce one module (`src/services/toolStore.js`) exposing `upsertMany(metaList)` / `deleteById(id)` / `loadAll()` — implemented today on Drive JSON, later on SQLite — and forbid direct `saveAllMetadata` calls outside it. This is the same seam the schema doc's §11 calls for; doing it now makes the SQLite swap mechanical and prevents future whole-file-replace bugs.
-4. **`updated_at` conflict stamp for multi-device.** All shared Drive files are last-writer-wins whole files. Before SQLite, a cheap safety: store the file's Drive `modifiedTime` at load and warn on save if it changed ("someone else saved metadata since you loaded — reload first"). Only worth it if two people actually edit concurrently today.
-5. **Promote flow: pick the target library.** `promoteToolToFusion` silently uses the default library. With multi-library shops, offer the same target-library picker AddToolFlow already has.
-6. **Retire `no_fusion_link` naming toward `is_linked`** (schema doc §5 says the flag retires after Phase B). Not urgent, but every new call site added around a *negative* flag (`!t.no_fusion_link`) is a future misread; when the SQLite swap lands, flip to the positive `is_linked` derived property in one pass.
-7. **UX: "IDs out of date" nudge** (already in TODO) — after assigning/normalizing locations in `location` ID mode, show a dismissible banner on Settings/Library: "N tools have locations newer than their Tool IDs — run Re-number." The two-step Location→ID flow is currently easy to miss.
-8. **UX: DriftBanner bulk actions.** With many drift fields, per-field radios get tedious — add "Keep all Fusion" / "Keep all app" buttons above the field list.
+**Status (2026-07-11):** #1, #2, #5, #7 implemented this session; #8 was already present in `DriftBanner`. #3, #4, #6 are the remaining architectural/infra items — see the note after the list for why they're sequenced separately.
+
+1. ✅ **DONE** — **Make "Fusion off / no-Fusion" state visible at the library level.** Today the "Not in Fusion" pill is per-card and the Fusion-off note is per-tool. Add one persistent topbar chip when `integrations.fusion.enabled === false` ("Fusion sync off") — the G2 class of confusion ("why did/didn't this touch Fusion?") is much cheaper to prevent with an always-visible mode indicator. Cheap: a small badge in `TopBar` reading `fusionEnabled` from context.
+2. ✅ **DONE** — **Drift for presets in the DriftBanner.** `_drift` now carries `{kind}` info rows (preset/OOH/holder), rendered non-actionable so both-edited conflicts survive past the toast.
+3. ✅ **DONE** — **Formalize the repository seam before SQLite.** `src/services/toolStore.js` (`loadAll` / `upsertMany` / `upsertOne` / `deleteById`) now fronts every metadata read/write across `libraryOps`, `toolActions`, `attachmentActions`, and `AppContext`. `upsertMany` merges by id (the G1 invariant now lives in the seam, not each caller). Dedicated `toolStore.test.js`; 245 tests + audit + build green; existing tests unchanged (they mock `driveService`, which the seam delegates to). One swap point for SQLite.
+4. ⏳ **PENDING (decided: BLOCK on conflict + notify why).** **`modifiedTime` conflict stamp for multi-device.** Store the metadata file's Drive `modifiedTime` at load; on save, if it changed, **block the write** and notify the user why ("Someone else saved metadata since you loaded — reload to get their changes, then retry"). Owner chose block-not-warn. Touches `driveService` (thread `modifiedTime` through `driveGet`/`loadMetadata` and return it from the write), `toolStore`/`AppContext` (hold the stamp; compare in `upsertMany`/`upsertOne`), and surface a clear toast. Note: `upsertOne`/`deleteById` already re-read before writing and `upsertMany` merges by id, so this is the *last-mile* guard against a same-record concurrent clobber, not the whole safety net.
+5. ✅ **DONE** — **Promote flow: pick the target library.** `promoteToolToFusion(toolId, targetLibraryId)` + a picker modal for multi-library shops.
+6. ⏳ **DEFERRED to the SQLite migration.** **Retire `no_fusion_link` → `is_linked`.** Pure rename of a *persisted* field across ~15 sites for zero functional benefit and nonzero regression risk. The schema doc says flip it "in one pass" at the SQLite swap; doing it in isolation now is cost without payoff. (Owner: "your call" → deferred.)
+7. ✅ **DONE** — **"IDs out of date" nudge** in location ID mode (Settings Tool ID card).
+8. ✅ **DONE (already present)** — **DriftBanner bulk actions** ("Keep all Fusion" / "Keep all app").
+
+### Why #3, #4, #6 are sequenced separately
+
+They're infrastructure/cleanup, not user-facing features: #3 is a persistence-layer refactor (its value is *preventing* future bugs and easing the SQLite swap — worth doing, but as a focused change with its own test pass), #4 needs a product decision (block vs. warn on concurrent edit) and touches the save hot path, and #6 is a risky persisted-field rename with no functional benefit that the schema doc explicitly slots into the SQLite migration. Recommendation: do #3 next as its own change, decide #4's UX then implement, and fold #6 into the SQLite work.
 
 ---
 
@@ -188,3 +202,36 @@ CLAUDE.md ("Key Constraints → Orphaned metadata is harmless but permanent — 
 7. **G8** (doc update) + suggestions as owner-approved follow-ups.
 
 After each: `npm run lint && npm test` and `node scripts/roundtrip-audit.mjs` must stay green; none of these fixes may touch the linked-tool write path's byte-for-byte behavior (the "linked tools = current code path" rule from the decoupling audit).
+
+---
+
+## Future feature — Universal Change Log / Audit Trail (owner idea, 2026-07-11)
+
+**Goal (owner's words, lightly structured):** capture *every* change and event so the shop can see what happened, when, and who did it — across the whole app, not just tools. Two views of the same log:
+
+1. **Scoped, in-context history** — per-tool history in the tool view (this partly exists via `merge_history`), shop settings changes on the Settings page, vendor changes on the Vendors page, materials on the Materials page, programs on the Programs page, and so on for every page.
+2. **A "mega" change log in Settings** — one global feed of everything, filterable by **category** (Tools / Settings / Vendors / Materials / Programs / Jobs / Locations / …).
+
+**What each entry should capture:** the **fields that changed** (old → new), **things added**, **things deleted**, plus **who** and **when**. For a change **pushed in from Fusion** (detected via drift / reconcile / the write-time 3-way merge), the actor is simply **"Fusion"** — we can't know the real person who edited it in Fusion 360.
+
+**Status:** partially implemented today and **not fully working** — `merge_history[]` on tools (Sync Job commits) and the drift/conflict surfaces are the closest existing pieces, but there is no unified event log, no coverage of settings/vendors/materials/programs edits, and no global feed. **Held for later** per the owner; capturing here so it isn't lost.
+
+### Engineering notes for when this is picked up (this IS a big feature — flag scope before building)
+
+- **It's a genuinely large, cross-cutting feature** (touches every write path and every editor page + a new data store + new UI) — treat it as its own project with an explicit scope sign-off, not a quick add. The current `merge_history` is tool-only and merge-only; generalizing it is the bulk of the work.
+- **Sequence it *with or after* the SQLite migration, not before.** An append-only `audit_log` table `(id, at, actor, category, entity_type, entity_id, action ['create'|'update'|'delete'], field, old_value, new_value, source ['app'|'fusion'|'proshop'|'import'])` is the natural shape — one row per changed field. Building this on the current whole-file-JSON Drive storage would mean rewriting a growing log file on every edit (slow, and last-writer-wins would *lose* concurrent log entries — the exact multi-device problem #4 flags). **The repository seam (#3, now built) is the right capture point**: every metadata write already funnels through `toolStore`, and the shared-file writes through `saveSharedFile` — those two seams are where change events can be emitted once, centrally, instead of hand-instrumenting every action.
+- **Actor identity:** app edits already carry `updated_by` (Google account); wire that through as the log actor. Fusion-sourced changes (from `detectFusionDrift` / the write-time `conflicts` accumulator / reconcile) log actor `"Fusion"`. ProShop import logs `"ProShop import"`.
+- **Diffing:** the field-level diff machinery already exists for tools (`detectFusionDrift` / `DRIFT_FIELDS`, the combine `_combineConflicts`) — reuse the same shape (`{field, old, new}`) so the log format is consistent across sources.
+- **Open questions to refine with the owner later:** (a) retention — keep forever, or cap/rotate? (b) do settings/vendor/material edits need per-field granularity or is "X edited the vendor registry" enough? (c) should the global feed be searchable by entity (e.g. "everything that touched tool A-3")? (d) is the actor always the signed-in Google user, or should there be a shop-user concept?
+
+## Future UX — Surface the non-obvious "what just happened" moments (owner ask, 2026-07-11)
+
+The owner's related point: we've worked hard on the *correctness* of sync/conflict handling; the complement is making sure the user can *see* what the app is doing. We already toast most actions, but several behaviors were **silent or non-obvious**. The three highest-value, low-noise ones were implemented (2026-07-11):
+
+- ✅ **DONE** — **Load-time auto-combine** (`combineToolsByToolId`): `loadTools` now counts folded entries per library and shows "Combined N duplicate library entries sharing a Tool #" (only when it actually folded something), so two entries silently becoming one is visible.
+- ✅ **DONE** — **Metadata-only vs. Fusion writes:** `saveTool` now says "Saved (app only — not in Fusion)" for a no-Fusion tool or Fusion-off mode, instead of always implying it reached Fusion.
+- ✅ **DONE** — **Write-time drift adoption:** the "only Fusion changed it → adopt" branch of the 3-way merge is no longer silent — `writeLogicalTool` now toasts "Also pulled in N change(s) made in Fusion since you loaded this tool" (an `adopted` accumulator threaded through all three merge functions, mirroring the existing `conflicts` one). Locked by a test assertion on the geometry-drift case.
+- ⏳ **LEFT for the log** — **Load-time backfills** (`backfillAsmNumbers`, `derivePairings`, `materializeUnlinkedTools`) run invisibly. Toasting each on every load would be noise; these belong in the durable audit log, not a toast.
+- ⏳ **LEFT (minor)** — **Lazy re-sync after location normalize:** the metadata-only write re-syncs to Fusion's vendor field on each tool's next individual save; the user isn't told the Fusion side is briefly behind. Low-stakes; fold into the log.
+
+These overlap heavily with the change-log feature above — the audit trail is the durable version, and these toasts are the in-the-moment version.

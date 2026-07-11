@@ -56,6 +56,43 @@ describe('assignToolIds — includes no-Fusion tools, honors exclusions', () => 
   });
 });
 
+describe('normalizeLibrary preserves conflict tools Fusion entries (G6)', () => {
+  const raw = (guid, comment, productId, desc) => ({
+    guid, type: 'flat end mill', unit: 'inches', description: desc,
+    'product-id': productId, 'post-process': { comment, number: null },
+    geometry: { DC: 0.5, LCF: 1, OAL: 3, NOF: 4, LB: 1 },
+    'start-values': { presets: [] }, expressions: {},
+  });
+
+  it('keeps a conflict pair in the library instead of dropping it on full-replace', async () => {
+    // One clean tracked tool + a conflict pair: two tracked entries sharing a
+    // product-id but with different descriptions (a same-tool_id duplicate).
+    const rawA = raw('gA', 'FTL-CLEAN', 'CLEAN-1', 'Clean A');
+    const rawB = raw('gB', 'FTL-B', 'DUP-1', 'Desc B');
+    const rawC = raw('gC', 'FTL-C', 'DUP-1', 'Desc C');
+    let uploaded = null;
+    const ctx = makeCtx({
+      downloadAllLibraries: vi.fn(async () => [
+        { libraryId: 'lib-1', library: { fileName: 'main.json' }, list: [rawA, rawB, rawC] },
+      ]),
+      uploadFusionList: vi.fn(async (_id, list) => { uploaded = list; }),
+      shopSettingsRef: { current: {
+        tool_id_system: { mode: 'sequential', start: 1000, skip: [], digits: 4 },
+        machine_number: { start: 30, skip: [] }, location_config: { systems: [] },
+        tool_libraries: [{ id: 'lib-1', fileName: 'main.json' }], default_tool_library_id: 'lib-1',
+      } },
+    });
+    loadMetadata.mockResolvedValue([]);
+    const { normalizeLibrary } = createLibraryOps(ctx);
+    await normalizeLibrary();
+
+    // The conflict pair's raw entries must survive in the uploaded library.
+    const guids = new Set(uploaded.map(f => f.guid));
+    expect(guids.has('gB')).toBe(true);
+    expect(guids.has('gC')).toBe(true);
+  });
+});
+
 describe('Drive-required guards for no-Fusion tools (G3/G4)', () => {
   it('saveFullLibrary refuses when a no-Fusion tool is present and Drive is off (G3)', async () => {
     const ctx = makeCtx({ googleRef: { current: false } });

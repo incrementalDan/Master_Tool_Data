@@ -10,6 +10,7 @@
 // dispatch/notify/IO + the render-synced refs and return plain async actions.
 import { createContext, useContext, useReducer, useCallback, useEffect, useMemo, useRef } from 'react';
 import * as driveService from '../services/driveService.js';
+import * as toolStore from '../services/toolStore.js';
 import * as aps from '../services/apsService.js';
 import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeUnlinkedTools, buildUnlinkedTool } from '../schema/toolSchema.js';
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
@@ -649,7 +650,7 @@ export function AppProvider({ children }) {
             .catch(e => { if (e.code === 'TOKEN_EXPIRED') throw e; return def; });
         try {
           const [meta, materials, vendorRegistry, shopSettings, jobs, components] = await Promise.all([
-            driveService.loadMetadata(),
+            toolStore.loadAll(),
             sharedSafe('materials', DEFAULT_MATERIALS),
             sharedSafe('vendorRegistry', DEFAULT_VENDOR_REGISTRY),
             sharedSafe('shopSettings', DEFAULT_SHOP_SETTINGS),
@@ -730,6 +731,7 @@ export function AppProvider({ children }) {
       const locSystems = effectiveShop.location_config?.systems || [];
       const tools = [];
       let untrackedCount = 0;
+      let combinedFoldCount = 0;   // duplicate library entries silently folded on load
       for (const lib of toolLibs) {
         const fusionList = await downloadFusionList(lib.id);
         const { groups, untracked } = groupByTrackingId(fusionList);
@@ -738,6 +740,7 @@ export function AppProvider({ children }) {
         for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
         untrackedCount += untracked.length;
         const combined = combineToolsByToolId(built);
+        combinedFoldCount += built.length - combined.length;
         for (const t of combined) {
           let extra = {};
           if (t.tool_location) {
@@ -792,6 +795,12 @@ export function AppProvider({ children }) {
       const finalTools = backfillAsmNumbers(pairedTools, effectiveShop, componentsFile);
 
       dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize, normalizeCount: untrackedCount });
+      // Surface the otherwise-invisible load-time auto-combine: entries sharing a
+      // ProShop number are folded into one logical tool, so the user doesn't
+      // silently "lose" rows. Only when it actually folded something.
+      if (combinedFoldCount > 0) {
+        notify(`Combined ${combinedFoldCount} duplicate librar${combinedFoldCount === 1 ? 'y entry' : 'y entries'} sharing a Tool #`, 'info', 5000);
+      }
       // Load every holder library alongside tools (non-critical — failure of one
       // won't block). loadHolders tags each holder with its source library. Pass
       // the resolved registry explicitly — the SET_LIBRARIES dispatch above hasn't

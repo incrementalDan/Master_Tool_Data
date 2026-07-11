@@ -143,7 +143,7 @@ function presetSpeedFeedChanged(a, b) {
   return false;
 }
 
-export function mergePresetsWithFusion(localPresets, basePresets, remotePresets, conflicts = null) {
+export function mergePresetsWithFusion(localPresets, basePresets, remotePresets, conflicts = null, adopted = null) {
   if (!localPresets?.length) return localPresets;
   const baseByGuid = new Map((basePresets || []).map(p => [p.guid, p]));
   const remoteByGuid = new Map((remotePresets || []).map(p => [p.guid, p]));
@@ -156,6 +156,7 @@ export function mergePresetsWithFusion(localPresets, basePresets, remotePresets,
     if (fusionChanged && !appChanged) {
       // Fusion edited this preset, the app didn't → adopt Fusion's values +
       // expressions (no wipe); keep the app-only overlay fields.
+      if (adopted) adopted.push({ kind: 'preset', label: local.name || local.guid });
       return {
         ...remote,
         operation_type: local.operation_type ?? null,
@@ -183,7 +184,7 @@ function oohEqual(a, b) {
   return Math.abs(Number(a) - Number(b)) < 5e-6;
 }
 
-export function mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws, conflicts = null) {
+export function mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws, conflicts = null, adopted = null) {
   const baseByGuid = new Map((baseRaws || []).map(r => [r.guid, r]));
   const remoteByGuid = new Map((remoteRaws || []).map(r => [r.guid, r]));
   let changed = false;
@@ -195,8 +196,10 @@ export function mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws, 
     const baseOoh = readOohFromFusion(base);
     const remoteOoh = readOohFromFusion(remote);
     if (!oohEqual(remoteOoh, baseOoh)) {
-      if (oohEqual(a.ooh, baseOoh)) patch.ooh = remoteOoh;                 // only Fusion changed → adopt
-      else if (conflicts) conflicts.push({ kind: 'ooh', assembly: a.holder_description || a.assembly_id });
+      if (oohEqual(a.ooh, baseOoh)) {                                      // only Fusion changed → adopt
+        patch.ooh = remoteOoh;
+        if (adopted) adopted.push({ kind: 'ooh', label: a.holder_description || a.assembly_id });
+      } else if (conflicts) conflicts.push({ kind: 'ooh', assembly: a.holder_description || a.assembly_id });
     }
     const baseHolder = base.holder?.guid || null;
     const remoteHolder = remote.holder?.guid || null;
@@ -204,6 +207,7 @@ export function mergeInstanceFieldsWithFusion(assemblies, baseRaws, remoteRaws, 
       if ((a.holder_guid || null) === baseHolder) {                       // only Fusion changed → adopt
         patch.holder_guid = remoteHolder;
         patch.holder_description = remote.holder?.description || '';
+        if (adopted) adopted.push({ kind: 'holder', label: a.holder_description || a.assembly_id });
       } else if (conflicts) conflicts.push({ kind: 'holder', assembly: a.holder_description || a.assembly_id });
     }
     if (Object.keys(patch).length) { changed = true; return { ...a, ...patch }; }
@@ -243,6 +247,29 @@ function emptyFusionInternal() {
   };
 }
 
+// The flat speed/feed fields on a tool are a DERIVED cache of preset 0 (O1 in
+// PHASE_A_TOOL_RECORD_SCHEMA.md) — never an independent editable source. This is
+// the single point of that derivation, so it can't drift between the places that
+// recompute it (buildUnlinkedTool at load, the no-Fusion write path on save).
+// Returns the 9 mirror fields from preset 0, or {} when there are no presets (so
+// spreading it never nulls out flat values on a preset-less tool, e.g. one whose
+// speeds/feeds came straight from a ProShop row).
+export function presetZeroMirror(presets) {
+  const p0 = presets?.[0];
+  if (!p0) return {};
+  return {
+    spindle_speed: p0.n ?? null,
+    cutting_feedrate: p0.v_f ?? null,
+    plunge_feedrate: p0.v_f_plunge ?? null,
+    ramp_feedrate: p0.v_f_ramp ?? null,
+    lead_in_feedrate: p0.v_f_leadIn ?? null,
+    lead_out_feedrate: p0.v_f_leadOut ?? null,
+    feed_per_tooth: p0.f_z ?? null,
+    feed_per_rev: p0.f_n ?? null,
+    cutting_speed: p0.v_c ?? null,
+  };
+}
+
 // Build a complete logical tool from metadata ALONE — no Fusion instance.
 // Metadata is authoritative for every field. Mirrors buildLogicalTool's output
 // shape so the rest of the app treats it identically, except _instancesRaw is
@@ -251,7 +278,6 @@ function emptyFusionInternal() {
 export function buildUnlinkedTool(meta) {
   const merged = mergeFusionAndMetadata(emptyFusionInternal(), meta);
   const presets = overlayPresets(meta?.presets || [], meta?.preset_meta || {});
-  const p0 = presets[0] || {};
 
   const assemblies = (meta?.assemblies || []).map(a => ({
     assembly_id: a.assembly_id || generateAssemblyId(),
@@ -277,16 +303,8 @@ export function buildUnlinkedTool(meta) {
     id: meta.id,
     tracking_id: meta.id,
     // Flat speed/feed mirror = derived cache of preset 0 (O1). No Fusion side to
-    // read them from, so recompute from the primary preset.
-    spindle_speed: p0.n ?? null,
-    cutting_feedrate: p0.v_f ?? null,
-    plunge_feedrate: p0.v_f_plunge ?? null,
-    ramp_feedrate: p0.v_f_ramp ?? null,
-    lead_in_feedrate: p0.v_f_leadIn ?? null,
-    lead_out_feedrate: p0.v_f_leadOut ?? null,
-    feed_per_tooth: p0.f_z ?? null,
-    feed_per_rev: p0.f_n ?? null,
-    cutting_speed: p0.v_c ?? null,
+    // read them from, so recompute from the primary preset (shared helper).
+    ...presetZeroMirror(presets),
     presets,
     assemblies,
     machine_tool_number: (meta?.machine_tool_number ?? null) === null ? null : Number(meta.machine_tool_number),

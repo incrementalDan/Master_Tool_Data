@@ -3,12 +3,12 @@
 // assign/normalize, reconcile-on-open). Created once by AppProvider via
 // createToolActions(ctx) — ctx supplies dispatch, notify, the per-library IO
 // helpers, and the render-synced refs, so these functions never see stale state.
-import * as driveService from '../services/driveService.js';
+import * as toolStore from '../services/toolStore.js';
 import {
   validateTool, generateId, generateAssemblyId, generateTrackingId,
   splitToFusionInstances, buildMetadataTool, mergePresetsWithFusion,
   mergeSharedFieldsWithFusion, mergeInstanceFieldsWithFusion, fusionToolToInternal,
-  readTrackingId, readOohFromFusion,
+  readTrackingId, readOohFromFusion, presetZeroMirror,
   getNextMachineNumber, combineToolsByToolId,
 } from '../schema/toolSchema.js';
 import { composeAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
@@ -124,6 +124,10 @@ export function createToolActions(ctx) {
       const toWrite = {
         ...tool, tracking_id, library_id: null, library_name: null,
         assemblies, ...locExtra,
+        // Keep the flat speed/feed mirror = preset 0 (O1) — it isn't stored in
+        // metadata, so a stale in-memory value would otherwise linger on cards /
+        // search / ProShop export until the next reload rebuilds it.
+        ...presetZeroMirror(tool.presets),
         // Preserve the tool's own intent: a per-tool no-Fusion tool stays marked;
         // a formerly-linked tool saved only because Fusion is disabled keeps its
         // flag (false), so re-enabling Fusion doesn't spuriously detach it.
@@ -134,7 +138,7 @@ export function createToolActions(ctx) {
         throw new Error('Connect Google Drive to save (metadata is the tool\'s store when it is not in Fusion)');
       }
       try {
-        await driveService.upsertMetadata(buildMetadataTool({ ...toWrite, tracking_id }));
+        await toolStore.upsertOne(buildMetadataTool({ ...toWrite, tracking_id }));
       } catch (err) {
         if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
         throw err;
@@ -161,15 +165,18 @@ export function createToolActions(ctx) {
     // but we NEVER take Fusion's change silently — the conflicts are surfaced as a
     // toast and, for shared scalar fields, attached to the tool's _drift so the
     // DriftBanner offers a one-click restore of Fusion's value (D3).
+    // `adopted` collects the "only Fusion changed it → adopt" cases so the save can
+    // tell the user it quietly pulled in an edit made in Fusion (not just conflicts).
     const conflicts = [];
+    const adopted = [];
     const remotePresets = refreshedRaws?.[0]?.['start-values']?.presets || [];
-    const mergedPresets = mergePresetsWithFusion(tool.presets, basePresets, remotePresets, conflicts);
+    const mergedPresets = mergePresetsWithFusion(tool.presets, basePresets, remotePresets, conflicts, adopted);
     const baseRaw = tool._instancesRaw?.[0];
     const remoteRaw = refreshedRaws?.[0];
     const sharedMerged = (baseRaw && remoteRaw)
-      ? mergeSharedFieldsWithFusion(tool, fusionToolToInternal(baseRaw), fusionToolToInternal(remoteRaw), conflicts)
+      ? mergeSharedFieldsWithFusion(tool, fusionToolToInternal(baseRaw), fusionToolToInternal(remoteRaw), conflicts, adopted)
       : tool;
-    const mergedAssemblies = mergeInstanceFieldsWithFusion(assemblies, tool._instancesRaw, refreshedRaws, conflicts);
+    const mergedAssemblies = mergeInstanceFieldsWithFusion(assemblies, tool._instancesRaw, refreshedRaws, conflicts, adopted);
 
     // Shared scalar-field conflicts (from mergeSharedFieldsWithFusion) carry a
     // `field` — surface them via the DriftBanner so Fusion's value stays one click
@@ -178,6 +185,15 @@ export function createToolActions(ctx) {
     const fieldConflicts = conflicts
       .filter(c => c.field)
       .map(c => ({ field: c.field, appValue: c.appValue, fusionValue: c.fusionValue }));
+
+    // Non-scalar conflicts (a preset / OOH / holder that BOTH the app and Fusion
+    // changed) can't be a per-field radio, but they must not vanish with the toast
+    // (D3: never silent). Attach them to _drift as non-actionable info rows so the
+    // DriftBanner keeps showing "Fusion also changed preset X — review in Sync Job"
+    // until the next clean save or reload clears it.
+    const infoConflicts = conflicts
+      .filter(c => c.kind)
+      .map(c => ({ kind: c.kind, label: c.preset || c.assembly || '' }));
 
     const toWrite = {
       ...sharedMerged,
@@ -188,7 +204,7 @@ export function createToolActions(ctx) {
       presets: mergedPresets,
       _instancesRaw: refreshedRaws,
       _fusionRaw: refreshedRaws[0] || tool._fusionRaw || null,
-      _drift: fieldConflicts,
+      _drift: [...fieldConflicts, ...infoConflicts],
       ...locExtra,
     };
 
@@ -210,7 +226,7 @@ export function createToolActions(ctx) {
     await uploadFusionList(library_id, next);
     if (googleRef.current) {
       try {
-        await driveService.upsertMetadata(metadataTool);
+        await toolStore.upsertOne(metadataTool);
       } catch (err) {
         if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
         throw err; // Still fail the save so the user knows metadata didn't persist
@@ -231,6 +247,16 @@ export function createToolActions(ctx) {
       );
     }
 
+    // Quietly-adopted Fusion edits (only Fusion changed it, the app didn't) used to
+    // be silent. Tell the user their save pulled them in, so a change appearing
+    // "out of nowhere" is explained. (Conflicts are the louder warning above.)
+    if (adopted.length) {
+      notify(
+        `Also pulled in ${adopted.length} change${adopted.length === 1 ? '' : 's'} made in Fusion since you loaded this tool.`,
+        'info', 6000,
+      );
+    }
+
     return { ...toWrite, _instancesRaw: fusionInstances, _fusionRaw: fusionInstances[0] };
   };
 
@@ -243,7 +269,11 @@ export function createToolActions(ctx) {
       const updated = await writeLogicalTool({ ...tool, updated_at: new Date().toISOString() });
       dispatch({ type: 'UPDATE_TOOL', tool: updated });
       dispatch({ type: 'SAVE_SUCCESS' });
-      notify('Saved to Fusion library', 'success');
+      // Make the destination explicit: a no-Fusion tool (or Fusion-off mode) is
+      // saved to metadata only — say so rather than implying it reached Fusion.
+      const fusionDisabled = shopSettingsRef.current?.integrations?.fusion?.enabled === false;
+      const appOnly = updated.no_fusion_link === true || fusionDisabled;
+      notify(appOnly ? 'Saved (app only — not in Fusion)' : 'Saved to Fusion library', 'success');
       return updated;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
@@ -332,7 +362,7 @@ export function createToolActions(ctx) {
     // Batch metadata write (Drive only — skipped when Google not connected).
     if (googleRef.current && matched.length) {
       try {
-        const metaList = await driveService.loadMetadata();
+        const metaList = await toolStore.loadAll();
         const metaById = new Map(metaList.map(m => [m.id, m]));
         for (const { tool, location } of matched) {
           const key = tool.tracking_id || tool.id;
@@ -344,7 +374,7 @@ export function createToolActions(ctx) {
             : (existing.legacy_locations || []);
           metaById.set(key, { ...existing, location, legacy_locations });
         }
-        await driveService.saveAllMetadata([...metaById.values()]);
+        await toolStore.upsertMany([...metaById.values()]);
       } catch (err) {
         notify(`Saved system but metadata write failed: ${err.message}`, 'error', 7000);
         throw err;
@@ -580,7 +610,7 @@ export function createToolActions(ctx) {
       // reconciled, rather than mutating the Fusion library while sync is off.
       const fusionDisabled = shopSettingsRef.current?.integrations?.fusion?.enabled === false;
       if (tool?.no_fusion_link === true || fusionDisabled) {
-        if (googleRef.current) await driveService.deleteMetadata(tid);
+        if (googleRef.current) await toolStore.deleteById(tid);
         dispatch({ type: 'DELETE_TOOL', id });
         dispatch({ type: 'SAVE_SUCCESS' });
         notify('Tool deleted', 'success');
@@ -599,7 +629,7 @@ export function createToolActions(ctx) {
         remaining = fusionList.filter(f => !guids.has(f.guid));
       }
       await uploadFusionList(library_id, remaining);
-      if (googleRef.current) await driveService.deleteMetadata(tid);
+      if (googleRef.current) await toolStore.deleteById(tid);
       dispatch({ type: 'DELETE_TOOL', id });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify('Tool deleted', 'success');
@@ -765,14 +795,16 @@ export function createToolActions(ctx) {
   // ─── Promote / detach (no-Fusion ↔ Fusion) — Fusion-decoupling Phase B ─────
   // Promote: a no-Fusion tool becomes Fusion-linked. Flip the flag and save — the
   // LINKED writeLogicalTool path mints the Fusion instances and stores their guids.
-  const promoteToolToFusion = async (toolId) => {
+  const promoteToolToFusion = async (toolId, targetLibraryId = null) => {
     const tool = toolsRef.current.find(t => t.id === toolId);
     if (!tool) throw new Error('Tool not found');
     if (!tool.no_fusion_link) return tool; // already linked
     if (shopSettingsRef.current?.integrations?.fusion?.enabled === false) {
       throw new Error('Fusion sync is off — re-enable it in Settings → Fusion Libraries to create this tool in Fusion');
     }
-    const library_id = tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
+    // Destination: the caller's chosen library (multi-library shops), else the
+    // tool's own, else the shop default.
+    const library_id = targetLibraryId || tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
     if (!library_id) throw new Error('Link a Fusion library first (Settings → Fusion Libraries)');
     dispatch({ type: 'SAVE_START' });
     try {
@@ -803,16 +835,14 @@ export function createToolActions(ctx) {
     if (!googleRef.current) throw new Error('Connect Google Drive to detach (the tool becomes metadata-only)');
     dispatch({ type: 'SAVE_START' });
     try {
-      // Remove this tool's entries from its Fusion library (by tracking ID + the
-      // guids of the instances it currently owns).
-      const library_id = tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
-      const fusionList = await downloadFusionList(library_id);
-      const tid = tool.tracking_id || null;
-      const dropGuids = new Set((tool._instancesRaw || []).map(r => r.guid));
-      const remaining = fusionList.filter(f =>
-        !(tid && readTrackingId(f) === tid) && !dropGuids.has(f.guid));
-      await uploadFusionList(library_id, remaining);
-      // Now write metadata-only (writeLogicalTool takes the no_fusion_link branch).
+      // Order matters — write the metadata mark FIRST, then remove the Fusion
+      // entries. If the second step fails, the tool is already marked no-Fusion in
+      // metadata, so a reload shows it (either as no-Fusion, or linked again from
+      // the still-present entries) — it never becomes an invisible dormant orphan
+      // (no Fusion entries + unmarked metadata), which is what the reverse order
+      // risked on a metadata-write failure. In-memory state is only updated after
+      // BOTH steps succeed, so a failure leaves the tool linked and detach is
+      // safely re-runnable. (G7)
       const written = await writeLogicalTool({
         ...tool,
         no_fusion_link: true,
@@ -820,6 +850,20 @@ export function createToolActions(ctx) {
         assemblies: (tool.assemblies || []).map(a => ({ ...a, instance_guid: null })),
         updated_at: new Date().toISOString(),
       });
+
+      // Remove this tool's entries from its Fusion library (by tracking ID + the
+      // guids of the instances it owned). Skip when there's no library to target
+      // (e.g. the tool never had one) — there's nothing to remove. (G7.2)
+      const library_id = tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
+      if (library_id) {
+        const fusionList = await downloadFusionList(library_id);
+        const tid = tool.tracking_id || null;
+        const dropGuids = new Set((tool._instancesRaw || []).map(r => r.guid));
+        const remaining = fusionList.filter(f =>
+          !(tid && readTrackingId(f) === tid) && !dropGuids.has(f.guid));
+        await uploadFusionList(library_id, remaining);
+      }
+
       dispatch({ type: 'UPDATE_TOOL', tool: written });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify('Detached from Fusion — now a no-Fusion tool', 'success');
@@ -840,12 +884,12 @@ export function createToolActions(ctx) {
     const id_system_exclusions = setToolExclusion(tool, system, excluded);
     if (googleRef.current) {
       try {
-        const metaList = await driveService.loadMetadata();
+        const metaList = await toolStore.loadAll();
         const tid = tool.tracking_id || tool.id;
         const idx = metaList.findIndex(m => m.id === tid);
         if (idx >= 0) metaList[idx] = { ...metaList[idx], id_system_exclusions };
         else metaList.push(buildMetadataTool({ ...tool, id_system_exclusions }));
-        await driveService.saveAllMetadata(metaList);
+        await toolStore.upsertMany(metaList);
       } catch (err) {
         if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
         notify(`Could not update membership: ${err.message}`, 'error', 7000);

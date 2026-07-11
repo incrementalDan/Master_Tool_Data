@@ -4,6 +4,7 @@
 **Scope:** (1) audit the insert holder/insert component feature, (2) audit the program/job ↔ tool/preset link feature, (3) a concrete plan for letting tools exist *without* a Fusion entry (the "zero Fusion instances" TODO).
 **Status:** findings + plan. **F1–F6 are FIXED** (F1/F2 with regression tests); **F7 is a deliberate won't-fix** (see below). The Part-3 decoupling plan is **largely built** — Phase A (complete record) and Phase B (no-Fusion tools, promote/detach, Fusion-off toggle, drift review incl. write-time conflict surfacing, ID-system membership) are all implemented; only B4b-2 (never-connect-Autodesk onboarding gate) and the SQLite storage swap remain deferred. See the implementation-status block in `PHASE_A_TOOL_RECORD_SCHEMA.md`.
 **Baseline:** all unit tests pass (234); the round-trip audit runs clean (232 tools, 0 unexpected diffs).
+**Follow-up (2026-07-11):** a later audit of the *shipped* Phase A/B work found and fixed 8 additional issues (G1–G8) — two migration-path data-loss bugs among them — plus implemented the repository seam (`toolStore`) and several UX/visibility improvements. See **`DECOUPLING_FOLLOWUP_FINDINGS.md`** (now at 245 tests, audit 0 diffs). Deferred items from that pass: multi-device block-on-conflict (#4), the `no_fusion_link → is_linked` rename (at SQLite time), and the Universal Change Log feature.
 
 ---
 

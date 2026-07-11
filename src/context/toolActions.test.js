@@ -62,6 +62,20 @@ describe('Phase B increment 3 — no-Fusion write path (metadata only)', () => {
     expect(savedMeta.no_fusion_link).toBe(true);
   });
 
+  it('writeLogicalTool recomputes the flat speed/feed mirror from preset 0 (G5, O1)', async () => {
+    const ctx = makeCtx();
+    const { writeLogicalTool } = createToolActions(ctx);
+    const result = await writeLogicalTool({
+      tracking_id: 'FTL-MIR', tool_type: 'flat end mill', no_fusion_link: true,
+      spindle_speed: 8000, cutting_feedrate: 50,          // STALE flat values
+      presets: [{ guid: 'p0', name: 'Rough', n: 12000, v_f: 90 }],
+      assemblies: [{ assembly_id: 'a1', ooh: 1 }],
+    });
+    // Flat mirror follows preset 0, not the stale values passed in.
+    expect(result.spindle_speed).toBe(12000);
+    expect(result.cutting_feedrate).toBe(90);
+  });
+
   it('writeLogicalTool refuses a no-Fusion save when Drive is not connected', async () => {
     const ctx = makeCtx({ googleRef: { current: false } });
     const { writeLogicalTool } = createToolActions(ctx);
@@ -192,6 +206,10 @@ describe('writeLogicalTool does not wipe a concurrent Fusion geometry edit', () 
     const written = await writeLogicalTool(tool);
     expect(uploaded[0].geometry.LCF).toBe(1.25);   // Fusion's edit survived the save
     expect(written.flute_length).toBe(1.25);       // and the in-memory tool reflects it
+    // The adopt is no longer silent — the user is told a Fusion change was pulled in.
+    expect(ctx.notify).toHaveBeenCalledWith(
+      expect.stringMatching(/pulled in 1 change/i), 'info', expect.anything(),
+    );
   });
 });
 
@@ -231,6 +249,24 @@ describe('Phase B increment 4 — promote / detach', () => {
     expect(result.library_id).toBe('lib-1');
   });
 
+  it('promoteToolToFusion routes to the chosen target library (#5)', async () => {
+    const tool = { id: 'FTL-P3', tracking_id: 'FTL-P3', tool_type: 'drill', no_fusion_link: true,
+      unit: 'inches', assemblies: [{ assembly_id: 'a1', ooh: 1.0 }] };
+    const ctx = makeIoCtx({
+      toolsRef: { current: [tool] },
+      shopSettingsRef: { current: {
+        assembly_id_system: { mode: 'auto' }, tool_id_system: {}, location_config: { systems: [] },
+        tool_libraries: [{ id: 'lib-1', fileName: 'a.json' }, { id: 'lib-2', fileName: 'b.json' }],
+        default_tool_library_id: 'lib-1',
+      } },
+    });
+    const { promoteToolToFusion } = createToolActions(ctx);
+    const result = await promoteToolToFusion('FTL-P3', 'lib-2');   // pick the non-default library
+    const [libId] = ctx.uploadFusionList.mock.calls[0];
+    expect(libId).toBe('lib-2');
+    expect(result.library_id).toBe('lib-2');
+  });
+
   it('promoteToolToFusion refuses when no Fusion library is linked', async () => {
     const tool = { id: 'FTL-P2', tracking_id: 'FTL-P2', no_fusion_link: true, assemblies: [{ assembly_id: 'a', ooh: 1 }] };
     const ctx = makeIoCtx({
@@ -267,5 +303,26 @@ describe('Phase B increment 4 — promote / detach', () => {
     expect(result.no_fusion_link).toBe(true);
     expect(result.library_id).toBeNull();
     expect(result.assemblies[0].instance_guid).toBeNull();
+  });
+
+  it('detachToolFromFusion with no library skips Fusion IO but still detaches (G7.2)', async () => {
+    const tool = {
+      id: 'FTL-D2', tracking_id: 'FTL-D2', tool_type: 'drill', no_fusion_link: false,
+      library_id: null, unit: 'inches', assemblies: [{ assembly_id: 'a1', instance_guid: null, ooh: 1 }],
+      _instancesRaw: [],
+    };
+    const ctx = makeIoCtx({
+      toolsRef: { current: [tool] },
+      // No default library either — nothing to target.
+      shopSettingsRef: { current: { assembly_id_system: { mode: 'auto' }, tool_id_system: {}, location_config: { systems: [] }, tool_libraries: [] } },
+      downloadFusionList: vi.fn(() => { throw new Error('must not download when there is no library'); }),
+      uploadFusionList: vi.fn(() => { throw new Error('must not upload when there is no library'); }),
+    });
+    const { detachToolFromFusion } = createToolActions(ctx);
+    const result = await detachToolFromFusion('FTL-D2');
+    expect(ctx.downloadFusionList).not.toHaveBeenCalled();
+    expect(ctx.uploadFusionList).not.toHaveBeenCalled();
+    expect(upsertMetadata).toHaveBeenCalledOnce();   // metadata mark still written
+    expect(result.no_fusion_link).toBe(true);
   });
 });
