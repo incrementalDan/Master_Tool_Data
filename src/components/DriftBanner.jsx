@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import { fieldLabel } from '../schema/fieldRegistry.js';
+
+const INFO_KIND_LABEL = { preset: 'preset', ooh: 'assembly stick-out', holder: 'assembly holder' };
 
 // D3 — Fusion drift review. When a linked tool's live Fusion values differ from
 // the app's stored copy (someone edited the tool directly in Fusion 360), this
@@ -22,15 +24,24 @@ function fmt(v) {
 
 export default function DriftBanner({ tool, authority = 'fusion', isSaving, onApply }) {
   const drift = tool._drift || [];
+  // Scalar field rows are resolvable per-field (Keep Fusion / Keep app). Info rows
+  // (preset / OOH / holder that both sides changed) are non-actionable here —
+  // they're surfaced so the both-edited conflict doesn't vanish with the toast, and
+  // are resolved in Sync Job (#2).
+  const fieldDrift = drift.filter(d => d.field);
+  const infoDrift = drift.filter(d => d.kind && !d.field);
   const [open, setOpen] = useState(false);
   const [res, setRes] = useState(
-    () => Object.fromEntries(drift.map(d => [d.field, authority === 'app' ? 'app' : 'fusion'])),
+    () => Object.fromEntries(fieldDrift.map(d => [d.field, authority === 'app' ? 'app' : 'fusion'])),
   );
 
   if (drift.length === 0) return null;
 
-  const setAll = (choice) => setRes(Object.fromEntries(drift.map(d => [d.field, choice])));
+  const setAll = (choice) => setRes(Object.fromEntries(fieldDrift.map(d => [d.field, choice])));
   const unit = tool.unit;
+  const headerLabel = fieldDrift.length > 0
+    ? `Differs from Fusion in ${fieldDrift.length} field${fieldDrift.length !== 1 ? 's' : ''}`
+    : `Fusion also changed ${infoDrift.length} value${infoDrift.length !== 1 ? 's' : ''} you edited`;
 
   return (
     <div className="drift-banner" style={{
@@ -45,7 +56,7 @@ export default function DriftBanner({ tool, authority = 'fusion', isSaving, onAp
       >
         <AlertTriangle size={15} style={{ color: 'var(--orange)', flexShrink: 0 }} />
         <span className="panel-header-title" style={{ color: 'var(--text)' }}>
-          Differs from Fusion in {drift.length} field{drift.length !== 1 ? 's' : ''}
+          {headerLabel}
           <span className="text-sub" style={{ fontWeight: 400, marginLeft: 6, fontSize: 12 }}>
             — someone edited this tool in Fusion. Review before it syncs.
           </span>
@@ -55,32 +66,51 @@ export default function DriftBanner({ tool, authority = 'fusion', isSaving, onAp
 
       {open && (
         <div className="panel-body" style={{ paddingTop: 4 }}>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => setAll('fusion')}>Keep all Fusion</button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setAll('app')}>Keep all app</button>
-          </div>
+          {fieldDrift.length > 0 && (
+            <>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                <button className="btn btn-ghost btn-sm" onClick={() => setAll('fusion')}>Keep all Fusion</button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setAll('app')}>Keep all app</button>
+              </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '6px 14px', alignItems: 'center' }}>
-            <div className="text-xs text-sub" style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Field</div>
-            <div className="text-xs text-sub" style={{ fontWeight: 600, textAlign: 'center' }}>Keep Fusion</div>
-            <div className="text-xs text-sub" style={{ fontWeight: 600, textAlign: 'center' }}>Keep app</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '6px 14px', alignItems: 'center' }}>
+                <div className="text-xs text-sub" style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Field</div>
+                <div className="text-xs text-sub" style={{ fontWeight: 600, textAlign: 'center' }}>Keep Fusion</div>
+                <div className="text-xs text-sub" style={{ fontWeight: 600, textAlign: 'center' }}>Keep app</div>
 
-            {drift.map(d => (
-              <DriftRow key={d.field} d={d} unit={unit}
-                choice={res[d.field]}
-                onChoose={(c) => setRes(r => ({ ...r, [d.field]: c }))} />
-            ))}
-          </div>
+                {fieldDrift.map(d => (
+                  <DriftRow key={d.field} d={d} unit={unit}
+                    choice={res[d.field]}
+                    onChoose={(c) => setRes(r => ({ ...r, [d.field]: c }))} />
+                ))}
+              </div>
 
-          <div style={{ display: 'flex', gap: 8, marginTop: 14, alignItems: 'center' }}>
-            <button className="btn btn-primary btn-sm" disabled={isSaving}
-              onClick={() => onApply(res)}>
-              {isSaving ? 'Applying…' : 'Apply & sync'}
-            </button>
-            <span className="text-xs text-sub">
-              Writes the chosen value to both Fusion and the app for each field.
-            </span>
-          </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 14, alignItems: 'center' }}>
+                <button className="btn btn-primary btn-sm" disabled={isSaving}
+                  onClick={() => onApply(res)}>
+                  {isSaving ? 'Applying…' : 'Apply & sync'}
+                </button>
+                <span className="text-xs text-sub">
+                  Writes the chosen value to both Fusion and the app for each field.
+                </span>
+              </div>
+            </>
+          )}
+
+          {infoDrift.length > 0 && (
+            <div style={{ marginTop: fieldDrift.length > 0 ? 14 : 0, display: 'grid', gap: 6 }}>
+              {infoDrift.map((d, i) => (
+                <div key={i} className="text-sm" style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
+                  <Info size={14} style={{ color: 'var(--orange)', flexShrink: 0, marginTop: 2 }} />
+                  <span>
+                    Fusion also changed a {INFO_KIND_LABEL[d.kind] || d.kind}
+                    {d.label ? <> (<span className="font-mono" style={{ color: 'var(--text)' }}>{d.label}</span>)</> : null}
+                    {' '}you had edited — your edit was kept. <strong>Open Sync Job</strong> to review Fusion’s version.
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

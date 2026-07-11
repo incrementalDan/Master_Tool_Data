@@ -163,6 +163,7 @@ export default function ToolDetail() {
   const handleApplyDrift = async (resolutions) => {
     const patch = {};
     for (const d of (tool._drift || [])) {
+      if (!d.field) continue;   // non-scalar info rows (preset/OOH/holder) aren't resolved here
       patch[d.field] = resolutions[d.field] === 'app' ? d.appValue : d.fusionValue;
     }
     try { await saveTool({ ...tool, ...patch, _drift: [] }); }

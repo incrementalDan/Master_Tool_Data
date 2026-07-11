@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useGoogleLogin } from '@react-oauth/google';
-import { FolderOpen, LogOut, Library, Settings, RefreshCw, AlertTriangle, Download, X, FlaskConical, Building2, Hash } from 'lucide-react';
+import { FolderOpen, LogOut, Library, Settings, RefreshCw, AlertTriangle, Download, X, FlaskConical, Building2, Hash, CloudOff } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import BrandLogo from './components/BrandLogo.jsx';
 import { setAccessToken, fetchUserInfo } from './services/driveService.js';
@@ -309,7 +309,7 @@ function GoogleReconnectBanner() {
 
 function TopBar() {
   const location = useLocation();
-  const { loadTools, isLoading, maybeBlockNav } = useApp();
+  const { loadTools, isLoading, maybeBlockNav, fusionEnabled } = useApp();
   const onLanding = location.pathname === '/';
   // Intercept tab clicks so a page with a registered nav guard (e.g. Settings
   // with unsaved edits) can prompt before we change the hash route.
@@ -360,6 +360,21 @@ function TopBar() {
         </a>
       </nav>
       <div className="topbar-actions">
+        {!fusionEnabled && (
+          <span
+            className="fusion-off-badge"
+            title="Fusion sync is turned off (Settings → Fusion Libraries). Tools are managed in the app only — nothing reads from or writes to the Fusion library. Re-enable to sync again."
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '3px 9px', borderRadius: 'var(--radius)',
+              border: '1px solid color-mix(in srgb, var(--orange) 45%, transparent)',
+              background: 'color-mix(in srgb, var(--orange) 12%, transparent)',
+              color: 'var(--orange)', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
+            }}
+          >
+            <CloudOff size={13} /> Fusion sync off
+          </span>
+        )}
         <button
           className="icon-btn"
           onClick={() => loadTools()}

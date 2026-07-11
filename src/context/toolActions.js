@@ -183,6 +183,15 @@ export function createToolActions(ctx) {
       .filter(c => c.field)
       .map(c => ({ field: c.field, appValue: c.appValue, fusionValue: c.fusionValue }));
 
+    // Non-scalar conflicts (a preset / OOH / holder that BOTH the app and Fusion
+    // changed) can't be a per-field radio, but they must not vanish with the toast
+    // (D3: never silent). Attach them to _drift as non-actionable info rows so the
+    // DriftBanner keeps showing "Fusion also changed preset X — review in Sync Job"
+    // until the next clean save or reload clears it.
+    const infoConflicts = conflicts
+      .filter(c => c.kind)
+      .map(c => ({ kind: c.kind, label: c.preset || c.assembly || '' }));
+
     const toWrite = {
       ...sharedMerged,
       tracking_id,
@@ -192,7 +201,7 @@ export function createToolActions(ctx) {
       presets: mergedPresets,
       _instancesRaw: refreshedRaws,
       _fusionRaw: refreshedRaws[0] || tool._fusionRaw || null,
-      _drift: fieldConflicts,
+      _drift: [...fieldConflicts, ...infoConflicts],
       ...locExtra,
     };
 
