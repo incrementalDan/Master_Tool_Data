@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { UploadCloud, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import ImportPhotosModal from './ImportPhotosModal.jsx';
@@ -25,13 +25,19 @@ function mergeImportedTools(current, imported) {
 
 export default function ImportFlow() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { tools, saveFullLibrary, isSaving, markSetupStepInSettings, shopSettings, components, saveComponents } = useApp();
   const toolLibraries = shopSettings?.tool_libraries || [];
   const defaultLibId = shopSettings?.default_tool_library_id || toolLibraries[0]?.id || null;
   const [targetLibraryId, setTargetLibraryId] = useState(defaultLibId);
-  const [step, setStep] = useState(1);
+  // Settings' "Open Import" (ProShop merge step) deep-links straight to step 2
+  // via navigation state so the user isn't dropped at the Fusion upload step.
+  const [step, setStep] = useState(location.state?.startStep || 1);
   const [fusionTools, setFusionTools] = useState(tools);
   const [parseError, setParseError] = useState('');
+  // Soft "this looks like the other kind of file" flag — set when a file dropped
+  // on the Fusion step looks like a ProShop CSV, or vice versa.
+  const [mismatchWarn, setMismatchWarn] = useState('');
   const [fusionPreview, setFusionPreview] = useState(null);
   const [proShopMatches, setProShopMatches] = useState(null);
   const [psUnit, setPsUnit] = useState(getDefaultUnit());
@@ -49,8 +55,14 @@ export default function ImportFlow() {
   const handleFusionFile = (file) => {
     if (!file) return;
     setParseError('');
+    setMismatchWarn('');
     const reader = new FileReader();
     reader.onload = (e) => {
+      // Flag a ProShop CSV dropped on the Fusion (JSON) step.
+      if (detectFileKind(e.target.result, file.name) === 'proshop') {
+        setMismatchWarn('This looks like ProShop CSV data, not a Fusion tool library (JSON). Upload it in the "Merge ProShop" step instead.');
+        return;
+      }
       try {
         const json = JSON.parse(e.target.result);
         const list = Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : null);
@@ -104,8 +116,14 @@ export default function ImportFlow() {
   const handleProShopFile = (file) => {
     if (!file) return;
     setParseError('');
+    setMismatchWarn('');
     const reader = new FileReader();
     reader.onload = (e) => {
+      // Flag a Fusion JSON library dropped on the ProShop (CSV) step.
+      if (detectFileKind(e.target.result, file.name) === 'fusion') {
+        setMismatchWarn('This looks like Fusion tool library data (JSON), not a ProShop CSV export. Upload it in the "Import Fusion" step instead.');
+        return;
+      }
       try {
         const rows = parseCSV(e.target.result);
         if (rows.length < 2) throw new Error('CSV must have a header row and at least one data row');
@@ -219,6 +237,15 @@ export default function ImportFlow() {
       </div>
 
       {parseError && <div className="error-banner mb-16">{parseError}</div>}
+
+      {mismatchWarn && (
+        <div className="warn-banner mb-16">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <AlertTriangle size={12} style={{ flexShrink: 0 }} />
+            {mismatchWarn}
+          </div>
+        </div>
+      )}
 
       {/* ── Step 1 ──────────────────────────────────────────────────────── */}
       {step === 1 && (
@@ -592,6 +619,24 @@ function DropZone({ label, accept, fileRef, onFile }) {
       </div>
     </div>
   );
+}
+
+// ── File-kind sniffer ───────────────────────────────────────────────────────
+// Lightweight guess at whether a dropped file is a Fusion tool library (JSON)
+// or a ProShop export (CSV), so the wrong file on the wrong step gets flagged
+// rather than failing with a cryptic parse error. Content wins over extension.
+function detectFileKind(text, filename = '') {
+  const trimmed = (text || '').trim();
+  // Fusion library: a JSON object/array (usually { data: [...] }).
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return 'fusion';
+  // ProShop export: CSV whose header carries the Tool #/Description columns.
+  const firstLine = trimmed.split('\n')[0] || '';
+  const ext = filename.toLowerCase().split('.').pop();
+  if (ext === 'csv' || firstLine.includes(',')) {
+    if (/tool\s*#|description|cut\s*dia|approved\s*brand/i.test(firstLine)) return 'proshop';
+    return 'csv';
+  }
+  return 'unknown';
 }
 
 // ── CSV parser ──────────────────────────────────────────────────────────────
