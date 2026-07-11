@@ -103,6 +103,22 @@ describe('Phase B increment 3 — no-Fusion write path (metadata only)', () => {
     expect(ctx.uploadFusionList).not.toHaveBeenCalled();
     expect(deleteMetadata).toHaveBeenCalledWith('FTL-NOFUS1');
   });
+
+  it('deleteTool is metadata-only when Fusion is DISABLED, even for a linked tool (G2)', async () => {
+    const ctx = makeCtx({
+      toolsRef: { current: [{ id: 'FTL-DIS', tracking_id: 'FTL-DIS', no_fusion_link: false, library_id: 'lib-1' }] },
+      shopSettingsRef: { current: {
+        assembly_id_system: { mode: 'auto' }, tool_id_system: {}, location_config: { systems: [] },
+        integrations: { fusion: { enabled: false } },
+      } },
+    });
+    const { deleteTool } = createToolActions(ctx);
+    await deleteTool('FTL-DIS');
+    // The throwing Fusion IO must never be called while sync is off.
+    expect(ctx.downloadFusionList).not.toHaveBeenCalled();
+    expect(ctx.uploadFusionList).not.toHaveBeenCalled();
+    expect(deleteMetadata).toHaveBeenCalledWith('FTL-DIS');
+  });
 });
 
 describe('writeLogicalTool does not wipe a concurrent Fusion preset edit', () => {
