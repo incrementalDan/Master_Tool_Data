@@ -35,6 +35,15 @@ export function createLibraryOps(ctx) {
       // library (covers bulk import, which routes through here).
       const combinedTools = combineToolsByToolId(tools);
 
+      // No-Fusion tools live ONLY in metadata — without Drive there is nowhere to
+      // persist them. Fail loudly before any partial Fusion write instead of
+      // reporting success and silently losing them on the next reload (G3). The
+      // single-tool writeLogicalTool path already throws the equivalent.
+      const noFusion = combinedTools.filter(t => t.no_fusion_link === true);
+      if (noFusion.length && !googleRef.current) {
+        throw new Error(`Connect Google Drive to save — ${noFusion.length} of these tools exist only in metadata`);
+      }
+
       // Partition tools by their destination library (their own library_id, or the
       // default for new/untagged tools). Each represented library is FULL-REPLACED
       // with its subset, so libraries not represented here are left untouched.
@@ -134,6 +143,12 @@ export function createLibraryOps(ctx) {
   const renumberLibrary = async () => {
     dispatch({ type: 'SAVE_START' });
     try {
+      // No-Fusion tools are renumbered in metadata only — without Drive there is
+      // nowhere to persist the new number, so it would exist in memory and vanish
+      // on reload. Fail before any Fusion write (G4).
+      if (!googleRef.current && (toolsRef.current || []).some(t => t.no_fusion_link && !isExcludedFrom(t, 'machine_number'))) {
+        throw new Error('Connect Google Drive — no-Fusion tools exist only in metadata and cannot be renumbered without it');
+      }
       // Machine numbers are shop-global: gather entries from EVERY library into one
       // list (remembering each entry's source library), number across the union,
       // then write each library back.
@@ -237,6 +252,11 @@ export function createLibraryOps(ctx) {
     }
     dispatch({ type: 'SAVE_START' });
     try {
+      // No-Fusion tools get their ID in metadata only — without Drive it cannot be
+      // persisted and would vanish on reload. Fail before any Fusion write (G4).
+      if (!googleRef.current && (toolsRef.current || []).some(t => t.no_fusion_link && !t.tool_id && !isExcludedFrom(t, 'tool_id'))) {
+        throw new Error('Connect Google Drive — no-Fusion tools exist only in metadata and cannot be assigned an ID without it');
+      }
       // Shop-global IDs: gather entries across every library, assign across the
       // union, then write each library back.
       const perLib = await downloadAllLibraries();
@@ -371,6 +391,12 @@ export function createLibraryOps(ctx) {
 
     dispatch({ type: 'SAVE_START' });
     try {
+      // No-Fusion tools are re-numbered in metadata only — without Drive the new
+      // ID cannot be persisted and would vanish on reload. Fail before any Fusion
+      // write (G4).
+      if (!googleRef.current && (toolsRef.current || []).some(t => t.no_fusion_link && !isExcludedFrom(t, 'tool_id'))) {
+        throw new Error('Connect Google Drive — no-Fusion tools exist only in metadata and cannot be re-numbered without it');
+      }
       // Shop-global re-number across every library.
       const perLib = await downloadAllLibraries();
       const entryLib = new Map();

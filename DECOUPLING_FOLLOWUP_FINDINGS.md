@@ -13,9 +13,9 @@
 | # | Severity | Finding | Files |
 |---|---|---|---|
 | G1 | 🔴 Data loss — ✅ **FIXED** | `normalizeLibrary` → `saveFullLibrary(cleanTools)` wiped metadata records not in the passed set — **no-Fusion tools' metadata is their ONLY store**, so they were permanently deleted | `libraryOps.js` |
-| G2 | 🔴 Consistency | `deleteTool` ignores the shop-wide `integrations.fusion.enabled === false` mode — it round-trips APS (and deletes Fusion entries) while "Fusion sync is off" | `toolActions.js` |
-| G3 | 🟠 Data loss (silent) | `saveFullLibrary` with Google Drive not connected silently drops every no-Fusion tool's data (metadata write is skipped, but the tool is re-materialized in memory and looks saved) | `libraryOps.js` |
-| G4 | 🟠 Data loss (silent) | `assignToolIds` / `renumberAllToolIds` / `renumberLibrary` count no-Fusion tools as assigned even when Drive is disconnected — their new IDs/numbers exist only in memory and vanish on reload | `libraryOps.js` |
+| G2 | 🔴 Consistency — ✅ **FIXED** | `deleteTool` ignored the shop-wide `integrations.fusion.enabled === false` mode — it round-tripped APS (and deleted Fusion entries) while "Fusion sync is off" | `toolActions.js` |
+| G3 | 🟠 Data loss (silent) — ✅ **FIXED** | `saveFullLibrary` with Google Drive not connected silently dropped every no-Fusion tool's data (metadata write skipped, but the tool re-materialized in memory and looked saved) | `libraryOps.js` |
+| G4 | 🟠 Data loss (silent) — ✅ **FIXED** | `assignToolIds` / `renumberAllToolIds` / `renumberLibrary` counted no-Fusion tools as assigned even when Drive is disconnected — their new IDs/numbers existed only in memory and vanished on reload | `libraryOps.js` |
 | G5 | 🟡 Staleness | O1 violation: the flat speed/feed mirror is not recomputed from preset 0 on the no-Fusion write path (self-heals on reload, stale in memory until then) | `toolActions.js` |
 | G6 | 🟡 Doc contradiction | `normalizeLibrary`'s "conflict tools' raw entries left untouched" claim conflicts with `saveFullLibrary`'s full-replace semantics — verify conflict tools' Fusion entries actually survive a normalize | `libraryOps.js`, `combine.js` |
 | G7 | 🟡 Edge | `detachToolFromFusion` / `promoteToolToFusion` edge cases: no default library, Drive-token expiry mid-two-step detach (Fusion entries already deleted, metadata write fails → tool state inconsistent until retry) | `toolActions.js` |
@@ -52,7 +52,9 @@ Make `saveFullLibrary` **merge-by-id instead of blind replace**:
 
 ---
 
-## G2 — `deleteTool` doesn't honor the Fusion-off mode 🔴
+## G2 — `deleteTool` doesn't honor the Fusion-off mode 🔴 ✅ FIXED
+
+> **Fixed 2026-07-11.** `deleteTool` now takes the metadata-only branch when `integrations.fusion.enabled === false` as well as for `no_fusion_link` tools — no APS round-trip while sync is off. **Chosen semantics:** metadata-only delete (consistent with the whole disabled-mode contract, where every write is metadata-only). A formerly-linked tool's Fusion entry is left untouched and resurfaces if Fusion is re-enabled — that re-enable is the reconcile point, rather than mutating the Fusion library while sync is off. *(This was going to be a user question — block vs. metadata-only — but the prompt was interrupted; metadata-only is the consistent default and is a one-line change to "block" if the owner prefers.)* Same `fusionDisabled` guard added to `promoteToolToFusion` / `detachToolFromFusion` (they were UI-gated only). New regression test in `toolActions.test.js`.
 
 **Where:** `toolActions.js` `deleteTool` (~line 567). The early metadata-only branch checks only `tool?.no_fusion_link === true`. `writeLogicalTool` (line 43–44) treats `fusionDisabled = shopSettings.integrations.fusion.enabled === false` as equivalent to unlinked — `deleteTool` does not.
 
@@ -69,7 +71,9 @@ Make `saveFullLibrary` **merge-by-id instead of blind replace**:
 
 ---
 
-## G3 — `saveFullLibrary` silently loses no-Fusion tools when Drive is disconnected 🟠
+## G3 — `saveFullLibrary` silently loses no-Fusion tools when Drive is disconnected 🟠 ✅ FIXED
+
+> **Fixed 2026-07-11.** `saveFullLibrary` now throws before any Fusion write when the passed set contains a `no_fusion_link` tool and Drive is not connected ("Connect Google Drive to save — N of these tools exist only in metadata"). The `catch` surfaces it as a toast; no partial write happens. Regression test in `libraryOps.test.js`.
 
 **Where:** `libraryOps.js:79` — `if (googleRef.current) await driveService.saveAllMetadata(allMeta);` then line 98 re-materializes the no-Fusion tools into in-memory state regardless.
 
@@ -85,7 +89,9 @@ Make `saveFullLibrary` **merge-by-id instead of blind replace**:
 
 ---
 
-## G4 — Bulk ID/number ops "assign" to no-Fusion tools without persisting 🟠
+## G4 — Bulk ID/number ops "assign" to no-Fusion tools without persisting 🟠 ✅ FIXED
+
+> **Fixed 2026-07-11.** Chose option (a): `renumberLibrary`, `assignToolIds`, and `renumberAllToolIds` each throw at the top of their non-demo path when a candidate (non-excluded) no-Fusion tool exists and Drive is off — before any Fusion upload — so nothing is reported assigned that can't persist. `assignToolIds` additionally scopes the check to no-Fusion tools that still lack an ID (avoids a false block when all already have one). Regression test in `libraryOps.test.js`.
 
 **Where:** `libraryOps.js` — `renumberLibrary` (no-Fusion loop at ~157), `assignToolIds` (~266), `renumberAllToolIds` (~430). Each updates `metaByTracking` for no-Fusion tools and increments `assigned`, but the only persistence is `if (googleRef.current) await driveService.saveAllMetadata(...)`. With Drive disconnected the success toast reports them assigned; the values exist only in the in-memory rebuild.
 

@@ -570,9 +570,16 @@ export function createToolActions(ctx) {
       const tool = toolsRef.current.find(t => t.id === id);
       const tid = tool?.tracking_id || id;
 
-      // No-Fusion tool: nothing to remove from any Fusion library — delete the
-      // metadata record only.
-      if (tool?.no_fusion_link === true) {
+      // Metadata-only delete when the tool has no Fusion entry (a per-tool
+      // no-Fusion tool) OR the whole Fusion integration is disabled shop-wide.
+      // In disabled mode every write is metadata-only — writeLogicalTool routes
+      // that way and loadTools builds from metadata — so delete follows the same
+      // contract and never round-trips APS while "Fusion sync is off". A
+      // formerly-linked tool's stale Fusion entry is intentionally left untouched:
+      // re-enabling Fusion is the point at which it resurfaces and can be
+      // reconciled, rather than mutating the Fusion library while sync is off.
+      const fusionDisabled = shopSettingsRef.current?.integrations?.fusion?.enabled === false;
+      if (tool?.no_fusion_link === true || fusionDisabled) {
         if (googleRef.current) await driveService.deleteMetadata(tid);
         dispatch({ type: 'DELETE_TOOL', id });
         dispatch({ type: 'SAVE_SUCCESS' });
@@ -762,6 +769,9 @@ export function createToolActions(ctx) {
     const tool = toolsRef.current.find(t => t.id === toolId);
     if (!tool) throw new Error('Tool not found');
     if (!tool.no_fusion_link) return tool; // already linked
+    if (shopSettingsRef.current?.integrations?.fusion?.enabled === false) {
+      throw new Error('Fusion sync is off — re-enable it in Settings → Fusion Libraries to create this tool in Fusion');
+    }
     const library_id = tool.library_id || defaultToolLibraryId(shopSettingsRef.current);
     if (!library_id) throw new Error('Link a Fusion library first (Settings → Fusion Libraries)');
     dispatch({ type: 'SAVE_START' });
@@ -787,6 +797,9 @@ export function createToolActions(ctx) {
     const tool = toolsRef.current.find(t => t.id === toolId);
     if (!tool) throw new Error('Tool not found');
     if (tool.no_fusion_link) return tool; // already detached
+    if (shopSettingsRef.current?.integrations?.fusion?.enabled === false) {
+      throw new Error('Fusion sync is off — re-enable it to detach this tool from Fusion');
+    }
     if (!googleRef.current) throw new Error('Connect Google Drive to detach (the tool becomes metadata-only)');
     dispatch({ type: 'SAVE_START' });
     try {

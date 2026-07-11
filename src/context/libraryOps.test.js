@@ -56,6 +56,27 @@ describe('assignToolIds — includes no-Fusion tools, honors exclusions', () => 
   });
 });
 
+describe('Drive-required guards for no-Fusion tools (G3/G4)', () => {
+  it('saveFullLibrary refuses when a no-Fusion tool is present and Drive is off (G3)', async () => {
+    const ctx = makeCtx({ googleRef: { current: false } });
+    const { saveFullLibrary } = createLibraryOps(ctx);
+    await expect(saveFullLibrary([
+      { id: 'FTL-NF', tracking_id: 'FTL-NF', no_fusion_link: true, tool_type: 'drill' },
+    ])).rejects.toThrow(/Google Drive/i);
+    expect(ctx.uploadFusionList).not.toHaveBeenCalled();   // no partial write
+  });
+
+  it('assignToolIds refuses when a no-Fusion tool needs an ID and Drive is off (G4)', async () => {
+    const ctx = makeCtx({
+      googleRef: { current: false },
+      toolsRef: { current: [{ id: 'FTL-NF', tracking_id: 'FTL-NF', no_fusion_link: true, tool_id: '' }] },
+    });
+    const { assignToolIds } = createLibraryOps(ctx);
+    await expect(assignToolIds()).rejects.toThrow(/Google Drive/i);
+    expect(ctx.uploadFusionList).not.toHaveBeenCalled();
+  });
+});
+
 describe('saveFullLibrary — merges metadata by id (does not wipe records not passed)', () => {
   it('preserves a no-Fusion tool absent from the passed set (G1)', async () => {
     // The Drive metadata file already holds a no-Fusion tool's record. A bulk
