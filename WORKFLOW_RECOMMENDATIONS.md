@@ -203,6 +203,60 @@ So the list above stays honest — commonly recommended, not worth it yet:
 
 ---
 
+## Part 7 — Your safety nets: how the tests actually work
+
+You have **three layers**, and they all run at the same two moments.
+
+### The three layers
+
+| Layer | What it catches | Shop analogy |
+|---|---|---|
+| **Lint** (`npm run lint`) | Code referencing something never imported → blank white page in the browser | Checking the tool is actually in the spindle before cycle start |
+| **Unit tests** (~290 tests) | Broken logic: naming rules, ID systems, unit conversion, program numbers, converter invariants, Sync-Job matching | First-article inspection on each piece of logic |
+| **Round-trip audit** (`scripts/roundtrip-audit.mjs`) | Feeds every real tool from `FUSION TOOL Library REF/` through read→write and diffs the result against the original file. Any unexplained difference fails. | Running a proven part back through the CMM after changing the post |
+
+The round-trip audit is the crown jewel — it's the reason a session can touch
+the Fusion converter without silently corrupting geometry on the next save.
+
+### When they run — the triggers
+
+- **Automatically, on GitHub's side:** the **Tests** workflow
+  (`.github/workflows/test.yml`) runs lint → tests → audit on **every pull
+  request** and **every push to `main`**. That's the ✅/❌ you see on a PR.
+- **Manually, inside a Claude session:** `npm test` runs the identical thing.
+  Sessions normally run it before pushing — but that's convention, not
+  enforcement, which is exactly why **branch protection (Part 2, #1) matters**:
+  it makes the ❌ physically block the merge button.
+- **Never on your own computer automatically.** Nothing runs when you save a
+  file. Everything happens after a push, on GitHub's machines.
+
+When a check is red: the answer is always *"paste the failure to Claude"* —
+never "merge anyway."
+
+### What's covered, and the honest edges
+
+- **Covered:** all the pure logic — converters, naming, ID/location/assembly
+  systems, programs, metadata model, search, and (as of this doc) the
+  **Sync-Job match-priority rules** (`duplicateDetector`), the **paste parser
+  and queue routing** (`mergeQueue`), and the **reconcile-on-open stray
+  classification** (`reconcile`) — the code that decides *which master tool an
+  incoming job tool updates*.
+- **Not covered: the UI itself.** No test verifies that clicking "Save" works
+  or that a panel renders. That's normal at this scale — it's what
+  *"verify it in demo mode and show me a screenshot"* (and the `/verify`
+  skill) are for.
+- **Not covered: real Autodesk/Google calls.** CI has no secrets, by design.
+  The code is structured so the logic *around* those calls is what's tested.
+
+### The two habits that keep this strong
+
+1. **Every bug fix ends with "…and lock it with a test."** Each incident
+   becomes a permanent jig — that exact mistake can never return silently.
+2. **Anything user-facing ends with "…verify in demo mode + screenshot."**
+   Tests prove the logic; the screenshot proves the experience.
+
+---
+
 ## Glossary
 
 | Term | Plain English |
