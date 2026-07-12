@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Search, X, Plus } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { searchPrograms, partById, alloyLabel, formatOperation } from '../utils/programs.js';
+import { searchPrograms, partById, alloyLabel, formatOperation, machineOptions } from '../utils/programs.js';
 import { CustomerBadge, ProgramNumBadge, TypePill } from './programsUi.jsx';
 import AddProgramModal from './AddProgramModal.jsx';
+import MachinePill from './MachinePill.jsx';
+import { machineColorFor } from '../utils/machineColors.js';
 
 // The one shared control for linking to a program record (Program Number
 // Manager). Type a PROGRAM NUMBER (exact) or PART NUMBER (contains) → matching
@@ -14,9 +16,10 @@ import AddProgramModal from './AddProgramModal.jsx';
 // preset, a tool, or a sync commit). selection shape:
 //   { program_id, program_number, part_id, part_number, operation }
 export default function JobProgramPicker({ onPick, placeholder = 'Program # (exact) or part # (contains)', autoFocus = false }) {
-  const { jobs: jobsFile, materials } = useApp();
+  const { jobs: jobsFile, materials, shopSettings } = useApp();
   const [query, setQuery] = useState('');
   const [showAdd, setShowAdd] = useState(false);
+  const machines = machineOptions(shopSettings);
 
   const results = useMemo(() => searchPrograms(jobsFile, query), [jobsFile, query]);
 
@@ -58,7 +61,7 @@ export default function JobProgramPicker({ onPick, placeholder = 'Program # (exa
               {part && <span className="text-xs text-sub">Rev {part.rev}</span>}
               <span className="text-xs text-sub">· {formatOperation(program.operation) || '—'}</span>
               <TypePill isFixture={program.is_fixture} internalExternal={program.internal_external} />
-              <span className="text-xs text-sub">{program.machine_label}</span>
+              <MachinePill label={program.machine_label} color={machineColorFor(program.machine_id, program.machine_label, machines)} />
               {program.is_fixture && (program.material_id || program.material_custom) && (
                 <span className="text-xs text-sub">{alloyLabel(materials, program.material_id, program.material_custom)}</span>
               )}

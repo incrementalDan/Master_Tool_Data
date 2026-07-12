@@ -79,11 +79,24 @@ describe('customers + machines', () => {
     expect(customerColor('')).toBeNull();
   });
   it('machineOptions uses shop machines, falls back to hardcoded pair', () => {
-    expect(machineOptions({ machines: [{ id: 'm1', model: 'Speedio M300X3' }] }))
+    const opts = machineOptions({ machines: [{ id: 'm1', model: 'Speedio M300X3' }] });
+    expect(opts.map(m => ({ id: m.id, label: m.label })))
       .toEqual([{ id: 'm1', label: 'Speedio M300X3' }]);
     const fb = machineOptions({ machines: [] });
     expect(fb.map(m => m.label)).toEqual(['Brother M300X3', 'Brother R650']);
     expect(fb[0].id).toBeNull();
+  });
+  it('machineOptions carries each machine display color (blue, green first)', () => {
+    const opts = machineOptions({ machines: [
+      { id: 'm1', model: 'M300X3' },
+      { id: 'm2', model: 'R650' },
+      { id: 'm3', model: 'Lathe', color: '#123456' },
+    ] });
+    expect(opts[0].color).toBe('#4a8fff');   // first machine → blue
+    expect(opts[1].color).toBe('#4ade80');   // second machine → green
+    expect(opts[2].color).toBe('#123456');   // picked color wins
+    const fb = machineOptions({ machines: [] });
+    expect(fb.map(m => m.color)).toEqual(['#4a8fff', '#4ade80']);
   });
   it('isPalletMachine matches R650 anywhere in the model name', () => {
     expect(isPalletMachine('Brother R650')).toBe(true);

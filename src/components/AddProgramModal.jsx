@@ -11,6 +11,8 @@ import {
   MaterialSelect, MachineSelect, materialFieldsOf, fixturingValueOf,
 } from './programsUi.jsx';
 import InfoTip from './InfoTip.jsx';
+import MachinePill from './MachinePill.jsx';
+import { machineColorFor } from '../utils/machineColors.js';
 
 // The "Add program" modal — search/create a part, then reserve one or more
 // operations (each grabs the next program number). Self-contained: reads the
@@ -96,7 +98,7 @@ export default function AddProgramModal({ onClose, onCreated }) {
     });
     setSessionAdded(prev => [...prev, {
       program_number: prg.program_number, operation: opForm.operation.trim(),
-      machine_label: opForm.machine_label, is_fixture: opForm.is_fixture,
+      machine_id: opForm.machine_id, machine_label: opForm.machine_label, is_fixture: opForm.is_fixture,
     }]);
     onCreated?.(prg, activePart);
     setOpForm(prev => ({
@@ -202,7 +204,7 @@ export default function AddProgramModal({ onClose, onCreated }) {
                       <Check size={13} style={{ color: 'var(--green)' }} />
                       <ProgramNumBadge n={s.program_number} />
                       <span className="text-sm">{formatOperation(s.operation)}</span>
-                      <span className="text-xs text-sub">· {s.machine_label}</span>
+                      <MachinePill label={s.machine_label} color={machineColorFor(s.machine_id, s.machine_label, machines)} />
                       {s.is_fixture && <span className="pn-type-pill fixture">Fixture</span>}
                     </div>
                   ))}

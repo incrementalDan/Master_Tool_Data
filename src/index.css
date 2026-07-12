@@ -2911,6 +2911,7 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /*  .machine-num-badge  — Machine Tool #    — green rect (monospace, square)  */
 /*  .location-tag       — Location/Cabinet  — indigo rounded-rect (monospace)  */
 /*  .preset-tag         — Preset Name       — colored by ISO group (--badge-color) */
+/*  .machine-pill       — Machine (model)   — colored per MACHINE (--badge-color) */
 /*                                                                            */
 /* Holder + preset badges carry a per-instance --badge-color set by the host: */
 /* the holder's size color (holderColor) / the material's ISO-group color     */
@@ -3263,6 +3264,62 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   font-family: var(--font-mono);
   white-space: nowrap;
   letter-spacing: 0.02em;
+}
+
+/* ─── Machine pill — colored per machine; host sets --badge-color ─────────── */
+.machine-pill {
+  /* Color follows the MACHINE — host sets --badge-color per machine
+     (machineColor / machineColorFor, utils/machineColors.js). Defaults to
+     blue. Same shape/derivation as .holder-pill. */
+  --badge-color: var(--blue);
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--badge-color) 55%, transparent);
+  background: color-mix(in srgb, var(--badge-color) 10%, var(--input-bg));
+  color: color-mix(in srgb, var(--badge-color) 65%, #ffffff);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+/* Machine filter chips (landing page + preset panel) — the interactive chip
+   keeps its behavior but is tinted with the machine's color so the chips read
+   as the same entity as the machine pills. */
+.chip.machine-chip {
+  --badge-color: var(--blue);
+  border-color: color-mix(in srgb, var(--badge-color) 40%, transparent);
+  color: color-mix(in srgb, var(--badge-color) 70%, #ffffff);
+}
+.chip.machine-chip:hover { border-color: var(--badge-color); }
+.chip.machine-chip.active {
+  border-color: var(--badge-color);
+  background: color-mix(in srgb, var(--badge-color) 14%, var(--input-bg));
+  color: color-mix(in srgb, var(--badge-color) 80%, #ffffff);
+}
+
+/* Machine color picker (Settings) — swatch row + custom color input */
+.machine-color-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.machine-color-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.machine-color-swatch.selected { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg); }
+.machine-color-custom {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
 }
 
 /* ─── Assemblies grid — multiple cards per row ───────────────────────────── */

@@ -17,6 +17,7 @@
 // "cascades" everywhere by construction, with zero copies to drift out of
 // sync. Only fixture ops (is_fixture) carry their own material fields.
 import { generateId } from '../schema/identity.js';
+import { machineColor, MACHINE_COLOR_PALETTE } from './machineColors.js';
 
 export const INT_EXT = ['External', 'Internal'];
 
@@ -110,11 +111,12 @@ export function alloyLabel(materials, material_id, material_custom) {
 // Machines for the machine dropdown: the shop's configured machines
 // (shop_settings.machines[], stable UUIDs) or the hardcoded fallback pair when
 // none are configured yet. Programs store machine_id + a machine_label cache
-// so rows survive a machine being deleted from settings.
+// so rows survive a machine being deleted from settings. Each option carries
+// the machine's display color (machineColors.js) for the machine pills.
 export function machineOptions(shopSettings) {
   const ms = shopSettings?.machines || [];
-  if (ms.length > 0) return ms.map(m => ({ id: m.id, label: m.model || 'Machine' }));
-  return FALLBACK_MACHINES.map(label => ({ id: null, label }));
+  if (ms.length > 0) return ms.map(m => ({ id: m.id, label: m.model || 'Machine', color: machineColor(m, ms) }));
+  return FALLBACK_MACHINES.map((label, i) => ({ id: null, label, color: MACHINE_COLOR_PALETTE[i % MACHINE_COLOR_PALETTE.length] }));
 }
 
 // Pallet selection only applies to the R650 (pallet-changer machine).

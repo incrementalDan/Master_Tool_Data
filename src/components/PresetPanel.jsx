@@ -4,6 +4,8 @@ import { generateId, COOLANT_OPTS } from '../schema/toolSchema.js';
 import { useApp } from '../context/AppContext.jsx';
 import { jobById, jobLabel } from '../utils/jobs.js';
 import { holderColor } from './AssemblyCard.jsx';
+import { machineColor } from '../utils/machineColors.js';
+import MachinePill from './MachinePill.jsx';
 import CamPresetPicker from './CamPresetPicker.jsx';
 import JobProgramPicker from './JobProgramPicker.jsx';
 import {
@@ -334,7 +336,8 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
             return (
               <button
                 key={m.id}
-                className={`chip ${machineFilter === m.id ? 'active' : ''}`}
+                className={`chip machine-chip ${machineFilter === m.id ? 'active' : ''}`}
+                style={{ '--badge-color': machineColor(m, machines) }}
                 onClick={() => setMachineFilter(f => f === m.id ? 'All' : m.id)}
               >
                 {m.model}{count > 0 ? ` (${count})` : ''}
@@ -607,7 +610,7 @@ function CollapsedCard({
         {linkedMachine && (
           <div style={{ marginTop: linkedAssemblies?.length > 0 ? 4 : 6, display: 'flex', alignItems: 'center', gap: 4 }}>
             <Cpu size={10} style={{ color: 'var(--text-sub)', flexShrink: 0 }} />
-            <span className="text-xs text-sub">{linkedMachine.model}</span>
+            <MachinePill label={linkedMachine.model} color={machineColor(linkedMachine, machines)} />
           </div>
         )}
       </div>
