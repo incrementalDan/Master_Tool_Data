@@ -157,6 +157,30 @@ export function materialNameCode(query, materials) {
   return matchMaterial(query) || '';
 }
 
+// Legacy material code -> a name hint identifying its single obvious default CAM
+// preset. Only unambiguous cases live here: "AL" clearly means the wrought Al
+// preset. Ambiguous groups (steel P, stainless M — many presets, no one obvious
+// default) are deliberately omitted so normalization asks the user to pick.
+const CODE_DEFAULT_HINT = { AL: /wrought/i };
+
+// Suggest a CAM preset NAME to link a legacy material string to, resolved within
+// the CURRENT materials library (so shop edits are respected). Confident matches
+// only:
+//   1. the query already resolves to a CAM preset (or a known alloy → its preset)
+//   2. an unambiguous legacy code with a single obvious default (AL → Al Wrought)
+// Returns null for everything else (e.g. "Steel", "ST", "SS Austenitic 316") so
+// the normalize flow surfaces a searchable picker for the user to choose.
+export function suggestCamPresetName(query, materials) {
+  const { preset } = findMaterialInLibrary(query, materials);
+  if (preset) return preset.name;
+  const code = matchMaterial(query);
+  const hint = code ? CODE_DEFAULT_HINT[code] : null;
+  if (!hint) return null;
+  const iso = MATERIAL_CODE_TO_ISO_GROUP[code];
+  const match = (materials?.presets || []).find(p => p.group_id === iso && hint.test(p.name || ''));
+  return match?.name || null;
+}
+
 // ISO-group color for a preset's stored material, resolved via the library
 // first, then the legacy keyword map. null when unknown / no color.
 export function presetMaterialColor(query, materials) {

@@ -14,6 +14,7 @@ import {
   composePresetName,
   parsePresetName,
   presetMatchesAssembly,
+  suggestCamPresetName,
 } from './presetNaming.js';
 
 describe('materialToCode', () => {
@@ -260,5 +261,44 @@ describe('opTypeWord', () => {
     expect(opTypeWord('rough')).toBe('Rough');
     expect(opTypeWord('small_bore')).toBe('Small Bore');
     expect(opTypeWord('nope')).toBe('');
+  });
+});
+
+describe('suggestCamPresetName', () => {
+  const materials = {
+    groups: [
+      { id: 'N', label: 'Non-Ferrous', code: 'AL' },
+      { id: 'M', label: 'Stainless Steel', code: 'SS' },
+      { id: 'P', label: 'Steel', code: 'STEEL' },
+    ],
+    presets: [
+      { id: 'p_wrought', group_id: 'N', name: 'Al Wrought' },
+      { id: 'p_cast', group_id: 'N', name: 'Al Cast' },
+      { id: 'p_ss_aus', group_id: 'M', name: 'SS Austenitic' },
+      { id: 'p_low', group_id: 'P', name: 'Steel Low Carbon' },
+      { id: 'p_alloy', group_id: 'P', name: 'Steel Alloy' },
+    ],
+    materials: [
+      { id: 'a_316', group_id: 'M', preset_id: 'p_ss_aus', label: '316L', aliases: ['316'] },
+    ],
+  };
+
+  it('defaults a bare "AL" to the wrought Al CAM preset', () => {
+    expect(suggestCamPresetName('AL', materials)).toBe('Al Wrought');
+  });
+
+  it('returns null for ambiguous steel/stainless codes so the user picks', () => {
+    expect(suggestCamPresetName('Steel', materials)).toBe(null);
+    expect(suggestCamPresetName('ST', materials)).toBe(null);
+    expect(suggestCamPresetName('SS Austenitic 316', materials)).toBe(null);
+  });
+
+  it('resolves a query that is already a CAM preset name or known alloy', () => {
+    expect(suggestCamPresetName('Al Cast', materials)).toBe('Al Cast');
+    expect(suggestCamPresetName('316L', materials)).toBe('SS Austenitic');
+  });
+
+  it('returns null for a blank query', () => {
+    expect(suggestCamPresetName('', materials)).toBe(null);
   });
 });
