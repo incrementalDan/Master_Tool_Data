@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight } from 'lucide-react';
+import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
 import { generateMachineNumbers, generateId, duplicateIdClusters } from '../schema/toolSchema.js';
 import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../utils/toolIdSystem.js';
@@ -39,9 +39,13 @@ export default function Settings() {
     googleAuthenticated, metadataSkipped, user: googleUser,
     fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
     shopSettings, saveShopSettings, signOutAll, fusionEnabled,
-    setupProgress, demoMode,
+    setupProgress, demoMode, resetSetupProgress,
     registerNavGuard, maybeBlockNav,
   } = useApp();
+
+  // Inline confirm for the "Reset checklist" action (no window.confirm — mirrors
+  // the machine-list delete pattern).
+  const [confirmResetSetup, setConfirmResetSetup] = useState(false);
 
   // Multi-library registry (from shop_settings). Tool + holder libraries are
   // lists; new tools write to default_tool_library_id (falls back to the first).
@@ -876,6 +880,32 @@ export default function Settings() {
             </div>
           );
         })}
+
+        {/* Reset — the checkmarks are stored on THIS device (localStorage), not in
+            shop_settings.json, so clearing the Drive file doesn't reset them.
+            This does. Use it to re-run the whole workflow with fresh real data. */}
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          {confirmResetSetup ? (
+            <>
+              <span className="text-sub text-sm" style={{ flex: 1, minWidth: 220 }}>
+                Uncheck every setup step and clear its timestamp? The workflow starts over — your tools and data aren&apos;t touched.
+              </span>
+              <button className="btn btn-danger btn-sm" onClick={() => { resetSetupProgress(); setConfirmResetSetup(false); }}>
+                Reset checklist
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setConfirmResetSetup(false)}>Cancel</button>
+            </>
+          ) : (
+            <>
+              <span className="text-sub" style={{ fontSize: 11, flex: 1, minWidth: 220 }}>
+                Progress is saved per-device, separate from <code>shop_settings.json</code>.
+              </span>
+              <button className="btn btn-ghost btn-sm" onClick={() => setConfirmResetSetup(true)}>
+                <RotateCcw size={12} /> Reset checklist
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {showPhotos && <ImportPhotosModal onClose={() => setShowPhotos(false)} />}

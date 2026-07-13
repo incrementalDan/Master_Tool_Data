@@ -295,6 +295,8 @@ export function reducer(state, action) {
       return { ...state, shopSettings: { ...state.shopSettings, location_config: action.locationConfig } };
     case 'MARK_SETUP_TIMESTAMP':
       return { ...state, shopSettings: { ...state.shopSettings, setup_steps: { ...(state.shopSettings?.setup_steps || {}), [action.key]: action.ts } } };
+    case 'RESET_SETUP_TIMESTAMPS':
+      return { ...state, shopSettings: { ...state.shopSettings, setup_steps: {} } };
     case 'CLEAR_ERROR': return { ...state, error: null };
     case 'ADD_TOAST': return { ...state, toasts: [...state.toasts, action.toast] };
     case 'DISMISS_TOAST': return { ...state, toasts: state.toasts.filter(t => t.id !== action.id) };

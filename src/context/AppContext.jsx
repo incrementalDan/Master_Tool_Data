@@ -432,6 +432,24 @@ export function AppProvider({ children }) {
   const setupCelebrated = useCallback(() => localStorage.getItem(SETUP_CELEBRATED_KEY) === '1', []);
   const markSetupCelebrated = useCallback(() => localStorage.setItem(SETUP_CELEBRATED_KEY, '1'), []);
 
+  // Reset the setup checklist to a clean slate. The step flags are DEVICE-LOCAL
+  // (localStorage), independent of the Drive settings file — so emptying
+  // shop_settings.json alone does NOT clear the checkmarks (the source of the
+  // "steps stuck checked off" confusion). This clears the local flags + the
+  // "already celebrated" marker, blanks the in-memory progress, and wipes the
+  // Drive-side timestamps so a re-run of the workflow (with fresh real data)
+  // starts from zero. setupSeededRef stays set so live data doesn't auto-reseed
+  // the flags back on this session.
+  const resetSetupProgress = useCallback(() => {
+    localStorage.removeItem(SETUP_PROGRESS_KEY);
+    localStorage.removeItem(SETUP_CELEBRATED_KEY);
+    setupSeededRef.current = true;
+    dispatch({ type: 'SET_SETUP_PROGRESS', progress: {} });
+    dispatch({ type: 'RESET_SETUP_TIMESTAMPS' });
+    if (googleRef.current) scheduleSharedWrite('shopSettings');
+    notify('Setup checklist reset — start the workflow fresh', 'success');
+  }, [scheduleSharedWrite, notify]);
+
   // ─── Library registry actions ─────────────────────────────────────────────
   // Single point that commits a registry change: updates state + pointers (via
   // SET_LIBRARIES), mirrors to localStorage (so APS-only sessions keep working),
@@ -871,6 +889,7 @@ export function AppProvider({ children }) {
       maybeBlockNav,
       setupCelebrated,
       markSetupCelebrated,
+      resetSetupProgress,
       setLibraryLocation,
       clearLibraryLocation,
       beginChangeLibrary,
