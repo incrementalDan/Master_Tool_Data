@@ -265,6 +265,8 @@ describe('opTypeWord', () => {
 });
 
 describe('suggestCamPresetName', () => {
+  // Mirrors the real seed shapes (materials.json): CAM preset "SS Austenitic 316",
+  // and a 316 alloy whose label is "316 / 316L" with aliases like "SS316".
   const materials = {
     groups: [
       { id: 'N', label: 'Non-Ferrous', code: 'AL' },
@@ -272,14 +274,17 @@ describe('suggestCamPresetName', () => {
       { id: 'P', label: 'Steel', code: 'STEEL' },
     ],
     presets: [
-      { id: 'p_wrought', group_id: 'N', name: 'Al Wrought' },
-      { id: 'p_cast', group_id: 'N', name: 'Al Cast' },
-      { id: 'p_ss_aus', group_id: 'M', name: 'SS Austenitic' },
-      { id: 'p_low', group_id: 'P', name: 'Steel Low Carbon' },
-      { id: 'p_alloy', group_id: 'P', name: 'Steel Alloy' },
+      { id: 'pre_N_al_wrought', group_id: 'N', name: 'Al Wrought' },
+      { id: 'pre_N_al_cast', group_id: 'N', name: 'Al Cast' },
+      { id: 'pre_M_aus_304', group_id: 'M', name: 'SS Austenitic 304' },
+      { id: 'pre_M_aus_316', group_id: 'M', name: 'SS Austenitic 316' },
+      { id: 'pre_P_low_c', group_id: 'P', name: 'Steel Low Carbon' },
+      { id: 'pre_P_alloy', group_id: 'P', name: 'Steel Alloy' },
     ],
     materials: [
-      { id: 'a_316', group_id: 'M', preset_id: 'p_ss_aus', label: '316L', aliases: ['316'] },
+      { id: 'M_304', group_id: 'M', preset_id: 'pre_M_aus_304', label: '304 / 304L', aliases: ['SS304', '18-8'] },
+      { id: 'M_316', group_id: 'M', preset_id: 'pre_M_aus_316', label: '316 / 316L', aliases: ['SS316', '316L', '316 L'] },
+      { id: 'N_6061', group_id: 'N', preset_id: 'pre_N_al_wrought', label: '6061', aliases: ['6061-T6'] },
     ],
   };
 
@@ -287,15 +292,22 @@ describe('suggestCamPresetName', () => {
     expect(suggestCamPresetName('AL', materials)).toBe('Al Wrought');
   });
 
-  it('returns null for ambiguous steel/stainless codes so the user picks', () => {
+  it('defaults SS / 316 / "316 SS" to SS Austenitic 316', () => {
+    expect(suggestCamPresetName('SS', materials)).toBe('SS Austenitic 316');
+    expect(suggestCamPresetName('316', materials)).toBe('SS Austenitic 316');
+    expect(suggestCamPresetName('316 SS', materials)).toBe('SS Austenitic 316');
+    expect(suggestCamPresetName('SS316', materials)).toBe('SS Austenitic 316');
+  });
+
+  it('does NOT map "Steel"/"ST" to stainless — leaves them for the user to pick', () => {
     expect(suggestCamPresetName('Steel', materials)).toBe(null);
     expect(suggestCamPresetName('ST', materials)).toBe(null);
-    expect(suggestCamPresetName('SS Austenitic 316', materials)).toBe(null);
   });
 
   it('resolves a query that is already a CAM preset name or known alloy', () => {
     expect(suggestCamPresetName('Al Cast', materials)).toBe('Al Cast');
-    expect(suggestCamPresetName('316L', materials)).toBe('SS Austenitic');
+    expect(suggestCamPresetName('316L', materials)).toBe('SS Austenitic 316');
+    expect(suggestCamPresetName('6061', materials)).toBe('Al Wrought');
   });
 
   it('returns null for a blank query', () => {
