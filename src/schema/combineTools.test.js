@@ -76,28 +76,51 @@ describe('combineToolsByToolId — conflict detection', () => {
       id: 'FTL-000003',
       tracking_id: 'FTL-000003',
       tool_id: 'B-1',
-      description: 'Original Description',
+      diameter: 0.5,
       _fusionRaw: { guid: 'guid-primary' },
     });
     const other = makeTool({
       id: 'guid-other',
       tracking_id: null,
       tool_id: 'B-1',
-      description: 'Different Description',
+      diameter: 0.375,
       _fusionRaw: { guid: 'guid-other' },
     });
 
     const [result] = combineToolsByToolId([primary, other]);
 
     // Primary value is kept.
-    expect(result.description).toBe('Original Description');
-    // Conflict is recorded.
+    expect(result.diameter).toBe(0.5);
+    // Conflict is recorded for the genuinely-shared Fusion-native field.
     expect(result._combineConflicts).toBeDefined();
-    const conflict = result._combineConflicts.find(c => c.field === 'description');
+    const conflict = result._combineConflicts.find(c => c.field === 'diameter');
     expect(conflict).toBeDefined();
-    expect(conflict.values).toEqual(['Original Description', 'Different Description']);
+    expect(conflict.values).toEqual([0.5, 0.375]);
     expect(conflict.guids).toContain('guid-primary');
     expect(conflict.guids).toContain('guid-other');
+  });
+
+  it('does NOT flag loosely-controlled fields — description keeps primary, OAL takes biggest, shoulder takes smallest', () => {
+    const primary = makeTool({
+      tracking_id: 'FTL-00A001', tool_id: 'BR-1',
+      description: 'Original', overall_length: 3.0, shoulder_length: 1.5,
+      custom_grind: false,
+    });
+    const other = makeTool({
+      tracking_id: null, tool_id: 'BR-1',
+      description: 'Original (copy)', overall_length: 3.5, shoulder_length: 1.2,
+      custom_grind: '-',
+    });
+
+    const [result] = combineToolsByToolId([primary, other]);
+
+    expect(result.description).toBe('Original');        // keep primary — not a conflict
+    expect(result.overall_length).toBe(3.5);            // biggest wins
+    expect(result.shoulder_length).toBe(1.2);           // smallest wins
+    // None of these — nor the metadata-only custom_grind — record a conflict.
+    for (const f of ['description', 'overall_length', 'shoulder_length', 'custom_grind']) {
+      expect(result._combineConflicts?.find(c => c.field === f)).toBeUndefined();
+    }
   });
 
   it('does not flag a conflict when numeric values are within round4 tolerance', () => {

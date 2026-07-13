@@ -2,6 +2,24 @@
 // number (`tool_id`) into ONE logical tool. See CLAUDE.md → Sync & Merge
 // Workflows → Load-time auto-combine.
 import { readTrackingId, round4 } from './identity.js';
+import { isMetadataOnly } from './fieldRegistry.js';
+import { mergePresetLists } from '../utils/presetMerge.js';
+
+// Flat speed/feed fields are a DERIVED cache of preset 0 — the presets carry the
+// real values, so a difference here is not an independent conflict (the preset
+// merge handles it). Excluded from the shared-field conflict scan.
+const SPEED_FEED_MIRROR = new Set([
+  'spindle_speed', 'cutting_feedrate', 'plunge_feedrate', 'ramp_feedrate',
+  'lead_in_feedrate', 'lead_out_feedrate', 'feed_per_tooth', 'feed_per_rev',
+  'cutting_speed',
+]);
+
+// Fields resolved by an explicit rule instead of ever being flagged as a
+// conflict: description may legitimately differ across copies (keep the primary's);
+// overall length takes the biggest; shoulder length is loosely controlled and
+// takes the smallest (ProShop's MIN OOH locks it down later). See the per-field
+// merge policy in CLAUDE.md / the setup plan.
+const AUTO_RESOLVE = new Set(['description', 'overall_length', 'shoulder_length']);
 
 // ─── Combine logical tools that share a ProShop number ─────────────────────
 // The ProShop number (Fusion's `product-id`, our `tool_id`) is the
@@ -20,12 +38,12 @@ function mergeLogicalTools(group) {
   const primary = group.find(t => t.tracking_id) || group[0];
   const ordered = [primary, ...group.filter(t => t !== primary)];
 
+  const unit = primary.unit;
   const assemblies = [];
   const seenAsmSig = new Set();   // collapse identical instances (holder + OOH)
   const raws = [];
   const seenRawGuid = new Set();
-  const presets = [];
-  const seenPresetName = new Set();
+  let presets = [];               // unioned via mergePresetLists (tolerance-aware)
   const mergeHistory = [];
   const registered = [];
   const seenRegGuid = new Set();
@@ -48,12 +66,9 @@ function mergeLogicalTools(group) {
       seenRawGuid.add(r.guid);
       raws.push(r);
     }
-    for (const p of (t.presets || [])) {
-      const key = String(p.name || '').trim().toLowerCase();
-      if (key && seenPresetName.has(key)) continue;
-      if (key) seenPresetName.add(key);
-      presets.push(p);
-    }
+    // Merge presets: identical-within-tolerance ones collapse; a same-name preset
+    // with genuinely different values is kept, its name indexed up (Rough → Rough 2).
+    presets = mergePresetLists(presets, t.presets || [], unit);
     if (machine == null && t.machine_tool_number != null) machine = t.machine_tool_number;
     if (Array.isArray(t.merge_history)) mergeHistory.push(...t.merge_history);
   }
@@ -79,17 +94,32 @@ function mergeLogicalTools(group) {
   };
 
   const merged = { ...primary };
+
+  // Loosely-controlled lengths resolve by rule (never a conflict): overall length
+  // = the biggest across the group; shoulder length = the smallest (ProShop MIN
+  // OOH locks it down on the later ProShop import). Description keeps the primary's.
+  const oals = group.map(t => Number(t.overall_length)).filter(v => !isNaN(v) && v > 0);
+  if (oals.length) merged.overall_length = Math.max(...oals);
+  const shoulders = group.map(t => Number(t.shoulder_length)).filter(v => !isNaN(v) && v > 0);
+  if (shoulders.length) merged.shoulder_length = Math.min(...shoulders);
+
   const combineConflicts = [];
   const allKeys = new Set(group.flatMap(t => Object.keys(t)));
 
   for (const key of allKeys) {
     if (SKIP_KEYS.has(key) || key.startsWith('_')) continue;
+    // Gap-fill still applies to every field; only CONFLICT flagging is suppressed
+    // for fields that resolve by rule (description/OAL/shoulder), are a derived
+    // cache of the presets (flat speed/feed), or are metadata/ProShop-only and thus
+    // absent on the Fusion side (custom_grind, min_ooh, vendor, coating, …).
+    const conflictable = !AUTO_RESOLVE.has(key) && !SPEED_FEED_MIRROR.has(key) && !isMetadataOnly(key);
     for (const other of ordered.slice(1)) {
       const curVal = merged[key];
       const otherVal = other[key];
       if (isEmpty(curVal) && !isEmpty(otherVal)) {
         merged[key] = otherVal;                                  // gap-fill
       } else if (
+        conflictable &&
         !isEmpty(curVal) && !isEmpty(otherVal) &&
         (typeof curVal === 'string' || typeof curVal === 'number' || typeof curVal === 'boolean') &&
         (typeof otherVal === 'string' || typeof otherVal === 'number' || typeof otherVal === 'boolean') &&

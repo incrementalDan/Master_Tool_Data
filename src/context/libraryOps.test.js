@@ -57,19 +57,21 @@ describe('assignToolIds — includes no-Fusion tools, honors exclusions', () => 
 });
 
 describe('normalizeLibrary preserves conflict tools Fusion entries (G6)', () => {
-  const raw = (guid, comment, productId, desc) => ({
+  const raw = (guid, comment, productId, desc, dc = 0.5) => ({
     guid, type: 'flat end mill', unit: 'inches', description: desc,
     'product-id': productId, 'post-process': { comment, number: null },
-    geometry: { DC: 0.5, LCF: 1, OAL: 3, NOF: 4, LB: 1 },
+    geometry: { DC: dc, LCF: 1, OAL: 3, NOF: 4, LB: 1 },
     'start-values': { presets: [] }, expressions: {},
   });
 
   it('keeps a conflict pair in the library instead of dropping it on full-replace', async () => {
     // One clean tracked tool + a conflict pair: two tracked entries sharing a
-    // product-id but with different descriptions (a same-tool_id duplicate).
+    // product-id but with a genuinely-conflicting Fusion-native field (different
+    // diameter). (Description differences alone no longer conflict — they resolve
+    // by rule — so a real shared-field difference is used to exercise G6.)
     const rawA = raw('gA', 'FTL-CLEAN', 'CLEAN-1', 'Clean A');
-    const rawB = raw('gB', 'FTL-B', 'DUP-1', 'Desc B');
-    const rawC = raw('gC', 'FTL-C', 'DUP-1', 'Desc C');
+    const rawB = raw('gB', 'FTL-B', 'DUP-1', 'Desc B', 0.5);
+    const rawC = raw('gC', 'FTL-C', 'DUP-1', 'Desc C', 0.375);
     let uploaded = null;
     const ctx = makeCtx({
       downloadAllLibraries: vi.fn(async () => [

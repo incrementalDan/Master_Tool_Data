@@ -30,12 +30,16 @@ export default function DriftBanner({ tool, authority = 'fusion', isSaving, onAp
   // are resolved in Sync Job (#2).
   const fieldDrift = drift.filter(d => d.field);
   const infoDrift = drift.filter(d => d.kind && !d.field);
+  // Stale tracking-ID: this tool's Fusion instances carry different product IDs
+  // under one tracking ID — someone copied it in Fusion, re-numbered the product
+  // ID, and left the app's tracking ID behind. Surfaced (never silently merged).
+  const pidConflict = tool._productIdConflict || null;
   const [open, setOpen] = useState(false);
   const [res, setRes] = useState(
     () => Object.fromEntries(fieldDrift.map(d => [d.field, authority === 'app' ? 'app' : 'fusion'])),
   );
 
-  if (drift.length === 0) return null;
+  if (drift.length === 0 && !pidConflict) return null;
 
   const setAll = (choice) => setRes(Object.fromEntries(fieldDrift.map(d => [d.field, choice])));
   const unit = tool.unit;
@@ -44,6 +48,26 @@ export default function DriftBanner({ tool, authority = 'fusion', isSaving, onAp
     : `Fusion also changed ${infoDrift.length} value${infoDrift.length !== 1 ? 's' : ''} you edited`;
 
   return (
+    <>
+      {pidConflict && (
+        <div className="drift-banner" style={{
+          border: '1px solid var(--orange)', borderRadius: 'var(--radius)',
+          background: 'color-mix(in srgb, var(--orange) 8%, transparent)',
+          marginBottom: 16, overflow: 'hidden',
+        }}>
+          <div className="panel-body" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: 12 }}>
+            <AlertTriangle size={15} style={{ color: 'var(--orange)', flexShrink: 0, marginTop: 2 }} />
+            <span className="text-sm">
+              This tool’s Fusion entries have different product IDs
+              {' '}(<span className="font-mono" style={{ color: 'var(--text)' }}>{pidConflict.join(', ')}</span>)
+              {' '}under one tracking ID — likely a tool copied in Fusion and given a new product ID
+              without clearing the app’s tracking ID in its comment. Two different tools may be
+              linked as one. <strong>Review in Fusion</strong> and give each its own tracking ID.
+            </span>
+          </div>
+        </div>
+      )}
+      {drift.length > 0 && (
     <div className="drift-banner" style={{
       border: '1px solid var(--orange)', borderRadius: 'var(--radius)',
       background: 'color-mix(in srgb, var(--orange) 8%, transparent)',
@@ -114,6 +138,8 @@ export default function DriftBanner({ tool, authority = 'fusion', isSaving, onAp
         </div>
       )}
     </div>
+      )}
+    </>
   );
 }
 
