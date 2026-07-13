@@ -9,6 +9,7 @@ import { fusionToolToInternal, internalToFusionTool } from './fusionConvert.js';
 import { mergeFusionAndMetadata, buildMetadataTool, detectFusionDrift } from './metadataModel.js';
 import { buildHolderObject } from './holderGauge.js';
 import { parsePresetName, materialCategory, matchMaterial } from '../utils/presetNaming.js';
+import { mergePresetLists } from '../utils/presetMerge.js';
 import { convertLength } from '../utils/units.js';
 
 // ─── Build a logical tool from a group of raw Fusion instances ─────────────
@@ -57,13 +58,31 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
   // blank — the shop's presets encode the material only in the name ("AL FIN",
   // "SS316 SM HOLE FIN"), so without this the material would be lost on rename.
   const presetMeta = meta?.preset_meta || {};
-  // Presets come from Fusion for a LINKED tool (the only case today). When the
-  // Fusion side has none — a no-Fusion tool (Phase B) — fall back to the complete
-  // presets persisted in metadata (see buildMetadataTool). Inert for linked tools:
-  // Fusion presets are present, so this is exactly today's source.
-  const fusionPresets = merged.presets || [];
+  // Convert every instance to internal form once — reused for the preset union
+  // below AND the drift scan at the bottom (avoids a second per-instance convert).
+  const internalByRaw = rawInstances.map(r => (r === canonical ? internal : fusionToolToInternal(r)));
+  // Presets come from Fusion for a LINKED tool (the only case today). The model
+  // expects every instance to carry the SAME preset set, so for well-formed data
+  // this union is a no-op (each instance's presets collapse into the canonical's).
+  // When instances genuinely differ (e.g. fresh imports where each assembly was
+  // tuned separately), the distinct presets are preserved — same-name-but-different
+  // ones kept and indexed up (Rough → Rough 2) via mergePresetLists. When the Fusion
+  // side has none — a no-Fusion tool (Phase B) — fall back to the complete presets
+  // persisted in metadata (see buildMetadataTool).
+  let fusionPresets = [];
+  for (const int of internalByRaw) fusionPresets = mergePresetLists(fusionPresets, int.presets || [], merged.unit);
   const sourcePresets = fusionPresets.length > 0 ? fusionPresets : (meta?.presets || []);
   const presets = overlayPresets(sourcePresets, presetMeta);
+
+  // Stale tracking-ID flag: all instances of one logical tool must share the same
+  // product ID (ProShop number). If they DON'T, someone copied the tool in Fusion,
+  // changed the product ID, but left this app's tracking ID behind in the comment —
+  // so two different physical tools are wrongly linked. Surface it (never silently
+  // merge them). Runtime-only, like _drift.
+  const productIds = [...new Set(
+    rawInstances.map(r => String(r?.['product-id'] || '').trim()).filter(Boolean)
+  )];
+  const _productIdConflict = productIds.length > 1 ? productIds : null;
 
   const mtn = meta?.machine_tool_number ?? canonical['post-process']?.number ?? null;
 
@@ -85,10 +104,10 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
     // Scans EVERY instance (a shared-field edit to any one assembly counts), not
     // just the canonical. Runtime-only (never persisted); surfaced on the tool
     // page for confirmation, and the chosen value is pushed to ALL instances.
-    _drift: detectFusionDrift(
-      rawInstances.map(r => (r === canonical ? internal : fusionToolToInternal(r))),
-      meta,
-    ),
+    _drift: detectFusionDrift(internalByRaw, meta),
+    // Distinct product IDs found across this tool's instances (stale tracking ID) —
+    // null when consistent. Only present when there's a real conflict.
+    ...(_productIdConflict ? { _productIdConflict } : {}),
   };
 }
 
@@ -370,8 +389,33 @@ export function splitToFusionInstances(tool, holders = []) {
   const fusionInstances = assemblies.map(a => {
     const instanceGuid = a.instance_guid || generateId();
     const raw = rawByGuid.get(instanceGuid) || tool._fusionRaw || {};
+
+    // Per-instance OOH → geometry.LB (documented OOH source of truth), in the
+    // tool's own unit. Computed up-front so the shoulder-length guard can clamp
+    // against it before the Fusion object is built. When ooh is null (no assembly
+    // yet) fall back to the existing LB, then shoulder/flute length, so Fusion
+    // always receives a valid LB.
+    const oohNum = (a.ooh != null && a.ooh !== '' && !isNaN(Number(a.ooh))) ? Number(a.ooh) : null;
+    const lb = oohNum ??
+      raw.geometry?.LB ??
+      tool.shoulder_length ??
+      tool.flute_length ??
+      0;
+
+    // Shoulder length must never exceed this instance's stick-out (OOH). Shoulder
+    // is loosely controlled (the app takes the smallest across instances; ProShop
+    // MIN OOH locks it later) — if an intentionally long-stick-out instance still
+    // carries a shoulder longer than its own OOH, clamp the shoulder DOWN for this
+    // instance so Fusion doesn't reject the entry ("gauge length exceeds section
+    // height") and the flute ≤ shoulder ≤ OOH ordering holds. Never raises OOH.
+    let instShoulder = tool.shoulder_length;
+    if (instShoulder != null && instShoulder !== '' && !isNaN(Number(instShoulder)) && Number(instShoulder) > lb) {
+      instShoulder = lb;
+    }
+
     const base = internalToFusionTool({
       ...tool,
+      shoulder_length: instShoulder,
       id: instanceGuid,
       tracking_id,
       _fusionRaw: raw,
@@ -421,20 +465,10 @@ export function splitToFusionInstances(tool, holders = []) {
       delete base.expressions.holder_vendor;
     }
 
-    // Per-instance OOH → geometry.LB (the documented OOH source of truth).
-    // OOH is stored in the tool's own unit, so it's written raw (no conversion).
-    // ALSO update expressions.tool_bodyLength — Fusion re-derives LB from this
-    // expression on every library load, silently overriding the numeric field if
-    // the two don't match. Both must be updated together.
-    // When ooh is null (no assembly yet), fall back to the existing LB (from a
-    // prior Fusion entry) or seed with shoulder_length / flute_length so Fusion
-    // always receives a valid LB — it requires the field to be present.
-    const oohNum = (a.ooh != null && a.ooh !== '' && !isNaN(Number(a.ooh))) ? Number(a.ooh) : null;
-    const lb = oohNum ??
-      raw.geometry?.LB ??
-      tool.shoulder_length ??
-      tool.flute_length ??
-      0;
+    // Write the per-instance OOH to geometry.LB AND expressions.tool_bodyLength
+    // together — Fusion re-derives LB from the expression on every library load,
+    // silently overriding the numeric field if the two don't match. (lb + the
+    // shoulder clamp were computed at the top of this iteration.)
     base.geometry = { ...(base.geometry || {}), LB: lb };
     base.expressions = { ...(base.expressions || {}), tool_bodyLength: `${lb} ${isMetric ? 'mm' : 'in'}` };
 

@@ -24,11 +24,22 @@ describe('sharedSignature — what counts as "the same tool"', () => {
     expect(sharedSignature(a)).toBe(sharedSignature(b));
   });
 
-  it('changes when a shared field changes (description, geometry, preset speeds)', () => {
+  it('changes when a genuinely shared field changes (geometry, preset speeds)', () => {
     const base = rawEntry({ guid: 'g1' });
-    expect(sharedSignature(rawEntry({ guid: 'g2', desc: 'RENAMED' }))).not.toBe(sharedSignature(base));
     expect(sharedSignature(rawEntry({ guid: 'g3', dc: 0.375 }))).not.toBe(sharedSignature(base));
     expect(sharedSignature(rawEntry({ guid: 'g4', feed: 150 }))).not.toBe(sharedSignature(base));
+  });
+
+  it('ignores loosely-controlled fields that resolve by rule (description, OAL, shoulder)', () => {
+    const base = rawEntry({ guid: 'g1' });
+    // A " (copy)" or other description difference must NOT force a conflict — it
+    // resolves by rule (keep primary), so the shared signature is unchanged.
+    expect(sharedSignature(rawEntry({ guid: 'g2', desc: '1/2 4FL EM (copy)' }))).toBe(sharedSignature(base));
+    // OAL (biggest wins) and shoulder-length (smallest wins) are likewise excluded.
+    const oalDiff = rawEntry({ guid: 'g3' }); oalDiff.geometry.OAL = 3.5;
+    expect(sharedSignature(oalDiff)).toBe(sharedSignature(base));
+    const shoulderDiff = rawEntry({ guid: 'g4' }); shoulderDiff.geometry['shoulder-length'] = 1.2;
+    expect(sharedSignature(shoulderDiff)).toBe(sharedSignature(base));
   });
 
   it('is GUID-independent (a copied entry with a new guid still matches)', () => {
@@ -110,7 +121,9 @@ describe('classifyStrays — entries dumped into Fusion outside the app', () => 
 
   it('no metadata registry → new-assembly detection is disabled (kept silently), conflicts still surface', () => {
     const newSetup = rawEntry({ guid: 'stray-5', holderGuid: 'H2', lb: 3.0 });
-    const edited = rawEntry({ guid: 'stray-6', holderGuid: 'H3', lb: 2.0, desc: 'EDITED' });
+    // A real shared-field difference (preset feed), not just a description edit —
+    // description no longer counts toward the signature.
+    const edited = rawEntry({ guid: 'stray-6', holderGuid: 'H3', lb: 2.0, feed: 999 });
     const res = classifyStrays({
       matchingRaws: [canonical, newSetup, edited],
       registeredAssemblies: [],          // Drive not connected

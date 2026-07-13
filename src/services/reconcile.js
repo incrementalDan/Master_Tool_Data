@@ -34,6 +34,11 @@ function presetSig(p) {
 
 // A normalized, comparable fingerprint of everything that is SHARED across a
 // logical tool's instances (i.e. everything except holder + OOH).
+// Deliberately EXCLUDES the loosely-controlled fields that resolve by rule rather
+// than flag (see the per-field merge policy): `description` (may differ across
+// copies, e.g. a " (copy)" suffix), `overall-length` (biggest wins), and
+// `shoulder-length` (smallest wins; ProShop MIN OOH locks it later). A difference
+// in only those must classify as a new assembly, never a conflict.
 export function sharedSignature(raw) {
   const geo = raw.geometry || {};
   const presets = (raw['start-values']?.presets || [])
@@ -41,11 +46,11 @@ export function sharedSignature(raw) {
     .sort((a, b) => a.name.localeCompare(b.name));
   return JSON.stringify({
     type: raw.type || '',
-    dc: r4(geo.DC), lcf: r4(geo.LCF), oal: r4(geo.OAL),
+    dc: r4(geo.DC), lcf: r4(geo.LCF),
     nof: geo.NOF ?? null, re: r4(geo.RE), sfdm: r4(geo.SFDM),
-    ta: r4(geo.TA), shoulderLen: r4(geo['shoulder-length']),
+    ta: r4(geo.TA),
     sig: r4(geo.SIG), tp: r6(geo.TP),
-    material: raw.BMC || '', desc: raw.description || '',
+    material: raw.BMC || '',
     pid: raw['product-id'] || '', presets,
   });
 }

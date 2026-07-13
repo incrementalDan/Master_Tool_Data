@@ -4,6 +4,9 @@ import { generateId, generateAssemblyId } from '../../schema/toolSchema.js';
 import { fieldLabel } from '../../schema/fieldRegistry.js';
 import { composePresetName, parsePresetName, presetMatchesAssembly, materialNameCode, presetMaterialColor, HOLE_MAKING_TYPES } from '../../utils/presetNaming.js';
 import { lengthEps, unitAbbr } from '../../utils/units.js';
+import {
+  PRESET_DIFF_FIELDS, NUMERIC_PRESET_FIELDS, presetTolerance, valuesEqual,
+} from '../../utils/presetMerge.js';
 import { useApp } from '../../context/AppContext.jsx';
 import InfoTip from '../InfoTip.jsx';
 
@@ -44,26 +47,6 @@ const DIFF_SECTIONS = [
     fields: ['notes'],
   },
 ];
-
-const PRESET_DIFF_FIELDS = [
-  'n', 'v_c', 'n_ramp',
-  'v_f', 'f_z',
-  'v_f_plunge', 'f_n',
-  'v_f_leadIn', 'v_f_leadOut', 'v_f_transition',
-  'v_f_ramp', 'ramp-angle',
-  'use-stepdown', 'stepdown',
-  'use-stepover', 'stepover',
-  'tool-coolant',
-];
-
-const NUMERIC_PRESET_FIELDS = new Set([
-  'n', 'v_c', 'n_ramp',
-  'v_f', 'f_z',
-  'v_f_plunge', 'f_n',
-  'v_f_leadIn', 'v_f_leadOut', 'v_f_transition',
-  'v_f_ramp', 'ramp-angle',
-  'stepdown', 'stepover',
-]);
 
 export const PRESET_FIELD_LABELS = {
   n: 'Spindle Speed (RPM)',
@@ -109,44 +92,6 @@ function formatValue(v) {
 // differences are treated as identical (counted, shown as "minor differences
 // ignored"). abs floors are in inch units; fields marked `len` scale ×25.4 for
 // a millimeters tool.
-const PRESET_SIGNIFICANCE = {
-  n:              { rel: 0.01, abs: 15 },                   // RPM
-  n_ramp:         { rel: 0.01, abs: 15 },
-  v_c:            { rel: 0.01, abs: 1 },                    // surface speed
-  v_f:            { rel: 0.02, abs: 0.1,     len: true },   // feeds
-  v_f_plunge:     { rel: 0.02, abs: 0.1,     len: true },
-  v_f_ramp:       { rel: 0.02, abs: 0.1,     len: true },
-  v_f_leadIn:     { rel: 0.05, abs: 0.1,     len: true },   // followers of v_f — looser
-  v_f_leadOut:    { rel: 0.05, abs: 0.1,     len: true },
-  v_f_transition: { rel: 0.05, abs: 0.1,     len: true },
-  f_z:            { rel: 0.02, abs: 0.00005, len: true },   // chip load — 0.0001" is real
-  f_n:            { rel: 0.02, abs: 0.00005, len: true },
-  'ramp-angle':   { rel: 0,    abs: 0.25 },
-  stepdown:       { rel: 0.10, abs: 0.005,   len: true },   // DOC reference value — coarse
-  stepover:       { rel: 0.02, abs: 0.0005,  len: true },   // WOC — small diffs matter
-};
-
-function presetTolerance(field, a, b, unit) {
-  const sig = PRESET_SIGNIFICANCE[field];
-  if (!sig) return 0.0001;
-  const mag = Math.max(Math.abs(Number(a)), Math.abs(Number(b)));
-  const scale = (sig.len && unit === 'millimeters') ? 25.4 : 1;
-  return Math.max(sig.rel * mag, sig.abs * scale);
-}
-
-function valuesEqual(a, b) {
-  if (a === b) return true;
-  if (Array.isArray(a) && Array.isArray(b)) return JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
-  const isEmpty = v => v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0);
-  if (isEmpty(a) && isEmpty(b)) return true;
-  const na = Number(a), nb = Number(b);
-  // Numbers that round to the same 4-decimal display are equal — formatValue
-  // shows 4dp, so anything closer would render as "0.5 → 0.5" (float round-trip
-  // noise from Fusion), which is pure confusion in a diff row.
-  if (!isNaN(na) && !isNaN(nb) && a !== '' && b !== '') return Math.abs(na - nb) < 5e-5;
-  return false;
-}
-
 function checkDifferentAssembly(masterPreset, incomingOoh, incomingHolderGuid, masterAssemblies, unit = 'inches') {
   if (incomingOoh == null || incomingOoh <= 0) return false;
   const linked = (masterAssemblies || []).filter(a => presetMatchesAssembly(masterPreset, a, unit));
