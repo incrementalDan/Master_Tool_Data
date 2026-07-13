@@ -3044,6 +3044,14 @@ textarea.field-input { resize: vertical; min-height: 70px; }
    and units stay neutral; only the glyph is colored. */
 .dia { color: var(--orange); font-weight: 600; }
 
+/* App-level alert banners (normalize / combine-conflict / reconnect / setup).
+   On the landing route, the fixed 72px Sync Job sidebar overlays the top-left
+   corner, so shift the banner strip clear of it to stop the leading text
+   ("N tools …") from being hidden behind the sidebar. */
+.app-banners--landing {
+  padding-left: 72px;
+}
+
 /* ─── Library landing page — left sidebar + main content ────────────────── */
 .landing-layout {
   min-height: calc(100vh - 54px);
