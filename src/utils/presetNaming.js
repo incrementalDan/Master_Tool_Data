@@ -157,6 +157,53 @@ export function materialNameCode(query, materials) {
   return matchMaterial(query) || '';
 }
 
+// Legacy material code -> a name hint identifying the shop's single default CAM
+// preset for a bare code. Only unambiguous codes live here: "AL" means the
+// wrought Al preset, and a bare "SS" means austenitic 316 (the shop's default
+// stainless). Steel (P) is deliberately omitted — many presets, no one obvious
+// default — so "Steel"/"ST" fall through to null and the user picks.
+const CODE_DEFAULT_HINT = { AL: /wrought/i, SS: /austenitic 316/i };
+
+// Suggest a CAM preset NAME to link a legacy material string to, resolved within
+// the CURRENT materials library (so shop edits are respected). Confident matches
+// only, tried in order:
+//   1. the query already resolves to a CAM preset or a known alloy → its preset
+//      (e.g. "SS316", "316L")
+//   2. a grade number in the query matches an alloy's grade → its preset
+//      (e.g. "316" or "316 SS" → the 316 alloy → SS Austenitic 316)
+//   3. a bare legacy code with a single default (AL → Al Wrought, SS → 316)
+// Returns null for everything else (e.g. "Steel", "ST") so the normalize flow
+// surfaces a searchable picker for the user to choose.
+export function suggestCamPresetName(query, materials) {
+  const exact = findMaterialInLibrary(query, materials);
+  if (exact.preset) return exact.preset.name;
+
+  const raw = String(query || '').trim();
+  if (!raw) return null;
+  const presets = materials?.presets || [];
+  const alloys = materials?.materials || [];
+  const presetName = (id) => presets.find(p => p.id === id)?.name || null;
+  const toTokens = (s) => String(s || '').toUpperCase().split(/[\s/-]+/).filter(Boolean);
+
+  // Grade-number match: a numeric token in the query (e.g. "316", "6061")
+  // matching an alloy's label/alias grade token → that alloy's CAM preset. Lets
+  // a bare grade like "316" (not itself an alias) still resolve to its preset.
+  const gradeTokens = toTokens(raw).filter(t => /\d/.test(t));
+  for (const gt of gradeTokens) {
+    const alloy = alloys.find(a =>
+      [a.label, ...(a.aliases || [])].some(f => toTokens(f).includes(gt)));
+    const name = alloy && presetName(alloy.preset_id);
+    if (name) return name;
+  }
+
+  // Bare legacy code with a single obvious default.
+  const code = matchMaterial(query);
+  const hint = code ? CODE_DEFAULT_HINT[code] : null;
+  if (!hint) return null;
+  const iso = MATERIAL_CODE_TO_ISO_GROUP[code];
+  return presets.find(p => p.group_id === iso && hint.test(p.name || ''))?.name || null;
+}
+
 // ISO-group color for a preset's stored material, resolved via the library
 // first, then the legacy keyword map. null when unknown / no color.
 export function presetMaterialColor(query, materials) {

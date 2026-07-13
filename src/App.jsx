@@ -56,6 +56,13 @@ function AppShell() {
 
   const [shopConnectChosen, setShopConnectChosen] = useState(false);
 
+  // The landing page renders a fixed 72px-wide left sidebar (Sync Job) that
+  // overlays everything below the topbar. The app-level alert banners live above
+  // <main>, so on the landing route that sidebar clips their left edge (hiding
+  // the "N tools" count). Pad the banner strip clear of the sidebar there.
+  const { pathname } = useLocation();
+  const onLanding = pathname === '/';
+
   const ready = !localMode && !demoMode && apsAuthenticated && libraryLocation && (googleAuthenticated || metadataSkipped);
   const loadedRef = useRef(false);
 
@@ -129,11 +136,13 @@ function AppShell() {
     content = (
       <div className="app-shell">
         <TopBar />
-        <NormalizeBanner />
-        <CombineConflictBanner />
-        <GoogleReconnectBanner />
-        <MetadataFileBanner />
-        <SetupGuideBanner />
+        <div className={`app-banners${onLanding ? ' app-banners--landing' : ''}`}>
+          <NormalizeBanner />
+          <CombineConflictBanner />
+          <GoogleReconnectBanner />
+          <MetadataFileBanner />
+          <SetupGuideBanner />
+        </div>
         <SetupCompleteModal />
         <main className="page-content">
           <Routes>

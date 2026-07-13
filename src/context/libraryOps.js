@@ -14,7 +14,7 @@ import {
 import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSystem.js';
 import { isExcludedFrom } from '../utils/idSystems.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
-import { composePresetName, opTypeWord, parsePresetName, materialNameCode, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
+import { composePresetName, opTypeWord, parsePresetName, materialNameCode, materialCategory, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import { defaultToolLibraryId, machineNumberArgs } from './appState.js';
 
@@ -535,9 +535,12 @@ export function createLibraryOps(ctx) {
   // Assigns tracking IDs to untracked tools, fans each out into instances per
   // its existing metadata assemblies, renames presets to the naming convention,
   // and extracts operation_type (from the name, or from `opOverrides` keyed by
-  // preset guid). Re-keys metadata from guid → tracking_id by overwriting the
-  // whole file. Idempotent: already-tracked tools are left as-is.
-  const normalizeLibrary = async (opOverrides = {}) => {
+  // preset guid). `matOverrides` (also keyed by preset guid) links each preset's
+  // material to a chosen CAM preset NAME — set from the NormalizeModal's material
+  // picker (auto-suggested for confident cases like AL → Al Wrought, user-picked
+  // otherwise). Re-keys metadata from guid → tracking_id by overwriting the whole
+  // file. Idempotent: already-tracked tools are left as-is.
+  const normalizeLibrary = async (opOverrides = {}, matOverrides = {}) => {
     dispatch({ type: 'SAVE_START' });
     try {
       const holders = holdersRef.current || [];
@@ -616,18 +619,24 @@ export function createLibraryOps(ctx) {
         const primaryHolderShort = holderShortName(primary.holder_description || '');
         const isHoleMakingTool = HOLE_MAKING_TYPES.has(merged.tool_type);
         const presets = (merged.presets || []).map(p => {
+          // Link the material to the user's chosen (or auto-suggested) CAM preset
+          // name. When no override is supplied the preset keeps its existing query.
+          const overrideQuery = matOverrides[p.guid];
+          const material = overrideQuery
+            ? { ...(p.material || {}), query: overrideQuery, category: materialCategory(overrideQuery) }
+            : p.material;
           const opType = isHoleMakingTool
             ? null
             : (parsePresetName(p.name)?.opType ?? opOverrides[p.guid] ?? p.operation_type ?? null);
           const name = (!isHoleMakingTool && opTypeWord(opType))
             ? composePresetName({
-                materialQuery: materialNameCode(p.material?.query, materialsRef.current),
+                materialQuery: materialNameCode(material?.query, materialsRef.current),
                 ooh: primary.ooh,
                 holderShort: primaryHolderShort,
                 opType,
               })
             : p.name;
-          return { ...p, name, operation_type: opType };
+          return { ...p, material, name, operation_type: opType };
         });
 
         logicalTools.push({
