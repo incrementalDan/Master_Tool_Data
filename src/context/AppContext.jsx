@@ -22,9 +22,9 @@ import { findJob, newJob } from '../utils/jobs.js';
 import { setDefaultUnit } from '../utils/units.js';
 import { getDemoData, isDemoRequested } from '../demo/index.js';
 import {
-  SETUP_STEPS, SETUP_PROGRESS_KEY, SETUP_CELEBRATED_KEY,
+  SETUP_STEPS, SETUP_CELEBRATED_KEY,
   locToLibEntry, saveRegistryMirror, defaultToolLibraryId, primaryToolLib,
-  seedShopSettingsRegistry, loadSetupProgress,
+  seedShopSettingsRegistry, setupProgressFromSteps,
   initialState, reducer,
 } from './appState.js';
 import { createToolActions } from './toolActions.js';
@@ -84,15 +84,15 @@ export function AppProvider({ children }) {
   jobsRef.current = state.jobs;
   componentsRef.current = state.components;
 
-  // Tracks whether we've already seeded setup-progress flags for an established
-  // library this session — seeding should run at most once, and only when no
-  // progress has been stored yet (a brand-new install).
-  const setupSeededRef = useRef(loadSetupProgress() !== null);
+  // Guards the once-per-session seeding of an established shop's setup completion
+  // (see loadTools). Seeding writes the shop-wide setup_steps timestamps, and only
+  // runs when none have been recorded yet.
+  const setupSeededRef = useRef(false);
 
-  // Persist setup-progress flags whenever they change (seeding or step marks).
-  useEffect(() => {
-    localStorage.setItem(SETUP_PROGRESS_KEY, JSON.stringify(state.setupProgress));
-  }, [state.setupProgress]);
+  // Setup completion is derived from the shop-wide setup_steps timestamps
+  // (shop_settings.json on Drive) — the single source of truth, shared across
+  // devices. No per-device localStorage flags.
+  const setupProgress = setupProgressFromSteps(state.shopSettings?.setup_steps);
 
   // ─── Handle APS OAuth callback on mount ───────────────────────────────────
   useEffect(() => {
@@ -386,30 +386,28 @@ export function AppProvider({ children }) {
     return false;
   }, []);
 
-  // Marks one step of the setup guide as complete (idempotent — see MARK_SETUP_STEP).
-  const markSetupStep = useCallback((key) => dispatch({ type: 'MARK_SETUP_STEP', key }), []);
-
-  // Like markSetupStep but also stamps a timestamp in shop_settings.json on Drive
-  // (shared across devices). Falls back gracefully if Google Drive is not connected.
+  // Marks one step of the setup guide as complete by stamping its timestamp in the
+  // shop-wide setup_steps (shop_settings.json on Drive) — the single source of
+  // truth that the derived setupProgress reads from. Idempotent: a step already
+  // recorded is left as-is (so its original completion date and any concurrent
+  // edit aren't churned). Updates in-memory immediately; persists to Drive when
+  // connected (in-memory/session-only otherwise). The timestamp is merged via the
+  // reducer off fresh state — never rebuild-and-replace from a stale ref, which
+  // would clobber a concurrent location_config / id-system edit in the same tick.
   const markSetupStepInSettings = useCallback((key) => {
-    dispatch({ type: 'MARK_SETUP_STEP', key });
-    if (!googleRef.current) return;
-    // Merge the timestamp into shopSettings via the reducer (fresh state — never
-    // rebuild-and-replace from a stale ref, which would clobber a concurrent
-    // location_config / id-system edit in the same tick), then debounce-write the
-    // latest settled state.
+    if (shopSettingsRef.current?.setup_steps?.[key]) return; // already recorded
     dispatch({ type: 'MARK_SETUP_TIMESTAMP', key, ts: new Date().toISOString() });
-    scheduleSharedWrite('shopSettings');
+    if (googleRef.current) scheduleSharedWrite('shopSettings');
   }, [scheduleSharedWrite]);
 
   // The metadataConnected setup step completes the moment Google Drive is
   // connected (live sign-in or a restored session). Declarative so it fires
   // for both paths without threading a call through every Google entry point.
   useEffect(() => {
-    if (state.googleAuthenticated && !state.setupProgress.metadataConnected) {
+    if (state.googleAuthenticated && !state.shopSettings?.setup_steps?.metadataConnected) {
       markSetupStepInSettings('metadataConnected');
     }
-  }, [state.googleAuthenticated, state.setupProgress.metadataConnected, markSetupStepInSettings]);
+  }, [state.googleAuthenticated, state.shopSettings?.setup_steps?.metadataConnected, markSetupStepInSettings]);
 
   // Flush any pending debounced shared-file writes when the page is hidden or
   // closed, so an edit made inside the 600ms debounce window isn't lost on a tab
@@ -432,19 +430,15 @@ export function AppProvider({ children }) {
   const setupCelebrated = useCallback(() => localStorage.getItem(SETUP_CELEBRATED_KEY) === '1', []);
   const markSetupCelebrated = useCallback(() => localStorage.setItem(SETUP_CELEBRATED_KEY, '1'), []);
 
-  // Reset the setup checklist to a clean slate. The step flags are DEVICE-LOCAL
-  // (localStorage), independent of the Drive settings file — so emptying
-  // shop_settings.json alone does NOT clear the checkmarks (the source of the
-  // "steps stuck checked off" confusion). This clears the local flags + the
-  // "already celebrated" marker, blanks the in-memory progress, and wipes the
-  // Drive-side timestamps so a re-run of the workflow (with fresh real data)
-  // starts from zero. setupSeededRef stays set so live data doesn't auto-reseed
-  // the flags back on this session.
+  // Reset the setup checklist to a clean slate, SHOP-WIDE: wipe the setup_steps
+  // timestamps in shop_settings.json (Drive) — the shop-wide source of truth — so
+  // every device sees the workflow start over. Also clear this device's "already
+  // celebrated" marker so the completion fireworks can fire again when the re-run
+  // finishes. setupSeededRef is set so established live data doesn't auto-reseed
+  // the steps back this session.
   const resetSetupProgress = useCallback(() => {
-    localStorage.removeItem(SETUP_PROGRESS_KEY);
     localStorage.removeItem(SETUP_CELEBRATED_KEY);
     setupSeededRef.current = true;
-    dispatch({ type: 'SET_SETUP_PROGRESS', progress: {} });
     dispatch({ type: 'RESET_SETUP_TIMESTAMPS' });
     if (googleRef.current) scheduleSharedWrite('shopSettings');
     notify('Setup checklist reset — start the workflow fresh', 'success');
@@ -771,31 +765,38 @@ export function AppProvider({ children }) {
       }
       const needsNormalize = untrackedCount > 0;
 
-      // Seed setup-progress flags once for libraries that already completed this
-      // workflow before the setup guide existed — otherwise an established shop
-      // would be told "you haven't done this yet" the first time they open the app.
+      // Seed setup-completion once for a shop that CLEARLY already finished this
+      // workflow before adopting the setup guide (normalized + ProShop-merged data)
+      // but has no setup_steps recorded yet — otherwise an established shop would be
+      // told "you haven't done this yet". Writes the SHOP-WIDE setup_steps
+      // timestamps (Drive). Skipped the moment ANY step is already recorded, so it
+      // never stomps real progress or an explicit reset. Connection facts
+      // (fusionConnected / metadataConnected) are marked by their own actions.
       if (!setupSeededRef.current) {
         setupSeededRef.current = true;
+        // Read the freshly-loaded Drive settings (effectiveShop) — NOT
+        // shopSettingsRef, which is still the pre-load value mid-loadTools (the
+        // SET_SHARED_FILES dispatch above hasn't re-rendered yet).
+        const recordedSteps = effectiveShop?.setup_steps || {};
+        const alreadyRecorded = Object.values(recordedSteps).some(Boolean);
         const normalized = !needsNormalize && tools.length > 0;
         const proshopMerged = tools.some(t => t.min_ooh != null && t.min_ooh > 0);
         const machineNumbers = tools.some(t => t.machine_tool_number != null && t.machine_tool_number > 0);
-        const metadataConnected = googleRef.current;
         const established = normalized && proshopMerged;
-        dispatch({ type: 'SET_SETUP_PROGRESS', progress: {
-          fusionConnected: true,
-          metadataConnected,
-          // The three ID systems: an established shop already has Tool ID / Location
-          // / Assembly schemes (all default to a working mode) — mark done so the
-          // banner stays gone for an already-set-up library.
-          toolIdConfigured: established,
-          locationConfigured: established,
-          assemblyIdConfigured: established,
-          normalized,
-          proshopMerged,
-          machineNumbers,
-          proshopExported: established,
-        }});
-        if (established) localStorage.setItem(SETUP_CELEBRATED_KEY, '1');
+        if (!alreadyRecorded && established) {
+          const ts = new Date().toISOString();
+          // The three ID systems default to a working mode, so an established shop
+          // already has them configured — mark done alongside the data steps.
+          const steps = {};
+          for (const k of ['fusionConnected', 'metadataConnected', 'toolIdConfigured',
+            'locationConfigured', 'assemblyIdConfigured', 'normalized', 'proshopMerged',
+            'proshopExported', ...(machineNumbers ? ['machineNumbers'] : [])]) {
+            steps[k] = ts;
+          }
+          dispatch({ type: 'MERGE_SETUP_TIMESTAMPS', steps });
+          if (googleRef.current) scheduleSharedWrite('shopSettings');
+          localStorage.setItem(SETUP_CELEBRATED_KEY, '1');
+        }
       }
 
       // No-Fusion tools (Fusion-decoupling Phase B): materialize any metadata
@@ -863,6 +864,9 @@ export function AppProvider({ children }) {
   return (
     <AppContext.Provider value={{
       ...state,
+      // Setup completion is derived from the shop-wide setup_steps timestamps
+      // (not per-device localStorage) — the single source of truth across devices.
+      setupProgress,
       holderLibrarySetupComplete: !!state.holderLibraryLocation,
       // Whether the Fusion sync adapter is active (shop-wide). Off = tools live in
       // metadata only; writes are metadata-only and the load reads from metadata.
@@ -883,7 +887,6 @@ export function AppProvider({ children }) {
       saveComponents,
       findOrCreateJob,
       saveLocationConfig,
-      markSetupStep,
       markSetupStepInSettings,
       registerNavGuard,
       maybeBlockNav,

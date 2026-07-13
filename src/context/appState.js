@@ -13,7 +13,9 @@ const HOLDER_LOCATION_KEY = 'aps_holder_library_location';
 // cache is the fallback + the seed before Drive loads. Mirrors the existing
 // default_units localStorage-mirroring pattern.
 const REGISTRY_MIRROR_KEY = 'aps_library_registry';
-export const SETUP_PROGRESS_KEY = 'tms_setup_progress';
+// Whether THIS device has already shown the one-time completion fireworks. This
+// is a per-device UI acknowledgment (has this user seen the party?), NOT shop
+// configuration — setup COMPLETION itself is shop-wide, in shop_settings.setup_steps.
 export const SETUP_CELEBRATED_KEY = 'tms_setup_celebrated';
 
 // The one-time setup/normalization/ProShop workflow, in order. Each step is
@@ -127,30 +129,16 @@ export function seedShopSettingsRegistry(ss) {
   return { ...ss, tool_libraries, holder_libraries, default_tool_library_id };
 }
 
-export function loadSetupProgress() {
-  try {
-    const raw = localStorage.getItem(SETUP_PROGRESS_KEY);
-    const progress = raw ? JSON.parse(raw) : null;
-    // Migration: a shop that finished the workflow before later steps were added
-    // has all its old flags true but is missing the newer keys. Back-fill them on
-    // an established library (proshopExported true) so the banner goes away and the
-    // celebration modal fires correctly on upgrade. Covers 'machineNumbers' (4→5
-    // step upgrade) and 'metadataConnected' (5→6 step upgrade — if they got to
-    // export they had a metadata file).
-    if (progress && progress.proshopExported) {
-      let changed = false;
-      if (progress.machineNumbers === undefined) { progress.machineNumbers = true; changed = true; }
-      if (progress.metadataConnected === undefined) { progress.metadataConnected = true; changed = true; }
-      // Three-ID-systems upgrade: an established shop already has Tool ID / Location
-      // / Assembly ID schemes (all default to a working mode) — back-fill so the
-      // setup banner doesn't resurrect.
-      if (progress.toolIdConfigured === undefined) { progress.toolIdConfigured = true; changed = true; }
-      if (progress.locationConfigured === undefined) { progress.locationConfigured = true; changed = true; }
-      if (progress.assemblyIdConfigured === undefined) { progress.assemblyIdConfigured = true; changed = true; }
-      if (changed) localStorage.setItem(SETUP_PROGRESS_KEY, JSON.stringify(progress));
-    }
-    return progress;
-  } catch { return null; }
+// Derive the boolean "is this step done?" map the UI reads from the shop-wide
+// setup_steps timestamps (shop_settings.json on Drive). setup_steps is the SINGLE
+// SOURCE OF TRUTH for setup completion — shared across every device via Drive — so
+// a step is "done" exactly when it carries a timestamp. (Previously the booleans
+// lived per-device in localStorage, which is why deleting the Drive settings file
+// didn't reset the checklist; that store is gone.)
+export function setupProgressFromSteps(setupSteps) {
+  const out = {};
+  for (const [k, v] of Object.entries(setupSteps || {})) out[k] = !!v;
+  return out;
 }
 
 // Machine-number start/skip come from shop_settings.json (falling back to the
@@ -183,7 +171,9 @@ export const initialState = {
   libraryLocation: primaryToolLib(SEEDED_SHOP_SETTINGS),
   changingLibrary: false,     // transient: showing the library picker to switch, with Cancel
   holderLibraryLocation: (SEEDED_SHOP_SETTINGS.holder_libraries || [])[0] || null, // pointer to first holder lib
-  setupProgress: loadSetupProgress() || {}, // { fusionConnected, normalized, proshopMerged, proshopExported }
+  // NOTE: setup completion is NOT stored here — it's derived from the shop-wide
+  // shopSettings.setup_steps timestamps (see setupProgressFromSteps). The provider
+  // exposes the derived `setupProgress` map in the context value.
   processingAuth: false,      // exchanging APS callback code
   tools: [],
   holders: [],                // loaded from Master-Holder library/libraries (tagged with _libraryId/_libraryName)
@@ -233,10 +223,6 @@ export function reducer(state, action) {
     case 'START_CHANGE_LIBRARY': return { ...state, changingLibrary: true };
     case 'CANCEL_CHANGE_LIBRARY': return { ...state, changingLibrary: false };
     case 'SET_HOLDERS': return { ...state, holders: action.holders };
-    case 'SET_SETUP_PROGRESS': return { ...state, setupProgress: action.progress };
-    case 'MARK_SETUP_STEP':
-      if (state.setupProgress[action.key]) return state; // already done — no-op
-      return { ...state, setupProgress: { ...state.setupProgress, [action.key]: true } };
     case 'SIGN_OUT':
       return {
         ...initialState,
@@ -295,6 +281,10 @@ export function reducer(state, action) {
       return { ...state, shopSettings: { ...state.shopSettings, location_config: action.locationConfig } };
     case 'MARK_SETUP_TIMESTAMP':
       return { ...state, shopSettings: { ...state.shopSettings, setup_steps: { ...(state.shopSettings?.setup_steps || {}), [action.key]: action.ts } } };
+    // Merge several step timestamps at once (used to seed an established shop's
+    // completion). Merged over the current setup_steps off fresh state.
+    case 'MERGE_SETUP_TIMESTAMPS':
+      return { ...state, shopSettings: { ...state.shopSettings, setup_steps: { ...(state.shopSettings?.setup_steps || {}), ...action.steps } } };
     case 'RESET_SETUP_TIMESTAMPS':
       return { ...state, shopSettings: { ...state.shopSettings, setup_steps: {} } };
     case 'CLEAR_ERROR': return { ...state, error: null };

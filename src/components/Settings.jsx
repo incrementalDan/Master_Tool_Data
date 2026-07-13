@@ -881,14 +881,14 @@ export default function Settings() {
           );
         })}
 
-        {/* Reset — the checkmarks are stored on THIS device (localStorage), not in
-            shop_settings.json, so clearing the Drive file doesn't reset them.
-            This does. Use it to re-run the whole workflow with fresh real data. */}
+        {/* Reset — clears the shop-wide setup_steps in shop_settings.json (Drive),
+            so every device sees the workflow start over. Use it to re-run the whole
+            setup with fresh real data. */}
         <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {confirmResetSetup ? (
             <>
               <span className="text-sub text-sm" style={{ flex: 1, minWidth: 220 }}>
-                Uncheck every setup step and clear its timestamp? The workflow starts over — your tools and data aren&apos;t touched.
+                Uncheck every setup step for the whole shop and clear its timestamp? The workflow starts over on every device — your tools and data aren&apos;t touched.
               </span>
               <button className="btn btn-danger btn-sm" onClick={() => { resetSetupProgress(); setConfirmResetSetup(false); }}>
                 Reset checklist
@@ -898,9 +898,9 @@ export default function Settings() {
           ) : (
             <>
               <span className="text-sub" style={{ fontSize: 11, flex: 1, minWidth: 220 }}>
-                Progress is saved per-device, separate from <code>shop_settings.json</code>.
+                Completion is shop-wide, saved in <code>shop_settings.json</code> on Drive.
               </span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setConfirmResetSetup(true)}>
+              <button className="btn btn-ghost btn-sm" onClick={() => setConfirmResetSetup(true)} disabled={!googleAuthenticated} title={!googleAuthenticated ? 'Connect Google Drive to change shop-wide settings' : undefined}>
                 <RotateCcw size={12} /> Reset checklist
               </button>
             </>

@@ -269,8 +269,10 @@ export const DEFAULT_SHOP_SETTINGS = {
   import: { last_proshop_import: null, last_photo_import_folder_id: null },
   aps: { last_used_hub_id: null, last_used_project_id: null },
   // ISO timestamps set when each step of the initial setup workflow completes.
-  // null = not done. Shared across users via Drive (unlike the localStorage flags
-  // used for the in-app banner). proshopPhotos is a sub-step of proshopMerged.
+  // null = not done. This is the SINGLE SOURCE OF TRUTH for setup completion —
+  // shop-wide, shared across every device via Drive; the UI's boolean "done" map
+  // is derived from it (setupProgressFromSteps). proshopPhotos is a sub-step of
+  // proshopMerged.
   setup_steps: {
     fusionConnected: null,
     metadataConnected: null,
