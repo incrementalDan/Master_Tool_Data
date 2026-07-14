@@ -239,6 +239,27 @@ export function AppProvider({ children }) {
   // Save back to Drive and update in-memory state. Foundation: no UI yet, but
   // any component can read state.{materials,vendorRegistry,shopSettings} and
   // call these to persist edits.
+  // Whether a Drive write can actually succeed RIGHT NOW: connected AND the token
+  // hasn't lapsed. googleRef (= googleAuthenticated) alone is NOT enough — a
+  // GOOGLE_EXPIRED keeps googleAuthenticated true (so the reconnect banner can
+  // overlay the running app), and the Google OAuth flow has no silent refresh, so
+  // the token simply dies after ~1hr. When it's NOT writable we flip on the
+  // reconnect banner (dispatch GOOGLE_EXPIRED) so the failure is surfaced instead
+  // of a write being silently dropped on the next debounce / tab-close flush.
+  // `toast` adds a one-off error toast for user-initiated saves.
+  const ensureDriveWritable = useCallback(({ toast = false } = {}) => {
+    if (!googleRef.current) {
+      if (toast) notify('Connect Google Drive to save', 'error');
+      return false;
+    }
+    if (driveService.isTokenExpired()) {
+      dispatch({ type: 'GOOGLE_EXPIRED' });
+      if (toast) notify('Google Drive session expired — reconnect to save your changes', 'error', 8000);
+      return false;
+    }
+    return true;
+  }, [notify]);
+
   // Debounced Drive write for a shared file. Flushes the LATEST settled state at
   // timer time (the refs are render-synced, so by flush all same-tick optimistic
   // dispatches have committed) — robust when several writers touch shop_settings
@@ -246,6 +267,12 @@ export function AppProvider({ children }) {
   const scheduleSharedWrite = useCallback((key, fallbackData) => {
     // Demo mode is an in-memory sandbox — never write shared files to Drive.
     if (demoModeRef.current) return;
+    // Never queue a write we already know will fail (no token / expired session).
+    // Surfaces the reconnect banner instead of silently dropping the write on the
+    // debounce timer or the tab-close keepalive flush (where a 401 is unobservable).
+    // This is the central guard for the direct callers that bypass saveSharedFile
+    // (markSetupStepInSettings, persistRegistry, the load-time seed).
+    if (driveService.isTokenExpired()) { dispatch({ type: 'GOOGLE_EXPIRED' }); return; }
     const { SHARED_FILES } = driveService;
     const pending = sharedSaveTimersRef.current;
     // The write closure reads the latest settled state at call time (refs are
@@ -299,7 +326,16 @@ export function AppProvider({ children }) {
       dispatch({ type: dispatchType, [stateKey]: data });
       return Promise.resolve();
     }
-    if (!googleRef.current) { notify('Connect Google Drive to save', 'error'); return Promise.reject(new Error('Google Drive not connected')); }
+    // Verify Drive can ACTUALLY be written before doing anything — never optimistic-
+    // update + report success when the session is disconnected or the token has
+    // expired (the silent-save bug: settings looked saved but were lost on reload
+    // because Google had quietly expired). Rejecting here keeps every awaiting caller
+    // honest — Settings skips its "saved" toast, Materials/Vendors show "Save failed"
+    // — and the reconnect banner comes up. This extends the pre-existing
+    // not-connected rejection to also cover an expired token.
+    if (!ensureDriveWritable({ toast: true })) {
+      return Promise.reject(new Error('Google Drive not available — reconnect to save'));
+    }
     // Optimistic, synchronous state update — controlled inputs in the editors
     // (Location / Materials / Vendors) read their value from this state, so they
     // must NOT wait on the Drive round-trip or every keystroke lags by the network
@@ -309,7 +345,7 @@ export function AppProvider({ children }) {
     dispatch({ type: dispatchType, [stateKey]: data });
     scheduleSharedWrite(key, data);
     return Promise.resolve();
-  }, [notify, scheduleSharedWrite]);
+  }, [notify, scheduleSharedWrite, ensureDriveWritable]);
 
   const saveMaterials = useCallback((materials) =>
     saveSharedFile('materials', materials, 'SET_MATERIALS'), [saveSharedFile]);
@@ -437,6 +473,29 @@ export function AppProvider({ children }) {
     }
   }, [state.localMode, state.tools.length, state.needsNormalize, state.shopSettings?.setup_steps?.normalized, markSetupStepInSettings]);
 
+  // Proactively surface an expired Google token — flip on the reconnect banner the
+  // moment the token lapses, WITHOUT waiting for a save to fail. The OAuth flow has
+  // no silent refresh, so the token just dies after ~1hr; before this the app looked
+  // connected until a write 401'd, and that failure was often swallowed on tab-close
+  // (keepalive) — so a "saved" change silently vanished on reload with no indication.
+  // Checks on an interval and whenever the tab regains focus (a laptop that slept
+  // through the token's lifetime notices immediately on wake). Demo/local mode never
+  // have a real token, so they're excluded by the googleAuthenticated gate.
+  useEffect(() => {
+    if (!state.googleAuthenticated || state.googleExpired) return;
+    const check = () => { if (driveService.isTokenExpired()) dispatch({ type: 'GOOGLE_EXPIRED' }); };
+    check();
+    const id = setInterval(check, 30000);
+    const onFocus = () => check();
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onFocus);
+    };
+  }, [state.googleAuthenticated, state.googleExpired]);
+
   // Flush any pending debounced shared-file writes when the page is hidden or
   // closed, so an edit made inside the 600ms debounce window isn't lost on a tab
   // close / refresh / navigate-away. `visibilitychange → hidden` and `pagehide`
@@ -482,7 +541,12 @@ export function AppProvider({ children }) {
     if (googleRef.current) {
       const { SHARED_FILES } = driveService;
       driveService.saveSharedJson(SHARED_FILES.shopSettings.name, SHARED_FILES.shopSettings.cacheKey, nextSS)
-        .catch(() => { /* mirror + in-memory already set; Drive is best-effort */ });
+        .catch(err => {
+          // The registry also lives in the localStorage mirror + in-memory, so the
+          // change survives reload even if Drive is down — but an EXPIRED session
+          // must still raise the reconnect banner rather than vanish silently.
+          if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
+        });
     }
   }, []);
 
