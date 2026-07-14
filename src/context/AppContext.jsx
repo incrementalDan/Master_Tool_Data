@@ -409,6 +409,34 @@ export function AppProvider({ children }) {
     }
   }, [state.googleAuthenticated, state.shopSettings?.setup_steps?.metadataConnected, markSetupStepInSettings]);
 
+  // The fusionConnected setup step completes the moment a tool library is linked —
+  // including on a RETURNING device that already had the library in localStorage and
+  // never re-runs addToolLibrary/commitInitialLibraries this session (the reason the
+  // step used to sit unchecked despite a working connection). Declarative so it fires
+  // regardless of HOW the library got there. Skipped in read-only local-browse mode
+  // (no real shop settings / Drive to persist to). Mirrors the metadataConnected effect.
+  useEffect(() => {
+    if (state.localMode) return;
+    const hasLibrary = (state.shopSettings?.tool_libraries?.length > 0) || !!state.libraryLocation;
+    if (hasLibrary && !state.shopSettings?.setup_steps?.fusionConnected) {
+      markSetupStepInSettings('fusionConnected');
+    }
+  }, [state.localMode, state.libraryLocation, state.shopSettings?.tool_libraries?.length, state.shopSettings?.setup_steps?.fusionConnected, markSetupStepInSettings]);
+
+  // The normalized setup step completes once the loaded library has no untracked
+  // (pre-migration) tools left — every tool carries a tracking ID. Declarative so an
+  // ALREADY-normalized library (normalized in a past session, or by a click whose
+  // mark didn't persist) checks the step off on load, not only at the instant the
+  // Normalize action runs. Same condition the established-shop seed uses
+  // (!needsNormalize && tools loaded). If new untracked tools later appear,
+  // needsNormalize flips true and the checklist's live-data warning surfaces it.
+  useEffect(() => {
+    if (state.localMode) return;
+    if (state.tools.length > 0 && !state.needsNormalize && !state.shopSettings?.setup_steps?.normalized) {
+      markSetupStepInSettings('normalized');
+    }
+  }, [state.localMode, state.tools.length, state.needsNormalize, state.shopSettings?.setup_steps?.normalized, markSetupStepInSettings]);
+
   // Flush any pending debounced shared-file writes when the page is hidden or
   // closed, so an edit made inside the 600ms debounce window isn't lost on a tab
   // close / refresh / navigate-away. `visibilitychange → hidden` and `pagehide`
@@ -778,7 +806,15 @@ export function AppProvider({ children }) {
         // shopSettingsRef, which is still the pre-load value mid-loadTools (the
         // SET_SHARED_FILES dispatch above hasn't re-rendered yet).
         const recordedSteps = effectiveShop?.setup_steps || {};
-        const alreadyRecorded = Object.values(recordedSteps).some(Boolean);
+        // The connection/normalize facts can be stamped on their own by the
+        // declarative effects above (fusion/metadata connected, library already
+        // normalized) BEFORE this one-shot seed runs. Those don't count as "the
+        // shop already has real recorded progress" — otherwise an established-but-
+        // never-seeded shop whose auto-facts got set would be denied the full
+        // historical seed (the three ID systems + proshopExported). Only a manual
+        // step being recorded means "leave the real progress alone."
+        const AUTO_DERIVED = new Set(['fusionConnected', 'metadataConnected', 'normalized']);
+        const alreadyRecorded = Object.entries(recordedSteps).some(([k, v]) => v && !AUTO_DERIVED.has(k));
         const normalized = !needsNormalize && tools.length > 0;
         const proshopMerged = tools.some(t => t.min_ooh != null && t.min_ooh > 0);
         const machineNumbers = tools.some(t => t.machine_tool_number != null && t.machine_tool_number > 0);

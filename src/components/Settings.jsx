@@ -29,6 +29,38 @@ const ID_MODES = [
   { id: 'other_erp', label: 'Other ERP', desc: 'Reserved for a future in-house ERP ID source.', disabled: true },
 ];
 
+// Inline "mark this step done" control for the setup steps whose defaults are
+// already valid — the three identification systems (Tool ID / Location / Assembly)
+// and Machine Numbers. The page's Save only fires after an actual field change, so
+// a shop that's happy with the defaults had NO way to check these steps off. This
+// gives an explicit confirm. Idempotent: once done it shows a confirmed badge.
+// markSetupStepInSettings persists to Drive when connected and no-ops if already set.
+function StepConfirm({ stepKey, label, divider = true }) {
+  const { setupProgress, markSetupStepInSettings } = useApp();
+  const done = !!setupProgress[stepKey];
+  const wrap = divider
+    ? { marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border)' }
+    : {};
+  return (
+    <div style={wrap}>
+      {done ? (
+        <span className="text-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--green)' }}>
+          <CheckCircle2 size={15} /> Confirmed — this shows as done on the setup checklist
+        </span>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => markSetupStepInSettings(stepKey)}>
+            <CheckCircle2 size={14} /> Confirm {label}
+          </button>
+          <span className="text-sub" style={{ fontSize: 11 }}>
+            Happy with the settings above (the defaults are fine)? Confirm to check this step off the setup list.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const navigate = useNavigate();
   const {
@@ -1479,12 +1511,20 @@ export default function Settings() {
             )}
           </div>
         )}
+
+        <StepConfirm stepKey="toolIdConfigured" label="your Tool ID format" />
       </div>
 
       {/* Location System — adjacent to Tool ID System (it drives the ID in
           location mode). Self-contained: configures systems, normalizes, and
           shows the library-wide unmatched panel. */}
       <LocationSystemSettings configOverride={locDraft} onConfigChange={setLocDraft} />
+
+      {/* Location System has valid defaults (no system = "I don't file by
+          location"), so it needs an explicit confirm like the other ID systems. */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <StepConfirm stepKey="locationConfigured" label="your Location System" divider={false} />
+      </div>
 
       {/* Assembly ID System — third of the three parallel ID systems. Generates a
           human-readable number per tool+holder assembly (asm_number). */}
@@ -1568,6 +1608,8 @@ export default function Settings() {
             <div className="text-sub text-xs">Display a muted “Formerly:” line on assemblies whose number was reassigned (e.g. an old ProShop RTA# after switching to Auto). A search that matches an old number still finds the tool either way.</div>
           </span>
         </label>
+
+        <StepConfirm stepKey="assemblyIdConfigured" label="your Assembly ID format" />
       </div>
 
       {/* Machine Numbers + Renumber — grouped because the numbers drive the
@@ -1601,6 +1643,8 @@ export default function Settings() {
             onChange={e => setSkipInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSkip()} />
           <button className="btn btn-secondary btn-sm" onClick={addSkip}>Add</button>
         </div>
+
+        <StepConfirm stepKey="machineNumbers" label="your machine numbering" />
 
         <div style={{
           marginTop: 20,
