@@ -5,7 +5,7 @@ import { useGoogleLogin } from '@react-oauth/google';
 import { FolderOpen, LogOut, Library, Settings, RefreshCw, AlertTriangle, Download, X, FlaskConical, Building2, Hash, CloudOff } from 'lucide-react';
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import BrandLogo from './components/BrandLogo.jsx';
-import { setAccessToken, fetchUserInfo } from './services/driveService.js';
+import { setAccessToken, fetchUserInfo, tokenSecondsRemaining } from './services/driveService.js';
 import { exportFullLibrary } from './utils/proShopExport.js';
 import { displayConflicts } from './utils/toolConflicts.js';
 import ToastStack from './components/Toast.jsx';
@@ -170,6 +170,9 @@ function AppShell() {
   return (
     <>
       {content}
+      {/* Background silent token refresh — self-guards on googleAuthenticated, so
+          it's inert until Drive is connected and across every route/gate. */}
+      <GoogleSessionKeeper />
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </>
   );
@@ -275,6 +278,59 @@ function MetadataFileBanner() {
       <button className="icon-btn" onClick={dismissMetadataWarning} title="Dismiss"><X size={15} /></button>
     </div>
   );
+}
+
+const GOOGLE_KEEPER_SCOPE = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
+
+// Keeps the Google Drive session alive in the BACKGROUND so it doesn't lapse
+// mid-work. The OAuth implicit flow issues short-lived access tokens with no
+// refresh token, so the only way to renew without interrupting the user is a
+// silent (prompt:'none') re-request against their still-active Google session —
+// the same mechanism MetadataConnect uses on load. This polls and, once the token
+// is within ~2.5min of expiry, silently swaps in a fresh one before it dies (so
+// the reconnect banner rarely needs to appear). If the silent refresh fails
+// (e.g. the browser blocks the third-party cookies GIS needs, or the Google
+// session itself ended), we simply let the token expire and fall back to the
+// manual reconnect banner — no worse than before. Renders nothing.
+function GoogleSessionKeeper() {
+  const { googleAuthenticated, noteGoogleTokenRefreshed } = useApp();
+  const inFlight = useRef(false);
+
+  const refresh = useGoogleLogin({
+    scope: GOOGLE_KEEPER_SCOPE,
+    prompt: 'none',
+    onSuccess: (tokenResponse) => {
+      inFlight.current = false;
+      setAccessToken(tokenResponse.access_token, tokenResponse.expires_in);
+      noteGoogleTokenRefreshed();
+    },
+    // Let the token lapse → GoogleReconnectBanner takes over. Release the guard.
+    onError: () => { inFlight.current = false; },
+  });
+
+  useEffect(() => {
+    if (!googleAuthenticated) return;
+    const tick = () => {
+      if (inFlight.current) return;
+      // tokenSecondsRemaining: 0 = no/expired token, Infinity = unknown lifetime
+      // (skip — can't schedule). Refresh proactively before the token actually dies.
+      const remaining = tokenSecondsRemaining();
+      if (remaining < 150) {
+        inFlight.current = true;
+        // Safety release: GIS can hang (neither callback fires) when third-party
+        // cookies are blocked, so free the guard after 12s so a later tick retries.
+        setTimeout(() => { inFlight.current = false; }, 12000);
+        refresh();
+      }
+    };
+    tick();
+    const id = setInterval(tick, 60000);
+    return () => clearInterval(id);
+    // `refresh` is stable enough for our purposes; re-running on googleAuthenticated
+    // is what matters (start polling once connected, stop when disconnected).
+  }, [googleAuthenticated]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return null;
 }
 
 // Shown when the Google token expires while the user is already in the app —

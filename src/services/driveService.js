@@ -29,6 +29,14 @@ export function isTokenExpired() {
   if (!_expiresAt) return false; // no expiry info — assume valid
   return Date.now() >= _expiresAt;
 }
+// Seconds until the current token lapses — 0 when there's no token or it's
+// already expired, Infinity when the lifetime is unknown (don't proactively
+// refresh). Drives the background silent-refresh keeper (App.jsx).
+export function tokenSecondsRemaining() {
+  if (!_accessToken) return 0;
+  if (!_expiresAt) return Infinity;
+  return Math.max(0, Math.round((_expiresAt - Date.now()) / 1000));
+}
 
 const CACHED_FILE_ID_KEY = 'drive_metadata_file_id';
 const TOOL_FILES_FOLDER_CACHE_KEY = 'drive_tool_files_folder_id';
