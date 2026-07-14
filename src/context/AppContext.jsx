@@ -62,6 +62,15 @@ export function AppProvider({ children }) {
   // { timer, write(keepalive) }. Lets typing coalesce into one write and lets
   // flushSharedWrites fire the latest pending write early on page hide/close.
   const sharedSaveTimersRef = useRef({});
+  // Whether the shared Drive files (materials / vendors / shop settings / jobs /
+  // components) have been LOADED from Drive yet this session. Until they have,
+  // in-memory state is still the pre-load DEFAULT, so writing any shared file back
+  // to Drive would clobber the real file with defaults. loadTools flips this true
+  // right after it dispatches SET_SHARED_FILES. This closes the load-vs-write race
+  // that let an early setup-step mark (fusion/metadata connected fires the moment
+  // auth resolves — before the multi-second library download completes) persist the
+  // default shop_settings over the user's saved shop name / machines / etc.
+  const sharedLoadedRef = useRef(false);
   // In-app navigation guard. A page (e.g. Settings, while editing) registers
   // { shouldBlock(), onBlocked(proceed) }; nav sources call maybeBlockNav(proceed)
   // and skip their own navigation when it returns true (blocked). HashRouter isn't
@@ -273,6 +282,12 @@ export function AppProvider({ children }) {
     // This is the central guard for the direct callers that bypass saveSharedFile
     // (markSetupStepInSettings, persistRegistry, the load-time seed).
     if (driveService.isTokenExpired()) { dispatch({ type: 'GOOGLE_EXPIRED' }); return; }
+    // Never write a shared file before it's been loaded this session — the in-memory
+    // value is still the pre-load DEFAULT, so writing it would overwrite the real
+    // Drive file with defaults (the setup-step-mark-vs-load race that wiped saved
+    // shop settings). The setup-step effects re-fire after SET_SHARED_FILES lands
+    // and persist correctly against the loaded settings then.
+    if (!sharedLoadedRef.current) return;
     const { SHARED_FILES } = driveService;
     const pending = sharedSaveTimersRef.current;
     // The write closure reads the latest settled state at call time (refs are
@@ -335,6 +350,15 @@ export function AppProvider({ children }) {
     // not-connected rejection to also cover an expired token.
     if (!ensureDriveWritable({ toast: true })) {
       return Promise.reject(new Error('Google Drive not available — reconnect to save'));
+    }
+    // Refuse to save before this session has loaded the shared files from Drive:
+    // the in-memory value is still the pre-load default, so persisting it would
+    // overwrite the real Drive file with defaults. Only bites in the brief initial
+    // load window (a manual save the instant the app opens); reject honestly rather
+    // than report a false success + silently drop the write in scheduleSharedWrite.
+    if (!sharedLoadedRef.current) {
+      notify('Still loading your saved data — try again in a moment', 'error');
+      return Promise.reject(new Error('Shared files not loaded yet'));
     }
     // Optimistic, synchronous state update — controlled inputs in the editors
     // (Location / Materials / Vendors) read their value from this state, so they
@@ -790,6 +814,10 @@ export function AppProvider({ children }) {
           saveRegistryMirror(ss);
           dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings: ss, jobs, components });
           dispatch({ type: 'SET_LIBRARIES', shopSettings: ss }); // sync pointers
+          // Shared files are now loaded — Drive writes are safe. Set synchronously
+          // (it's a ref) so the setup-step effects that re-fire on this dispatch,
+          // and the established-shop seed below, all persist against real settings.
+          sharedLoadedRef.current = true;
         } catch (err) {
           if (err.code === 'TOKEN_EXPIRED') {
             dispatch({ type: 'GOOGLE_EXPIRED' });
