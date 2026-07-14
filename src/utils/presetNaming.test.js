@@ -220,6 +220,12 @@ describe('parsePresetName', () => {
     expect(parsePresetName('SS316 SM HOLE FIN').opType).toBe('small_bore');
   });
 
+  it('detects the collapsed one-word SMBORE even next to a finish token (longer alias wins)', () => {
+    expect(parsePresetName('AL-SMBORE-FIN').opType).toBe('small_bore');
+    expect(parsePresetName('SMBORE FIN').opType).toBe('small_bore');
+    expect(parsePresetName('ss sm bore fin').opType).toBe('small_bore');
+  });
+
   it('prefers the more specific multi-word op (Fine Finish over Finish)', () => {
     expect(parsePresetName('GF Nylon Fine Finish').opType).toBe('fine_finish');
   });

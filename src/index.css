@@ -3051,6 +3051,9 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .app-banners--landing {
   padding-left: 72px;
 }
+.app-banners--tool {
+  padding-left: 90px;   /* clear the tool detail page's fixed 90px action sidebar */
+}
 
 /* ─── Library landing page — left sidebar + main content ────────────────── */
 .landing-layout {

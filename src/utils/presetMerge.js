@@ -71,6 +71,10 @@ export function valuesEqual(a, b) {
   // Numbers that round to the same 4-decimal display are equal — anything closer
   // is float round-trip noise from Fusion, not a real difference.
   if (!isNaN(na) && !isNaN(nb) && a !== '' && b !== '') return Math.abs(na - nb) < 5e-5;
+  // Strings compare case- AND whitespace-insensitively: a pure capitalization or
+  // trailing-space difference (e.g. "1/8 Mill Drill" vs "1/8 Mill drill") is never
+  // a real change and must not be flagged in any diff.
+  if (typeof a === 'string' && typeof b === 'string') return a.trim().toLowerCase() === b.trim().toLowerCase();
   return false;
 }
 

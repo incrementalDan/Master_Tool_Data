@@ -266,7 +266,11 @@ export function scanOpTypeInName(name) {
       candidates.push({ value: o.value, alias: a, len: a.trim().split(/\s+/).length });
     }
   }
-  candidates.sort((x, y) => y.len - x.len); // longest (most tokens) first
+  // Most tokens first (so "SM BORE" beats a trailing "FIN"); then, at equal token
+  // count, the longer alias string wins — the more specific token. This makes the
+  // collapsed one-word form win too: "AL SMBORE FIN" → small bore, not finish
+  // (SMBORE is 6 chars vs FIN 3), matching how the shop writes these.
+  candidates.sort((x, y) => (y.len - x.len) || (y.alias.length - x.alias.length));
   for (const c of candidates) {
     const esc = c.alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     if (new RegExp(`(?:^| )${esc}(?: |$)`).test(norm)) return c.value;

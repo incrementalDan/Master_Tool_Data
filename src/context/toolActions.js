@@ -16,6 +16,8 @@ import { INSERT_FAMILY_BY_ID, pairedAsmIdPart } from '../schema/insertFamilies.j
 import { resolveLocationString, analyzeSystem, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { isExcludedFrom, setToolExclusion } from '../utils/idSystems.js';
 import { classifyStrays } from '../services/reconcile.js';
+import { displayConflicts, clearToolConflict } from '../utils/toolConflicts.js';
+import { valuesEqual } from '../utils/presetMerge.js';
 import { defaultToolLibraryId, machineNumberArgs } from './appState.js';
 
 export function createToolActions(ctx) {
@@ -900,6 +902,55 @@ export function createToolActions(ctx) {
     return { ...tool, id_system_exclusions };
   };
 
+  // ─── Resolve / clear an "informed, not blocked" conflict ──────────────────
+  // Called from the tool page when the user reviews a flagged difference. Two
+  // outcomes:
+  //   • field conflict + a chosenValue that differs from the current value →
+  //     write the picked value to the tool (full round-trip; the merge rewrites
+  //     every instance to it) and drop the conflict record.
+  //   • otherwise (keep current, or a product-id conflict the user is fixing in
+  //     Fusion) → just clear the flag, metadata-only. The shared value is already
+  //     unified across instances from the last save, so the disagreement won't be
+  //     re-detected; this is pure "acknowledge and dismiss".
+  const resolveToolConflict = async (toolId, conflictId, chosenValue) => {
+    const tool = (toolsRef.current || []).find(t => t.id === toolId);
+    if (!tool) throw new Error('Tool not found');
+    const conflict = displayConflicts(tool).find(c => c.id === conflictId);
+    const remaining = clearToolConflict(displayConflicts(tool), conflictId);
+    // Clear the runtime markers so the write/rebuild doesn't re-add what we just
+    // resolved; `conflicts: remaining` becomes the persisted set.
+    const cleared = { ...tool, conflicts: remaining, _combineConflicts: [], _productIdConflict: null };
+
+    dispatch({ type: 'SAVE_START' });
+    try {
+      if (conflict?.type === 'field' && chosenValue !== undefined
+          && !valuesEqual(chosenValue, tool[conflict.field])) {
+        const updated = await writeLogicalTool({ ...cleared, [conflict.field]: chosenValue, updated_at: new Date().toISOString() });
+        dispatch({ type: 'UPDATE_TOOL', tool: updated });
+        dispatch({ type: 'SAVE_SUCCESS' });
+        notify('Conflict resolved — value updated', 'success');
+        return updated;
+      }
+      // Clear the flag only — metadata-only (no Fusion rewrite).
+      if (googleRef.current) {
+        try {
+          await toolStore.upsertOne(buildMetadataTool(cleared));
+        } catch (err) {
+          if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
+          throw err;
+        }
+      }
+      dispatch({ type: 'UPDATE_TOOL', tool: cleared });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify('Conflict cleared', 'success');
+      return cleared;
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Could not clear conflict: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  };
+
   return {
     writeLogicalTool,
     saveTool, assignToolLocation, normalizeLocationSystem,
@@ -907,6 +958,6 @@ export function createToolActions(ctx) {
     addAssembly, updateAssembly, deleteAssembly,
     reconcileTool, applyReconcile,
     promoteToolToFusion, detachToolFromFusion,
-    setIdSystemExclusion,
+    setIdSystemExclusion, resolveToolConflict,
   };
 }
