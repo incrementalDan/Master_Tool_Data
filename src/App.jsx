@@ -63,6 +63,9 @@ function AppShell() {
   // the "N tools" count). Pad the banner strip clear of the sidebar there.
   const { pathname } = useLocation();
   const onLanding = pathname === '/';
+  // The tool detail page has its own 90px fixed left action sidebar; pad the
+  // banner strip clear of it too (the landing page's sidebar is 72px).
+  const onToolDetail = pathname.startsWith('/tool/') && pathname !== '/tool/new';
 
   const ready = !localMode && !demoMode && apsAuthenticated && libraryLocation && (googleAuthenticated || metadataSkipped);
   const loadedRef = useRef(false);
@@ -137,7 +140,7 @@ function AppShell() {
     content = (
       <div className="app-shell">
         <TopBar />
-        <div className={`app-banners${onLanding ? ' app-banners--landing' : ''}`}>
+        <div className={`app-banners${onLanding ? ' app-banners--landing' : ''}${onToolDetail ? ' app-banners--tool' : ''}`}>
           <NormalizeBanner />
           <CombineConflictBanner />
           <GoogleReconnectBanner />
