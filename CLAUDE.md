@@ -1430,6 +1430,35 @@ The explicit, user-initiated batch flow — see the **Phase 2** section above. T
 
 -----
 
+## Informed, not blocked — the conflict workflow (CRITICAL philosophy)
+
+The shop's real Fusion + ProShop data is a **mess** — the entire point of this app is to clean it into one true source of truth. So the load/import/normalize path must **NEVER block the user on a data disagreement**. It merges what it can, **flags** what it can't, and lets the user **keep working** — they resolve each flag later, on the tool page, when they actually go to use that tool. "Informed, not blocked." When touching any merge/normalize/reconcile code, preserve this: surface differences, never halt.
+
+**How a difference is classified** (see the per-field merge policy in `combine.js` `mergeLogicalTools` + `reconcile.js` `sharedSignature`):
+- **holder / OOH differ** → a new **assembly** (per-instance, expected — never a conflict).
+- **Loosely-controlled fields resolve by rule, never flag**: `description` (keep primary; capitalization/whitespace ignored everywhere via `valuesEqual`), `overall_length` (biggest wins), `shoulder_length` (smallest wins; ProShop MIN OOH locks it later). `splitToFusionInstances` clamps `shoulder_length` down to each instance's OOH so a long stick-out never errors.
+- **Metadata/ProShop-only fields are excluded from the Fusion-import conflict scan** (`isMetadataOnly`): `custom_grind`, `min_ooh`, `vendor`, `coating`, tags, etc. — Fusion has no data for them, so they can't be a Fusion-import conflict.
+- **Presets merge** (`mergePresetLists`, `src/utils/presetMerge.js`): identical-within-tolerance collapse; same-name-but-different are BOTH kept, the later indexed up (`Rough`, `Rough 2`, `Rough 3`). Uses the same `PRESET_SIGNIFICANCE` tolerance as the Sync-Job diff.
+- **Any other genuinely-shared Fusion-native value that differs → a FLAGGED conflict** (e.g. flute length 0.7 vs 0.75, diameter, flute count). The tool still comes in fully merged (primary/ProShop value wins); the disagreement is recorded, not blocked.
+- **Stale tracking ID** (`buildLogicalTool` `_productIdConflict`): instances share a tracking ID but carry **different product IDs** → someone copied the tool in Fusion, re-numbered it, and left the app's tracking ID in the comment. Flagged as a `product_id` conflict.
+
+**The conflict record** (`src/utils/toolConflicts.js`, persisted in `tool_metadata.json` under `conflicts[]`):
+- Shapes: `{ id, type:'field', field, values:[kept, other], detected_at }` and `{ id, type:'product_id', values:[…ids], detected_at }`.
+- `mergeToolConflicts(existing, { combineConflicts, productIdConflict })` folds freshly-detected runtime conflicts (`tool._combineConflicts` / `tool._productIdConflict`) into the persisted set, **deduped** (field conflicts by field name; product-id singular). Called in `buildMetadataTool`, so every save persists them.
+- `displayConflicts(tool)` unions persisted + not-yet-saved runtime conflicts (for the freshly-combined tool at load, before its next save writes them through). `conflictCount(tool)` backs the card badge.
+- **A conflict is NEVER auto-cleared.** A later ProShop import may overwrite the value, but the badge stays until the user explicitly clears it on the tool page. Because `splitToFusionInstances` unifies the shared value across instances on the first save, the record becomes pure *memory* of the disagreement — clearing it is a safe metadata-only action and it won't be re-detected.
+
+**`normalizeLibrary` does NOT hold conflict tools back** (it used to — that left the library "needs normalize" until a reload). Every combined tool is written normally, carrying its `_combineConflicts`; `buildMetadataTool` persists them. So normalization always completes and the banner clears.
+
+**Surfacing (three places):**
+- **Library cards** (`ToolCard`): an orange `⚠ N` badge when `conflictCount(tool) > 0`.
+- **Main page** (`App.jsx` `CombineConflictBanner`): a **dismissible** "N tools have unresolved differences" nudge — dismiss for the session so setup isn't interrupted.
+- **Tool page** (`ConflictBanner.jsx`): per-conflict resolution — a field conflict offers **Keep <current>** (clear only) or **Use <other>** (writes the picked value via `resolveToolConflict` → full round-trip); a product-id conflict is informational + **Mark reviewed** (metadata-only clear). Distinct from `DriftBanner` (live Fusion-edit drift, D3) — conflicts are persisted import-time disagreements.
+
+**Action**: `AppContext.resolveToolConflict(toolId, conflictId, chosenValue?)` (`toolActions.js`) — with a differing `chosenValue` it writes the field (full write, rewriting every instance to it); otherwise it clears the flag metadata-only.
+
+-----
+
 ## UI Layout — ToolDetail
 
 The ToolDetail view uses a three-zone layout:

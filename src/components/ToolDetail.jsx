@@ -18,6 +18,7 @@ import AttachmentUploadModal from './AttachmentUploadModal.jsx';
 import PhotoSlot from './PhotoSlot.jsx';
 import PairingSections from './PairingSections.jsx';
 import DriftBanner from './DriftBanner.jsx';
+import ConflictBanner from './ConflictBanner.jsx';
 import {
   INSERT_FAMILY_BY_ID, ALWAYS_INSERT_TYPES, autoInsertFamily, newPairing,
 } from '../schema/insertFamilies.js';
@@ -453,6 +454,10 @@ export default function ToolDetail() {
             onApply={handleApplyDrift}
           />
         )}
+
+        {/* "Informed, not blocked" conflict review — shared-value disagreements
+            flagged during Fusion import / normalize, resolved here on demand. */}
+        <ConflictBanner key={`conflicts-${tool.id}`} tool={tool} />
 
         {/* Insert-style tool: pairing bar + the Holder Body / Insert component
             groups (each with its own Geometry & setup, Photo, Location and

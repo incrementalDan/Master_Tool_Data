@@ -2,6 +2,7 @@
 // source of the full metadata field set (add new metadata fields there first),
 // and mergeFusionAndMetadata reads them back onto the internal tool object.
 import { generateId, generateAssemblyId } from './identity.js';
+import { mergeToolConflicts } from '../utils/toolConflicts.js';
 
 // ─── Fusion drift detection (Fusion-decoupling Phase B — D3) ───────────────
 // The shared, Fusion-native fields the app now ALSO stores in metadata. When a
@@ -200,6 +201,10 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     // records in tool_components.json by UUID. null for regular tools. See
     // src/schema/insertFamilies.js.
     pairing: meta.pairing || null,
+    // "Informed, not blocked" conflicts — Fusion-instance / ProShop disagreements
+    // on a shared value, flagged for the user to resolve on the tool page (never
+    // block). See src/utils/toolConflicts.js. Cleared only by explicit user action.
+    conflicts: meta.conflicts || [],
   };
 }
 
@@ -413,5 +418,13 @@ export function buildMetadataTool(tool) {
           rta_number: tool.pairing.rta_number || '',
         }
       : null,
+    // "Informed, not blocked" conflicts. Persist the existing set, folding in any
+    // freshly-detected runtime disagreement (the combine's _combineConflicts / the
+    // stale-tracking-ID _productIdConflict). Deduped so a conflict isn't re-added
+    // each save; never auto-cleared (only the user clears one on the tool page).
+    conflicts: mergeToolConflicts(tool.conflicts, {
+      combineConflicts: tool._combineConflicts,
+      productIdConflict: tool._productIdConflict,
+    }),
   };
 }

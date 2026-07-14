@@ -552,7 +552,7 @@ export function createLibraryOps(ctx) {
       // Normalize each library independently, tagging produced tools with their
       // source library so saveFullLibrary writes each back to the right file.
       const cleanTools = [];
-      const conflictTools = [];
+      let flaggedCount = 0;
       let dupCount = 0;
       let untrackedCount = 0;
       for (const { libraryId, library, list: fusionList } of perLib) {
@@ -658,32 +658,24 @@ export function createLibraryOps(ctx) {
       const combined = combineToolsByToolId(logicalTools);
       dupCount += logicalTools.length - combined.length;
 
-      // Skip tools whose fields genuinely conflict (non-empty values differ between
-      // the placeholder and the Fusion entry). Leave their raw entries untouched in
-      // the library so nothing is destroyed; the user can reconcile on next open.
+      // "Informed, not blocked": a tool whose shared fields genuinely conflict
+      // (e.g. two instances with different flute lengths) still comes in fully
+      // normalized — the primary/ProShop value wins and the disagreement rides
+      // along as a persisted conflict record (tool._combineConflicts →
+      // buildMetadataTool). The user resolves it later on the tool page when they
+      // go to use that tool; normalization is never blocked and nothing is held
+      // back (which used to leave the library "needs normalize" until a reload).
       for (const t of combined) {
-        const tagged = { ...t, library_id: libraryId, library_name: library.fileName };
-        if (t._combineConflicts?.length) conflictTools.push(tagged); else cleanTools.push(tagged);
+        if (t._combineConflicts?.length) flaggedCount++;
+        cleanTools.push({ ...t, library_id: libraryId, library_name: library.fileName });
       }
       } // end per-library loop
 
-      // Preserve the conflict tools' Fusion entries verbatim: they're held back
-      // from the normalized set for manual review, but saveFullLibrary full-
-      // replaces each represented library, so without this passthrough their raw
-      // entries would be deleted from the library (G6). Keyed by source library.
-      const extraRawByLibrary = new Map();
-      for (const t of conflictTools) {
-        const raws = (t._instancesRaw || []).filter(r => r?.guid);
-        if (!raws.length) continue;
-        if (!extraRawByLibrary.has(t.library_id)) extraRawByLibrary.set(t.library_id, []);
-        extraRawByLibrary.get(t.library_id).push(...raws);
-      }
-
-      await saveFullLibrary(cleanTools, { extraRawByLibrary });
+      await saveFullLibrary(cleanTools);
       markSetupStepInSettings('normalized');
       const base = `Normalized ${untrackedCount} tool${untrackedCount === 1 ? '' : 's'} to the multi-instance model`;
-      const conflictSuffix = conflictTools.length > 0
-        ? `; ${conflictTools.length} need${conflictTools.length === 1 ? 's' : ''} conflict review — open them to resolve`
+      const conflictSuffix = flaggedCount > 0
+        ? `; ${flaggedCount} flagged with differences — resolve on the tool page when you use them`
         : '';
       const dupSuffix = dupCount > 0
         ? `; combined ${dupCount} ProShop-number duplicate${dupCount === 1 ? '' : 's'}`

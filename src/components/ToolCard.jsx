@@ -6,6 +6,7 @@ import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { exportSingleTool as exportProShop } from '../utils/proShopExport.js';
 import { showsProShopUrl, toolIdLabel } from '../utils/toolIdSystem.js';
+import { conflictCount } from '../utils/toolConflicts.js';
 
 function formatDim(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -27,6 +28,7 @@ export default function ToolCard({ tool, variant = 'grid', matchedLegacyId = nul
 
   const open = () => navigate(`/tool/${tool.id}`);
   const stop = (e, fn) => { e.stopPropagation(); fn(); };
+  const nConflicts = conflictCount(tool);
 
   const handleClone = async () => {
     try {
@@ -77,6 +79,18 @@ export default function ToolCard({ tool, variant = 'grid', matchedLegacyId = nul
       {tool.no_fusion_link && (
         <span className="no-fusion-pill" style={{ fontSize: 10, padding: '1px 7px' }} title="Not in Fusion — this tool lives in the app & metadata only (no Fusion library entry). Open it to create it in Fusion.">
           <AlertTriangle size={10} /> Not in Fusion
+        </span>
+      )}
+      {nConflicts > 0 && (
+        <span
+          title={`${nConflicts} unresolved difference${nConflicts === 1 ? '' : 's'} — open to review`}
+          style={{
+            fontSize: 10, padding: '1px 7px', display: 'inline-flex', alignItems: 'center', gap: 3,
+            color: 'var(--orange)', border: '1px solid var(--orange)', borderRadius: 6,
+            background: 'color-mix(in srgb, var(--orange) 12%, transparent)', fontWeight: 600,
+          }}
+        >
+          <AlertTriangle size={10} /> {nConflicts}
         </span>
       )}
       {/* Only shown when the search matched a former (retired) ID. */}

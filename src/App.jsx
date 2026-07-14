@@ -7,6 +7,7 @@ import { AppProvider, useApp } from './context/AppContext.jsx';
 import BrandLogo from './components/BrandLogo.jsx';
 import { setAccessToken, fetchUserInfo } from './services/driveService.js';
 import { exportFullLibrary } from './utils/proShopExport.js';
+import { displayConflicts } from './utils/toolConflicts.js';
 import ToastStack from './components/Toast.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
 import LibrarySetup from './components/LibrarySetup.jsx';
@@ -219,13 +220,17 @@ function NormalizeBanner() {
   );
 }
 
-// Shown when any tool in the library has _combineConflicts — fields that were
-// non-empty on both the ProShop placeholder and the real Fusion entry, with
-// different values. Open the flagged tool to resolve via the existing reconcile flow.
+// "Informed, not blocked": shown when any tool carries an unresolved conflict —
+// a shared-value disagreement between its Fusion instances / ProShop (e.g. two
+// instances with different flute lengths, or different product IDs under one
+// tracking ID). The tools already came in fully merged; this is a non-blocking
+// nudge. Dismissible for the session so the user can power through setup and
+// resolve each conflict on its tool page when they go to use that tool.
 function CombineConflictBanner() {
   const { tools } = useApp();
-  const conflictTools = tools.filter(t => t._combineConflicts?.length);
-  if (conflictTools.length === 0) return null;
+  const [dismissed, setDismissed] = useState(false);
+  const conflictTools = tools.filter(t => displayConflicts(t).length > 0);
+  if (dismissed || conflictTools.length === 0) return null;
   const n = conflictTools.length;
   return (
     <div role="alert" style={{
@@ -235,10 +240,11 @@ function CombineConflictBanner() {
     }}>
       <AlertTriangle size={16} />
       <span style={{ flex: 1, minWidth: 220 }}>
-        <strong>{n} tool{n === 1 ? '' : 's'}</strong> {n === 1 ? 'has' : 'have'} fields that differ
-        between the ProShop placeholder and the Fusion entry — open {n === 1 ? 'it' : 'them'} to
-        review and resolve the conflict before normalizing.
+        <strong>{n} tool{n === 1 ? '' : 's'}</strong> {n === 1 ? 'has' : 'have'} unresolved
+        differences flagged during import — open {n === 1 ? 'it' : 'them'} to review and pick the
+        correct value. You can keep working; nothing is blocked.
       </span>
+      <button className="icon-btn" onClick={() => setDismissed(true)} title="Dismiss"><X size={15} /></button>
     </div>
   );
 }

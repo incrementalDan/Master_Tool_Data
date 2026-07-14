@@ -56,7 +56,7 @@ describe('assignToolIds — includes no-Fusion tools, honors exclusions', () => 
   });
 });
 
-describe('normalizeLibrary preserves conflict tools Fusion entries (G6)', () => {
+describe('normalizeLibrary — informed, not blocked (conflict tools come in with a record)', () => {
   const raw = (guid, comment, productId, desc, dc = 0.5) => ({
     guid, type: 'flat end mill', unit: 'inches', description: desc,
     'product-id': productId, 'post-process': { comment, number: null },
@@ -64,11 +64,12 @@ describe('normalizeLibrary preserves conflict tools Fusion entries (G6)', () => 
     'start-values': { presets: [] }, expressions: {},
   });
 
-  it('keeps a conflict pair in the library instead of dropping it on full-replace', async () => {
-    // One clean tracked tool + a conflict pair: two tracked entries sharing a
-    // product-id but with a genuinely-conflicting Fusion-native field (different
-    // diameter). (Description differences alone no longer conflict — they resolve
-    // by rule — so a real shared-field difference is used to exercise G6.)
+  it('merges a conflict pair into ONE normalized tool carrying a conflict record — never held back', async () => {
+    // One clean tool + a conflict pair: two entries sharing a product-id but with a
+    // genuinely-conflicting Fusion-native field (different diameter). The pair now
+    // comes in fully merged (primary wins) with the disagreement recorded as a
+    // conflict, instead of being held back un-normalized (which used to leave the
+    // library "needs normalize" until a reload).
     const rawA = raw('gA', 'FTL-CLEAN', 'CLEAN-1', 'Clean A');
     const rawB = raw('gB', 'FTL-B', 'DUP-1', 'Desc B', 0.5);
     const rawC = raw('gC', 'FTL-C', 'DUP-1', 'Desc C', 0.375);
@@ -88,10 +89,18 @@ describe('normalizeLibrary preserves conflict tools Fusion entries (G6)', () => 
     const { normalizeLibrary } = createLibraryOps(ctx);
     await normalizeLibrary();
 
-    // The conflict pair's raw entries must survive in the uploaded library.
-    const guids = new Set(uploaded.map(f => f.guid));
-    expect(guids.has('gB')).toBe(true);
-    expect(guids.has('gC')).toBe(true);
+    // The conflict tool is present in the library (merged into one entry), not dropped.
+    const pids = new Set(uploaded.map(f => f['product-id']));
+    expect(pids.has('DUP-1')).toBe(true);
+    expect(pids.has('CLEAN-1')).toBe(true);
+
+    // Its diameter disagreement is persisted as a conflict record (informed, not blocked).
+    const savedMeta = saveAllMetadata.mock.calls.at(-1)[0];
+    const dup = savedMeta.find(m => m.tool_id === 'DUP-1');
+    expect(dup).toBeDefined();
+    const diaConflict = (dup.conflicts || []).find(c => c.field === 'diameter');
+    expect(diaConflict).toBeDefined();
+    expect(diaConflict.values).toEqual([0.5, 0.375]);
   });
 });
 
