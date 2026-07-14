@@ -201,6 +201,12 @@ export function reducer(state, action) {
       return { ...state, user: action.user, googleAuthenticated: true, googleExpired: false, metadataForceNew: false };
     case 'GOOGLE_EXPIRED':
       return { ...state, googleExpired: true };
+    // A background silent token refresh succeeded — restore write capability
+    // WITHOUT a full reload (which would clobber unsaved in-memory edits). Only
+    // clears the expired flag; the new token itself lives in driveService. No-op
+    // (same reference) when not currently expired, to avoid a needless re-render.
+    case 'GOOGLE_REFRESHED':
+      return state.googleExpired ? { ...state, googleExpired: false } : state;
     case 'SKIP_METADATA': return { ...state, metadataSkipped: true };
     case 'RECONNECT_METADATA': return { ...state, metadataSkipped: false };
     case 'DISCONNECT_METADATA':

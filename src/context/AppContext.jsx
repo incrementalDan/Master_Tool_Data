@@ -513,6 +513,14 @@ export function AppProvider({ children }) {
     };
   }, [flushSharedWrites]);
 
+  // A background silent token refresh (App.jsx GoogleSessionKeeper) succeeded —
+  // clear any expired flag so writes resume seamlessly. Deliberately does NOT
+  // reload tools: the token was renewed in place, and a reload would discard the
+  // user's unsaved in-memory edits. The fresh token already lives in driveService.
+  const noteGoogleTokenRefreshed = useCallback(() => {
+    dispatch({ type: 'GOOGLE_REFRESHED' });
+  }, []);
+
   // One-time-ever flag so the congratulations popup doesn't fire again after dismissal.
   const setupCelebrated = useCallback(() => localStorage.getItem(SETUP_CELEBRATED_KEY) === '1', []);
   const markSetupCelebrated = useCallback(() => localStorage.setItem(SETUP_CELEBRATED_KEY, '1'), []);
@@ -993,6 +1001,7 @@ export function AppProvider({ children }) {
       setupCelebrated,
       markSetupCelebrated,
       resetSetupProgress,
+      noteGoogleTokenRefreshed,
       setLibraryLocation,
       clearLibraryLocation,
       beginChangeLibrary,
