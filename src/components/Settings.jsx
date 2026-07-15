@@ -31,12 +31,13 @@ const ID_MODES = [
 
 // Inline "mark this step done" control for the setup steps whose defaults are
 // already valid — the three identification systems (Tool ID / Location / Assembly)
-// and Machine Numbers. The page's Save only fires after an actual field change, so
-// a shop that's happy with the defaults had NO way to check these steps off. This
-// gives an explicit confirm. Idempotent: once done it shows a confirmed badge.
-// markSetupStepInSettings persists to Drive when connected and no-ops if already set.
-function StepConfirm({ stepKey, label, divider = true }) {
-  const { setupProgress, markSetupStepInSettings } = useApp();
+// and Machine Numbers. Confirm SAVES the current settings (whether you changed
+// them or not) and checks the step off — so building a location system then
+// hitting Confirm persists it, instead of the old behavior that only marked the
+// step and let the unsaved draft get wiped. The action (onConfirm → confirmStep)
+// routes through the page Save, inheriting its shared-files-loaded guard.
+function StepConfirm({ stepKey, label, divider = true, onConfirm, saving }) {
+  const { setupProgress } = useApp();
   const done = !!setupProgress[stepKey];
   const wrap = divider
     ? { marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border)' }
@@ -49,11 +50,11 @@ function StepConfirm({ stepKey, label, divider = true }) {
         </span>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => markSetupStepInSettings(stepKey)}>
+          <button className="btn btn-secondary btn-sm" onClick={onConfirm} disabled={saving}>
             <CheckCircle2 size={14} /> Confirm {label}
           </button>
           <span className="text-sub" style={{ fontSize: 11 }}>
-            Happy with the settings above (the defaults are fine)? Confirm to check this step off the setup list.
+            Saves the settings above (whether you changed them or not) and checks this step off the setup list.
           </span>
         </div>
       )}
@@ -369,24 +370,47 @@ export default function Settings() {
     setIdlePrompt(false);
   };
 
-  const saveAll = async () => {
-    if (!dirty) return;
+  // Persist the current draft to shop_settings.json. No step-marking — that's the
+  // caller's call. Returns true when the save landed (or nothing to save), false
+  // when saveShopSettings rejected (Drive not loaded yet / disconnected), so a
+  // caller can avoid acting on a save that didn't happen. saveShopSettings already
+  // carries the shared-files-loaded guard, so a mid-load write can't clobber Drive.
+  const persistDraft = async () => {
+    if (!dirty) return true;
     setSavingAll(true);
     try {
       // In machine_linked ID mode, the Machine Numbers section IS the source of
-      // the ID start/skip — buildDraft already carries machine_number, so no extra
-      // sync is needed here.
-      const next = buildDraft();
-      await saveShopSettings(next);
+      // the ID start/skip — buildDraft already carries machine_number.
+      await saveShopSettings(buildDraft());
       setDefaultUnit(defaultUnit);
-      markSetupStepInSettings?.('toolIdConfigured');
-      markSetupStepInSettings?.('assemblyIdConfigured');
-      if ((next.location_config?.systems || []).length > 0) markSetupStepInSettings?.('locationConfigured');
-      if (next.machine_number?.start) markSetupStepInSettings?.('machineNumbers');
       setIdlePrompt(false);
       notify('Settings saved', 'success');
-    } catch { /* notify handled in saveShopSettings */ }
+      return true;
+    } catch { return false; /* notify handled in saveShopSettings */ }
     finally { setSavingAll(false); }
+  };
+
+  // The main page Save: persist the draft, then check off every config step it
+  // covers (saving the page = you've reviewed/accepted those sections).
+  const saveAll = async () => {
+    if (!(await persistDraft())) return false;
+    const next = buildDraft();
+    markSetupStepInSettings?.('toolIdConfigured');
+    markSetupStepInSettings?.('assemblyIdConfigured');
+    if ((next.location_config?.systems || []).length > 0) markSetupStepInSettings?.('locationConfigured');
+    if (next.machine_number?.start) markSetupStepInSettings?.('machineNumbers');
+    return true;
+  };
+
+  // Confirm a setup step from its card. Persists the CURRENT settings first (so an
+  // in-progress edit — e.g. a location system you just built — is SAVED, not lost:
+  // the old behavior only MARKED the step, and the resulting shop_settings write
+  // didn't include the unsaved draft, wiping it). When nothing changed it just
+  // marks the step (the "happy with the defaults" case). Marks ONLY this card's
+  // step — unlike the page Save — and only when the save actually landed.
+  const confirmStep = async (stepKey) => {
+    if (!(await persistDraft())) return;
+    markSetupStepInSettings?.(stepKey);
   };
 
   // Idle auto-exit: while dirty, a quiet period flags the user; if still no
@@ -1512,7 +1536,7 @@ export default function Settings() {
           </div>
         )}
 
-        <StepConfirm stepKey="toolIdConfigured" label="your Tool ID format" />
+        <StepConfirm stepKey="toolIdConfigured" label="your Tool ID format" onConfirm={() => confirmStep('toolIdConfigured')} saving={savingAll} />
       </div>
 
       {/* Location System — adjacent to Tool ID System (it drives the ID in
@@ -1523,7 +1547,7 @@ export default function Settings() {
       {/* Location System has valid defaults (no system = "I don't file by
           location"), so it needs an explicit confirm like the other ID systems. */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
-        <StepConfirm stepKey="locationConfigured" label="your Location System" divider={false} />
+        <StepConfirm stepKey="locationConfigured" label="your Location System" divider={false} onConfirm={() => confirmStep('locationConfigured')} saving={savingAll} />
       </div>
 
       {/* Assembly ID System — third of the three parallel ID systems. Generates a
@@ -1609,7 +1633,7 @@ export default function Settings() {
           </span>
         </label>
 
-        <StepConfirm stepKey="assemblyIdConfigured" label="your Assembly ID format" />
+        <StepConfirm stepKey="assemblyIdConfigured" label="your Assembly ID format" onConfirm={() => confirmStep('assemblyIdConfigured')} saving={savingAll} />
       </div>
 
       {/* Machine Numbers + Renumber — grouped because the numbers drive the
@@ -1644,7 +1668,7 @@ export default function Settings() {
           <button className="btn btn-secondary btn-sm" onClick={addSkip}>Add</button>
         </div>
 
-        <StepConfirm stepKey="machineNumbers" label="your machine numbering" />
+        <StepConfirm stepKey="machineNumbers" label="your machine numbering" onConfirm={() => confirmStep('machineNumbers')} saving={savingAll} />
 
         <div style={{
           marginTop: 20,
