@@ -245,6 +245,31 @@ export function isUnlinkedMeta(meta) {
   return !!meta?.no_fusion_link;
 }
 
+// Whether a metadata record is a COMPLETE app record (Phase A increments 1+2):
+// it carries the Fusion-native scalars (tool_type is the increment-1 marker — the
+// old overlay records never stored it) AND a presets array (the increment-2
+// marker — old records have no `presets` key at all; an empty array is a real
+// "this tool has no presets", so only `undefined` counts as incomplete). Only a
+// complete record can reconstruct a standalone tool (buildUnlinkedTool), so this
+// gates both the metadata-first paint and the one-time backfill below.
+export function isCompleteRecord(meta) {
+  return !!meta && meta.tool_type != null && meta.presets !== undefined;
+}
+
+// The one-time complete-record backfill (mode-2 enabler): given the fully-built
+// (Fusion-merged) tools from a successful load and the metadata list as loaded,
+// return the built tools whose metadata record is missing or still the old
+// incomplete overlay shape — the ones whose complete record should be written
+// once so the next load can paint the whole library from the app's own store.
+// Deliberately keyed off the BUILT tools (each is complete — Fusion merged), so
+// orphan metadata (a tool deleted directly in Fusion — no built tool) is never
+// touched, preserving the orphan-ghost guard's dormant-record invariant.
+export function recordsNeedingBackfill(tools, metaList) {
+  const metaById = new Map((metaList || []).map(m => [m.id, m]));
+  return (tools || []).filter(t =>
+    t.tracking_id && !isCompleteRecord(metaById.get(t.tracking_id)));
+}
+
 // The Fusion-native fields as an all-null internal object, so
 // mergeFusionAndMetadata's `?? meta` fallbacks resolve every field to the
 // metadata value (there is no Fusion side to win). Deliberately NOT built via

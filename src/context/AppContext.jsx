@@ -12,7 +12,7 @@ import { createContext, useContext, useReducer, useCallback, useEffect, useMemo,
 import * as driveService from '../services/driveService.js';
 import * as toolStore from '../services/toolStore.js';
 import * as aps from '../services/apsService.js';
-import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeUnlinkedTools, buildUnlinkedTool } from '../schema/toolSchema.js';
+import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeUnlinkedTools, buildUnlinkedTool, isCompleteRecord, recordsNeedingBackfill, buildMetadataTool } from '../schema/toolSchema.js';
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
@@ -62,6 +62,9 @@ export function AppProvider({ children }) {
   // { timer, write(keepalive) }. Lets typing coalesce into one write and lets
   // flushSharedWrites fire the latest pending write early on page hide/close.
   const sharedSaveTimersRef = useRef({});
+  // Once-per-session guard for the complete-record backfill (mode 2) — reset only
+  // on a failed write so the next loadTools retries it.
+  const backfilledRef = useRef(false);
   // Whether the shared Drive files (materials / vendors / shop settings / jobs /
   // components) have been LOADED from Drive yet this session. Until they have,
   // in-memory state is still the pre-load DEFAULT, so writing any shared file back
@@ -81,9 +84,11 @@ export function AppProvider({ children }) {
   // writes the file back with the same wrapper shape. One entry per linked
   // library. See downloadFusionList/uploadFusionList.
   const libraryWrappersRef = useRef(new Map());
+  const fusionReadyRef = useRef(state.fusionReady);
   locationRef.current = state.libraryLocation;
   holderLocationRef.current = state.holderLibraryLocation;
   googleRef.current = state.googleAuthenticated;
+  fusionReadyRef.current = state.fusionReady;
   toolsRef.current = state.tools;
   holdersRef.current = state.holders;
   localModeRef.current = state.localMode;
@@ -490,12 +495,15 @@ export function AppProvider({ children }) {
   // Normalize action runs. Same condition the established-shop seed uses
   // (!needsNormalize && tools loaded). If new untracked tools later appear,
   // needsNormalize flips true and the checklist's live-data warning surfaces it.
+  // Gated on fusionReady: the metadata-first provisional paint reports
+  // needsNormalize false as a placeholder — only the completed Fusion build (or
+  // fusion-disabled/demo/local, which also set fusionReady) knows the real value.
   useEffect(() => {
     if (state.localMode) return;
-    if (state.tools.length > 0 && !state.needsNormalize && !state.shopSettings?.setup_steps?.normalized) {
+    if (state.fusionReady && state.tools.length > 0 && !state.needsNormalize && !state.shopSettings?.setup_steps?.normalized) {
       markSetupStepInSettings('normalized');
     }
-  }, [state.localMode, state.tools.length, state.needsNormalize, state.shopSettings?.setup_steps?.normalized, markSetupStepInSettings]);
+  }, [state.localMode, state.fusionReady, state.tools.length, state.needsNormalize, state.shopSettings?.setup_steps?.normalized, markSetupStepInSettings]);
 
   // Proactively surface an expired Google token — flip on the reconnect banner the
   // moment the token lapses, WITHOUT waiting for a save to fail. The OAuth flow has
@@ -828,19 +836,46 @@ export function AppProvider({ children }) {
         }
       }
       const metaByTracking = new Map(metaList.map(m => [m.id, m]));
+      const fusionEnabled = effectiveShop.integrations?.fusion?.enabled !== false;
+      const locSystems0 = effectiveShop.location_config?.systems || [];
+
+      // ── Stage 1 — metadata-first paint (mode 2: the app's own store is primary).
+      // The app record is complete (scalars + presets — Phase A increments 1+2), so
+      // the library is built and painted from Drive metadata IMMEDIATELY; the
+      // (multi-second) Fusion download below then confirms and replaces it. Only
+      // complete records paint (isCompleteRecord — pre-increment overlay records
+      // can't render a tool); incomplete ones appear when Fusion lands, and the
+      // one-time backfill below completes their records for the next load. Linked
+      // writes stay refused until the Fusion build lands (fusionReady). Best-effort:
+      // a stage-1 failure just means the spinner stays until stage 2, as before.
+      if (fusionEnabled && metaList.length > 0) {
+        try {
+          const complete = metaList.filter(isCompleteRecord);
+          if (complete.length > 0) {
+            const provisional = complete.map(m => {
+              const t = buildUnlinkedTool(m);
+              if (!t.tool_location) return t;
+              const sys = findSystem(locSystems0, t.tool_location.system_id);
+              const composed = sys ? resolveLocationString(t.tool_location, locSystems0) : '';
+              return composed ? { ...t, location: composed, proshop_location: proShopLocationValue(sys, composed) } : t;
+            });
+            const paired = derivePairings(provisional, componentsFile?.components || []);
+            dispatch({ type: 'LOAD_PROVISIONAL', tools: backfillAsmNumbers(paired, effectiveShop, componentsFile) });
+          }
+        } catch { /* stage 2 below is authoritative */ }
+      }
 
       // Warn if the linked metadata file is gone. A deleted file 404s; a TRASHED
       // file still reads/writes via the API, so without this check the app would
       // silently keep saving notes/photos into a file sitting in the trash. The
       // check is best-effort — never block the library load on it.
+      let metaFileWarning = null;
       if (googleRef.current) {
         try {
           const health = await driveService.getMetadataFileHealth();
-          dispatch({
-            type: 'METADATA_FILE_WARNING',
-            warning: health.configured && health.missing ? 'missing'
-              : health.configured && health.trashed ? 'trashed' : null,
-          });
+          metaFileWarning = health.configured && health.missing ? 'missing'
+            : health.configured && health.trashed ? 'trashed' : null;
+          dispatch({ type: 'METADATA_FILE_WARNING', warning: metaFileWarning });
         } catch { /* inconclusive — leave any existing warning as-is */ }
       }
 
@@ -848,7 +883,6 @@ export function AppProvider({ children }) {
       // library. Build every tool from its metadata record — no Fusion download,
       // no library requirement, no holder load (holders are an APS/Fusion concept).
       // buildUnlinkedTool preserves each record's own no_fusion_link flag.
-      const fusionEnabled = effectiveShop.integrations?.fusion?.enabled !== false;
       if (!fusionEnabled) {
         const built = metaList.map(m => buildUnlinkedTool(m));
         const paired = derivePairings(built, componentsFile?.components || []);
@@ -961,6 +995,26 @@ export function AppProvider({ children }) {
       // the resolved registry explicitly — the SET_LIBRARIES dispatch above hasn't
       // updated shopSettingsRef yet this tick.
       try { await loadHolders(effectiveShop.holder_libraries || []); } catch { /* non-critical */ }
+
+      // ── One-time complete-record backfill (mode-2 enabler) ──────────────────
+      // Any built tool whose metadata record is missing or still the old
+      // incomplete overlay shape gets its COMPLETE record (scalars + presets)
+      // written once, so the next load's stage-1 paint covers the whole library.
+      // Keyed off the BUILT tools, so orphan metadata (a tool deleted directly in
+      // Fusion) is never touched. Fire-and-forget + once per session; skipped
+      // when the metadata file is missing/trashed (don't churn a dead file).
+      // upsertMany merges by id (the G1 invariant), so untouched records survive.
+      if (googleRef.current && !metaFileWarning && !backfilledRef.current) {
+        backfilledRef.current = true;
+        const needs = recordsNeedingBackfill(finalTools, metaList);
+        if (needs.length > 0) {
+          toolStore.upsertMany(needs.map(t => buildMetadataTool(t)))
+            .then(() => notify(
+              `Completed the app's own record for ${needs.length} tool${needs.length === 1 ? '' : 's'} — the library will load instantly from Drive next time`,
+              'info', 7000))
+            .catch(() => { backfilledRef.current = false; /* best-effort — retried next load */ });
+        }
+      }
     } catch (err) {
       dispatch({ type: 'LOAD_ERROR', error: err.message });
     }
@@ -976,13 +1030,13 @@ export function AppProvider({ children }) {
     dispatch, notify,
     downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary,
     saveLocationConfig,
-    toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef,
+    toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef, fusionReadyRef,
   }), [notify, downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary, saveLocationConfig]);
 
   const libraryOps = useMemo(() => createLibraryOps({
     dispatch, notify,
     uploadFusionList, downloadAllLibraries, markSetupStepInSettings,
-    toolsRef, holdersRef, shopSettingsRef, googleRef, demoModeRef, materialsRef,
+    toolsRef, holdersRef, shopSettingsRef, googleRef, demoModeRef, materialsRef, fusionReadyRef,
   }), [notify, uploadFusionList, downloadAllLibraries, markSetupStepInSettings]);
 
   const attachmentActions = useMemo(() => createAttachmentActions({

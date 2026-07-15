@@ -25,8 +25,20 @@ export function createToolActions(ctx) {
     dispatch, notify,
     downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary,
     saveLocationConfig,
-    toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef,
+    toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef, fusionReadyRef,
   } = ctx;
+
+  // Mode-2 two-stage load: until the full Fusion build has completed this session
+  // (fusionReady), in-memory tools may be the metadata-first provisional paint —
+  // they have no _instancesRaw base, so the linked write's 3-way merges would run
+  // against nothing and could clobber Fusion-side state. Refuse loudly instead.
+  // Demo/local/fusion-disabled paths never reach this (their own guards/branches
+  // run first). Optional-chained so tests that stub a partial ctx keep working.
+  const assertFusionReady = () => {
+    if (fusionReadyRef && !fusionReadyRef.current) {
+      throw new Error('Still syncing with the Fusion library — try again in a few seconds');
+    }
+  };
 
   // ─── Core write: reconcile a logical tool's instances into the library ────
   // A logical tool maps to N Fusion entries (one per assembly). This drops every
@@ -147,6 +159,10 @@ export function createToolActions(ctx) {
       }
       return toWrite;
     }
+
+    // Linked write — requires the full Fusion build (real _instancesRaw) so the
+    // 3-way merges below have a valid base. See assertFusionReady.
+    assertFusionReady();
 
     // Base = what the app last saw/wrote as this tool's Fusion state (its shared
     // presets are identical across instances, so instance 0 is representative).
@@ -719,6 +735,11 @@ export function createToolActions(ctx) {
   const reconcileTool = async (tool) => {
     const empty = { duplicates: [], newAssemblies: [], conflicts: [] };
     if (!tool) return empty;
+    // Provisional (metadata-first) tools have no _fusionRaw/_registeredAssemblies
+    // canon yet — comparing the live library against them would misclassify
+    // legitimate instances as strays/conflicts. Skip until the Fusion build lands;
+    // the tool page re-runs reconcile on its next open.
+    if (fusionReadyRef && !fusionReadyRef.current) return empty;
     const tid = tool.tracking_id || null;
     const pid = String(tool.tool_id || '').trim();
     if (!tid && !pid) return empty;
