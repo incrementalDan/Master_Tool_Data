@@ -23,7 +23,18 @@ export function createLibraryOps(ctx) {
     dispatch, notify,
     uploadFusionList, downloadAllLibraries, markSetupStepInSettings,
     toolsRef, holdersRef, shopSettingsRef, googleRef, demoModeRef, materialsRef,
+    fusionReadyRef,
   } = ctx;
+
+  // Mode-2 two-stage load: until the full Fusion build completes (fusionReady),
+  // in-memory tools may be the metadata-first provisional paint — a full-replace
+  // write built from them would drop Fusion-side data they don't carry. Refuse
+  // loudly. Optional-chained so tests stubbing a partial ctx keep working.
+  const assertFusionReady = () => {
+    if (fusionReadyRef && !fusionReadyRef.current) {
+      throw new Error('Still syncing with the Fusion library — try again in a few seconds');
+    }
+  };
 
   // `extraRawByLibrary` (Map libraryId → raw Fusion entries): entries appended to
   // a library's upload VERBATIM — not re-split — and rebuilt into memory as-is.
@@ -34,6 +45,7 @@ export function createLibraryOps(ctx) {
   const saveFullLibrary = async (tools, { extraRawByLibrary = new Map() } = {}) => {
     dispatch({ type: 'SAVE_START' });
     try {
+      assertFusionReady();
       const holders = holdersRef.current || [];
       const defaultLib = defaultToolLibraryId(shopSettingsRef.current);
       const libById = new Map((shopSettingsRef.current?.tool_libraries || []).map(l => [l.id, l]));

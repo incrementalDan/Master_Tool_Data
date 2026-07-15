@@ -180,6 +180,16 @@ export const initialState = {
   needsNormalize: false,      // true when any tool lacks a tracking ID (pre-migration)
   normalizeCount: 0,          // number of un-migrated tools (for banner/modal copy)
   metadataFileWarning: null,  // null | 'missing' | 'trashed' — linked metadata file is gone
+  // ── Mode-2 two-stage load (metadata-first paint, Fusion confirms) ──────────
+  // fusionSyncing: the library painted from the app's own records (Drive) and the
+  // Fusion download is still confirming in the background — a UI hint only.
+  // fusionReady: a FULL Fusion build has completed this session, so tools carry
+  // real _instancesRaw and linked writes are safe. Until then writeLogicalTool /
+  // saveFullLibrary / reconcile refuse with a clear "still syncing" message —
+  // never a write against provisional data. Demo/local set it true (their own
+  // read-only guards produce the right error messages).
+  fusionSyncing: false,
+  fusionReady: false,
   // Shared Drive files (loaded at startup; default to the seeds until then).
   materials: DEFAULT_MATERIALS,
   vendorRegistry: DEFAULT_VENDOR_REGISTRY,
@@ -236,11 +246,14 @@ export function reducer(state, action) {
         holderLibraryLocation: state.holderLibraryLocation,
       };
     case 'ENTER_LOCAL_MODE':
-      return { ...state, localMode: true, tools: action.tools, needsNormalize: false, error: null };
+      // fusionReady true: local mode is read-only via its own download/upload
+      // guards — those produce the right "local mode" message, not "still syncing".
+      return { ...state, localMode: true, fusionReady: true, tools: action.tools, needsNormalize: false, error: null };
     case 'ENTER_DEMO_MODE':
       return {
         ...state,
         demoMode: true,
+        fusionReady: true, // demo's own read-only guards give the right message
         tools: action.tools,
         holders: action.holders,
         materials: action.materials,
@@ -260,8 +273,17 @@ export function reducer(state, action) {
         holderLibraryLocation: state.holderLibraryLocation,
       };
     case 'LOAD_START': return { ...state, isLoading: true, error: null };
-    case 'LOAD_SUCCESS': return { ...state, isLoading: false, tools: action.tools, needsNormalize: !!action.needsNormalize, normalizeCount: action.normalizeCount ?? 0 };
-    case 'LOAD_ERROR': return { ...state, isLoading: false, error: action.error };
+    // Stage-1 metadata-first paint: the library built from the app's own complete
+    // records, shown immediately while the Fusion download confirms in the
+    // background. needsNormalize is a Fusion-side fact — unknown until stage 2 —
+    // so it stays false here (the auto-mark setup effect gates on fusionReady).
+    case 'LOAD_PROVISIONAL':
+      return { ...state, isLoading: false, fusionSyncing: true, tools: action.tools, needsNormalize: false, normalizeCount: 0, error: null };
+    case 'LOAD_SUCCESS': return { ...state, isLoading: false, fusionSyncing: false, fusionReady: true, tools: action.tools, needsNormalize: !!action.needsNormalize, normalizeCount: action.normalizeCount ?? 0 };
+    // fusionReady deliberately NOT set on error — if stage 2 failed, any painted
+    // provisional tools stay browsable but linked writes stay refused (no
+    // _instancesRaw base to merge against).
+    case 'LOAD_ERROR': return { ...state, isLoading: false, fusionSyncing: false, error: action.error };
     case 'SAVE_START': return { ...state, isSaving: true, error: null };
     case 'SAVE_SUCCESS': return { ...state, isSaving: false };
     case 'SAVE_ERROR': return { ...state, isSaving: false, error: action.error };

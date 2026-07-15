@@ -236,8 +236,10 @@ export function buildMetadataTool(tool) {
     // can reconstruct a tool with no Fusion entry (Phase B) and can diff app-vs-
     // Fusion to surface drift (D3). Writing them changes nothing for a linked
     // tool today — the metadata copy is kept in sync with Fusion on every save.
-    // Presets are deliberately NOT here yet (next Phase-A increment — they carry
-    // the round-trip/preset_meta machinery). See PHASE_A_TOOL_RECORD_SCHEMA.md.
+    // Presets are persisted too (increment 2 — see `presets:` below), so the
+    // record is COMPLETE: scalars + presets. See PHASE_A_TOOL_RECORD_SCHEMA.md.
+    // isCompleteRecord (logicalTools.js) keys off tool_type + the presets key to
+    // tell these complete records apart from pre-increment overlay records.
     tool_type: tool.tool_type || null,
     description: tool.description || '',
     unit: tool.unit || null,

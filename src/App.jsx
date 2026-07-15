@@ -383,7 +383,7 @@ function GoogleReconnectBanner() {
 
 function TopBar() {
   const location = useLocation();
-  const { loadTools, isLoading, maybeBlockNav, fusionEnabled } = useApp();
+  const { loadTools, isLoading, fusionSyncing, maybeBlockNav, fusionEnabled } = useApp();
   const onLanding = location.pathname === '/';
   // Intercept tab clicks so a page with a registered nav guard (e.g. Settings
   // with unsaved edits) can prompt before we change the hash route.
@@ -452,10 +452,12 @@ function TopBar() {
         <button
           className="icon-btn"
           onClick={() => loadTools()}
-          disabled={isLoading}
-          title="Re-download the library from Autodesk to pick up changes made in Fusion 360"
+          disabled={isLoading || fusionSyncing}
+          title={fusionSyncing
+            ? 'Library shown from the app’s own records — confirming against the Fusion library in the background…'
+            : 'Re-download the library from Autodesk to pick up changes made in Fusion 360'}
         >
-          <RefreshCw size={15} style={isLoading ? { animation: 'spin 1s linear infinite' } : {}} />
+          <RefreshCw size={15} style={(isLoading || fusionSyncing) ? { animation: 'spin 1s linear infinite' } : {}} />
         </button>
       </div>
     </header>
