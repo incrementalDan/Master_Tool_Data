@@ -48,6 +48,7 @@ export default function ToolDetail() {
     tools, saveTool, deleteTool, cloneTool, isSaving, notify, holders, holderLibraryLocation,
     reconcileTool, googleAuthenticated, uploadToolPhoto, uploadToolAttachment, deleteToolAttachment,
     shopSettings, promoteToolToFusion, detachToolFromFusion, fusionEnabled, fusionAuthority,
+    isLoading, fusionSyncing,
   } = useApp();
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
   const [editing, setEditing] = useState(searchParams.get('edit') === '1');
@@ -128,6 +129,18 @@ export default function ToolDetail() {
   }, [tool?.tool_id, tool?.description]);
 
   if (!tool) {
+    // The library may still be loading — on a full refresh straight onto this
+    // page, `tools` is empty until the load lands (metadata-first paint, then
+    // Fusion). Show a spinner then, not a misleading "not found" flash; only
+    // declare the tool missing once the load has actually settled.
+    if (isLoading || fusionSyncing) {
+      return (
+        <div className="loading-screen">
+          <div className="spinner" />
+          <span>Loading tool…</span>
+        </div>
+      );
+    }
     return (
       <div className="loading-screen">
         <span className="text-sub">Tool not found.</span>
