@@ -612,14 +612,18 @@ export function createToolActions(ctx) {
     }
   };
 
-  const deleteTool = async (id) => {
+  const deleteTool = async (id, opts = {}) => {
     dispatch({ type: 'SAVE_START' });
     try {
       const tool = toolsRef.current.find(t => t.id === id);
       const tid = tool?.tracking_id || id;
 
       // Metadata-only delete when the tool has no Fusion entry (a per-tool
-      // no-Fusion tool) OR the whole Fusion integration is disabled shop-wide.
+      // no-Fusion tool) OR the whole Fusion integration is disabled shop-wide,
+      // OR the Fusion entry is already gone (`skipFusion` — reverse sync: the
+      // tool was deleted directly in Fusion 360 and reconcile-on-open found no
+      // matching entry, so there is nothing left to remove from the library and
+      // re-uploading the whole library would be a wasteful no-op).
       // In disabled mode every write is metadata-only — writeLogicalTool routes
       // that way and loadTools builds from metadata — so delete follows the same
       // contract and never round-trips APS while "Fusion sync is off". A
@@ -627,7 +631,7 @@ export function createToolActions(ctx) {
       // re-enabling Fusion is the point at which it resurfaces and can be
       // reconciled, rather than mutating the Fusion library while sync is off.
       const fusionDisabled = shopSettingsRef.current?.integrations?.fusion?.enabled === false;
-      if (tool?.no_fusion_link === true || fusionDisabled) {
+      if (tool?.no_fusion_link === true || fusionDisabled || opts.skipFusion === true) {
         if (googleRef.current) await toolStore.deleteById(tid);
         dispatch({ type: 'DELETE_TOOL', id });
         dispatch({ type: 'SAVE_SUCCESS' });
@@ -750,7 +754,13 @@ export function createToolActions(ctx) {
       const rpid = String(r['product-id'] || '').trim();
       return (tid && rtid === tid) || (pid && rpid === pid);
     });
-    if (matchingRaws.length <= 1) return empty;
+    // Reverse sync: a linked tool with ZERO matching Fusion entries was deleted
+    // directly in Fusion 360. Surface it so the app can offer to remove it too
+    // ("informed, not blocked" — never auto-delete). This only fires for a tool
+    // the app believes is linked (the caller skips no_fusion_link tools), and
+    // the live fetch means 0 is genuine, not a stale in-memory copy.
+    if (matchingRaws.length === 0) return { ...empty, missing: true };
+    if (matchingRaws.length === 1) return empty;
 
     return classifyStrays({
       matchingRaws,
