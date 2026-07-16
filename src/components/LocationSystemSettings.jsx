@@ -518,7 +518,7 @@ function Counter({ n, label, color }) {
 // reads/writes the passed location_config draft instead of shopSettings, and
 // never persists to Drive itself (the Settings page's Save commits the whole
 // draft). Normalize is disabled while buffered, since it needs the saved config.
-export default function LocationSystemSettings({ configOverride = null, onConfigChange = null }) {
+export default function LocationSystemSettings({ configOverride = null, onConfigChange = null, footer = null }) {
   const { tools, shopSettings, saveLocationConfig, normalizeLocationSystem, markSetupStepInSettings, setupProgress } = useApp();
   const buffered = typeof onConfigChange === 'function';
   const cfg = (buffered ? configOverride : shopSettings?.location_config) || { systems: [], bin_sizes: [] };
@@ -593,6 +593,10 @@ export default function LocationSystemSettings({ configOverride = null, onConfig
       </label>
 
       <LibraryUnmatchedPanel tools={tools} systems={systems} />
+
+      {/* Optional setup-step confirm, rendered INSIDE this card (like the other
+          ID-system cards) rather than a separate floating box. */}
+      {footer}
     </div>
   );
 }
