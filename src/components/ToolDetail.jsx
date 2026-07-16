@@ -52,8 +52,15 @@ export default function ToolDetail() {
   } = useApp();
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
   const [editing, setEditing] = useState(searchParams.get('edit') === '1');
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  // Delete confirmation. null = closed; 'normal' = user-initiated from edit mode
+  // (deletes the Fusion entry too); 'missing' = reverse sync, the tool was
+  // already deleted in Fusion and we're only clearing it from the app.
+  const [deleteMode, setDeleteMode] = useState(null);
   const [deleteError, setDeleteError] = useState('');
+  // Reverse sync: reconcile-on-open found no matching Fusion entry — the tool
+  // was deleted directly in Fusion 360. Surfaced as a banner (informed, not
+  // blocked); the user chooses to remove it from the app or keep it.
+  const [fusionMissing, setFusionMissing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showExportPicker, setShowExportPicker] = useState(null); // null | 'copy' | 'download'
   const [reconcileResults, setReconcileResults] = useState(null);
@@ -85,11 +92,16 @@ export default function ToolDetail() {
     if (tool.no_fusion_link) return; // no Fusion entry — nothing to reconcile against
     if (reconciledRef.current === tool.id) return;
     reconciledRef.current = tool.id;
+    setFusionMissing(false); // clear stale state when moving to a different tool
     let cancelled = false;
     (async () => {
       try {
         const results = await reconcileTool(tool);
-        if (!cancelled && hasReconcileWork(results)) setReconcileResults(results);
+        if (cancelled) return;
+        // Reverse sync takes precedence — if the tool is gone from Fusion there
+        // are no strays to reconcile, only the "removed from Fusion" prompt.
+        if (results.missing) setFusionMissing(true);
+        else if (hasReconcileWork(results)) setReconcileResults(results);
       } catch { /* non-critical */ }
     })();
     return () => { cancelled = true; };
@@ -212,7 +224,10 @@ export default function ToolDetail() {
   const handleDelete = async () => {
     setDeleteError('');
     try {
-      await deleteTool(id);
+      // 'missing' = already gone from Fusion → metadata-only removal (skipFusion),
+      // no wasteful re-upload of the whole library. 'normal' = also delete the
+      // Fusion entry.
+      await deleteTool(id, { skipFusion: deleteMode === 'missing' });
       navigate('/');
     } catch (err) {
       setDeleteError(err.message);
@@ -276,6 +291,44 @@ export default function ToolDetail() {
     catch { /* toast handled in context */ }
   };
 
+  // Delete confirmation modal — shared by the edit-mode Delete button ('normal')
+  // and the reverse-sync banner ('missing'). Rendered in both the edit and view
+  // returns so it works from wherever it was opened.
+  const deleteModalEl = deleteMode && (
+    <div className="modal-backdrop">
+      <div className="modal">
+        <h3 className="modal-title">
+          {deleteMode === 'missing' ? 'Remove from ToolDex?' : 'Delete tool?'}
+        </h3>
+        <p className="modal-body">
+          {deleteMode === 'missing' ? (
+            <>
+              <strong>{tool.description || 'This tool'}</strong> no longer exists in the
+              Fusion library — it was deleted in Fusion 360. Removing it here deletes
+              the app's record (presets, assemblies, purchasing, location, photos and
+              notes). This cannot be undone.
+            </>
+          ) : (
+            <>
+              <strong>{tool.description || 'This tool'}</strong> will be permanently deleted.
+              {!noFusion && <> This also removes its entry (all assemblies/instances) from the <strong>Fusion library</strong>.</>}
+              {' '}The app record — presets, purchasing, location, photos and notes — is deleted too. This cannot be undone.
+            </>
+          )}
+        </p>
+        {deleteError && <div className="error-banner mb-12">{deleteError}</div>}
+        <div className="modal-actions">
+          <button className="btn btn-secondary" onClick={() => { setDeleteMode(null); setDeleteError(''); }} disabled={isSaving}>
+            Cancel
+          </button>
+          <button className="btn btn-danger" onClick={handleDelete} disabled={isSaving}>
+            {isSaving ? 'Deleting…' : (deleteMode === 'missing' ? 'Remove from app' : 'Delete permanently')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   if (editing) {
     return (
       <div>
@@ -322,7 +375,9 @@ export default function ToolDetail() {
           onCancel={() => { setEditing(false); clearEditParam(); }}
           isSaving={isSaving}
           isNew={false}
+          onDelete={() => { setDeleteError(''); setDeleteMode('normal'); }}
         />
+        {deleteModalEl}
       </div>
     );
   }
@@ -371,14 +426,8 @@ export default function ToolDetail() {
           style={{ color: 'var(--orange)' }}
           onClick={() => { exportProShop(tool); notify('Exported ProShop CSV', 'success'); }}
         />
-        <div style={{ flex: 1 }} />
-        <SidebarBtn
-          icon={Trash2}
-          label="Delete"
-          tip="Delete tool permanently"
-          className="danger"
-          onClick={() => setShowDeleteModal(true)}
-        />
+        {/* Delete lives in Edit mode now (ToolForm's action bar), so it can't be
+            hit by accident from the view. */}
       </aside>
 
       {/* Main content */}
@@ -471,6 +520,29 @@ export default function ToolDetail() {
         {/* "Informed, not blocked" conflict review — shared-value disagreements
             flagged during Fusion import / normalize, resolved here on demand. */}
         <ConflictBanner key={`conflicts-${tool.id}`} tool={tool} />
+
+        {/* Reverse sync — the tool was deleted directly in Fusion 360, so it's
+            gone from the live library. Offer to remove it from the app too, or
+            keep it (informed, not blocked — never auto-deleted). */}
+        {fusionMissing && (
+          <div style={{
+            border: '1px solid var(--red, #ef4444)', borderRadius: 'var(--radius)',
+            background: 'color-mix(in srgb, var(--red, #ef4444) 8%, transparent)',
+            padding: 14, marginBottom: 16,
+            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          }}>
+            <AlertTriangle size={16} style={{ color: 'var(--red, #ef4444)', flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 220, lineHeight: 1.5 }}>
+              <strong>Deleted from Fusion.</strong>{' '}
+              This tool no longer exists in the Fusion library — it looks like it was deleted in Fusion 360.
+              Remove it from ToolDex too?
+            </span>
+            <button className="btn btn-secondary" onClick={() => setFusionMissing(false)}>Keep</button>
+            <button className="btn btn-danger" onClick={() => { setDeleteError(''); setDeleteMode('missing'); }}>
+              <Trash2 size={15} /> Remove from ToolDex
+            </button>
+          </div>
+        )}
 
         {/* Insert-style tool: pairing bar + the Holder Body / Insert component
             groups (each with its own Geometry & setup, Photo, Location and
@@ -706,7 +778,6 @@ export default function ToolDetail() {
           />
         )}
 
-        {/* Delete confirmation modal */}
         {reconcileResults && (
           <ReconcileModal
             tool={tool}
@@ -717,23 +788,8 @@ export default function ToolDetail() {
           />
         )}
 
-        {showDeleteModal && (
-          <div className="modal-backdrop">
-            <div className="modal">
-              <h3 className="modal-title">Delete Tool?</h3>
-              <p className="modal-body">
-                <strong>{tool.description || 'This tool'}</strong> will be permanently removed from the library. This cannot be undone.
-              </p>
-              {deleteError && <div className="error-banner mb-12">{deleteError}</div>}
-              <div className="modal-actions">
-                <button className="btn btn-secondary" onClick={() => setShowDeleteModal(false)}>Cancel</button>
-                <button className="btn btn-danger" onClick={handleDelete} disabled={isSaving}>
-                  {isSaving ? 'Deleting…' : 'Delete'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* Delete confirmation modal (shared with edit mode) */}
+        {deleteModalEl}
 
         {promoteLibId !== null && (
           <div className="modal-backdrop" onClick={() => setPromoteLibId(null)}>

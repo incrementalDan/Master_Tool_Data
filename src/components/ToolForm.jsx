@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Tag, Ruler, Layers, Save, X, AlertTriangle, Wand2, ChevronDown, ChevronRight, StickyNote, Link2 } from 'lucide-react';
+import { Tag, Ruler, Layers, Save, X, AlertTriangle, Wand2, ChevronDown, ChevronRight, StickyNote, Link2, Trash2 } from 'lucide-react';
 import {
   validateTool, validateGeometry, getNextMachineNumber, toolToExtractor,
   INCH_THREAD_SIZES, METRIC_THREAD_SIZES,
@@ -39,7 +39,7 @@ function derivePitchFromThreadSize(pitchStr, toolUnit = 'inches') {
   return null;
 }
 
-export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
+export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDelete }) {
   const { tools, shopSettings } = useApp();
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
   const [data, setData] = useState({ ...tool });
@@ -360,6 +360,20 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew }) {
 
       {/* Sticky save bar */}
       <div className="form-actions-bar">
+        {/* Delete lives here — only while editing an existing tool. Kept apart
+            from Save/Cancel (pushed left) so it's not fat-fingered. The heavy
+            "are you sure" confirmation is handled by the parent (ToolDetail). */}
+        {!isNew && onDelete && (
+          <button
+            className="btn btn-danger"
+            onClick={onDelete}
+            disabled={isSaving}
+            title="Delete this tool permanently"
+            style={{ marginRight: 'auto' }}
+          >
+            <Trash2 size={15} /> Delete
+          </button>
+        )}
         <span className={`form-dirty ${dirty ? 'show' : ''}`}>{dirty ? 'Unsaved changes' : 'No changes'}</span>
         <span className="form-hint text-xs text-sub">⌘/Ctrl+S to save · Esc to cancel</span>
         <button className="btn btn-secondary" onClick={handleCancel} disabled={isSaving}>Cancel</button>

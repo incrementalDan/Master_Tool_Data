@@ -133,6 +133,46 @@ describe('Phase B increment 3 — no-Fusion write path (metadata only)', () => {
     expect(ctx.uploadFusionList).not.toHaveBeenCalled();
     expect(deleteMetadata).toHaveBeenCalledWith('FTL-DIS');
   });
+
+  it('deleteTool with skipFusion is metadata-only for a linked tool (reverse sync — already gone from Fusion)', async () => {
+    // A normally-linked tool, but it was deleted directly in Fusion; the caller
+    // passes skipFusion so we don't re-download/re-upload the whole library.
+    const ctx = makeCtx({
+      toolsRef: { current: [{ id: 'FTL-GONE', tracking_id: 'FTL-GONE', no_fusion_link: false, library_id: 'lib-1' }] },
+    });
+    const { deleteTool } = createToolActions(ctx);
+    await deleteTool('FTL-GONE', { skipFusion: true });
+    expect(ctx.downloadFusionList).not.toHaveBeenCalled();
+    expect(ctx.uploadFusionList).not.toHaveBeenCalled();
+    expect(deleteMetadata).toHaveBeenCalledWith('FTL-GONE');
+  });
+});
+
+describe('reconcileTool — reverse sync (deleted from Fusion) detection', () => {
+  it('reports missing when a linked tool has no matching Fusion entry', async () => {
+    const tool = { id: 'FTL-RS', tracking_id: 'FTL-RS', tool_id: 'A-9', library_id: 'lib-1' };
+    // The live library has some OTHER tool, but nothing matching this tracking ID / product-id.
+    const rawList = [{ guid: 'x', 'post-process': { comment: 'FTL-OTHER' }, 'product-id': 'B-2' }];
+    const ctx = makeCtx({
+      fetchRawLibrary: vi.fn(async () => rawList),
+      fusionReadyRef: { current: true },
+    });
+    const { reconcileTool } = createToolActions(ctx);
+    const res = await reconcileTool(tool);
+    expect(res.missing).toBe(true);
+  });
+
+  it('does NOT report missing when the tool still exists in Fusion', async () => {
+    const tool = { id: 'FTL-OK', tracking_id: 'FTL-OK', tool_id: 'A-9', library_id: 'lib-1' };
+    const rawList = [{ guid: 'g1', 'post-process': { comment: 'FTL-OK' }, 'product-id': 'A-9' }];
+    const ctx = makeCtx({
+      fetchRawLibrary: vi.fn(async () => rawList),
+      fusionReadyRef: { current: true },
+    });
+    const { reconcileTool } = createToolActions(ctx);
+    const res = await reconcileTool(tool);
+    expect(res.missing).toBeFalsy();
+  });
 });
 
 describe('writeLogicalTool does not wipe a concurrent Fusion preset edit', () => {
