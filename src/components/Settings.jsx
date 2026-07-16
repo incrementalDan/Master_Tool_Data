@@ -1541,14 +1541,14 @@ export default function Settings() {
 
       {/* Location System — adjacent to Tool ID System (it drives the ID in
           location mode). Self-contained: configures systems, normalizes, and
-          shows the library-wide unmatched panel. */}
-      <LocationSystemSettings configOverride={locDraft} onConfigChange={setLocDraft} />
-
-      {/* Location System has valid defaults (no system = "I don't file by
-          location"), so it needs an explicit confirm like the other ID systems. */}
-      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
-        <StepConfirm stepKey="locationConfigured" label="your Location System" divider={false} onConfirm={() => confirmStep('locationConfigured')} saving={savingAll} />
-      </div>
+          shows the library-wide unmatched panel. The setup-step confirm is passed
+          as `footer` so it renders INSIDE this card (matching the other ID-system
+          cards), not as a separate floating box. */}
+      <LocationSystemSettings
+        configOverride={locDraft}
+        onConfigChange={setLocDraft}
+        footer={<StepConfirm stepKey="locationConfigured" label="your Location System" onConfirm={() => confirmStep('locationConfigured')} saving={savingAll} />}
+      />
 
       {/* Assembly ID System — third of the three parallel ID systems. Generates a
           human-readable number per tool+holder assembly (asm_number). */}
