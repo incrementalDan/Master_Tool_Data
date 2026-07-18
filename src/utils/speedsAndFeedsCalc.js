@@ -52,9 +52,10 @@ export const FORMULAS = {
 export const FIELD_PRECISION = {
   n: 0, n_ramp: 0,
   v_c: 1,
-  v_f: 2, v_f_plunge: 2, v_f_retract: 2,
+  v_f: 2, v_f_plunge: 2, v_f_retract: 2, v_f_ramp: 2,
   v_f_leadIn: 2, v_f_leadOut: 2, v_f_transition: 2,
   f_z: 5, f_n: 5,
+  ramp_angle: 1,
 };
 
 export function roundForField(field, value) {

@@ -8,6 +8,7 @@ import { machineColor } from '../utils/machineColors.js';
 import MachinePill from './MachinePill.jsx';
 import CamPresetPicker from './CamPresetPicker.jsx';
 import JobProgramPicker from './JobProgramPicker.jsx';
+import LinkedSlider from './LinkedSlider.jsx';
 import {
   composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
   materialNameCode, presetMaterialColor, findMaterialInLibrary, HOLE_MAKING_TYPES, TURNING_TYPES,
@@ -17,7 +18,7 @@ import {
   rpmToSFM, sfmToRPM,
   fptToIPM, ipmToFPT,
   iprToIPM, ipmToIPR,
-  FORMULAS, FIELD_PRECISION, roundForField,
+  roundForField,
 } from '../utils/speedsAndFeedsCalc.js';
 
 // Default formula states when opening any preset for editing.
@@ -110,7 +111,7 @@ function PresetJobsBlock({ jobIds = [], jobsFile, editable = false, canAdd = tru
   );
 }
 
-export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange, onEditingChange }) {
+export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
   const { holders, materials, shopSettings, jobs, findOrCreateJob, user, googleAuthenticated, demoMode } = useApp();
   // Job links persist in metadata (jobs.json + preset_meta on Drive), so adding
   // them needs Drive (or the demo sandbox, which keeps everything in memory).
@@ -154,14 +155,6 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange, onE
 
   // Report unsaved-editor state up so ToolDetail can warn before navigating away.
   useEffect(() => { onDirtyChange?.(!!editingId && editorDirty); }, [editingId, editorDirty, onDirtyChange]);
-
-  // Report editor-open state up — ToolDetail switches the page into focus mode
-  // (right sidebar hidden, editor full width) while a preset is being edited.
-  // The cleanup clears it if the panel unmounts with an editor still open.
-  useEffect(() => {
-    onEditingChange?.(!!editingId);
-    return () => onEditingChange?.(false);
-  }, [editingId, onEditingChange]);
 
   // Confirm discarding unsaved edits before switching presets / adding / etc.
   const guardDiscard = () => {
@@ -808,7 +801,6 @@ function EditCard({
   // Plain setter for non-formula fields (name, material, checkboxes, coolant,
   // and the independent feedrate fields that have no formula linkage).
   const set = (k, v) => { touch(); setDraft(d => ({ ...d, [k]: v })); };
-  const setMat = (k, v) => { touch(); setDraft(d => ({ ...d, material: { ...(d.material || {}), [k]: v } })); };
   // Plunge for milling / spot drill is a plain value (no f_n field), but retract
   // still follows it unless overridden — so cascade retract here too.
   const setPlunge = (v) => { touch(); setDraft(d => {
@@ -902,6 +894,11 @@ function EditCard({
   };
 
   const noSpeed = !(draft.n);
+  const isMetricTool = lenUnit === 'mm';
+  // The RPM sliders' default ceiling maps to the linked machine's max spindle
+  // speed (soft max can still stretch past it); 16000 fallback lives in
+  // SLIDER_RANGES (LinkedSlider.jsx).
+  const machineMaxRpm = configMachines.find(m => m.id === draft.machine_id)?.max_rpm || undefined;
 
   return (
     <div
@@ -941,7 +938,7 @@ function EditCard({
           Stored as material.query = CAM preset name, else group label. The CAM
           preset name is the Fusion speed/feed preset group this maps to. */}
       <EditorSection label="Material" accent={PE_VIOLET}>
-        <div className="pe-grid">
+        <div>
           <FGroup label="CAM Preset">
             {(() => {
               const cur = findMaterialInLibrary(draft.material?.query, materials);
@@ -980,18 +977,10 @@ function EditCard({
               );
             })()}
           </FGroup>
-          <FGroup label="Filter by type">
-            <select
-              className="field-input"
-              value={['all', 'metal', 'plastic'].includes(draft.material?.category) ? draft.material.category : 'all'}
-              onChange={e => setMat('category', e.target.value)}
-            >
-              {['all', 'metal', 'plastic'].map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
-          </FGroup>
         </div>
+        {/* No "Filter by type" select — material.category is still written to
+            the draft (Fusion needs it), derived from the picked CAM preset via
+            materialCategory(query) in the picker's onSelect / clearMat. */}
       </EditorSection>
 
       {/* Operation & Assembly — drive the convention preset name */}
@@ -1071,25 +1060,23 @@ function EditCard({
       {/* Speed + Passes row */}
       <div className="pe-row">
       <EditorSection label="Speed" accent="var(--blue)">
-        <div className="pe-stack">
-          <NField
-            label="Spindle speed" value={draft.n} unit="RPM"
-            formulaField="n" formulaState={fx.n}
-            onChange={v => handleNumChange('n', v)}
+        <LinkedSlider
+          field="n" label="Spindle speed" unit="RPM"
+          value={draft.n} fxState={fx.n} max={machineMaxRpm}
+          onChange={v => handleNumChange('n', v)}
+        />
+        <LinkedSlider
+          field="v_c" label="Surface speed" unit={speedUnit}
+          value={draft.v_c} fxState={fx.v_c} metric={isMetricTool}
+          onChange={v => handleNumChange('v_c', v)}
+        />
+        {!isHoleMaking && (
+          <LinkedSlider
+            field="n_ramp" label="Ramp spindle" unit="RPM"
+            value={draft.n_ramp} fxState={fx.n_ramp} max={machineMaxRpm}
+            onChange={v => handleNumChange('n_ramp', v)}
           />
-          <NField
-            label="Surface speed" value={draft.v_c} unit={speedUnit}
-            formulaField="v_c" formulaState={fx.v_c}
-            onChange={v => handleNumChange('v_c', v)}
-          />
-          {!isHoleMaking && (
-            <NField
-              label="Ramp spindle speed" value={draft.n_ramp} unit="RPM"
-              formulaField="n_ramp" formulaState={fx.n_ramp}
-              onChange={v => handleNumChange('n_ramp', v)}
-            />
-          )}
-        </div>
+        )}
       </EditorSection>
 
       {/* Passes & Linking — milling only */}
@@ -1134,40 +1121,66 @@ function EditCard({
       </div>
 
       {/* Feedrates — full-width section (the tallest, so it gets the whole row) */}
-      {/* Feedrates — milling only */}
+      {/* Feedrates — milling: two clusters, CUTTING and PLUNGE & RAMP. Plunge
+          routes through handleNumChange (not setPlunge) because milling now
+          shows the Feed-per-rev slider as its paired entry point (mockup) —
+          the fx cascade keeps whichever of the two was touched last. */}
       {isMilling && (
         <EditorSection label="Feedrates" accent="var(--blue)">
-          <div className="pe-grid pe-grid--wide">
-            <NField
-              label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
-              formulaField="v_f" formulaState={fx.v_f}
-              warning={noSpeed ? 'Set spindle speed first' : undefined}
-              onChange={v => handleNumChange('v_f', v)}
-            />
-            <NField
-              label="Feed per tooth" value={draft.f_z} unit={lenUnit}
-              formulaField="f_z" formulaState={fx.f_z}
-              warning={noSpeed ? 'Set spindle speed first' : undefined}
-              onChange={v => handleNumChange('f_z', v)}
-            />
-            <NField
-              label="Lead-in feedrate" value={draft.v_f_leadIn} unit={feedUnit}
-              formulaField="v_f_leadIn" formulaState={fx.v_f_leadIn}
-              onChange={v => handleNumChange('v_f_leadIn', v)}
-            />
-            <NField
-              label="Lead-out feedrate" value={draft.v_f_leadOut} unit={feedUnit}
-              formulaField="v_f_leadOut" formulaState={fx.v_f_leadOut}
-              onChange={v => handleNumChange('v_f_leadOut', v)}
-            />
-            <NField
-              label="Transition feedrate" value={draft.v_f_transition} unit={feedUnit}
-              formulaField="v_f_transition" formulaState={fx.v_f_transition}
-              onChange={v => handleNumChange('v_f_transition', v)}
-            />
-            <NField label="Plunge feedrate" value={draft.v_f_plunge}   unit={feedUnit} onChange={v => setPlunge(v)} />
-            <NField label="Ramp feedrate" value={draft.v_f_ramp}      unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
-            <NField label="Ramp angle"    value={draft['ramp-angle']} unit="°"        onChange={v => set('ramp-angle', v)} />
+          <div className="pe-feed-grid">
+            <div>
+              <div className="pe-cluster-label">CUTTING</div>
+              <LinkedSlider
+                field="f_z" label="Feed per tooth" unit={lenUnit}
+                value={draft.f_z} fxState={fx.f_z} metric={isMetricTool}
+                warning={noSpeed ? 'Set spindle speed first' : undefined}
+                onChange={v => handleNumChange('f_z', v)}
+              />
+              <LinkedSlider
+                field="v_f" label="Cutting feedrate" unit={feedUnit}
+                value={draft.v_f} fxState={fx.v_f} metric={isMetricTool}
+                warning={noSpeed ? 'Set spindle speed first' : undefined}
+                onChange={v => handleNumChange('v_f', v)}
+              />
+              <LinkedSlider
+                field="v_f_leadIn" label="Lead-in" unit={feedUnit}
+                value={draft.v_f_leadIn} fxState={fx.v_f_leadIn} metric={isMetricTool} compact
+                onChange={v => handleNumChange('v_f_leadIn', v)}
+              />
+              <LinkedSlider
+                field="v_f_leadOut" label="Lead-out" unit={feedUnit}
+                value={draft.v_f_leadOut} fxState={fx.v_f_leadOut} metric={isMetricTool} compact
+                onChange={v => handleNumChange('v_f_leadOut', v)}
+              />
+              <LinkedSlider
+                field="v_f_transition" label="Transition" unit={feedUnit}
+                value={draft.v_f_transition} fxState={fx.v_f_transition} metric={isMetricTool} compact
+                onChange={v => handleNumChange('v_f_transition', v)}
+              />
+            </div>
+            <div>
+              <div className="pe-cluster-label">PLUNGE &amp; RAMP</div>
+              <LinkedSlider
+                field="v_f_plunge" label="Plunge feedrate" unit={feedUnit}
+                value={draft.v_f_plunge} fxState={fx.v_f_plunge} metric={isMetricTool}
+                onChange={v => handleNumChange('v_f_plunge', v)}
+              />
+              <LinkedSlider
+                field="f_n" label="Feed per rev" unit={`${lenUnit}/rev`}
+                value={draft.f_n} fxState={fx.f_n} metric={isMetricTool}
+                onChange={v => handleNumChange('f_n', v)}
+              />
+              <LinkedSlider
+                field="v_f_ramp" label="Ramp feedrate" unit={feedUnit}
+                value={draft.v_f_ramp} metric={isMetricTool} compact
+                onChange={v => set('v_f_ramp', v)}
+              />
+              <LinkedSlider
+                field="ramp_angle" label="Ramp angle" unit="°"
+                value={draft['ramp-angle']} compact
+                onChange={v => set('ramp-angle', v)}
+              />
+            </div>
           </div>
         </EditorSection>
       )}
@@ -1176,45 +1189,58 @@ function EditCard({
           no feed/rev or ramp angle (see normalizePreset's isSpotDrill branch) */}
       {isSpotDrill && (
         <EditorSection label="Feedrates" accent="var(--blue)">
-          <div className="pe-grid pe-grid--wide">
-            <NField
-              label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
-              formulaField="v_f" formulaState={fx.v_f}
-              warning={noSpeed ? 'Set spindle speed first' : undefined}
-              onChange={v => handleNumChange('v_f', v)}
-            />
-            <NField
-              label="Feed per tooth" value={draft.f_z} unit={lenUnit}
-              formulaField="f_z" formulaState={fx.f_z}
-              warning={noSpeed ? 'Set spindle speed first' : undefined}
-              onChange={v => handleNumChange('f_z', v)}
-            />
-            <NField
-              label="Lead-in feedrate" value={draft.v_f_leadIn} unit={feedUnit}
-              formulaField="v_f_leadIn" formulaState={fx.v_f_leadIn}
-              onChange={v => handleNumChange('v_f_leadIn', v)}
-            />
-            <NField
-              label="Lead-out feedrate" value={draft.v_f_leadOut} unit={feedUnit}
-              formulaField="v_f_leadOut" formulaState={fx.v_f_leadOut}
-              onChange={v => handleNumChange('v_f_leadOut', v)}
-            />
-            <NField
-              label="Transition feedrate" value={draft.v_f_transition} unit={feedUnit}
-              formulaField="v_f_transition" formulaState={fx.v_f_transition}
-              onChange={v => handleNumChange('v_f_transition', v)}
-            />
-            <NField label="Ramp feedrate" value={draft.v_f_ramp} unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
-            <NField
-              label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
-              warning={noSpeed ? 'Set spindle speed first' : undefined}
-              onChange={v => setPlunge(v)}
-            />
-            <NField
-              label="Retract feedrate" value={draft['v_f_retract']} unit={feedUnit}
-              formulaField="v_f_retract" formulaState={fx.v_f_retract}
-              onChange={v => handleNumChange('v_f_retract', v)}
-            />
+          <div className="pe-feed-grid">
+            <div>
+              <div className="pe-cluster-label">CUTTING</div>
+              <LinkedSlider
+                field="f_z" label="Feed per tooth" unit={lenUnit}
+                value={draft.f_z} fxState={fx.f_z} metric={isMetricTool}
+                warning={noSpeed ? 'Set spindle speed first' : undefined}
+                onChange={v => handleNumChange('f_z', v)}
+              />
+              <LinkedSlider
+                field="v_f" label="Cutting feedrate" unit={feedUnit}
+                value={draft.v_f} fxState={fx.v_f} metric={isMetricTool}
+                warning={noSpeed ? 'Set spindle speed first' : undefined}
+                onChange={v => handleNumChange('v_f', v)}
+              />
+              <LinkedSlider
+                field="v_f_leadIn" label="Lead-in" unit={feedUnit}
+                value={draft.v_f_leadIn} fxState={fx.v_f_leadIn} metric={isMetricTool} compact
+                onChange={v => handleNumChange('v_f_leadIn', v)}
+              />
+              <LinkedSlider
+                field="v_f_leadOut" label="Lead-out" unit={feedUnit}
+                value={draft.v_f_leadOut} fxState={fx.v_f_leadOut} metric={isMetricTool} compact
+                onChange={v => handleNumChange('v_f_leadOut', v)}
+              />
+              <LinkedSlider
+                field="v_f_transition" label="Transition" unit={feedUnit}
+                value={draft.v_f_transition} fxState={fx.v_f_transition} metric={isMetricTool} compact
+                onChange={v => handleNumChange('v_f_transition', v)}
+              />
+            </div>
+            <div>
+              <div className="pe-cluster-label">PLUNGE &amp; RAMP</div>
+              {/* Plunge stays on setPlunge — spot drill has no feed-per-rev
+                  field, and setPlunge cascades the retract follower. */}
+              <LinkedSlider
+                field="v_f_plunge" label="Plunge feedrate" unit={feedUnit}
+                value={draft.v_f_plunge} metric={isMetricTool}
+                warning={noSpeed ? 'Set spindle speed first' : undefined}
+                onChange={v => setPlunge(v)}
+              />
+              <LinkedSlider
+                field="v_f_retract" label="Retract feedrate" unit={feedUnit}
+                value={draft['v_f_retract']} fxState={fx.v_f_retract} metric={isMetricTool}
+                onChange={v => handleNumChange('v_f_retract', v)}
+              />
+              <LinkedSlider
+                field="v_f_ramp" label="Ramp feedrate" unit={feedUnit}
+                value={draft.v_f_ramp} metric={isMetricTool} compact
+                onChange={v => set('v_f_ramp', v)}
+              />
+            </div>
           </div>
         </EditorSection>
       )}
@@ -1222,21 +1248,21 @@ function EditCard({
       {/* Feedrates — turning/boring */}
       {isTurning && (
         <EditorSection label="Feedrates" accent="var(--blue)">
-          <div className="pe-grid pe-grid--wide">
-            <NField
-              label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
-              formulaField="v_f" formulaState={fx.v_f}
+          <div className="pe-feed-grid">
+            <LinkedSlider
+              field="v_f" label="Cutting feedrate" unit={feedUnit}
+              value={draft.v_f} fxState={fx.v_f} metric={isMetricTool}
               warning={noSpeed ? 'Set spindle speed first' : undefined}
               onChange={v => handleNumChange('v_f', v)}
             />
-            <NField
-              label="Feed per rev" value={draft.f_n} unit={`${lenUnit}/rev`}
-              formulaField="f_n" formulaState={fx.f_n}
+            <LinkedSlider
+              field="f_n" label="Feed per rev" unit={`${lenUnit}/rev`}
+              value={draft.f_n} fxState={fx.f_n} metric={isMetricTool}
               onChange={v => handleNumChange('f_n', v)}
             />
-            <NField
-              label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
-              formulaField="v_f_plunge" formulaState={fx.v_f_plunge}
+            <LinkedSlider
+              field="v_f_plunge" label="Plunge feedrate" unit={feedUnit}
+              value={draft.v_f_plunge} fxState={fx.v_f_plunge} metric={isMetricTool}
               onChange={v => handleNumChange('v_f_plunge', v)}
             />
           </div>
@@ -1246,21 +1272,21 @@ function EditCard({
       {/* Feedrates — drill family: plunge + retract + feed/rev */}
       {isDrillFamily && (
         <EditorSection label="Feedrates" accent="var(--blue)">
-          <div className="pe-grid pe-grid--wide">
-            <NField
-              label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
-              formulaField="v_f_plunge" formulaState={fx.v_f_plunge}
+          <div className="pe-feed-grid">
+            <LinkedSlider
+              field="v_f_plunge" label="Plunge feedrate" unit={feedUnit}
+              value={draft.v_f_plunge} fxState={fx.v_f_plunge} metric={isMetricTool}
               warning={noSpeed ? 'Set spindle speed first' : undefined}
               onChange={v => handleNumChange('v_f_plunge', v)}
             />
-            <NField
-              label="Retract feedrate" value={draft['v_f_retract']} unit={feedUnit}
-              formulaField="v_f_retract" formulaState={fx.v_f_retract}
+            <LinkedSlider
+              field="v_f_retract" label="Retract feedrate" unit={feedUnit}
+              value={draft['v_f_retract']} fxState={fx.v_f_retract} metric={isMetricTool}
               onChange={v => handleNumChange('v_f_retract', v)}
             />
-            <NField
-              label="Feed per rev" value={draft.f_n} unit={`${lenUnit}/rev`}
-              formulaField="f_n" formulaState={fx.f_n}
+            <LinkedSlider
+              field="f_n" label="Feed per rev" unit={`${lenUnit}/rev`}
+              value={draft.f_n} fxState={fx.f_n} metric={isMetricTool}
               onChange={v => handleNumChange('f_n', v)}
             />
           </div>
@@ -1435,66 +1461,6 @@ function FGroup({ label, children }) {
   );
 }
 
-// NField — numeric input with optional formula badge and shift+hover tooltip.
-// formulaField: key in FORMULAS (enables badge + tooltip + field-specific precision)
-// formulaState: 'formula' | 'manual' — 'formula' shows the fx badge
-// warning: string shown below the input when present (e.g. "Set spindle speed first")
-function NField({ label, value, unit, onChange, formulaField, formulaState, warning }) {
-  const [focused, setFocused] = useState(false);
-  const [shiftHover, setShiftHover] = useState(false);
-
-  const formulaInfo = formulaField ? FORMULAS[formulaField] : null;
-  const prec = formulaField ? (FIELD_PRECISION[formulaField] ?? 4) : 4;
-  const isFormula = formulaState === 'formula';
-
-  // Focused: full precision so the user can see/edit the stored value exactly.
-  // Blurred: field-specific display precision.
-  const displayed = focused
-    ? (value ?? '')
-    : (value !== null && value !== undefined && value !== ''
-        ? parseFloat(Number(value).toFixed(prec))
-        : '');
-
-  return (
-    <div
-      className="field-group"
-      style={{ position: 'relative' }}
-      onMouseMove={e => { if (formulaInfo) setShiftHover(e.shiftKey); }}
-      onMouseLeave={() => setShiftHover(false)}
-    >
-      <label className="field-label">{label}</label>
-      <div className="nfield-row">
-        <input
-          className="field-input"
-          type="number"
-          step="0.0001"
-          value={displayed}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          onChange={e => onChange(e.target.value === '' ? null : parseFloat(e.target.value))}
-          placeholder="0"
-        />
-        <span className="nfield-unit">{unit || ''}</span>
-        {/* Always reserve the badge slot so every input is the same width */}
-        <span className="nfield-fx">
-          {formulaInfo && (
-            <span className={`fx-badge${isFormula ? '' : ' fx-badge--hidden'}`}>fx</span>
-          )}
-        </span>
-      </div>
-      {warning && <div className="fx-warning">{warning}</div>}
-      {shiftHover && formulaInfo && (
-        <div className="formula-tooltip">
-          <div><span className="formula-tooltip-key">Variable</span> {formulaField}</div>
-          <div><span className="formula-tooltip-key">State</span> {isFormula ? 'Calculated' : 'Manual'}</div>
-          <div>
-            <span className="formula-tooltip-key">
-              {isFormula ? 'Formula' : 'Formula available'}
-            </span>
-            {formulaInfo.expr}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
+// (NField was replaced by LinkedSlider — src/components/LinkedSlider.jsx —
+// which carries over its fx badge, shift-hover formula tooltip, and precision
+// handling on top of the slider control.)
