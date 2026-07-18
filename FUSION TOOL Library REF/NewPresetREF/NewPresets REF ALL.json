@@ -1,0 +1,649 @@
+{
+    "data": [
+        {
+            "BMC": "carbide",
+            "GRADE": "Mill Generic",
+            "description": "1/2 4FL EM 1.625LOC ST Rough",
+            "geometry": {
+                "CSP": false,
+                "DC": 0.5,
+                "HAND": true,
+                "LB": 2.35,
+                "LCF": 1.625,
+                "NOF": 4,
+                "OAL": 4,
+                "SFDM": 0.5,
+                "assemblyGaugeLength": 6.87752,
+                "shoulder-diameter": 0.5,
+                "shoulder-length": 1.7
+            },
+            "guid": "d5c0680e-2d58-405e-a952-193f82fd7614",
+            "holder": {
+                "description": "NBT30-SK13C-120",
+                "gaugeLength": 4.52752,
+                "guid": "",
+                "product-id": "",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 3.740157,
+                        "lower-diameter": 1.299213,
+                        "upper-diameter": 1.299213
+                    },
+                    {
+                        "height": 0.03937,
+                        "lower-diameter": 1.732283,
+                        "upper-diameter": 1.811024
+                    },
+                    {
+                        "height": 0.133858,
+                        "lower-diameter": 1.811024,
+                        "upper-diameter": 1.811024
+                    },
+                    {
+                        "height": 0.090906,
+                        "lower-diameter": 1.811024,
+                        "upper-diameter": 1.496063
+                    },
+                    {
+                        "height": 0.13311,
+                        "lower-diameter": 1.496063,
+                        "upper-diameter": 1.496063
+                    },
+                    {
+                        "height": 0.090906,
+                        "lower-diameter": 1.496063,
+                        "upper-diameter": 1.811024
+                    },
+                    {
+                        "height": 0.259843,
+                        "lower-diameter": 1.811024,
+                        "upper-diameter": 1.811024
+                    },
+                    {
+                        "height": 0.03937,
+                        "lower-diameter": 1.811024,
+                        "upper-diameter": 1.732283
+                    },
+                    {
+                        "height": 0.07874,
+                        "lower-diameter": 1.25,
+                        "upper-diameter": 1.25
+                    }
+                ],
+                "type": "holder",
+                "unit": "inches",
+                "vendor": ""
+            },
+            "post-process": {
+                "break-control": false,
+                "comment": "FTL-97D413",
+                "diameter-offset": 180,
+                "length-offset": 180,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 180,
+                "turret": 0
+            },
+            "product-id": "A-205",
+            "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-205$hour=15&page=2BC4665D-0C77-65E8-FDBB-5C8E7BFB0A77&token=0A272C77-F643-1135-F6AA-8E74CE9E3E31",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "f_n": 0.02945243112740431,
+                        "f_z": 0.0048,
+                        "guid": "7dd4df33-de42-f6d5-a631-77aa0f662bd5",
+                        "material": {
+                            "category": "metal",
+                            "query": "SS",
+                            "use-hardness": false
+                        },
+                        "n": 1527.8874536821952,
+                        "n_ramp": 1527.8874536821952,
+                        "name": "SS316L-.4step",
+                        "ramp-angle": 2,
+                        "stepdown": 0.425,
+                        "stepover": 0.035,
+                        "stock-materials": [
+                            "SS Harder",
+                            "Steel, High-Carbon"
+                        ],
+                        "strategies": {
+                            "finishing": [
+                            ],
+                            "roughing": [
+                                "adaptive2d",
+                                "adaptive"
+                            ]
+                        },
+                        "tool-coolant": "flood",
+                        "use-stepdown": true,
+                        "use-stepover": true,
+                        "v_c": 200,
+                        "v_f": 29.335439110698147,
+                        "v_f_leadIn": 29.335439110698147,
+                        "v_f_leadOut": 29.335439110698147,
+                        "v_f_plunge": 45,
+                        "v_f_ramp": 10,
+                        "v_f_transition": 400
+                    },
+                    {
+                        "description": "",
+                        "f_n": 0.02945243112740431,
+                        "f_z": 0.0023,
+                        "guid": "dfc5bb49-564a-682f-5ce3-69905323991c",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 1527.8874536821952,
+                        "n_ramp": 1527.8874536821952,
+                        "name": "GEN 2.350 30-SK13-120 - Finish",
+                        "ramp-angle": 2,
+                        "stock-materials": [
+                            "SS Harder"
+                        ],
+                        "strategies": {
+                            "finishing": [
+                                "contour2d",
+                                "pocket2d"
+                            ],
+                            "roughing": [
+                            ]
+                        },
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 200,
+                        "v_f": 14.056564573876194,
+                        "v_f_leadIn": 14.056564573876194,
+                        "v_f_leadOut": 14.056564573876194,
+                        "v_f_plunge": 45,
+                        "v_f_ramp": 10,
+                        "v_f_transition": 400
+                    },
+                    {
+                        "description": "",
+                        "f_n": 0.0607266621183594,
+                        "f_z": 0.0015,
+                        "guid": "f1836b2c-7841-d78a-1730-aba751aad902",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 741.0254150358646,
+                        "n_ramp": 741.0254150358646,
+                        "name": "GEN 2.350 30-SK13-120 - Small Bore",
+                        "ramp-angle": 2,
+                        "stock-materials": [
+                            "SS Harder"
+                        ],
+                        "strategies": {
+                            "finishing": [
+                                "bore"
+                            ],
+                            "roughing": [
+                            ]
+                        },
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 96.99999999999996,
+                        "v_f": 4.446152490215188,
+                        "v_f_leadIn": 4.446152490215188,
+                        "v_f_leadOut": 4.446152490215188,
+                        "v_f_plunge": 45,
+                        "v_f_ramp": 6,
+                        "v_f_transition": 400
+                    },
+                    {
+                        "description": "",
+                        "f_n": 0.02945243112740431,
+                        "f_z": 0.0048,
+                        "guid": "96e1c2eb-b436-4f54-8358-bae393a33e11",
+                        "material": {
+                            "category": "metal",
+                            "query": "SS",
+                            "use-hardness": false
+                        },
+                        "n": 1527.8874536821952,
+                        "n_ramp": 1527.8874536821952,
+                        "name": "ALL MILLING STRATEGIES",
+                        "ramp-angle": 2,
+                        "stepdown": 0.425,
+                        "stepover": 0.035,
+                        "stock-materials": [
+                            "SS Harder",
+                            "Steel, High-Carbon"
+                        ],
+                        "strategies": {
+                            "finishing": [
+                                "adaptive2d",
+                                "bore",
+                                "circular",
+                                "contour2d",
+                                "face",
+                                "path3d",
+                                "pocket2d",
+                                "slot",
+                                "thread",
+                                "adaptive",
+                                "contour_new",
+                                "flat",
+                                "horizontal_new",
+                                "inclined_walls",
+                                "morph",
+                                "morphed_spiral",
+                                "parallel_new",
+                                "pencil_new",
+                                "pocket_new",
+                                "project",
+                                "radial_new",
+                                "ramp",
+                                "rest_finishing",
+                                "scallop_new",
+                                "spiral_new",
+                                "steep_and_shallow",
+                                "valley",
+                                "drill",
+                                "blend",
+                                "flow2",
+                                "moduleworks_4axis_finishing",
+                                "moduleworks_4axis_roughing",
+                                "moduleworks_automatic_deburring",
+                                "moduleworks_multiaxis_roughing",
+                                "moduleworks_swarf",
+                                "moduleworks_three_plus_two",
+                                "multiAxisContour",
+                                "multiAxisMorph",
+                                "rotary_finishing",
+                                "swarf5d",
+                                "cldToolpath",
+                                "contact",
+                                "rest_area",
+                                "tool",
+                                "tool_turning",
+                                "toolpath_edit_tool_change"
+                            ],
+                            "roughing": [
+                                "adaptive2d",
+                                "bore",
+                                "circular",
+                                "contour2d",
+                                "face",
+                                "path3d",
+                                "pocket2d",
+                                "slot",
+                                "thread",
+                                "adaptive",
+                                "contour_new",
+                                "flat",
+                                "horizontal_new",
+                                "inclined_walls",
+                                "morph",
+                                "morphed_spiral",
+                                "parallel_new",
+                                "pencil_new",
+                                "pocket_new",
+                                "project",
+                                "radial_new",
+                                "ramp",
+                                "rest_finishing",
+                                "scallop_new",
+                                "spiral_new",
+                                "steep_and_shallow",
+                                "valley",
+                                "drill",
+                                "blend",
+                                "flow2",
+                                "moduleworks_4axis_finishing",
+                                "moduleworks_4axis_roughing",
+                                "moduleworks_automatic_deburring",
+                                "moduleworks_multiaxis_roughing",
+                                "moduleworks_swarf",
+                                "moduleworks_three_plus_two",
+                                "multiAxisContour",
+                                "multiAxisMorph",
+                                "rotary_finishing",
+                                "swarf5d",
+                                "cldToolpath",
+                                "contact",
+                                "rest_area",
+                                "tool",
+                                "tool_turning",
+                                "toolpath_edit_tool_change"
+                            ]
+                        },
+                        "tool-coolant": "flood",
+                        "use-stepdown": true,
+                        "use-stepover": true,
+                        "v_c": 200,
+                        "v_f": 29.335439110698147,
+                        "v_f_leadIn": 29.335439110698147,
+                        "v_f_leadOut": 29.335439110698147,
+                        "v_f_plunge": 45,
+                        "v_f_ramp": 10,
+                        "v_f_transition": 400
+                    }
+                ]
+            },
+            "type": "flat end mill",
+            "unit": "inches",
+            "vendor": "LC-196"
+        },
+        {
+            "BMC": "carbide",
+            "description": "55° Turning Tool",
+            "expressions": {
+                "tool_crossSection": "'G'",
+                "tool_productId": "'TF-194/ TO-195'",
+                "tool_reliefAngle": "0 degrees",
+                "tool_shaftAxisAngle": "180 degrees",
+                "tool_thickness": "0.1875 in",
+                "tool_tolerance": "'M'",
+                "tool_vendor": "'LC-186'"
+            },
+            "geometry": {
+                "INSD": 0.5,
+                "RA": 0,
+                "RE": 0.015625,
+                "S": 0.1875,
+                "SC": "D",
+                "SCTY": "G",
+                "SIZE_SPECIFICATION_MODE": "IC",
+                "TC": "M"
+            },
+            "guid": "0b484553-0a09-45d3-abad-81f377a6d23f",
+            "holder": {
+                "CW": 1,
+                "H": 0.75,
+                "HAND": "R",
+                "LH": 1.25,
+                "MTP": "D",
+                "OAL": 4.5,
+                "THSC": "J",
+                "W": 0.75,
+                "tool_roundShank": false
+            },
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "compensation-offset": 9,
+                "manual-tool-change": false,
+                "number": 9,
+                "turret": 202
+            },
+            "product-id": "TF-194/ TO-195",
+            "product-link": "",
+            "setup": {
+                "HAND": false,
+                "angle": 90,
+                "compensation": "tip tangent",
+                "tool_shaftAxisAngle": 180
+            },
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "expressions": {
+                            "tool_coolant": "'flood tool'",
+                            "tool_feedCuttingRel": ".006 in",
+                            "tool_surfaceSpeed": "400 fpm"
+                        },
+                        "f_n": 0.006,
+                        "f_n_leadIn": 0.006,
+                        "f_n_leadOut": 0.006,
+                        "guid": "50e1bc56-b9ee-4005-8462-af5a45da4f47",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "name": "ALL OD TURNING",
+                        "strategies": {
+                            "finishing": [
+                                "turningChamfer",
+                                "turningFace",
+                                "turningProfileFinishing",
+                                "turningProfileRoughing",
+                                "turningRoughing",
+                                "turningTrace",
+                                "cldToolpath",
+                                "contact",
+                                "rest_area",
+                                "tool",
+                                "tool_turning",
+                                "toolpath_edit_tool_change"
+                            ],
+                            "roughing": [
+                                "turningChamfer",
+                                "turningFace",
+                                "turningProfileFinishing",
+                                "turningProfileRoughing",
+                                "turningRoughing",
+                                "turningTrace",
+                                "cldToolpath",
+                                "contact",
+                                "rest_area",
+                                "tool",
+                                "tool_turning",
+                                "toolpath_edit_tool_change"
+                            ]
+                        },
+                        "tool-coolant": "flood tool",
+                        "use-constant-surface-speed": true,
+                        "use-depth-of-cut": false,
+                        "use-feed-per-revolution": true,
+                        "v_c": 400
+                    }
+                ]
+            },
+            "type": "turning general",
+            "unit": "inches",
+            "vendor": "LC-186"
+        },
+        {
+            "BMC": "carbide",
+            "description": "TURNING BORING TOOL REF",
+            "expressions": {
+                "tool_cornerRadius": "0.008 in",
+                "tool_description": "'TURNING BORING TOOL REF'"
+            },
+            "geometry": {
+                "INSD": 0.375,
+                "RA": 0,
+                "RE": 0.008,
+                "S": 0.375,
+                "SC": "C",
+                "SCTY": "T",
+                "SIZE_SPECIFICATION_MODE": "IC",
+                "TC": "M"
+            },
+            "guid": "6f4ef795-e84e-4292-8846-27f928fcced5",
+            "holder": {
+                "CW": 1,
+                "HAND": "R",
+                "LH": 1.28,
+                "MTP": "D",
+                "OAL": 5,
+                "THSC": "boring bar f",
+                "W": 0.8
+            },
+            "last_modified": 1784323244064,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "compensation-offset": 1,
+                "manual-tool-change": false,
+                "number": 1,
+                "turret": 0
+            },
+            "product-id": "",
+            "product-link": "",
+            "reference_guid": "<NEW TOOL GUID>",
+            "setup": {
+                "HAND": true,
+                "angle": 90,
+                "compensation": "tip tangent",
+                "tool_shaftAxisAngle": 0
+            },
+            "start-values": {
+                "presets": [
+                    {
+                        "depth-of-cut": 0.04,
+                        "expressions": {
+                            "use_tool_depthOfCut": "true"
+                        },
+                        "f_n": 0.005,
+                        "f_n_leadIn": 0.005,
+                        "f_n_leadOut": 0.005,
+                        "guid": "28f67f1c-56f7-4fe7-9938-55c56f891743",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "name": "ALL TUNRING BORING",
+                        "strategies": {
+                            "finishing": [
+                                "turningChamfer",
+                                "turningFace",
+                                "turningProfileFinishing",
+                                "turningProfileRoughing",
+                                "turningRoughing",
+                                "turningTrace",
+                                "cldToolpath",
+                                "contact",
+                                "rest_area",
+                                "tool",
+                                "tool_turning",
+                                "toolpath_edit_tool_change"
+                            ],
+                            "roughing": [
+                                "turningChamfer",
+                                "turningFace",
+                                "turningProfileFinishing",
+                                "turningProfileRoughing",
+                                "turningRoughing",
+                                "turningTrace",
+                                "cldToolpath",
+                                "contact",
+                                "rest_area",
+                                "tool",
+                                "tool_turning",
+                                "toolpath_edit_tool_change"
+                            ]
+                        },
+                        "tool-coolant": "flood",
+                        "use-constant-surface-speed": true,
+                        "use-depth-of-cut": true,
+                        "use-feed-per-revolution": true,
+                        "v_c": 656.1679790026246
+                    }
+                ]
+            },
+            "type": "turning boring",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "BMC": "carbide",
+            "description": "OD TURNING THREADIND REF",
+            "expressions": {
+                "tool_description": "'OD TURNING THREADIND REF'"
+            },
+            "geometry": {
+                "OAL": 1.2,
+                "S": 0.375,
+                "SC": "thread iso double",
+                "SCTY": "T",
+                "TC": "M",
+                "TP": 0.04,
+                "TPN": 0.04,
+                "TPX": 0.04,
+                "thread-profile-angle": 60,
+                "thread-tip-radius": 0.005773502691896257,
+                "thread-tip-type": "round",
+                "tool_insertWidth": 0.04,
+                "tool_internalThread": false
+            },
+            "guid": "4c3169a3-ef56-4895-b88b-5434478b6f94",
+            "holder": {
+                "H": 0.8,
+                "HAND": "R",
+                "LH": 1.28,
+                "MTP": "D",
+                "OAL": 5,
+                "THSC": "thread straight",
+                "W": 0.8,
+                "tool_roundShank": false
+            },
+            "last_modified": 1784323301055,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "compensation-offset": 2,
+                "manual-tool-change": false,
+                "number": 2,
+                "turret": 0
+            },
+            "product-id": "",
+            "product-link": "",
+            "reference_guid": "<NEW TOOL GUID>",
+            "setup": {
+                "HAND": true,
+                "angle": 0,
+                "compensation": "tip tangent",
+                "tool_shaftAxisAngle": 0
+            },
+            "start-values": {
+                "presets": [
+                    {
+                        "guid": "23fb3549-8408-45d7-beac-5a586ae791df",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 500,
+                        "name": "ALL TUNRING OD THREADING",
+                        "strategies": {
+                            "finishing": [
+                                "turningChamfer",
+                                "turningGroove",
+                                "turningThread",
+                                "turningTrace",
+                                "cldToolpath",
+                                "contact",
+                                "rest_area",
+                                "tool",
+                                "tool_turning",
+                                "toolpath_edit_tool_change"
+                            ],
+                            "roughing": [
+                                "turningChamfer",
+                                "turningGroove",
+                                "turningThread",
+                                "turningTrace",
+                                "cldToolpath",
+                                "contact",
+                                "rest_area",
+                                "tool",
+                                "tool_turning",
+                                "toolpath_edit_tool_change"
+                            ]
+                        },
+                        "tool-coolant": "flood"
+                    }
+                ]
+            },
+            "type": "turning threading",
+            "unit": "inches",
+            "vendor": ""
+        }
+    ],
+    "version": 36
+}
