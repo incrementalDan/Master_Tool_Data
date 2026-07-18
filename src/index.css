@@ -819,6 +819,13 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   .detail-layout { grid-template-columns: 1fr; }
   .detail-layout-right { order: -1; }
 }
+/* Preset-editor focus mode — while a preset is open in the inline editor the
+   layout collapses to one column and hides the right sidebar, so the editor
+   (and the preset row above it) gets the FULL page width instead of leaving
+   the right 1/3 as dead space. ToolDetail toggles this off the editor-open
+   state reported by PresetPanel (onEditingChange). */
+.detail-layout--preset-focus { grid-template-columns: 1fr; }
+.detail-layout--preset-focus .detail-layout-right { display: none; }
 
 /* ─── Panel cards (detail + form sections) ──────────────────────────────── */
 .panel {
@@ -2427,42 +2434,12 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   align-self: center;
 }
 
-/* ── Edit card sections ── */
-.preset-edit-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px;
-  border-bottom: 1px solid var(--border);
-}
-
-.preset-name-input { flex: 1; font-weight: 600; font-size: 12px; }
-
-.preset-edit-section {
-  padding: 10px;
-  border-bottom: 1px solid var(--border);
-}
-
-.preset-edit-section:last-child { border-bottom: none; }
-
-.preset-edit-section-label {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  color: var(--text-sub);
-  margin-bottom: 8px;
-}
-
-.preset-edit-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px 10px;
-}
-
-/* ── Preset editor — inline "pop-out" panel (non-obstructive) ──
+/* ── Unified preset editor — inline "pop-out" panel (non-obstructive) ──
    Grows out of the bottom of the presets section and lifts off the page with a
    shadow + ring so it reads as "you're editing this", without covering the rest
-   of the page (the material CAM-preset picker is still a modal). */
+   of the page (the material CAM-preset picker is still a modal). While open,
+   the page is in preset-focus mode (see .detail-layout--preset-focus) so this
+   panel spans the full page width. */
 .preset-editor-inline {
   margin-top: 12px;
   background: var(--surface);
@@ -2477,65 +2454,81 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   from { opacity: 0; transform: scaleY(0.55) translateY(-10px); }
   to   { opacity: 1; transform: none; }
 }
-.preset-editor-inline .preset-edit-modal-body { overflow: visible; }
 
-.preset-edit-modal-header {
+.preset-name-input { flex: 1; font-weight: 600; font-size: 12px; }
+
+/* Header — preset name + tool readout + Save/✕ */
+.pe-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 14px 18px;
   border-bottom: 1px solid var(--border);
-  flex: 0 0 auto;
 }
-
-.preset-edit-modal-header .preset-name-input {
+.pe-header .preset-name-input {
   font-size: 14px;
   padding-top: 8px;
   padding-bottom: 8px;
 }
-
-.preset-edit-modal-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 8px 18px 18px;
+.pe-tool-readout {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-sub);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-/* Material + Operation/Assembly sit together at the top in their own row —
-   these define what the preset IS, separate from its speed/feed values. */
-.preset-edit-modal-top {
+.pe-body {
+  padding: 12px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* A row of section cards — auto-wraps to one column when narrow */
+.pe-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 10px;
 }
 
-/* Two explicit columns: Speed on the left, Passes + Coolant stacked on the
-   right (so the short sections fill the space instead of leaving a gap).
-   Feedrates — the tallest — spans full width below. */
-.preset-edit-modal-rest {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  align-items: start;
-  margin-top: 12px;
-}
-
-.preset-edit-col { display: flex; flex-direction: column; gap: 12px; }
-
-.preset-edit-modal-body .preset-edit-section {
+/* Section card — the visual grouping fix from the UnifiedPresetEditor mockup:
+   sections sit RAISED off the editor shell (surface-2 on surface) with a real
+   border and a colored uppercase label, so the groupings read at a glance
+   instead of blending together. Accent color per section via --pe-accent. */
+.pe-section {
+  --pe-accent: var(--blue);
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   padding: 12px 14px;
 }
+.pe-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.pe-section-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--pe-accent);
+  white-space: nowrap;
+}
+.pe-section-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+  opacity: 0.6;
+}
 
-/* Inside the modal, sections live in half-width cells, so their fields stack
-   in a single column — every input then gets the full cell width (no cramped
-   half-fields, no wrapped labels like "Assembly (holder + OOH)"). */
-.preset-edit-modal-body .preset-edit-grid { grid-template-columns: 1fr; }
-
-/* Feedrates is a full-width section under the two columns, laid out three-up */
-.preset-edit-section--wide { margin-top: 12px; }
-.preset-edit-modal-body .preset-edit-grid--wide { grid-template-columns: repeat(3, 1fr); }
+/* Field layouts inside a section card */
+.pe-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.pe-grid--3 { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.pe-grid--wide { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.pe-stack { display: flex; flex-direction: column; gap: 8px; }
 
 /* Numeric field row: input flexes, unit + fx badge occupy fixed slots so
    every input across the editor lines up at the same width. */
@@ -2549,13 +2542,6 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   white-space: nowrap;
 }
 .nfield-fx { flex: 0 0 auto; width: 20px; display: flex; justify-content: center; }
-
-/* Single column on narrow screens */
-@media (max-width: 720px) {
-  .preset-edit-modal-top,
-  .preset-edit-modal-rest { grid-template-columns: 1fr; }
-  .preset-edit-modal-body .preset-edit-grid--wide { grid-template-columns: 1fr 1fr; }
-}
 
 /* The collapsed card whose editor is currently open below */
 .preset-card--editing {
