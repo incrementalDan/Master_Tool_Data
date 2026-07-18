@@ -66,6 +66,9 @@ export default function ToolDetail() {
   const [reconcileResults, setReconcileResults] = useState(null);
   const [showPhotoUpload, setShowPhotoUpload] = useState(false);
   const [promoteLibId, setPromoteLibId] = useState(null); // non-null = target-library picker open
+  // True while a preset is open in the inline editor — the layout drops the
+  // right sidebar column so the editor gets the full page width (focus mode).
+  const [presetEditing, setPresetEditing] = useState(false);
 
   // True while the inline preset editor has unsaved changes — used to warn
   // before navigating away or switching into the tool edit form.
@@ -557,7 +560,7 @@ export default function ToolDetail() {
           />
         )}
 
-        <div className="detail-layout">
+        <div className={`detail-layout${presetEditing ? ' detail-layout--preset-focus' : ''}`}>
           <div className="detail-layout-left">
             <Section
               title={pairing ? 'Combined Geometry (Fusion)' : 'Geometry & Setup'}
@@ -592,7 +595,8 @@ export default function ToolDetail() {
             )}
 
             <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving}
-              onDirtyChange={(d) => { presetDirtyRef.current = d; }} />
+              onDirtyChange={(d) => { presetDirtyRef.current = d; }}
+              onEditingChange={setPresetEditing} />
 
             <SpeedFeedSection
               tool={tool}

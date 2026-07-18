@@ -110,7 +110,7 @@ function PresetJobsBlock({ jobIds = [], jobsFile, editable = false, canAdd = tru
   );
 }
 
-export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
+export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange, onEditingChange }) {
   const { holders, materials, shopSettings, jobs, findOrCreateJob, user, googleAuthenticated, demoMode } = useApp();
   // Job links persist in metadata (jobs.json + preset_meta on Drive), so adding
   // them needs Drive (or the demo sandbox, which keeps everything in memory).
@@ -154,6 +154,14 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
 
   // Report unsaved-editor state up so ToolDetail can warn before navigating away.
   useEffect(() => { onDirtyChange?.(!!editingId && editorDirty); }, [editingId, editorDirty, onDirtyChange]);
+
+  // Report editor-open state up — ToolDetail switches the page into focus mode
+  // (right sidebar hidden, editor full width) while a preset is being edited.
+  // The cleanup clears it if the panel unmounts with an editor still open.
+  useEffect(() => {
+    onEditingChange?.(!!editingId);
+    return () => onEditingChange?.(false);
+  }, [editingId, onEditingChange]);
 
   // Confirm discarding unsaved edits before switching presets / adding / etc.
   const guardDiscard = () => {
@@ -901,8 +909,8 @@ function EditCard({
       className="preset-editor-inline"
       style={accentColor ? { borderTop: `3px solid ${accentColor}` } : undefined}
     >
-      {/* Header */}
-      <div className="preset-edit-modal-header">
+      {/* Header — name + tool readout + Save/✕ */}
+      <div className="pe-header">
         <input
           className="field-input preset-name-input"
           value={draft.name || ''}
@@ -910,6 +918,9 @@ function EditCard({
           placeholder="Preset name"
           autoFocus
         />
+        <span className="pe-tool-readout" title="Tool diameter · flute count">
+          <span className="dia">⌀</span>{diameter ?? '—'}{numberOfFlutes ? ` · ${numberOfFlutes}FL` : ''}
+        </span>
         <button
           className="btn btn-primary btn-sm"
           onClick={() => onSave(draft)}
@@ -922,15 +933,15 @@ function EditCard({
         </button>
       </div>
 
-      <div className="preset-edit-modal-body">
-      <div className="preset-edit-modal-top">
+      <div className="pe-body">
+      {/* Setup row — what this preset IS (material, operation, assembly) */}
+      <div className="pe-row">
       {/* Material — picked from the Materials library via the CAM Preset picker
           (search "6061"/"1018" → its CAM preset, or browse the group pills).
           Stored as material.query = CAM preset name, else group label. The CAM
           preset name is the Fusion speed/feed preset group this maps to. */}
-      <div className="preset-edit-section">
-        <div className="preset-edit-section-label">MATERIAL</div>
-        <div className="preset-edit-grid">
+      <EditorSection label="Material" accent={PE_VIOLET}>
+        <div className="pe-grid">
           <FGroup label="CAM Preset">
             {(() => {
               const cur = findMaterialInLibrary(draft.material?.query, materials);
@@ -981,12 +992,11 @@ function EditCard({
             </select>
           </FGroup>
         </div>
-      </div>
+      </EditorSection>
 
       {/* Operation & Assembly — drive the convention preset name */}
-      <div className="preset-edit-section">
-        <div className="preset-edit-section-label">{isHoleMaking ? 'ASSEMBLY' : 'OPERATION & ASSEMBLY'}</div>
-        <div className="preset-edit-grid">
+      <EditorSection label={isHoleMaking ? 'Assembly & Machine' : 'Operation & Assembly'} accent={PE_VIOLET}>
+        <div className="pe-grid pe-grid--3">
           {!isHoleMaking && (
             <FGroup label="Operation">
               <select
@@ -1055,15 +1065,13 @@ function EditCard({
             );
           })()}
         </div>
-      </div>
+      </EditorSection>
       </div>
 
-      <div className="preset-edit-modal-rest">
-      <div className="preset-edit-col">
-      {/* Speed */}
-      <div className="preset-edit-section">
-        <div className="preset-edit-section-label">SPEED</div>
-        <div className="preset-edit-grid">
+      {/* Speed + Passes row */}
+      <div className="pe-row">
+      <EditorSection label="Speed" accent="var(--blue)">
+        <div className="pe-stack">
           <NField
             label="Spindle speed" value={draft.n} unit="RPM"
             formulaField="n" formulaState={fx.n}
@@ -1082,15 +1090,12 @@ function EditCard({
             />
           )}
         </div>
-      </div>
-      </div>
+      </EditorSection>
 
-      <div className="preset-edit-col">
       {/* Passes & Linking — milling only */}
       {isMilling && (
-      <div className="preset-edit-section">
-        <div className="preset-edit-section-label">PASSES &amp; LINKING</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <EditorSection label="Passes & Linking" accent="var(--blue)">
+        <div className="pe-stack" style={{ gap: 14 }}>
           <StepField
             label="Use stepdown"
             value={draft.stepdown}
@@ -1124,32 +1129,15 @@ function EditCard({
             defaultFactor={0.3}
           />
         </div>
-      </div>
+      </EditorSection>
       )}
-
-      {/* Coolant */}
-      <div className="preset-edit-section">
-        <div className="preset-edit-section-label">COOLANT</div>
-        <select
-          className="field-input"
-          value={draft['tool-coolant'] || 'flood'}
-          onChange={e => set('tool-coolant', e.target.value)}
-        >
-          {COOLANT_OPTS.map(([v, l]) => (
-            <option key={v} value={v}>{l}</option>
-          ))}
-        </select>
-      </div>
-      </div>
       </div>
 
-      {/* Feedrates — full-width row at the bottom (the tallest section, so it
-          gets its own wide grid instead of squeezing into a column) */}
+      {/* Feedrates — full-width section (the tallest, so it gets the whole row) */}
       {/* Feedrates — milling only */}
       {isMilling && (
-        <div className="preset-edit-section preset-edit-section--wide">
-          <div className="preset-edit-section-label">FEEDRATES</div>
-          <div className="preset-edit-grid preset-edit-grid--wide">
+        <EditorSection label="Feedrates" accent="var(--blue)">
+          <div className="pe-grid pe-grid--wide">
             <NField
               label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
               formulaField="v_f" formulaState={fx.v_f}
@@ -1181,15 +1169,14 @@ function EditCard({
             <NField label="Ramp feedrate" value={draft.v_f_ramp}      unit={feedUnit} onChange={v => set('v_f_ramp', v)} />
             <NField label="Ramp angle"    value={draft['ramp-angle']} unit="°"        onChange={v => set('ramp-angle', v)} />
           </div>
-        </div>
+        </EditorSection>
       )}
 
       {/* Feedrates — spot drill: milling-style cutting feed + plunge/retract,
           no feed/rev or ramp angle (see normalizePreset's isSpotDrill branch) */}
       {isSpotDrill && (
-        <div className="preset-edit-section preset-edit-section--wide">
-          <div className="preset-edit-section-label">FEEDRATES</div>
-          <div className="preset-edit-grid preset-edit-grid--wide">
+        <EditorSection label="Feedrates" accent="var(--blue)">
+          <div className="pe-grid pe-grid--wide">
             <NField
               label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
               formulaField="v_f" formulaState={fx.v_f}
@@ -1229,14 +1216,13 @@ function EditCard({
               onChange={v => handleNumChange('v_f_retract', v)}
             />
           </div>
-        </div>
+        </EditorSection>
       )}
 
       {/* Feedrates — turning/boring */}
       {isTurning && (
-        <div className="preset-edit-section preset-edit-section--wide">
-          <div className="preset-edit-section-label">FEEDRATES</div>
-          <div className="preset-edit-grid preset-edit-grid--wide">
+        <EditorSection label="Feedrates" accent="var(--blue)">
+          <div className="pe-grid pe-grid--wide">
             <NField
               label="Cutting feedrate" value={draft.v_f} unit={feedUnit}
               formulaField="v_f" formulaState={fx.v_f}
@@ -1254,14 +1240,13 @@ function EditCard({
               onChange={v => handleNumChange('v_f_plunge', v)}
             />
           </div>
-        </div>
+        </EditorSection>
       )}
 
       {/* Feedrates — drill family: plunge + retract + feed/rev */}
       {isDrillFamily && (
-        <div className="preset-edit-section preset-edit-section--wide">
-          <div className="preset-edit-section-label">FEEDRATES</div>
-          <div className="preset-edit-grid preset-edit-grid--wide">
+        <EditorSection label="Feedrates" accent="var(--blue)">
+          <div className="pe-grid pe-grid--wide">
             <NField
               label="Plunge feedrate" value={draft.v_f_plunge} unit={feedUnit}
               formulaField="v_f_plunge" formulaState={fx.v_f_plunge}
@@ -1279,13 +1264,27 @@ function EditCard({
               onChange={v => handleNumChange('f_n', v)}
             />
           </div>
-        </div>
+        </EditorSection>
       )}
+
+      {/* Footer row — Coolant + Jobs, compact */}
+      <div className="pe-row">
+      <EditorSection label="Coolant" accent="var(--text-sub)">
+        <select
+          className="field-input"
+          value={draft['tool-coolant'] || 'flood'}
+          onChange={e => set('tool-coolant', e.target.value)}
+        >
+          {COOLANT_OPTS.map(([v, l]) => (
+            <option key={v} value={v}>{l}</option>
+          ))}
+        </select>
+      </EditorSection>
 
       {/* Jobs — reference links to the jobs this preset was proven on. Adding
           resolves against the shop-wide jobs.json registry (same job entered
           twice = one record); saved with the preset via preset_meta. */}
-      <div className="preset-edit-section preset-edit-section--wide">
+      <EditorSection label="Jobs" accent="var(--text-sub)">
         <PresetJobsBlock
           jobIds={draft.job_ids || []}
           jobsFile={jobsFile}
@@ -1303,6 +1302,7 @@ function EditCard({
             setDraft(d => ({ ...d, job_ids: (d.job_ids || []).filter(j => j !== id) }));
           }}
         />
+      </EditorSection>
       </div>
       </div>
 
@@ -1404,6 +1404,28 @@ function StepField({ label, value, onChange, refDim, refLabel, lenUnit, enabled,
 }
 
 // ── Small helpers ────────────────────────────────────────────────────────────
+// Section-label accents for the unified editor. Violet (the description-badge
+// token) marks the "what is this preset" setup sections; blue marks speeds/
+// feeds; muted marks the footer reference sections.
+const PE_VIOLET = 'rgb(var(--tok-description))';
+
+// Section card — the unified editor's visual grouping shell: raised surface,
+// real border, colored uppercase label with a hairline rule. This is the
+// UnifiedPresetEditor mockup's `Section`, mapped onto the app's tokens
+// (.pe-section in index.css).
+function EditorSection({ label, accent, right, children }) {
+  return (
+    <div className="pe-section" style={accent ? { '--pe-accent': accent } : undefined}>
+      <div className="pe-section-head">
+        <span className="pe-section-label">{label}</span>
+        <span className="pe-section-rule" />
+        {right}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function FGroup({ label, children }) {
   return (
     <div className="field-group">

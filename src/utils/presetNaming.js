@@ -348,7 +348,10 @@ export const HOLE_MAKING_TYPES = new Set([
 ]);
 
 // Turning/boring tools share speed + feed-per-rev fields but no step fields.
-export const TURNING_TYPES = new Set(['turning general', 'boring head']);
+// 'turning boring' and 'turning threading' are newer Fusion types the app has
+// no editor UI for yet — they're recognized here so a save never mangles their
+// presets by treating them as milling (data-safety guard; full support later).
+export const TURNING_TYPES = new Set(['turning general', 'boring head', 'turning boring', 'turning threading']);
 
 // Does a preset's name encode the given assembly (holder + OOH)?
 // Compares the parsed holder short name (case-insensitive) and OOH. The OOH in
