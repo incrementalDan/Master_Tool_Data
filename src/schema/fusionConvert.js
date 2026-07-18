@@ -39,6 +39,10 @@ const FUSION_TYPE_MAP = {
   'tap left hand': 'tap',
   'boring bar': 'boring head',
   'turning general': 'turning general',
+  // Newer Fusion turning types — no app UI yet, but mapped explicitly so they
+  // classify as turning (TURNING_TYPES) instead of falling through to milling.
+  'turning boring': 'turning boring',
+  'turning threading': 'turning threading',
 };
 
 // Loose numeric equality for "did this value actually change" checks when syncing
@@ -269,6 +273,12 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
     if (p.v_f != null) out.v_f = p.v_f;
     if (p.f_n != null) out.f_n = p.f_n;
     if (p.v_f_plunge != null) out.v_f_plunge = p.v_f_plunge;
+    // Native turning presets often omit n (constant-surface-speed presets carry
+    // only v_c) or v_c (threading presets carry only n). The base fields above
+    // default both to 0 — strip a default we'd be injecting so the preset keeps
+    // Fusion's native shape (sync-never-inject).
+    if (p.n == null) delete out.n;
+    if (p.v_c == null) delete out.v_c;
   } else if (isSpotDrill) {
     // Spot drill: full cutting-feed set (cutting, lead-in/out, transition, ramp
     // feed, feed/tooth) plus drill-specific plunge/retract feedrates and the
@@ -392,9 +402,11 @@ export function internalToFusionTool(tool) {
   const outPresets = sourcePresets.map((p, i) => {
     const np = normalizePreset(p, tool.tsc_capable, tool.tool_type);
     if (i === 0) {
-      // Speed fields apply to all tool types.
-      np.n   = tool.spindle_speed ?? np.n;
-      np.v_c = tool.cutting_speed ?? np.v_c;
+      // Speed fields apply to all tool types — but never (re)create a key both
+      // sides lack: native turning presets omit n (CSS presets) or v_c
+      // (threading), and normalizePreset just stripped those defaults.
+      if (tool.spindle_speed != null || 'n' in np)   np.n   = tool.spindle_speed ?? np.n;
+      if (tool.cutting_speed != null || 'v_c' in np) np.v_c = tool.cutting_speed ?? np.v_c;
       // Milling-only flat fields — not written for hole-making tools (spot
       // drill excepted: it gets the same cutting-feed set as milling tools).
       if (!isHoleMakingTool || isSpotDrillTool) {
@@ -531,7 +543,10 @@ export function internalToFusionTool(tool) {
   const mtnInt = hasMtn ? parseInt(mtn) : null;
 
   const hasExisting = Object.keys(existing).length > 0;
-  const isTurningGeneralTool = fusionType === 'turning general';
+  // All turning Fusion types use insert geometry (EPSR/INSD/RE/SC/…), not the
+  // mill core fields — the geometry block below must skip the mill set for
+  // every one of them, not just 'turning general'.
+  const isTurningFusionType = ['turning general', 'turning boring', 'turning threading'].includes(fusionType);
 
   // ── Tool-level expression sync ──
   // Fusion re-derives every numeric/string field from its paired expression on
@@ -632,7 +647,7 @@ export function internalToFusionTool(tool) {
       // Turning tools use an entirely different (insert) geometry set — never
       // force the mill core fields onto them; Fusion flags fields a type doesn't
       // use. Their native geometry survives via the spread above.
-      ...(isTurningGeneralTool ? {} : {
+      ...(isTurningFusionType ? {} : {
       CSP: false,
       DC: tool.diameter || 0,
       // HAND from cutting_direction (true = right hand) — never hardcode true, or
