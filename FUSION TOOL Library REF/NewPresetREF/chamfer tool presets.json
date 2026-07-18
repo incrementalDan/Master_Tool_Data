@@ -1,0 +1,85 @@
+{
+    "data": [
+        {
+            "BMC": "hss",
+            "description": "Chamfer tool preset ref",
+            "expressions": {
+                "tool_description": "'Chamfer tool preset ref'"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 0.5,
+                "HAND": true,
+                "LB": 1.5,
+                "LCF": 0.75,
+                "NOF": 2,
+                "OAL": 3,
+                "SFDM": 0.5,
+                "TA": 45,
+                "assemblyGaugeLength": 1.5,
+                "shoulder-diameter": 0.5,
+                "shoulder-length": 1.125,
+                "tip-diameter": 0
+            },
+            "guid": "95d2afe8-676b-4b57-9529-4c85724fe655",
+            "last_modified": 1784408767196,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 3,
+                "length-offset": 3,
+                "live": true,
+                "manual-tool-change": false,
+                "number": 3,
+                "turret": 0
+            },
+            "product-id": "",
+            "product-link": "",
+            "reference_guid": "adb6703c-2450-496f-9122-11b8f5851e39",
+            "start-values": {
+                "presets": [
+                    {
+                        "f_n": 0.0026666666666666666,
+                        "f_z": 0.004,
+                        "guid": "bae85388-1a5c-4ff1-b88d-b2a7590cbd3b",
+                        "material": {
+                            "category": "all",
+                            "query": "",
+                            "use-hardness": false
+                        },
+                        "n": 5000,
+                        "n_ramp": 5000,
+                        "name": "REF for chamfer tools",
+                        "ramp-angle": 2,
+                        "strategies": {
+                            "finishing": [
+                                "chamfer2d",
+                                "contour2d",
+                                "engrave"
+                            ],
+                            "roughing": [
+                                "chamfer2d",
+                                "contour2d",
+                                "engrave"
+                            ]
+                        },
+                        "tool-coolant": "flood",
+                        "use-stepdown": false,
+                        "use-stepover": false,
+                        "v_c": 654.4984694978734,
+                        "v_f": 40,
+                        "v_f_leadIn": 40,
+                        "v_f_leadOut": 40,
+                        "v_f_plunge": 13.333333333333334,
+                        "v_f_ramp": 13.333333333333334,
+                        "v_f_transition": 40
+                    }
+                ]
+            },
+            "type": "chamfer mill",
+            "unit": "inches",
+            "vendor": ""
+        }
+    ],
+    "version": 36
+}
