@@ -819,13 +819,21 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   .detail-layout { grid-template-columns: 1fr; }
   .detail-layout-right { order: -1; }
 }
-/* Preset-editor focus mode — while a preset is open in the inline editor the
-   layout collapses to one column and hides the right sidebar, so the editor
-   (and the preset row above it) gets the FULL page width instead of leaving
-   the right 1/3 as dead space. ToolDetail toggles this off the editor-open
-   state reported by PresetPanel (onEditingChange). */
-.detail-layout--preset-focus { grid-template-columns: 1fr; }
-.detail-layout--preset-focus .detail-layout-right { display: none; }
+/* Preset-editor breakout — the editor renders inside the 65% left column but
+   spans the FULL page width: the width backs out the 65fr/35fr split above
+   (left = (page − 12px gap) × 0.65 → page = left/0.65 + 12px) and z-index
+   lifts it over any right-sidebar content still beside it (the presets
+   section usually sits below the sidebar anyway; when it doesn't, the editor
+   simply goes over top — per Dan). Keep the 0.65 / 12px in sync with
+   .detail-layout's grid-template-columns and gap. No breakout under 768px —
+   the layout is already one column there. */
+@media (min-width: 769px) {
+  .detail-layout .preset-editor-inline {
+    width: calc(100% / 0.65 + 12px);
+    position: relative;
+    z-index: 30;
+  }
+}
 
 /* ─── Panel cards (detail + form sections) ──────────────────────────────── */
 .panel {
@@ -2529,6 +2537,156 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .pe-grid--3 { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .pe-grid--wide { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 .pe-stack { display: flex; flex-direction: column; gap: 8px; }
+
+/* Feedrates layout: clusters (CUTTING / PLUNGE & RAMP) side by side, each a
+   column of sliders; simpler tool types put sliders straight in the grid. */
+.pe-feed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 6px 28px;
+  align-items: start;
+}
+.pe-cluster-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--text-sub);
+  margin-bottom: 4px;
+}
+
+/* ── LinkedSlider — slider + number input over the fx cascade ──
+   Fixed column widths so every slider in a section lines up: labels flush
+   left, tracks the same length, number boxes in one straight column. Only the
+   TRACK dims when the field is driven ('formula') — the label, fx badge, and
+   number stay full brightness (a driven value is still a number you read). */
+.lslider {
+  --ls-accent: var(--blue);
+  position: relative;
+  display: grid;
+  grid-template-columns: 132px 1fr 128px;
+  align-items: center;
+  gap: 12px;
+  padding: 5px 0;
+}
+.lslider--compact { padding: 3px 0; }
+.lslider-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.lslider-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lslider--compact .lslider-name { font-size: 11.5px; }
+.lslider-track {
+  position: relative;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  cursor: grab;
+  touch-action: none;
+  transition: opacity 0.15s;
+}
+.lslider--compact .lslider-track { height: 22px; }
+.lslider-track--dragging { cursor: grabbing; }
+.lslider--driven .lslider-track { opacity: 0.55; }
+.lslider-rail {
+  position: absolute;
+  left: 0; right: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--surface-3);
+}
+.lslider-fill {
+  position: absolute;
+  left: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ls-accent);
+  transition: width 0.12s ease-out;
+}
+.lslider-handle {
+  position: absolute;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--ls-accent);
+  border: 2px solid var(--surface-2);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  transition: left 0.12s ease-out;
+}
+.lslider--compact .lslider-handle { width: 12px; height: 12px; }
+.lslider-handle--drag { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ls-accent) 27%, transparent); }
+.lslider-handle--edge { box-shadow: 0 0 0 4px color-mix(in srgb, var(--ls-accent) 40%, transparent); }
+/* Chevron overlay announcing a track rescale (soft max) — white with a dark
+   halo, NOT the accent: while growing, the bar is fully accent-filled and
+   accent chevrons would be invisible exactly when needed. */
+.lslider-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.3s ease-out;
+}
+.lslider-hint--fading { opacity: 0; }
+.lslider-hint > span {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95), 0 0 9px rgba(0, 0, 0, 0.8);
+}
+.lslider-numcol { display: flex; flex-direction: column; min-width: 0; }
+.lslider-num { display: flex; align-items: center; gap: 5px; }
+.lslider-num .field-input {
+  padding: 4px 6px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  width: 0;
+  flex: 1;
+  min-width: 54px;
+}
+.lslider--compact .lslider-num .field-input { font-size: 11.5px; }
+.lslider-unit {
+  font-size: 9.5px;
+  color: var(--text-sub);
+  width: 40px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Native number-spinner arrows suppressed — the slider is the increment
+   control, and the arrows steal horizontal space from the number itself. */
+.td-noSpin::-webkit-outer-spin-button,
+.td-noSpin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.td-noSpin[type=number] { -moz-appearance: textfield; appearance: textfield; }
+
+@keyframes td-drift-r {
+  0%   { opacity: 0; transform: translateX(-5px); }
+  40%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(5px); }
+}
+@keyframes td-drift-l {
+  0%   { opacity: 0; transform: translateX(5px); }
+  40%  { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-5px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes td-drift-r { 0%, 100% { opacity: 0.9; transform: none; } }
+  @keyframes td-drift-l { 0%, 100% { opacity: 0.9; transform: none; } }
+}
 
 /* Numeric field row: input flexes, unit + fx badge occupy fixed slots so
    every input across the editor lines up at the same width. */
