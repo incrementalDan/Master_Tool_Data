@@ -1893,10 +1893,13 @@ function IntensityMeter({ value, bucket, onChange }) {
     return r < 1 / 3 ? 'light' : r < 2 / 3 ? 'normal' : 'aggressive';
   };
   const handle = (e) => { const z = zoneFrom(e.clientX); if (z !== value) onChange(z); };
-  // Dots are positioned by ratio (not space-between) so the fill end always
-  // lands exactly on the active dot. 8px inset keeps the end dots off the edge;
-  // fill + dots share the same coordinate math, so they can't drift apart.
+  // Dots AND labels are positioned by the same ratio math off a fixed edge
+  // inset (--pe-inset, big enough that the end labels don't clip), so the fill
+  // end, the dot, and the word all share one x per step and stay aligned at any
+  // meter width. This mirrors the reference mockup's intent (fixed-width
+  // centered labels) but pins each label's centre to its dot exactly.
   const last = INTENSITIES.length - 1;
+  const posAt = (n) => `calc(var(--pe-inset) + (100% - 2 * var(--pe-inset)) * ${n / last})`;
   return (
     <div className="pe-intensity" style={{ '--pe-b': c }}>
       <div
@@ -1906,13 +1909,13 @@ function IntensityMeter({ value, bucket, onChange }) {
         onPointerUp={() => setDragging(false)}
       >
         <div className="pe-intensity-rail" />
-        <div className="pe-intensity-fill" style={{ width: `calc((100% - 16px) * ${idx / last})` }} />
+        <div className="pe-intensity-fill" style={{ width: `calc((100% - 2 * var(--pe-inset)) * ${idx / last})` }} />
         {INTENSITIES.map((i, n) => (
           <span
             key={i.key}
             className={`pe-intensity-dot${i.key === value ? ' pe-intensity-dot--on' : ''}${n <= idx ? ' pe-intensity-dot--passed' : ''}`}
             style={{
-              left: `calc(8px + (100% - 16px) * ${n / last})`,
+              left: posAt(n),
               width: i.key === value ? i.dot + 6 : i.dot,
               height: i.key === value ? i.dot + 6 : i.dot,
             }}
@@ -1920,8 +1923,13 @@ function IntensityMeter({ value, bucket, onChange }) {
         ))}
       </div>
       <div className="pe-intensity-labels">
-        {INTENSITIES.map(i => (
-          <button type="button" key={i.key} className={i.key === value ? 'on' : ''} onClick={() => onChange(i.key)}>{i.label}</button>
+        {INTENSITIES.map((i, n) => (
+          <button
+            type="button" key={i.key}
+            className={i.key === value ? 'on' : ''}
+            style={{ left: posAt(n) }}
+            onClick={() => onChange(i.key)}
+          >{i.label}</button>
         ))}
       </div>
     </div>
