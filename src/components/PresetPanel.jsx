@@ -28,22 +28,7 @@ import {
   iprToIPM, ipmToIPR,
   roundForField,
 } from '../utils/speedsAndFeedsCalc.js';
-
-// Default formula states when opening any preset for editing.
-// 'manual' = user owns this value; 'formula' = calculated from partner.
-const DEFAULT_FX = {
-  n:              'manual',
-  v_c:            'formula',
-  n_ramp:         'formula',
-  v_f:            'formula',
-  f_z:            'manual',
-  v_f_plunge:     'formula',
-  v_f_retract:    'formula',
-  f_n:            'manual',
-  v_f_leadIn:     'formula',
-  v_f_leadOut:    'formula',
-  v_f_transition: 'formula',
-};
+import { initialPresetFx, computeFormulaDraft } from '../utils/presetFx.js';
 
 function r4(v) {
   if (v === null || v === undefined || v === '') return v;
@@ -696,37 +681,6 @@ function StatRow({ label, value, unit }) {
   );
 }
 
-// Recomputes all formula-driven fields in a draft given current geometry.
-// Safe to call on mount and whenever diameter / numberOfFlutes change.
-function computeFormulaDraft(draft, fx, diameter, numberOfFlutes) {
-  const d = { ...draft };
-  const n = d.n ?? 0;
-
-  if (fx.v_c    === 'formula') d.v_c    = roundForField('v_c',    rpmToSFM(n, diameter));
-  if (fx.n_ramp === 'formula') d.n_ramp = roundForField('n_ramp', n);
-
-  if (fx.v_f === 'formula')
-    d.v_f = roundForField('v_f', fptToIPM(d.f_z ?? 0, n, numberOfFlutes));
-  else if (fx.f_z === 'formula')
-    d.f_z = roundForField('f_z', ipmToFPT(d.v_f ?? 0, n, numberOfFlutes));
-
-  if (fx.v_f_plunge === 'formula')
-    d.v_f_plunge = roundForField('v_f_plunge', iprToIPM(d.f_n ?? 0, n));
-  else if (fx.f_n === 'formula')
-    d.f_n = roundForField('f_n', ipmToIPR(d.v_f_plunge ?? 0, n));
-
-  // Retract follows plunge (one-directional) unless overridden.
-  if (fx.v_f_retract === 'formula')
-    d.v_f_retract = roundForField('v_f_retract', d.v_f_plunge ?? 0);
-
-  const vf = d.v_f ?? 0;
-  if (fx.v_f_leadIn     === 'formula') d.v_f_leadIn     = roundForField('v_f_leadIn',     vf);
-  if (fx.v_f_leadOut    === 'formula') d.v_f_leadOut    = roundForField('v_f_leadOut',    vf);
-  if (fx.v_f_transition === 'formula') d.v_f_transition = roundForField('v_f_transition', vf);
-
-  return d;
-}
-
 // Returns true when the machine's taper is found in the holder description.
 // Used for the informational taper compatibility hint — non-blocking.
 function taperMatches(machTaper, holderDesc) {
@@ -749,42 +703,11 @@ function EditCard({
   const isTurning = TURNING_TYPES.has(toolType);
   const isMilling = !isHoleMaking && !isTurning;
 
-  // Milling and spot drill enter plunge feed as an independent value: neither
-  // shows a feed-per-rev (f_n) field, so v_f_plunge is the source of truth and
-  // f_n is derived from it. Without this, DEFAULT_FX (v_f_plunge:'formula',
-  // f_n:'manual') would recompute plunge from the (nonexistent, zero) f_n — on
-  // mount AND whenever spindle speed changes — silently zeroing a proven plunge
-  // feed. Drill-family tools keep the drilling convention (f_n manual, plunge
-  // derived). The draft init must use this same fx, not DEFAULT_FX.
-  const initialFx = { ...DEFAULT_FX };
-  if (isMilling || isSpotDrill) { initialFx.v_f_plunge = 'manual'; initialFx.f_n = 'formula'; }
-  // Turning/boring enter cutting feed and plunge directly — feed-per-tooth (f_z)
-  // doesn't apply — so keep them manual. Otherwise the milling formula (v_f =
-  // f_z × n × flutes, with f_z = 0) would zero the cutting feed on open and on
-  // every spindle-speed change. The n/v_c cascades below are also skipped for it.
-  if (isTurning) { initialFx.v_f = 'manual'; initialFx.v_f_plunge = 'manual'; }
-  // Retract feedrate defaults to the plunge feedrate (Fusion's native
-  // tool_feedRetract = tool_feedPlunge) and follows it as plunge changes — but
-  // only on the tools that have a retract field (drill family + spot drill), and
-  // only until the user overrides it. A stored value that already differs from
-  // plunge is treated as an override (manual) so it's preserved on open. For
-  // every other tool type retract isn't shown, so keep it manual (not computed).
-  if (isDrillFamily || isSpotDrill) {
-    const r = preset['v_f_retract'], pl = preset.v_f_plunge ?? 0;
-    initialFx.v_f_retract = (r == null || Math.abs(Number(r) - Number(pl)) < 1e-6) ? 'formula' : 'manual';
-  } else {
-    initialFx.v_f_retract = 'manual';
-  }
-  // One-directional followers: lead-in/out + transition follow cutting feed;
-  // ramp RPM follows spindle. A stored value that already differs from its
-  // source opens UNLINKED (manual) so it isn't clobbered to the source on open —
-  // the greyed fx badge then lets the user re-link it. Equal/absent → linked
-  // (formula). Same "preserve an override" pattern as retract above.
-  const followsSource = (val, src) => val == null || Math.abs(Number(val) - Number(src ?? 0)) < 1e-6;
-  initialFx.v_f_leadIn     = followsSource(preset.v_f_leadIn, preset.v_f)     ? 'formula' : 'manual';
-  initialFx.v_f_leadOut    = followsSource(preset.v_f_leadOut, preset.v_f)    ? 'formula' : 'manual';
-  initialFx.v_f_transition = followsSource(preset.v_f_transition, preset.v_f) ? 'formula' : 'manual';
-  initialFx.n_ramp         = followsSource(preset.n_ramp, preset.n)           ? 'formula' : 'manual';
+  // Open-time fx state — which fields are linked (recomputed from a source) vs.
+  // preserved. The clobber-safety rules (mathematically-locked pairs recompute;
+  // independent followers whose stored value differs stay preserved) live in
+  // initialPresetFx (src/utils/presetFx.js), locked by presetFx.test.js.
+  const initialFx = initialPresetFx(preset, { isMilling, isSpotDrill, isTurning, isDrillFamily });
   const configMachines = shopSettings?.machines || [];
   const [fx, setFx] = useState(initialFx);
   const [pickerOpen, setPickerOpen] = useState(false);
