@@ -1083,8 +1083,8 @@ function EditCard({
       {isMilling && (
       <EditorSection label="Passes & Linking" accent="var(--blue)">
         <div className="pe-stack" style={{ gap: 14 }}>
-          <StepField
-            label="Use stepdown"
+          <FactorSlider
+            label="Stepdown"
             value={draft.stepdown}
             enabled={!!draft['use-stepdown']}
             onToggle={checked => {
@@ -1097,10 +1097,10 @@ function EditCard({
             refDim={fluteLength}
             refLabel="flute length"
             lenUnit={lenUnit}
-            defaultFactor={0.4}
+            accent="var(--blue)"
           />
-          <StepField
-            label="Use stepover"
+          <FactorSlider
+            label="Stepover"
             value={draft.stepover}
             enabled={!!draft['use-stepover']}
             onToggle={checked => {
@@ -1113,7 +1113,18 @@ function EditCard({
             refDim={diameter}
             refLabel="diameter"
             lenUnit={lenUnit}
-            defaultFactor={0.3}
+            accent="var(--blue)"
+          />
+          {/* MRR = radial width × axial depth × feed — absolute step values
+              (0 when a step is off) and the live cutting feed, so it moves as
+              any of the three change. Tinted blue for now; becomes the
+              rough/finish bucket color when the Strategy section lands. */}
+          <MRRIndicator
+            ae={draft['use-stepover'] ? draft.stepover : 0}
+            ap={draft['use-stepdown'] ? draft.stepdown : 0}
+            vf={draft.v_f}
+            lenUnit={lenUnit}
+            accent="var(--blue)"
           />
         </div>
       </EditorSection>
@@ -1349,82 +1360,139 @@ function EditCard({
   );
 }
 
-// ── StepField — stepdown/stepover toggle + factor-based editing ───────────────
-// Displays the absolute value with a computed factor badge.
-// Double-click enters factor-edit mode; on commit, saves the new absolute value.
-function StepField({ label, value, onChange, refDim, refLabel, lenUnit, enabled, onToggle, defaultFactor }) {
-  const [editing, setEditing] = useState(false);
-  const [draftFactor, setDraftFactor] = useState('');
-  const inputRef = useRef(null);
+// ── FactorSlider — stepdown / stepover as a percentage of a reference dim ─────
+// Stepdown/stepover are decided as a PERCENTAGE of a reference dimension
+// (stepdown of flute length, stepover of diameter), so the slider drives the
+// percent and reads out as one (86%, not 0.86); never above 100%. Two entry
+// points as a driving/driven pair, exactly like LinkedSlider: drag/type the %
+// (1% steps) and the inch value follows (fx badge on it); type the inch value
+// and the % follows. Whichever was touched last drives.
+//
+// The DATA MODEL stays absolute — `value`/`onChange` are the raw inch value
+// (draft.stepdown / draft.stepover); percent is a UI convenience only and never
+// leaks into the preset. The triple-sync invariant (use-* boolean + numeric +
+// expression) is handled downstream by normalizePreset on save, unchanged.
+function FactorSlider({ label, value, onChange, refDim, refLabel, lenUnit, enabled, onToggle, accent }) {
+  const trackRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const [inchDraft, setInchDraft] = useState(null);
+  // Which side the user last drove. Percent leads by default — it's the
+  // decision a machinist actually makes; inches are what falls out.
+  const [driver, setDriver] = useState('pct');
 
-  const factor = (refDim && refDim > 0 && value != null && value > 0)
-    ? parseFloat((value / refDim).toFixed(4))
-    : null;
+  const factor = (refDim > 0 && value > 0) ? Math.min(1, value / refDim) : 0;
+  const pct = Math.round(factor * 100);
+  const abs = refDim > 0 ? factor * refDim : 0;
 
-  const computedAbs = () => {
-    const f = parseFloat(draftFactor);
-    if (isNaN(f) || f <= 0 || !refDim || refDim <= 0) return null;
-    return parseFloat((f * refDim).toFixed(6));
+  const setPct = (p) => {
+    setDriver('pct');
+    const f = Math.min(1, Math.max(0, (Number(p) || 0) / 100));
+    onChange(parseFloat((f * refDim).toFixed(6)));
+  };
+  const setInch = (v) => {
+    setDriver('inch');
+    onChange(Math.max(0, Number(v) || 0));
+  };
+  const pctFromPointer = (clientX) => {
+    const rect = trackRef.current.getBoundingClientRect();
+    const r = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return Math.round(r * 100);
   };
 
-  const startEditing = () => {
-    if (!enabled) return;
-    setDraftFactor(String(factor ?? defaultFactor));
-    setEditing(true);
-  };
-
-  const commitEdit = () => {
-    const abs = computedAbs();
-    if (abs !== null) onChange(abs);
-    setEditing(false);
-  };
-
+  // Non-passive wheel listener (same rationale as LinkedSlider) — one notch = 1%.
+  const wheelState = useRef({});
+  wheelState.current = { pct, enabled };
   useEffect(() => {
-    if (editing && inputRef.current) inputRef.current.focus();
-  }, [editing]);
+    const el = trackRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      if (!wheelState.current.enabled) return;
+      const axis = Math.abs(e.deltaX) >= Math.abs(e.shiftKey ? e.deltaY : 0) ? e.deltaX : (e.shiftKey ? e.deltaY : 0);
+      if (!axis || e.ctrlKey || e.metaKey) return;
+      e.preventDefault();
+      setPct(Math.max(0, Math.min(100, wheelState.current.pct + (axis > 0 ? 1 : -1))));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <div className="step-field">
-      <label className="preset-check-label">
+    <div
+      className={`pe-factor${enabled ? '' : ' pe-factor--off'}${driver === 'inch' ? ' pe-factor--inchdrv' : ''}`}
+      style={accent ? { '--ls-accent': accent } : undefined}
+    >
+      {/* Row 1 — checkbox + label | % track | percent input */}
+      <label className="pe-factor-label">
         <input type="checkbox" checked={enabled} onChange={e => onToggle(e.target.checked)} />
-        {label}
+        <span className="lslider-name">{label}</span>
+        <span className="nfield-fx"><span className={`fx-badge${driver === 'inch' ? '' : ' fx-badge--hidden'}`}>fx</span></span>
       </label>
-      {enabled && (
-        editing ? (
-          <div className="step-field-edit-row">
-            <input
-              ref={inputRef}
-              type="number"
-              className="step-factor-input field-input"
-              value={draftFactor}
-              onChange={e => setDraftFactor(e.target.value)}
-              onBlur={commitEdit}
-              onKeyDown={e => {
-                if (e.key === 'Enter') commitEdit();
-                if (e.key === 'Escape') setEditing(false);
-              }}
-              step="0.05"
-              min="0.01"
-            />
-            <span className="step-factor-ref">
-              × {refDim?.toFixed(3)}{lenUnit} {refLabel}
-            </span>
-            <span className="step-factor-result">
-              = {computedAbs() != null ? `${computedAbs().toFixed(4)}${lenUnit}` : '—'}
-            </span>
-          </div>
-        ) : (
-          <div className="step-field-display-row" onDoubleClick={startEditing} title="Double-click to edit factor">
-            <span className="step-abs-val">
-              {value != null && value > 0 ? `${parseFloat(value.toFixed(4))}${lenUnit}` : <span style={{ color: 'var(--text-sub)', fontStyle: 'italic' }}>no value set</span>}
-            </span>
-            {factor != null && (
-              <span className="step-factor-badge">×{factor.toFixed(3)} {refLabel}</span>
-            )}
-            <span className="step-edit-hint">double-click to edit</span>
-          </div>
-        )
-      )}
+      <div
+        ref={trackRef}
+        className={`lslider-track pe-factor-track${dragging ? ' lslider-track--dragging' : ''}`}
+        onPointerDown={e => { if (!enabled) return; e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); setPct(pctFromPointer(e.clientX)); }}
+        onPointerMove={e => { if (dragging) setPct(pctFromPointer(e.clientX)); }}
+        onPointerUp={() => setDragging(false)}
+        onPointerCancel={() => setDragging(false)}
+      >
+        <div className="lslider-rail" />
+        <div className="lslider-fill" style={{ width: `${pct}%`, ...(dragging ? { transition: 'none' } : {}) }} />
+        <div className={`lslider-handle${dragging ? ' lslider-handle--drag' : ''}`} style={{ left: `calc(${pct}% - 7px)`, ...(dragging ? { transition: 'none' } : {}) }} />
+      </div>
+      <div className="lslider-num">
+        <input
+          className="field-input td-noSpin" type="number" step="1" min="0" max="100"
+          value={pct} disabled={!enabled}
+          onChange={e => setPct(e.target.value)}
+        />
+        <span className="lslider-unit">%</span>
+      </div>
+
+      {/* Row 2 — "of {refLabel}" | ref-dim readout | inch input */}
+      <span className="pe-factor-of">
+        <span>of {refLabel}</span>
+        <span className="nfield-fx"><span className={`fx-badge${driver === 'pct' ? '' : ' fx-badge--hidden'}`}>fx</span></span>
+      </span>
+      <span className="pe-factor-ref">{refDim > 0 ? `${refDim.toFixed(4)} ${lenUnit}` : '—'}</span>
+      <div className="lslider-num">
+        <input
+          className="field-input td-noSpin" type="number" step="0.001" min="0" max={refDim || undefined}
+          value={inchDraft !== null ? inchDraft : abs.toFixed(4)}
+          disabled={!enabled}
+          onFocus={() => setInchDraft(abs.toFixed(4))}
+          onBlur={() => setInchDraft(null)}
+          onChange={e => { setInchDraft(e.target.value); setInch(e.target.value); }}
+        />
+        <span className="lslider-unit">{lenUnit}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── MRR — material removal rate ───────────────────────────────────────────────
+// The volume of metal coming off per minute: radial width × axial depth × feed.
+// It's the payoff of the Passes section (the reason you push stepdown/stepover
+// at all), so it gets a bold live readout. Uses the ABSOLUTE step values (0 when
+// a step is toggled off) and the live cutting feedrate; math shown on hover.
+//   ae = stepover (radial width, len)  ap = stepdown (axial depth, len)
+//   vf = cutting feed (len/min)  →  MRR = ae × ap × vf  (len³/min)
+function MRRIndicator({ ae, ap, vf, lenUnit, accent }) {
+  const a = Number(ae) || 0, p = Number(ap) || 0, f = Number(vf) || 0;
+  const mrr = a * p * f;
+  const live = mrr > 0;
+  return (
+    <div
+      className={`pe-mrr${live ? ' pe-mrr--live' : ''}`}
+      style={accent ? { '--ls-accent': accent } : undefined}
+      title={`radial width ${a.toFixed(4)} ${lenUnit} × axial depth ${p.toFixed(4)} ${lenUnit} × feed ${f.toFixed(1)} ${lenUnit}/min`}
+    >
+      <div className="pe-mrr-title">
+        <span>MRR</span>
+        <span className="pe-mrr-sub">removal rate</span>
+      </div>
+      <div className="pe-mrr-val">{live ? mrr.toFixed(3) : '—'}</div>
+      <span className="pe-mrr-unit">{lenUnit}³/min</span>
     </div>
   );
 }

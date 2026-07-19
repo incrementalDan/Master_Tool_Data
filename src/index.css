@@ -2776,88 +2776,76 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--text);
 }
 
-/* ── StepField (stepdown / stepover factor-based editing) ── */
-.step-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.step-field-display-row {
-  display: flex;
+/* ── FactorSlider (stepdown / stepover as % of a reference dim) ──
+   Two rows over a shared 3-column grid matching LinkedSlider's columns so the
+   Passes section lines up: [label 132] [track 1fr] [number 128]. Row 1 is the
+   percent (checkbox + label | % track | % input); row 2 is the inch value
+   ("of flute length" | ref-dim | inch input). The TRACK dims only when the
+   inch side is driving, mirroring LinkedSlider's driven look. */
+.pe-factor {
+  display: grid;
+  grid-template-columns: 132px 1fr 128px;
   align-items: center;
-  gap: 8px;
-  padding: 5px 10px 5px 26px;
-  border-radius: 5px;
-  cursor: default;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  font-size: 12px;
-  user-select: none;
-}
-.step-field-display-row:hover {
-  border-color: #5a5a5a;
-}
-
-.step-abs-val {
-  font-family: var(--font-mono);
-  font-weight: 600;
-  color: var(--text);
-  min-width: 52px;
-}
-
-.step-factor-badge {
-  font-size: 11px;
-  color: var(--blue);
-  background: var(--blue-tint);
-  border: 1px solid rgba(74,143,255,0.25);
-  border-radius: 4px;
-  padding: 1px 6px;
-  white-space: nowrap;
-}
-
-.step-edit-hint {
-  font-size: 10px;
-  color: var(--text-sub);
-  margin-left: auto;
-  font-style: italic;
-  opacity: 0;
+  gap: 3px 12px;
   transition: opacity 0.15s;
 }
-.step-field-display-row:hover .step-edit-hint {
-  opacity: 1;
-}
-
-.step-field-edit-row {
+.pe-factor--off { opacity: 0.45; }
+.pe-factor-label {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 10px 4px 26px;
-  background: var(--blue-tint-2);
-  border: 1px solid var(--blue);
-  border-radius: 5px;
+  gap: 6px;
+  min-width: 0;
+  cursor: pointer;
   font-size: 12px;
-  flex-wrap: wrap;
+  font-weight: 600;
 }
-
-.step-factor-input {
-  width: 72px !important;
-  padding: 3px 6px !important;
-  font-family: var(--font-mono);
-  font-size: 12px !important;
-}
-
-.step-factor-ref {
+.pe-factor-track { cursor: grab; }
+.pe-factor--off .pe-factor-track { cursor: not-allowed; }
+.pe-factor--inchdrv .pe-factor-track { opacity: 0.55; }
+/* Row-2 label column: "of {refLabel}" + the pct-driven fx badge */
+.pe-factor-of {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 22px;
+  min-width: 0;
+  font-size: 11px;
   color: var(--text-sub);
   white-space: nowrap;
 }
-
-.step-factor-result {
+.pe-factor-ref {
   font-family: var(--font-mono);
-  color: var(--green);
-  font-weight: 600;
-  white-space: nowrap;
+  font-size: 10px;
+  color: var(--text-sub);
+  opacity: 0.7;
 }
+
+/* ── MRR indicator ── */
+.pe-mrr {
+  --ls-accent: var(--blue);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 9px 13px;
+  margin-top: 4px;
+}
+.pe-mrr--live { border-color: color-mix(in srgb, var(--ls-accent) 40%, transparent); }
+.pe-mrr-title { display: flex; flex-direction: column; line-height: 1.15; }
+.pe-mrr-title > span:first-child { font-size: 11px; font-weight: 800; letter-spacing: 0.09em; color: var(--text); }
+.pe-mrr-sub { font-size: 9px; color: var(--text-sub); white-space: nowrap; }
+.pe-mrr-val {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-sub);
+}
+.pe-mrr--live .pe-mrr-val { color: var(--ls-accent); }
+.pe-mrr-unit { font-family: var(--font-mono); font-size: 11px; color: var(--text-sub); }
 
 /* ── fx badge ── */
 .fx-badge {
