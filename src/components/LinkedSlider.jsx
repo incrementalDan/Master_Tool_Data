@@ -102,6 +102,10 @@ function ScaleHint({ dir }) {
 export default function LinkedSlider({
   field, label, value, unit, fxState, onChange,
   accent, compact = false, metric = false, max, warning,
+  // One-directional followers (lead-in/out, transition, ramp RPM) pass onRelink
+  // + relinkLabel: the fx badge stays visible even when unlinked (greyed) and,
+  // clicked, re-links the field to its source (relinkLabel names it).
+  onRelink, relinkLabel,
 }) {
   const base = (metric && METRIC_RANGES[field]) || SLIDER_RANGES[field] || { min: 0, max: 100, step: 1 };
   // `max` overrides the default ceiling (machine max RPM). Soft-max growth
@@ -242,13 +246,24 @@ export default function LinkedSlider({
       onMouseMove={e => { if (formulaInfo) setShiftHover(e.shiftKey); }}
       onMouseLeave={() => setShiftHover(false)}
     >
-      {/* Label + fx badge — NEVER dimmed (a driven value is still one you read) */}
+      {/* Label + fx badge — NEVER dimmed (a driven value is still one you read).
+          For re-linkable followers the badge is a button: lit blue while linked,
+          greyed + clickable once unlinked (click re-links to the source). */}
       <div className="lslider-label">
         <span className="lslider-name">{label}</span>
         <span className="nfield-fx">
-          {formulaInfo && (
+          {onRelink ? (
+            <button
+              type="button"
+              className={`fx-badge fx-badge--btn${driven ? '' : ' fx-badge--unlinked'}`}
+              title={driven
+                ? `Linked to ${relinkLabel} — change this field to unlink it`
+                : `Unlinked from ${relinkLabel}. Click to re-link (back to default)`}
+              onClick={() => { if (!driven) onRelink(); }}
+            >fx</button>
+          ) : formulaInfo ? (
             <span className={`fx-badge${driven ? '' : ' fx-badge--hidden'}`}>fx</span>
-          )}
+          ) : null}
         </span>
       </div>
 

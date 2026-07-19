@@ -133,6 +133,10 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
   const feedUnit = isMetric ? 'mm/min' : 'in/min';
   const speedUnit = isMetric ? 'm/min' : 'SFM';
   const toolType = tool.tool_type || 'flat end mill';
+  // Milling tools are the ones that carry toolpath strategies (hole-making has
+  // none; turning has its own vocabulary the app doesn't edit yet). New milling
+  // presets default to the new (strategy) format.
+  const isMillingType = !HOLE_MAKING_TYPES.has(toolType) && !TURNING_TYPES.has(toolType);
 
   const diameter = tool.diameter;
   const numberOfFlutes = tool.number_of_flutes;
@@ -307,6 +311,18 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
     // a copy already carries the original preset's machine_id).
     if (copySrc.type !== 'preset' && shopSettings?.default_machine_id) {
       np.machine_id = shopSettings.default_machine_id;
+    }
+    // New milling presets default to the NEW (strategy) format: give them a
+    // Fusion `strategies` object so the editor opens on the strategy picker, not
+    // the legacy Operation dropdown. A copy of a preset that was ALREADY new
+    // format keeps its selected strategies; a copy of an old-format preset (or a
+    // blank/ref one) starts new-format with an empty selection, its bucket seeded
+    // from the operation. Hole-making/turning are untouched (no strategy UI).
+    if (isMillingType && !isNewFormatPreset(np)) {
+      // A fresh preset with no operation defaults to the Rough bucket (the usual
+      // first operation); a copy keeps whatever operation its source carried.
+      if (!np.operation_type) np.operation_type = 'rough';
+      np.strategies = buildStrategies(opTypeToBucket(np.operation_type), []);
     }
     return np;
   };
@@ -759,6 +775,16 @@ function EditCard({
   } else {
     initialFx.v_f_retract = 'manual';
   }
+  // One-directional followers: lead-in/out + transition follow cutting feed;
+  // ramp RPM follows spindle. A stored value that already differs from its
+  // source opens UNLINKED (manual) so it isn't clobbered to the source on open —
+  // the greyed fx badge then lets the user re-link it. Equal/absent → linked
+  // (formula). Same "preserve an override" pattern as retract above.
+  const followsSource = (val, src) => val == null || Math.abs(Number(val) - Number(src ?? 0)) < 1e-6;
+  initialFx.v_f_leadIn     = followsSource(preset.v_f_leadIn, preset.v_f)     ? 'formula' : 'manual';
+  initialFx.v_f_leadOut    = followsSource(preset.v_f_leadOut, preset.v_f)    ? 'formula' : 'manual';
+  initialFx.v_f_transition = followsSource(preset.v_f_transition, preset.v_f) ? 'formula' : 'manual';
+  initialFx.n_ramp         = followsSource(preset.n_ramp, preset.n)           ? 'formula' : 'manual';
   const configMachines = shopSettings?.machines || [];
   const [fx, setFx] = useState(initialFx);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -777,7 +803,20 @@ function EditCard({
   // ones (a Fusion `strategies` object). Convert flips old → new.
   const availableStrategies = strategiesForToolType(toolType);
   const [strategyFormat, setStrategyFormat] = useState(() => (isMilling && isNewFormatPreset(preset) ? 'new' : 'old'));
-  const initBucket = isNewFormatPreset(preset) ? readStrategyBucket(preset) : { bucket: opTypeToBucket(preset.operation_type), ids: [] };
+  // Initial bucket + selection. For a new-format preset read the populated
+  // bucket; but when the selection is empty, readStrategyBucket can't tell which
+  // bucket was intended (both arrays are empty), so fall back to operation_type
+  // (a fresh preset seeds operation_type = 'rough' → Rough bucket).
+  const initBucket = (() => {
+    if (isNewFormatPreset(preset)) {
+      const rb = readStrategyBucket(preset);
+      if (rb.ids.length === 0 && preset.operation_type) {
+        return { bucket: opTypeToBucket(preset.operation_type), ids: [] };
+      }
+      return rb;
+    }
+    return { bucket: opTypeToBucket(preset.operation_type), ids: [] };
+  })();
   const [bucket, setBucket] = useState(initBucket.bucket);
   const [selected, setSelected] = useState(() => new Set(initBucket.ids));
   const [intensity, setIntensity] = useState(preset.intensity || 'normal');
@@ -909,6 +948,20 @@ function EditCard({
     if (fx.v_f_retract !== 'manual') nd.v_f_retract = v;
     return nd;
   }); };
+
+  // Re-link a one-directional follower to its source (lead-in/out + transition →
+  // cutting feed; n_ramp → spindle). Sets it back to formula and snaps its value
+  // to the source. Only the re-linked field is touched.
+  const relinkField = (field) => {
+    touch();
+    setFx(f => ({ ...f, [field]: 'formula' }));
+    setDraft(d => ({
+      ...d,
+      [field]: field === 'n_ramp'
+        ? roundForField('n_ramp', d.n ?? 0)
+        : roundForField(field, d.v_f ?? 0),
+    }));
+  };
 
   // ── Bidirectional calculation ──────────────────────────────────────────────
   // Called for every formula-linked field on each keystroke.
@@ -1252,6 +1305,7 @@ function EditCard({
             field="n_ramp" label="Ramp spindle" unit="RPM"
             value={draft.n_ramp} fxState={fx.n_ramp} max={machineMaxRpm}
             onChange={v => handleNumChange('n_ramp', v)}
+            onRelink={() => relinkField('n_ramp')} relinkLabel="spindle speed"
           />
         )}
       </EditorSection>
@@ -1334,16 +1388,19 @@ function EditCard({
                 field="v_f_leadIn" label="Lead-in" unit={feedUnit}
                 value={draft.v_f_leadIn} fxState={fx.v_f_leadIn} metric={isMetricTool} compact
                 onChange={v => handleNumChange('v_f_leadIn', v)}
+                onRelink={() => relinkField('v_f_leadIn')} relinkLabel="cutting feedrate"
               />
               <LinkedSlider
                 field="v_f_leadOut" label="Lead-out" unit={feedUnit}
                 value={draft.v_f_leadOut} fxState={fx.v_f_leadOut} metric={isMetricTool} compact
                 onChange={v => handleNumChange('v_f_leadOut', v)}
+                onRelink={() => relinkField('v_f_leadOut')} relinkLabel="cutting feedrate"
               />
               <LinkedSlider
                 field="v_f_transition" label="Transition" unit={feedUnit}
                 value={draft.v_f_transition} fxState={fx.v_f_transition} metric={isMetricTool} compact
                 onChange={v => handleNumChange('v_f_transition', v)}
+                onRelink={() => relinkField('v_f_transition')} relinkLabel="cutting feedrate"
               />
             </div>
             <div>
@@ -1421,16 +1478,19 @@ function EditCard({
                 field="v_f_leadIn" label="Lead-in" unit={feedUnit}
                 value={draft.v_f_leadIn} fxState={fx.v_f_leadIn} metric={isMetricTool} compact
                 onChange={v => handleNumChange('v_f_leadIn', v)}
+                onRelink={() => relinkField('v_f_leadIn')} relinkLabel="cutting feedrate"
               />
               <LinkedSlider
                 field="v_f_leadOut" label="Lead-out" unit={feedUnit}
                 value={draft.v_f_leadOut} fxState={fx.v_f_leadOut} metric={isMetricTool} compact
                 onChange={v => handleNumChange('v_f_leadOut', v)}
+                onRelink={() => relinkField('v_f_leadOut')} relinkLabel="cutting feedrate"
               />
               <LinkedSlider
                 field="v_f_transition" label="Transition" unit={feedUnit}
                 value={draft.v_f_transition} fxState={fx.v_f_transition} metric={isMetricTool} compact
                 onChange={v => handleNumChange('v_f_transition', v)}
+                onRelink={() => relinkField('v_f_transition')} relinkLabel="cutting feedrate"
               />
             </div>
             <div>
@@ -1893,10 +1953,13 @@ function IntensityMeter({ value, bucket, onChange }) {
     return r < 1 / 3 ? 'light' : r < 2 / 3 ? 'normal' : 'aggressive';
   };
   const handle = (e) => { const z = zoneFrom(e.clientX); if (z !== value) onChange(z); };
-  // Dots are positioned by ratio (not space-between) so the fill end always
-  // lands exactly on the active dot. 8px inset keeps the end dots off the edge;
-  // fill + dots share the same coordinate math, so they can't drift apart.
+  // Dots AND labels are positioned by the same ratio math off a fixed edge
+  // inset (--pe-inset, big enough that the end labels don't clip), so the fill
+  // end, the dot, and the word all share one x per step and stay aligned at any
+  // meter width. This mirrors the reference mockup's intent (fixed-width
+  // centered labels) but pins each label's centre to its dot exactly.
   const last = INTENSITIES.length - 1;
+  const posAt = (n) => `calc(var(--pe-inset) + (100% - 2 * var(--pe-inset)) * ${n / last})`;
   return (
     <div className="pe-intensity" style={{ '--pe-b': c }}>
       <div
@@ -1906,13 +1969,13 @@ function IntensityMeter({ value, bucket, onChange }) {
         onPointerUp={() => setDragging(false)}
       >
         <div className="pe-intensity-rail" />
-        <div className="pe-intensity-fill" style={{ width: `calc((100% - 16px) * ${idx / last})` }} />
+        <div className="pe-intensity-fill" style={{ width: `calc((100% - 2 * var(--pe-inset)) * ${idx / last})` }} />
         {INTENSITIES.map((i, n) => (
           <span
             key={i.key}
             className={`pe-intensity-dot${i.key === value ? ' pe-intensity-dot--on' : ''}${n <= idx ? ' pe-intensity-dot--passed' : ''}`}
             style={{
-              left: `calc(8px + (100% - 16px) * ${n / last})`,
+              left: posAt(n),
               width: i.key === value ? i.dot + 6 : i.dot,
               height: i.key === value ? i.dot + 6 : i.dot,
             }}
@@ -1920,8 +1983,13 @@ function IntensityMeter({ value, bucket, onChange }) {
         ))}
       </div>
       <div className="pe-intensity-labels">
-        {INTENSITIES.map(i => (
-          <button type="button" key={i.key} className={i.key === value ? 'on' : ''} onClick={() => onChange(i.key)}>{i.label}</button>
+        {INTENSITIES.map((i, n) => (
+          <button
+            type="button" key={i.key}
+            className={i.key === value ? 'on' : ''}
+            style={{ left: posAt(n) }}
+            onClick={() => onChange(i.key)}
+          >{i.label}</button>
         ))}
       </div>
     </div>

@@ -2941,6 +2941,9 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /* Rough/Finish bucket toggle */
 .pe-bucket {
   display: inline-flex;
+  /* The FGroup wrapper is a stretch flex column — without this the toggle
+     stretches to the full column width, leaving dead space past Finish. */
+  align-self: flex-start;
   background: var(--input-bg);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2967,12 +2970,13 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--pe-b);
 }
 
-/* Intensity meter — dots positioned by ratio; fill + dots share the 8px-inset
-   coordinate space so the fill end always lands on the active dot. */
-.pe-intensity { min-width: 210px; }
+/* Intensity meter — the fill end, the dot, and the label for each step all
+   share one x (posAt in the component) off a fixed edge inset, so they stay
+   aligned at any width and the end labels never clip. */
+.pe-intensity { --pe-inset: 30px; min-width: 220px; }
 .pe-intensity-track { position: relative; height: 22px; cursor: grab; touch-action: none; }
-.pe-intensity-rail { position: absolute; top: 50%; transform: translateY(-50%); left: 8px; right: 8px; height: 3px; border-radius: 2px; background: var(--surface-3); }
-.pe-intensity-fill { position: absolute; top: 50%; transform: translateY(-50%); left: 8px; height: 3px; border-radius: 2px; background: var(--pe-b); transition: width 0.14s ease-out; }
+.pe-intensity-rail { position: absolute; top: 50%; transform: translateY(-50%); left: var(--pe-inset); right: var(--pe-inset); height: 3px; border-radius: 2px; background: var(--surface-3); }
+.pe-intensity-fill { position: absolute; top: 50%; transform: translateY(-50%); left: var(--pe-inset); height: 3px; border-radius: 2px; background: var(--pe-b); transition: width 0.14s ease-out; }
 .pe-intensity-dot {
   position: absolute;
   top: 50%;
@@ -2984,18 +2988,20 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 .pe-intensity-dot--passed { background: var(--pe-b); }
 .pe-intensity-dot--on { border: 2px solid var(--surface-2); box-shadow: 0 0 0 2px var(--pe-b); }
-.pe-intensity-labels { position: relative; display: flex; justify-content: space-between; margin-top: 2px; }
+.pe-intensity-labels { position: relative; height: 14px; margin-top: 3px; }
 .pe-intensity-labels > button {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
   font-size: 10px;
+  line-height: 1;
   color: var(--text-sub);
   background: none;
   border: none;
-  padding: 2px 4px;
+  padding: 0;
   cursor: pointer;
   font-family: var(--font-sans);
 }
-.pe-intensity-labels > button:first-child { margin-left: -4px; }
-.pe-intensity-labels > button:last-child { margin-right: -4px; }
 .pe-intensity-labels > button:hover { color: var(--text); }
 .pe-intensity-labels > button.on { color: var(--pe-b); font-weight: 700; }
 
@@ -3117,6 +3123,24 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 .fx-badge--hidden {
   visibility: hidden;
+}
+
+/* Re-linkable follower badge (lead-in/out, transition, ramp RPM): a button that
+   stays visible even when unlinked. Blue = linked; greyed = unlinked, click to
+   re-link back to the source. */
+.fx-badge--btn {
+  font-family: inherit;
+  cursor: default;
+  background: transparent;
+}
+.fx-badge--unlinked {
+  color: var(--text-sub);
+  border-color: var(--border);
+  cursor: pointer;
+}
+.fx-badge--unlinked:hover {
+  color: var(--text);
+  border-color: var(--text-sub);
 }
 
 /* ── spindle-speed warning ── */
