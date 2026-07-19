@@ -155,9 +155,11 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
   // `rest` here, since the top-level isMetadataOnly guard only sweeps tool-level
   // keys, not preset keys. stepdown/stepover are pulled out so a disabled flag
   // leaves NO leftover numeric key (Fusion omits the key entirely when disabled).
+  // Note: `strategies` is Fusion-NATIVE (stays in `rest`, written to the JSON) —
+  // only the app-only intensity is pulled out here alongside the others.
   const {
     operation_type, machine_id, job_ids,
-    small_bore, small_bore_diameter, f_z_base,
+    small_bore, small_bore_diameter, f_z_base, intensity,
     stepdown: _sd, stepover: _so, ...rest
   } = p;
 

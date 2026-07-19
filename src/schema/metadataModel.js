@@ -219,7 +219,11 @@ export function buildMetadataTool(tool) {
     // comp works from — persisting it is what stops a saved small-bore preset
     // from re-compensating its already-compensated f_z on every reopen.
     const hasSmallBore = p.small_bore || p.small_bore_diameter || p.f_z_base != null;
-    if (p.guid && (p.operation_type || p.machine_id || p.job_ids?.length || hasSmallBore)) {
+    // intensity is the new-format strategy "aggressiveness" (light/normal/
+    // aggressive) — app-only, a name-modifier hint; 'normal' is the default so
+    // it's only stored when it differs.
+    const hasIntensity = p.intensity && p.intensity !== 'normal';
+    if (p.guid && (p.operation_type || p.machine_id || p.job_ids?.length || hasSmallBore || hasIntensity)) {
       preset_meta[p.guid] = {
         ...(p.operation_type ? { operation_type: p.operation_type } : {}),
         ...(p.machine_id    ? { machine_id: p.machine_id }         : {}),
@@ -229,6 +233,7 @@ export function buildMetadataTool(tool) {
         ...(p.small_bore ? { small_bore: true } : {}),
         ...(p.small_bore_diameter ? { small_bore_diameter: p.small_bore_diameter } : {}),
         ...(p.f_z_base != null ? { f_z_base: p.f_z_base } : {}),
+        ...(hasIntensity ? { intensity: p.intensity } : {}),
       };
     }
   }

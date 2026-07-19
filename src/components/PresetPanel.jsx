@@ -12,6 +12,11 @@ import LinkedSlider from './LinkedSlider.jsx';
 import InfoTip from './InfoTip.jsx';
 import { boreCompensation, SmallBoreIcon } from '../utils/boreCompensation.jsx';
 import {
+  STRATEGIES, STRATEGY_COLUMNS, strategyById, strategiesForToolType,
+  QUICK_GROUPS, quickGroupsContaining, AUTO_LINK_PAIR, PINNED_STRATEGIES,
+  SMALL_BORE_STRATEGIES, isNewFormatPreset, readStrategyBucket, buildStrategies,
+} from '../schema/camStrategies.js';
+import {
   composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
   materialNameCode, presetMaterialColor, findMaterialInLibrary, HOLE_MAKING_TYPES, TURNING_TYPES,
 } from '../utils/presetNaming.js';
@@ -740,6 +745,73 @@ function EditCard({
     return d;
   });
 
+  // ── Strategy state (new-format presets) ──────────────────────────────────────
+  // Only milling tools carry toolpath strategies (turning/hole-making have their
+  // own vocabularies, out of scope). `strategyFormat` distinguishes OLD presets
+  // (operation lives in the name + operation_type; no strategies key) from NEW
+  // ones (a Fusion `strategies` object). Convert flips old → new.
+  const availableStrategies = strategiesForToolType(toolType);
+  const [strategyFormat, setStrategyFormat] = useState(() => (isMilling && isNewFormatPreset(preset) ? 'new' : 'old'));
+  const initBucket = isNewFormatPreset(preset) ? readStrategyBucket(preset) : { bucket: opTypeToBucket(preset.operation_type), ids: [] };
+  const [bucket, setBucket] = useState(initBucket.bucket);
+  const [selected, setSelected] = useState(() => new Set(initBucket.ids));
+  const [intensity, setIntensity] = useState(preset.intensity || 'normal');
+  const [listOpen, setListOpen] = useState(false);
+
+  // Small bore requires a Bore/Contour strategy (new format) and locks the bucket
+  // to Finishing while active — the cross-section lock the mockup shows.
+  const smallBoreAvailable = strategyFormat === 'new' && SMALL_BORE_STRATEGIES.some(id => selected.has(id));
+  const smallBoreOn = !!draft.small_bore && smallBoreAvailable;
+  const effectiveBucket = smallBoreOn ? 'finishing' : bucket;
+  const modifier = nameModifier(effectiveBucket, intensity, smallBoreOn);
+  const selectedList = availableStrategies.filter(s => selected.has(s.id));
+
+  // Persist bucket + selection into the draft's Fusion-native strategies object
+  // (new format only) and keep operation_type/name in sync with the bucket.
+  const syncStrategies = (nextBucket, nextSet) => {
+    touch();
+    setDraft(d => {
+      const op = bucketToOpType(nextBucket);
+      const nd = { ...d, operation_type: op, name: composeName(d, assemblyId, op) };
+      if (strategyFormat === 'new') nd.strategies = buildStrategies(nextBucket, [...nextSet]);
+      return nd;
+    });
+  };
+  const changeBucket = (b) => { setBucket(b); syncStrategies(b, selected); };
+  const toggleStrategy = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else { next.add(id); if (AUTO_LINK_PAIR.includes(id)) AUTO_LINK_PAIR.forEach(m => next.add(m)); }
+      syncStrategies(bucket, next);
+      return next;
+    });
+  };
+  const toggleQuickGroup = (group, additive) => {
+    const wasFull = group.members.every(id => selected.has(id));
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (!additive) {
+        [...next].forEach(id => {
+          const groups = quickGroupsContaining(id);
+          if (groups.length > 0 && !groups.some(g => g.key === group.key)) next.delete(id);
+        });
+      }
+      if (wasFull) group.members.forEach(id => next.delete(id));
+      else group.members.forEach(id => next.add(id));
+      const nb = (!wasFull && group.suggestBucket && !smallBoreOn) ? group.suggestBucket : bucket;
+      if (nb !== bucket) setBucket(nb);
+      syncStrategies(nb, next);
+      return next;
+    });
+  };
+  const setIntensityVal = (v) => { setIntensity(v); touch(); setDraft(d => ({ ...d, intensity: v })); };
+  const convertToNew = () => {
+    setStrategyFormat('new');
+    touch();
+    setDraft(d => ({ ...d, strategies: buildStrategies(bucket, [...selected]) }));
+  };
+
   // Which assembly (holder + OOH) this preset is named for. Initialised by
   // matching the current name; user can switch it to retarget the preset.
   const [assemblyId, setAssemblyId] = useState(() =>
@@ -919,6 +991,7 @@ function EditCard({
           placeholder="Preset name"
           autoFocus
         />
+        {isMilling && strategyFormat === 'new' && <ModifierBadge modifier={modifier} bucket={effectiveBucket} />}
         <span className="pe-tool-readout" title="Tool diameter · flute count">
           <span className="dia">⌀</span>{diameter ?? '—'}{numberOfFlutes ? ` · ${numberOfFlutes}FL` : ''}
         </span>
@@ -988,24 +1061,11 @@ function EditCard({
       </EditorSection>
 
       {/* Operation & Assembly — drive the convention preset name */}
-      <EditorSection label={isHoleMaking ? 'Assembly & Machine' : 'Operation & Assembly'} accent={PE_VIOLET}>
+      {/* Assembly & Machine — the Operation control moved to the Strategy
+          section below (old format keeps the dropdown; new format uses the
+          Rough/Finish bucket toggle). */}
+      <EditorSection label="Assembly & Machine" accent={PE_VIOLET}>
         <div className="pe-grid pe-grid--3">
-          {!isHoleMaking && (
-            <FGroup label="Operation">
-              <select
-                className="field-input"
-                value={draft.operation_type || ''}
-                onChange={e => {
-                  const op = e.target.value || null;
-                  touch();
-                  setDraft(d => ({ ...d, operation_type: op, name: composeName(d, assemblyId, op) }));
-                }}
-              >
-                <option value="">—</option>
-                {OP_TYPES.map(o => <option key={o.value} value={o.value}>{o.word}</option>)}
-              </select>
-            </FGroup>
-          )}
           <FGroup label="Assembly (holder + OOH)">
             <select
               className="field-input"
@@ -1060,6 +1120,80 @@ function EditCard({
         </div>
       </EditorSection>
       </div>
+
+      {/* Strategy / Operation — milling + turning (hole-making has no operation).
+          Milling old-format presets keep the Operation dropdown + a Convert
+          button; new-format milling gets the full strategy picker. Turning keeps
+          the Operation dropdown only (its strategy vocabulary is out of scope).
+          The bucket / operation drives operation_type + the preset name. */}
+      {!isHoleMaking && (
+        <EditorSection
+          label={isMilling ? 'Strategy' : 'Operation'}
+          accent={isMilling && strategyFormat === 'new' ? bucketColor(effectiveBucket) : PE_VIOLET}
+          right={isMilling && (strategyFormat === 'old'
+            ? <button type="button" className="btn btn-ghost btn-sm" onClick={convertToNew} title="Add Fusion toolpath strategies to this preset">Convert to new</button>
+            : <button type="button" className="btn btn-ghost btn-sm" onClick={() => setListOpen(true)}>All strategies…</button>)}
+        >
+          {(!isMilling || strategyFormat === 'old') ? (
+            <div className="pe-grid pe-grid--3">
+              <FGroup label="Operation">
+                <select
+                  className="field-input"
+                  value={draft.operation_type || ''}
+                  onChange={e => {
+                    const op = e.target.value || null;
+                    touch();
+                    if (op === 'rough' || op === 'finish') setBucket(opTypeToBucket(op));
+                    setDraft(d => ({ ...d, operation_type: op, name: composeName(d, assemblyId, op) }));
+                  }}
+                >
+                  <option value="">—</option>
+                  {OP_TYPES.map(o => <option key={o.value} value={o.value}>{o.word}</option>)}
+                </select>
+              </FGroup>
+              {isMilling && (
+                <div className="pe-strat-oldhint text-xs text-sub">
+                  Newer Fusion presets carry a toolpath strategy (2D Adaptive, Bore, …).
+                  &nbsp;<b>Convert to new</b> to pick strategies here — Fusion reads both formats.
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="pe-strat-top">
+                <FGroup label="Operation">
+                  <BucketToggle value={effectiveBucket} onChange={changeBucket} locked={smallBoreOn} />
+                  <div className={`pe-strat-lock${smallBoreOn ? '' : ' pe-strat-lock--hidden'}`}>
+                    Locked to Finish by Small bore (in Feedrates)
+                  </div>
+                </FGroup>
+                <FGroup label="Intensity">
+                  <IntensityMeter value={intensity} bucket={effectiveBucket} onChange={setIntensityVal} />
+                </FGroup>
+              </div>
+
+              <FGroup label="Quick groups — click selects one, shift-click combines">
+                <div className="pe-strat-quick">
+                  {QUICK_GROUPS.map(g => (
+                    <QuickGroupButton key={g.key} group={g} selected={selected} onClick={e => toggleQuickGroup(g, e.shiftKey)} />
+                  ))}
+                  <span className="pe-strat-divider" />
+                  {PINNED_STRATEGIES.map(id => {
+                    const s = strategyById(id);
+                    return s && <PinnedStrategyButton key={id} strategy={s} selected={selected} bucket={effectiveBucket} onClick={() => toggleStrategy(id)} />;
+                  })}
+                </div>
+              </FGroup>
+
+              <div className="pe-strat-selected">
+                {selectedList.length === 0
+                  ? <span className="text-xs text-sub">No strategies selected — Fusion may reject this preset</span>
+                  : selectedList.map(s => <StrategyPill key={s.id} strategy={s} bucket={effectiveBucket} onRemove={() => toggleStrategy(s.id)} />)}
+              </div>
+            </>
+          )}
+        </EditorSection>
+      )}
 
       {/* Speed + Passes row */}
       <div className="pe-row">
@@ -1198,12 +1332,12 @@ function EditCard({
             </div>
           </div>
           {/* Small bore lives HERE — it compensates the chip load above, and
-              applies live through the cascade. Available for all milling presets
-              this round; the Bore/Contour-strategy gate + Finishing lock arrive
-              with the Strategy section. */}
+              applies live through the cascade. Available only when a Bore/Contour
+              strategy is selected (new format); turning it on locks the Strategy
+              bucket to Finishing (handled via smallBoreOn / effectiveBucket). */}
           <SmallBoreRow
             diameter={diameter} flutes={numberOfFlutes} rpm={draft.n ?? 0}
-            active={!!draft.small_bore} available
+            active={smallBoreOn} available={smallBoreAvailable}
             onToggle={(on) => {
               touch();
               setDraft(d => {
@@ -1383,6 +1517,16 @@ function EditCard({
             nd.name = composeName(nd, assemblyId, nd.operation_type);
             return nd;
           }); }}
+        />
+      )}
+
+      {listOpen && (
+        <StrategyListPopout
+          available={availableStrategies}
+          selected={selected}
+          onToggle={toggleStrategy}
+          bucket={effectiveBucket}
+          onClose={() => setListOpen(false)}
         />
       )}
     </div>
@@ -1657,6 +1801,201 @@ function SmallBoreRow({
             <span className="text-sub pe-sb-applied">Applied live to feed per tooth</span>
           )}
         </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Strategy section (new-format presets) ─────────────────────────────────────
+// Rough / Finish are the only two buckets (a preset is one or the other), each
+// with its own accent color. bucket ↔ operation_type: roughing='rough',
+// finishing='finish' — so the bucket drives the preset name's operation suffix
+// exactly like the old Operation dropdown does.
+const bucketColor = (b) => (b === 'roughing' ? 'var(--pe-rough)' : 'var(--pe-finish)');
+const bucketToOpType = (b) => (b === 'roughing' ? 'rough' : 'finish');
+const opTypeToBucket = (op) => (op === 'rough' ? 'roughing' : 'finishing');
+const INTENSITIES = [
+  { key: 'light', label: 'Light', dot: 4 },
+  { key: 'normal', label: 'Normal', dot: 6 },
+  { key: 'aggressive', label: 'Aggressive', dot: 9 },
+];
+// The name-modifier HINT (intensity is metadata-only this round — not folded
+// into the composed name; shown as a live badge only).
+function nameModifier(bucket, intensity, smallBore) {
+  if (smallBore) return 'Small Bore';
+  if (intensity === 'normal') return null;
+  if (bucket === 'roughing') return intensity === 'aggressive' ? 'Fast' : 'Light';
+  return intensity === 'light' ? 'Fine' : 'Fast';
+}
+
+function BucketToggle({ value, onChange, locked }) {
+  return (
+    <div className={`pe-bucket${locked ? ' pe-bucket--locked' : ''}`}>
+      {[{ key: 'roughing', label: 'Rough' }, { key: 'finishing', label: 'Finish' }].map(o => (
+        <button
+          key={o.key} type="button"
+          className={`pe-bucket-btn${value === o.key ? ' pe-bucket-btn--on' : ''}`}
+          style={value === o.key ? { '--pe-b': bucketColor(o.key) } : undefined}
+          onClick={() => !locked && onChange(o.key)}
+        >{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
+function IntensityMeter({ value, bucket, onChange }) {
+  const c = bucketColor(bucket);
+  const idx = INTENSITIES.findIndex(i => i.key === value);
+  const trackRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const zoneFrom = (clientX) => {
+    const rect = trackRef.current.getBoundingClientRect();
+    const r = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return r < 1 / 3 ? 'light' : r < 2 / 3 ? 'normal' : 'aggressive';
+  };
+  const handle = (e) => { const z = zoneFrom(e.clientX); if (z !== value) onChange(z); };
+  return (
+    <div className="pe-intensity" style={{ '--pe-b': c }}>
+      <div
+        ref={trackRef} className="pe-intensity-track"
+        onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); handle(e); }}
+        onPointerMove={e => { if (dragging) handle(e); }}
+        onPointerUp={() => setDragging(false)}
+      >
+        <div className="pe-intensity-rail" />
+        <div className="pe-intensity-fill" style={{ width: `calc(${idx / (INTENSITIES.length - 1)} * 100%)` }} />
+        <div className="pe-intensity-dots">
+          {INTENSITIES.map((i, n) => (
+            <span key={i.key} className="pe-intensity-slot">
+              <span
+                className={`pe-intensity-dot${i.key === value ? ' pe-intensity-dot--on' : ''}${n <= idx ? ' pe-intensity-dot--passed' : ''}`}
+                style={{ width: i.key === value ? i.dot + 6 : i.dot, height: i.key === value ? i.dot + 6 : i.dot }}
+              />
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="pe-intensity-labels">
+        {INTENSITIES.map(i => (
+          <span key={i.key} className={i.key === value ? 'on' : ''}>{i.label}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ModifierBadge({ modifier, bucket }) {
+  return (
+    <span
+      className={`pe-modifier${modifier ? ' pe-modifier--on' : ''}`}
+      style={modifier ? { '--pe-b': bucketColor(bucket) } : undefined}
+    >{modifier || '—'}</span>
+  );
+}
+
+function StrategyPill({ strategy, bucket, onRemove }) {
+  return (
+    <span className="pe-strat-pill" style={{ '--pe-b': bucketColor(bucket) }}>
+      <span className="pe-strat-pill-dot" />
+      {strategy.name}
+      {onRemove && <button type="button" className="pe-strat-pill-x" onClick={onRemove}>×</button>}
+    </span>
+  );
+}
+
+function QuickGroupButton({ group, selected, onClick }) {
+  const total = group.members.length;
+  const on = group.members.filter(id => selected.has(id)).length;
+  const full = on === total;
+  const partial = on > 0 && !full;
+  const tint = group.suggestBucket ? bucketColor(group.suggestBucket) : 'rgb(var(--tok-description))';
+  return (
+    <button
+      type="button"
+      className={`pe-qgroup${full ? ' pe-qgroup--full' : partial ? ' pe-qgroup--partial' : ''}`}
+      style={{ '--pe-b': tint }}
+      onClick={onClick}
+    >
+      <span className="pe-qgroup-glyph" />
+      <span className="pe-qgroup-label">{group.label}</span>
+      <span className="pe-qgroup-count">{on}/{total}</span>
+    </button>
+  );
+}
+
+function PinnedStrategyButton({ strategy, selected, bucket, onClick }) {
+  const on = selected.has(strategy.id);
+  return (
+    <button
+      type="button"
+      className={`pe-pinned${on ? ' pe-pinned--on' : ''}`}
+      style={{ '--pe-b': bucketColor(bucket) }}
+      onClick={onClick}
+    >
+      <span className="pe-pinned-dot" />
+      {strategy.name}
+    </button>
+  );
+}
+
+function StrategyListPopout({ available, selected, onToggle, bucket, onClose }) {
+  const [query, setQuery] = useState('');
+  const c = bucketColor(bucket);
+  const q = query.trim().toLowerCase();
+  const filtered = q ? available.filter(s => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)) : available;
+  const byGroup = {};
+  filtered.forEach(s => { (byGroup[s.group] = byGroup[s.group] || []).push(s); });
+  return (
+    <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal pe-strat-popout" style={{ '--pe-b': c }}>
+        <div className="pe-strat-popout-head">
+          <span className="pe-strat-popout-title">All Strategies</span>
+          <div style={{ flex: 1 }} />
+          <button type="button" className="icon-btn" onClick={onClose}><X size={16} /></button>
+        </div>
+        <div className="pe-strat-popout-search">
+          <input autoFocus className="field-input" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search strategies…" />
+        </div>
+        <div className="pe-strat-popout-body">
+          <div className="pe-strat-popout-cols">
+            {STRATEGY_COLUMNS.map((col, i) => (
+              <div key={i}>
+                {col.map(g => byGroup[g] && (
+                  <div key={g} className="pe-strat-popout-group">
+                    <div className="pe-strat-popout-glabel">
+                      <span>{g}</span>
+                      <div className="pe-strat-popout-rule" />
+                    </div>
+                    <div className="pe-strat-popout-list">
+                      {byGroup[g].map(s => {
+                        const on = selected.has(s.id);
+                        const isAuto = AUTO_LINK_PAIR.includes(s.id);
+                        const memberOf = quickGroupsContaining(s.id);
+                        return (
+                          <button
+                            key={s.id} type="button"
+                            className={`pe-strat-opt${on ? ' pe-strat-opt--on' : ''}`}
+                            onClick={() => onToggle(s.id)}
+                          >
+                            <span className="pe-strat-opt-name">{s.name}</span>
+                            {isAuto && <span className="pe-strat-opt-link" title="Auto-links with its 2D/3D twin">⇄</span>}
+                            {!isAuto && memberOf.length > 0 && (
+                              <span className="pe-strat-opt-member" title={`Part of: ${memberOf.map(g2 => g2.label).join(', ')}`} />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+          {filtered.length === 0 && <div className="pe-strat-popout-empty">No strategies match &quot;{query}&quot;</div>}
+        </div>
+        <div className="pe-strat-popout-foot">
+          <button type="button" className="btn btn-primary btn-sm" onClick={onClose}>Done</button>
+        </div>
       </div>
     </div>
   );

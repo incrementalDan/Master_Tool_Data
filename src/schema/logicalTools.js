@@ -129,6 +129,9 @@ export function overlayPresets(sourcePresets, presetMeta = {}) {
       small_bore: presetMeta[p.guid]?.small_bore ?? p.small_bore ?? false,
       small_bore_diameter: presetMeta[p.guid]?.small_bore_diameter ?? p.small_bore_diameter ?? '',
       f_z_base: presetMeta[p.guid]?.f_z_base ?? p.f_z_base ?? null,
+      // Strategy intensity (app-only) — the Fusion-native `strategies` object
+      // itself lives in the JSON and carries through the `...p` spread.
+      intensity: presetMeta[p.guid]?.intensity ?? p.intensity ?? 'normal',
       material: inferredMat
         ? { ...(p.material || {}), query: inferredMat, category: materialCategory(inferredMat) }
         : p.material,
@@ -188,6 +191,7 @@ export function mergePresetsWithFusion(localPresets, basePresets, remotePresets,
         small_bore: local.small_bore ?? false,
         small_bore_diameter: local.small_bore_diameter ?? '',
         f_z_base: local.f_z_base ?? null,
+        intensity: local.intensity ?? 'normal',
       };
     }
     // Both edited the same preset → keep the app's active edit, but surface it so
