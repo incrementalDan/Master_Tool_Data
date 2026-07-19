@@ -133,6 +133,10 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
   const feedUnit = isMetric ? 'mm/min' : 'in/min';
   const speedUnit = isMetric ? 'm/min' : 'SFM';
   const toolType = tool.tool_type || 'flat end mill';
+  // Milling tools are the ones that carry toolpath strategies (hole-making has
+  // none; turning has its own vocabulary the app doesn't edit yet). New milling
+  // presets default to the new (strategy) format.
+  const isMillingType = !HOLE_MAKING_TYPES.has(toolType) && !TURNING_TYPES.has(toolType);
 
   const diameter = tool.diameter;
   const numberOfFlutes = tool.number_of_flutes;
@@ -307,6 +311,18 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
     // a copy already carries the original preset's machine_id).
     if (copySrc.type !== 'preset' && shopSettings?.default_machine_id) {
       np.machine_id = shopSettings.default_machine_id;
+    }
+    // New milling presets default to the NEW (strategy) format: give them a
+    // Fusion `strategies` object so the editor opens on the strategy picker, not
+    // the legacy Operation dropdown. A copy of a preset that was ALREADY new
+    // format keeps its selected strategies; a copy of an old-format preset (or a
+    // blank/ref one) starts new-format with an empty selection, its bucket seeded
+    // from the operation. Hole-making/turning are untouched (no strategy UI).
+    if (isMillingType && !isNewFormatPreset(np)) {
+      // A fresh preset with no operation defaults to the Rough bucket (the usual
+      // first operation); a copy keeps whatever operation its source carried.
+      if (!np.operation_type) np.operation_type = 'rough';
+      np.strategies = buildStrategies(opTypeToBucket(np.operation_type), []);
     }
     return np;
   };
@@ -777,7 +793,20 @@ function EditCard({
   // ones (a Fusion `strategies` object). Convert flips old → new.
   const availableStrategies = strategiesForToolType(toolType);
   const [strategyFormat, setStrategyFormat] = useState(() => (isMilling && isNewFormatPreset(preset) ? 'new' : 'old'));
-  const initBucket = isNewFormatPreset(preset) ? readStrategyBucket(preset) : { bucket: opTypeToBucket(preset.operation_type), ids: [] };
+  // Initial bucket + selection. For a new-format preset read the populated
+  // bucket; but when the selection is empty, readStrategyBucket can't tell which
+  // bucket was intended (both arrays are empty), so fall back to operation_type
+  // (a fresh preset seeds operation_type = 'rough' → Rough bucket).
+  const initBucket = (() => {
+    if (isNewFormatPreset(preset)) {
+      const rb = readStrategyBucket(preset);
+      if (rb.ids.length === 0 && preset.operation_type) {
+        return { bucket: opTypeToBucket(preset.operation_type), ids: [] };
+      }
+      return rb;
+    }
+    return { bucket: opTypeToBucket(preset.operation_type), ids: [] };
+  })();
   const [bucket, setBucket] = useState(initBucket.bucket);
   const [selected, setSelected] = useState(() => new Set(initBucket.ids));
   const [intensity, setIntensity] = useState(preset.intensity || 'normal');
