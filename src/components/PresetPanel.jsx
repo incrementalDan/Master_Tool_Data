@@ -28,22 +28,7 @@ import {
   iprToIPM, ipmToIPR,
   roundForField,
 } from '../utils/speedsAndFeedsCalc.js';
-
-// Default formula states when opening any preset for editing.
-// 'manual' = user owns this value; 'formula' = calculated from partner.
-const DEFAULT_FX = {
-  n:              'manual',
-  v_c:            'formula',
-  n_ramp:         'formula',
-  v_f:            'formula',
-  f_z:            'manual',
-  v_f_plunge:     'formula',
-  v_f_retract:    'formula',
-  f_n:            'manual',
-  v_f_leadIn:     'formula',
-  v_f_leadOut:    'formula',
-  v_f_transition: 'formula',
-};
+import { initialPresetFx, computeFormulaDraft } from '../utils/presetFx.js';
 
 function r4(v) {
   if (v === null || v === undefined || v === '') return v;
@@ -696,37 +681,6 @@ function StatRow({ label, value, unit }) {
   );
 }
 
-// Recomputes all formula-driven fields in a draft given current geometry.
-// Safe to call on mount and whenever diameter / numberOfFlutes change.
-function computeFormulaDraft(draft, fx, diameter, numberOfFlutes) {
-  const d = { ...draft };
-  const n = d.n ?? 0;
-
-  if (fx.v_c    === 'formula') d.v_c    = roundForField('v_c',    rpmToSFM(n, diameter));
-  if (fx.n_ramp === 'formula') d.n_ramp = roundForField('n_ramp', n);
-
-  if (fx.v_f === 'formula')
-    d.v_f = roundForField('v_f', fptToIPM(d.f_z ?? 0, n, numberOfFlutes));
-  else if (fx.f_z === 'formula')
-    d.f_z = roundForField('f_z', ipmToFPT(d.v_f ?? 0, n, numberOfFlutes));
-
-  if (fx.v_f_plunge === 'formula')
-    d.v_f_plunge = roundForField('v_f_plunge', iprToIPM(d.f_n ?? 0, n));
-  else if (fx.f_n === 'formula')
-    d.f_n = roundForField('f_n', ipmToIPR(d.v_f_plunge ?? 0, n));
-
-  // Retract follows plunge (one-directional) unless overridden.
-  if (fx.v_f_retract === 'formula')
-    d.v_f_retract = roundForField('v_f_retract', d.v_f_plunge ?? 0);
-
-  const vf = d.v_f ?? 0;
-  if (fx.v_f_leadIn     === 'formula') d.v_f_leadIn     = roundForField('v_f_leadIn',     vf);
-  if (fx.v_f_leadOut    === 'formula') d.v_f_leadOut    = roundForField('v_f_leadOut',    vf);
-  if (fx.v_f_transition === 'formula') d.v_f_transition = roundForField('v_f_transition', vf);
-
-  return d;
-}
-
 // Returns true when the machine's taper is found in the holder description.
 // Used for the informational taper compatibility hint — non-blocking.
 function taperMatches(machTaper, holderDesc) {
@@ -749,42 +703,11 @@ function EditCard({
   const isTurning = TURNING_TYPES.has(toolType);
   const isMilling = !isHoleMaking && !isTurning;
 
-  // Milling and spot drill enter plunge feed as an independent value: neither
-  // shows a feed-per-rev (f_n) field, so v_f_plunge is the source of truth and
-  // f_n is derived from it. Without this, DEFAULT_FX (v_f_plunge:'formula',
-  // f_n:'manual') would recompute plunge from the (nonexistent, zero) f_n — on
-  // mount AND whenever spindle speed changes — silently zeroing a proven plunge
-  // feed. Drill-family tools keep the drilling convention (f_n manual, plunge
-  // derived). The draft init must use this same fx, not DEFAULT_FX.
-  const initialFx = { ...DEFAULT_FX };
-  if (isMilling || isSpotDrill) { initialFx.v_f_plunge = 'manual'; initialFx.f_n = 'formula'; }
-  // Turning/boring enter cutting feed and plunge directly — feed-per-tooth (f_z)
-  // doesn't apply — so keep them manual. Otherwise the milling formula (v_f =
-  // f_z × n × flutes, with f_z = 0) would zero the cutting feed on open and on
-  // every spindle-speed change. The n/v_c cascades below are also skipped for it.
-  if (isTurning) { initialFx.v_f = 'manual'; initialFx.v_f_plunge = 'manual'; }
-  // Retract feedrate defaults to the plunge feedrate (Fusion's native
-  // tool_feedRetract = tool_feedPlunge) and follows it as plunge changes — but
-  // only on the tools that have a retract field (drill family + spot drill), and
-  // only until the user overrides it. A stored value that already differs from
-  // plunge is treated as an override (manual) so it's preserved on open. For
-  // every other tool type retract isn't shown, so keep it manual (not computed).
-  if (isDrillFamily || isSpotDrill) {
-    const r = preset['v_f_retract'], pl = preset.v_f_plunge ?? 0;
-    initialFx.v_f_retract = (r == null || Math.abs(Number(r) - Number(pl)) < 1e-6) ? 'formula' : 'manual';
-  } else {
-    initialFx.v_f_retract = 'manual';
-  }
-  // One-directional followers: lead-in/out + transition follow cutting feed;
-  // ramp RPM follows spindle. A stored value that already differs from its
-  // source opens UNLINKED (manual) so it isn't clobbered to the source on open —
-  // the greyed fx badge then lets the user re-link it. Equal/absent → linked
-  // (formula). Same "preserve an override" pattern as retract above.
-  const followsSource = (val, src) => val == null || Math.abs(Number(val) - Number(src ?? 0)) < 1e-6;
-  initialFx.v_f_leadIn     = followsSource(preset.v_f_leadIn, preset.v_f)     ? 'formula' : 'manual';
-  initialFx.v_f_leadOut    = followsSource(preset.v_f_leadOut, preset.v_f)    ? 'formula' : 'manual';
-  initialFx.v_f_transition = followsSource(preset.v_f_transition, preset.v_f) ? 'formula' : 'manual';
-  initialFx.n_ramp         = followsSource(preset.n_ramp, preset.n)           ? 'formula' : 'manual';
+  // Open-time fx state — which fields are linked (recomputed from a source) vs.
+  // preserved. The clobber-safety rules (mathematically-locked pairs recompute;
+  // independent followers whose stored value differs stay preserved) live in
+  // initialPresetFx (src/utils/presetFx.js), locked by presetFx.test.js.
+  const initialFx = initialPresetFx(preset, { isMilling, isSpotDrill, isTurning, isDrillFamily });
   const configMachines = shopSettings?.machines || [];
   const [fx, setFx] = useState(initialFx);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -1099,6 +1022,10 @@ function EditCard({
         </button>
       </div>
 
+      {/* Builder body (left) + calculated-results rail (right). The rail is a
+          distinct, connected area for computed badges (MRR now, physics later)
+          — it also pulls MRR out of the Passes column, killing its dead space. */}
+      <div className="pe-layout">
       <div className="pe-body">
       {/* Setup row — what this preset IS (material, operation, assembly) */}
       <div className="pe-row">
@@ -1346,17 +1273,8 @@ function EditCard({
             lenUnit={lenUnit}
             accent="var(--blue)"
           />
-          {/* MRR = radial width × axial depth × feed — absolute step values
-              (0 when a step is off) and the live cutting feed, so it moves as
-              any of the three change. Tinted blue for now; becomes the
-              rough/finish bucket color when the Strategy section lands. */}
-          <MRRIndicator
-            ae={draft['use-stepover'] ? draft.stepover : 0}
-            ap={draft['use-stepdown'] ? draft.stepdown : 0}
-            vf={draft.v_f}
-            lenUnit={lenUnit}
-            accent="var(--blue)"
-          />
+          {/* MRR moved to the Results rail on the right (a calculated-result
+              badge). It reads stepover × stepdown × cutting feed live. */}
         </div>
       </EditorSection>
       )}
@@ -1605,6 +1523,23 @@ function EditCard({
       </div>
       </div>
 
+      {/* ── Results rail — calculated-result badges ─────────────────────────── */}
+      <div className="pe-results">
+        <div className="pe-results-label">Results</div>
+        {isMilling ? (
+          <MRRIndicator
+            ae={draft['use-stepover'] ? draft.stepover : 0}
+            ap={draft['use-stepdown'] ? draft.stepdown : 0}
+            vf={draft.v_f}
+            lenUnit={lenUnit}
+            accent="var(--blue)"
+          />
+        ) : (
+          <div className="pe-results-empty">No calculated results for this tool type yet.</div>
+        )}
+      </div>
+      </div>
+
       {pickerOpen && (
         <CamPresetPicker
           materials={materials}
@@ -1742,11 +1677,27 @@ function FactorSlider({ label, value, onChange, refDim, refLabel, lenUnit, enabl
   );
 }
 
+// ── Result badge (Results rail) — a periodic-table-style calculated result ────
+// A rounded tile: small label top-left, big value centred, unit at the bottom.
+// The reusable shape every rail badge (MRR now, physics later) uses.
+function ResultBadge({ label, value, unit, live, accent, hint }) {
+  return (
+    <div
+      className={`pe-result${live ? ' pe-result--live' : ''}`}
+      style={accent ? { '--ls-accent': accent } : undefined}
+      title={hint}
+    >
+      <span className="pe-result-label">{label}</span>
+      <span className="pe-result-value">{value}</span>
+      <span className="pe-result-unit">{unit}</span>
+    </div>
+  );
+}
+
 // ── MRR — material removal rate ───────────────────────────────────────────────
 // The volume of metal coming off per minute: radial width × axial depth × feed.
-// It's the payoff of the Passes section (the reason you push stepdown/stepover
-// at all), so it gets a bold live readout. Uses the ABSOLUTE step values (0 when
-// a step is toggled off) and the live cutting feedrate; math shown on hover.
+// Uses the ABSOLUTE step values (0 when a step is toggled off) and the live
+// cutting feedrate; math shown on hover. Rendered as a Results-rail badge.
 //   ae = stepover (radial width, len)  ap = stepdown (axial depth, len)
 //   vf = cutting feed (len/min)  →  MRR = ae × ap × vf  (len³/min)
 function MRRIndicator({ ae, ap, vf, lenUnit, accent }) {
@@ -1754,18 +1705,11 @@ function MRRIndicator({ ae, ap, vf, lenUnit, accent }) {
   const mrr = a * p * f;
   const live = mrr > 0;
   return (
-    <div
-      className={`pe-mrr${live ? ' pe-mrr--live' : ''}`}
-      style={accent ? { '--ls-accent': accent } : undefined}
-      title={`radial width ${a.toFixed(4)} ${lenUnit} × axial depth ${p.toFixed(4)} ${lenUnit} × feed ${f.toFixed(1)} ${lenUnit}/min`}
-    >
-      <div className="pe-mrr-title">
-        <span>MRR</span>
-        <span className="pe-mrr-sub">removal rate</span>
-      </div>
-      <div className="pe-mrr-val">{live ? mrr.toFixed(3) : '—'}</div>
-      <span className="pe-mrr-unit">{lenUnit}³/min</span>
-    </div>
+    <ResultBadge
+      label="MRR" live={live} accent={accent}
+      value={live ? mrr.toFixed(3) : '—'} unit={`${lenUnit}³/min`}
+      hint={`Material removal rate = radial width ${a.toFixed(4)} ${lenUnit} × axial depth ${p.toFixed(4)} ${lenUnit} × feed ${f.toFixed(1)} ${lenUnit}/min`}
+    />
   );
 }
 
