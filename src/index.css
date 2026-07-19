@@ -2473,13 +2473,13 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 14px 18px;
+  padding: 10px 18px;
   border-bottom: 1px solid var(--border);
 }
 .pe-header .preset-name-input {
   font-size: 14px;
-  padding-top: 8px;
-  padding-bottom: 8px;
+  padding-top: 7px;
+  padding-bottom: 7px;
 }
 .pe-tool-readout {
   font-family: var(--font-mono);
@@ -2489,18 +2489,85 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   flex-shrink: 0;
 }
 
+/* Builder body (left) + calculated-results rail (right). Fixed rail width
+   (~14% of the breakout editor) pulls the builder ~15% narrower. On the page's
+   1-column (mobile/narrow) mode the rail drops below as a horizontal strip. */
+.pe-layout {
+  display: grid;
+  grid-template-columns: 1fr 190px;
+  gap: 12px;
+  padding: 10px 18px 16px;
+  align-items: start;
+}
 .pe-body {
-  padding: 12px 18px 18px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
 /* A row of section cards — auto-wraps to one column when narrow */
 .pe-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 8px;
+}
+
+/* ── Results rail — distinct, connected area for calculated-result badges ── */
+.pe-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  position: sticky;
+  top: 8px;
+}
+.pe-results-label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-sub);
+}
+.pe-results-empty { font-size: 11px; color: var(--text-sub); line-height: 1.5; }
+
+/* Result badge — periodic-table-style tile: label top-left, big value centred,
+   unit at the bottom. Reusable for future physics results. */
+.pe-result {
+  --ls-accent: var(--blue);
+  display: flex;
+  flex-direction: column;
+  min-height: 92px;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 9px 11px;
+}
+.pe-result--live { border-color: color-mix(in srgb, var(--ls-accent) 40%, transparent); }
+.pe-result-label { font-size: 11px; font-weight: 800; letter-spacing: 0.07em; color: var(--text); }
+.pe-result-value {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 25px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-sub);
+  margin: 3px 0;
+}
+.pe-result--live .pe-result-value { color: var(--ls-accent); }
+.pe-result-unit { font-family: var(--font-mono); font-size: 10px; color: var(--text-sub); }
+
+@media (max-width: 768px) {
+  .pe-layout { grid-template-columns: 1fr; }
+  .pe-results { flex-direction: row; flex-wrap: wrap; align-items: stretch; position: static; }
+  .pe-results-label { width: 100%; }
+  .pe-result { flex: 1 1 130px; min-height: 80px; }
+  .pe-results-empty { flex: 1; }
 }
 
 /* Section card — the visual grouping fix from the UnifiedPresetEditor mockup:
@@ -2512,13 +2579,13 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px 14px;
+  padding: 9px 12px 10px;
 }
 .pe-section-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 7px;
 }
 .pe-section-label {
   font-size: 11px;
@@ -2822,33 +2889,6 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--text-sub);
   opacity: 0.7;
 }
-
-/* ── MRR indicator ── */
-.pe-mrr {
-  --ls-accent: var(--blue);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: var(--input-bg);
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  padding: 9px 13px;
-  margin-top: 4px;
-}
-.pe-mrr--live { border-color: color-mix(in srgb, var(--ls-accent) 40%, transparent); }
-.pe-mrr-title { display: flex; flex-direction: column; line-height: 1.15; }
-.pe-mrr-title > span:first-child { font-size: 11px; font-weight: 800; letter-spacing: 0.09em; color: var(--text); }
-.pe-mrr-sub { font-size: 9px; color: var(--text-sub); white-space: nowrap; }
-.pe-mrr-val {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 24px;
-  font-weight: 800;
-  line-height: 1;
-  color: var(--text-sub);
-}
-.pe-mrr--live .pe-mrr-val { color: var(--ls-accent); }
-.pe-mrr-unit { font-family: var(--font-mono); font-size: 11px; color: var(--text-sub); }
 
 /* ── Small Bore comp (inside Feedrates) — two FIXED-height rows ── */
 .pe-sb {

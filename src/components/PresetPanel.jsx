@@ -1022,6 +1022,10 @@ function EditCard({
         </button>
       </div>
 
+      {/* Builder body (left) + calculated-results rail (right). The rail is a
+          distinct, connected area for computed badges (MRR now, physics later)
+          — it also pulls MRR out of the Passes column, killing its dead space. */}
+      <div className="pe-layout">
       <div className="pe-body">
       {/* Setup row — what this preset IS (material, operation, assembly) */}
       <div className="pe-row">
@@ -1269,17 +1273,8 @@ function EditCard({
             lenUnit={lenUnit}
             accent="var(--blue)"
           />
-          {/* MRR = radial width × axial depth × feed — absolute step values
-              (0 when a step is off) and the live cutting feed, so it moves as
-              any of the three change. Tinted blue for now; becomes the
-              rough/finish bucket color when the Strategy section lands. */}
-          <MRRIndicator
-            ae={draft['use-stepover'] ? draft.stepover : 0}
-            ap={draft['use-stepdown'] ? draft.stepdown : 0}
-            vf={draft.v_f}
-            lenUnit={lenUnit}
-            accent="var(--blue)"
-          />
+          {/* MRR moved to the Results rail on the right (a calculated-result
+              badge). It reads stepover × stepdown × cutting feed live. */}
         </div>
       </EditorSection>
       )}
@@ -1528,6 +1523,23 @@ function EditCard({
       </div>
       </div>
 
+      {/* ── Results rail — calculated-result badges ─────────────────────────── */}
+      <div className="pe-results">
+        <div className="pe-results-label">Results</div>
+        {isMilling ? (
+          <MRRIndicator
+            ae={draft['use-stepover'] ? draft.stepover : 0}
+            ap={draft['use-stepdown'] ? draft.stepdown : 0}
+            vf={draft.v_f}
+            lenUnit={lenUnit}
+            accent="var(--blue)"
+          />
+        ) : (
+          <div className="pe-results-empty">No calculated results for this tool type yet.</div>
+        )}
+      </div>
+      </div>
+
       {pickerOpen && (
         <CamPresetPicker
           materials={materials}
@@ -1665,11 +1677,27 @@ function FactorSlider({ label, value, onChange, refDim, refLabel, lenUnit, enabl
   );
 }
 
+// ── Result badge (Results rail) — a periodic-table-style calculated result ────
+// A rounded tile: small label top-left, big value centred, unit at the bottom.
+// The reusable shape every rail badge (MRR now, physics later) uses.
+function ResultBadge({ label, value, unit, live, accent, hint }) {
+  return (
+    <div
+      className={`pe-result${live ? ' pe-result--live' : ''}`}
+      style={accent ? { '--ls-accent': accent } : undefined}
+      title={hint}
+    >
+      <span className="pe-result-label">{label}</span>
+      <span className="pe-result-value">{value}</span>
+      <span className="pe-result-unit">{unit}</span>
+    </div>
+  );
+}
+
 // ── MRR — material removal rate ───────────────────────────────────────────────
 // The volume of metal coming off per minute: radial width × axial depth × feed.
-// It's the payoff of the Passes section (the reason you push stepdown/stepover
-// at all), so it gets a bold live readout. Uses the ABSOLUTE step values (0 when
-// a step is toggled off) and the live cutting feedrate; math shown on hover.
+// Uses the ABSOLUTE step values (0 when a step is toggled off) and the live
+// cutting feedrate; math shown on hover. Rendered as a Results-rail badge.
 //   ae = stepover (radial width, len)  ap = stepdown (axial depth, len)
 //   vf = cutting feed (len/min)  →  MRR = ae × ap × vf  (len³/min)
 function MRRIndicator({ ae, ap, vf, lenUnit, accent }) {
@@ -1677,18 +1705,11 @@ function MRRIndicator({ ae, ap, vf, lenUnit, accent }) {
   const mrr = a * p * f;
   const live = mrr > 0;
   return (
-    <div
-      className={`pe-mrr${live ? ' pe-mrr--live' : ''}`}
-      style={accent ? { '--ls-accent': accent } : undefined}
-      title={`radial width ${a.toFixed(4)} ${lenUnit} × axial depth ${p.toFixed(4)} ${lenUnit} × feed ${f.toFixed(1)} ${lenUnit}/min`}
-    >
-      <div className="pe-mrr-title">
-        <span>MRR</span>
-        <span className="pe-mrr-sub">removal rate</span>
-      </div>
-      <div className="pe-mrr-val">{live ? mrr.toFixed(3) : '—'}</div>
-      <span className="pe-mrr-unit">{lenUnit}³/min</span>
-    </div>
+    <ResultBadge
+      label="MRR" live={live} accent={accent}
+      value={live ? mrr.toFixed(3) : '—'} unit={`${lenUnit}³/min`}
+      hint={`Material removal rate = radial width ${a.toFixed(4)} ${lenUnit} × axial depth ${p.toFixed(4)} ${lenUnit} × feed ${f.toFixed(1)} ${lenUnit}/min`}
+    />
   );
 }
 
