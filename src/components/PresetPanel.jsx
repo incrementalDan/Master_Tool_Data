@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, Check, GripVertical, Trash2, ChevronDown, Cpu, Briefcase } from 'lucide-react';
+import { Plus, X, Check, GripVertical, Trash2, ChevronDown, Cpu, Briefcase, Clipboard } from 'lucide-react';
 import { generateId, COOLANT_OPTS } from '../schema/toolSchema.js';
+import { copyPresetToClipboard } from '../utils/fusionExport.js';
 import { useApp } from '../context/AppContext.jsx';
 import { jobById, jobLabel } from '../utils/jobs.js';
 import { holderColor } from './AssemblyCard.jsx';
@@ -155,7 +156,20 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
   const [copySrc, setCopySrc] = useState({ type: 'blank', id: '' });
   const [editorDirty, setEditorDirty] = useState(false);
   const [dragOverIdx, setDragOverIdx] = useState(null);
+  // Transient "Copied ✓" feedback, keyed by preset guid (or '__editor__').
+  const [copiedKey, setCopiedKey] = useState(null);
   const dragSrcIdx = useRef(null);
+
+  // Copy one preset as Fusion-paste JSON (see fusionExport). `key` drives the
+  // transient "Copied" feedback; the preset object is normalized through the
+  // real Fusion path so it pastes straight into Fusion.
+  const copyForFusion = async (preset, key) => {
+    try {
+      await copyPresetToClipboard(tool, preset);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(k => (k === key ? null : k)), 1600);
+    } catch { /* clipboard blocked — no-op */ }
+  };
   const panelRef = useRef(null);
 
   // Speeds & Feeds references (metadata-only) the user can seed a preset from.
@@ -409,6 +423,8 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
                   jobsFile={jobs}
                   onEdit={() => handleEditClick(preset.guid)}
                   onDelete={() => setDeleteConfirmId(preset.guid)}
+                  onCopyFusion={() => copyForFusion(preset, preset.guid)}
+                  copied={copiedKey === preset.guid}
                   onDragStart={e => handleDragStart(e, globalIdx)}
                   onDragOver={e => handleDragOver(e, globalIdx)}
                   onDrop={e => handleDrop(e, globalIdx)}
@@ -511,6 +527,8 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
             onSave={handlePresetSave}
             onCancel={handleCancelEdit}
             onDirtyChange={setEditorDirty}
+            onCopyFusion={(draftPreset) => copyForFusion(draftPreset, '__editor__')}
+            copied={copiedKey === '__editor__'}
             isSaving={isSaving}
           />
         );
@@ -524,7 +542,7 @@ function CollapsedCard({
   preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
   isEditing, pickMode, picked, onPick, isDragOver, dragEnabled,
   linkedAssemblies, holders, machines, jobsFile,
-  onEdit, onDelete,
+  onEdit, onDelete, onCopyFusion, copied,
   onDragStart, onDragOver, onDrop, onDragEnd,
 }) {
   const isTap = toolType === 'tap';
@@ -633,6 +651,13 @@ function CollapsedCard({
         ) : (
           <>
             <button className="btn btn-secondary btn-sm" onClick={onEdit}>{isEditing ? 'Editing…' : 'Edit'}</button>
+            <button
+              className="btn btn-ghost btn-sm preset-card-copy"
+              onClick={onCopyFusion}
+              title="Copy this preset as Fusion JSON (paste into Fusion)"
+            >
+              {copied ? <Check size={12} /> : <Clipboard size={12} />}
+            </button>
             <button className="btn btn-ghost btn-sm preset-card-del" onClick={onDelete}>
               <Trash2 size={12} />
             </button>
@@ -699,7 +724,7 @@ function EditCard({
   diameter, fluteLength, numberOfFlutes,
   assemblies = [], holders = [], materials, shopSettings,
   jobsFile, findOrCreateJob, canAddJobs = false, currentUser = '',
-  onSave, onCancel, onDirtyChange, isSaving,
+  onSave, onCancel, onDirtyChange, onCopyFusion, copied, isSaving,
 }) {
   const isTap = toolType === 'tap';
   const isSpotDrill = toolType === 'spot drill';
@@ -995,6 +1020,14 @@ function EditCard({
         <span className="pe-tool-readout" title="Tool diameter · flute count">
           <span className="dia">⌀</span>{diameter ?? '—'}{numberOfFlutes ? ` · ${numberOfFlutes}FL` : ''}
         </span>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => onCopyFusion?.(draft)}
+          disabled={isSaving}
+          title="Copy this preset as Fusion JSON (paste into Fusion)"
+        >
+          {copied ? <Check size={13} /> : <Clipboard size={13} />} Copy for Fusion
+        </button>
         <button
           className="btn btn-primary btn-sm"
           onClick={() => onSave(draft)}
