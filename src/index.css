@@ -3125,6 +3125,24 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   visibility: hidden;
 }
 
+/* Re-linkable follower badge (lead-in/out, transition, ramp RPM): a button that
+   stays visible even when unlinked. Blue = linked; greyed = unlinked, click to
+   re-link back to the source. */
+.fx-badge--btn {
+  font-family: inherit;
+  cursor: default;
+  background: transparent;
+}
+.fx-badge--unlinked {
+  color: var(--text-sub);
+  border-color: var(--border);
+  cursor: pointer;
+}
+.fx-badge--unlinked:hover {
+  color: var(--text);
+  border-color: var(--text-sub);
+}
+
 /* ── spindle-speed warning ── */
 .fx-warning {
   font-size: 10px;

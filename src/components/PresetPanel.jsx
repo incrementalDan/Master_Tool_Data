@@ -775,6 +775,16 @@ function EditCard({
   } else {
     initialFx.v_f_retract = 'manual';
   }
+  // One-directional followers: lead-in/out + transition follow cutting feed;
+  // ramp RPM follows spindle. A stored value that already differs from its
+  // source opens UNLINKED (manual) so it isn't clobbered to the source on open —
+  // the greyed fx badge then lets the user re-link it. Equal/absent → linked
+  // (formula). Same "preserve an override" pattern as retract above.
+  const followsSource = (val, src) => val == null || Math.abs(Number(val) - Number(src ?? 0)) < 1e-6;
+  initialFx.v_f_leadIn     = followsSource(preset.v_f_leadIn, preset.v_f)     ? 'formula' : 'manual';
+  initialFx.v_f_leadOut    = followsSource(preset.v_f_leadOut, preset.v_f)    ? 'formula' : 'manual';
+  initialFx.v_f_transition = followsSource(preset.v_f_transition, preset.v_f) ? 'formula' : 'manual';
+  initialFx.n_ramp         = followsSource(preset.n_ramp, preset.n)           ? 'formula' : 'manual';
   const configMachines = shopSettings?.machines || [];
   const [fx, setFx] = useState(initialFx);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -938,6 +948,20 @@ function EditCard({
     if (fx.v_f_retract !== 'manual') nd.v_f_retract = v;
     return nd;
   }); };
+
+  // Re-link a one-directional follower to its source (lead-in/out + transition →
+  // cutting feed; n_ramp → spindle). Sets it back to formula and snaps its value
+  // to the source. Only the re-linked field is touched.
+  const relinkField = (field) => {
+    touch();
+    setFx(f => ({ ...f, [field]: 'formula' }));
+    setDraft(d => ({
+      ...d,
+      [field]: field === 'n_ramp'
+        ? roundForField('n_ramp', d.n ?? 0)
+        : roundForField(field, d.v_f ?? 0),
+    }));
+  };
 
   // ── Bidirectional calculation ──────────────────────────────────────────────
   // Called for every formula-linked field on each keystroke.
@@ -1281,6 +1305,7 @@ function EditCard({
             field="n_ramp" label="Ramp spindle" unit="RPM"
             value={draft.n_ramp} fxState={fx.n_ramp} max={machineMaxRpm}
             onChange={v => handleNumChange('n_ramp', v)}
+            onRelink={() => relinkField('n_ramp')} relinkLabel="spindle speed"
           />
         )}
       </EditorSection>
@@ -1363,16 +1388,19 @@ function EditCard({
                 field="v_f_leadIn" label="Lead-in" unit={feedUnit}
                 value={draft.v_f_leadIn} fxState={fx.v_f_leadIn} metric={isMetricTool} compact
                 onChange={v => handleNumChange('v_f_leadIn', v)}
+                onRelink={() => relinkField('v_f_leadIn')} relinkLabel="cutting feedrate"
               />
               <LinkedSlider
                 field="v_f_leadOut" label="Lead-out" unit={feedUnit}
                 value={draft.v_f_leadOut} fxState={fx.v_f_leadOut} metric={isMetricTool} compact
                 onChange={v => handleNumChange('v_f_leadOut', v)}
+                onRelink={() => relinkField('v_f_leadOut')} relinkLabel="cutting feedrate"
               />
               <LinkedSlider
                 field="v_f_transition" label="Transition" unit={feedUnit}
                 value={draft.v_f_transition} fxState={fx.v_f_transition} metric={isMetricTool} compact
                 onChange={v => handleNumChange('v_f_transition', v)}
+                onRelink={() => relinkField('v_f_transition')} relinkLabel="cutting feedrate"
               />
             </div>
             <div>
@@ -1450,16 +1478,19 @@ function EditCard({
                 field="v_f_leadIn" label="Lead-in" unit={feedUnit}
                 value={draft.v_f_leadIn} fxState={fx.v_f_leadIn} metric={isMetricTool} compact
                 onChange={v => handleNumChange('v_f_leadIn', v)}
+                onRelink={() => relinkField('v_f_leadIn')} relinkLabel="cutting feedrate"
               />
               <LinkedSlider
                 field="v_f_leadOut" label="Lead-out" unit={feedUnit}
                 value={draft.v_f_leadOut} fxState={fx.v_f_leadOut} metric={isMetricTool} compact
                 onChange={v => handleNumChange('v_f_leadOut', v)}
+                onRelink={() => relinkField('v_f_leadOut')} relinkLabel="cutting feedrate"
               />
               <LinkedSlider
                 field="v_f_transition" label="Transition" unit={feedUnit}
                 value={draft.v_f_transition} fxState={fx.v_f_transition} metric={isMetricTool} compact
                 onChange={v => handleNumChange('v_f_transition', v)}
+                onRelink={() => relinkField('v_f_transition')} relinkLabel="cutting feedrate"
               />
             </div>
             <div>
