@@ -742,6 +742,12 @@ function EditCard({
   })();
   const [bucket, setBucket] = useState(initBucket.bucket);
   const [selected, setSelected] = useState(() => new Set(initBucket.ids));
+  // Provenance: which selected strategies were chosen INDIVIDUALLY (the
+  // "All strategies…" popout, a pinned single, or a Fusion import) vs. pulled in
+  // by a quick group. Switching quick groups replaces the previous group's
+  // members but NEVER touches individual/Fusion picks. Strategies loaded from a
+  // preset are all treated as individual (they weren't chosen via a group here).
+  const [individualIds, setIndividualIds] = useState(() => new Set(initBucket.ids));
   const [intensity, setIntensity] = useState(preset.intensity || 'normal');
   const [listOpen, setListOpen] = useState(false);
   // Fusion can put strategies in BOTH buckets (its picker is a Rough/Finish
@@ -787,31 +793,50 @@ function EditCard({
     if (loadedDualBucket) {
       const forB = new Set(draft.strategies?.[b] || []);
       setSelected(forB);
+      setIndividualIds(new Set(forB));   // a bucket's loaded strategies are individual/Fusion
       syncStrategies(b, forB);
     } else {
-      syncStrategies(b, selected);
+      syncStrategies(b, selected);       // carry the current selection to the new bucket
     }
   };
+  // Individual pick (popout / pinned single). Toggles the strategy AND records
+  // it as individual, so a later group switch won't drop it.
   const toggleStrategy = (id) => {
-    setSelected(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else { next.add(id); if (AUTO_LINK_PAIR.includes(id)) AUTO_LINK_PAIR.forEach(m => next.add(m)); }
-      syncStrategies(bucket, next);
-      return next;
+    setIndividualIds(prevInd => {
+      const nextInd = new Set(prevInd);
+      setSelected(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) { next.delete(id); nextInd.delete(id); }
+        else {
+          next.add(id); nextInd.add(id);
+          if (AUTO_LINK_PAIR.includes(id)) AUTO_LINK_PAIR.forEach(m => { next.add(m); nextInd.add(m); });
+        }
+        syncStrategies(bucket, next);
+        return next;
+      });
+      return nextInd;
     });
   };
-  // Quick group = ADDITIVE. Clicking a group only toggles ITS OWN members —
-  // every other selection (individual picks made here, pinned singles, or ones
-  // loaded from Fusion) is left untouched, so a group click never overrides a
-  // manual selection. It also never switches the Rough/Finish bucket: that
-  // stays a deliberate, user-controlled choice (no silent setting change).
-  const toggleQuickGroup = (group) => {
+  // Quick group click. PLAIN click switches groups — the previous group's
+  // members are replaced by this one's — but INDIVIDUAL / Fusion picks are kept.
+  // SHIFT-click combines groups (toggle this group on/off, keep others). Neither
+  // switches the Rough/Finish bucket (a deliberate, user-controlled choice).
+  const toggleQuickGroup = (group, additive) => {
     const wasFull = group.members.every(id => selected.has(id));
     setSelected(prev => {
-      const next = new Set(prev);
-      if (wasFull) group.members.forEach(id => next.delete(id));   // toggle the group off
-      else group.members.forEach(id => next.add(id));              // add (combine)
+      let next;
+      if (additive) {
+        // Combine: toggle only this group's members; keep everything else. When
+        // toggling off, individual members stay (they weren't the group's to remove).
+        next = new Set(prev);
+        if (wasFull) group.members.forEach(id => { if (!individualIds.has(id)) next.delete(id); });
+        else group.members.forEach(id => next.add(id));
+      } else {
+        // Switch: keep individual/Fusion picks, drop the previous group's
+        // members, add this group's. Clicking the active group again clears it.
+        next = new Set(individualIds);
+        if (!wasFull) group.members.forEach(id => next.add(id));
+      }
       syncStrategies(bucket, next);
       return next;
     });
@@ -1215,10 +1240,10 @@ function EditCard({
                 </FGroup>
               </div>
 
-              <FGroup label="Quick groups — a click adds or removes a whole group; your other picks stay">
+              <FGroup label="Quick groups — click switches group, shift-click combines; individual picks stay">
                 <div className="pe-strat-quick">
                   {QUICK_GROUPS.map(g => (
-                    <QuickGroupButton key={g.key} group={g} selected={selected} onClick={() => toggleQuickGroup(g)} />
+                    <QuickGroupButton key={g.key} group={g} selected={selected} onClick={e => toggleQuickGroup(g, e.shiftKey)} />
                   ))}
                   <span className="pe-strat-divider" />
                   {PINNED_STRATEGIES.map(id => {
