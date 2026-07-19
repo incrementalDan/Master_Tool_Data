@@ -215,13 +215,20 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
 export function buildMetadataTool(tool) {
   const preset_meta = {};
   for (const p of (tool.presets || [])) {
-    if (p.guid && (p.operation_type || p.machine_id || p.job_ids?.length)) {
+    // Small-bore comp is app-only: f_z_base is the UNCOMPENSATED chip load the
+    // comp works from — persisting it is what stops a saved small-bore preset
+    // from re-compensating its already-compensated f_z on every reopen.
+    const hasSmallBore = p.small_bore || p.small_bore_diameter || p.f_z_base != null;
+    if (p.guid && (p.operation_type || p.machine_id || p.job_ids?.length || hasSmallBore)) {
       preset_meta[p.guid] = {
         ...(p.operation_type ? { operation_type: p.operation_type } : {}),
         ...(p.machine_id    ? { machine_id: p.machine_id }         : {}),
         // Job links (jobs.json registry ids) proven on this preset — see
         // src/utils/jobs.js. Metadata-only, never written to Fusion.
         ...(p.job_ids?.length ? { job_ids: p.job_ids } : {}),
+        ...(p.small_bore ? { small_bore: true } : {}),
+        ...(p.small_bore_diameter ? { small_bore_diameter: p.small_bore_diameter } : {}),
+        ...(p.f_z_base != null ? { f_z_base: p.f_z_base } : {}),
       };
     }
   }

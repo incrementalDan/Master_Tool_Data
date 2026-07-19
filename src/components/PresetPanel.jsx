@@ -9,6 +9,8 @@ import MachinePill from './MachinePill.jsx';
 import CamPresetPicker from './CamPresetPicker.jsx';
 import JobProgramPicker from './JobProgramPicker.jsx';
 import LinkedSlider from './LinkedSlider.jsx';
+import InfoTip from './InfoTip.jsx';
+import { boreCompensation, SmallBoreIcon } from '../utils/boreCompensation.jsx';
 import {
   composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
   materialNameCode, presetMaterialColor, findMaterialInLibrary, HOLE_MAKING_TYPES, TURNING_TYPES,
@@ -62,6 +64,8 @@ function blankPreset() {
     'ramp-spindle-speed': 'n',
     machine_id: null,
     job_ids: [],
+    // Small-bore comp (app-only, metadata-owned) — off by default.
+    small_bore: false, small_bore_diameter: '', f_z_base: null,
   };
 }
 
@@ -1193,6 +1197,31 @@ function EditCard({
               />
             </div>
           </div>
+          {/* Small bore lives HERE — it compensates the chip load above, and
+              applies live through the cascade. Available for all milling presets
+              this round; the Bore/Contour-strategy gate + Finishing lock arrive
+              with the Strategy section. */}
+          <SmallBoreRow
+            diameter={diameter} flutes={numberOfFlutes} rpm={draft.n ?? 0}
+            active={!!draft.small_bore} available
+            onToggle={(on) => {
+              touch();
+              setDraft(d => {
+                const nd = { ...d, small_bore: on };
+                // Seed the uncompensated base from the current f_z the first
+                // time comp is turned on, so it has something to compensate.
+                if (on && (nd.f_z_base == null || nd.f_z_base === '')) nd.f_z_base = d.f_z ?? 0;
+                // Turning comp off restores the uncompensated feed.
+                if (!on && nd.f_z_base != null) return { ...nd, f_z: nd.f_z_base };
+                return nd;
+              });
+            }}
+            boreDia={draft.small_bore_diameter ?? ''} setBoreDia={v => set('small_bore_diameter', v)}
+            baseFz={draft.f_z_base} setBaseFz={v => set('f_z_base', v === '' ? null : parseFloat(v))}
+            actualFz={draft.f_z}
+            onCompute={v => handleNumChange('f_z', v)}
+            accent={accentColor || 'var(--blue)'} lenUnit={lenUnit}
+          />
         </EditorSection>
       )}
 
@@ -1493,6 +1522,142 @@ function MRRIndicator({ ae, ap, vf, lenUnit, accent }) {
       </div>
       <div className="pe-mrr-val">{live ? mrr.toFixed(3) : '—'}</div>
       <span className="pe-mrr-unit">{lenUnit}³/min</span>
+    </div>
+  );
+}
+
+// ── Small Bore — chip-load compensation, lives INSIDE Feedrates ───────────────
+// It compensates the chip load, so it sits under the cutting-feed cluster as two
+// FIXED-height rows (never pops open downward as you type). Compensation applies
+// LIVE through the normal cascade: change the bore Ø or the base fz and the
+// compensated fz is pushed straight into f_z (via onCompute → handleNumChange),
+// so cutting feed follows and dims like any other edit — no Apply button.
+//
+// baseFz (persisted as f_z_base) is the UNCOMPENSATED chip load the comp works
+// from; using it (not the already-compensated f_z) is what keeps reopening a
+// saved small-bore preset from shrinking the feed a little more each time.
+const SB_OVERRIDE_EPS = 5e-6;   // half a 5-decimal f_z step
+function SmallBoreRow({
+  diameter, flutes, rpm, active, available, onToggle,
+  boreDia, setBoreDia, baseFz, setBaseFz, actualFz, onCompute, accent, lenUnit,
+}) {
+  const comp = boreCompensation(diameter, boreDia);
+  const z = flutes || 1;
+  const baseFzNum = parseFloat(baseFz) || 0;
+  const currentVf = rpm * z * baseFzNum;
+  const compFz = comp && !comp.error ? baseFzNum * comp.factor : null;
+  const compVf = compFz !== null ? rpm * z * compFz : null;
+  const minorEffect = comp && !comp.error && comp.factor > 0.8;
+  const live = active && comp && !comp.error;
+
+  // Override detection — the user moved the feed/fz slider after comp landed.
+  // Small bore doesn't fight them, it just stops claiming credit: the computed
+  // value is struck through and the value in effect is flagged amber.
+  const suggested = live ? roundForField('f_z', compFz) : null;
+  const inEffect = actualFz == null ? null : roundForField('f_z', actualFz);
+  const overridden = live && inEffect !== null && Math.abs(inEffect - suggested) > SB_OVERRIDE_EPS;
+  const effVf = overridden ? rpm * z * inEffect : compVf;
+
+  // Live apply — push compensated fz through the cascade when the bore or the
+  // base fz changes. SKIP the first render: a reopened preset's saved f_z is
+  // already compensated (== f_z_base × factor), so re-firing on mount would be a
+  // no-op at best and would mark the editor dirty at worst. Only user changes to
+  // active / baseFz / boreDia recompute. draft.f_z is deliberately NOT a dep, or
+  // dragging the fz slider would fight the effect.
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    if (live) onCompute(roundForField('f_z', compFz));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, baseFz, boreDia]);
+
+  return (
+    <div className="pe-sb" style={accent ? { '--ls-accent': accent } : undefined}>
+      {/* Row 1 — toggle, geometry, comp %, status */}
+      <div className="pe-sb-row1">
+        <button
+          type="button"
+          className={`pe-sb-toggle${active ? ' pe-sb-toggle--on' : ''}`}
+          onClick={() => available && onToggle(!active)}
+          disabled={!available}
+        >
+          <SmallBoreIcon size={18} />
+          Small bore
+        </button>
+
+        <div className={`pe-sb-geo${active ? '' : ' pe-sb-geo--off'}`}>
+          <span className="pe-sb-cell"><span className="pe-sb-tag">TOOL</span><span className="font-mono"><span className="dia">⌀</span>{diameter}</span></span>
+          <span className="pe-sb-cell">
+            <span className="pe-sb-tag">BORE</span><span className="font-mono text-sub"><span className="dia">⌀</span></span>
+            <input
+              className="field-input td-noSpin pe-sb-bore" type="number" step="0.001"
+              value={boreDia} onChange={e => setBoreDia(e.target.value)}
+              disabled={!active} placeholder="0.485"
+            />
+            <span className="pe-sb-unit">{lenUnit}</span>
+          </span>
+          <span className="pe-sb-cell">
+            <span className="pe-sb-tag">COMP</span>
+            <span className="pe-sb-comp" style={{ color: live ? 'var(--ls-accent)' : 'var(--text-sub)' }}>
+              {live ? `${(comp.factor * 100).toFixed(1)}%` : '—'}
+            </span>
+            {live && (
+              <InfoTip text={`Tool centre orbits ⌀${comp.centerCircle.toFixed(3)} while the edge sweeps ⌀${parseFloat(boreDia).toFixed(3)} — the edge travels ${comp.ratio.toFixed(2)}× farther per rev, so it sees ${comp.ratio.toFixed(2)}× the programmed chip load. Arc compensation only; radial chip thinning partially offsets it and is left to your judgment.`} />
+            )}
+          </span>
+        </div>
+
+        <span className="pe-sb-status">
+          {!available
+            ? 'Requires Bore or Contour strategy'
+            : active && comp?.error
+              ? <span className="text-danger">{comp.error}</span>
+              : minorEffect
+                ? 'Minor at this ratio — may not be needed'
+                : ' '}
+        </span>
+      </div>
+
+      {/* Row 2 — before → after readout; amber when overridden */}
+      <div className={`pe-sb-row2${overridden ? ' pe-sb-row2--override' : ''}${live ? '' : ' pe-sb-row2--idle'}`}>
+        <span className="pe-sb-cell">
+          <span className="pe-sb-tag">FZ START</span>
+          <input
+            className="field-input td-noSpin pe-sb-basefz" type="number" step="0.0001"
+            value={baseFz ?? ''} onChange={e => setBaseFz(e.target.value)}
+            disabled={!active} placeholder="0.0008"
+          />
+          <span className="text-sub">→</span>
+          <span className="font-mono pe-sb-compfz" style={overridden ? { textDecoration: 'line-through', color: 'var(--text-sub)' } : {}}>
+            {live ? compFz.toFixed(4) : '—'}
+          </span>
+          {overridden && <span className="font-mono pe-sb-override-val">{inEffect.toFixed(4)}</span>}
+          <span className="pe-sb-unit">{lenUnit}</span>
+        </span>
+
+        <span className="pe-sb-cell">
+          <span className="pe-sb-tag">FEED</span>
+          <span className="font-mono text-sub">{currentVf.toFixed(2)}</span>
+          <span className="text-sub">→</span>
+          <span className="font-mono pe-sb-feed" style={overridden ? { color: 'var(--orange)' } : {}}>
+            {live ? effVf.toFixed(2) : '—'}
+          </span>
+          <span className="pe-sb-unit">{lenUnit}/min</span>
+        </span>
+
+        <span className="pe-sb-row2-tail">
+          {overridden ? (
+            <>
+              <span className="pe-sb-badge">OVERRIDDEN</span>
+              <button type="button" className="btn btn-ghost btn-sm pe-sb-restore" onClick={() => onCompute(suggested)}>
+                Restore {suggested.toFixed(4)}
+              </button>
+            </>
+          ) : (
+            <span className="text-sub pe-sb-applied">Applied live to feed per tooth</span>
+          )}
+        </span>
+      </div>
     </div>
   );
 }

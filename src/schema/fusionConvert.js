@@ -147,14 +147,19 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
   const isTurning = TURNING_TYPES.has(toolType);
   const isMilling = !isHoleMaking && !isTurning && !isSpotDrill;
 
-  // operation_type, machine_id, and job_ids are app-only per-preset fields
+  // operation_type, machine_id, job_ids, and the small-bore comp fields
+  // (small_bore / small_bore_diameter / f_z_base) are app-only per-preset fields
   // (stored in preset_meta in tool_metadata.json, overlaid by buildLogicalTool).
   // They must never be written into the Fusion JSON (Fusion validates strictly)
   // — every app-only field stamped onto in-memory presets MUST be pulled out of
   // `rest` here, since the top-level isMetadataOnly guard only sweeps tool-level
   // keys, not preset keys. stepdown/stepover are pulled out so a disabled flag
   // leaves NO leftover numeric key (Fusion omits the key entirely when disabled).
-  const { operation_type, machine_id, job_ids, stepdown: _sd, stepover: _so, ...rest } = p;
+  const {
+    operation_type, machine_id, job_ids,
+    small_bore, small_bore_diameter, f_z_base,
+    stepdown: _sd, stepover: _so, ...rest
+  } = p;
 
   // Strip step flags from non-milling presets (native Fusion never writes them
   // there, and a flag with no numeric/expression triggers the three-way-sync
