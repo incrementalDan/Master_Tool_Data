@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, Check, GripVertical, Trash2, ChevronDown, Cpu, Briefcase, Clipboard } from 'lucide-react';
+import { Plus, X, Check, GripVertical, Trash2, ChevronDown, Cpu, Briefcase, Clipboard, AlertTriangle } from 'lucide-react';
 import { generateId, COOLANT_OPTS } from '../schema/toolSchema.js';
 import { copyPresetToClipboard } from '../utils/fusionExport.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -15,7 +15,7 @@ import { boreCompensation, SmallBoreIcon } from '../utils/boreCompensation.jsx';
 import {
   STRATEGIES, STRATEGY_COLUMNS, strategyById, strategiesForToolType,
   QUICK_GROUPS, quickGroupsContaining, AUTO_LINK_PAIR, PINNED_STRATEGIES,
-  SMALL_BORE_STRATEGIES, isNewFormatPreset, readStrategyBucket, buildStrategies,
+  SMALL_BORE_STRATEGIES, isNewFormatPreset, readStrategyBucket, buildStrategies, writeBucketStrategies,
 } from '../schema/camStrategies.js';
 import {
   composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
@@ -744,6 +744,15 @@ function EditCard({
   const [selected, setSelected] = useState(() => new Set(initBucket.ids));
   const [intensity, setIntensity] = useState(preset.intensity || 'normal');
   const [listOpen, setListOpen] = useState(false);
+  // Fusion can put strategies in BOTH buckets (its picker is a Rough/Finish
+  // matrix); this app models one bucket per preset. When a preset loads that
+  // way, we DON'T silently collapse it: each bucket is shown/edited on its own
+  // tab and the inactive bucket is preserved on save, with a warning shown.
+  // Normal single-bucket presets keep the simple "switch moves the selection"
+  // behavior (see changeBucket / syncStrategies below).
+  const loadedDualBucket = isMilling && isNewFormatPreset(preset)
+    && (preset.strategies?.roughing?.length > 0)
+    && (preset.strategies?.finishing?.length > 0);
 
   // Small bore requires a Bore/Contour strategy (new format) and locks the bucket
   // to Finishing while active — the cross-section lock the mockup shows.
@@ -755,16 +764,34 @@ function EditCard({
 
   // Persist bucket + selection into the draft's Fusion-native strategies object
   // (new format only) and keep operation_type/name in sync with the bucket.
+  // For a dual-bucket preset, the OTHER bucket's strategies are carried through
+  // unchanged (never wiped); for a normal single-bucket preset only the active
+  // bucket is written.
   const syncStrategies = (nextBucket, nextSet) => {
     touch();
     setDraft(d => {
       const op = bucketToOpType(nextBucket);
       const nd = { ...d, operation_type: op, name: composeName(d, assemblyId, op) };
-      if (strategyFormat === 'new') nd.strategies = buildStrategies(nextBucket, [...nextSet]);
+      if (strategyFormat === 'new') {
+        nd.strategies = writeBucketStrategies(nextBucket, [...nextSet], d.strategies, loadedDualBucket);
+      }
       return nd;
     });
   };
-  const changeBucket = (b) => { setBucket(b); syncStrategies(b, selected); };
+  // Switching Rough/Finish: a normal one-bucket preset MOVES the selection to
+  // the new bucket (its strategies aren't inherently rough or finish). A
+  // dual-bucket Fusion preset instead shows each bucket's OWN strategies, so
+  // switching reveals the other set rather than moving the current one.
+  const changeBucket = (b) => {
+    setBucket(b);
+    if (loadedDualBucket) {
+      const forB = new Set(draft.strategies?.[b] || []);
+      setSelected(forB);
+      syncStrategies(b, forB);
+    } else {
+      syncStrategies(b, selected);
+    }
+  };
   const toggleStrategy = (id) => {
     setSelected(prev => {
       const next = new Set(prev);
@@ -774,21 +801,18 @@ function EditCard({
       return next;
     });
   };
-  const toggleQuickGroup = (group, additive) => {
+  // Quick group = ADDITIVE. Clicking a group only toggles ITS OWN members —
+  // every other selection (individual picks made here, pinned singles, or ones
+  // loaded from Fusion) is left untouched, so a group click never overrides a
+  // manual selection. It also never switches the Rough/Finish bucket: that
+  // stays a deliberate, user-controlled choice (no silent setting change).
+  const toggleQuickGroup = (group) => {
     const wasFull = group.members.every(id => selected.has(id));
     setSelected(prev => {
       const next = new Set(prev);
-      if (!additive) {
-        [...next].forEach(id => {
-          const groups = quickGroupsContaining(id);
-          if (groups.length > 0 && !groups.some(g => g.key === group.key)) next.delete(id);
-        });
-      }
-      if (wasFull) group.members.forEach(id => next.delete(id));
-      else group.members.forEach(id => next.add(id));
-      const nb = (!wasFull && group.suggestBucket && !smallBoreOn) ? group.suggestBucket : bucket;
-      if (nb !== bucket) setBucket(nb);
-      syncStrategies(nb, next);
+      if (wasFull) group.members.forEach(id => next.delete(id));   // toggle the group off
+      else group.members.forEach(id => next.add(id));              // add (combine)
+      syncStrategies(bucket, next);
       return next;
     });
   };
@@ -1191,10 +1215,10 @@ function EditCard({
                 </FGroup>
               </div>
 
-              <FGroup label="Quick groups — click selects one, shift-click combines">
+              <FGroup label="Quick groups — a click adds or removes a whole group; your other picks stay">
                 <div className="pe-strat-quick">
                   {QUICK_GROUPS.map(g => (
-                    <QuickGroupButton key={g.key} group={g} selected={selected} onClick={e => toggleQuickGroup(g, e.shiftKey)} />
+                    <QuickGroupButton key={g.key} group={g} selected={selected} onClick={() => toggleQuickGroup(g)} />
                   ))}
                   <span className="pe-strat-divider" />
                   {PINNED_STRATEGIES.map(id => {
@@ -1209,6 +1233,19 @@ function EditCard({
                   ? <span className="text-xs text-sub">No strategies selected — Fusion may reject this preset</span>
                   : selectedList.map(s => <StrategyPill key={s.id} strategy={s} bucket={effectiveBucket} onRemove={() => toggleStrategy(s.id)} />)}
               </div>
+
+              {/* Dual-bucket Fusion preset: this app uses one bucket per preset,
+                  but never wipes the other — surface it (informed, not blocked). */}
+              {loadedDualBucket && (
+                <div className="pe-strat-dual">
+                  <AlertTriangle size={13} />
+                  <span>
+                    This preset has both <b>Rough</b> and <b>Finish</b> strategies (from Fusion).
+                    This app edits one bucket at a time — switch the Rough/Finish toggle to see each set.
+                    Both are kept on save; neither is wiped.
+                  </span>
+                </div>
+              )}
             </>
           )}
         </EditorSection>

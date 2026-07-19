@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname, resolve } from 'path';
 import {
   STRATEGIES, strategyById, strategiesForToolType,
-  isNewFormatPreset, readStrategyBucket, buildStrategies, SMALL_BORE_STRATEGIES,
+  isNewFormatPreset, readStrategyBucket, buildStrategies, writeBucketStrategies, SMALL_BORE_STRATEGIES,
 } from './camStrategies.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -77,5 +77,27 @@ describe('camStrategies — format detection and read/write', () => {
       .toEqual({ roughing: ['adaptive2d', 'adaptive'], finishing: [] });
     expect(buildStrategies('finishing', ['bore']))
       .toEqual({ roughing: [], finishing: ['bore'] });
+  });
+});
+
+describe('camStrategies — writeBucketStrategies preserves the non-active bucket', () => {
+  it('normal single-bucket preset empties the other bucket', () => {
+    expect(writeBucketStrategies('roughing', ['adaptive'], { roughing: [], finishing: [] }, false))
+      .toEqual({ roughing: ['adaptive'], finishing: [] });
+  });
+
+  it('dual-bucket preset keeps the OTHER bucket when editing one', () => {
+    // Editing the roughing bucket must not wipe the finishing strategies Fusion had.
+    const current = { roughing: ['adaptive', 'bore'], finishing: ['contour_new', 'scallop_new'] };
+    expect(writeBucketStrategies('roughing', ['adaptive', 'bore', 'flat'], current, true))
+      .toEqual({ roughing: ['adaptive', 'bore', 'flat'], finishing: ['contour_new', 'scallop_new'] });
+    // …and vice versa.
+    expect(writeBucketStrategies('finishing', ['contour_new'], current, true))
+      .toEqual({ roughing: ['adaptive', 'bore'], finishing: ['contour_new'] });
+  });
+
+  it('dual-bucket write dedupes the active selection', () => {
+    expect(writeBucketStrategies('roughing', ['adaptive', 'adaptive'], { roughing: [], finishing: ['bore'] }, true))
+      .toEqual({ roughing: ['adaptive'], finishing: ['bore'] });
   });
 });
