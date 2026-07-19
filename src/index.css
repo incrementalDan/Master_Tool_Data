@@ -2967,19 +2967,37 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--pe-b);
 }
 
-/* Intensity meter */
+/* Intensity meter — dots positioned by ratio; fill + dots share the 8px-inset
+   coordinate space so the fill end always lands on the active dot. */
 .pe-intensity { min-width: 210px; }
-.pe-intensity-track { position: relative; height: 22px; display: flex; align-items: center; padding: 0 6px; cursor: grab; touch-action: none; }
-.pe-intensity-rail { position: absolute; left: 16px; right: 16px; height: 3px; border-radius: 2px; background: var(--surface-3); }
-.pe-intensity-fill { position: absolute; left: 16px; height: 3px; border-radius: 2px; background: var(--pe-b); transition: width 0.14s ease-out; }
-.pe-intensity-dots { position: relative; display: flex; justify-content: space-between; width: 100%; pointer-events: none; }
-.pe-intensity-slot { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; }
-.pe-intensity-dot { border-radius: 50%; background: var(--text-sub); transition: all 0.14s ease-out; }
+.pe-intensity-track { position: relative; height: 22px; cursor: grab; touch-action: none; }
+.pe-intensity-rail { position: absolute; top: 50%; transform: translateY(-50%); left: 8px; right: 8px; height: 3px; border-radius: 2px; background: var(--surface-3); }
+.pe-intensity-fill { position: absolute; top: 50%; transform: translateY(-50%); left: 8px; height: 3px; border-radius: 2px; background: var(--pe-b); transition: width 0.14s ease-out; }
+.pe-intensity-dot {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--text-sub);
+  pointer-events: none;
+  transition: width 0.14s ease-out, height 0.14s ease-out, background 0.14s ease-out;
+}
 .pe-intensity-dot--passed { background: var(--pe-b); }
 .pe-intensity-dot--on { border: 2px solid var(--surface-2); box-shadow: 0 0 0 2px var(--pe-b); }
-.pe-intensity-labels { display: flex; justify-content: space-between; padding: 0 2px; margin-top: -1px; }
-.pe-intensity-labels > span { font-size: 10px; width: 56px; text-align: center; color: var(--text-sub); }
-.pe-intensity-labels > span.on { color: var(--pe-b); font-weight: 700; }
+.pe-intensity-labels { position: relative; display: flex; justify-content: space-between; margin-top: 2px; }
+.pe-intensity-labels > button {
+  font-size: 10px;
+  color: var(--text-sub);
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+}
+.pe-intensity-labels > button:first-child { margin-left: -4px; }
+.pe-intensity-labels > button:last-child { margin-right: -4px; }
+.pe-intensity-labels > button:hover { color: var(--text); }
+.pe-intensity-labels > button.on { color: var(--pe-b); font-weight: 700; }
 
 /* Modifier badge (name hint) */
 .pe-modifier {
