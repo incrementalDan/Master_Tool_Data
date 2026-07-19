@@ -32,7 +32,7 @@ export const SLIDER_RANGES = {
   n:              { min: 0, max: 16000, step: 10 },
   v_c:            { min: 0, max: 1500, step: 5 },
   n_ramp:         { min: 0, max: 16000, step: 10 },
-  f_z:            { min: 0, max: 0.02, step: 0.0001, softMax: true },
+  f_z:            { min: 0, max: 0.012, step: 0.0001, softMax: true },
   f_n:            { min: 0, max: 0.05, step: 0.0001 },
   v_f:            { min: 0, max: 225, step: 0.5, softMax: true },
   v_f_leadIn:     { min: 0, max: 225, step: 0.5, softMax: true },
@@ -48,7 +48,7 @@ export const SLIDER_RANGES = {
 // a raw ×25.4 of the inch values). RPM/angle fields are unit-independent.
 const METRIC_RANGES = {
   v_c:            { min: 0, max: 450, step: 5 },
-  f_z:            { min: 0, max: 0.5, step: 0.001, softMax: true },
+  f_z:            { min: 0, max: 0.3, step: 0.001, softMax: true },
   f_n:            { min: 0, max: 1.2, step: 0.001 },
   v_f:            { min: 0, max: 5700, step: 10, softMax: true },
   v_f_leadIn:     { min: 0, max: 5700, step: 10, softMax: true },
