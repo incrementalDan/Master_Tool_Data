@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, X, Check, GripVertical, Trash2, ChevronDown, Cpu, Briefcase } from 'lucide-react';
+import { Plus, X, Check, GripVertical, Trash2, ChevronDown, Cpu, Briefcase, Clipboard } from 'lucide-react';
 import { generateId, COOLANT_OPTS } from '../schema/toolSchema.js';
+import { copyPresetToClipboard } from '../utils/fusionExport.js';
 import { useApp } from '../context/AppContext.jsx';
 import { jobById, jobLabel } from '../utils/jobs.js';
 import { holderColor } from './AssemblyCard.jsx';
@@ -9,6 +10,13 @@ import MachinePill from './MachinePill.jsx';
 import CamPresetPicker from './CamPresetPicker.jsx';
 import JobProgramPicker from './JobProgramPicker.jsx';
 import LinkedSlider from './LinkedSlider.jsx';
+import InfoTip from './InfoTip.jsx';
+import { boreCompensation, SmallBoreIcon } from '../utils/boreCompensation.jsx';
+import {
+  STRATEGIES, STRATEGY_COLUMNS, strategyById, strategiesForToolType,
+  QUICK_GROUPS, quickGroupsContaining, AUTO_LINK_PAIR, PINNED_STRATEGIES,
+  SMALL_BORE_STRATEGIES, isNewFormatPreset, readStrategyBucket, buildStrategies,
+} from '../schema/camStrategies.js';
 import {
   composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
   materialNameCode, presetMaterialColor, findMaterialInLibrary, HOLE_MAKING_TYPES, TURNING_TYPES,
@@ -62,6 +70,8 @@ function blankPreset() {
     'ramp-spindle-speed': 'n',
     machine_id: null,
     job_ids: [],
+    // Small-bore comp (app-only, metadata-owned) — off by default.
+    small_bore: false, small_bore_diameter: '', f_z_base: null,
   };
 }
 
@@ -146,7 +156,20 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
   const [copySrc, setCopySrc] = useState({ type: 'blank', id: '' });
   const [editorDirty, setEditorDirty] = useState(false);
   const [dragOverIdx, setDragOverIdx] = useState(null);
+  // Transient "Copied ✓" feedback, keyed by preset guid (or '__editor__').
+  const [copiedKey, setCopiedKey] = useState(null);
   const dragSrcIdx = useRef(null);
+
+  // Copy one preset as Fusion-paste JSON (see fusionExport). `key` drives the
+  // transient "Copied" feedback; the preset object is normalized through the
+  // real Fusion path so it pastes straight into Fusion.
+  const copyForFusion = async (preset, key) => {
+    try {
+      await copyPresetToClipboard(tool, preset);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(k => (k === key ? null : k)), 1600);
+    } catch { /* clipboard blocked — no-op */ }
+  };
   const panelRef = useRef(null);
 
   // Speeds & Feeds references (metadata-only) the user can seed a preset from.
@@ -400,6 +423,8 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
                   jobsFile={jobs}
                   onEdit={() => handleEditClick(preset.guid)}
                   onDelete={() => setDeleteConfirmId(preset.guid)}
+                  onCopyFusion={() => copyForFusion(preset, preset.guid)}
+                  copied={copiedKey === preset.guid}
                   onDragStart={e => handleDragStart(e, globalIdx)}
                   onDragOver={e => handleDragOver(e, globalIdx)}
                   onDrop={e => handleDrop(e, globalIdx)}
@@ -502,6 +527,8 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
             onSave={handlePresetSave}
             onCancel={handleCancelEdit}
             onDirtyChange={setEditorDirty}
+            onCopyFusion={(draftPreset) => copyForFusion(draftPreset, '__editor__')}
+            copied={copiedKey === '__editor__'}
             isSaving={isSaving}
           />
         );
@@ -515,7 +542,7 @@ function CollapsedCard({
   preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
   isEditing, pickMode, picked, onPick, isDragOver, dragEnabled,
   linkedAssemblies, holders, machines, jobsFile,
-  onEdit, onDelete,
+  onEdit, onDelete, onCopyFusion, copied,
   onDragStart, onDragOver, onDrop, onDragEnd,
 }) {
   const isTap = toolType === 'tap';
@@ -624,6 +651,13 @@ function CollapsedCard({
         ) : (
           <>
             <button className="btn btn-secondary btn-sm" onClick={onEdit}>{isEditing ? 'Editing…' : 'Edit'}</button>
+            <button
+              className="btn btn-ghost btn-sm preset-card-copy"
+              onClick={onCopyFusion}
+              title="Copy this preset as Fusion JSON (paste into Fusion)"
+            >
+              {copied ? <Check size={12} /> : <Clipboard size={12} />}
+            </button>
             <button className="btn btn-ghost btn-sm preset-card-del" onClick={onDelete}>
               <Trash2 size={12} />
             </button>
@@ -690,7 +724,7 @@ function EditCard({
   diameter, fluteLength, numberOfFlutes,
   assemblies = [], holders = [], materials, shopSettings,
   jobsFile, findOrCreateJob, canAddJobs = false, currentUser = '',
-  onSave, onCancel, onDirtyChange, isSaving,
+  onSave, onCancel, onDirtyChange, onCopyFusion, copied, isSaving,
 }) {
   const isTap = toolType === 'tap';
   const isSpotDrill = toolType === 'spot drill';
@@ -735,6 +769,73 @@ function EditCard({
     d.job_ids = preset.job_ids ?? [];
     return d;
   });
+
+  // ── Strategy state (new-format presets) ──────────────────────────────────────
+  // Only milling tools carry toolpath strategies (turning/hole-making have their
+  // own vocabularies, out of scope). `strategyFormat` distinguishes OLD presets
+  // (operation lives in the name + operation_type; no strategies key) from NEW
+  // ones (a Fusion `strategies` object). Convert flips old → new.
+  const availableStrategies = strategiesForToolType(toolType);
+  const [strategyFormat, setStrategyFormat] = useState(() => (isMilling && isNewFormatPreset(preset) ? 'new' : 'old'));
+  const initBucket = isNewFormatPreset(preset) ? readStrategyBucket(preset) : { bucket: opTypeToBucket(preset.operation_type), ids: [] };
+  const [bucket, setBucket] = useState(initBucket.bucket);
+  const [selected, setSelected] = useState(() => new Set(initBucket.ids));
+  const [intensity, setIntensity] = useState(preset.intensity || 'normal');
+  const [listOpen, setListOpen] = useState(false);
+
+  // Small bore requires a Bore/Contour strategy (new format) and locks the bucket
+  // to Finishing while active — the cross-section lock the mockup shows.
+  const smallBoreAvailable = strategyFormat === 'new' && SMALL_BORE_STRATEGIES.some(id => selected.has(id));
+  const smallBoreOn = !!draft.small_bore && smallBoreAvailable;
+  const effectiveBucket = smallBoreOn ? 'finishing' : bucket;
+  const modifier = nameModifier(effectiveBucket, intensity, smallBoreOn);
+  const selectedList = availableStrategies.filter(s => selected.has(s.id));
+
+  // Persist bucket + selection into the draft's Fusion-native strategies object
+  // (new format only) and keep operation_type/name in sync with the bucket.
+  const syncStrategies = (nextBucket, nextSet) => {
+    touch();
+    setDraft(d => {
+      const op = bucketToOpType(nextBucket);
+      const nd = { ...d, operation_type: op, name: composeName(d, assemblyId, op) };
+      if (strategyFormat === 'new') nd.strategies = buildStrategies(nextBucket, [...nextSet]);
+      return nd;
+    });
+  };
+  const changeBucket = (b) => { setBucket(b); syncStrategies(b, selected); };
+  const toggleStrategy = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else { next.add(id); if (AUTO_LINK_PAIR.includes(id)) AUTO_LINK_PAIR.forEach(m => next.add(m)); }
+      syncStrategies(bucket, next);
+      return next;
+    });
+  };
+  const toggleQuickGroup = (group, additive) => {
+    const wasFull = group.members.every(id => selected.has(id));
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (!additive) {
+        [...next].forEach(id => {
+          const groups = quickGroupsContaining(id);
+          if (groups.length > 0 && !groups.some(g => g.key === group.key)) next.delete(id);
+        });
+      }
+      if (wasFull) group.members.forEach(id => next.delete(id));
+      else group.members.forEach(id => next.add(id));
+      const nb = (!wasFull && group.suggestBucket && !smallBoreOn) ? group.suggestBucket : bucket;
+      if (nb !== bucket) setBucket(nb);
+      syncStrategies(nb, next);
+      return next;
+    });
+  };
+  const setIntensityVal = (v) => { setIntensity(v); touch(); setDraft(d => ({ ...d, intensity: v })); };
+  const convertToNew = () => {
+    setStrategyFormat('new');
+    touch();
+    setDraft(d => ({ ...d, strategies: buildStrategies(bucket, [...selected]) }));
+  };
 
   // Which assembly (holder + OOH) this preset is named for. Initialised by
   // matching the current name; user can switch it to retarget the preset.
@@ -915,9 +1016,18 @@ function EditCard({
           placeholder="Preset name"
           autoFocus
         />
+        {isMilling && strategyFormat === 'new' && <ModifierBadge modifier={modifier} bucket={effectiveBucket} />}
         <span className="pe-tool-readout" title="Tool diameter · flute count">
           <span className="dia">⌀</span>{diameter ?? '—'}{numberOfFlutes ? ` · ${numberOfFlutes}FL` : ''}
         </span>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => onCopyFusion?.(draft)}
+          disabled={isSaving}
+          title="Copy this preset as Fusion JSON (paste into Fusion)"
+        >
+          {copied ? <Check size={13} /> : <Clipboard size={13} />} Copy for Fusion
+        </button>
         <button
           className="btn btn-primary btn-sm"
           onClick={() => onSave(draft)}
@@ -984,24 +1094,11 @@ function EditCard({
       </EditorSection>
 
       {/* Operation & Assembly — drive the convention preset name */}
-      <EditorSection label={isHoleMaking ? 'Assembly & Machine' : 'Operation & Assembly'} accent={PE_VIOLET}>
+      {/* Assembly & Machine — the Operation control moved to the Strategy
+          section below (old format keeps the dropdown; new format uses the
+          Rough/Finish bucket toggle). */}
+      <EditorSection label="Assembly & Machine" accent={PE_VIOLET}>
         <div className="pe-grid pe-grid--3">
-          {!isHoleMaking && (
-            <FGroup label="Operation">
-              <select
-                className="field-input"
-                value={draft.operation_type || ''}
-                onChange={e => {
-                  const op = e.target.value || null;
-                  touch();
-                  setDraft(d => ({ ...d, operation_type: op, name: composeName(d, assemblyId, op) }));
-                }}
-              >
-                <option value="">—</option>
-                {OP_TYPES.map(o => <option key={o.value} value={o.value}>{o.word}</option>)}
-              </select>
-            </FGroup>
-          )}
           <FGroup label="Assembly (holder + OOH)">
             <select
               className="field-input"
@@ -1057,6 +1154,80 @@ function EditCard({
       </EditorSection>
       </div>
 
+      {/* Strategy / Operation — milling + turning (hole-making has no operation).
+          Milling old-format presets keep the Operation dropdown + a Convert
+          button; new-format milling gets the full strategy picker. Turning keeps
+          the Operation dropdown only (its strategy vocabulary is out of scope).
+          The bucket / operation drives operation_type + the preset name. */}
+      {!isHoleMaking && (
+        <EditorSection
+          label={isMilling ? 'Strategy' : 'Operation'}
+          accent={isMilling && strategyFormat === 'new' ? bucketColor(effectiveBucket) : PE_VIOLET}
+          right={isMilling && (strategyFormat === 'old'
+            ? <button type="button" className="btn btn-ghost btn-sm" onClick={convertToNew} title="Add Fusion toolpath strategies to this preset">Convert to new</button>
+            : <button type="button" className="btn btn-ghost btn-sm" onClick={() => setListOpen(true)}>All strategies…</button>)}
+        >
+          {(!isMilling || strategyFormat === 'old') ? (
+            <div className="pe-grid pe-grid--3">
+              <FGroup label="Operation">
+                <select
+                  className="field-input"
+                  value={draft.operation_type || ''}
+                  onChange={e => {
+                    const op = e.target.value || null;
+                    touch();
+                    if (op === 'rough' || op === 'finish') setBucket(opTypeToBucket(op));
+                    setDraft(d => ({ ...d, operation_type: op, name: composeName(d, assemblyId, op) }));
+                  }}
+                >
+                  <option value="">—</option>
+                  {OP_TYPES.map(o => <option key={o.value} value={o.value}>{o.word}</option>)}
+                </select>
+              </FGroup>
+              {isMilling && (
+                <div className="pe-strat-oldhint text-xs text-sub">
+                  Newer Fusion presets carry a toolpath strategy (2D Adaptive, Bore, …).
+                  &nbsp;<b>Convert to new</b> to pick strategies here — Fusion reads both formats.
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="pe-strat-top">
+                <FGroup label="Operation">
+                  <BucketToggle value={effectiveBucket} onChange={changeBucket} locked={smallBoreOn} />
+                  <div className={`pe-strat-lock${smallBoreOn ? '' : ' pe-strat-lock--hidden'}`}>
+                    Locked to Finish by Small bore (in Feedrates)
+                  </div>
+                </FGroup>
+                <FGroup label="Intensity">
+                  <IntensityMeter value={intensity} bucket={effectiveBucket} onChange={setIntensityVal} />
+                </FGroup>
+              </div>
+
+              <FGroup label="Quick groups — click selects one, shift-click combines">
+                <div className="pe-strat-quick">
+                  {QUICK_GROUPS.map(g => (
+                    <QuickGroupButton key={g.key} group={g} selected={selected} onClick={e => toggleQuickGroup(g, e.shiftKey)} />
+                  ))}
+                  <span className="pe-strat-divider" />
+                  {PINNED_STRATEGIES.map(id => {
+                    const s = strategyById(id);
+                    return s && <PinnedStrategyButton key={id} strategy={s} selected={selected} bucket={effectiveBucket} onClick={() => toggleStrategy(id)} />;
+                  })}
+                </div>
+              </FGroup>
+
+              <div className="pe-strat-selected">
+                {selectedList.length === 0
+                  ? <span className="text-xs text-sub">No strategies selected — Fusion may reject this preset</span>
+                  : selectedList.map(s => <StrategyPill key={s.id} strategy={s} bucket={effectiveBucket} onRemove={() => toggleStrategy(s.id)} />)}
+              </div>
+            </>
+          )}
+        </EditorSection>
+      )}
+
       {/* Speed + Passes row */}
       <div className="pe-row">
       <EditorSection label="Speed" accent="var(--blue)">
@@ -1083,8 +1254,8 @@ function EditCard({
       {isMilling && (
       <EditorSection label="Passes & Linking" accent="var(--blue)">
         <div className="pe-stack" style={{ gap: 14 }}>
-          <StepField
-            label="Use stepdown"
+          <FactorSlider
+            label="Stepdown"
             value={draft.stepdown}
             enabled={!!draft['use-stepdown']}
             onToggle={checked => {
@@ -1097,10 +1268,10 @@ function EditCard({
             refDim={fluteLength}
             refLabel="flute length"
             lenUnit={lenUnit}
-            defaultFactor={0.4}
+            accent="var(--blue)"
           />
-          <StepField
-            label="Use stepover"
+          <FactorSlider
+            label="Stepover"
             value={draft.stepover}
             enabled={!!draft['use-stepover']}
             onToggle={checked => {
@@ -1113,7 +1284,18 @@ function EditCard({
             refDim={diameter}
             refLabel="diameter"
             lenUnit={lenUnit}
-            defaultFactor={0.3}
+            accent="var(--blue)"
+          />
+          {/* MRR = radial width × axial depth × feed — absolute step values
+              (0 when a step is off) and the live cutting feed, so it moves as
+              any of the three change. Tinted blue for now; becomes the
+              rough/finish bucket color when the Strategy section lands. */}
+          <MRRIndicator
+            ae={draft['use-stepover'] ? draft.stepover : 0}
+            ap={draft['use-stepdown'] ? draft.stepdown : 0}
+            vf={draft.v_f}
+            lenUnit={lenUnit}
+            accent="var(--blue)"
           />
         </div>
       </EditorSection>
@@ -1182,6 +1364,31 @@ function EditCard({
               />
             </div>
           </div>
+          {/* Small bore lives HERE — it compensates the chip load above, and
+              applies live through the cascade. Available only when a Bore/Contour
+              strategy is selected (new format); turning it on locks the Strategy
+              bucket to Finishing (handled via smallBoreOn / effectiveBucket). */}
+          <SmallBoreRow
+            diameter={diameter} flutes={numberOfFlutes} rpm={draft.n ?? 0}
+            active={smallBoreOn} available={smallBoreAvailable}
+            onToggle={(on) => {
+              touch();
+              setDraft(d => {
+                const nd = { ...d, small_bore: on };
+                // Seed the uncompensated base from the current f_z the first
+                // time comp is turned on, so it has something to compensate.
+                if (on && (nd.f_z_base == null || nd.f_z_base === '')) nd.f_z_base = d.f_z ?? 0;
+                // Turning comp off restores the uncompensated feed.
+                if (!on && nd.f_z_base != null) return { ...nd, f_z: nd.f_z_base };
+                return nd;
+              });
+            }}
+            boreDia={draft.small_bore_diameter ?? ''} setBoreDia={v => set('small_bore_diameter', v)}
+            baseFz={draft.f_z_base} setBaseFz={v => set('f_z_base', v === '' ? null : parseFloat(v))}
+            actualFz={draft.f_z}
+            onCompute={v => handleNumChange('f_z', v)}
+            accent={accentColor || 'var(--blue)'} lenUnit={lenUnit}
+          />
         </EditorSection>
       )}
 
@@ -1345,86 +1552,484 @@ function EditCard({
           }); }}
         />
       )}
+
+      {listOpen && (
+        <StrategyListPopout
+          available={availableStrategies}
+          selected={selected}
+          onToggle={toggleStrategy}
+          bucket={effectiveBucket}
+          onClose={() => setListOpen(false)}
+        />
+      )}
     </div>
   );
 }
 
-// ── StepField — stepdown/stepover toggle + factor-based editing ───────────────
-// Displays the absolute value with a computed factor badge.
-// Double-click enters factor-edit mode; on commit, saves the new absolute value.
-function StepField({ label, value, onChange, refDim, refLabel, lenUnit, enabled, onToggle, defaultFactor }) {
-  const [editing, setEditing] = useState(false);
-  const [draftFactor, setDraftFactor] = useState('');
-  const inputRef = useRef(null);
+// ── FactorSlider — stepdown / stepover as a percentage of a reference dim ─────
+// Stepdown/stepover are decided as a PERCENTAGE of a reference dimension
+// (stepdown of flute length, stepover of diameter), so the slider drives the
+// percent and reads out as one (86%, not 0.86); never above 100%. Two entry
+// points as a driving/driven pair, exactly like LinkedSlider: drag/type the %
+// (1% steps) and the inch value follows (fx badge on it); type the inch value
+// and the % follows. Whichever was touched last drives.
+//
+// The DATA MODEL stays absolute — `value`/`onChange` are the raw inch value
+// (draft.stepdown / draft.stepover); percent is a UI convenience only and never
+// leaks into the preset. The triple-sync invariant (use-* boolean + numeric +
+// expression) is handled downstream by normalizePreset on save, unchanged.
+function FactorSlider({ label, value, onChange, refDim, refLabel, lenUnit, enabled, onToggle, accent }) {
+  const trackRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const [inchDraft, setInchDraft] = useState(null);
+  // Which side the user last drove. Percent leads by default — it's the
+  // decision a machinist actually makes; inches are what falls out.
+  const [driver, setDriver] = useState('pct');
 
-  const factor = (refDim && refDim > 0 && value != null && value > 0)
-    ? parseFloat((value / refDim).toFixed(4))
-    : null;
+  const factor = (refDim > 0 && value > 0) ? Math.min(1, value / refDim) : 0;
+  const pct = Math.round(factor * 100);
+  const abs = refDim > 0 ? factor * refDim : 0;
 
-  const computedAbs = () => {
-    const f = parseFloat(draftFactor);
-    if (isNaN(f) || f <= 0 || !refDim || refDim <= 0) return null;
-    return parseFloat((f * refDim).toFixed(6));
+  const setPct = (p) => {
+    setDriver('pct');
+    const f = Math.min(1, Math.max(0, (Number(p) || 0) / 100));
+    onChange(parseFloat((f * refDim).toFixed(6)));
+  };
+  const setInch = (v) => {
+    setDriver('inch');
+    onChange(Math.max(0, Number(v) || 0));
+  };
+  const pctFromPointer = (clientX) => {
+    const rect = trackRef.current.getBoundingClientRect();
+    const r = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return Math.round(r * 100);
   };
 
-  const startEditing = () => {
-    if (!enabled) return;
-    setDraftFactor(String(factor ?? defaultFactor));
-    setEditing(true);
-  };
-
-  const commitEdit = () => {
-    const abs = computedAbs();
-    if (abs !== null) onChange(abs);
-    setEditing(false);
-  };
-
+  // Non-passive wheel listener (same rationale as LinkedSlider) — one notch = 1%.
+  const wheelState = useRef({});
+  wheelState.current = { pct, enabled };
   useEffect(() => {
-    if (editing && inputRef.current) inputRef.current.focus();
-  }, [editing]);
+    const el = trackRef.current;
+    if (!el) return;
+    const onWheel = (e) => {
+      if (!wheelState.current.enabled) return;
+      const axis = Math.abs(e.deltaX) >= Math.abs(e.shiftKey ? e.deltaY : 0) ? e.deltaX : (e.shiftKey ? e.deltaY : 0);
+      if (!axis || e.ctrlKey || e.metaKey) return;
+      e.preventDefault();
+      setPct(Math.max(0, Math.min(100, wheelState.current.pct + (axis > 0 ? 1 : -1))));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <div className="step-field">
-      <label className="preset-check-label">
+    <div
+      className={`pe-factor${enabled ? '' : ' pe-factor--off'}${driver === 'inch' ? ' pe-factor--inchdrv' : ''}`}
+      style={accent ? { '--ls-accent': accent } : undefined}
+    >
+      {/* Row 1 — checkbox + label | % track | percent input */}
+      <label className="pe-factor-label">
         <input type="checkbox" checked={enabled} onChange={e => onToggle(e.target.checked)} />
-        {label}
+        <span className="lslider-name">{label}</span>
+        <span className="nfield-fx"><span className={`fx-badge${driver === 'inch' ? '' : ' fx-badge--hidden'}`}>fx</span></span>
       </label>
-      {enabled && (
-        editing ? (
-          <div className="step-field-edit-row">
+      <div
+        ref={trackRef}
+        className={`lslider-track pe-factor-track${dragging ? ' lslider-track--dragging' : ''}`}
+        onPointerDown={e => { if (!enabled) return; e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); setPct(pctFromPointer(e.clientX)); }}
+        onPointerMove={e => { if (dragging) setPct(pctFromPointer(e.clientX)); }}
+        onPointerUp={() => setDragging(false)}
+        onPointerCancel={() => setDragging(false)}
+      >
+        <div className="lslider-rail" />
+        <div className="lslider-fill" style={{ width: `${pct}%`, ...(dragging ? { transition: 'none' } : {}) }} />
+        <div className={`lslider-handle${dragging ? ' lslider-handle--drag' : ''}`} style={{ left: `calc(${pct}% - 7px)`, ...(dragging ? { transition: 'none' } : {}) }} />
+      </div>
+      <div className="lslider-num">
+        <input
+          className="field-input td-noSpin" type="number" step="1" min="0" max="100"
+          value={pct} disabled={!enabled}
+          onChange={e => setPct(e.target.value)}
+        />
+        <span className="lslider-unit">%</span>
+      </div>
+
+      {/* Row 2 — "of {refLabel}" | ref-dim readout | inch input */}
+      <span className="pe-factor-of">
+        <span>of {refLabel}</span>
+        <span className="nfield-fx"><span className={`fx-badge${driver === 'pct' ? '' : ' fx-badge--hidden'}`}>fx</span></span>
+      </span>
+      <span className="pe-factor-ref">{refDim > 0 ? `${refDim.toFixed(4)} ${lenUnit}` : '—'}</span>
+      <div className="lslider-num">
+        <input
+          className="field-input td-noSpin" type="number" step="0.001" min="0" max={refDim || undefined}
+          value={inchDraft !== null ? inchDraft : abs.toFixed(4)}
+          disabled={!enabled}
+          onFocus={() => setInchDraft(abs.toFixed(4))}
+          onBlur={() => setInchDraft(null)}
+          onChange={e => { setInchDraft(e.target.value); setInch(e.target.value); }}
+        />
+        <span className="lslider-unit">{lenUnit}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── MRR — material removal rate ───────────────────────────────────────────────
+// The volume of metal coming off per minute: radial width × axial depth × feed.
+// It's the payoff of the Passes section (the reason you push stepdown/stepover
+// at all), so it gets a bold live readout. Uses the ABSOLUTE step values (0 when
+// a step is toggled off) and the live cutting feedrate; math shown on hover.
+//   ae = stepover (radial width, len)  ap = stepdown (axial depth, len)
+//   vf = cutting feed (len/min)  →  MRR = ae × ap × vf  (len³/min)
+function MRRIndicator({ ae, ap, vf, lenUnit, accent }) {
+  const a = Number(ae) || 0, p = Number(ap) || 0, f = Number(vf) || 0;
+  const mrr = a * p * f;
+  const live = mrr > 0;
+  return (
+    <div
+      className={`pe-mrr${live ? ' pe-mrr--live' : ''}`}
+      style={accent ? { '--ls-accent': accent } : undefined}
+      title={`radial width ${a.toFixed(4)} ${lenUnit} × axial depth ${p.toFixed(4)} ${lenUnit} × feed ${f.toFixed(1)} ${lenUnit}/min`}
+    >
+      <div className="pe-mrr-title">
+        <span>MRR</span>
+        <span className="pe-mrr-sub">removal rate</span>
+      </div>
+      <div className="pe-mrr-val">{live ? mrr.toFixed(3) : '—'}</div>
+      <span className="pe-mrr-unit">{lenUnit}³/min</span>
+    </div>
+  );
+}
+
+// ── Small Bore — chip-load compensation, lives INSIDE Feedrates ───────────────
+// It compensates the chip load, so it sits under the cutting-feed cluster as two
+// FIXED-height rows (never pops open downward as you type). Compensation applies
+// LIVE through the normal cascade: change the bore Ø or the base fz and the
+// compensated fz is pushed straight into f_z (via onCompute → handleNumChange),
+// so cutting feed follows and dims like any other edit — no Apply button.
+//
+// baseFz (persisted as f_z_base) is the UNCOMPENSATED chip load the comp works
+// from; using it (not the already-compensated f_z) is what keeps reopening a
+// saved small-bore preset from shrinking the feed a little more each time.
+const SB_OVERRIDE_EPS = 5e-6;   // half a 5-decimal f_z step
+function SmallBoreRow({
+  diameter, flutes, rpm, active, available, onToggle,
+  boreDia, setBoreDia, baseFz, setBaseFz, actualFz, onCompute, accent, lenUnit,
+}) {
+  const comp = boreCompensation(diameter, boreDia);
+  const z = flutes || 1;
+  const baseFzNum = parseFloat(baseFz) || 0;
+  const currentVf = rpm * z * baseFzNum;
+  const compFz = comp && !comp.error ? baseFzNum * comp.factor : null;
+  const compVf = compFz !== null ? rpm * z * compFz : null;
+  const minorEffect = comp && !comp.error && comp.factor > 0.8;
+  const live = active && comp && !comp.error;
+
+  // Override detection — the user moved the feed/fz slider after comp landed.
+  // Small bore doesn't fight them, it just stops claiming credit: the computed
+  // value is struck through and the value in effect is flagged amber.
+  const suggested = live ? roundForField('f_z', compFz) : null;
+  const inEffect = actualFz == null ? null : roundForField('f_z', actualFz);
+  const overridden = live && inEffect !== null && Math.abs(inEffect - suggested) > SB_OVERRIDE_EPS;
+  const effVf = overridden ? rpm * z * inEffect : compVf;
+
+  // Live apply — push compensated fz through the cascade when the bore or the
+  // base fz changes. SKIP the first render: a reopened preset's saved f_z is
+  // already compensated (== f_z_base × factor), so re-firing on mount would be a
+  // no-op at best and would mark the editor dirty at worst. Only user changes to
+  // active / baseFz / boreDia recompute. draft.f_z is deliberately NOT a dep, or
+  // dragging the fz slider would fight the effect.
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    if (live) onCompute(roundForField('f_z', compFz));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, baseFz, boreDia]);
+
+  return (
+    <div className="pe-sb" style={accent ? { '--ls-accent': accent } : undefined}>
+      {/* Row 1 — toggle, geometry, comp %, status */}
+      <div className="pe-sb-row1">
+        <button
+          type="button"
+          className={`pe-sb-toggle${active ? ' pe-sb-toggle--on' : ''}`}
+          onClick={() => available && onToggle(!active)}
+          disabled={!available}
+        >
+          <SmallBoreIcon size={18} />
+          Small bore
+        </button>
+
+        <div className={`pe-sb-geo${active ? '' : ' pe-sb-geo--off'}`}>
+          <span className="pe-sb-cell"><span className="pe-sb-tag">TOOL</span><span className="font-mono"><span className="dia">⌀</span>{diameter}</span></span>
+          <span className="pe-sb-cell">
+            <span className="pe-sb-tag">BORE</span><span className="font-mono text-sub"><span className="dia">⌀</span></span>
             <input
-              ref={inputRef}
-              type="number"
-              className="step-factor-input field-input"
-              value={draftFactor}
-              onChange={e => setDraftFactor(e.target.value)}
-              onBlur={commitEdit}
-              onKeyDown={e => {
-                if (e.key === 'Enter') commitEdit();
-                if (e.key === 'Escape') setEditing(false);
-              }}
-              step="0.05"
-              min="0.01"
+              className="field-input td-noSpin pe-sb-bore" type="number" step="0.001"
+              value={boreDia} onChange={e => setBoreDia(e.target.value)}
+              disabled={!active} placeholder="0.485"
             />
-            <span className="step-factor-ref">
-              × {refDim?.toFixed(3)}{lenUnit} {refLabel}
+            <span className="pe-sb-unit">{lenUnit}</span>
+          </span>
+          <span className="pe-sb-cell">
+            <span className="pe-sb-tag">COMP</span>
+            <span className="pe-sb-comp" style={{ color: live ? 'var(--ls-accent)' : 'var(--text-sub)' }}>
+              {live ? `${(comp.factor * 100).toFixed(1)}%` : '—'}
             </span>
-            <span className="step-factor-result">
-              = {computedAbs() != null ? `${computedAbs().toFixed(4)}${lenUnit}` : '—'}
-            </span>
-          </div>
-        ) : (
-          <div className="step-field-display-row" onDoubleClick={startEditing} title="Double-click to edit factor">
-            <span className="step-abs-val">
-              {value != null && value > 0 ? `${parseFloat(value.toFixed(4))}${lenUnit}` : <span style={{ color: 'var(--text-sub)', fontStyle: 'italic' }}>no value set</span>}
-            </span>
-            {factor != null && (
-              <span className="step-factor-badge">×{factor.toFixed(3)} {refLabel}</span>
+            {live && (
+              <InfoTip text={`Tool centre orbits ⌀${comp.centerCircle.toFixed(3)} while the edge sweeps ⌀${parseFloat(boreDia).toFixed(3)} — the edge travels ${comp.ratio.toFixed(2)}× farther per rev, so it sees ${comp.ratio.toFixed(2)}× the programmed chip load. Arc compensation only; radial chip thinning partially offsets it and is left to your judgment.`} />
             )}
-            <span className="step-edit-hint">double-click to edit</span>
+          </span>
+        </div>
+
+        <span className="pe-sb-status">
+          {!available
+            ? 'Requires Bore or Contour strategy'
+            : active && comp?.error
+              ? <span className="text-danger">{comp.error}</span>
+              : minorEffect
+                ? 'Minor at this ratio — may not be needed'
+                : ' '}
+        </span>
+      </div>
+
+      {/* Row 2 — before → after readout; amber when overridden */}
+      <div className={`pe-sb-row2${overridden ? ' pe-sb-row2--override' : ''}${live ? '' : ' pe-sb-row2--idle'}`}>
+        <span className="pe-sb-cell">
+          <span className="pe-sb-tag">FZ START</span>
+          <input
+            className="field-input td-noSpin pe-sb-basefz" type="number" step="0.0001"
+            value={baseFz ?? ''} onChange={e => setBaseFz(e.target.value)}
+            disabled={!active} placeholder="0.0008"
+          />
+          <span className="text-sub">→</span>
+          <span className="font-mono pe-sb-compfz" style={overridden ? { textDecoration: 'line-through', color: 'var(--text-sub)' } : {}}>
+            {live ? compFz.toFixed(4) : '—'}
+          </span>
+          {overridden && <span className="font-mono pe-sb-override-val">{inEffect.toFixed(4)}</span>}
+          <span className="pe-sb-unit">{lenUnit}</span>
+        </span>
+
+        <span className="pe-sb-cell">
+          <span className="pe-sb-tag">FEED</span>
+          <span className="font-mono text-sub">{currentVf.toFixed(2)}</span>
+          <span className="text-sub">→</span>
+          <span className="font-mono pe-sb-feed" style={overridden ? { color: 'var(--orange)' } : {}}>
+            {live ? effVf.toFixed(2) : '—'}
+          </span>
+          <span className="pe-sb-unit">{lenUnit}/min</span>
+        </span>
+
+        <span className="pe-sb-row2-tail">
+          {overridden ? (
+            <>
+              <span className="pe-sb-badge">OVERRIDDEN</span>
+              <button type="button" className="btn btn-ghost btn-sm pe-sb-restore" onClick={() => onCompute(suggested)}>
+                Restore {suggested.toFixed(4)}
+              </button>
+            </>
+          ) : (
+            <span className="text-sub pe-sb-applied">Applied live to feed per tooth</span>
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ── Strategy section (new-format presets) ─────────────────────────────────────
+// Rough / Finish are the only two buckets (a preset is one or the other), each
+// with its own accent color. bucket ↔ operation_type: roughing='rough',
+// finishing='finish' — so the bucket drives the preset name's operation suffix
+// exactly like the old Operation dropdown does.
+const bucketColor = (b) => (b === 'roughing' ? 'var(--pe-rough)' : 'var(--pe-finish)');
+const bucketToOpType = (b) => (b === 'roughing' ? 'rough' : 'finish');
+const opTypeToBucket = (op) => (op === 'rough' ? 'roughing' : 'finishing');
+const INTENSITIES = [
+  { key: 'light', label: 'Light', dot: 4 },
+  { key: 'normal', label: 'Normal', dot: 6 },
+  { key: 'aggressive', label: 'Aggressive', dot: 9 },
+];
+// The name-modifier HINT (intensity is metadata-only this round — not folded
+// into the composed name; shown as a live badge only).
+function nameModifier(bucket, intensity, smallBore) {
+  if (smallBore) return 'Small Bore';
+  if (intensity === 'normal') return null;
+  if (bucket === 'roughing') return intensity === 'aggressive' ? 'Fast' : 'Light';
+  return intensity === 'light' ? 'Fine' : 'Fast';
+}
+
+function BucketToggle({ value, onChange, locked }) {
+  return (
+    <div className={`pe-bucket${locked ? ' pe-bucket--locked' : ''}`}>
+      {[{ key: 'roughing', label: 'Rough' }, { key: 'finishing', label: 'Finish' }].map(o => (
+        <button
+          key={o.key} type="button"
+          className={`pe-bucket-btn${value === o.key ? ' pe-bucket-btn--on' : ''}`}
+          style={value === o.key ? { '--pe-b': bucketColor(o.key) } : undefined}
+          onClick={() => !locked && onChange(o.key)}
+        >{o.label}</button>
+      ))}
+    </div>
+  );
+}
+
+function IntensityMeter({ value, bucket, onChange }) {
+  const c = bucketColor(bucket);
+  const idx = INTENSITIES.findIndex(i => i.key === value);
+  const trackRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const zoneFrom = (clientX) => {
+    const rect = trackRef.current.getBoundingClientRect();
+    const r = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return r < 1 / 3 ? 'light' : r < 2 / 3 ? 'normal' : 'aggressive';
+  };
+  const handle = (e) => { const z = zoneFrom(e.clientX); if (z !== value) onChange(z); };
+  return (
+    <div className="pe-intensity" style={{ '--pe-b': c }}>
+      <div
+        ref={trackRef} className="pe-intensity-track"
+        onPointerDown={e => { e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); handle(e); }}
+        onPointerMove={e => { if (dragging) handle(e); }}
+        onPointerUp={() => setDragging(false)}
+      >
+        <div className="pe-intensity-rail" />
+        <div className="pe-intensity-fill" style={{ width: `calc(${idx / (INTENSITIES.length - 1)} * 100%)` }} />
+        <div className="pe-intensity-dots">
+          {INTENSITIES.map((i, n) => (
+            <span key={i.key} className="pe-intensity-slot">
+              <span
+                className={`pe-intensity-dot${i.key === value ? ' pe-intensity-dot--on' : ''}${n <= idx ? ' pe-intensity-dot--passed' : ''}`}
+                style={{ width: i.key === value ? i.dot + 6 : i.dot, height: i.key === value ? i.dot + 6 : i.dot }}
+              />
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="pe-intensity-labels">
+        {INTENSITIES.map(i => (
+          <span key={i.key} className={i.key === value ? 'on' : ''}>{i.label}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ModifierBadge({ modifier, bucket }) {
+  return (
+    <span
+      className={`pe-modifier${modifier ? ' pe-modifier--on' : ''}`}
+      style={modifier ? { '--pe-b': bucketColor(bucket) } : undefined}
+    >{modifier || '—'}</span>
+  );
+}
+
+function StrategyPill({ strategy, bucket, onRemove }) {
+  return (
+    <span className="pe-strat-pill" style={{ '--pe-b': bucketColor(bucket) }}>
+      <span className="pe-strat-pill-dot" />
+      {strategy.name}
+      {onRemove && <button type="button" className="pe-strat-pill-x" onClick={onRemove}>×</button>}
+    </span>
+  );
+}
+
+function QuickGroupButton({ group, selected, onClick }) {
+  const total = group.members.length;
+  const on = group.members.filter(id => selected.has(id)).length;
+  const full = on === total;
+  const partial = on > 0 && !full;
+  const tint = group.suggestBucket ? bucketColor(group.suggestBucket) : 'rgb(var(--tok-description))';
+  return (
+    <button
+      type="button"
+      className={`pe-qgroup${full ? ' pe-qgroup--full' : partial ? ' pe-qgroup--partial' : ''}`}
+      style={{ '--pe-b': tint }}
+      onClick={onClick}
+    >
+      <span className="pe-qgroup-glyph" />
+      <span className="pe-qgroup-label">{group.label}</span>
+      <span className="pe-qgroup-count">{on}/{total}</span>
+    </button>
+  );
+}
+
+function PinnedStrategyButton({ strategy, selected, bucket, onClick }) {
+  const on = selected.has(strategy.id);
+  return (
+    <button
+      type="button"
+      className={`pe-pinned${on ? ' pe-pinned--on' : ''}`}
+      style={{ '--pe-b': bucketColor(bucket) }}
+      onClick={onClick}
+    >
+      <span className="pe-pinned-dot" />
+      {strategy.name}
+    </button>
+  );
+}
+
+function StrategyListPopout({ available, selected, onToggle, bucket, onClose }) {
+  const [query, setQuery] = useState('');
+  const c = bucketColor(bucket);
+  const q = query.trim().toLowerCase();
+  const filtered = q ? available.filter(s => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)) : available;
+  const byGroup = {};
+  filtered.forEach(s => { (byGroup[s.group] = byGroup[s.group] || []).push(s); });
+  return (
+    <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal pe-strat-popout" style={{ '--pe-b': c }}>
+        <div className="pe-strat-popout-head">
+          <span className="pe-strat-popout-title">All Strategies</span>
+          <div style={{ flex: 1 }} />
+          <button type="button" className="icon-btn" onClick={onClose}><X size={16} /></button>
+        </div>
+        <div className="pe-strat-popout-search">
+          <input autoFocus className="field-input" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search strategies…" />
+        </div>
+        <div className="pe-strat-popout-body">
+          <div className="pe-strat-popout-cols">
+            {STRATEGY_COLUMNS.map((col, i) => (
+              <div key={i}>
+                {col.map(g => byGroup[g] && (
+                  <div key={g} className="pe-strat-popout-group">
+                    <div className="pe-strat-popout-glabel">
+                      <span>{g}</span>
+                      <div className="pe-strat-popout-rule" />
+                    </div>
+                    <div className="pe-strat-popout-list">
+                      {byGroup[g].map(s => {
+                        const on = selected.has(s.id);
+                        const isAuto = AUTO_LINK_PAIR.includes(s.id);
+                        const memberOf = quickGroupsContaining(s.id);
+                        return (
+                          <button
+                            key={s.id} type="button"
+                            className={`pe-strat-opt${on ? ' pe-strat-opt--on' : ''}`}
+                            onClick={() => onToggle(s.id)}
+                          >
+                            <span className="pe-strat-opt-name">{s.name}</span>
+                            {isAuto && <span className="pe-strat-opt-link" title="Auto-links with its 2D/3D twin">⇄</span>}
+                            {!isAuto && memberOf.length > 0 && (
+                              <span className="pe-strat-opt-member" title={`Part of: ${memberOf.map(g2 => g2.label).join(', ')}`} />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
           </div>
-        )
-      )}
+          {filtered.length === 0 && <div className="pe-strat-popout-empty">No strategies match &quot;{query}&quot;</div>}
+        </div>
+        <div className="pe-strat-popout-foot">
+          <button type="button" className="btn btn-primary btn-sm" onClick={onClose}>Done</button>
+        </div>
+      </div>
     </div>
   );
 }

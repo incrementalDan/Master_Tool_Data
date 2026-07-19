@@ -371,3 +371,52 @@ export async function copyToolToClipboard(tool, holders = [], assembly = null) {
 export async function copyToolsToClipboard(tools, holders = []) {
   await navigator.clipboard.writeText(buildFusionTsv(tools, holders));
 }
+
+// ─── Copy a single preset as Fusion-paste JSON ──────────────────────────────
+// Fusion's right-click "copy" on ONE preset puts this on the clipboard:
+//   { "presets": [ <one preset> ], "toolType": "<fusion type>", "unit": "inches" }
+// and it pastes straight back into Fusion's Cutting-data list. Verified against
+// a real Fusion clipboard sample (matches ALL MILLING STRATEGIES Preset only.json).
+//
+// The preset is produced through the REAL internalToFusionTool path so every
+// expression-sync invariant (stepdown/stepover triple-sync, coolant, the
+// "expressions absent for milling" shape, app-only fields stripped) holds — no
+// hand-serialization. The tool's flat speed/feed mirrors are set FROM the copied
+// preset so internalToFusionTool's presets[0] sync can't override its values.
+
+// Recursive alphabetical key sort (arrays keep their order) — matches Fusion's
+// own key ordering so a copy round-trips byte-for-byte.
+function sortKeysDeep(v) {
+  if (Array.isArray(v)) return v.map(sortKeysDeep);
+  if (v && typeof v === 'object') {
+    const out = {};
+    for (const k of Object.keys(v).sort()) out[k] = sortKeysDeep(v[k]);
+    return out;
+  }
+  return v;
+}
+
+export function presetToFusionClipboardObject(tool, preset) {
+  const p = { ...preset };
+  const tempTool = {
+    ...tool,
+    presets: [p],
+    // Flat mirrors from the copied preset → presets[0] sync is a no-op.
+    spindle_speed: p.n, cutting_speed: p.v_c, cutting_feedrate: p.v_f,
+    feed_per_tooth: p.f_z, ramp_feedrate: p.v_f_ramp,
+    lead_in_feedrate: p.v_f_leadIn, lead_out_feedrate: p.v_f_leadOut,
+    plunge_feedrate: p.v_f_plunge, feed_per_rev: p.f_n,
+  };
+  const f = internalToFusionTool(tempTool);
+  const list = f['start-values']?.presets || [];
+  const outPreset = list.find(x => x.guid === p.guid) || list[0];
+  return sortKeysDeep({ presets: [outPreset], toolType: f.type, unit: f.unit });
+}
+
+export function presetToFusionClipboardJson(tool, preset) {
+  return JSON.stringify(presetToFusionClipboardObject(tool, preset));
+}
+
+export async function copyPresetToClipboard(tool, preset) {
+  await navigator.clipboard.writeText(presetToFusionClipboardJson(tool, preset));
+}
