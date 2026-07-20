@@ -16,9 +16,9 @@ const refAll = resolve(here, '../../FUSION TOOL Library REF/NewPresetREF/NewPres
 const MILLING = { isMilling: true, isSpotDrill: false, isTurning: false, isDrillFamily: false };
 const DRILL = { isMilling: false, isSpotDrill: false, isTurning: false, isDrillFamily: true };
 
-function openInEditor(preset, flags, diameter, flutes) {
+function openInEditor(preset, flags, diameter, flutes, metric = false) {
   const fx = initialPresetFx(preset, flags);
-  return { fx, out: computeFormulaDraft({ ...preset }, fx, diameter, flutes) };
+  return { fx, out: computeFormulaDraft({ ...preset }, fx, diameter, flutes, metric) };
 }
 
 describe('presetFx — opening a preset never clobbers an independent stored value', () => {
@@ -78,6 +78,14 @@ describe('presetFx — opening a preset never clobbers an independent stored val
     expect(fx.n_ramp).toBe('formula');
     expect(Math.abs(out.v_f_transition - 40)).toBeLessThan(0.01);
     expect(Math.abs(out.n_ramp - 5000)).toBeLessThan(1);
+  });
+
+  it('metric: surface speed derives from RPM in m/min (÷1000), not ft/min (÷12)', () => {
+    // A 10 mm, 4-flute mill at 5000 rpm: v_c = 5000·π·10 / 1000 ≈ 157.08 m/min.
+    // The inch factor (/12) would wrongly give ~13090 — off by ~83×.
+    const preset = { n: 5000, v_c: 0, f_z: 0.05, v_f: 0 };
+    const { out } = openInEditor(preset, MILLING, 10, 4, true);
+    expect(Math.abs(out.v_c - 157.08)).toBeLessThan(0.1);
   });
 
   it('turning: cutting feed + plunge open manual (not zeroed by the milling f_z formula)', () => {

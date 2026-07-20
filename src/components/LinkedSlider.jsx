@@ -121,7 +121,13 @@ export default function LinkedSlider({
   const [hint, setHint] = useState(null);
 
   const driven = fxState === 'formula';
-  const formulaInfo = FORMULAS[field] || null;
+  let formulaInfo = FORMULAS[field] || null;
+  // The surface-speed ↔ RPM conversion factor is unit-dependent (ft/min = 12
+  // in/ft, m/min = 1000 mm/m), so the tooltip formula must match the tool's
+  // unit — otherwise a mm tool would show the inch "/ 12" constant.
+  if (formulaInfo && metric && (field === 'v_c' || field === 'n')) {
+    formulaInfo = { ...formulaInfo, expr: formulaInfo.expr.replaceAll('12', '1000') };
+  }
   const prec = FIELD_PRECISION[field] ?? 4;
   const [shiftHover, setShiftHover] = useState(false);
 

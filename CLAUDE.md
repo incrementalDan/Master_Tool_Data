@@ -829,6 +829,11 @@ src/
                                   # (hasTier3Assembly), PROSHOP_FAMILY_MAP (sync boundary
                                   # only), combined-ID split/compose, component factory,
                                   # pairing asm-number helpers
+    camStrategies.js              # New-format preset toolpath strategies: verified
+                                  # STRATEGIES vocabulary, QUICK_GROUPS, format
+                                  # detection + read/write (isNewFormatPreset,
+                                  # readStrategyBucket, buildStrategies,
+                                  # writeBucketStrategies). See "Strategy section"
     toolFactory.js                # newTool, validateTool, validateGeometry
 
   services/
@@ -868,7 +873,13 @@ src/
     presetNaming.js               # composePresetName, parsePresetName, presetMatchesAssembly,
                                   # OP_TYPES / opTypeWord / matchOpType
     holderNaming.js               # holder short names (strip NBT, drop SK<n> C, override map)
-    speedsAndFeedsCalc.js         # speeds & feeds calculator helpers
+    speedsAndFeedsCalc.js         # speeds & feeds calculator helpers — rpmToSFM/
+                                  # sfmToRPM take a metric flag (÷1000 vs ÷12)
+    presetFx.js                   # Preset editor formula-link (fx) logic —
+                                  # DEFAULT_FX, initialPresetFx, computeFormulaDraft.
+                                  # Test-locked "never clobber a stored value on open"
+    boreCompensation.jsx          # Small-bore feed-per-tooth compensation factor +
+                                  # SmallBoreIcon
 
   components/
     LandingPage.jsx               # Search + facets + sort + grid/list toggle + machine filter
@@ -938,9 +949,14 @@ src/
                                   # Fields: holder (HolderPicker), OOH, linked presets, notes
     NormalizeModal.jsx            # One-time normalization: preset operation-type assignment
     DescRenameModal.jsx           # Per-tool description rename confirmation (buildDesc suggestions)
-    PresetPanel.jsx               # Preset editor panel (speeds/feeds per preset)
-                                  # CollapsedCard shows linked machine (Cpu icon + model name)
-                                  # Machine filter chip row (below material tabs, machines only)
+    PresetPanel.jsx               # Unified preset editor — full-width slider UI
+                                  # (speeds/feeds per preset). CollapsedCard shows linked
+                                  # machine (Cpu icon + model). Machine filter chip row.
+                                  # EditCard uses LinkedSlider/FactorSlider + a results
+                                  # rail (MRR) + Small Bore + the Strategy section.
+                                  # See "Unified Preset Editor" + "Strategy section".
+    LinkedSlider.jsx              # Speed/feed slider over the fx cascade — soft-max
+                                  # ceiling, unit-aware ranges, follower re-link control
     CamPresetPicker.jsx           # Modal "mini Materials page" — pick a CAM preset
                                   # for a preset's material (search by alloy + group pills)
     SpeedFeedSection.jsx          # ToolDetail panel: per-CAM-preset SFM + chip-load
@@ -1261,7 +1277,7 @@ CNC machines are configured in `shop_settings.json` under `machines[]` (each wit
 
 **Machine colors + the `.machine-pill` token** — every machine has its own display color and renders as a colored pill everywhere its name appears standalone (`MachinePill.jsx`, the `.machine-pill` data-field token — same `--badge-color` mechanism as holder pills). Pure helpers in `src/utils/machineColors.js` (tested): `MACHINE_COLOR_PALETTE` (**blue and green first** — the first two machines get those), `machineColor(machine, machines)` (picked `color` else palette-by-list-position, so pre-color machines need no migration), `machineColorFor(machine_id, machine_label, machineOpts)` (resolves a program row's cached id/label against `machineOptions()`, which now stamps `color` on each option; null when the machine was deleted → pill renders in its default blue), and `nextMachineColor(machines)` (first unused palette color — seeds the Add Machine form). The user picks the color via `MachineColorPicker` (swatch row + custom color input) in the Settings machine editor + AddMachineForm. Pill sites: Programs page (grouped rows + table), AddProgramModal session list, JobProgramPicker results, PresetPanel collapsed-card machine link, Settings machine list. The machine **filter chips** (LandingPage + PresetPanel) keep chip behavior but are tinted via `.chip.machine-chip` + `--badge-color`.
 
-**Preset machine link** — each preset carries a metadata-only `machine_id` field (null when unlinked). It is stored in `preset_meta[guid].machine_id` in `tool_metadata.json` (alongside `operation_type`) and read back in `mergeFusionAndMetadata`. **Never written to Fusion JSON.** New blank/ref-seeded presets are pre-populated with `shopSettings.default_machine_id`; copied presets keep the original's `machine_id`.
+**Preset machine link** — each preset carries a metadata-only `machine_id` field (null when unlinked). It is stored in `preset_meta[guid].machine_id` in `tool_metadata.json` (alongside `operation_type`, `job_ids`, and the unified-editor fields `small_bore` / `small_bore_diameter` / `f_z_base` / `intensity` — all written only when non-default) and read back in `mergeFusionAndMetadata` / overlaid in `logicalTools.overlayPresets`. **Never written to Fusion JSON** — every app-only per-preset field MUST be in `normalizePreset`'s destructure so it can't leak into the strict Fusion JSON (`strategies` is the exception — it IS Fusion-native). New blank/ref-seeded presets are pre-populated with `shopSettings.default_machine_id`; copied presets keep the original's `machine_id`.
 
 **Taper compatibility hint** (`taperMatches`, `PresetPanel.jsx`) — when a preset's linked assembly has a holder, checks whether the machine's taper string appears (case-insensitive substring) in the holder description. Mismatch shows a ⚠ warning next to the machine picker in `EditCard`. Informational only, non-blocking. `'Other'` taper never flags.
 
@@ -1653,6 +1669,32 @@ The preset editor links paired speed/feed fields with a per-field `fx` state (`'
 - **Retract feedrate** (`v_f_retract`, drill family + spot drill) — **defaults to the plunge feedrate and follows it** as plunge changes (mirrors Fusion's native `tool_feedRetract = tool_feedPlunge`), a one-directional follower like lead-in/out. A stored retract that already **differs** from plunge is treated as an override → `'manual'` on open so it's preserved; typing in the field overrides it. `setPlunge` cascades retract for the milling/spot-drill plunge fields (which use a plain setter, not `handleNumChange`). Added to `FORMULAS` + `FIELD_PRECISION` (`speedsAndFeedsCalc.js`). Not shown on other tool types (`v_f_retract:'manual'` there).
 
 When adding a feed field or tool type, ask: *does this field's formula source exist for this tool type?* If not, default it `'manual'` in `initialFx` and skip its `n`/`v_c` cascade. These are **UI-only** functions — the round-trip audit doesn't exercise them, so `normalizePreset`/`internalToFusionTool` remain the authority on what's actually written per type.
+
+**The fx logic is extracted to `src/utils/presetFx.js`** (`DEFAULT_FX`, `initialPresetFx(preset, {isMilling,isSpotDrill,isTurning,isDrillFamily})`, `computeFormulaDraft(draft, fx, diameter, numberOfFlutes, metric)`) so the "opening a preset never clobbers an independent stored value" invariant is **test-locked** (`presetFx.test.js`) — every field `initialPresetFx` marks `'manual'` (a follower whose stored value differs from its source) is returned by `computeFormulaDraft` byte-for-byte, incl. a value edited in Fusion then re-opened here.
+
+**Surface speed ↔ RPM is unit-dependent (inch↔mm safety).** `rpmToSFM(rpm, dia, metric)` / `sfmToRPM(sfm, dia, metric)` (`speedsAndFeedsCalc.js`) divide by **12** (inch, ft/min) or **1000** (mm, m/min) — the `v_c↔n` link is the **only** speed/feed relationship that depends on the tool's unit (feed conversions `v_f = f_z·n·flutes` and plunge `= f_n·n` are unit-independent). `EditCard` passes `isMetricTool = (lenUnit === 'mm')` to `computeFormulaDraft` and both `handleNumChange` call sites; `LinkedSlider` swaps the `/12`→`/1000` in the `v_c`/`n` tooltip formula for a metric tool. Omitting the flag makes a mm tool's surface speed off by ~83×. (`SpeedFeedSection.deriveRPM` has its own equivalent unit switch.)
+
+### Unified Preset Editor (`PresetPanel` `EditCard`) — full-width slider UI
+
+The preset editor is a **full-width overlay** (breakout from the ToolDetail column) built from `Section` cards, with sliders in place of bare number inputs. Supporting modules (all pure/testable, mirroring the schema-module pattern): `src/utils/presetFx.js` (fx logic above), `src/schema/camStrategies.js` (toolpath strategy vocabulary), `src/utils/boreCompensation.jsx` (small-bore factor + icon), plus the components `src/components/LinkedSlider.jsx` and the in-file `FactorSlider` / `MRRIndicator` / `SmallBoreSection`.
+
+- **`LinkedSlider`** — the speed/feed input. A slider + numeric box over the **existing `fx` cascade** (it renders `fxState` and calls `onChange`; the math stays in `computeFormulaDraft`/`handleNumChange`). **Soft-max ceiling**: the range grows to fit any value pushed past the default and shrinks back when it fits again (a default, not a hard limit). Ranges are unit-aware — `SLIDER_RANGES` (inch) vs `METRIC_RANGES` (mm), picked by the `metric` prop; feed-per-tooth (`f_z`) defaults to a **0.012 in / 0.3 mm** ceiling. RPM sliders take a `max` override wired to the **linked machine's `max_rpm`** (else the shop default machine's) so the ceiling is real, not a guessed huge number. **Re-link control** (`onRelink`/`relinkLabel`): one-directional followers (lead-in/out, transition, ramp RPM) keep the `fx` badge visible even when unlinked — greyed when the value differs from its source; clicking re-links (snaps to source, back to `'formula'`), with a tooltip. Only these followers + ramp RPM get it — bidirectional pairs don't.
+- **`FactorSlider`** — stepdown/stepover entered **as a % of a reference dimension** (stepdown % of diameter/LOC, stepover % of diameter) alongside the absolute value; both stay in sync. The stored Fusion value is still the absolute `stepdown`/`stepover` in the tool's unit — the % is a UI convenience.
+- **`MRRIndicator`** (results rail) — Material Removal Rate = stepover × stepdown × cutting-feed, all in the tool's unit → `${lenUnit}³/min`. Lives in a **distinct results sidebar** to the right of the builder (periodic-table-style badge; the builder is ~10-15% narrower to make room), reserved for future physics results. Drops below the builder (no box) on narrow screens.
+- **Small Bore** (`SmallBoreSection`, inside Feedrates) — a metadata-only bore-compensation helper: enter the actual bore diameter + base feed-per-tooth, it derives a reduced `f_z` via `boreCompensation` (a unitless factor). Small Bore is modeled as **finish + a bore/contour strategy**; the compensation values live in `preset_meta` (`small_bore`, `small_bore_diameter`, `f_z_base`), never folded into the preset name.
+
+### Strategy section — new-format Fusion presets (`camStrategies.js`)
+
+Fusion's newer preset format carries a **`strategies` object** (`{ roughing:[], finishing:[] }` of internal strategy IDs) instead of encoding the operation in the name. `PresetPanel` supports both:
+
+- **Format detection**: `isNewFormatPreset(preset)` (has a `strategies` object). Old presets keep operation in the name + `operation_type` metadata, unchanged. A **Convert** action flips old → new. **New format is the default for all newly-created presets** — blank, ref-seeded, and copied.
+- **One bucket per preset**: per the shop, a preset is **either** roughing **or** finishing, never both (`readStrategyBucket` returns the single populated bucket; a Rough/Finish toggle switches). A **dual-bucket** preset that came from Fusion (its picker is a matrix) is **preserved, not silently collapsed** — `writeBucketStrategies(bucket, ids, current, dualBucket)` keeps the other bucket's IDs, and an amber warning surfaces it. Unknown strategy IDs round-trip untouched.
+- **Verified IDs only**: every ID in `STRATEGIES` is checked against real Fusion exports (`FUSION TOOL Library REF/NewPresetREF/`) — the 46-ID "ALL MILLING STRATEGIES" reference + the chamfer-tool reference — locked by `camStrategies.test.js`. **No guessed IDs.** Several names map to non-obvious IDs (`Trace`=`path3d`, `Wall`=`inclined_walls`, `Corner`=`rest_finishing`, the Rotary/ModuleWorks multi-axis set) — don't "correct" a name to its ID. `chamfer2d`/`engrave` are chamfer-mill-only (`chamferOnly`); the "Other" group is Fusion's internal/utility tail (hidden from the quick picker but round-tripped).
+- **Provenance-aware selection (warn, never wipe)**: the picker tracks `selected` (all chosen IDs) **plus `individualIds`** (the subset chosen individually in the "all strategies" popout **or** imported from Fusion). A **plain quick-group click switches groups** — replaces the previous group's members but **keeps** the individually-chosen/Fusion IDs (`next = new Set(individualIds)` + the new group's members). **Shift-click combines** groups additively. This protects a user's (or Fusion's) intentional individual picks from being wiped by a later group click; changing Rough/Finish/Small-Bore **warns, doesn't block**. Strategies are **milling-only** (turning/hole-making have their own vocabularies, out of scope).
+
+### Copy preset as Fusion JSON (`fusionExport.js`)
+
+`copyPresetToClipboard` / `presetToFusionClipboardObject` / `presetToFusionClipboardJson` emit a **single preset** in Fusion's exact right-click-copy clipboard shape (`{ presets:[one], toolType, unit }`), routed through `internalToFusionTool` so every round-trip invariant (expression sync, strategies, app-only field stripping) holds, with keys sorted alphabetically (`sortKeysDeep`) to match Fusion byte-for-byte. Locked by a test against the user's real clipboard sample.
 
 ### Tap & thread mill metadata fields
 

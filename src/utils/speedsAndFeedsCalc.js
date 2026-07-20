@@ -1,14 +1,19 @@
 const PI = Math.PI;
 
 // ── Speed conversions ─────────────────────────────────────────────────────────
-export function rpmToSFM(rpm, diameterInches) {
-  if (!rpm || !diameterInches) return 0;
-  return (rpm * PI * diameterInches) / 12;
+// Surface speed ↔ spindle speed is UNIT-DEPENDENT: an inch tool's surface speed
+// is ft/min (12 in/ft), a millimeters tool's is m/min (1000 mm/m). Pass
+// metric=true for a millimeters tool so the divisor matches the tool's unit —
+// otherwise a mm tool's v_c↔n link is off by ~83×. (The feed conversions below
+// — v_f = f_z·n·flutes, plunge = f_n·n — are unit-INDEPENDENT and need no flag.)
+export function rpmToSFM(rpm, diameter, metric = false) {
+  if (!rpm || !diameter) return 0;
+  return (rpm * PI * diameter) / (metric ? 1000 : 12);
 }
 
-export function sfmToRPM(sfm, diameterInches) {
-  if (!sfm || !diameterInches) return 0;
-  return (sfm * 12) / (PI * diameterInches);
+export function sfmToRPM(surfaceSpeed, diameter, metric = false) {
+  if (!surfaceSpeed || !diameter) return 0;
+  return (surfaceSpeed * (metric ? 1000 : 12)) / (PI * diameter);
 }
 
 // ── Cutting feed conversions ──────────────────────────────────────────────────

@@ -702,6 +702,9 @@ function EditCard({
   const isHoleMaking = isTap || isDrillFamily || isSpotDrill;
   const isTurning = TURNING_TYPES.has(toolType);
   const isMilling = !isHoleMaking && !isTurning;
+  // Surface speed ↔ spindle speed is unit-dependent (ft/min vs m/min); the
+  // v_c↔n formula needs the tool's unit or a mm tool's link is off by ~83×.
+  const isMetricTool = lenUnit === 'mm';
 
   // Open-time fx state — which fields are linked (recomputed from a source) vs.
   // preserved. The clobber-safety rules (mathematically-locked pairs recompute;
@@ -712,7 +715,7 @@ function EditCard({
   const [fx, setFx] = useState(initialFx);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [draft, setDraft] = useState(() => {
-    const d = computeFormulaDraft({ ...preset }, initialFx, diameter, numberOfFlutes);
+    const d = computeFormulaDraft({ ...preset }, initialFx, diameter, numberOfFlutes, isMetricTool);
     d.operation_type = preset.operation_type ?? parsePresetName(preset.name)?.opType ?? null;
     d.machine_id = preset.machine_id ?? null;
     d.job_ids = preset.job_ids ?? [];
@@ -906,7 +909,7 @@ function EditCard({
   const isFirstRender = useRef(true);
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
-    setDraft(d => computeFormulaDraft(d, fxRef.current, diameter, numberOfFlutes));
+    setDraft(d => computeFormulaDraft(d, fxRef.current, diameter, numberOfFlutes, isMetricTool));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [diameter, numberOfFlutes]);
 
@@ -951,14 +954,14 @@ function EditCard({
     // ── Speed group ──────────────────────────────────────────────────────────
     if (field === 'n') {
       n = value ?? 0;
-      newDraft.v_c   = roundForField('v_c',   rpmToSFM(n, diameter));
+      newDraft.v_c   = roundForField('v_c',   rpmToSFM(n, diameter, isMetricTool));
       newFx.v_c      = 'formula';
       if (fx.n_ramp !== 'manual') {
         newDraft.n_ramp = roundForField('n_ramp', n);
         newFx.n_ramp    = 'formula';
       }
     } else if (field === 'v_c') {
-      n = roundForField('n', sfmToRPM(value ?? 0, diameter));
+      n = roundForField('n', sfmToRPM(value ?? 0, diameter, isMetricTool));
       newDraft.n   = n;
       newFx.n      = 'formula';
       if (fx.n_ramp !== 'manual') {
@@ -1020,7 +1023,6 @@ function EditCard({
   };
 
   const noSpeed = !(draft.n);
-  const isMetricTool = lenUnit === 'mm';
   // The RPM sliders' default ceiling maps to a machine's max spindle speed:
   // the preset's linked machine if it has one, else the shop's default machine
   // (so an unlinked preset still gets a sane ceiling), else the 16000 fallback
