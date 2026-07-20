@@ -439,6 +439,7 @@ export function buildMetadataTool(tool) {
     conflicts: mergeToolConflicts(tool.conflicts, {
       combineConflicts: tool._combineConflicts,
       productIdConflict: tool._productIdConflict,
+      machineNumberConflict: tool._machineNumberConflict,
     }),
   };
 }

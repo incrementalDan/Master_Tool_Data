@@ -29,6 +29,19 @@ describe('mergeToolConflicts', () => {
     const out = mergeToolConflicts(existing, { combineConflicts: [{ field: 'diameter', values: [0.5, 0.375] }] });
     expect(out.map(c => c.field).sort()).toEqual(['diameter', 'flute_length']);
   });
+
+  it('adds a machine-number collision conflict, singular per tool', () => {
+    const out = mergeToolConflicts([], { machineNumberConflict: { from: 42, to: 43 } });
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ type: 'machine_number', from: 42, to: 43 });
+    const again = mergeToolConflicts(out, { machineNumberConflict: { from: 42, to: 44 } });
+    expect(again).toHaveLength(1);   // not re-added
+  });
+
+  it('ignores an incomplete machine-number conflict', () => {
+    expect(mergeToolConflicts([], { machineNumberConflict: { from: 42 } })).toHaveLength(0);
+    expect(mergeToolConflicts([], { machineNumberConflict: null })).toHaveLength(0);
+  });
 });
 
 describe('clearToolConflict', () => {

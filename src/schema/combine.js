@@ -225,6 +225,24 @@ export function findNoFusionMergeCandidates(tools) {
   return out;
 }
 
+// Other EXISTING tools that share `tool`'s ProShop number — the tool-page
+// duplicate detector behind MergeSiblingBanner. THIS is the invariant the original
+// bug violated: a no-Fusion (ProShop-only) tool and a separately-tracked Fusion
+// tool carrying the same ProShop number must NOT silently coexist as two
+// unconnected records — the app has to surface them as mergeable. Kept as a pure,
+// tested helper (not inline in the banner) so a future refactor can't quietly drop
+// the detection. Match is by normalized ProShop number; a pair where BOTH sides are
+// linked to a real Fusion library is excluded (cross-library — writes must stay
+// routable, so it's never an auto-merge candidate).
+export function findProShopSiblings(tool, tools) {
+  const pid = normPid(tool?.tool_id);
+  if (!pid) return [];
+  return (tools || []).filter(t =>
+    t && t.id !== tool.id &&
+    normPid(t.tool_id) === pid &&
+    !(t.library_id != null && tool.library_id != null));
+}
+
 // Merge a NEW Fusion tool into an existing no-Fusion tool that shares its ProShop
 // number — the explicit merge the user confirms at normalization. The Fusion tool
 // is primary so its real geometry/presets/raw instance win; the CALLER must have

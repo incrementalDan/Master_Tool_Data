@@ -41,14 +41,19 @@ export default function ConflictBanner({ tool }) {
       </div>
 
       <div className="panel-body" style={{ display: 'grid', gap: 12, paddingTop: 4 }}>
-        {conflicts.map(c => (
-          c.type === 'product_id'
-            ? <ProductIdRow key={c.id} c={c} disabled={isSaving}
-                onClear={() => resolveToolConflict(tool.id, c.id)} />
-            : <FieldRow key={c.id} c={c} unit={tool.unit} current={tool[c.field]} disabled={isSaving}
-                onKeep={() => resolveToolConflict(tool.id, c.id)}
-                onUse={(v) => resolveToolConflict(tool.id, c.id, v)} />
-        ))}
+        {conflicts.map(c => {
+          if (c.type === 'product_id') {
+            return <ProductIdRow key={c.id} c={c} disabled={isSaving}
+              onClear={() => resolveToolConflict(tool.id, c.id)} />;
+          }
+          if (c.type === 'machine_number') {
+            return <MachineNumberRow key={c.id} c={c} disabled={isSaving}
+              onClear={() => resolveToolConflict(tool.id, c.id)} />;
+          }
+          return <FieldRow key={c.id} c={c} unit={tool.unit} current={tool[c.field]} disabled={isSaving}
+            onKeep={() => resolveToolConflict(tool.id, c.id)}
+            onUse={(v) => resolveToolConflict(tool.id, c.id, v)} />;
+        })}
       </div>
     </div>
   );
@@ -73,6 +78,20 @@ function FieldRow({ c, unit, current, onKeep, onUse, disabled }) {
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+function MachineNumberRow({ c, onClear, disabled }) {
+  return (
+    <div>
+      <div className="text-sm" style={{ fontWeight: 600 }}>Duplicate machine tool number — auto-reassigned</div>
+      <div className="text-xs text-sub" style={{ marginBottom: 6 }}>
+        This tool came in with machine number <span className="font-mono" style={{ color: 'var(--text)' }}>T{fmt(c.from)}</span>,
+        which another tool already uses. Machine numbers must be unique, so it was reassigned to{' '}
+        <span className="font-mono" style={{ color: 'var(--text)' }}>T{fmt(c.to)}</span>. Update the machine/setup sheet if needed.
+      </div>
+      <button className="btn btn-ghost btn-sm" disabled={disabled} onClick={onClear}>Mark reviewed</button>
     </div>
   );
 }
