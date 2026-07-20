@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { combineToolsByToolId, combineUnlinkedByToolId, duplicateIdClusters } from './toolSchema.js';
+import { combineToolsByToolId, findNoFusionMergeCandidates, mergeNoFusionIntoFusion, duplicateIdClusters } from './toolSchema.js';
 
 // Minimal logical-tool shape that satisfies mergeLogicalTools' expectations.
 function makeTool(overrides = {}) {
@@ -159,69 +159,80 @@ describe('combineToolsByToolId — no grouping without tool_id', () => {
   });
 });
 
-describe('combineUnlinkedByToolId — no-Fusion + Fusion tool sharing a ProShop #', () => {
-  it('folds a no-Fusion (ProShop-only) tool into the freshly-uploaded Fusion tool', () => {
-    // ProShop-only import: metadata-only tool, its OWN tracking ID, ProShop data.
-    const proShopOnly = makeTool({
+describe('findNoFusionMergeCandidates — new Fusion tool matching a no-Fusion tool', () => {
+  const proShopOnly = () => makeTool({
+    id: 'FTL-PSONLY', tracking_id: 'FTL-PSONLY', tool_id: 'A-7',
+    no_fusion_link: true, tool_type: 'flat end mill',
+    diameter: 0.25, flute_length: 0.75,
+  });
+  // A freshly-uploaded, not-yet-normalized Fusion tool has NO tracking id.
+  const fusionUpload = (extra = {}) => makeTool({
+    id: 'guid-fusion', tracking_id: null, tool_id: 'A-7',
+    no_fusion_link: false, tool_type: 'flat end mill',
+    diameter: 0.25, flute_length: 0.75, library_id: 'lib-1',
+    ...extra,
+  });
+
+  it('pairs an untracked Fusion tool with the no-Fusion tool of the same ProShop #', () => {
+    const cands = findNoFusionMergeCandidates([proShopOnly(), fusionUpload()]);
+    expect(cands).toHaveLength(1);
+    expect(cands[0].toolId).toBe('A-7');
+    expect(cands[0].fusionTool.tracking_id).toBeNull();
+    expect(cands[0].existingTool.tracking_id).toBe('FTL-PSONLY');
+    expect(cands[0].conflicts).toHaveLength(0);   // specs agree
+  });
+
+  it('matches ProShop #s case/dash/space-insensitively and reports differing specs', () => {
+    const cands = findNoFusionMergeCandidates([
+      proShopOnly(),
+      fusionUpload({ tool_id: 'a 7', diameter: 0.2505 }),   // "a 7" == "A-7", diameter differs
+    ]);
+    expect(cands).toHaveLength(1);
+    const conflict = cands[0].conflicts.find(c => c.field === 'diameter');
+    expect(conflict).toBeDefined();
+    expect(conflict.fusion).toBe(0.2505);
+    expect(conflict.existing).toBe(0.25);
+  });
+
+  it('ignores an already-tracked Fusion tool (only NEW uploads are candidates)', () => {
+    const tracked = fusionUpload({ tracking_id: 'FTL-FUSION' });
+    expect(findNoFusionMergeCandidates([proShopOnly(), tracked])).toHaveLength(0);
+  });
+
+  it('no candidate when there is no matching no-Fusion tool', () => {
+    expect(findNoFusionMergeCandidates([fusionUpload()])).toHaveLength(0);
+  });
+});
+
+describe('mergeNoFusionIntoFusion', () => {
+  it('keeps the Fusion tool primary, gap-fills ProShop data, flags spec conflicts', () => {
+    // Caller has already stamped the Fusion tool with the no-Fusion tracking id.
+    const fusionTool = makeTool({
       id: 'FTL-PSONLY', tracking_id: 'FTL-PSONLY', tool_id: 'A-7',
-      no_fusion_link: true, library_id: null, library_name: null,
-      diameter: 0.25, vendor: 'Helical', min_ooh: 0.75,
-      purchasing: { manufacturers: [{ id: 'm1', name: 'Helical' }], vendors: [] },
-    });
-    // Same tool later uploaded into Fusion → DIFFERENT tracking ID, SAME Tool #.
-    const fusionUpload = makeTool({
-      id: 'FTL-FUSION', tracking_id: 'FTL-FUSION', tool_id: 'A-7',
-      no_fusion_link: false, library_id: 'lib-1', library_name: 'Master.json',
-      diameter: 0.25, vendor: '', min_ooh: null,
+      no_fusion_link: false, library_id: 'lib-1',
+      diameter: 0.2505,                 // real Fusion geometry
+      vendor: '', min_ooh: null,
       _fusionRaw: { guid: 'guid-fusion' },
     });
-
-    const result = combineUnlinkedByToolId([proShopOnly, fusionUpload]);
-
-    // One entry, not two.
-    expect(result).toHaveLength(1);
-    const [tool] = result;
-    // The Fusion tool is primary — routing survives.
-    expect(tool.tracking_id).toBe('FTL-FUSION');
-    expect(tool.library_id).toBe('lib-1');
-    expect(tool.no_fusion_link).toBe(false);
-    // ProShop-only fields gap-fill onto the linked tool.
-    expect(tool.vendor).toBe('Helical');
-    expect(tool.min_ooh).toBe(0.75);
-    expect(tool.purchasing.manufacturers[0].name).toBe('Helical');
-  });
-
-  it('makes the linked tool primary regardless of input order', () => {
-    const fusionUpload = makeTool({
-      id: 'FTL-F', tracking_id: 'FTL-F', tool_id: 'B-2',
-      no_fusion_link: false, library_id: 'lib-1',
-    });
-    const proShopOnly = makeTool({
-      id: 'FTL-P', tracking_id: 'FTL-P', tool_id: 'B-2',
-      no_fusion_link: true, library_id: null,
+    const noFusionTool = makeTool({
+      id: 'FTL-PSONLY', tracking_id: 'FTL-PSONLY', tool_id: 'A-7',
+      no_fusion_link: true,
+      diameter: 0.25,                   // ProShop geometry (slightly off)
+      vendor: 'Helical', min_ooh: 0.75,
     });
 
-    // no-Fusion tool listed FIRST — the Fusion tool must still win as primary.
-    const [tool] = combineUnlinkedByToolId([proShopOnly, fusionUpload]);
-    expect(tool.tracking_id).toBe('FTL-F');
-    expect(tool.library_id).toBe('lib-1');
-    expect(tool.no_fusion_link).toBe(false);
-  });
-
-  it('never folds two DISTINCT Fusion libraries sharing a Tool # (routing)', () => {
-    const a = makeTool({ tracking_id: 'FTL-A', tool_id: 'C-3', library_id: 'lib-1' });
-    const b = makeTool({ tracking_id: 'FTL-B', tool_id: 'C-3', library_id: 'lib-2' });
-
-    const result = combineUnlinkedByToolId([a, b]);
-    expect(result).toHaveLength(2);   // kept separate — writes must stay routable
-  });
-
-  it('leaves tools with distinct Tool #s untouched', () => {
-    const a = makeTool({ tracking_id: 'FTL-A', tool_id: 'D-1', library_id: 'lib-1' });
-    const b = makeTool({ tracking_id: 'FTL-B', tool_id: 'D-2', no_fusion_link: true });
-
-    const result = combineUnlinkedByToolId([a, b]);
-    expect(result).toHaveLength(2);
+    const merged = mergeNoFusionIntoFusion(fusionTool, noFusionTool);
+    // Fusion tool primary → its geometry + tracking id survive; now linked.
+    expect(merged.tracking_id).toBe('FTL-PSONLY');
+    expect(merged.diameter).toBe(0.2505);
+    expect(merged.no_fusion_link).toBe(false);
+    // ProShop-only fields gap-fill.
+    expect(merged.vendor).toBe('Helical');
+    expect(merged.min_ooh).toBe(0.75);
+    // The slight geometry disagreement is flagged for the user to resolve.
+    const conflict = merged._combineConflicts?.find(c => c.field === 'diameter');
+    expect(conflict).toBeDefined();
+    expect(conflict.values).toEqual([0.2505, 0.25]);
   });
 });
 
