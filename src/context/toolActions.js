@@ -9,8 +9,9 @@ import {
   splitToFusionInstances, buildMetadataTool, mergePresetsWithFusion,
   mergeSharedFieldsWithFusion, mergeInstanceFieldsWithFusion, fusionToolToInternal,
   readTrackingId, readOohFromFusion, presetZeroMirror,
-  getNextMachineNumber, combineToolsByToolId,
+  getNextMachineNumber, combineToolsByToolId, mergeNoFusionIntoFusion,
 } from '../schema/toolSchema.js';
+import { normProShopId } from '../schema/insertFamilies.js';
 import { composeAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
 import { INSERT_FAMILY_BY_ID, pairedAsmIdPart } from '../schema/insertFamilies.js';
 import { resolveLocationString, analyzeSystem, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
@@ -662,6 +663,56 @@ export function createToolActions(ctx) {
     }
   };
 
+  // ─── Merge two already-existing tools that share a ProShop number ─────────
+  // The tool-page counterpart to the normalize-time merge: when two SEPARATE
+  // records already exist for one physical tool (e.g. a ProShop-only import that
+  // was later uploaded into Fusion and normalized under its own tracking ID before
+  // the normalize-merge existed), fold them into one here. The Fusion-linked tool
+  // is the SURVIVOR (its Fusion instance already carries its tracking ID, so no
+  // Fusion rewrite is needed); the other tool — always metadata-only in a routing-
+  // safe pair — is absorbed and its metadata record deleted. Its ProShop-only
+  // fields gap-fill onto the survivor and any shared spec that differs rides along
+  // as a conflict for the user to resolve. Returns { survivorId, absorbedId }.
+  const mergeTools = async (idA, idB) => {
+    const a = toolsRef.current.find(t => t.id === idA);
+    const b = toolsRef.current.find(t => t.id === idB);
+    if (!a || !b) throw new Error('Tool not found');
+    if (normProShopId(a.tool_id) !== normProShopId(b.tool_id) || !normProShopId(a.tool_id)) {
+      throw new Error('These tools do not share a ProShop number');
+    }
+    // Routing-safe only: at most one may be linked to a real Fusion library, so the
+    // absorbed record is metadata-only and its deletion needs no Fusion rewrite.
+    if (a.library_id != null && b.library_id != null) {
+      throw new Error("Both tools are linked to a Fusion library — can't merge automatically");
+    }
+    // Survivor = the linked tool if exactly one is linked, else the first (a).
+    const survivor = (b.library_id != null && a.library_id == null) ? b : a;
+    const absorbed = survivor === a ? b : a;
+
+    dispatch({ type: 'SAVE_START' });
+    try {
+      assertFusionReady();
+      // Survivor stays primary (its geometry/presets/library/tracking id win); the
+      // absorbed tool's fields gap-fill and disagreements become conflict records.
+      const merged = mergeNoFusionIntoFusion(survivor, absorbed);
+      const written = await writeLogicalTool(merged);
+      // Delete the absorbed (metadata-only) record — no Fusion round-trip.
+      if (googleRef.current) await toolStore.deleteById(absorbed.tracking_id || absorbed.id);
+      dispatch({ type: 'DELETE_TOOL', id: absorbed.id });
+      dispatch({ type: 'UPDATE_TOOL', tool: written });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      const flagged = written._combineConflicts?.length || 0;
+      notify(
+        `Merged into one tool${flagged ? ` — ${flagged} difference${flagged === 1 ? '' : 's'} flagged to resolve` : ''}`,
+        'success', 6000);
+      return { survivorId: written.id, absorbedId: absorbed.id };
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Merge failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  };
+
   // ─── Assembly CRUD (each assembly = one Fusion instance) ──────────────────
   const addAssembly = async (toolId, assembly) => {
     const tool = toolsRef.current.find(t => t.id === toolId);
@@ -985,7 +1036,7 @@ export function createToolActions(ctx) {
   return {
     writeLogicalTool,
     saveTool, assignToolLocation, normalizeLocationSystem,
-    addTool, cloneTool, mergeTool, deleteTool,
+    addTool, cloneTool, mergeTool, deleteTool, mergeTools,
     addAssembly, updateAssembly, deleteAssembly,
     reconcileTool, applyReconcile,
     promoteToolToFusion, detachToolFromFusion,

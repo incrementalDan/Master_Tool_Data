@@ -171,12 +171,30 @@ export function combineToolsByToolId(tools) {
   });
 }
 
-// Shared specs compared to preview whether a NEW (untracked) Fusion tool and an
-// existing no-Fusion (metadata-only) tool sharing a ProShop number are really the
-// same tool. Fusion-native fields both sides carry.
+// Shared specs compared to preview whether two tools sharing a ProShop number are
+// really the same tool. Fusion-native fields both sides carry.
 const MERGE_PREVIEW_FIELDS = ['tool_type', 'diameter', 'flute_length', 'overall_length', 'number_of_flutes'];
 
 const normPid = (s) => String(s || '').replace(/[\s-]/g, '').toUpperCase();
+
+// The shared specs (cut diameter, flute count, …) where two tools sharing a
+// ProShop number DISAGREE — the preview shown before merging so the user sees what
+// they'll have to reconcile. `{ field, a, b }` per differing field; empty when the
+// specs agree. Used by both the normalize-time candidate list and the tool-page
+// merge banner.
+export function sharedSpecConflicts(a, b) {
+  const isEmpty = (v) => v == null || v === '';
+  const out = [];
+  for (const f of MERGE_PREVIEW_FIELDS) {
+    const av = a?.[f], bv = b?.[f];
+    if (isEmpty(av) || isEmpty(bv)) continue;
+    const differ = (typeof av === 'number' && typeof bv === 'number')
+      ? round4(av) !== round4(bv)
+      : String(av).trim() !== String(bv).trim();
+    if (differ) out.push({ field: f, a: av, b: bv });
+  }
+  return out;
+}
 
 // Detect NEW (untracked) Fusion tools that share a ProShop number with an existing
 // no-Fusion tool — the case that used to surface as two separate library entries.
@@ -194,7 +212,6 @@ export function findNoFusionMergeCandidates(tools) {
     const pid = normPid(t.tool_id);
     if (pid) noFusionByPid.set(pid, t);
   }
-  const isEmpty = (v) => v == null || v === '';
   const out = [];
   for (const t of (tools || [])) {
     if (!t || t.tracking_id || t.no_fusion_link) continue;   // only NEW untracked Fusion tools
@@ -202,15 +219,7 @@ export function findNoFusionMergeCandidates(tools) {
     if (!pid) continue;
     const existing = noFusionByPid.get(pid);
     if (!existing) continue;
-    const conflicts = [];
-    for (const f of MERGE_PREVIEW_FIELDS) {
-      const a = t[f], b = existing[f];
-      if (isEmpty(a) || isEmpty(b)) continue;
-      const differ = (typeof a === 'number' && typeof b === 'number')
-        ? round4(a) !== round4(b)
-        : String(a).trim() !== String(b).trim();
-      if (differ) conflicts.push({ field: f, fusion: a, existing: b });
-    }
+    const conflicts = sharedSpecConflicts(t, existing).map(c => ({ field: c.field, fusion: c.a, existing: c.b }));
     out.push({ toolId: t.tool_id, fusionTool: t, existingTool: existing, conflicts });
   }
   return out;

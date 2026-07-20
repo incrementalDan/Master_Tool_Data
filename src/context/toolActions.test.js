@@ -366,3 +366,89 @@ describe('Phase B increment 4 — promote / detach', () => {
     expect(result.no_fusion_link).toBe(true);
   });
 });
+
+describe('mergeTools — fold two records sharing a ProShop number (tool-page merge)', () => {
+  const ioCtx = (overrides = {}) => ({
+    dispatch: vi.fn(), notify: vi.fn(),
+    downloadFusionList: vi.fn(async () => []),
+    uploadFusionList: vi.fn(async () => {}),
+    downloadAllLibraries: vi.fn(), fetchRawLibrary: vi.fn(), saveLocationConfig: vi.fn(),
+    toolsRef: { current: [] }, holdersRef: { current: [] },
+    shopSettingsRef: { current: {
+      assembly_id_system: { mode: 'auto' }, tool_id_system: {}, location_config: { systems: [] },
+      tool_libraries: [{ id: 'lib-1', fileName: 'main.json' }], default_tool_library_id: 'lib-1',
+    } },
+    googleRef: { current: true }, componentsRef: { current: { components: [] } },
+    ...overrides,
+  });
+  const baseTool = (o) => ({
+    tool_type: 'flat end mill', unit: 'inches', diameter: 0.5, flute_length: 1,
+    overall_length: 3, number_of_flutes: 4, presets: [], assemblies: [], _instancesRaw: [], ...o,
+  });
+
+  it('throws when the two tools do not share a ProShop number', async () => {
+    const ctx = ioCtx({ toolsRef: { current: [
+      baseTool({ id: 'FTL-A', tracking_id: 'FTL-A', tool_id: 'A-1', no_fusion_link: true }),
+      baseTool({ id: 'FTL-B', tracking_id: 'FTL-B', tool_id: 'B-2', no_fusion_link: true }),
+    ] } });
+    const { mergeTools } = createToolActions(ctx);
+    await expect(mergeTools('FTL-A', 'FTL-B')).rejects.toThrow(/ProShop number/i);
+  });
+
+  it('refuses when both tools are linked to a Fusion library (routing)', async () => {
+    const ctx = ioCtx({ toolsRef: { current: [
+      baseTool({ id: 'FTL-A', tracking_id: 'FTL-A', tool_id: 'A-7', library_id: 'lib-1' }),
+      baseTool({ id: 'FTL-B', tracking_id: 'FTL-B', tool_id: 'A-7', library_id: 'lib-2' }),
+    ] } });
+    const { mergeTools } = createToolActions(ctx);
+    await expect(mergeTools('FTL-A', 'FTL-B')).rejects.toThrow(/both.*linked/i);
+  });
+
+  it('merges a no-Fusion pair into one, gap-fills ProShop data, deletes the absorbed record', async () => {
+    const a = baseTool({ id: 'FTL-A', tracking_id: 'FTL-A', tool_id: 'A-7', no_fusion_link: true,
+      library_id: null, diameter: 0.2505, vendor: '', assemblies: [{ assembly_id: 'a1', ooh: 1 }] });
+    const b = baseTool({ id: 'FTL-B', tracking_id: 'FTL-B', tool_id: 'A-7', no_fusion_link: true,
+      library_id: null, diameter: 0.25, vendor: 'Helical' });
+    const ctx = ioCtx({ toolsRef: { current: [a, b] } });
+    const { mergeTools } = createToolActions(ctx);
+
+    const res = await mergeTools('FTL-A', 'FTL-B');
+    expect(res).toEqual({ survivorId: 'FTL-A', absorbedId: 'FTL-B' });
+    expect(deleteMetadata).toHaveBeenCalledWith('FTL-B');
+    expect(ctx.dispatch.mock.calls.find(c => c[0].type === 'DELETE_TOOL')[0].id).toBe('FTL-B');
+    const savedMeta = upsertMetadata.mock.calls.at(-1)[0];
+    expect(savedMeta.id).toBe('FTL-A');
+    expect(savedMeta.vendor).toBe('Helical');                 // gap-filled
+    expect((savedMeta.conflicts || []).some(c => c.field === 'diameter')).toBe(true);
+  });
+
+  it('keeps the LINKED tool as survivor even when called from the no-Fusion tool', async () => {
+    const rawG1 = { guid: 'g1', type: 'flat end mill', unit: 'inches', 'product-id': 'A-7',
+      'post-process': { comment: 'FTL-LINK', number: null },
+      geometry: { DC: 0.2505, LCF: 1, OAL: 3, NOF: 4, LB: 1 }, 'start-values': { presets: [] }, expressions: {} };
+    const linked = baseTool({ id: 'FTL-LINK', tracking_id: 'FTL-LINK', tool_id: 'A-7', no_fusion_link: false,
+      library_id: 'lib-1', library_name: 'main.json', diameter: 0.2505, vendor: '',
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'g1', ooh: 1, holder_guid: null }],
+      _instancesRaw: [rawG1], _fusionRaw: rawG1 });
+    const noFus = baseTool({ id: 'FTL-PS', tracking_id: 'FTL-PS', tool_id: 'A-7', no_fusion_link: true,
+      library_id: null, diameter: 0.25, vendor: 'Helical', min_ooh: 0.75 });
+    let uploaded = null;
+    const ctx = ioCtx({
+      toolsRef: { current: [noFus, linked] },
+      downloadFusionList: vi.fn(async () => [rawG1]),
+      uploadFusionList: vi.fn(async (_id, list) => { uploaded = list; }),
+    });
+    const { mergeTools } = createToolActions(ctx);
+
+    // Called from the no-Fusion tool's page — survivor must still be the linked one.
+    const res = await mergeTools('FTL-PS', 'FTL-LINK');
+    expect(res.survivorId).toBe('FTL-LINK');
+    expect(res.absorbedId).toBe('FTL-PS');
+    expect(deleteMetadata).toHaveBeenCalledWith('FTL-PS');
+    expect(ctx.uploadFusionList).toHaveBeenCalled();
+    // One A-7 entry remains, under the survivor's tracking id (no orphan).
+    const a7 = uploaded.filter(f => f['product-id'] === 'A-7');
+    expect(a7).toHaveLength(1);
+    expect(a7[0]['post-process'].comment).toBe('FTL-LINK');
+  });
+});
