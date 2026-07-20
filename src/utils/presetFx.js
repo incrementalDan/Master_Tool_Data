@@ -74,11 +74,12 @@ export function initialPresetFx(preset, { isMilling, isSpotDrill, isTurning, isD
 // Recompute all 'formula' fields in a draft from their sources. Safe on mount
 // and whenever diameter / flute count change — only fields marked 'formula' are
 // touched, so 'manual' (user-owned or preserved) values are never overwritten.
-export function computeFormulaDraft(draft, fx, diameter, numberOfFlutes) {
+// `metric` selects the surface-speed unit (m/min vs ft/min) for the v_c↔n link.
+export function computeFormulaDraft(draft, fx, diameter, numberOfFlutes, metric = false) {
   const d = { ...draft };
   const n = d.n ?? 0;
 
-  if (fx.v_c    === 'formula') d.v_c    = roundForField('v_c',    rpmToSFM(n, diameter));
+  if (fx.v_c    === 'formula') d.v_c    = roundForField('v_c',    rpmToSFM(n, diameter, metric));
   if (fx.n_ramp === 'formula') d.n_ramp = roundForField('n_ramp', n);
 
   if (fx.v_f === 'formula')
