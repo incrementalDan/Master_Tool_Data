@@ -356,6 +356,14 @@ Current workflow:
 
 This app fixes that by being the authoritative place to manage tools, with a proper compare/merge workflow (Phase 2) for committing proven job values back to master.
 
+### A tool copied into a job is a FULLY INDEPENDENT COPY (no live link to master)
+
+This is the foundational fact the whole sync design rests on. When a programmer copies a tool from the cloud master library into a job file, Fusion makes a **complete, independent snapshot** — there is **no maintained link** back to the master. The relationship is **one-way at copy time** (the job pulls a snapshot); after that the job's copy and the master evolve separately. Consequences that drive the architecture:
+
+- **Nothing updates an in-job tool from master automatically.** Once a job tool has connected toolpaths it doesn't sync with the cloud library at all — editing the master (or this app) has zero effect on it. Getting a new/updated preset onto a tool **already in a job** requires an **in-job replace**: Fusion's own "replace tool from library," or a third-party add-in that reaches into the open job and swaps it. There is no file/clipboard shortcut (see **Copy preset as Fusion JSON**).
+- **This is why Phase 2 (compare/merge) exists.** Proven job edits can only come back to master by **re-importing the job tool and diffing it** against master — there's no live feedback channel to read them off automatically.
+- **It's also why duplicates proliferate.** Independent copies with no back-link are exactly what let the old workflow spawn divergent, unsynced versions of the "same" tool.
+
 -----
 
 ## Security Model
