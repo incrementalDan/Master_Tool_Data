@@ -3123,6 +3123,20 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .pe-strat-pill-x:hover { opacity: 1; }
 .pe-strat-lock { font-size: 10px; margin-top: 5px; color: var(--text-sub); }
 .pe-strat-lock--hidden { visibility: hidden; }
+.pe-strat-dual {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text);
+}
+.pe-strat-dual > svg { color: var(--amber); flex-shrink: 0; margin-top: 1px; }
 
 /* "All strategies…" popout (modal) */
 .pe-strat-popout { width: 100%; max-width: 820px; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; padding: 0; }

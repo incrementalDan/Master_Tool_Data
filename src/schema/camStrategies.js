@@ -151,3 +151,18 @@ export function buildStrategies(bucket, ids) {
     ? { roughing: list, finishing: [] }
     : { roughing: [], finishing: list };
 }
+
+// Write the active bucket's selection into a strategies object. A normal
+// single-bucket preset empties the other bucket (the app's one-bucket model).
+// A dual-bucket preset (Fusion put strategies in BOTH — its picker is a matrix)
+// PRESERVES the other bucket's current strategies, so editing one bucket never
+// wipes the other. `current` is the preset's live strategies object.
+export function writeBucketStrategies(bucket, ids, current, dualBucket) {
+  if (!dualBucket) return buildStrategies(bucket, ids);
+  const list = [...new Set(ids)];
+  const other = bucket === 'roughing' ? 'finishing' : 'roughing';
+  const preserved = current?.[other] || [];
+  return bucket === 'roughing'
+    ? { roughing: list, finishing: preserved }
+    : { roughing: preserved, finishing: list };
+}
