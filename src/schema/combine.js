@@ -171,6 +171,54 @@ export function combineToolsByToolId(tools) {
   });
 }
 
+// Fold a no-Fusion tool and a Fusion-linked tool that share a ProShop number.
+//
+// The per-library combineToolsByToolId above only ever sees the entries built
+// from ONE Fusion library, so it can't catch this case: a ProShop-only import
+// creates a metadata-only tool (no_fusion_link, its own tracking ID), and later
+// the same physical tool is uploaded into the Fusion library under a DIFFERENT
+// tracking ID but the SAME product-id/tool_id. Those two live in different piles
+// at load (one is materialized from metadata, the other built from Fusion), so
+// without this pass they surface as two separate library entries sharing a
+// ProShop number — the exact duplicate the app is meant to prevent.
+//
+// Runs once over the UNION (linked tools + materialized no-Fusion tools). It is
+// library-safe: a group is folded only when it maps to AT MOST ONE real Fusion
+// library (no-Fusion tools have `library_id: null`), so two DIFFERENT Fusion
+// libraries that happen to share a tool_id are never merged — writes must stay
+// routable to exactly one library. The linked tool is ordered first so it becomes
+// the primary, keeping its library_id, tracking ID and raw Fusion instances; the
+// no-Fusion tool's ProShop-only fields (purchasing, location, vendor, min_ooh)
+// gap-fill onto it, and any genuinely-shared field that differs is flagged as a
+// conflict (_combineConflicts) — informed, not blocked.
+export function combineUnlinkedByToolId(tools) {
+  const groups = new Map();   // key -> [tool, ...]
+  const order = [];           // preserve first-seen order
+  let anon = 0;
+  for (const tool of (tools || [])) {
+    const pid = String(tool.tool_id || '').trim();
+    const key = pid ? `pid:${pid}` : `anon:${anon++}`;
+    if (!groups.has(key)) { groups.set(key, []); order.push(key); }
+    groups.get(key).push(tool);
+  }
+  const out = [];
+  for (const key of order) {
+    const group = groups.get(key);
+    if (group.length === 1) { out.push(group[0]); continue; }
+    // Never fold two DISTINCT real Fusion libraries — a combined tool must belong
+    // to exactly one library so writes route. (The per-library combine already
+    // folded same-library dups, so a >1-library group here is genuinely cross-lib.)
+    const libs = new Set(group.map(t => t.library_id).filter(v => v != null));
+    if (libs.size > 1) { out.push(...group); continue; }
+    // Linked tool first → it wins as primary (mergeLogicalTools prefers a tracked
+    // tool, but both are tracked here, so order decides). Keeps library routing.
+    const ordered = [...group].sort(
+      (a, b) => (a.library_id != null ? 0 : 1) - (b.library_id != null ? 0 : 1));
+    out.push(mergeLogicalTools(ordered));
+  }
+  return out;
+}
+
 // Combined tools that are actually MORE THAN ONE Fusion tracking-ID group folded
 // together because they share a tool_id (usually a duplicate from human error in
 // the legacy/Fusion data). These are the tools a bulk re-number would split into

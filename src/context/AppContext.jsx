@@ -12,7 +12,7 @@ import { createContext, useContext, useReducer, useCallback, useEffect, useMemo,
 import * as driveService from '../services/driveService.js';
 import * as toolStore from '../services/toolStore.js';
 import * as aps from '../services/apsService.js';
-import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeUnlinkedTools, buildUnlinkedTool, isCompleteRecord, recordsNeedingBackfill, buildMetadataTool } from '../schema/toolSchema.js';
+import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, combineUnlinkedByToolId, materializeUnlinkedTools, buildUnlinkedTool, isCompleteRecord, recordsNeedingBackfill, buildMetadataTool } from '../schema/toolSchema.js';
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
@@ -978,7 +978,13 @@ export function AppProvider({ children }) {
       // created as no-Fusion. Runs before pairing/backfill so unlinked tools get
       // the same in-memory treatment as linked ones.
       const withUnlinked = materializeUnlinkedTools(tools, metaList);
-      const pairedTools = derivePairings(withUnlinked, componentsFile?.components || []);
+      // Fold a no-Fusion (ProShop-only) tool into a freshly-uploaded Fusion tool
+      // that shares its ProShop number — the per-library combine above never saw
+      // them together (one was metadata-only). Without this, uploading the Fusion
+      // version of a ProShop-only tool leaves TWO entries with the same Tool #.
+      const unionCombined = combineUnlinkedByToolId(withUnlinked);
+      const unlinkedFoldCount = withUnlinked.length - unionCombined.length;
+      const pairedTools = derivePairings(unionCombined, componentsFile?.components || []);
       // Assembly ID System: fill auto-mode asm_number in-memory for any assembly
       // missing one (deterministic; persisted lazily on the tool's next save).
       const finalTools = backfillAsmNumbers(pairedTools, effectiveShop, componentsFile);
@@ -987,8 +993,9 @@ export function AppProvider({ children }) {
       // Surface the otherwise-invisible load-time auto-combine: entries sharing a
       // ProShop number are folded into one logical tool, so the user doesn't
       // silently "lose" rows. Only when it actually folded something.
-      if (combinedFoldCount > 0) {
-        notify(`Combined ${combinedFoldCount} duplicate librar${combinedFoldCount === 1 ? 'y entry' : 'y entries'} sharing a Tool #`, 'info', 5000);
+      const totalFoldCount = combinedFoldCount + unlinkedFoldCount;
+      if (totalFoldCount > 0) {
+        notify(`Combined ${totalFoldCount} duplicate librar${totalFoldCount === 1 ? 'y entry' : 'y entries'} sharing a Tool #`, 'info', 5000);
       }
       // Load every holder library alongside tools (non-critical — failure of one
       // won't block). loadHolders tags each holder with its source library. Pass

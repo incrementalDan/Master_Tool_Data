@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { combineToolsByToolId, duplicateIdClusters } from './toolSchema.js';
+import { combineToolsByToolId, combineUnlinkedByToolId, duplicateIdClusters } from './toolSchema.js';
 
 // Minimal logical-tool shape that satisfies mergeLogicalTools' expectations.
 function makeTool(overrides = {}) {
@@ -155,6 +155,72 @@ describe('combineToolsByToolId — no grouping without tool_id', () => {
     const b = makeTool({ id: 'B', tracking_id: 'FTL-B', tool_id: '' });
 
     const result = combineToolsByToolId([a, b]);
+    expect(result).toHaveLength(2);
+  });
+});
+
+describe('combineUnlinkedByToolId — no-Fusion + Fusion tool sharing a ProShop #', () => {
+  it('folds a no-Fusion (ProShop-only) tool into the freshly-uploaded Fusion tool', () => {
+    // ProShop-only import: metadata-only tool, its OWN tracking ID, ProShop data.
+    const proShopOnly = makeTool({
+      id: 'FTL-PSONLY', tracking_id: 'FTL-PSONLY', tool_id: 'A-7',
+      no_fusion_link: true, library_id: null, library_name: null,
+      diameter: 0.25, vendor: 'Helical', min_ooh: 0.75,
+      purchasing: { manufacturers: [{ id: 'm1', name: 'Helical' }], vendors: [] },
+    });
+    // Same tool later uploaded into Fusion → DIFFERENT tracking ID, SAME Tool #.
+    const fusionUpload = makeTool({
+      id: 'FTL-FUSION', tracking_id: 'FTL-FUSION', tool_id: 'A-7',
+      no_fusion_link: false, library_id: 'lib-1', library_name: 'Master.json',
+      diameter: 0.25, vendor: '', min_ooh: null,
+      _fusionRaw: { guid: 'guid-fusion' },
+    });
+
+    const result = combineUnlinkedByToolId([proShopOnly, fusionUpload]);
+
+    // One entry, not two.
+    expect(result).toHaveLength(1);
+    const [tool] = result;
+    // The Fusion tool is primary — routing survives.
+    expect(tool.tracking_id).toBe('FTL-FUSION');
+    expect(tool.library_id).toBe('lib-1');
+    expect(tool.no_fusion_link).toBe(false);
+    // ProShop-only fields gap-fill onto the linked tool.
+    expect(tool.vendor).toBe('Helical');
+    expect(tool.min_ooh).toBe(0.75);
+    expect(tool.purchasing.manufacturers[0].name).toBe('Helical');
+  });
+
+  it('makes the linked tool primary regardless of input order', () => {
+    const fusionUpload = makeTool({
+      id: 'FTL-F', tracking_id: 'FTL-F', tool_id: 'B-2',
+      no_fusion_link: false, library_id: 'lib-1',
+    });
+    const proShopOnly = makeTool({
+      id: 'FTL-P', tracking_id: 'FTL-P', tool_id: 'B-2',
+      no_fusion_link: true, library_id: null,
+    });
+
+    // no-Fusion tool listed FIRST — the Fusion tool must still win as primary.
+    const [tool] = combineUnlinkedByToolId([proShopOnly, fusionUpload]);
+    expect(tool.tracking_id).toBe('FTL-F');
+    expect(tool.library_id).toBe('lib-1');
+    expect(tool.no_fusion_link).toBe(false);
+  });
+
+  it('never folds two DISTINCT Fusion libraries sharing a Tool # (routing)', () => {
+    const a = makeTool({ tracking_id: 'FTL-A', tool_id: 'C-3', library_id: 'lib-1' });
+    const b = makeTool({ tracking_id: 'FTL-B', tool_id: 'C-3', library_id: 'lib-2' });
+
+    const result = combineUnlinkedByToolId([a, b]);
+    expect(result).toHaveLength(2);   // kept separate — writes must stay routable
+  });
+
+  it('leaves tools with distinct Tool #s untouched', () => {
+    const a = makeTool({ tracking_id: 'FTL-A', tool_id: 'D-1', library_id: 'lib-1' });
+    const b = makeTool({ tracking_id: 'FTL-B', tool_id: 'D-2', no_fusion_link: true });
+
+    const result = combineUnlinkedByToolId([a, b]);
     expect(result).toHaveLength(2);
   });
 });
