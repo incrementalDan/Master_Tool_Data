@@ -8,6 +8,7 @@ import {
   generateId, generateAssemblyId, generateTrackingId,
   groupByTrackingId, buildLogicalTool, splitToFusionInstances, readTrackingId,
   generateMachineNumbers, applyMachineNumberToFusion, applyToolIdToFusion,
+  resolveMachineNumberCollision,
   fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
   combineToolsByToolId, buildMetadataTool, materializeUnlinkedTools,
   buildUnlinkedTool, mergeNoFusionIntoFusion,
@@ -574,6 +575,40 @@ export function createLibraryOps(ctx) {
           .map(m => [normProShopId(m.tool_id), m]));
       let mergedCount = 0;
 
+      // ── Machine tool numbers must be unique library-wide ────────────────────
+      // A tool uploaded into Fusion can carry its own post-process.number that
+      // collides with a tool already in the app. Seed the "in use" set with every
+      // number that KEEPS its value across this normalize — already-tracked Fusion
+      // tools (all libraries) and existing no-Fusion tools — EXCEPT no-Fusion
+      // records being merged away this run (their number is absorbed by the merged
+      // tool, so it must not block its own partner). Each untracked tool below then
+      // claims a number from this running set; a collision is reassigned + flagged.
+      const [mnStart, mnSkip] = machineNumberArgs(shopSettingsRef.current);
+      const mergeTargetIds = new Set();
+      for (const { list } of perLib) {
+        for (const raw of list) {
+          if (readTrackingId(raw)) continue;
+          const pid = normProShopId(String(raw['product-id'] || '').trim());
+          if (pid && mergeDecisions[pid] === true && noFusionByPid.has(pid)) {
+            mergeTargetIds.add(noFusionByPid.get(pid).id);
+          }
+        }
+      }
+      const usedMachineNums = new Set();
+      for (const { list } of perLib) {
+        for (const raw of list) {
+          if (!readTrackingId(raw)) continue;   // untracked tools claim theirs below
+          const n = raw['post-process']?.number;
+          if (n != null && !isNaN(Number(n))) usedMachineNums.add(Number(n));
+        }
+      }
+      for (const m of metaList) {
+        if (m.no_fusion_link && m.machine_tool_number != null && !mergeTargetIds.has(m.id)) {
+          usedMachineNums.add(Number(m.machine_tool_number));
+        }
+      }
+      let machineReassignedCount = 0;
+
       // Normalize each library independently, tagging produced tools with their
       // source library so saveFullLibrary writes each back to the right file.
       const cleanTools = [];
@@ -604,6 +639,13 @@ export function createLibraryOps(ctx) {
           : null;
         const tracking_id = mergeTarget ? mergeTarget.id : generateTrackingId();
         const now = new Date().toISOString();
+
+        // Enforce unique machine tool numbers: if this tool's Fusion number is
+        // already taken, reassign it the next free one and flag the collision.
+        const { number: mtnResolved, reassignedFrom } = resolveMachineNumberCollision(
+          merged.machine_tool_number, usedMachineNums, mnStart, mnSkip);
+        if (mtnResolved != null) usedMachineNums.add(mtnResolved);
+        if (reassignedFrom != null) machineReassignedCount++;
 
         const oldAssemblies = (meta?.assemblies || []).filter(Boolean);
         const rawAssemblies = oldAssemblies.length
@@ -680,11 +722,17 @@ export function createLibraryOps(ctx) {
           id: tracking_id,
           tracking_id,
           no_fusion_link: false,
+          machine_tool_number: mtnResolved,
           shoulder_length,
           assemblies,
           presets,
           _instancesRaw: [raw],
           _fusionRaw: raw,
+          // Flag an auto-reassigned machine number so the user is informed (never
+          // silently changed). Persisted via buildMetadataTool → conflicts[].
+          ...(reassignedFrom != null
+            ? { _machineNumberConflict: { from: reassignedFrom, to: mtnResolved } }
+            : {}),
         };
 
         if (mergeTarget) {
@@ -731,7 +779,10 @@ export function createLibraryOps(ctx) {
       const mergeSuffix = mergedCount > 0
         ? `; merged ${mergedCount} into ${mergedCount === 1 ? 'an existing' : 'existing'} no-Fusion tool${mergedCount === 1 ? '' : 's'}`
         : '';
-      notify(`${base}${mergeSuffix}${dupSuffix}${conflictSuffix}`, 'success', 6000);
+      const machineSuffix = machineReassignedCount > 0
+        ? `; reassigned ${machineReassignedCount} duplicate machine number${machineReassignedCount === 1 ? '' : 's'}`
+        : '';
+      notify(`${base}${mergeSuffix}${dupSuffix}${machineSuffix}${conflictSuffix}`, 'success', 6000);
       return untrackedCount;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });

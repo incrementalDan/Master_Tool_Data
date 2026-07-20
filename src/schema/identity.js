@@ -119,6 +119,24 @@ export function getNextMachineNumber(existingNumbers, start = DEFAULT_MACHINE_ST
   return next;
 }
 
+// Enforce unique machine tool numbers on import/normalize. Machine tool numbers
+// must be unique library-wide, but a tool uploaded into Fusion can carry its own
+// `post-process.number` that collides with a tool already in the app. Given the
+// tool's desired number and the set already in use, this returns the number to
+// actually use plus the original if it had to be reassigned (collision → next free
+// number, skipping used + reserved). A null/blank number is left null (a tool need
+// not have one) and never treated as a collision. The chosen number is NOT added
+// to `used` here — the caller threads the running set across every tool.
+export function resolveMachineNumberCollision(desired, used, start, skip) {
+  if (desired == null || desired === '' || isNaN(Number(desired))) {
+    return { number: null, reassignedFrom: null };
+  }
+  const n = Number(desired);
+  const usedSet = used instanceof Set ? used : new Set((used || []).map(Number));
+  if (!usedSet.has(n)) return { number: n, reassignedFrom: null };
+  return { number: getNextMachineNumber([...usedSet], start, skip), reassignedFrom: n };
+}
+
 // Write a tool ID (ProShop number / generated shop ID) directly into a raw
 // Fusion entry — the native `product-id` plus its paired expression. Mirrors
 // the native+expression pairing internalToFusionTool uses for tool_productId.

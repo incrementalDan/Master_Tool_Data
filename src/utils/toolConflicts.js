@@ -11,8 +11,12 @@
 // value, but the badge stays until the user explicitly clears it on the tool page.
 //
 // Record shapes (persisted in tool_metadata.json under `conflicts`):
-//   field:       { id, type:'field', field, values:[kept, other], detected_at }
-//   product_id:  { id, type:'product_id', values:[id, id, …], detected_at }
+//   field:          { id, type:'field', field, values:[kept, other], detected_at }
+//   product_id:     { id, type:'product_id', values:[id, id, …], detected_at }
+//   machine_number: { id, type:'machine_number', from, to, detected_at }
+//                   — the tool's Fusion machine tool number collided with another
+//                     tool's on import; it was auto-reassigned `from` → `to` to keep
+//                     machine numbers unique. Informational (acknowledge to clear).
 import { generateId } from '../schema/identity.js';
 
 // Merge freshly-detected runtime conflicts into the tool's already-persisted set.
@@ -20,7 +24,7 @@ import { generateId } from '../schema/identity.js';
 // name; the product-id conflict is singular per tool). Existing records — with
 // their id, detected_at, and not-yet-resolved state — are preserved untouched;
 // only a genuinely new disagreement is appended.
-export function mergeToolConflicts(existing = [], { combineConflicts = [], productIdConflict = null } = {}) {
+export function mergeToolConflicts(existing = [], { combineConflicts = [], productIdConflict = null, machineNumberConflict = null } = {}) {
   const out = [...(existing || [])];
   const hasField = (f) => out.some(c => c.type === 'field' && c.field === f);
   for (const c of (combineConflicts || [])) {
@@ -41,6 +45,18 @@ export function mergeToolConflicts(existing = [], { combineConflicts = [], produ
       detected_at: new Date().toISOString(),
     });
   }
+  // Machine-number collision: auto-reassigned on import to keep numbers unique.
+  // Singular per tool (dedupe by type) — never re-added once persisted.
+  if (machineNumberConflict && machineNumberConflict.from != null && machineNumberConflict.to != null
+      && !out.some(c => c.type === 'machine_number')) {
+    out.push({
+      id: generateId(),
+      type: 'machine_number',
+      from: machineNumberConflict.from,
+      to: machineNumberConflict.to,
+      detected_at: new Date().toISOString(),
+    });
+  }
   return out;
 }
 
@@ -57,6 +73,7 @@ export function displayConflicts(tool) {
   return mergeToolConflicts(tool.conflicts || [], {
     combineConflicts: tool._combineConflicts || [],
     productIdConflict: tool._productIdConflict || null,
+    machineNumberConflict: tool._machineNumberConflict || null,
   });
 }
 

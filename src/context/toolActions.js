@@ -1001,7 +1001,7 @@ export function createToolActions(ctx) {
     const remaining = clearToolConflict(displayConflicts(tool), conflictId);
     // Clear the runtime markers so the write/rebuild doesn't re-add what we just
     // resolved; `conflicts: remaining` becomes the persisted set.
-    const cleared = { ...tool, conflicts: remaining, _combineConflicts: [], _productIdConflict: null };
+    const cleared = { ...tool, conflicts: remaining, _combineConflicts: [], _productIdConflict: null, _machineNumberConflict: null };
 
     dispatch({ type: 'SAVE_START' });
     try {

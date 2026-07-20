@@ -178,6 +178,75 @@ describe('normalizeLibrary — merge a new Fusion tool into an existing no-Fusio
   });
 });
 
+describe('normalizeLibrary — machine tool numbers stay unique', () => {
+  const raw = (guid, comment, productId, number) => ({
+    guid, type: 'flat end mill', unit: 'inches', description: `T${number}`,
+    'product-id': productId, 'post-process': { comment, number },
+    geometry: { DC: 0.5, LCF: 1, OAL: 3, NOF: 4, LB: 1 },
+    'start-values': { presets: [] }, expressions: {},
+  });
+
+  it('reassigns a NEW tool whose machine number collides with an existing tool, and flags it', async () => {
+    const existing = raw('gEx', 'FTL-A00001', 'EX-1', 30);   // already tracked, machine T30
+    const incoming = raw('gNew', null, 'NEW-1', 30);         // untracked upload, ALSO T30
+    let uploaded = null;
+    const ctx = makeCtx({
+      downloadAllLibraries: vi.fn(async () => [
+        { libraryId: 'lib-1', library: { fileName: 'main.json' }, list: [existing, incoming] },
+      ]),
+      uploadFusionList: vi.fn(async (_id, list) => { uploaded = list; }),
+      shopSettingsRef: { current: {
+        tool_id_system: { mode: 'sequential', start: 1000, skip: [], digits: 4 },
+        machine_number: { start: 30, skip: [] }, location_config: { systems: [] },
+        tool_libraries: [{ id: 'lib-1', fileName: 'main.json' }], default_tool_library_id: 'lib-1',
+      } },
+    });
+    loadMetadata.mockResolvedValue([]);
+    const { normalizeLibrary } = createLibraryOps(ctx);
+    await normalizeLibrary();
+
+    const byPid = Object.fromEntries(uploaded.map(f => [f['product-id'], f]));
+    // The existing tool keeps T30; the new tool was reassigned to the next free (T31).
+    expect(byPid['EX-1']['post-process'].number).toBe(30);
+    expect(byPid['NEW-1']['post-process'].number).toBe(31);
+
+    // The collision is flagged on the reassigned tool (informed, not silent).
+    const savedMeta = saveAllMetadata.mock.calls.at(-1)[0];
+    const newMeta = savedMeta.find(m => m.tool_id === 'NEW-1');
+    const mnConflict = (newMeta.conflicts || []).find(c => c.type === 'machine_number');
+    expect(mnConflict).toMatchObject({ from: 30, to: 31 });
+    // The tool that kept its number is NOT flagged.
+    const exMeta = savedMeta.find(m => m.tool_id === 'EX-1');
+    expect((exMeta.conflicts || []).some(c => c.type === 'machine_number')).toBe(false);
+  });
+
+  it('leaves a non-colliding machine number untouched (no flag)', async () => {
+    const a = raw('gA', null, 'A-1', 30);
+    const b = raw('gB', null, 'B-1', 31);   // distinct numbers — no collision
+    let uploaded = null;
+    const ctx = makeCtx({
+      downloadAllLibraries: vi.fn(async () => [
+        { libraryId: 'lib-1', library: { fileName: 'main.json' }, list: [a, b] },
+      ]),
+      uploadFusionList: vi.fn(async (_id, list) => { uploaded = list; }),
+      shopSettingsRef: { current: {
+        tool_id_system: { mode: 'sequential', start: 1000, skip: [], digits: 4 },
+        machine_number: { start: 30, skip: [] }, location_config: { systems: [] },
+        tool_libraries: [{ id: 'lib-1', fileName: 'main.json' }], default_tool_library_id: 'lib-1',
+      } },
+    });
+    loadMetadata.mockResolvedValue([]);
+    const { normalizeLibrary } = createLibraryOps(ctx);
+    await normalizeLibrary();
+
+    const byPid = Object.fromEntries(uploaded.map(f => [f['product-id'], f]));
+    expect(byPid['A-1']['post-process'].number).toBe(30);
+    expect(byPid['B-1']['post-process'].number).toBe(31);
+    const savedMeta = saveAllMetadata.mock.calls.at(-1)[0];
+    expect(savedMeta.every(m => !(m.conflicts || []).some(c => c.type === 'machine_number'))).toBe(true);
+  });
+});
+
 describe('Drive-required guards for no-Fusion tools (G3/G4)', () => {
   it('saveFullLibrary refuses when a no-Fusion tool is present and Drive is off (G3)', async () => {
     const ctx = makeCtx({ googleRef: { current: false } });
