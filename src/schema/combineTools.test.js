@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { combineToolsByToolId, findNoFusionMergeCandidates, mergeNoFusionIntoFusion, duplicateIdClusters } from './toolSchema.js';
+import { combineToolsByToolId, findNoFusionMergeCandidates, mergeNoFusionIntoFusion, findProShopSiblings, duplicateIdClusters } from './toolSchema.js';
 
 // Minimal logical-tool shape that satisfies mergeLogicalTools' expectations.
 function makeTool(overrides = {}) {
@@ -201,6 +201,58 @@ describe('findNoFusionMergeCandidates — new Fusion tool matching a no-Fusion t
 
   it('no candidate when there is no matching no-Fusion tool', () => {
     expect(findNoFusionMergeCandidates([fusionUpload()])).toHaveLength(0);
+  });
+});
+
+// ─── Regression guard for the original bug ─────────────────────────────────────
+// Reported bug: a ProShop tool with no Fusion entry was imported (a no-Fusion
+// tool), then the same tool was uploaded into the Fusion library and normalized
+// under its OWN tracking ID. The app left TWO separate entries with the same
+// ProShop number and no way to notice or reconcile them. These assert the two
+// detectors that must keep surfacing that situation — a future refactor that
+// silently drops either one fails here.
+describe('REGRESSION: a no-Fusion and a Fusion tool sharing a ProShop # must never silently coexist', () => {
+  // The two records exactly as they exist post-bug: a normalized Fusion tool and a
+  // no-Fusion tool, DIFFERENT tracking IDs, SAME ProShop number.
+  const fusionTool = (o = {}) => makeTool({
+    id: 'FTL-FUSION', tracking_id: 'FTL-FUSION', tool_id: 'A-7',
+    no_fusion_link: false, library_id: 'lib-1', tool_type: 'flat end mill', diameter: 0.25, ...o,
+  });
+  const noFusionTool = (o = {}) => makeTool({
+    id: 'FTL-PSONLY', tracking_id: 'FTL-PSONLY', tool_id: 'A-7',
+    no_fusion_link: true, library_id: null, tool_type: 'flat end mill', diameter: 0.25, ...o,
+  });
+
+  it('the tool page surfaces the duplicate from EITHER tool (findProShopSiblings)', () => {
+    const tools = [fusionTool(), noFusionTool()];
+    // From the Fusion tool → sees the no-Fusion one.
+    expect(findProShopSiblings(tools[0], tools).map(t => t.id)).toEqual(['FTL-PSONLY']);
+    // From the no-Fusion tool → sees the Fusion one.
+    expect(findProShopSiblings(tools[1], tools).map(t => t.id)).toEqual(['FTL-FUSION']);
+  });
+
+  it('a bare ProShop-number difference (dash/space/case) still matches — not a silent miss', () => {
+    const tools = [fusionTool(), noFusionTool({ tool_id: 'a 7' })];
+    expect(findProShopSiblings(tools[0], tools)).toHaveLength(1);
+  });
+
+  it('a NEW (not-yet-normalized) Fusion upload is caught at normalize time too', () => {
+    // Same scenario one step earlier: the Fusion tool is still untracked.
+    const untracked = makeTool({ id: 'g', tracking_id: null, tool_id: 'A-7', no_fusion_link: false, tool_type: 'flat end mill', diameter: 0.25 });
+    const cands = findNoFusionMergeCandidates([noFusionTool(), untracked]);
+    expect(cands).toHaveLength(1);
+    expect(cands[0].existingTool.id).toBe('FTL-PSONLY');
+  });
+
+  it('does NOT flag two ordinary tools with different ProShop numbers', () => {
+    const tools = [fusionTool(), noFusionTool({ id: 'FTL-OTHER', tracking_id: 'FTL-OTHER', tool_id: 'B-9' })];
+    expect(findProShopSiblings(tools[0], tools)).toHaveLength(0);
+  });
+
+  it('does NOT auto-offer when both are linked to different Fusion libraries (routing)', () => {
+    const a = fusionTool();
+    const b = makeTool({ id: 'FTL-OTHERLIB', tracking_id: 'FTL-OTHERLIB', tool_id: 'A-7', library_id: 'lib-2' });
+    expect(findProShopSiblings(a, [a, b])).toHaveLength(0);
   });
 });
 

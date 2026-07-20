@@ -2,8 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GitMerge } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { sharedSpecConflicts } from '../schema/toolSchema.js';
-import { normProShopId } from '../schema/insertFamilies.js';
+import { sharedSpecConflicts, findProShopSiblings } from '../schema/toolSchema.js';
 import { formatLength } from '../utils/units.js';
 
 // Tool-page merge: two SEPARATE records already exist for one physical tool,
@@ -23,15 +22,7 @@ export default function MergeSiblingBanner({ tool }) {
   const { tools, mergeTools, isSaving, googleAuthenticated } = useApp();
   const navigate = useNavigate();
 
-  const siblings = useMemo(() => {
-    const pid = normProShopId(tool.tool_id);
-    if (!pid) return [];
-    return (tools || []).filter(t =>
-      t.id !== tool.id &&
-      normProShopId(t.tool_id) === pid &&
-      // Routing-safe: skip a cross-library pair (both linked to a real library).
-      !(t.library_id != null && tool.library_id != null));
-  }, [tools, tool]);
+  const siblings = useMemo(() => findProShopSiblings(tool, tools), [tools, tool]);
 
   // Job links live in metadata; a merge deletes one record — require Drive.
   if (siblings.length === 0 || !googleAuthenticated) return null;
