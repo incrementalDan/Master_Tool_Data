@@ -149,9 +149,23 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
   const [copiedKey, setCopiedKey] = useState(null);
   const dragSrcIdx = useRef(null);
 
-  // Copy one preset as Fusion-paste JSON (see fusionExport). `key` drives the
-  // transient "Copied" feedback; the preset object is normalized through the
-  // real Fusion path so it pastes straight into Fusion.
+  // Copy one preset as Fusion JSON (see fusionExport). `key` drives the transient
+  // "Copied" feedback; the preset is normalized through the real Fusion path so
+  // the JSON content is byte-for-byte what Fusion emits (test-locked).
+  //
+  // ⚠️ Fusion's in-app "Paste" will NOT accept this copy, and that CANNOT be
+  // fixed from a web page. Fusion (a Qt app) gates its Paste on a *custom
+  // clipboard format* it stamps only on its own copy — not on the text content.
+  // Proof: copy a preset out of Fusion, launder it through a plain-text app
+  // (VSCode) and copy it back — Fusion refuses its OWN text once the format tag
+  // is gone. A browser can only put down the safelisted MIME types (text/plain,
+  // text/html, image/png); Chromium "web custom formats" get a mangled wrapper
+  // name native apps don't match. Replicating Fusion's stamp needs something
+  // outside the browser (a helper app / extension w/ native messaging).
+  // So this button is "Copy JSON" — useful for files, diffs, and sharing.
+  // To get a new preset onto a tool ALREADY in a job (which doesn't sync back to
+  // the cloud library once its toolpaths are connected), the real routes are
+  // Fusion's library import or a third-party "replace tool from library" add-in.
   const copyForFusion = async (preset, key) => {
     try {
       await copyPresetToClipboard(tool, preset);
@@ -655,7 +669,7 @@ function CollapsedCard({
             <button
               className="btn btn-ghost btn-sm preset-card-copy"
               onClick={onCopyFusion}
-              title="Copy this preset as Fusion JSON (paste into Fusion)"
+              title="Copy this preset as Fusion JSON (Fusion's in-app Paste won't accept a browser copy — see copyForFusion)"
             >
               {copied ? <Check size={12} /> : <Clipboard size={12} />}
             </button>
@@ -1057,9 +1071,9 @@ function EditCard({
           className="btn btn-ghost btn-sm"
           onClick={() => onCopyFusion?.(draft)}
           disabled={isSaving}
-          title="Copy this preset as Fusion JSON (paste into Fusion)"
+          title="Copy this preset as Fusion JSON. Note: Fusion's in-app Paste won't accept it (see copyForFusion) — use the JSON in a file/diff, or the library-import / add-in route to get it onto a tool already in a job."
         >
-          {copied ? <Check size={13} /> : <Clipboard size={13} />} Copy for Fusion
+          {copied ? <Check size={13} /> : <Clipboard size={13} />} Copy JSON
         </button>
         <button
           className="btn btn-primary btn-sm"
