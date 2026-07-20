@@ -19,6 +19,7 @@ import PhotoSlot from './PhotoSlot.jsx';
 import PairingSections from './PairingSections.jsx';
 import DriftBanner from './DriftBanner.jsx';
 import ConflictBanner from './ConflictBanner.jsx';
+import MergeSiblingBanner from './MergeSiblingBanner.jsx';
 import {
   INSERT_FAMILY_BY_ID, ALWAYS_INSERT_TYPES, autoInsertFamily, newPairing,
 } from '../schema/insertFamilies.js';
@@ -520,6 +521,11 @@ export default function ToolDetail() {
         {/* "Informed, not blocked" conflict review — shared-value disagreements
             flagged during Fusion import / normalize, resolved here on demand. */}
         <ConflictBanner key={`conflicts-${tool.id}`} tool={tool} />
+
+        {/* Another record already exists for this physical tool (same ProShop
+            number) — offer to fold them into one. Handles duplicates created
+            before the normalize-time merge existed. */}
+        <MergeSiblingBanner key={`merge-${tool.id}`} tool={tool} />
 
         {/* Reverse sync — the tool was deleted directly in Fusion 360, so it's
             gone from the live library. Offer to remove it from the app too, or

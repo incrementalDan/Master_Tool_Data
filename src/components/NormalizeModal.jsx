@@ -1,11 +1,20 @@
 import { useState, useMemo } from 'react';
-import { X, AlertTriangle, ChevronDown } from 'lucide-react';
+import { X, AlertTriangle, ChevronDown, GitMerge } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import {
   OP_TYPES, HOLE_MAKING_TYPES, findMaterialInLibrary, presetMaterialColor,
   suggestCamPresetName,
 } from '../utils/presetNaming.js';
+import { findNoFusionMergeCandidates } from '../schema/toolSchema.js';
+import { normProShopId } from '../schema/insertFamilies.js';
+import { formatLength } from '../utils/units.js';
 import CamPresetPicker from './CamPresetPicker.jsx';
+
+// Human labels for the shared specs shown in the merge-candidate conflict preview.
+const PREVIEW_LABELS = {
+  tool_type: 'Type', diameter: 'Cut diameter', flute_length: 'Flute length',
+  overall_length: 'Overall length', number_of_flutes: 'Flutes',
+};
 
 // Review-and-normalize modal. For every preset on a pre-migration (untracked)
 // tool it lets the user (a) link the material to a CAM preset from the Materials
@@ -20,6 +29,13 @@ export default function NormalizeModal({ onClose }) {
   const [overrides, setOverrides] = useState({}); // presetGuid -> op value ('' = leave blank)
   const [matPicks, setMatPicks] = useState({});   // presetGuid -> CAM preset name (undefined = use suggestion)
   const [pickerFor, setPickerFor] = useState(null); // presetGuid whose material picker is open
+
+  // New (untracked) Fusion tools that share a ProShop number with an existing
+  // no-Fusion tool — the user decides whether to merge each. Default: merge (on).
+  const mergeCandidates = useMemo(() => findNoFusionMergeCandidates(tools), [tools]);
+  const [mergeChoices, setMergeChoices] = useState({}); // normPid -> false when unchecked (absent = merge)
+  const willMerge = (pid) => mergeChoices[normProShopId(pid)] !== false;
+  const toggleMerge = (pid) => setMergeChoices(prev => ({ ...prev, [normProShopId(pid)]: prev[normProShopId(pid)] === false }));
 
   // Every preset on every un-normalized tool.
   const groups = useMemo(() => {
@@ -62,8 +78,14 @@ export default function NormalizeModal({ onClose }) {
         if (v) matOverrides[p.guid] = v;
       }
     }
+    // Explicit merge decisions: normPid -> true for each candidate the user left
+    // checked. Only an explicit true merges; unchecked stays separate.
+    const mergeDecisions = {};
+    for (const c of mergeCandidates) {
+      if (willMerge(c.toolId)) mergeDecisions[normProShopId(c.toolId)] = true;
+    }
     try {
-      await normalizeLibrary(opOverrides, matOverrides);
+      await normalizeLibrary(opOverrides, matOverrides, mergeDecisions);
     } finally {
       onClose();
     }
@@ -87,6 +109,59 @@ export default function NormalizeModal({ onClose }) {
         </div>
 
         <div style={{ overflowY: 'auto', flex: 1, minHeight: 0 }}>
+          {mergeCandidates.length > 0 && (
+            <div style={{
+              border: '1px solid var(--blue)', borderRadius: 'var(--radius-sm)',
+              padding: '10px 12px', marginBottom: 14,
+              background: 'color-mix(in srgb, var(--blue) 8%, transparent)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <GitMerge size={16} style={{ color: 'var(--blue)' }} />
+                <strong style={{ fontSize: 13 }}>
+                  {mergeCandidates.length} of these already exist without a Fusion link
+                </strong>
+              </div>
+              <div className="text-sub text-xs" style={{ marginBottom: 10 }}>
+                A tool with this ProShop number was imported from ProShop but had no Fusion
+                entry. Merge keeps that ProShop data (purchasing, location, notes) and adds
+                this Fusion tool's geometry &amp; presets — becoming one tool. Anything that
+                doesn't match is flagged on the tool page for you to fix.
+              </div>
+              {mergeCandidates.map(c => {
+                const unit = c.fusionTool.unit || c.existingTool.unit;
+                const merge = willMerge(c.toolId);
+                return (
+                  <div key={c.toolId} style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 10,
+                    padding: '8px 0', borderTop: '1px solid var(--border)',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>
+                        {c.fusionTool.description || 'Untitled tool'}
+                        <span className="tool-id-pill" style={{ marginLeft: 8 }}>{c.toolId}</span>
+                      </div>
+                      <div className="text-sub text-xs" style={{ marginTop: 3 }}>
+                        <span className="dia">⌀</span> {formatLength(c.existingTool.diameter, unit)}
+                        {c.conflicts.length === 0
+                          ? <span style={{ color: 'var(--green, #4ade80)', marginLeft: 8 }}>· specs match</span>
+                          : (
+                            <span style={{ color: 'var(--orange)', marginLeft: 8 }}>
+                              · {c.conflicts.length} difference{c.conflicts.length === 1 ? '' : 's'}: {
+                                c.conflicts.map(cf => PREVIEW_LABELS[cf.field] || cf.field).join(', ')
+                              }
+                            </span>
+                          )}
+                      </div>
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, cursor: 'pointer', fontSize: 12 }}>
+                      <input type="checkbox" checked={merge} onChange={() => toggleMerge(c.toolId)} disabled={isSaving} />
+                      {merge ? 'Merge' : 'Keep separate'}
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="text-sub text-sm" style={{ marginBottom: 12 }}>
             This will normalize <strong style={{ color: 'var(--text)' }}>{normalizeCount || 0} tool{(normalizeCount || 0) === 1 ? '' : 's'}</strong>.
             Already-migrated tools won't be touched.

@@ -10,7 +10,9 @@ import {
   generateMachineNumbers, applyMachineNumberToFusion, applyToolIdToFusion,
   fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
   combineToolsByToolId, buildMetadataTool, materializeUnlinkedTools,
+  buildUnlinkedTool, mergeNoFusionIntoFusion,
 } from '../schema/toolSchema.js';
+import { normProShopId } from '../schema/insertFamilies.js';
 import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSystem.js';
 import { isExcludedFrom } from '../utils/idSystems.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
@@ -552,7 +554,11 @@ export function createLibraryOps(ctx) {
   // picker (auto-suggested for confident cases like AL → Al Wrought, user-picked
   // otherwise). Re-keys metadata from guid → tracking_id by overwriting the whole
   // file. Idempotent: already-tracked tools are left as-is.
-  const normalizeLibrary = async (opOverrides = {}, matOverrides = {}) => {
+  // mergeDecisions: { [normProShopId(tool_id)]: true } — the user's explicit
+  // choice (from the Normalize dialog) to merge a NEW Fusion tool into the
+  // existing no-Fusion tool that shares its ProShop number. Only an explicit
+  // `true` merges; anything absent/false keeps them separate (fresh tracking ID).
+  const normalizeLibrary = async (opOverrides = {}, matOverrides = {}, mergeDecisions = {}) => {
     dispatch({ type: 'SAVE_START' });
     try {
       const holders = holdersRef.current || [];
@@ -560,6 +566,13 @@ export function createLibraryOps(ctx) {
       const metaList = googleRef.current ? await toolStore.loadAll() : [];
       const metaByGuid = new Map(metaList.map(m => [m.id, m]));
       const metaByTracking = new Map(metaList.map(m => [m.id, m]));
+      // Existing no-Fusion (metadata-only) tools, keyed by normalized ProShop #, so
+      // a new untracked Fusion tool can be adopted INTO its record on merge.
+      const noFusionByPid = new Map(
+        metaList
+          .filter(m => m.no_fusion_link && m.tool_id)
+          .map(m => [normProShopId(m.tool_id), m]));
+      let mergedCount = 0;
 
       // Normalize each library independently, tagging produced tools with their
       // source library so saveFullLibrary writes each back to the right file.
@@ -580,7 +593,16 @@ export function createLibraryOps(ctx) {
         const meta = metaByGuid.get(raw.guid) || null;
         const internal = fusionToolToInternal(raw);
         const merged = mergeFusionAndMetadata(internal, meta);
-        const tracking_id = generateTrackingId();
+        // Does this new Fusion tool share a ProShop number with an existing
+        // no-Fusion tool, and did the user choose to MERGE them (Normalize dialog)?
+        // If so, adopt it INTO that record: reuse the no-Fusion tracking ID so the
+        // merged tool updates that record in place (no orphan) and the ProShop data
+        // already entered survives.
+        const pid = normProShopId(merged.tool_id);
+        const mergeTarget = (pid && mergeDecisions[pid] === true)
+          ? (noFusionByPid.get(pid) || null)
+          : null;
+        const tracking_id = mergeTarget ? mergeTarget.id : generateTrackingId();
         const now = new Date().toISOString();
 
         const oldAssemblies = (meta?.assemblies || []).filter(Boolean);
@@ -613,7 +635,9 @@ export function createLibraryOps(ctx) {
         // manually afterward.) When there's no MIN OOH, leave lengths untouched.
         // Units: min_ooh, per-assembly OOH and shoulder_length are all stored in
         // the tool's own unit, so they compare/assign directly — no conversion.
-        const minOoh = merged.min_ooh ?? null;
+        // On merge, the ProShop MIN OOH floor comes from the no-Fusion record
+        // (the untracked Fusion raw carries no metadata of its own).
+        const minOoh = merged.min_ooh ?? mergeTarget?.min_ooh ?? null;
         // Slot/key cutters (slitting saws): the unbroken shoulder is the cutter
         // width (flute length / kerf), NOT the MIN OOH stick-out — so don't
         // override it from min_ooh like other tool types.
@@ -651,16 +675,28 @@ export function createLibraryOps(ctx) {
           return { ...p, material, name, operation_type: opType };
         });
 
-        logicalTools.push({
+        const fusionLogical = {
           ...merged,
           id: tracking_id,
           tracking_id,
+          no_fusion_link: false,
           shoulder_length,
           assemblies,
           presets,
           _instancesRaw: [raw],
           _fusionRaw: raw,
-        });
+        };
+
+        if (mergeTarget) {
+          // Fold the new Fusion tool INTO the existing no-Fusion record. The Fusion
+          // tool is primary (real geometry/presets win); the no-Fusion tool's
+          // ProShop-only fields gap-fill and any shared spec that differs is flagged
+          // as a conflict for the user to resolve on the tool page.
+          logicalTools.push(mergeNoFusionIntoFusion(fusionLogical, buildUnlinkedTool(mergeTarget)));
+          mergedCount++;
+        } else {
+          logicalTools.push(fusionLogical);
+        }
       }
 
       // Fold tools sharing a ProShop number into one logical tool before saving,
@@ -692,7 +728,10 @@ export function createLibraryOps(ctx) {
       const dupSuffix = dupCount > 0
         ? `; combined ${dupCount} ProShop-number duplicate${dupCount === 1 ? '' : 's'}`
         : '';
-      notify(`${base}${dupSuffix}${conflictSuffix}`, 'success', 6000);
+      const mergeSuffix = mergedCount > 0
+        ? `; merged ${mergedCount} into ${mergedCount === 1 ? 'an existing' : 'existing'} no-Fusion tool${mergedCount === 1 ? '' : 's'}`
+        : '';
+      notify(`${base}${mergeSuffix}${dupSuffix}${conflictSuffix}`, 'success', 6000);
       return untrackedCount;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });

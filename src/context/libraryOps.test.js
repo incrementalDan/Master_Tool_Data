@@ -104,6 +104,80 @@ describe('normalizeLibrary — informed, not blocked (conflict tools come in wit
   });
 });
 
+describe('normalizeLibrary — merge a new Fusion tool into an existing no-Fusion tool', () => {
+  const raw = (guid, comment, productId, desc, dc = 0.5) => ({
+    guid, type: 'flat end mill', unit: 'inches', description: desc,
+    'product-id': productId, 'post-process': { comment, number: null },
+    geometry: { DC: dc, LCF: 1, OAL: 3, NOF: 4, LB: 1 },
+    'start-values': { presets: [] }, expressions: {},
+  });
+  // A ProShop-only import: a complete metadata record marked no_fusion_link.
+  const noFusionMeta = {
+    id: 'FTL-PS', no_fusion_link: true, tool_id: 'A-7', tool_type: 'flat end mill',
+    unit: 'inches', description: 'ProShop A7', diameter: 0.25, flute_length: 1,
+    overall_length: 3, number_of_flutes: 4, vendor: 'Helical', min_ooh: 0.75,
+    presets: [], assemblies: [],
+  };
+  const ctxFor = (list) => makeCtx({
+    downloadAllLibraries: vi.fn(async () => [{ libraryId: 'lib-1', library: { fileName: 'main.json' }, list }]),
+    uploadFusionList: vi.fn(async () => {}),
+    shopSettingsRef: { current: {
+      tool_id_system: { mode: 'sequential', start: 1000, skip: [], digits: 4 },
+      machine_number: { start: 30, skip: [] }, location_config: { systems: [] },
+      tool_libraries: [{ id: 'lib-1', fileName: 'main.json' }], default_tool_library_id: 'lib-1',
+    } },
+  });
+
+  it('adopts the untracked Fusion tool into the no-Fusion record when merge is chosen', async () => {
+    // Untracked (no tracking comment) Fusion tool, same ProShop #, diameter differs.
+    const rawNew = raw('gNew', null, 'A-7', 'Fusion A7', 0.2505);
+    let uploaded = null;
+    const ctx = ctxFor([rawNew]);
+    ctx.uploadFusionList = vi.fn(async (_id, l) => { uploaded = l; });
+    loadMetadata.mockResolvedValue([noFusionMeta]);
+
+    const { normalizeLibrary } = createLibraryOps(ctx);
+    await normalizeLibrary({}, {}, { A7: true });
+
+    // Exactly one Fusion entry for A-7, stamped with the no-Fusion tracking id.
+    const a7 = uploaded.filter(f => f['product-id'] === 'A-7');
+    expect(a7).toHaveLength(1);
+    expect(a7[0]['post-process'].comment).toBe('FTL-PS');
+
+    // No orphan: one record for A-7, now Fusion-linked, ProShop data kept.
+    const savedMeta = saveAllMetadata.mock.calls.at(-1)[0];
+    const recs = savedMeta.filter(m => m.tool_id === 'A-7');
+    expect(recs).toHaveLength(1);
+    expect(recs[0].id).toBe('FTL-PS');
+    expect(recs[0].no_fusion_link).toBe(false);
+    expect(recs[0].vendor).toBe('Helical');
+    // The geometry disagreement is flagged for the user (informed, not blocked).
+    const dia = (recs[0].conflicts || []).find(c => c.field === 'diameter');
+    expect(dia).toBeDefined();
+    expect(dia.values).toEqual([0.2505, 0.25]);
+  });
+
+  it('keeps them separate (fresh tracking id) when merge is NOT chosen', async () => {
+    const rawNew = raw('gNew', null, 'A-7', 'Fusion A7', 0.25);
+    let uploaded = null;
+    const ctx = ctxFor([rawNew]);
+    ctx.uploadFusionList = vi.fn(async (_id, l) => { uploaded = l; });
+    loadMetadata.mockResolvedValue([noFusionMeta]);
+
+    const { normalizeLibrary } = createLibraryOps(ctx);
+    await normalizeLibrary({}, {}, {});   // no merge decision
+
+    // The uploaded Fusion tool got a FRESH tracking id (not the no-Fusion one).
+    const a7 = uploaded.filter(f => f['product-id'] === 'A-7');
+    expect(a7).toHaveLength(1);
+    expect(a7[0]['post-process'].comment).not.toBe('FTL-PS');
+
+    // The no-Fusion record is preserved untouched (still marked no_fusion_link).
+    const savedMeta = saveAllMetadata.mock.calls.at(-1)[0];
+    expect(savedMeta.find(m => m.id === 'FTL-PS').no_fusion_link).toBe(true);
+  });
+});
+
 describe('Drive-required guards for no-Fusion tools (G3/G4)', () => {
   it('saveFullLibrary refuses when a no-Fusion tool is present and Drive is off (G3)', async () => {
     const ctx = makeCtx({ googleRef: { current: false } });

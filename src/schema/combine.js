@@ -171,6 +171,73 @@ export function combineToolsByToolId(tools) {
   });
 }
 
+// Shared specs compared to preview whether two tools sharing a ProShop number are
+// really the same tool. Fusion-native fields both sides carry.
+const MERGE_PREVIEW_FIELDS = ['tool_type', 'diameter', 'flute_length', 'overall_length', 'number_of_flutes'];
+
+const normPid = (s) => String(s || '').replace(/[\s-]/g, '').toUpperCase();
+
+// The shared specs (cut diameter, flute count, …) where two tools sharing a
+// ProShop number DISAGREE — the preview shown before merging so the user sees what
+// they'll have to reconcile. `{ field, a, b }` per differing field; empty when the
+// specs agree. Used by both the normalize-time candidate list and the tool-page
+// merge banner.
+export function sharedSpecConflicts(a, b) {
+  const isEmpty = (v) => v == null || v === '';
+  const out = [];
+  for (const f of MERGE_PREVIEW_FIELDS) {
+    const av = a?.[f], bv = b?.[f];
+    if (isEmpty(av) || isEmpty(bv)) continue;
+    const differ = (typeof av === 'number' && typeof bv === 'number')
+      ? round4(av) !== round4(bv)
+      : String(av).trim() !== String(bv).trim();
+    if (differ) out.push({ field: f, a: av, b: bv });
+  }
+  return out;
+}
+
+// Detect NEW (untracked) Fusion tools that share a ProShop number with an existing
+// no-Fusion tool — the case that used to surface as two separate library entries.
+// A ProShop-only import makes a metadata-only tool (no_fusion_link); later the same
+// physical tool is uploaded into Fusion under its own tracking ID but the SAME
+// product-id. Match is by tool_id only (the physical identity). Each candidate
+// pairs the untracked Fusion tool with the no-Fusion tool it matches, plus a small
+// conflict preview (shared specs that differ, e.g. cut diameter) so the user can
+// see what to fix before merging. Surfaced in the Normalize dialog — the app never
+// merges these silently; the user decides per tool.
+export function findNoFusionMergeCandidates(tools) {
+  const noFusionByPid = new Map();
+  for (const t of (tools || [])) {
+    if (!t?.no_fusion_link) continue;
+    const pid = normPid(t.tool_id);
+    if (pid) noFusionByPid.set(pid, t);
+  }
+  const out = [];
+  for (const t of (tools || [])) {
+    if (!t || t.tracking_id || t.no_fusion_link) continue;   // only NEW untracked Fusion tools
+    const pid = normPid(t.tool_id);
+    if (!pid) continue;
+    const existing = noFusionByPid.get(pid);
+    if (!existing) continue;
+    const conflicts = sharedSpecConflicts(t, existing).map(c => ({ field: c.field, fusion: c.a, existing: c.b }));
+    out.push({ toolId: t.tool_id, fusionTool: t, existingTool: existing, conflicts });
+  }
+  return out;
+}
+
+// Merge a NEW Fusion tool into an existing no-Fusion tool that shares its ProShop
+// number — the explicit merge the user confirms at normalization. The Fusion tool
+// is primary so its real geometry/presets/raw instance win; the CALLER must have
+// already set its tracking_id to the no-Fusion record's id so the merged tool
+// updates that record in place (no orphan left behind). The no-Fusion tool's
+// ProShop-only fields (purchasing, location, vendor, min_ooh, tags) gap-fill onto
+// it, and any shared spec that genuinely differs is flagged as a conflict
+// (_combineConflicts) for the user to resolve on the tool page — exactly like two
+// Fusion tools that disagree.
+export function mergeNoFusionIntoFusion(fusionTool, noFusionTool) {
+  return mergeLogicalTools([fusionTool, noFusionTool]);
+}
+
 // Combined tools that are actually MORE THAN ONE Fusion tracking-ID group folded
 // together because they share a tool_id (usually a duplicate from human error in
 // the legacy/Fusion data). These are the tools a bulk re-number would split into
