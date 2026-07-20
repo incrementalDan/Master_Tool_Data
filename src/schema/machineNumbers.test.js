@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateMachineNumbers, getNextMachineNumber, resolveMachineNumberCollision } from './toolSchema.js';
+import { generateMachineNumbers, getNextMachineNumber, resolveMachineNumberCollision, findDuplicateMachineNumbers } from './toolSchema.js';
 
 describe('generateMachineNumbers', () => {
   it('defaults: starts at 30, skips 98/99/100', () => {
@@ -55,5 +55,36 @@ describe('resolveMachineNumberCollision — unique machine numbers on import', (
 
   it('accepts an array for the used set and honors custom start/skip', () => {
     expect(resolveMachineNumberCollision(1, [1], 1, [3])).toEqual({ number: 2, reassignedFrom: 1 });
+  });
+});
+
+describe('findDuplicateMachineNumbers — background duplicate detector', () => {
+  it('returns only numbers used by 2+ tools, sorted ascending', () => {
+    const dups = findDuplicateMachineNumbers([
+      { id: 'a', machine_tool_number: 42 },
+      { id: 'b', machine_tool_number: 30 },
+      { id: 'c', machine_tool_number: 42 },   // dup of a
+      { id: 'd', machine_tool_number: 30 },   // dup of b
+      { id: 'e', machine_tool_number: 30 },   // triple on 30
+      { id: 'f', machine_tool_number: 7 },    // unique
+    ]);
+    expect(dups.map(g => g.number)).toEqual([30, 42]);           // sorted, uniques excluded
+    expect(dups.find(g => g.number === 30).tools).toHaveLength(3);
+    expect(dups.find(g => g.number === 42).tools).toHaveLength(2);
+  });
+
+  it('ignores tools with no machine number', () => {
+    expect(findDuplicateMachineNumbers([
+      { id: 'a', machine_tool_number: null },
+      { id: 'b', machine_tool_number: null },
+      { id: 'c', machine_tool_number: '' },
+    ])).toEqual([]);
+  });
+
+  it('is empty when every number is unique', () => {
+    expect(findDuplicateMachineNumbers([
+      { id: 'a', machine_tool_number: 30 },
+      { id: 'b', machine_tool_number: 31 },
+    ])).toEqual([]);
   });
 });

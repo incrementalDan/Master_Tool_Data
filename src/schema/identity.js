@@ -137,6 +137,25 @@ export function resolveMachineNumberCollision(desired, used, start, skip) {
   return { number: getNextMachineNumber([...usedSet], start, skip), reassignedFrom: n };
 }
 
+// Find machine tool numbers used by more than one logical tool. Read-only — the
+// background detector behind the Settings "fix duplicates" action. Groups tools by
+// their machine_tool_number (nulls/blanks ignored — a tool need not have one) and
+// returns only the numbers shared by 2+ tools, sorted ascending:
+//   [{ number, tools: [tool, ...] }]. Excluded-tool filtering is the caller's job.
+export function findDuplicateMachineNumbers(tools) {
+  const byNum = new Map();
+  for (const t of (tools || [])) {
+    const n = t?.machine_tool_number;
+    if (n == null || n === '' || isNaN(Number(n))) continue;
+    const key = Number(n);
+    if (!byNum.has(key)) byNum.set(key, []);
+    byNum.get(key).push(t);
+  }
+  const out = [];
+  for (const [number, group] of byNum) if (group.length > 1) out.push({ number, tools: group });
+  return out.sort((a, b) => a.number - b.number);
+}
+
 // Write a tool ID (ProShop number / generated shop ID) directly into a raw
 // Fusion entry — the native `product-id` plus its paired expression. Mirrors
 // the native+expression pairing internalToFusionTool uses for tool_productId.

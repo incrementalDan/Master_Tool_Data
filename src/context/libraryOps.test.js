@@ -247,6 +247,59 @@ describe('normalizeLibrary — machine tool numbers stay unique', () => {
   });
 });
 
+describe('fixDuplicateMachineNumbers — clean up numbers already duplicated', () => {
+  const raw = (guid, comment, productId, number) => ({
+    guid, type: 'flat end mill', unit: 'inches', description: `T${number}`,
+    'product-id': productId, 'post-process': { comment, number },
+    geometry: { DC: 0.5, LCF: 1, OAL: 3, NOF: 4, LB: 1 },
+    'start-values': { presets: [] }, expressions: {},
+  });
+  const ctxFor = (list) => makeCtx({
+    downloadAllLibraries: vi.fn(async () => [{ libraryId: 'lib-1', library: { fileName: 'main.json' }, list }]),
+    uploadFusionList: vi.fn(async () => {}),
+    shopSettingsRef: { current: {
+      tool_id_system: { mode: 'sequential', start: 1000, skip: [], digits: 4 },
+      machine_number: { start: 30, skip: [] }, location_config: { systems: [] },
+      tool_libraries: [{ id: 'lib-1', fileName: 'main.json' }], default_tool_library_id: 'lib-1',
+    } },
+  });
+
+  it('keeps the first tool on a shared number and reassigns + flags the rest', async () => {
+    // Two ESTABLISHED (tracked) tools already sharing machine number 30.
+    const a = raw('gA', 'FTL-A00001', 'A-1', 30);
+    const b = raw('gB', 'FTL-B00002', 'B-1', 30);
+    let uploaded = null;
+    const ctx = ctxFor([a, b]);
+    ctx.uploadFusionList = vi.fn(async (_id, l) => { uploaded = l; });
+    loadMetadata.mockResolvedValue([]);
+
+    const { fixDuplicateMachineNumbers } = createLibraryOps(ctx);
+    const n = await fixDuplicateMachineNumbers();
+    expect(n).toBe(1);
+
+    const byPid = Object.fromEntries(uploaded.map(f => [f['product-id'], f]));
+    expect(byPid['A-1']['post-process'].number).toBe(30);   // first keeps it
+    expect(byPid['B-1']['post-process'].number).toBe(31);   // second reassigned
+
+    // Only the reassigned tool's metadata is written, carrying the flag.
+    const savedMeta = saveAllMetadata.mock.calls.at(-1)[0];
+    const bMeta = savedMeta.find(m => m.id === 'FTL-B00002');
+    expect(bMeta.machine_tool_number).toBe(31);
+    expect((bMeta.conflicts || []).find(c => c.type === 'machine_number')).toMatchObject({ from: 30, to: 31 });
+  });
+
+  it('does nothing (returns 0) when all machine numbers are already unique', async () => {
+    const a = raw('gA', 'FTL-A00001', 'A-1', 30);
+    const b = raw('gB', 'FTL-B00002', 'B-1', 31);
+    const ctx = ctxFor([a, b]);
+    loadMetadata.mockResolvedValue([]);
+
+    const { fixDuplicateMachineNumbers } = createLibraryOps(ctx);
+    expect(await fixDuplicateMachineNumbers()).toBe(0);
+    expect(ctx.uploadFusionList).not.toHaveBeenCalled();   // no write when nothing to fix
+  });
+});
+
 describe('Drive-required guards for no-Fusion tools (G3/G4)', () => {
   it('saveFullLibrary refuses when a no-Fusion tool is present and Drive is off (G3)', async () => {
     const ctx = makeCtx({ googleRef: { current: false } });

@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
-import { generateMachineNumbers, generateId, duplicateIdClusters } from '../schema/toolSchema.js';
+import { generateMachineNumbers, generateId, duplicateIdClusters, findDuplicateMachineNumbers } from '../schema/toolSchema.js';
+import { isExcludedFrom } from '../utils/idSystems.js';
 import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../utils/toolIdSystem.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
 import { ASM_MODES, previewAsmNumber } from '../utils/assemblyIdSystem.js';
@@ -65,7 +66,7 @@ function StepConfirm({ stepKey, label, divider = true, onConfirm, saving }) {
 export default function Settings() {
   const navigate = useNavigate();
   const {
-    tools, needsNormalize, fetchRawLibrary, renumberLibrary, assignToolIds, renumberAllToolIds, isSaving,
+    tools, needsNormalize, fetchRawLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, isSaving,
     markSetupStepInSettings,
     addToolLibrary, removeToolLibrary, setDefaultToolLibrary,
     addHolderLibrary, removeHolderLibrary, notify,
@@ -501,6 +502,17 @@ export default function Settings() {
     setStage('idle');
     setConfirmText('');
     setError('');
+  };
+
+  // Background (read-only) detection of machine numbers already shared by 2+ tools.
+  // Excluded tools (opted out of the machine-number system) are not flagged.
+  const duplicateMachineGroups = findDuplicateMachineNumbers(
+    (tools || []).filter(t => !isExcludedFrom(t, 'machine_number')));
+  const duplicateMachineToolCount = duplicateMachineGroups.reduce((n, g) => n + (g.tools.length - 1), 0);
+  const handleFixDuplicateMachineNumbers = async () => {
+    setError('');
+    try { await fixDuplicateMachineNumbers(); }
+    catch (err) { setError(err.message); }
   };
 
   const handleExportProShop = () => {
@@ -1669,6 +1681,39 @@ export default function Settings() {
         </div>
 
         <StepConfirm stepKey="machineNumbers" label="your machine numbering" onConfirm={() => confirmStep('machineNumbers')} saving={savingAll} />
+
+        {/* Background duplicate-machine-number detection (read-only) + manual fix.
+            Machine numbers must be unique; this surfaces any already-shared numbers
+            and reassigns only the duplicates on demand (never on load). */}
+        <div style={{
+          marginTop: 20, padding: 16, borderRadius: 'var(--radius-sm)',
+          border: '1px solid var(--border)',
+          borderLeft: `3px solid ${duplicateMachineGroups.length ? 'var(--orange)' : 'var(--green, #4ade80)'}`,
+          background: 'var(--surface-2)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Hash size={16} style={{ color: duplicateMachineGroups.length ? 'var(--orange)' : 'var(--green, #4ade80)' }} />
+            <strong>Duplicate machine numbers</strong>
+          </div>
+          {duplicateMachineGroups.length === 0 ? (
+            <div className="text-sub text-sm">Every tool has a unique machine tool number. ✓</div>
+          ) : (
+            <>
+              <div className="text-sub text-sm" style={{ marginBottom: 10 }}>
+                <strong style={{ color: 'var(--text)' }}>{duplicateMachineGroups.length}</strong> machine
+                number{duplicateMachineGroups.length === 1 ? ' is' : 's are'} used by more than one tool
+                ({duplicateMachineToolCount} tool{duplicateMachineToolCount === 1 ? '' : 's'} would be reassigned).
+                Numbers: <span className="font-mono">{duplicateMachineGroups.map(g => `T${g.number}`).join(', ')}</span>.
+                Fixing keeps the first tool on each number and gives the rest the next free number, flagged on each tool.
+              </div>
+              {error && <div className="error-banner mb-12">{error}</div>}
+              <button className="btn btn-primary btn-sm" onClick={handleFixDuplicateMachineNumbers}
+                disabled={isSaving || dirty} title={dirty ? 'Save or cancel your changes first' : undefined}>
+                {isSaving ? 'Fixing…' : `Assign new numbers to ${duplicateMachineToolCount} duplicate${duplicateMachineToolCount === 1 ? '' : 's'}`}
+              </button>
+            </>
+          )}
+        </div>
 
         <div style={{
           marginTop: 20,

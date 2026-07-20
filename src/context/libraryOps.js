@@ -8,12 +8,13 @@ import {
   generateId, generateAssemblyId, generateTrackingId,
   groupByTrackingId, buildLogicalTool, splitToFusionInstances, readTrackingId,
   generateMachineNumbers, applyMachineNumberToFusion, applyToolIdToFusion,
-  resolveMachineNumberCollision,
+  resolveMachineNumberCollision, getNextMachineNumber, findDuplicateMachineNumbers,
   fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
   combineToolsByToolId, buildMetadataTool, materializeUnlinkedTools,
   buildUnlinkedTool, mergeNoFusionIntoFusion,
 } from '../schema/toolSchema.js';
 import { normProShopId } from '../schema/insertFamilies.js';
+import { mergeToolConflicts } from '../utils/toolConflicts.js';
 import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSystem.js';
 import { isExcludedFrom } from '../utils/idSystems.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
@@ -240,6 +241,111 @@ export function createLibraryOps(ctx) {
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
       notify(`Renumber failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  };
+
+  // Fix machine tool numbers that are ALREADY duplicated across two established
+  // tools (as opposed to the normalize-time enforcement, which only catches tools
+  // as they come in). For every number used by 2+ tools, the FIRST tool keeps it
+  // and the rest are reassigned the next free number and flagged (machine_number
+  // conflict). Manual action only — never auto-runs on load, because a machine
+  // number maps to a physical setup sheet and must not change without the user's
+  // say-so. Mirrors renumberLibrary's shop-global download → mutate → write path,
+  // but touches only the colliding tools (everything else keeps its number).
+  const fixDuplicateMachineNumbers = async () => {
+    dispatch({ type: 'SAVE_START' });
+    try {
+      // No-Fusion tools live only in metadata — without Drive there's nowhere to
+      // persist a new number (same guard as renumberLibrary).
+      if (!googleRef.current && (toolsRef.current || []).some(t => t.no_fusion_link && !isExcludedFrom(t, 'machine_number'))) {
+        throw new Error('Connect Google Drive — no-Fusion tools exist only in metadata and cannot be renumbered without it');
+      }
+      const perLib = await downloadAllLibraries();
+      const entryLib = new Map();
+      const fusionList = [];
+      const libNameById = new Map();
+      for (const { libraryId, library, list } of perLib) {
+        libNameById.set(libraryId, library.fileName);
+        for (const f of list) { entryLib.set(f, libraryId); fusionList.push(f); }
+      }
+      const metaList = googleRef.current ? await toolStore.loadAll() : [];
+      const metaByTracking = new Map(metaList.map(m => [m.id, m]));
+
+      // Build the logical tools (Fusion groups + no-Fusion metadata tools), keeping
+      // a handle on each one's raws (for the Fusion write) and tracking id.
+      const { groups, untracked } = groupByTrackingId(fusionList);
+      const orderedGroups = [...groups.values(), ...untracked.map(r => [r])];
+      const items = [];
+      for (const raws of orderedGroups) {
+        const logical = buildLogicalTool(raws, metaByTracking);
+        if (isExcludedFrom(logical, 'machine_number')) continue;
+        items.push({ logical, raws, tid: readTrackingId(raws[0]) || logical.tracking_id, isNoFusion: false });
+      }
+      for (const m of metaList) {
+        if (!m.no_fusion_link) continue;
+        const logical = buildUnlinkedTool(m);
+        if (isExcludedFrom(logical, 'machine_number')) continue;
+        items.push({ logical, raws: null, tid: m.id, isNoFusion: true });
+      }
+
+      // Seed the used set with every current number, then walk the tools: the first
+      // tool on a number keeps it; each later tool on the same number is reassigned.
+      const [mnStart, mnSkip] = machineNumberArgs(shopSettingsRef.current);
+      const used = new Set();
+      for (const it of items) {
+        const n = it.logical.machine_tool_number;
+        if (n != null && !isNaN(Number(n))) used.add(Number(n));
+      }
+      const seen = new Set();
+      const reassigned = [];
+      for (const it of items) {
+        const cur = it.logical.machine_tool_number;
+        if (cur == null || isNaN(Number(cur))) continue;
+        const n = Number(cur);
+        if (!seen.has(n)) { seen.add(n); continue; }   // first occurrence keeps it
+        const to = getNextMachineNumber([...used], mnStart, mnSkip);
+        used.add(to);
+        reassigned.push({ it, from: n, to });
+      }
+
+      if (reassigned.length === 0) {
+        dispatch({ type: 'SAVE_SUCCESS' });
+        notify('No duplicate machine numbers found', 'info');
+        return 0;
+      }
+
+      // Apply: write the new number to Fusion (for linked tools) and to the metadata
+      // record, flagging each reassigned tool with a machine_number conflict.
+      for (const { it, from, to } of reassigned) {
+        if (it.raws) it.raws.forEach(raw => applyMachineNumberToFusion(raw, to));
+        const meta = metaByTracking.get(it.tid) || { id: it.tid, ...(it.isNoFusion ? { no_fusion_link: true } : {}) };
+        metaByTracking.set(it.tid, {
+          ...meta,
+          machine_tool_number: to,
+          conflicts: mergeToolConflicts(meta.conflicts || [], { machineNumberConflict: { from, to } }),
+          ...(it.isNoFusion ? { no_fusion_link: true } : {}),
+        });
+      }
+
+      for (const { libraryId } of perLib) {
+        await uploadFusionList(libraryId, fusionList.filter(f => entryLib.get(f) === libraryId));
+      }
+      if (googleRef.current) await toolStore.upsertMany([...metaByTracking.values()]);
+
+      // Rebuild the in-memory library so the new numbers + flags show immediately.
+      const tools = [];
+      const tagOf = (raws) => { const lib = entryLib.get(raws[0]); return { library_id: lib, library_name: libNameById.get(lib) }; };
+      for (const [, raws] of groups) tools.push({ ...buildLogicalTool(raws, metaByTracking), ...tagOf(raws) });
+      for (const raw of untracked) tools.push({ ...buildLogicalTool([raw], metaByTracking), ...tagOf([raw]) });
+      const finalTools = materializeUnlinkedTools(tools, [...metaByTracking.values()]);
+      dispatch({ type: 'SET_TOOLS', tools: finalTools });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify(`Reassigned ${reassigned.length} duplicate machine number${reassigned.length === 1 ? '' : 's'}`, 'success', 6000);
+      return reassigned.length;
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Fix duplicates failed: ${err.message}`, 'error', 7000);
       throw err;
     }
   };
@@ -791,5 +897,5 @@ export function createLibraryOps(ctx) {
     }
   };
 
-  return { saveFullLibrary, renumberLibrary, assignToolIds, renumberAllToolIds, normalizeLibrary };
+  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary };
 }
