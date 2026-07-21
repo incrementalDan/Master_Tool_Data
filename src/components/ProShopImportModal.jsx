@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { X, UploadCloud, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { parseCSV, matchProShopToTools } from './ImportFlow.jsx';
+import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel } from '../utils/proShopHeaders.js';
 import { getDefaultUnit, unitAbbr } from '../utils/units.js';
 
 // Single-tool ProShop data import. Upload a ProShop CSV export (the whole
@@ -45,6 +46,7 @@ export default function ProShopImportModal({ tool, onClose, onApply }) {
   const { components } = useApp();
   const [psUnit, setPsUnit] = useState(tool.unit || getDefaultUnit());
   const [additions, setAdditions] = useState(null);   // matched additions for this tool
+  const [psFormat, setPsFormat] = useState(null);     // detected header format of the last CSV
   const [status, setStatus] = useState('');           // 'nomatch' once a file parsed with no hit
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -56,17 +58,16 @@ export default function ProShopImportModal({ tool, onClose, onApply }) {
     setError('');
     setStatus('');
     setAdditions(null);
+    setPsFormat(null);
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const rows = parseCSV(e.target.result);
         if (rows.length < 2) throw new Error('CSV must have a header row and at least one data row');
-        const header = rows[0];
-        const data = rows.slice(1).map(row => {
-          const obj = {};
-          header.forEach((h, i) => { obj[h.trim()] = (row[i] || '').trim(); });
-          return obj;
-        });
+        // Accept both header conventions (real ProShop export + this app's own
+        // ProShop export) via header canonicalization — see proShopHeaders.js.
+        setPsFormat(detectProShopFormat(rows[0]));
+        const data = proShopRowsToObjects(rows);
         // Group rows by "Tool #" (a tool with several Approved Brands spans
         // multiple rows) exactly like the bulk importer, then match against
         // ONLY this tool.
@@ -117,8 +118,13 @@ export default function ProShopImportModal({ tool, onClose, onApply }) {
         <p className="text-sub text-sm mb-12">
           Upload a ProShop CSV export. The row matching this tool
           {tool.tool_id ? <> (<strong>Tool #{tool.tool_id}</strong>)</> : ' (by description + diameter)'} is
-          found and its data merged into this one tool. No other tools are touched.
+          found and its data merged into this one tool. No other tools are touched. Both a real ProShop
+          export and this app's own ProShop export are accepted (auto-detected).
         </p>
+
+        {psFormat && psFormat !== 'unknown' && (
+          <div className="text-sub text-xs mb-12">Detected: <strong>{proShopFormatLabel(psFormat)}</strong></div>
+        )}
 
         {error && <div className="error-banner mb-12">{error}</div>}
 

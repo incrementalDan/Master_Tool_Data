@@ -9,6 +9,7 @@ import { insertComponentIndex, newComponent, normProShopId } from '../schema/ins
 import { vendorHasOwnCatalogNumber, resolveVendorName } from '../schema/vendorRegistry.js';
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
+import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel } from '../utils/proShopHeaders.js';
 import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
 import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
 
@@ -41,6 +42,7 @@ export default function ImportFlow() {
   const [mismatchWarn, setMismatchWarn] = useState('');
   const [fusionPreview, setFusionPreview] = useState(null);
   const [proShopMatches, setProShopMatches] = useState(null);
+  const [psFormat, setPsFormat] = useState(null); // detected header format of the last CSV
   const [psUnit, setPsUnit] = useState(getDefaultUnit());
   // Component records (holder body / insert) filled from ProShop rows that
   // matched one side of an insert tool's combined id — saved to
@@ -128,12 +130,11 @@ export default function ImportFlow() {
       try {
         const rows = parseCSV(e.target.result);
         if (rows.length < 2) throw new Error('CSV must have a header row and at least one data row');
-        const header = rows[0];
-        const data = rows.slice(1).map(row => {
-          const obj = {};
-          header.forEach((h, i) => { obj[h.trim()] = (row[i] || '').trim(); });
-          return obj;
-        });
+        // Canonicalize headers so BOTH a real ProShop export (display-name
+        // headers) and this app's own ProShop export (API-id headers) import
+        // identically — see proShopHeaders.js.
+        setPsFormat(detectProShopFormat(rows[0]));
+        const data = proShopRowsToObjects(rows);
         // ProShop exports one row per "Tool #" normally, but multiple rows
         // (sharing the same Tool #) when a tool has multiple purchasing/
         // Approved Brand options — group them before matching.
@@ -342,7 +343,8 @@ export default function ImportFlow() {
             Upload a ProShop CSV export. Rows are grouped by ProShop's "Tool #" (multiple rows per tool
             represent multiple Approved Brand / purchasing options) and matched to existing tools by
             ProShop ID (Tool #) → description similarity. ProShop wins for vendor, MIN OOH, through-coolant,
-            and purchasing info; other fields fill gaps only.
+            and purchasing info; other fields fill gaps only. Both a real ProShop export and this app's own
+            ProShop export are accepted — the format is detected automatically.
           </p>
 
           <div className="field-group mb-16" style={{ maxWidth: 340 }}>
@@ -369,6 +371,12 @@ export default function ImportFlow() {
             fileRef={proShopFileRef}
             onFile={handleProShopFile}
           />
+
+          {psFormat && psFormat !== 'unknown' && (
+            <div className="text-sub text-xs mt-8">
+              Detected: <strong>{proShopFormatLabel(psFormat)}</strong>
+            </div>
+          )}
 
           {proShopMatches && (
             <div style={{ marginTop: 16 }}>
