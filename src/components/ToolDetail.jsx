@@ -797,9 +797,17 @@ export default function ToolDetail() {
           <ProShopImportModal
             tool={tool}
             onClose={() => setShowProShopImport(false)}
-            onApply={async (additions) => {
-              await saveTool({ ...tool, ...additions });
-              notify('ProShop data imported', 'success');
+            onApply={async (additions, conflicts) => {
+              const patch = { ...tool, ...additions };
+              // Differing values are flagged (not overwritten) — persisted via
+              // buildMetadataTool → mergeToolConflicts, shown in the ConflictBanner.
+              if (conflicts && conflicts.length) {
+                patch._combineConflicts = [...(tool._combineConflicts || []), ...conflicts];
+              }
+              await saveTool(patch);
+              notify(conflicts && conflicts.length
+                ? `ProShop data imported — ${conflicts.length} difference${conflicts.length === 1 ? '' : 's'} flagged`
+                : 'ProShop data imported', 'success');
             }}
           />
         )}

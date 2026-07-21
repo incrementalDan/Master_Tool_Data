@@ -1072,7 +1072,7 @@ ProShop export must never be removed even as the app evolves toward a future ERP
 The ToolDetail action sidebar has an **"Import PS"** button (`FileUp` icon, orange, next to the ProShop **export** button) that imports ProShop data for **one tool** without running the bulk importer. `src/components/ProShopImportModal.jsx`: upload a ProShop CSV (a whole-library export is fine), it finds the single row matching **this** tool and previews the exact fields it would fill/overwrite before applying.
 
 - **Reuses the bulk importer's brain** — the modal imports `parseCSV` + `matchProShopToTools` (now **named exports** from `ImportFlow.jsx`) and runs the identical matching + merge rules against a **single-tool array** (`matchProShopToTools(groups, [tool], psUnit, components)`), taking the `matched` entry whose `toolIdx === 0`. So single-tool behavior (fill-gap vs. overwrite policy, unit conversion, Approved-Brand multi-row purchasing) is identical to bulk — there is no second matching implementation to drift.
-- **Apply** merges the additions via `saveTool({ ...tool, ...additions })` (metadata-only for a no-Fusion tool; a normal round-trip otherwise). **No other tools are touched and no machine renumbering happens.** No match → a "No matching row found" notice (not a silent no-op).
+- **Apply** merges the additions via `saveTool({ ...tool, ...additions })` (metadata-only for a no-Fusion tool; a normal round-trip otherwise). **No other tools are touched and no machine renumbering happens.** No match → a "No matching row found" notice (not a silent no-op). Fill-gap fields where the app already holds a **different** value are **flagged, not overwritten** (attached as `_combineConflicts`, resolved later in `ConflictBanner`) — see ProShop Field Priority Rules; the modal previews them as a "differences to flag" table.
 - Accepts **both** header formats via `proShopRowsToObjects` and shows the detected-format note, exactly like the bulk importer (see the header-convention note above).
 - **Not yet handled** (flagged for later): if the tool is an **insert-style pairing**, ProShop stores each component (holder body / insert) as its own row — those still go through the bulk importer's component routing, not this per-tool button.
 
@@ -1123,17 +1123,21 @@ These rules apply during the **initial ProShop CSV merge** and on any **subseque
 |---|---|---|
 | Tool description | PS wins | Always via the per-tool rename confirmation UI — see Description Rename Workflow |
 | `vendor` (manufacturer) | PS wins | From `Approved Brand`; metadata-only, **never** written to Fusion |
-| `tool_id` | Fill gap only | From `Tool #` — only set if the tool doesn't already have one |
-| `location` (cabinet) | Fill gap only | From `Location`; Fusion's "Vendor" UI field (`expressions.tool_vendor`) holds the cabinet location → internal `location` |
+| `tool_id` | Fill gap, else flag | From `Tool #` — set if the tool has none; a *different* id flags (unless it matched by exact id or a known `legacy_ids` value — an expected re-number, not a conflict) |
+| `location` (cabinet) | Fill gap, else flag | From `Location`; Fusion's "Vendor" UI field (`expressions.tool_vendor`) holds the cabinet location → internal `location`. A tool that owns a **structured** `tool_location` ignores ProShop entirely (deliberate ownership, not a flag); a differing free-text `location` flags |
 | `purchasing` (Approved Brands → manufacturers/vendors) | PS wins, replace when present | Built from every row sharing a `Tool #` via `buildPurchasingFromGroup` — see Purchasing / Vendor Data Model |
 | `min_ooh` (MIN OOH floor) | PS wins | From `Length Below Holder - MIN OOH` (export id `lengthBelowShankDiameter`); metadata-only, always overwrites |
 | `geometry['shoulder-length']` (shoulder length) | Set to MIN OOH at normalization | See MIN OOH rule below |
 | per-assembly `ooh` → `geometry.LB` | Floored at MIN OOH | See MIN OOH rule below |
 | `tsc_capable` (through-spindle coolant) | PS wins | From `Through Coolant` (`true`/`false`); boolean capability flag |
 | `custom_grind` | PS wins | From `Custom Grind` (`true`/`false`, ProShop id `customgrindtool`); same PS-wins boolean pattern as `tsc_capable`. Metadata-only — appears in the Geometry section as "Custom Grind" |
-| `point_type` (taps) | Fill gap only | From `Point Type` (ProShop id `pointType`); metadata-only. In `PS_MAIN_COLS` so it round-trips through the app's own export |
-| `tip_to_first_thread` (taps) | Fill gap only | From `Tip to 1st Full Thread`, converted from the file unit — see note below |
+| `coating` | Fill gap, else flag | From `Coating`; a different value flags (case/space-insensitive compare) |
+| `pitch` (thread designation) | Fill gap, else flag | From `Thread`/`Pitch` via `resolveThreadSize`; a different designation flags. `is_sti`/`tap_thread_unit` ride along only when pitch is being filled |
+| `point_type` (taps) | Fill gap, else flag | From `Point Type` (ProShop id `pointType`); metadata-only. In `PS_MAIN_COLS` so it round-trips through the app's own export |
+| `tip_to_first_thread` (taps) | Fill gap, else flag | From `Tip to 1st Full Thread`, converted from the file unit — see note below |
 | All other differences | **Flag** to user | Do not auto-resolve |
+
+**Fill-gap fields flag a difference — "informed, not blocked" (`matchProShopToTools`, `ImportFlow.jsx`).** For the fill-gap fields above (`tool_id`, `location`, `coating`, `pitch`, `point_type`, `tip_to_first_thread`), a ProShop value is applied only when the app has **no** value; when the app already holds a **different** value the import neither overwrites nor silently ignores it — it records a **field conflict** (`{ field, values:[appValue, psValue] }`) via the existing conflict channel (`tool._combineConflicts` → `buildMetadataTool` → `mergeToolConflicts`), surfaced on the tool page in `ConflictBanner` (**Keep <app>** / **Use <ProShop>**), exactly like a load-time combine conflict. The app value is kept until the user picks. Equal values are a no-op (strings compared case/space-insensitively via `psStrEq`; lengths within tolerance via `psNumEq`). The **ProShop-authoritative** fields (`vendor`, `purchasing`, `min_ooh`, `tsc_capable`, `custom_grind`, and the description-rename flow) still **auto-win** — they are not flagged (purchasing is a complex multi-row object the Keep/Use banner can't represent as a single value). Both importers carry this: the bulk flow (`handleApplyMerge`) attaches `_combineConflicts` per matched tool and shows a "N flagged differences" summary chip; the single-tool `ProShopImportModal` shows a "differences to flag" table (app value vs. ProShop value) and records them on apply. Locked by `src/components/proShopImportMerge.test.js`.
 
 ### MIN OOH floor rule (read carefully)
 
