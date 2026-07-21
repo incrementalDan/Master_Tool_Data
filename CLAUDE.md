@@ -878,6 +878,11 @@ src/
                                   # copyToolToClipboard, copyToolsToClipboard
                                   # All accept optional selectedAssembly param for OOH export
     proShopExport.js              # ProShop CSV export (always maintain this)
+    proShopHeaders.js             # ProShop CSV header canonicalization — accept BOTH
+                                  # the display-name (real ProShop) and API-id (this
+                                  # app's own export) header conventions on import.
+                                  # canonicalProShopHeader / proShopRowsToObjects /
+                                  # detectProShopFormat. See ProShop Integration.
     presetNaming.js               # composePresetName, parsePresetName, presetMatchesAssembly,
                                   # OP_TYPES / opTypeWord / matchOpType
     holderNaming.js               # holder short names (strip NBT, drop SK<n> C, override map)
@@ -924,7 +929,13 @@ src/
     AddToolFlow.jsx               # New tool flow (extractor or manual)
     ImportFlow.jsx                # Bulk Fusion JSON / ProShop CSV import
                                   # Reached via Settings → Import. Step 2 hosts Import ProShop Photos
-                                  # as a sub-section (button → ImportPhotosModal)
+                                  # as a sub-section (button → ImportPhotosModal). Machine-number
+                                  # step (4) is optional + non-destructive (see ProShop Integration).
+                                  # Named-exports parseCSV + matchProShopToTools for reuse.
+    ProShopImportModal.jsx        # Single-tool ProShop data import (ToolDetail "Import PS"
+                                  # button) — finds this tool's row, previews field changes,
+                                  # applies via saveTool. See ProShop Integration → Single-tool
+                                  # ProShop import
     ImportPhotosModal.jsx         # One-time ProShop photo import: Drive folder browser +
                                   # progress/summary (see ProShop Integration → ProShop photo import)
     MetadataConnect.jsx           # Google Drive connect flow + shared-drive-aware folder picker.
@@ -1049,11 +1060,29 @@ ProShop manages inventory and purchasing. This app owns tool specifications. Rel
 
 ProShop export must never be removed even as the app evolves toward a future ERP.
 
-**Column header convention differs by direction**:
+**Column header convention differs by direction** — but import accepts BOTH:
 - **Export** (`tool-extractor.tsx` `PS_MAIN_COLS`, `src/utils/proShopExport.js`) writes ProShop's **API attribute id** names (camelCase, e.g. `lengthBelowShankDiameter`, `numberOfFlutes`, `tipTo1stFullThread`) as column headers — ProShop's UI matches these on import regardless of display label, and extra/unmapped columns are harmless.
-- **Import** (`src/components/ImportFlow.jsx`) reads a real ProShop export, whose headers are the **UI display names** (e.g. `Length Below Holder - MIN OOH`, `No.ofFlutes`, `Tip to 1st Full Thread`) — these often but not always match the API id.
+- **Import** reads a real ProShop export, whose headers are the **UI display names** (e.g. `Length Below Holder - MIN OOH`, `No.ofFlutes`, `Tip to 1st Full Thread`) — these often but not always match the API id.
+- **The two vocabularies barely overlap** (nearly every header differs by case, spacing, or entirely — `Tool #`↔`toolNumber`, `Length Below Holder - MIN OOH`↔`lengthBelowShankDiameter`, `EDP#`↔`vendorToolId`), so re-importing the app's OWN ProShop export used to match nothing. **`src/utils/proShopHeaders.js` fixes this with a header-canonicalization layer**: `canonicalProShopHeader(h)` maps either vocabulary onto the single set of display-name keys the importer already reads, and `proShopRowsToObjects(rows)` is the one seam that turns parsed CSV rows into canonical-keyed row objects. **Both** the bulk importer (`handleProShopFile`) and the single-tool importer (`ProShopImportModal`) route rows through it, so both formats import identically with **no manual toggle** — the format auto-detects. Unknown headers pass through unchanged (extra columns stay harmless). `detectProShopFormat(headerRow)` → `'proshop'` (real export) / `'tooldex'` (this app's export) / `'unknown'` drives only a small "Detected: …" note (`proShopFormatLabel`); matching never needs it. The alias map (`HEADER_ALIASES`) is the source of truth for accepted names — add new columns there, not as ad-hoc `r['…']` string variants. Locked by `src/utils/proShopHeaders.test.js` (both header sets → identical row objects). **Known gap**: `Location` and `Point Type` are read on import but are **not** in `PS_MAIN_COLS`, so they don't round-trip through the app's own export (they import blank from a ToolDex-format file) — add them to the export cols to close it.
 
 **Multi-row groups (Approved Brands)**: ProShop exports one row per `Tool #` normally, but a tool with multiple Approved Brand / purchasing options spans **multiple rows sharing the same `Tool #`** — geometry/spec columns are populated only on the first row of the group, and each row contributes one manufacturer/vendor pair (`Approved Brand` / `Vendor` / `EDP#` / `Cost`) to the normalized `purchasing.{manufacturers,vendors}` model — see Purchasing / Vendor Data Model. Import groups rows by `Tool #` before matching (`handleProShopFile`) and builds the normalized shape via `buildPurchasingFromGroup` (`src/components/ImportFlow.jsx`); export emits the same row shape via `buildBrandRows`/`buildProShopCSV` (`tool-extractor.tsx`) and `exportFullLibrary` (`src/utils/proShopExport.js`).
+
+### Single-tool ProShop import (`ProShopImportModal`)
+
+The ToolDetail action sidebar has an **"Import PS"** button (`FileUp` icon, orange, next to the ProShop **export** button) that imports ProShop data for **one tool** without running the bulk importer. `src/components/ProShopImportModal.jsx`: upload a ProShop CSV (a whole-library export is fine), it finds the single row matching **this** tool and previews the exact fields it would fill/overwrite before applying.
+
+- **Reuses the bulk importer's brain** — the modal imports `parseCSV` + `matchProShopToTools` (now **named exports** from `ImportFlow.jsx`) and runs the identical matching + merge rules against a **single-tool array** (`matchProShopToTools(groups, [tool], psUnit, components)`), taking the `matched` entry whose `toolIdx === 0`. So single-tool behavior (fill-gap vs. overwrite policy, unit conversion, Approved-Brand multi-row purchasing) is identical to bulk — there is no second matching implementation to drift.
+- **Apply** merges the additions via `saveTool({ ...tool, ...additions })` (metadata-only for a no-Fusion tool; a normal round-trip otherwise). **No other tools are touched and no machine renumbering happens.** No match → a "No matching row found" notice (not a silent no-op).
+- Accepts **both** header formats via `proShopRowsToObjects` and shows the detected-format note, exactly like the bulk importer (see the header-convention note above).
+- **Not yet handled** (flagged for later): if the tool is an **insert-style pairing**, ProShop stores each component (holder body / insert) as its own row — those still go through the bulk importer's component routing, not this per-tool button.
+
+### Machine-numbering is optional + non-destructive on import (`ImportFlow` step 4)
+
+The bulk import's final step originally renumbered **every** tool in the library from `#30` on save — fine for a first bulk import, destructive for an incremental one (adding a few ProShop tools would overwrite all existing machine numbers). Refined so incremental imports are safe:
+
+- The **Review step (step 3)** has a direct **"Save to Drive"** that never touches machine numbers — the machine-number step is now genuinely optional (a second **"Assign Machine Numbers →"** button leads to it).
+- **Step 4 numbering defaults to a non-destructive fill-gap mode** (`assignMode: 'fill'`): tools that already have a `machine_tool_number` keep it (shown `T## (kept)`); only tools missing one get the next free number (`getNextMachineNumber` threaded across the batch). An explicit **"Renumber the entire library from #30"** radio (`assignMode: 'all'`) restores the original overwrite-everything bulk behavior. Start/skip come from `machineNumberArgs(shopSettings)`, not hardcoded.
+- `handleSaveToDrive(list)` now takes the list to save so both the direct-save (step 3, `fusionTools` untouched) and assign-then-save (step 4, `assignMachineNumbers(fusionTools, assignMode)`) paths share one writer.
 
 ### Tool Group letter ↔ tool_type classification
 
@@ -1488,7 +1517,7 @@ The shop's real Fusion + ProShop data is a **mess** — the entire point of this
 The ToolDetail view uses a three-zone layout:
 
 1. **Frozen left sidebar** (`.tool-action-sidebar`): action buttons that don't scroll
-   - Edit, Duplicate, Sync Job, Copy JSON, Download JSON, ProShop CSV, Delete
+   - Edit, Duplicate, Sync Job, Copy JSON, Download JSON, ProShop CSV (export), Import PS (single-tool ProShop import — see ProShop Integration), Delete
    - Each is a `SidebarBtn` (large icon + wrapped label + title tooltip)
    - Collapse to icon-only on mobile (`max-width: 768px`)
 

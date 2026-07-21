@@ -3,11 +3,13 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { UploadCloud, AlertTriangle, Image as ImageIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import ImportPhotosModal from './ImportPhotosModal.jsx';
-import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers, typeFromProShopGroup, resolveThreadSize } from '../schema/toolSchema.js';
+import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers, getNextMachineNumber, typeFromProShopGroup, resolveThreadSize } from '../schema/toolSchema.js';
+import { machineNumberArgs } from '../context/appState.js';
 import { insertComponentIndex, newComponent, normProShopId } from '../schema/insertFamilies.js';
 import { vendorHasOwnCatalogNumber, resolveVendorName } from '../schema/vendorRegistry.js';
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
+import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel } from '../utils/proShopHeaders.js';
 import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
 import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
 
@@ -40,6 +42,7 @@ export default function ImportFlow() {
   const [mismatchWarn, setMismatchWarn] = useState('');
   const [fusionPreview, setFusionPreview] = useState(null);
   const [proShopMatches, setProShopMatches] = useState(null);
+  const [psFormat, setPsFormat] = useState(null); // detected header format of the last CSV
   const [psUnit, setPsUnit] = useState(getDefaultUnit());
   // Component records (holder body / insert) filled from ProShop rows that
   // matched one side of an insert tool's combined id — saved to
@@ -127,12 +130,11 @@ export default function ImportFlow() {
       try {
         const rows = parseCSV(e.target.result);
         if (rows.length < 2) throw new Error('CSV must have a header row and at least one data row');
-        const header = rows[0];
-        const data = rows.slice(1).map(row => {
-          const obj = {};
-          header.forEach((h, i) => { obj[h.trim()] = (row[i] || '').trim(); });
-          return obj;
-        });
+        // Canonicalize headers so BOTH a real ProShop export (display-name
+        // headers) and this app's own ProShop export (API-id headers) import
+        // identically — see proShopHeaders.js.
+        setPsFormat(detectProShopFormat(rows[0]));
+        const data = proShopRowsToObjects(rows);
         // ProShop exports one row per "Tool #" normally, but multiple rows
         // (sharing the same Tool #) when a tool has multiple purchasing/
         // Approved Brand options — group them before matching.
@@ -183,23 +185,52 @@ export default function ImportFlow() {
   // won't appear in Fusion until promoted.
   const newNoFusionCount = fusionTools.filter(t => t.no_fusion_link).length;
 
-  // ── Step 4: Assign machine numbers, then save ─────────────────────────
-  // Numbers are assigned in current import (array) order, starting at #30 and
-  // skipping the reserved numbers. The metadata file is the source of truth.
-  const machineNumbers = generateMachineNumbers(fusionTools.length);
+  // ── Step 4: Assign machine numbers (optional), then save ──────────────
+  // The machine-number step is only needed to (re)number tools in bulk. It is
+  // NOT required to save — the Review step has a direct "Save to Drive" that
+  // never touches machine numbers, so an incremental import (adding one tool's
+  // ProShop data) leaves every existing tool's number alone.
+  const [mnStart, mnSkip] = machineNumberArgs(shopSettings);
+  const startDisplay = mnStart ?? 30;
+  const skipDisplay = mnSkip ?? [98, 99, 100];
 
-  const handleSaveToDrive = async () => {
+  // 'fill'  — only tools WITHOUT a number get one (threaded from the next free
+  //           number), so existing numbers are preserved. This is the default.
+  // 'all'   — the original bulk-first-import behavior: renumber the whole
+  //           library in import order starting at #30 (overwrites existing).
+  const [assignMode, setAssignMode] = useState('fill');
+
+  const hasMachineNumber = (t) =>
+    t.machine_tool_number != null && t.machine_tool_number !== '' && !isNaN(Number(t.machine_tool_number));
+
+  // Returns a copy of the list with machine numbers applied per the chosen mode.
+  // In 'fill' mode a tool that already has a number is returned unchanged.
+  const assignMachineNumbers = (list, mode) => {
+    if (mode === 'all') {
+      const nums = generateMachineNumbers(list.length, mnStart, mnSkip);
+      return list.map((t, i) => ({ ...t, machine_tool_number: nums[i] }));
+    }
+    const used = new Set(list.filter(hasMachineNumber).map(t => Number(t.machine_tool_number)));
+    return list.map(t => {
+      if (hasMachineNumber(t)) return t;
+      const num = getNextMachineNumber([...used], mnStart, mnSkip);
+      used.add(num);
+      return { ...t, machine_tool_number: num };
+    });
+  };
+
+  const numberedPreview = assignMachineNumbers(fusionTools, assignMode);
+  const missingNumberCount = fusionTools.filter(t => !hasMachineNumber(t)).length;
+
+  // Persist the given list to Drive. Tools that don't already belong to a
+  // library (newly imported ones) are tagged with the chosen destination
+  // library; existing tools keep their own library_id so saveFullLibrary
+  // writes each back to its own file.
+  const handleSaveToDrive = async (list) => {
     setSaving(true);
     try {
-      // Tag tools that don't already belong to a library (newly imported ones)
-      // with the chosen destination library. Existing tools keep their own
-      // library_id so saveFullLibrary writes each back to its own file.
-      const numbered = fusionTools.map((t, i) => ({
-        ...t,
-        machine_tool_number: machineNumbers[i],
-        library_id: t.library_id || targetLibraryId,
-      }));
-      await saveFullLibrary(numbered);
+      const finalList = list.map(t => ({ ...t, library_id: t.library_id || targetLibraryId }));
+      await saveFullLibrary(finalList);
       // Persist any insert-tool component records filled from ProShop rows
       // (metadata-only, tool_components.json). Upsert by id so a re-import
       // updates rather than duplicates.
@@ -312,7 +343,8 @@ export default function ImportFlow() {
             Upload a ProShop CSV export. Rows are grouped by ProShop's "Tool #" (multiple rows per tool
             represent multiple Approved Brand / purchasing options) and matched to existing tools by
             ProShop ID (Tool #) → description similarity. ProShop wins for vendor, MIN OOH, through-coolant,
-            and purchasing info; other fields fill gaps only.
+            and purchasing info; other fields fill gaps only. Both a real ProShop export and this app's own
+            ProShop export are accepted — the format is detected automatically.
           </p>
 
           <div className="field-group mb-16" style={{ maxWidth: 340 }}>
@@ -339,6 +371,12 @@ export default function ImportFlow() {
             fileRef={proShopFileRef}
             onFile={handleProShopFile}
           />
+
+          {psFormat && psFormat !== 'unknown' && (
+            <div className="text-sub text-xs mt-8">
+              Detected: <strong>{proShopFormatLabel(psFormat)}</strong>
+            </div>
+          )}
 
           {proShopMatches && (
             <div style={{ marginTop: 16 }}>
@@ -513,14 +551,40 @@ export default function ImportFlow() {
             </table>
           </div>
 
-          <div className="flex gap-8 mt-16">
-            <button className="btn btn-primary btn-lg" onClick={() => setStep(4)}>
-              Continue → Assign Machine Numbers
+          {toolLibraries.length > 1 && (
+            <label className="flex items-center gap-8 text-sm mb-12" style={{ flexWrap: 'wrap' }}>
+              <span className="text-sub">Import new tools into library:</span>
+              <select
+                className="field-input"
+                style={{ width: 'auto' }}
+                value={targetLibraryId || ''}
+                onChange={e => setTargetLibraryId(e.target.value)}
+              >
+                {toolLibraries.map(lib => <option key={lib.id} value={lib.id}>{lib.fileName}</option>)}
+              </select>
+            </label>
+          )}
+
+          <div className="flex gap-8 mt-16" style={{ flexWrap: 'wrap' }}>
+            <button
+              className="btn btn-primary btn-lg"
+              onClick={() => handleSaveToDrive(fusionTools)}
+              disabled={saving || isSaving}
+            >
+              {saving || isSaving ? 'Saving to Drive…' : `Save ${fusionTools.length} Tools to Drive`}
             </button>
-            <button className="btn btn-secondary" onClick={() => navigate('/')}>
+            <button className="btn btn-secondary" onClick={() => setStep(4)} disabled={saving || isSaving}>
+              Assign Machine Numbers →
+            </button>
+            <button className="btn btn-ghost" onClick={() => navigate('/')} disabled={saving || isSaving}>
               Cancel
             </button>
           </div>
+          <p className="text-sub text-xs mt-8">
+            <strong>Save</strong> keeps every tool's existing machine number untouched — use this when adding
+            or updating a few tools. <strong>Assign Machine Numbers</strong> is only for (re)numbering tools in
+            bulk (e.g. a first import); it never has to be run to save.
+          </p>
         </div>
       )}
 
@@ -528,10 +592,27 @@ export default function ImportFlow() {
       {step === 4 && (
         <div className="card">
           <h3 style={{ marginBottom: 8 }}>Assign Machine Tool Numbers</h3>
-          <p className="text-sub text-sm mb-16">
-            This will number all {fusionTools.length} tools starting at <strong>#30</strong> in import order,
-            skipping <strong>98, 99, and 100</strong> (reserved for machine-specific use). The same value is
-            written to the tool number, length offset, and diameter offset so the machine reads them as locked.
+
+          <div className="flex flex-col gap-8 mb-12">
+            <label className="flex items-start gap-8 text-sm" style={{ cursor: 'pointer' }}>
+              <input type="radio" name="assignMode" checked={assignMode === 'fill'} onChange={() => setAssignMode('fill')} style={{ marginTop: 3 }} />
+              <span>
+                <strong>Only number tools that don't have one yet</strong> (recommended).
+                {' '}Existing machine numbers are kept as-is; {missingNumberCount} tool{missingNumberCount === 1 ? '' : 's'}
+                {' '}will get the next free number{missingNumberCount === 0 ? ' (none need one)' : ''}.
+              </span>
+            </label>
+            <label className="flex items-start gap-8 text-sm" style={{ cursor: 'pointer' }}>
+              <input type="radio" name="assignMode" checked={assignMode === 'all'} onChange={() => setAssignMode('all')} style={{ marginTop: 3 }} />
+              <span>
+                <strong>Renumber the entire library</strong> starting at <strong>#{startDisplay}</strong> in import order
+                (skips {skipDisplay.join(', ')}). <em>Overwrites every existing number</em> — for a first/bulk import only.
+              </span>
+            </label>
+          </div>
+
+          <p className="text-sub text-xs mb-16">
+            The same value is written to the tool number, length offset, and diameter offset so the machine reads them as locked.
           </p>
 
           <div style={{ maxHeight: 320, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }}>
@@ -542,21 +623,27 @@ export default function ImportFlow() {
                   <th>Description</th>
                   <th>Type</th>
                   <th>Current</th>
-                  <th>New Machine #</th>
+                  <th>Machine #</th>
                 </tr>
               </thead>
               <tbody>
-                {fusionTools.map((t, i) => (
-                  <tr key={t.id}>
-                    <td className="text-sub text-xs">{i + 1}</td>
-                    <td className="truncate" style={{ maxWidth: 220 }}>{t.description || '—'}</td>
-                    <td className="text-xs text-sub">{t.tool_type}</td>
-                    <td className="text-xs text-sub">
-                      {(t.machine_tool_number ?? null) === null ? '—' : `T${t.machine_tool_number}`}
-                    </td>
-                    <td className="font-mono" style={{ color: 'var(--green)' }}>T{machineNumbers[i]}</td>
-                  </tr>
-                ))}
+                {fusionTools.map((t, i) => {
+                  const newNum = numberedPreview[i].machine_tool_number;
+                  const kept = assignMode === 'fill' && hasMachineNumber(t);
+                  return (
+                    <tr key={t.id}>
+                      <td className="text-sub text-xs">{i + 1}</td>
+                      <td className="truncate" style={{ maxWidth: 220 }}>{t.description || '—'}</td>
+                      <td className="text-xs text-sub">{t.tool_type}</td>
+                      <td className="text-xs text-sub">
+                        {hasMachineNumber(t) ? `T${t.machine_tool_number}` : '—'}
+                      </td>
+                      <td className="font-mono" style={{ color: kept ? 'var(--text-sub)' : 'var(--green)' }}>
+                        {newNum == null ? '—' : `T${newNum}`}{kept ? ' (kept)' : ''}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -576,7 +663,11 @@ export default function ImportFlow() {
           )}
 
           <div className="flex gap-8 mt-16">
-            <button className="btn btn-primary btn-lg" onClick={handleSaveToDrive} disabled={saving || isSaving}>
+            <button
+              className="btn btn-primary btn-lg"
+              onClick={() => handleSaveToDrive(assignMachineNumbers(fusionTools, assignMode))}
+              disabled={saving || isSaving}
+            >
               {saving || isSaving ? 'Saving to Drive…' : `Assign & Save ${fusionTools.length} Tools →`}
             </button>
             <button className="btn btn-secondary" onClick={() => setStep(3)} disabled={saving || isSaving}>
@@ -640,7 +731,7 @@ function detectFileKind(text, filename = '') {
 }
 
 // ── CSV parser ──────────────────────────────────────────────────────────────
-function parseCSV(text) {
+export function parseCSV(text) {
   const rows = [];
   const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   for (const line of lines) {
@@ -793,7 +884,7 @@ function buildPurchasingFromGroup(group) {
 // psUnit is the unit of the ProShop file; lengths merged onto an existing tool
 // (min_ooh, tip_to_first_thread) are converted from it into the matched tool's
 // own unit.
-function matchProShopToTools(groups, tools, psUnit = 'inches', existingComponents = []) {
+export function matchProShopToTools(groups, tools, psUnit = 'inches', existingComponents = []) {
   const matched = [];
   const usedToolIdxs = new Set();
 
