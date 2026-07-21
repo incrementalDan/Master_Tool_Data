@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   newLocationSystem, newLevelOption,
   systemOutputSignature, systemStructureSignature, findSystemConflicts,
+  parseLocationString, analyzeSystem, nextBin,
 } from './locationSystem.js';
 
 // Helper: a system with a custom-prefix drawer + auto bin (the default shape).
@@ -73,5 +74,35 @@ describe('findSystemConflicts', () => {
     const a = lcSystem('A', { ident: 'LC' });
     const b = lcSystem('B', { ident: 'RC' });
     expect(findSystemConflicts([a, b]).size).toBe(0);
+  });
+});
+
+describe('parseLocationString — custom prefix is optional (bare numbers)', () => {
+  const sys = lcSystem('LC', { ident: 'LC', binStart: 1 });
+
+  it('parses a prefixed location "LC-140" to bin 140', () => {
+    expect(parseLocationString('LC-140', sys)?.bin).toBe(140);
+  });
+
+  it('parses a BARE number "140" (how ProShop stores it) to bin 140', () => {
+    expect(parseLocationString('140', sys)?.bin).toBe(140);
+  });
+
+  it('tolerates spacing / missing separator ("LC 84", "LC140")', () => {
+    expect(parseLocationString('LC 84', sys)?.bin).toBe(84);
+    expect(parseLocationString('LC140', sys)?.bin).toBe(140);
+  });
+});
+
+describe('analyzeSystem — bare-number free-text locations are matched, next bin is correct', () => {
+  it('counts bare-number locations so the next bin reflects the whole library', () => {
+    const sys = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    const tools = [];
+    for (let i = 1; i <= 20; i++) tools.push({ id: 'a' + i, location: `LC-${i}` });   // prefixed
+    for (let i = 21; i <= 250; i++) tools.push({ id: 'b' + i, location: `${i}` });     // bare number
+    const a = analyzeSystem(tools, sys);
+    expect(a.matched.length).toBe(250);
+    expect(a.unmatched.length).toBe(0);
+    expect(a.nextBin).toBe(251);   // not 21 — every location was recognized
   });
 });

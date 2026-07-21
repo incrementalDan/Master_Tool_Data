@@ -264,7 +264,13 @@ function buildParseRegex(system) {
     if (parts.length) parts.push(SEP);
     if (level.identFormat === 'custom') {
       if (!level.customIdent) return null;
-      parts.push(escapeRe(level.customIdent));
+      // A custom prefix (e.g. "LC") carries no per-tool data — it's the same for
+      // every tool at this level — so accept it as OPTIONAL when parsing. A bare
+      // bin number like "140" (how ProShop stores a location) then parses to the
+      // same bin as "LC-140". Without this, tools whose location is stored as just
+      // the number are missed by normalization (they land in "unmatched", so their
+      // bins aren't counted and the next-available bin is wildly wrong).
+      parts.push('(?:' + escapeRe(level.customIdent) + ')?');
     } else {
       const opts = level.options || [];
       if (opts.length === 0) return null; // nothing to match this level against
