@@ -56,6 +56,23 @@ describe('resolveMachineNumberCollision — unique machine numbers on import', (
   it('accepts an array for the used set and honors custom start/skip', () => {
     expect(resolveMachineNumberCollision(1, [1], 1, [3])).toEqual({ number: 2, reassignedFrom: 1 });
   });
+
+  it('reassigns a number BELOW the start (start numbers are treated as taken)', () => {
+    // T2 with start 30 — even though nothing else uses it — is reassigned to the
+    // first free number at/above the start (30).
+    expect(resolveMachineNumberCollision(2, new Set(), 30, [98, 99, 100]))
+      .toEqual({ number: 30, reassignedFrom: 2 });
+  });
+
+  it('reassigns a RESERVED number even when no other tool uses it', () => {
+    // 99 is reserved → reassigned to the next free number given 30/31 used → 32.
+    expect(resolveMachineNumberCollision(99, new Set([30, 31]), 30, [98, 99, 100]))
+      .toEqual({ number: 32, reassignedFrom: 99 });
+  });
+
+  it('with defaults, a below-default-start number (T2) is reassigned to 30', () => {
+    expect(resolveMachineNumberCollision(2, new Set())).toEqual({ number: 30, reassignedFrom: 2 });
+  });
 });
 
 describe('findDuplicateMachineNumbers — background duplicate detector', () => {

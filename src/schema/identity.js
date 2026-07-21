@@ -121,19 +121,29 @@ export function getNextMachineNumber(existingNumbers, start = DEFAULT_MACHINE_ST
 
 // Enforce unique machine tool numbers on import/normalize. Machine tool numbers
 // must be unique library-wide, but a tool uploaded into Fusion can carry its own
-// `post-process.number` that collides with a tool already in the app. Given the
-// tool's desired number and the set already in use, this returns the number to
-// actually use plus the original if it had to be reassigned (collision → next free
-// number, skipping used + reserved). A null/blank number is left null (a tool need
-// not have one) and never treated as a collision. The chosen number is NOT added
-// to `used` here — the caller threads the running set across every tool.
-export function resolveMachineNumberCollision(desired, used, start, skip) {
+// `post-process.number` that collides with a tool already in the app OR sits on a
+// number the shop treats as unavailable. Given the tool's desired number and the
+// set already in use, this returns the number to actually use plus the original if
+// it had to be reassigned. A number is reassigned (to the next free one) when it
+// is already used, is a **reserved/skip** number, or is **below the start** — the
+// start and reserved numbers are treated as "already assigned" (the shop pretends
+// they're taken), so e.g. a Fusion tool coming in as T2 when the start is T30, or
+// on a reserved T99, is reassigned rather than accepted. A null/blank number is
+// left null (a tool need not have one) and never treated as a collision. The
+// chosen number is NOT added to `used` here — the caller threads the running set
+// across every tool.
+export function resolveMachineNumberCollision(desired, used, start = DEFAULT_MACHINE_START, skip = RESERVED_MACHINE_NUMBERS) {
   if (desired == null || desired === '' || isNaN(Number(desired))) {
     return { number: null, reassignedFrom: null };
   }
   const n = Number(desired);
   const usedSet = used instanceof Set ? used : new Set((used || []).map(Number));
-  if (!usedSet.has(n)) return { number: n, reassignedFrom: null };
+  const skipSet = skip instanceof Set ? skip : new Set((skip || []).map(Number));
+  const startNum = Number(start);
+  const belowStart = Number.isFinite(startNum) && n < startNum;
+  if (!usedSet.has(n) && !skipSet.has(n) && !belowStart) {
+    return { number: n, reassignedFrom: null };
+  }
   return { number: getNextMachineNumber([...usedSet], start, skip), reassignedFrom: n };
 }
 
