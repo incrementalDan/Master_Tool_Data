@@ -8,7 +8,8 @@ import {
   generateId, generateAssemblyId, generateTrackingId,
   groupByTrackingId, buildLogicalTool, splitToFusionInstances, readTrackingId,
   generateMachineNumbers, applyMachineNumberToFusion, applyToolIdToFusion,
-  resolveMachineNumberCollision, getNextMachineNumber, findDuplicateMachineNumbers,
+  resolveMachineNumberCollision, getNextMachineNumber,
+  DEFAULT_MACHINE_START, RESERVED_MACHINE_NUMBERS,
   fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
   combineToolsByToolId, buildMetadataTool, materializeUnlinkedTools,
   buildUnlinkedTool, mergeNoFusionIntoFusion,
@@ -289,9 +290,16 @@ export function createLibraryOps(ctx) {
         items.push({ logical, raws: null, tid: m.id, isNoFusion: true });
       }
 
-      // Seed the used set with every current number, then walk the tools: the first
-      // tool on a number keeps it; each later tool on the same number is reassigned.
+      // Seed the used set with every current number, then walk the tools. A tool
+      // KEEPS its number only if the number is valid (at/above the start, not
+      // reserved) AND it's the first tool seen on it. A number is reassigned (to
+      // the next free one) when it's a DUPLICATE, a RESERVED/skip number, or BELOW
+      // the start — reserved + start numbers are treated as already assigned, the
+      // same rule resolveMachineNumberCollision enforces on import. Seeding `used`
+      // up front means a reassignment never lands on a number a valid tool keeps.
       const [mnStart, mnSkip] = machineNumberArgs(shopSettingsRef.current);
+      const startNum = Number(mnStart ?? DEFAULT_MACHINE_START);
+      const skipSet = new Set((mnSkip ?? RESERVED_MACHINE_NUMBERS).map(Number));
       const used = new Set();
       for (const it of items) {
         const n = it.logical.machine_tool_number;
@@ -303,7 +311,11 @@ export function createLibraryOps(ctx) {
         const cur = it.logical.machine_tool_number;
         if (cur == null || isNaN(Number(cur))) continue;
         const n = Number(cur);
-        if (!seen.has(n)) { seen.add(n); continue; }   // first occurrence keeps it
+        const reserved = skipSet.has(n);
+        const belowStart = Number.isFinite(startNum) && n < startNum;
+        const duplicate = seen.has(n);
+        if (!reserved && !belowStart) seen.add(n);   // valid numbers claim a slot
+        if (!duplicate && !reserved && !belowStart) continue;   // valid + first → keep
         const to = getNextMachineNumber([...used], mnStart, mnSkip);
         used.add(to);
         reassigned.push({ it, from: n, to });
@@ -311,7 +323,7 @@ export function createLibraryOps(ctx) {
 
       if (reassigned.length === 0) {
         dispatch({ type: 'SAVE_SUCCESS' });
-        notify('No duplicate machine numbers found', 'info');
+        notify('No machine numbers need fixing', 'info');
         return 0;
       }
 
@@ -341,7 +353,7 @@ export function createLibraryOps(ctx) {
       const finalTools = materializeUnlinkedTools(tools, [...metaByTracking.values()]);
       dispatch({ type: 'SET_TOOLS', tools: finalTools });
       dispatch({ type: 'SAVE_SUCCESS' });
-      notify(`Reassigned ${reassigned.length} duplicate machine number${reassigned.length === 1 ? '' : 's'}`, 'success', 6000);
+      notify(`Reassigned ${reassigned.length} machine number${reassigned.length === 1 ? '' : 's'}`, 'success', 6000);
       return reassigned.length;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });

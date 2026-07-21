@@ -93,7 +93,7 @@ export function groupByTrackingId(fusionList) {
 // the reserved set below, which is held back for machine-specific use.
 // `start`/`skip` default to these but can be overridden from shop_settings.json.
 export const RESERVED_MACHINE_NUMBERS = [98, 99, 100];
-const DEFAULT_MACHINE_START = 30;
+export const DEFAULT_MACHINE_START = 30;
 
 // Generate a full sequence of machine tool numbers for a renumber/import.
 // Starts at `start`, increments by 1, skips the `skip` numbers entirely.
@@ -121,19 +121,29 @@ export function getNextMachineNumber(existingNumbers, start = DEFAULT_MACHINE_ST
 
 // Enforce unique machine tool numbers on import/normalize. Machine tool numbers
 // must be unique library-wide, but a tool uploaded into Fusion can carry its own
-// `post-process.number` that collides with a tool already in the app. Given the
-// tool's desired number and the set already in use, this returns the number to
-// actually use plus the original if it had to be reassigned (collision → next free
-// number, skipping used + reserved). A null/blank number is left null (a tool need
-// not have one) and never treated as a collision. The chosen number is NOT added
-// to `used` here — the caller threads the running set across every tool.
-export function resolveMachineNumberCollision(desired, used, start, skip) {
+// `post-process.number` that collides with a tool already in the app OR sits on a
+// number the shop treats as unavailable. Given the tool's desired number and the
+// set already in use, this returns the number to actually use plus the original if
+// it had to be reassigned. A number is reassigned (to the next free one) when it
+// is already used, is a **reserved/skip** number, or is **below the start** — the
+// start and reserved numbers are treated as "already assigned" (the shop pretends
+// they're taken), so e.g. a Fusion tool coming in as T2 when the start is T30, or
+// on a reserved T99, is reassigned rather than accepted. A null/blank number is
+// left null (a tool need not have one) and never treated as a collision. The
+// chosen number is NOT added to `used` here — the caller threads the running set
+// across every tool.
+export function resolveMachineNumberCollision(desired, used, start = DEFAULT_MACHINE_START, skip = RESERVED_MACHINE_NUMBERS) {
   if (desired == null || desired === '' || isNaN(Number(desired))) {
     return { number: null, reassignedFrom: null };
   }
   const n = Number(desired);
   const usedSet = used instanceof Set ? used : new Set((used || []).map(Number));
-  if (!usedSet.has(n)) return { number: n, reassignedFrom: null };
+  const skipSet = skip instanceof Set ? skip : new Set((skip || []).map(Number));
+  const startNum = Number(start);
+  const belowStart = Number.isFinite(startNum) && n < startNum;
+  if (!usedSet.has(n) && !skipSet.has(n) && !belowStart) {
+    return { number: n, reassignedFrom: null };
+  }
   return { number: getNextMachineNumber([...usedSet], start, skip), reassignedFrom: n };
 }
 
@@ -154,6 +164,35 @@ export function findDuplicateMachineNumbers(tools) {
   const out = [];
   for (const [number, group] of byNum) if (group.length > 1) out.push({ number, tools: group });
   return out.sort((a, b) => a.number - b.number);
+}
+
+// Tools whose machine number a library SWEEP would reassign — the broader
+// companion to findDuplicateMachineNumbers. A number is "to fix" when it is a
+// DUPLICATE (2nd+ tool on it), a RESERVED/skip number, or BELOW the start:
+// reserved + start numbers are treated as already assigned (the shop pretends
+// they're taken), matching resolveMachineNumberCollision's import-time rule.
+// Returns the flagged tools in library order:
+//   [{ tool, number, reason: 'duplicate' | 'reserved' | 'belowStart' }]
+// Nulls/blanks are ignored (a tool need not have a number). Excluded-tool
+// filtering is the caller's job.
+export function findMachineNumbersToFix(tools, start = DEFAULT_MACHINE_START, skip = RESERVED_MACHINE_NUMBERS) {
+  const startNum = Number(start);
+  const skipSet = new Set((skip || []).map(Number));
+  const seen = new Set();
+  const out = [];
+  for (const t of (tools || [])) {
+    const n = t?.machine_tool_number;
+    if (n == null || n === '' || isNaN(Number(n))) continue;
+    const num = Number(n);
+    const reserved = skipSet.has(num);
+    const belowStart = Number.isFinite(startNum) && num < startNum;
+    const duplicate = seen.has(num);         // computed BEFORE claiming the slot
+    if (!reserved && !belowStart) seen.add(num);  // only valid numbers claim a slot
+    if (duplicate || reserved || belowStart) {
+      out.push({ tool: t, number: num, reason: duplicate ? 'duplicate' : reserved ? 'reserved' : 'belowStart' });
+    }
+  }
+  return out;
 }
 
 // Write a tool ID (ProShop number / generated shop ID) directly into a raw
