@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft, Pencil, Download, FileDown, Copy, Trash2, GitMerge,
+  ArrowLeft, Pencil, Download, FileDown, FileUp, Copy, Trash2, GitMerge,
   Ruler, StickyNote, Clock, Wrench, AlertTriangle, Camera,
   ChevronDown, ChevronRight, FileJson, MapPin, Link2, Unlink, CloudOff,
 } from 'lucide-react';
@@ -17,6 +17,7 @@ import JobsSection from './JobsSection.jsx';
 import AttachmentUploadModal from './AttachmentUploadModal.jsx';
 import PhotoSlot from './PhotoSlot.jsx';
 import PairingSections from './PairingSections.jsx';
+import ProShopImportModal from './ProShopImportModal.jsx';
 import DriftBanner from './DriftBanner.jsx';
 import ConflictBanner from './ConflictBanner.jsx';
 import MergeSiblingBanner from './MergeSiblingBanner.jsx';
@@ -66,6 +67,7 @@ export default function ToolDetail() {
   const [showExportPicker, setShowExportPicker] = useState(null); // null | 'copy' | 'download'
   const [reconcileResults, setReconcileResults] = useState(null);
   const [showPhotoUpload, setShowPhotoUpload] = useState(false);
+  const [showProShopImport, setShowProShopImport] = useState(false);
   const [promoteLibId, setPromoteLibId] = useState(null); // non-null = target-library picker open
 
   // True while the inline preset editor has unsaved changes — used to warn
@@ -427,6 +429,13 @@ export default function ToolDetail() {
           style={{ color: 'var(--orange)' }}
           onClick={() => { exportProShop(tool); notify('Exported ProShop CSV', 'success'); }}
         />
+        <SidebarBtn
+          icon={FileUp}
+          label="Import PS"
+          tip="Import ProShop data for this tool from a CSV export"
+          style={{ color: 'var(--orange)' }}
+          onClick={() => setShowProShopImport(true)}
+        />
         {/* Delete lives in Edit mode now (ToolForm's action bar), so it can't be
             hit by accident from the view. */}
       </aside>
@@ -781,6 +790,17 @@ export default function ToolDetail() {
               }
             }}
             onCancel={() => setShowExportPicker(null)}
+          />
+        )}
+
+        {showProShopImport && (
+          <ProShopImportModal
+            tool={tool}
+            onClose={() => setShowProShopImport(false)}
+            onApply={async (additions) => {
+              await saveTool({ ...tool, ...additions });
+              notify('ProShop data imported', 'success');
+            }}
           />
         )}
 

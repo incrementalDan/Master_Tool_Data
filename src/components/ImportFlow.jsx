@@ -723,7 +723,7 @@ function detectFileKind(text, filename = '') {
 }
 
 // ── CSV parser ──────────────────────────────────────────────────────────────
-function parseCSV(text) {
+export function parseCSV(text) {
   const rows = [];
   const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   for (const line of lines) {
@@ -876,7 +876,7 @@ function buildPurchasingFromGroup(group) {
 // psUnit is the unit of the ProShop file; lengths merged onto an existing tool
 // (min_ooh, tip_to_first_thread) are converted from it into the matched tool's
 // own unit.
-function matchProShopToTools(groups, tools, psUnit = 'inches', existingComponents = []) {
+export function matchProShopToTools(groups, tools, psUnit = 'inches', existingComponents = []) {
   const matched = [];
   const usedToolIdxs = new Set();
 
