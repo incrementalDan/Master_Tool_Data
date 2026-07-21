@@ -879,12 +879,25 @@ export function AppProvider({ children }) {
         } catch { /* inconclusive — leave any existing warning as-is */ }
       }
 
+      // Compose the derived `location` display string from a tool's structured
+      // tool_location (Location System). Applied to EVERY built tool — Fusion-
+      // linked AND no-Fusion (materialized) — so a no-Fusion tool's ProShop-
+      // assigned structured location actually shows up (it persists in metadata
+      // but has no Fusion vendor field to derive from). Idempotent.
+      const locSystems = effectiveShop.location_config?.systems || [];
+      const composeToolLocation = (t) => {
+        if (!t.tool_location) return t;
+        const sys = findSystem(locSystems, t.tool_location.system_id);
+        const composed = sys ? resolveLocationString(t.tool_location, locSystems) : '';
+        return composed ? { ...t, location: composed, proshop_location: proShopLocationValue(sys, composed) } : t;
+      };
+
       // Fusion sync disabled (Fusion-decoupling Phase B): metadata is the whole
       // library. Build every tool from its metadata record — no Fusion download,
       // no library requirement, no holder load (holders are an APS/Fusion concept).
       // buildUnlinkedTool preserves each record's own no_fusion_link flag.
       if (!fusionEnabled) {
-        const built = metaList.map(m => buildUnlinkedTool(m));
+        const built = metaList.map(m => buildUnlinkedTool(m)).map(composeToolLocation);
         const paired = derivePairings(built, componentsFile?.components || []);
         const finalTools = backfillAsmNumbers(paired, effectiveShop, componentsFile);
         dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize: false, normalizeCount: 0 });
@@ -898,11 +911,6 @@ export function AppProvider({ children }) {
       // a tool always belongs to exactly one library).
       const toolLibs = effectiveShop.tool_libraries || [];
       if (toolLibs.length === 0) throw new Error('No tool library linked — add one in Settings');
-      // Location systems drive the derived `location` display string: when a tool
-      // has a structured tool_location, its display location is composed here (so
-      // ToolDetail / search / Fusion-write all see a ready string); otherwise the
-      // legacy free-text Fusion vendor string is left untouched.
-      const locSystems = effectiveShop.location_config?.systems || [];
       const tools = [];
       let untrackedCount = 0;
       let combinedFoldCount = 0;   // duplicate library entries silently folded on load
@@ -916,13 +924,7 @@ export function AppProvider({ children }) {
         const combined = combineToolsByToolId(built);
         combinedFoldCount += built.length - combined.length;
         for (const t of combined) {
-          let extra = {};
-          if (t.tool_location) {
-            const sys = findSystem(locSystems, t.tool_location.system_id);
-            const composed = sys ? resolveLocationString(t.tool_location, locSystems) : '';
-            if (composed) extra = { location: composed, proshop_location: proShopLocationValue(sys, composed) };
-          }
-          tools.push({ ...t, library_id: lib.id, library_name: lib.fileName, ...extra });
+          tools.push(composeToolLocation({ ...t, library_id: lib.id, library_name: lib.fileName }));
         }
       }
       const needsNormalize = untrackedCount > 0;
@@ -977,7 +979,10 @@ export function AppProvider({ children }) {
       // placeholder); activates once placeholder-minting retires / a tool is
       // created as no-Fusion. Runs before pairing/backfill so unlinked tools get
       // the same in-memory treatment as linked ones.
-      const withUnlinked = materializeUnlinkedTools(tools, metaList);
+      // materializeUnlinkedTools appends no-Fusion tools built straight from
+      // metadata (buildUnlinkedTool) — compose their location too, since they never
+      // went through the per-library composition above.
+      const withUnlinked = materializeUnlinkedTools(tools, metaList).map(composeToolLocation);
       const pairedTools = derivePairings(withUnlinked, componentsFile?.components || []);
       // Assembly ID System: fill auto-mode asm_number in-memory for any assembly
       // missing one (deterministic; persisted lazily on the tool's next save).
