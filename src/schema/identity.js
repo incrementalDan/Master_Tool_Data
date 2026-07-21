@@ -93,7 +93,7 @@ export function groupByTrackingId(fusionList) {
 // the reserved set below, which is held back for machine-specific use.
 // `start`/`skip` default to these but can be overridden from shop_settings.json.
 export const RESERVED_MACHINE_NUMBERS = [98, 99, 100];
-const DEFAULT_MACHINE_START = 30;
+export const DEFAULT_MACHINE_START = 30;
 
 // Generate a full sequence of machine tool numbers for a renumber/import.
 // Starts at `start`, increments by 1, skips the `skip` numbers entirely.
@@ -164,6 +164,35 @@ export function findDuplicateMachineNumbers(tools) {
   const out = [];
   for (const [number, group] of byNum) if (group.length > 1) out.push({ number, tools: group });
   return out.sort((a, b) => a.number - b.number);
+}
+
+// Tools whose machine number a library SWEEP would reassign — the broader
+// companion to findDuplicateMachineNumbers. A number is "to fix" when it is a
+// DUPLICATE (2nd+ tool on it), a RESERVED/skip number, or BELOW the start:
+// reserved + start numbers are treated as already assigned (the shop pretends
+// they're taken), matching resolveMachineNumberCollision's import-time rule.
+// Returns the flagged tools in library order:
+//   [{ tool, number, reason: 'duplicate' | 'reserved' | 'belowStart' }]
+// Nulls/blanks are ignored (a tool need not have a number). Excluded-tool
+// filtering is the caller's job.
+export function findMachineNumbersToFix(tools, start = DEFAULT_MACHINE_START, skip = RESERVED_MACHINE_NUMBERS) {
+  const startNum = Number(start);
+  const skipSet = new Set((skip || []).map(Number));
+  const seen = new Set();
+  const out = [];
+  for (const t of (tools || [])) {
+    const n = t?.machine_tool_number;
+    if (n == null || n === '' || isNaN(Number(n))) continue;
+    const num = Number(n);
+    const reserved = skipSet.has(num);
+    const belowStart = Number.isFinite(startNum) && num < startNum;
+    const duplicate = seen.has(num);         // computed BEFORE claiming the slot
+    if (!reserved && !belowStart) seen.add(num);  // only valid numbers claim a slot
+    if (duplicate || reserved || belowStart) {
+      out.push({ tool: t, number: num, reason: duplicate ? 'duplicate' : reserved ? 'reserved' : 'belowStart' });
+    }
+  }
+  return out;
 }
 
 // Write a tool ID (ProShop number / generated shop ID) directly into a raw

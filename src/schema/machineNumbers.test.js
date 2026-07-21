@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateMachineNumbers, getNextMachineNumber, resolveMachineNumberCollision, findDuplicateMachineNumbers } from './toolSchema.js';
+import { generateMachineNumbers, getNextMachineNumber, resolveMachineNumberCollision, findDuplicateMachineNumbers, findMachineNumbersToFix } from './toolSchema.js';
 
 describe('generateMachineNumbers', () => {
   it('defaults: starts at 30, skips 98/99/100', () => {
@@ -100,6 +100,41 @@ describe('findDuplicateMachineNumbers — background duplicate detector', () => 
 
   it('is empty when every number is unique', () => {
     expect(findDuplicateMachineNumbers([
+      { id: 'a', machine_tool_number: 30 },
+      { id: 'b', machine_tool_number: 31 },
+    ])).toEqual([]);
+  });
+});
+
+describe('findMachineNumbersToFix — library sweep (duplicate + reserved + below-start)', () => {
+  const run = (tools) => findMachineNumbersToFix(tools, 30, [98, 99, 100]);
+
+  it('flags duplicates, reserved, and below-start; keeps valid uniques', () => {
+    const fix = run([
+      { id: 'a', machine_tool_number: 42 },   // valid, first → keep
+      { id: 'b', machine_tool_number: 42 },   // duplicate → fix
+      { id: 'c', machine_tool_number: 2 },    // below start → fix
+      { id: 'd', machine_tool_number: 99 },   // reserved → fix
+      { id: 'e', machine_tool_number: 55 },   // valid, unique → keep
+      { id: 'f', machine_tool_number: null }, // no number → ignored
+    ]);
+    expect(fix.map(x => x.tool.id)).toEqual(['b', 'c', 'd']);
+    expect(fix.find(x => x.tool.id === 'b').reason).toBe('duplicate');
+    expect(fix.find(x => x.tool.id === 'c').reason).toBe('belowStart');
+    expect(fix.find(x => x.tool.id === 'd').reason).toBe('reserved');
+  });
+
+  it('flags BOTH tools sharing a reserved number (neither is a valid slot)', () => {
+    const fix = run([
+      { id: 'a', machine_tool_number: 99 },
+      { id: 'b', machine_tool_number: 99 },
+    ]);
+    expect(fix.map(x => x.tool.id)).toEqual(['a', 'b']);
+    expect(fix.every(x => x.reason === 'reserved')).toBe(true);
+  });
+
+  it('is empty when every number is valid and unique', () => {
+    expect(run([
       { id: 'a', machine_tool_number: 30 },
       { id: 'b', machine_tool_number: 31 },
     ])).toEqual([]);

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
-import { generateMachineNumbers, generateId, duplicateIdClusters, findDuplicateMachineNumbers } from '../schema/toolSchema.js';
+import { generateMachineNumbers, generateId, duplicateIdClusters, findMachineNumbersToFix } from '../schema/toolSchema.js';
 import { isExcludedFrom } from '../utils/idSystems.js';
 import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../utils/toolIdSystem.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
@@ -504,11 +504,18 @@ export default function Settings() {
     setError('');
   };
 
-  // Background (read-only) detection of machine numbers already shared by 2+ tools.
-  // Excluded tools (opted out of the machine-number system) are not flagged.
-  const duplicateMachineGroups = findDuplicateMachineNumbers(
-    (tools || []).filter(t => !isExcludedFrom(t, 'machine_number')));
-  const duplicateMachineToolCount = duplicateMachineGroups.reduce((n, g) => n + (g.tools.length - 1), 0);
+  // Background (read-only) sweep for machine numbers that need fixing: duplicates,
+  // reserved/skip numbers, and numbers below the start (reserved + start are
+  // treated as already assigned). Uses the SAVED config (matches what the fix
+  // action reads). Excluded tools (opted out) are not flagged.
+  const machineNumbersToFix = findMachineNumbersToFix(
+    (tools || []).filter(t => !isExcludedFrom(t, 'machine_number')),
+    shopSettings?.machine_number?.start,
+    shopSettings?.machine_number?.skip,
+  );
+  const machineFixCount = machineNumbersToFix.length;
+  const machineFixByReason = machineNumbersToFix.reduce((acc, x) => { acc[x.reason]++; return acc; }, { duplicate: 0, reserved: 0, belowStart: 0 });
+  const machineFixNumbers = [...new Set(machineNumbersToFix.map(x => x.number))].sort((a, b) => a - b);
   const handleFixDuplicateMachineNumbers = async () => {
     setError('');
     try { await fixDuplicateMachineNumbers(); }
@@ -1689,28 +1696,32 @@ export default function Settings() {
         <div style={{
           marginTop: 20, padding: 16, borderRadius: 'var(--radius-sm)',
           border: '1px solid var(--border)',
-          borderLeft: `3px solid ${duplicateMachineGroups.length ? 'var(--orange)' : 'var(--green, #4ade80)'}`,
+          borderLeft: `3px solid ${machineFixCount ? 'var(--orange)' : 'var(--green, #4ade80)'}`,
           background: 'var(--surface-2)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <Hash size={16} style={{ color: duplicateMachineGroups.length ? 'var(--orange)' : 'var(--green, #4ade80)' }} />
-            <strong>Duplicate machine numbers</strong>
+            <Hash size={16} style={{ color: machineFixCount ? 'var(--orange)' : 'var(--green, #4ade80)' }} />
+            <strong>Machine number issues</strong>
           </div>
-          {duplicateMachineGroups.length === 0 ? (
-            <div className="text-sub text-sm">Every tool has a unique machine tool number. ✓</div>
+          {machineFixCount === 0 ? (
+            <div className="text-sub text-sm">Every tool has a valid, unique machine tool number. ✓</div>
           ) : (
             <>
               <div className="text-sub text-sm" style={{ marginBottom: 10 }}>
-                <strong style={{ color: 'var(--text)' }}>{duplicateMachineGroups.length}</strong> machine
-                number{duplicateMachineGroups.length === 1 ? ' is' : 's are'} used by more than one tool
-                ({duplicateMachineToolCount} tool{duplicateMachineToolCount === 1 ? '' : 's'} would be reassigned).
-                Numbers: <span className="font-mono">{duplicateMachineGroups.map(g => `T${g.number}`).join(', ')}</span>.
-                Fixing keeps the first tool on each number and gives the rest the next free number, flagged on each tool.
+                <strong style={{ color: 'var(--text)' }}>{machineFixCount}</strong> tool{machineFixCount === 1 ? '' : 's'}
+                {' '}{machineFixCount === 1 ? 'has' : 'have'} a machine number that needs fixing
+                {' '}({[
+                  machineFixByReason.duplicate ? `${machineFixByReason.duplicate} duplicate` : null,
+                  machineFixByReason.reserved ? `${machineFixByReason.reserved} reserved` : null,
+                  machineFixByReason.belowStart ? `${machineFixByReason.belowStart} below start T${shopSettings?.machine_number?.start ?? 30}` : null,
+                ].filter(Boolean).join(', ')}).
+                Numbers: <span className="font-mono">{machineFixNumbers.map(n => `T${n}`).join(', ')}</span>.
+                A sweep keeps the first tool on each valid number and gives the rest — plus any reserved / below-start numbers — the next free number, flagged on each tool.
               </div>
               {error && <div className="error-banner mb-12">{error}</div>}
               <button className="btn btn-primary btn-sm" onClick={handleFixDuplicateMachineNumbers}
                 disabled={isSaving || dirty} title={dirty ? 'Save or cancel your changes first' : undefined}>
-                {isSaving ? 'Fixing…' : `Assign new numbers to ${duplicateMachineToolCount} duplicate${duplicateMachineToolCount === 1 ? '' : 's'}`}
+                {isSaving ? 'Fixing…' : `Sweep & fix ${machineFixCount} machine number${machineFixCount === 1 ? '' : 's'}`}
               </button>
             </>
           )}
