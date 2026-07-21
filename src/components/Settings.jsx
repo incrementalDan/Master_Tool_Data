@@ -1559,6 +1559,7 @@ export default function Settings() {
       <LocationSystemSettings
         configOverride={locDraft}
         onConfigChange={setLocDraft}
+        dirty={dirty}
         footer={<StepConfirm stepKey="locationConfigured" label="your Location System" onConfirm={() => confirmStep('locationConfigured')} saving={savingAll} />}
       />
 

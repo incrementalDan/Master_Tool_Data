@@ -211,15 +211,17 @@ function proShopHint(mode, fixedVal) {
 }
 
 // ── Normalization step (real analysis against the live library) ─────────────
-function NormalizationStep({ sys, tools, buffered = false, onCommit, onUpdate }) {
+function NormalizationStep({ sys, tools, dirty = false, onCommit, onUpdate }) {
   const [phase, setPhase] = useState(sys.normalized ? 'done' : 'idle'); // idle | preview | committing | done
   const [analysis, setAnalysis] = useState(null);
 
   useEffect(() => { setPhase(sys.normalized ? 'done' : 'idle'); }, [sys.normalized]);
 
-  // Normalization commits LOCATION data to the live library — it can't run on an
-  // unsaved (buffered) config. Prompt the user to save first.
-  if (buffered) {
+  // Normalization commits LOCATION data to the live library, reading the SAVED
+  // config — so it's only blocked while there are UNSAVED settings changes. Once
+  // saved (not dirty), it runs even though the editor is still buffered into the
+  // page draft. Prompt the user to save first only when there's something unsaved.
+  if (dirty) {
     return (
       <div style={{ marginTop: 16, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -332,7 +334,7 @@ function joinNames(arr) {
 }
 
 // ── System card ─────────────────────────────────────────────────────────────
-function SystemCard({ sys, tools, conflicts = [], buffered = false, onUpdate, onDelete, onCommit, defaultOpen }) {
+function SystemCard({ sys, tools, conflicts = [], dirty = false, onUpdate, onDelete, onCommit, defaultOpen }) {
   const [open, setOpen] = useState(defaultOpen);
   const [confirmDel, setConfirmDel] = useState(false);
   const L = sys.levels; const D = sys.delimiters;
@@ -419,7 +421,7 @@ function SystemCard({ sys, tools, conflicts = [], buffered = false, onUpdate, on
             </div>
           </LevelBlock>
 
-          <NormalizationStep sys={sys} tools={tools} buffered={buffered} onCommit={onCommit} onUpdate={onUpdate} />
+          <NormalizationStep sys={sys} tools={tools} dirty={dirty} onCommit={onCommit} onUpdate={onUpdate} />
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
             {confirmDel ? (
@@ -518,7 +520,7 @@ function Counter({ n, label, color }) {
 // reads/writes the passed location_config draft instead of shopSettings, and
 // never persists to Drive itself (the Settings page's Save commits the whole
 // draft). Normalize is disabled while buffered, since it needs the saved config.
-export default function LocationSystemSettings({ configOverride = null, onConfigChange = null, footer = null }) {
+export default function LocationSystemSettings({ configOverride = null, onConfigChange = null, dirty = false, footer = null }) {
   const { tools, shopSettings, saveLocationConfig, normalizeLocationSystem, markSetupStepInSettings, setupProgress } = useApp();
   const buffered = typeof onConfigChange === 'function';
   const cfg = (buffered ? configOverride : shopSettings?.location_config) || { systems: [], bin_sizes: [] };
@@ -573,7 +575,7 @@ export default function LocationSystemSettings({ configOverride = null, onConfig
           tools={tools}
           conflicts={systemConflicts.get(sys.id) || []}
           defaultOpen={i === 0}
-          buffered={buffered}
+          dirty={dirty}
           onUpdate={v => updateSystem(sys.id, v)}
           onDelete={() => deleteSystem(sys.id)}
           onCommit={normalizeLocationSystem}
