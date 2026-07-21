@@ -874,23 +874,43 @@ function psRowToTool(group, psUnit = 'inches', locationSystems = []) {
 }
 
 // Build the normalized { manufacturers: [], vendors: [] } purchasing shape from
-// a group of ProShop CSV rows sharing a Tool # (one row per Approved Brand).
+// a group of ProShop CSV rows sharing a Tool #. ProShop exports multiple Approved
+// Brands two different ways: as multiple ROWS sharing a Tool #, OR as suffixed
+// COLUMNS in one row (`Approved Brand`, `Approved Brand_2`, `EDP#_2`, …). Both are
+// normalized via `brandTuples` into a flat list of {brand, vendor, edp, cost}.
 // ProShop's single "EDP#" column is ambiguous — it's either the manufacturer's
 // part number or the vendor's own catalog number depending on the vendor. Route
 // it to vendors[].vendor_num when the vendor is known to assign its own catalog
 // numbers (VENDORS_WITH_OWN_NUMBERS), otherwise to manufacturers[].edp.
+function brandTuples(r) {
+  // Case-insensitive, punctuation-insensitive key lookup so both the canonical
+  // base columns ("Approved Brand") and the raw suffixed ones ("approvedBrand_2")
+  // resolve regardless of casing/spacing.
+  const byNorm = {};
+  for (const k of Object.keys(r)) byNorm[k.toLowerCase().replace(/[^a-z0-9]/g, '')] = r[k];
+  const tuples = [];
+  for (let i = 1; i <= 8; i++) {
+    const sfx = i === 1 ? '' : String(i);
+    const brand = byNorm['approvedbrand' + sfx] || '';
+    const vendor = byNorm['vendor' + sfx] || '';
+    const edp = byNorm['edp' + sfx] || '';
+    const cost = byNorm['cost' + sfx] || '';
+    if (brand || vendor || edp || cost) tuples.push({ brand, vendor, edp, cost });
+  }
+  return tuples;
+}
 function buildPurchasingFromGroup(group) {
   const manufacturers = [];
   const vendors = [];
   const mfgByName = new Map();
 
   group
-    .filter(r => r['Approved Brand'] || r['Vendor'] || r['EDP#'] || r['Cost'] || r['Lead time'])
-    .forEach(r => {
-      const mfgName = resolveVendorName(r['Approved Brand'] || '');
-      const vendorName = resolveVendorName(r['Vendor'] || '');
-      const edp = r['EDP#'] || '';
-      const cost = r['Cost'] || '';
+    .flatMap(brandTuples)
+    .forEach(t => {
+      const mfgName = resolveVendorName(t.brand || '');
+      const vendorName = resolveVendorName(t.vendor || '');
+      const edp = t.edp || '';
+      const cost = t.cost || '';
 
       let mfg = mfgByName.get(mfgName);
       if (!mfg) {
@@ -937,7 +957,7 @@ function buildPurchasingFromGroup(group) {
 // psUnit is the unit of the ProShop file; lengths merged onto an existing tool
 // (min_ooh, tip_to_first_thread) are converted from it into the matched tool's
 // own unit.
-export function matchProShopToTools(groups, tools, psUnit = 'inches', existingComponents = [], locationSystems = []) {
+export function matchProShopToTools(groups, tools, psUnit = 'inches', existingComponents = [], locationSystems = [], forceSingleMatch = false) {
   const matched = [];
   const usedToolIdxs = new Set();
 
@@ -1012,6 +1032,14 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
         const diamMatch = diam == null || !t.diameter || Math.abs(parseFloat(t.diameter) - diam) < 0.001;
         return descMatch && diamMatch;
       });
+    }
+
+    // Single-tool import (ProShopImportModal): the user already picked BOTH the
+    // tool and the file, and a per-tool ProShop export often has no "Tool #"
+    // column and a description that won't fuzzy-match. Force the one group onto
+    // the one tool so it always imports (the modal previews the changes first).
+    if (toolIdx < 0 && forceSingleMatch && tools.length === 1 && !usedToolIdxs.has(0)) {
+      toolIdx = 0;
     }
 
     if (toolIdx >= 0) {

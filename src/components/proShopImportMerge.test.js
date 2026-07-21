@@ -13,6 +13,35 @@ const merge = (row, tool) => {
   return matched[0];
 };
 
+describe('ProShop merge — single-tool import (no Tool # column)', () => {
+  it('force-matches the one tool the user picked even when description differs', () => {
+    const row = { Description: '.0571 130DEG CARB DRILL', 'Cut Dia': '0.0571', Coating: 'UC' };
+    const tool = baseTool({ description: 'SOMETHING ELSE ENTIRELY', diameter: 0.5, coating: '' });
+    const { matched } = matchProShopToTools([[row]], [tool], 'inches', [], [], true);
+    expect(matched.length).toBe(1);
+    expect(matched[0].additions.coating).toBe('UC');
+  });
+
+  it('does NOT force-match without the flag (bulk keeps strict matching)', () => {
+    const row = { Description: '.0571 DRILL', 'Cut Dia': '0.0571' };
+    const { matched } = matchProShopToTools([[row]], [baseTool({ description: 'ELSE', diameter: 0.5 })], 'inches', []);
+    expect(matched.length).toBe(0);
+  });
+
+  it('reads multiple Approved Brands from suffixed columns (approvedBrand_2 …)', () => {
+    const row = {
+      'Approved Brand': 'M.A. Ford',
+      approvedBrand_2: 'McMaster-Carr', 'EDP#_2': '2841A154', cost_2: '7.80', vendor_2: 'McMaster-Carr',
+    };
+    const { matched } = matchProShopToTools([[row]], [baseTool()], 'inches', [], [], true);
+    const p = matched[0].additions.purchasing;
+    expect(p.manufacturers.map(m => m.name).sort()).toEqual(['M.A. Ford', 'McMaster-Carr']);
+    const mc = p.vendors.find(v => v.name === 'McMaster-Carr');
+    expect(mc.vendor_num).toBe('2841A154');
+    expect(mc.price).toBe(7.8);
+  });
+});
+
 describe('ProShop merge — fill-gap fields fill / flag / no-op', () => {
   it('fills when the app value is empty', () => {
     const m = merge({ Coating: 'AlTiN' }, baseTool({ coating: '' }));

@@ -71,16 +71,24 @@ export default function ProShopImportModal({ tool, onClose, onApply }) {
         // ProShop export) via header canonicalization — see proShopHeaders.js.
         setPsFormat(detectProShopFormat(rows[0]));
         const data = proShopRowsToObjects(rows);
-        // Group rows by "Tool #" (a tool with several Approved Brands spans
-        // multiple rows) exactly like the bulk importer, then match against
-        // ONLY this tool.
-        const groupMap = new Map();
-        for (const row of data) {
-          const key = row['Tool #'] || `__row_${groupMap.size}`;
-          if (!groupMap.has(key)) groupMap.set(key, []);
-          groupMap.get(key).push(row);
+        // A per-tool ProShop export often has NO "Tool #" column (this whole file
+        // is one tool). In that case every row belongs to the tool the user is
+        // importing into — group them together and force the match. Otherwise
+        // (a whole-library export) group by "Tool #" and find this tool's rows.
+        const hasToolNum = data.some(r => r['Tool #']);
+        let groups;
+        if (hasToolNum) {
+          const groupMap = new Map();
+          for (const row of data) {
+            const key = row['Tool #'] || `__row_${groupMap.size}`;
+            if (!groupMap.has(key)) groupMap.set(key, []);
+            groupMap.get(key).push(row);
+          }
+          groups = [...groupMap.values()];
+        } else {
+          groups = [data];
         }
-        const result = matchProShopToTools([...groupMap.values()], [tool], psUnit, components?.components || [], shopSettings?.location_config?.systems || []);
+        const result = matchProShopToTools(groups, [tool], psUnit, components?.components || [], shopSettings?.location_config?.systems || [], !hasToolNum);
         const hit = result.matched.find(m => m.toolIdx === 0);
         const adds = hit?.additions || {};
         const confs = hit?.conflicts || [];
