@@ -209,7 +209,7 @@ function buildFusionRow(f, outputUnit='inches'){
 const PS_MAIN_COLS=[
   ["toolNumber",f=>f.psToolId||""],
   ["description",f=>buildDesc(f,false)],["cutDiameter",f=>f.diameter||""],["lengthOfCut",f=>f.loc||""],
-  ["overallLength",f=>f.oal||""],["numberOfFlutes",f=>f.flutes||""],["shankDiameter",f=>f.shankDia||f.diameter||""],
+  ["overallLength",f=>f.oal||""],["No. of Flutes",f=>f.flutes||""],["shankDiameter",f=>f.shankDia||f.diameter||""],
   ["bodyDiameter",f=>f.shankDia||f.diameter||""],["cornerRadius",f=>f.cornerRadius||""],["tipAngle",f=>f.tipAngle||""],
   ["helixAngle",f=>f.helixAngle||""],["coating",f=>f.coating||""],["toolMaterial",f=>f.material||""],
   ["recommendedWorkpieceMaterial",f=>(f.workpieceMats&&f.workpieceMats.length?f.workpieceMats.join(", "):f.workpieceMat||"")],
@@ -270,7 +270,7 @@ function csvCell(v){const s=String(v===null||v===undefined?"":v);return(s.includ
 // sharing the same Tool # — geometry/spec columns are populated only on the first row.
 function buildProShopCSV(f){
   const brandRows=buildBrandRows(f);
-  const purchCols=["approvedBrand","vendor","vendorToolId","cost","leadTime"];
+  const purchCols=["approvedBrand","vendor","EDP#","cost","leadTime"];
   const hdr=[...PS_MAIN_COLS.map(([h])=>h),...purchCols].map(csvCell).join(",");
   const mainVals=PS_MAIN_COLS.map(([,fn])=>fn(f));
   const blankMain=mainVals.map(()=>"");

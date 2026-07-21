@@ -21,7 +21,7 @@ export function exportSingleTool(tool) {
 // Purchasing/Approved-Brand columns — one CSV row per `tool.purchasing[]` entry,
 // matching ProShop's real multi-row export. Geometry/spec columns are populated
 // only on each tool's first row.
-const PURCHASING_COLS = ['approvedBrand', 'vendor', 'vendorToolId', 'cost', 'leadTime'];
+const PURCHASING_COLS = ['approvedBrand', 'vendor', 'EDP#', 'cost', 'leadTime'];
 
 export function exportFullLibrary(tools) {
   if (tools.length === 0) return;
