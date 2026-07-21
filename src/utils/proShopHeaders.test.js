@@ -13,6 +13,9 @@ describe('proShopHeaders — canonicalization', () => {
     expect(canonicalProShopHeader('cutDiameter')).toBe('Cut Dia');
     expect(canonicalProShopHeader('customgrindtool')).toBe('Custom Grind');
     expect(canonicalProShopHeader('toolGroupLetter')).toBe('Tool Group');
+    // Location + Point Type round-trip (added to the app's own export)
+    expect(canonicalProShopHeader('location')).toBe('Location');
+    expect(canonicalProShopHeader('pointType')).toBe('Point Type');
   });
 
   it('leaves real ProShop display-name headers unchanged (identity)', () => {

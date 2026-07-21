@@ -22,6 +22,7 @@ const FIELD_LABELS = {
   min_ooh: 'MIN OOH',
   coating: 'Coating',
   location: 'Location',
+  point_type: 'Point Type',
   pitch: 'Thread / pitch',
   is_sti: 'STI tap',
   tap_thread_unit: 'Thread unit',
@@ -46,8 +47,9 @@ export default function ProShopImportModal({ tool, onClose, onApply }) {
   const { components } = useApp();
   const [psUnit, setPsUnit] = useState(tool.unit || getDefaultUnit());
   const [additions, setAdditions] = useState(null);   // matched additions for this tool
+  const [conflicts, setConflicts] = useState([]);     // fields where the app + ProShop differ → flag
   const [psFormat, setPsFormat] = useState(null);     // detected header format of the last CSV
-  const [status, setStatus] = useState('');           // 'nomatch' once a file parsed with no hit
+  const [status, setStatus] = useState('');           // 'nomatch' | 'nochange' after a parse
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -58,6 +60,7 @@ export default function ProShopImportModal({ tool, onClose, onApply }) {
     setError('');
     setStatus('');
     setAdditions(null);
+    setConflicts([]);
     setPsFormat(null);
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -79,10 +82,13 @@ export default function ProShopImportModal({ tool, onClose, onApply }) {
         }
         const result = matchProShopToTools([...groupMap.values()], [tool], psUnit, components?.components || []);
         const hit = result.matched.find(m => m.toolIdx === 0);
-        if (hit && Object.keys(hit.additions).length) {
-          setAdditions(hit.additions);
+        const adds = hit?.additions || {};
+        const confs = hit?.conflicts || [];
+        if (Object.keys(adds).length || confs.length) {
+          setAdditions(adds);
+          setConflicts(confs);
         } else {
-          setStatus('nomatch');
+          setStatus(hit ? 'nochange' : 'nomatch');
         }
       } catch (err) {
         setError(`ProShop CSV parse error: ${err.message}`);
@@ -95,7 +101,7 @@ export default function ProShopImportModal({ tool, onClose, onApply }) {
     if (!additions) return;
     setSaving(true);
     try {
-      await onApply(additions);
+      await onApply(additions, conflicts);
       onClose();
     } catch (err) {
       setError(err.message || 'Failed to apply ProShop data');
@@ -172,29 +178,70 @@ export default function ProShopImportModal({ tool, onClose, onApply }) {
           </div>
         )}
 
-        {additions && (
+        {status === 'nochange' && (
+          <div className="text-sub text-sm mt-12">Matched this tool — no new data or differences to apply.</div>
+        )}
+
+        {additions && (entries.length > 0 || conflicts.length > 0) && (
           <>
-            <div className="section-header mb-8">{entries.length} field{entries.length === 1 ? '' : 's'} to update</div>
-            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-              <table className="match-table">
-                <thead>
-                  <tr><th>Field</th><th>New value</th></tr>
-                </thead>
-                <tbody>
-                  {entries.map(([key, val]) => (
-                    <tr key={key}>
-                      <td className="text-sm">{FIELD_LABELS[key] || key}</td>
-                      <td className="text-sm font-mono">{displayValue(key, val, tool.unit)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            {entries.length > 0 && (
+              <>
+                <div className="section-header mb-8">{entries.length} field{entries.length === 1 ? '' : 's'} to update</div>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                  <table className="match-table">
+                    <thead>
+                      <tr><th>Field</th><th>New value</th></tr>
+                    </thead>
+                    <tbody>
+                      {entries.map(([key, val]) => (
+                        <tr key={key}>
+                          <td className="text-sm">{FIELD_LABELS[key] || key}</td>
+                          <td className="text-sm font-mono">{displayValue(key, val, tool.unit)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+
+            {conflicts.length > 0 && (
+              <div style={{ marginTop: entries.length > 0 ? 16 : 0 }}>
+                <div className="section-header mb-8" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AlertTriangle size={13} style={{ color: 'var(--orange)' }} />
+                  {conflicts.length} difference{conflicts.length === 1 ? '' : 's'} to flag
+                </div>
+                <div className="text-sub text-xs mb-8">
+                  This app already has a value for {conflicts.length === 1 ? 'this field' : 'these fields'}. Applying
+                  keeps the app value and flags the difference on the tool page, where you pick Keep vs. Use — nothing is overwritten.
+                </div>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                  <table className="match-table">
+                    <thead>
+                      <tr><th>Field</th><th>This app</th><th>ProShop</th></tr>
+                    </thead>
+                    <tbody>
+                      {conflicts.map(c => (
+                        <tr key={c.field}>
+                          <td className="text-sm">{FIELD_LABELS[c.field] || c.field}</td>
+                          <td className="text-sm font-mono">{displayValue(c.field, c.values[0], tool.unit)}</td>
+                          <td className="text-sm font-mono">{displayValue(c.field, c.values[1], tool.unit)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-8 mt-16">
               <button className="btn btn-primary" onClick={apply} disabled={saving}>
-                {saving ? 'Applying…' : 'Apply to This Tool'}
+                {saving ? 'Applying…'
+                  : entries.length > 0
+                    ? `Apply to This Tool${conflicts.length ? ` + flag ${conflicts.length}` : ''}`
+                    : `Flag ${conflicts.length} difference${conflicts.length === 1 ? '' : 's'}`}
               </button>
-              <button className="btn btn-secondary" onClick={() => { setAdditions(null); setStatus(''); }} disabled={saving}>
+              <button className="btn btn-secondary" onClick={() => { setAdditions(null); setConflicts([]); setStatus(''); }} disabled={saving}>
                 Choose Another File
               </button>
             </div>

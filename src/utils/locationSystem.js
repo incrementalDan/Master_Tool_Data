@@ -365,3 +365,15 @@ export function libraryLocationStatus(tools, systems) {
 export function emptyLocation(systemId) {
   return { system_id: systemId, zone_id: null, station_id: null, drawer_id: null, bin: null };
 }
+
+// Extract the numeric bin from a location value. ProShop stores a location as a
+// bare number (no "LC-" prefix); the app's composed string carries the prefix
+// (e.g. "LC-1405"). Comparing on the number lets "LC-1405" and "1405" match as
+// the same bin. Returns null when there are no digits.
+export function locationNumber(value) {
+  if (value == null || value === '') return null;
+  const digits = String(value).replace(/\D/g, '');
+  if (!digits) return null;
+  const n = parseInt(digits, 10);
+  return isNaN(n) ? null : n;
+}

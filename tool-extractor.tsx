@@ -223,6 +223,11 @@ const PS_MAIN_COLS=[
   ["doubleEnded",f=>f.doubleEnded?"true":""],["cuttingDirection",f=>f.cuttingDirection||"Right Hand"],
   ["taper",f=>f.taperAngle||""],["tipDiameter",f=>f.tipDiameter||""],
   ["tipTo1stFullThread",f=>f.tipToFirstFullThread||""],
+  // Location (cabinet) + tap Point Type — added so both round-trip through the
+  // app's own ProShop export (imported back via proShopHeaders alias map). API
+  // ids per ProShop: `location`, `pointType`.
+  ["location",f=>f.location||""],
+  ["pointType",f=>f.pointType||""],
 ];
 
 // Each purchasing entry ("Approved Brands" sub-table row in ProShop) becomes one

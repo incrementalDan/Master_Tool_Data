@@ -10,6 +10,7 @@ import { vendorHasOwnCatalogNumber, resolveVendorName } from '../schema/vendorRe
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
 import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel } from '../utils/proShopHeaders.js';
+import { locationNumber } from '../utils/locationSystem.js';
 import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
 import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
 
@@ -158,8 +159,14 @@ export default function ImportFlow() {
     markSetupStepInSettings('proshopMerged');
     const merged = [...fusionTools];
 
-    proShopMatches.matched.forEach(({ toolIdx, additions }) => {
+    proShopMatches.matched.forEach(({ toolIdx, additions, conflicts }) => {
       merged[toolIdx] = { ...merged[toolIdx], ...additions };
+      // Differences the app couldn't auto-resolve ride along as flagged conflicts
+      // (persisted via buildMetadataTool → mergeToolConflicts, deduped by field),
+      // surfaced on the tool page — never silently overwritten.
+      if (conflicts && conflicts.length) {
+        merged[toolIdx]._combineConflicts = [...(merged[toolIdx]._combineConflicts || []), ...conflicts];
+      }
     });
 
     proShopMatches.unmatched.forEach(({ psGroup, action }) => {
@@ -184,6 +191,11 @@ export default function ImportFlow() {
   // (Fusion-decoupling Phase B). Surfaced on the Review step so it's clear they
   // won't appear in Fusion until promoted.
   const newNoFusionCount = fusionTools.filter(t => t.no_fusion_link).length;
+
+  // Total fill-gap fields where the app + ProShop disagreed — flagged (not
+  // overwritten) for the user to resolve on each tool page after save.
+  const proShopConflictCount = (proShopMatches?.matched || [])
+    .reduce((n, m) => n + (m.conflicts?.length || 0), 0);
 
   // ── Step 4: Assign machine numbers (optional), then save ──────────────
   // The machine-number step is only needed to (re)number tools in bulk. It is
@@ -393,6 +405,11 @@ export default function ImportFlow() {
                 {(proShopMatches.components?.length > 0) && (
                   <div style={{ padding: '8px 14px', background: 'var(--surface-2)', borderRadius: 'var(--radius-sm)', fontSize: 13 }}>
                     <strong style={{ color: 'var(--blue)' }}>{proShopMatches.components.length}</strong> insert-tool component{proShopMatches.components.length === 1 ? '' : 's'} (holder / insert)
+                  </div>
+                )}
+                {proShopConflictCount > 0 && (
+                  <div style={{ padding: '8px 14px', background: 'var(--surface-2)', borderRadius: 'var(--radius-sm)', fontSize: 13 }}>
+                    <strong style={{ color: 'var(--orange)' }}>{proShopConflictCount}</strong> flagged difference{proShopConflictCount === 1 ? '' : 's'} (kept app value — resolve on the tool page)
                   </div>
                 )}
               </div>
@@ -774,6 +791,12 @@ function psNum(v) {
   return isNaN(n) ? null : n;
 }
 
+// Equality used when deciding fill-gap vs. flag on a ProShop merge. Strings are
+// compared case/space-insensitively (so "AlTiN" vs "altin" isn't a false flag);
+// lengths within a small tolerance are equal (float noise / unit conversion).
+const psStrEq = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
+const psNumEq = (a, b) => Math.abs(Number(a) - Number(b)) <= 1e-4;
+
 function psRowToTool(group, psUnit = 'inches') {
   const r = group[0];
   const grouping = r['Tool Group'] || '';
@@ -965,10 +988,22 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
       usedToolIdxs.add(toolIdx);
       const tool = tools[toolIdx];
       const additions = {};
+      // Fields where the app already has a DIFFERENT value than ProShop are not
+      // silently overwritten NOR silently ignored — they're flagged as conflicts
+      // ("informed, not blocked"), surfaced on the tool page for the user to pick
+      // Keep vs. Use. Only the fill-gap fields flag; the ProShop-authoritative
+      // fields below (vendor, purchasing, MIN OOH, through-coolant, custom grind)
+      // still auto-win by design.
+      const conflicts = [];
+      // Set the field when the app has no value; flag when it differs; no-op when equal.
+      const fillOrFlag = (field, appVal, psVal, eq = psStrEq) => {
+        if (psVal == null || psVal === '') return;
+        if (appVal == null || appVal === '') { additions[field] = psVal; return; }
+        if (!eq(appVal, psVal)) conflicts.push({ field, values: [appVal, psVal] });
+      };
 
-      // ProShop wins
+      // ProShop wins (authoritative — auto-overwrite, never flagged)
       if (r['Approved Brand']) additions.vendor = resolveVendorName(r['Approved Brand']);
-      if (toolNum && !tool.tool_id) additions.tool_id = toolNum;
       const purchasing = buildPurchasingFromGroup(group);
       if (purchasing.manufacturers.length || purchasing.vendors.length) additions.purchasing = purchasing;
       if (r['Through Coolant'] === 'true' || r['Through Coolant'] === 'false') {
@@ -982,29 +1017,65 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
       const psMinOoh = psNum(r['Length Below Holder - MIN OOH']);
       if (psMinOoh != null) additions.min_ooh = convertLength(psMinOoh, psUnit, tool.unit);
 
-      // Fill gaps only — don't overwrite existing values
-      if (!tool.coating && r['Coating']) additions.coating = r['Coating'];
-      // Location: ProShop's free text wins only until this tool owns a structured
-      // Location System assignment. Once normalized (tool_location set), this app
-      // owns location — the ProShop import value is ignored. A value already
-      // retired into legacy_locations is likewise not re-imported (normalization
-      // deliberately replaced it), so an old cabinet string doesn't resurrect.
-      const psLoc = (r['Location'] || '').trim();
-      const isRetiredLoc = Array.isArray(tool.legacy_locations)
-        && tool.legacy_locations.some(l => String(l).trim() === psLoc);
-      if (!tool.tool_location && !tool.location && psLoc && !isRetiredLoc) additions.location = psLoc;
-      if (!tool.pitch && (r['Thread'] || r['Pitch'])) {
-        const resolved = resolveThreadSize(r['Thread'] || r['Pitch'] || '');
-        if (resolved.pitch) additions.pitch = resolved.pitch;
-        if (resolved.is_sti && !tool.is_sti) additions.is_sti = true;
-        if (resolved.thread_unit && !tool.tap_thread_unit) additions.tap_thread_unit = resolved.thread_unit;
+      // Fill gaps, else flag a difference — don't silently overwrite or ignore.
+      // tool_id: a match by exact tool_id is equal (no flag); a legacy-id match is
+      // an expected re-number (the ProShop # is a known legacy id) so it's not a
+      // conflict either — only a genuinely different id (e.g. a description match)
+      // flags.
+      if (toolNum) {
+        if (!tool.tool_id) additions.tool_id = toolNum;
+        else if (!psStrEq(tool.tool_id, toolNum)
+          && !(tool.legacy_ids || []).some(l => psStrEq(l, toolNum))) {
+          conflicts.push({ field: 'tool_id', values: [tool.tool_id, toolNum] });
+        }
       }
-      if (tool.tip_to_first_thread == null) {
-        const psTip = psNum(r['Tip to 1st Full Thread']);
-        if (psTip != null) additions.tip_to_first_thread = convertLength(psTip, psUnit, tool.unit);
+      fillOrFlag('coating', tool.coating, r['Coating']);
+      fillOrFlag('point_type', tool.point_type, r['Point Type']);
+      // Location. ProShop's Location is a bare bin NUMBER (no "LC-" prefix); the
+      // app's location string carries the Location System prefix (e.g. "LC-1405").
+      // Compare on the NUMBER only so "LC-1405" and "1405" are the same bin. Same
+      // ProShop # ⇒ same tool ⇒ the bin should match. Rules:
+      //  • App owns a STRUCTURED location (tool_location.bin): a number mismatch is
+      //    FLAGGED for the user to reconcile — never silently overwritten. (Once the
+      //    app auto-names locations, ProShop imports are rare; this catches drift.)
+      //  • No app-owned location (legacy Fusion free-text or empty): ProShop wins
+      //    over Fusion — fill when empty, overwrite when the number differs, keep the
+      //    app's prefixed string when the number already matches.
+      const psLoc = (r['Location'] || '').trim();
+      const psLocNum = locationNumber(psLoc);
+      if (psLoc && psLocNum != null) {
+        if (tool.tool_location && tool.tool_location.bin != null) {
+          if (Number(tool.tool_location.bin) !== psLocNum) {
+            conflicts.push({ field: 'location', values: [tool.location, psLoc] });
+          }
+        } else {
+          const retired = (tool.legacy_locations || []).some(l => locationNumber(l) === psLocNum);
+          if (!retired && locationNumber(tool.location) !== psLocNum) additions.location = psLoc;
+        }
+      }
+      if (r['Thread'] || r['Pitch']) {
+        const resolved = resolveThreadSize(r['Thread'] || r['Pitch'] || '');
+        if (resolved.pitch) {
+          if (!tool.pitch) {
+            additions.pitch = resolved.pitch;
+            // STI / thread-unit ride along only when we're actually filling pitch.
+            if (resolved.is_sti && !tool.is_sti) additions.is_sti = true;
+            if (resolved.thread_unit && !tool.tap_thread_unit) additions.tap_thread_unit = resolved.thread_unit;
+          } else if (!psStrEq(tool.pitch, resolved.pitch)) {
+            conflicts.push({ field: 'pitch', values: [tool.pitch, resolved.pitch] });
+          }
+        }
+      }
+      const psTip = psNum(r['Tip to 1st Full Thread']);
+      if (psTip != null) {
+        const psTipConv = convertLength(psTip, psUnit, tool.unit);
+        if (tool.tip_to_first_thread == null) additions.tip_to_first_thread = psTipConv;
+        else if (!psNumEq(tool.tip_to_first_thread, psTipConv)) {
+          conflicts.push({ field: 'tip_to_first_thread', values: [tool.tip_to_first_thread, psTipConv] });
+        }
       }
 
-      matched.push({ toolIdx, psGroup: group, additions });
+      matched.push({ toolIdx, psGroup: group, additions, conflicts });
     }
   }
 

@@ -14,7 +14,7 @@ import {
 import { normProShopId } from '../schema/insertFamilies.js';
 import { composeAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
 import { INSERT_FAMILY_BY_ID, pairedAsmIdPart } from '../schema/insertFamilies.js';
-import { resolveLocationString, analyzeSystem, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
+import { resolveLocationString, analyzeSystem, findSystem, proShopLocationValue, locationNumber } from '../utils/locationSystem.js';
 import { isExcludedFrom, setToolExclusion } from '../utils/idSystems.js';
 import { classifyStrays } from '../services/reconcile.js';
 import { displayConflicts, clearToolConflict } from '../utils/toolConflicts.js';
@@ -1007,7 +1007,16 @@ export function createToolActions(ctx) {
     try {
       if (conflict?.type === 'field' && chosenValue !== undefined
           && !valuesEqual(chosenValue, tool[conflict.field])) {
-        const updated = await writeLogicalTool({ ...cleared, [conflict.field]: chosenValue, updated_at: new Date().toISOString() });
+        // A location conflict against a structured (app-owned) location resolves by
+        // updating the BIN NUMBER (ProShop carries a bare number, no "LC-" prefix);
+        // writeLogicalTool then recomposes the "LC-…" display string from
+        // tool_location. Any other field writes the chosen value directly.
+        let fieldPatch = { [conflict.field]: chosenValue };
+        if (conflict.field === 'location' && tool.tool_location && tool.tool_location.bin != null) {
+          const n = locationNumber(chosenValue);
+          if (n != null) fieldPatch = { tool_location: { ...tool.tool_location, bin: n } };
+        }
+        const updated = await writeLogicalTool({ ...cleared, ...fieldPatch, updated_at: new Date().toISOString() });
         dispatch({ type: 'UPDATE_TOOL', tool: updated });
         dispatch({ type: 'SAVE_SUCCESS' });
         notify('Conflict resolved — value updated', 'success');
