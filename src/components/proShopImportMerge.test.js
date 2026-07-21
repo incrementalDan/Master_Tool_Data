@@ -79,6 +79,48 @@ describe('ProShop merge — tool_id + location nuances', () => {
   });
 });
 
+describe('ProShop merge — structured location assignment (app takes over)', () => {
+  // A single bin-only Location System with a fixed "LC" drawer prefix.
+  const binOnlySystem = {
+    id: 'sys-lc',
+    levels: {
+      zone: { on: false }, station: { on: false },
+      drawer: { on: true, levelType: 'Drawer', identFormat: 'custom', customIdent: 'LC', options: [] },
+      bin: { fixed: false, start: 1000 },
+    },
+    delimiters: { zs: '-', sd: '-', db: '-' },
+  };
+  const mergeSys = (row, tool) => {
+    const { matched } = matchProShopToTools([[{ 'Tool #': 'A-3', ...row }]], [tool], 'inches', [], [binOnlySystem]);
+    return matched[0];
+  };
+
+  it('assigns a structured location (bin) that composes LC-140', () => {
+    const m = mergeSys({ Location: '140' }, baseTool({ location: '' }));
+    expect(m.additions.tool_location).toEqual({ system_id: 'sys-lc', zone_id: null, station_id: null, drawer_id: null, bin: 140 });
+    expect(m.additions.location).toBe('LC-140');
+    expect(m.conflicts).toEqual([]);
+  });
+
+  it('upgrades a legacy free-text location to structured ownership', () => {
+    const m = mergeSys({ Location: '140' }, baseTool({ location: 'LC-140' }));
+    expect(m.additions.tool_location.bin).toBe(140);
+    expect(m.additions.location).toBe('LC-140');
+  });
+
+  it('a no-Fusion tool with no location gets a structured (persistable) location', () => {
+    const m = mergeSys({ Location: '77' }, baseTool({ no_fusion_link: true, location: '' }));
+    expect(m.additions.tool_location).toEqual({ system_id: 'sys-lc', zone_id: null, station_id: null, drawer_id: null, bin: 77 });
+    expect(m.additions.location).toBe('LC-77');
+  });
+
+  it('still flags a bin mismatch once the app owns a structured location', () => {
+    const m = mergeSys({ Location: '1405' }, baseTool({ tool_location: { system_id: 'sys-lc', bin: 1400 }, location: 'LC-1400' }));
+    expect(m.conflicts).toContainEqual({ field: 'location', values: ['LC-1400', '1405'] });
+    expect(m.additions.tool_location).toBeUndefined();
+  });
+});
+
 describe('ProShop merge — authoritative fields still auto-win (no flag)', () => {
   it('MIN OOH overwrites without flagging', () => {
     const m = merge({ 'Length Below Holder - MIN OOH': '1.25' }, baseTool({ min_ooh: 1.0 }));

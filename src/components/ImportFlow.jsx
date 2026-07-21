@@ -10,7 +10,7 @@ import { vendorHasOwnCatalogNumber, resolveVendorName } from '../schema/vendorRe
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
 import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel } from '../utils/proShopHeaders.js';
-import { locationNumber } from '../utils/locationSystem.js';
+import { locationNumber, composeLocationString } from '../utils/locationSystem.js';
 import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
 import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
 
@@ -145,7 +145,7 @@ export default function ImportFlow() {
           if (!groupMap.has(key)) groupMap.set(key, []);
           groupMap.get(key).push(row);
         }
-        const matches = matchProShopToTools([...groupMap.values()], fusionTools, psUnit, components?.components || []);
+        const matches = matchProShopToTools([...groupMap.values()], fusionTools, psUnit, components?.components || [], shopSettings?.location_config?.systems || []);
         setProShopMatches(matches);
       } catch (err) {
         setParseError(`ProShop CSV parse error: ${err.message}`);
@@ -171,7 +171,7 @@ export default function ImportFlow() {
 
     proShopMatches.unmatched.forEach(({ psGroup, action }) => {
       if (action === 'add') {
-        merged.push(psRowToTool(psGroup, psUnit));
+        merged.push(psRowToTool(psGroup, psUnit, shopSettings?.location_config?.systems || []));
       }
     });
 
@@ -797,8 +797,34 @@ function psNum(v) {
 const psStrEq = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
 const psNumEq = (a, b) => Math.abs(Number(a) - Number(b)) <= 1e-4;
 
-function psRowToTool(group, psUnit = 'inches') {
+// A system whose only per-tool variable is the BIN — zone/station/drawer are off
+// or a fixed custom prefix (e.g. "LC"). Only then can a bare ProShop bin number
+// fully determine a structured location (a system with selectable level options
+// can't be derived from a number alone).
+function isBinOnlySystem(sys) {
+  const L = sys?.levels || {};
+  const ok = (lv) => !lv || !lv.on || lv.identFormat === 'custom';
+  return ok(L.zone) && ok(L.station) && ok(L.drawer);
+}
+
+// Map a bare ProShop bin number to a STRUCTURED tool_location so the app owns the
+// location: it composes to "LC-140" via the Location System AND persists in
+// metadata (the only place a no-Fusion tool can keep a location — a free-text
+// string has nowhere to live for it). Requires exactly one bin-only Location
+// System; otherwise returns null and the caller falls back to free-text.
+function proShopStructuredLocation(psLoc, systems) {
+  const num = locationNumber(psLoc);
+  if (num == null) return null;
+  const usable = (systems || []).filter(isBinOnlySystem);
+  if (usable.length !== 1) return null;
+  const sys = usable[0];
+  const loc = { system_id: sys.id, zone_id: null, station_id: null, drawer_id: null, bin: num };
+  return { tool_location: loc, location: composeLocationString(loc, sys) };
+}
+
+function psRowToTool(group, psUnit = 'inches', locationSystems = []) {
   const r = group[0];
+  const structuredLoc = proShopStructuredLocation(r['Location'], locationSystems);
   const grouping = r['Tool Group'] || '';
   const cornerRadius = psNum(r['CornerRad']);
   const toolType = typeFromProShopGroup(grouping, { description: r['Description'], cornerRadius }) || 'flat end mill';
@@ -834,7 +860,11 @@ function psRowToTool(group, psUnit = 'inches') {
       : [],
     min_ooh: psNum(r['Length Below Holder - MIN OOH']),
     tip_to_first_thread: psNum(r['Tip to 1st Full Thread']),
-    location: r['Location'] || '',
+    // Structured location when a bin-only Location System exists (so a no-Fusion
+    // tool's location persists in metadata and composes "LC-140"); else free-text.
+    ...(structuredLoc
+      ? { tool_location: structuredLoc.tool_location, location: structuredLoc.location }
+      : { location: r['Location'] || '' }),
     vendor: resolveVendorName(r['Approved Brand'] || ''),
     purchasing: buildPurchasingFromGroup(group),
     // No Fusion entry exists yet — flags this as a placeholder needing Fusion
@@ -907,7 +937,7 @@ function buildPurchasingFromGroup(group) {
 // psUnit is the unit of the ProShop file; lengths merged onto an existing tool
 // (min_ooh, tip_to_first_thread) are converted from it into the matched tool's
 // own unit.
-export function matchProShopToTools(groups, tools, psUnit = 'inches', existingComponents = []) {
+export function matchProShopToTools(groups, tools, psUnit = 'inches', existingComponents = [], locationSystems = []) {
   const matched = [];
   const usedToolIdxs = new Set();
 
@@ -1045,12 +1075,26 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
       const psLocNum = locationNumber(psLoc);
       if (psLoc && psLocNum != null) {
         if (tool.tool_location && tool.tool_location.bin != null) {
+          // App already owns a STRUCTURED location — a bin-number mismatch is
+          // flagged for review, never silently overwritten.
           if (Number(tool.tool_location.bin) !== psLocNum) {
             conflicts.push({ field: 'location', values: [tool.location, psLoc] });
           }
         } else {
           const retired = (tool.legacy_locations || []).some(l => locationNumber(l) === psLocNum);
-          if (!retired && locationNumber(tool.location) !== psLocNum) additions.location = psLoc;
+          if (!retired) {
+            const structured = proShopStructuredLocation(psLoc, locationSystems);
+            if (structured) {
+              // Take over: store the ProShop number as a structured location so it
+              // composes "LC-140" and persists in metadata (incl. no-Fusion tools).
+              additions.tool_location = structured.tool_location;
+              additions.location = structured.location;
+            } else if (locationNumber(tool.location) !== psLocNum) {
+              // No single bin-only Location System — fall back to free-text (ProShop
+              // wins over a legacy Fusion location when the number differs).
+              additions.location = psLoc;
+            }
+          }
         }
       }
       if (r['Thread'] || r['Pitch']) {

@@ -44,7 +44,7 @@ function displayValue(key, val, unit) {
 }
 
 export default function ProShopImportModal({ tool, onClose, onApply }) {
-  const { components } = useApp();
+  const { components, shopSettings } = useApp();
   const [psUnit, setPsUnit] = useState(tool.unit || getDefaultUnit());
   const [additions, setAdditions] = useState(null);   // matched additions for this tool
   const [conflicts, setConflicts] = useState([]);     // fields where the app + ProShop differ → flag
@@ -80,7 +80,7 @@ export default function ProShopImportModal({ tool, onClose, onApply }) {
           if (!groupMap.has(key)) groupMap.set(key, []);
           groupMap.get(key).push(row);
         }
-        const result = matchProShopToTools([...groupMap.values()], [tool], psUnit, components?.components || []);
+        const result = matchProShopToTools([...groupMap.values()], [tool], psUnit, components?.components || [], shopSettings?.location_config?.systems || []);
         const hit = result.matched.find(m => m.toolIdx === 0);
         const adds = hit?.additions || {};
         const confs = hit?.conflicts || [];
@@ -109,7 +109,9 @@ export default function ProShopImportModal({ tool, onClose, onApply }) {
     }
   };
 
-  const entries = additions ? Object.entries(additions) : [];
+  // tool_location is the structured backing for the composed `location` string
+  // (shown as its own row) — don't render the raw object.
+  const entries = additions ? Object.entries(additions).filter(([k]) => k !== 'tool_location') : [];
 
   return (
     <div className="modal-backdrop" onClick={saving ? undefined : onClose}>
