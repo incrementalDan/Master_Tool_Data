@@ -984,6 +984,7 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
 
       // Fill gaps only — don't overwrite existing values
       if (!tool.coating && r['Coating']) additions.coating = r['Coating'];
+      if (!tool.point_type && r['Point Type']) additions.point_type = r['Point Type'];
       // Location: ProShop's free text wins only until this tool owns a structured
       // Location System assignment. Once normalized (tool_location set), this app
       // owns location — the ProShop import value is ignored. A value already

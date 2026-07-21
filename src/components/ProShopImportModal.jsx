@@ -22,6 +22,7 @@ const FIELD_LABELS = {
   min_ooh: 'MIN OOH',
   coating: 'Coating',
   location: 'Location',
+  point_type: 'Point Type',
   pitch: 'Thread / pitch',
   is_sti: 'STI tap',
   tap_thread_unit: 'Thread unit',
