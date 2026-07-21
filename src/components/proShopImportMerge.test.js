@@ -49,15 +49,33 @@ describe('ProShop merge — tool_id + location nuances', () => {
     expect(matched[0].additions.tool_id).toBeUndefined();
   });
 
-  it('ignores ProShop location once the tool owns a structured location', () => {
-    const m = merge({ Location: 'LC-99' }, baseTool({ tool_location: { system_id: 's', bin: 5 }, location: 'LC-8' }));
+  it('structured location: same number is a no-op (LC-1405 vs 1405)', () => {
+    const m = merge({ Location: '1405' }, baseTool({ tool_location: { system_id: 's', bin: 1405 }, location: 'LC-1405' }));
     expect(m.conflicts).toEqual([]);
     expect(m.additions.location).toBeUndefined();
   });
 
-  it('flags a differing free-text location', () => {
-    const m = merge({ Location: 'LC-99' }, baseTool({ location: 'LC-8' }));
-    expect(m.conflicts).toContainEqual({ field: 'location', values: ['LC-8', 'LC-99'] });
+  it('structured location: a NUMBER mismatch is flagged (not overwritten)', () => {
+    const m = merge({ Location: '1405' }, baseTool({ tool_location: { system_id: 's', bin: 1400 }, location: 'LC-1400' }));
+    expect(m.conflicts).toContainEqual({ field: 'location', values: ['LC-1400', '1405'] });
+    expect(m.additions.location).toBeUndefined();
+  });
+
+  it('free-text location: ProShop wins on a number difference (over Fusion)', () => {
+    const m = merge({ Location: '1405' }, baseTool({ location: 'LC-8' }));
+    expect(m.additions.location).toBe('1405');
+    expect(m.conflicts).toEqual([]);
+  });
+
+  it('free-text location: same number keeps the app prefixed string (LC-8 vs 8)', () => {
+    const m = merge({ Location: '8' }, baseTool({ location: 'LC-8' }));
+    expect(m.additions.location).toBeUndefined();
+    expect(m.conflicts).toEqual([]);
+  });
+
+  it('fills location when the tool has none', () => {
+    const m = merge({ Location: '1405' }, baseTool({ location: '' }));
+    expect(m.additions.location).toBe('1405');
   });
 });
 

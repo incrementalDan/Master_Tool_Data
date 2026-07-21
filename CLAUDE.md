@@ -287,7 +287,7 @@ Per system: **Analyze** (read-only `analyzeSystem` parse pass — no writes) →
 ### ProShop import/export
 
 - **Export**: composed string → ProShop `Location` column, transformed by the tool's system `proShopExport` rule (`number_only` strips to just the bin digits / `full` / `fixed`).
-- **Import** (`ImportFlow.matchProShopToTools`): the ProShop location free text fills `location` **only** when the tool has no structured `tool_location` yet. Once a tool is normalized/assigned, this app owns its location and the ProShop import value is ignored.
+- **Import** (`ImportFlow.matchProShopToTools`): compared on the **bin number only** (ProShop's `Location` is a bare number, no `LC-` prefix; `locationNumber()` strips the app's prefix). When the tool has **no** structured `tool_location`, ProShop wins over the legacy Fusion free-text (fill/overwrite by number). Once the tool owns a structured `tool_location`, a number **mismatch is flagged** for review (not silently overwritten, not silently ignored) — resolving with "Use ProShop #" updates `tool_location.bin`. See ProShop Field Priority Rules → the location rule.
 
 ### Context actions (AppContext)
 
@@ -1124,7 +1124,7 @@ These rules apply during the **initial ProShop CSV merge** and on any **subseque
 | Tool description | PS wins | Always via the per-tool rename confirmation UI — see Description Rename Workflow |
 | `vendor` (manufacturer) | PS wins | From `Approved Brand`; metadata-only, **never** written to Fusion |
 | `tool_id` | Fill gap, else flag | From `Tool #` — set if the tool has none; a *different* id flags (unless it matched by exact id or a known `legacy_ids` value — an expected re-number, not a conflict) |
-| `location` (cabinet) | Fill gap, else flag | From `Location`; Fusion's "Vendor" UI field (`expressions.tool_vendor`) holds the cabinet location → internal `location`. A tool that owns a **structured** `tool_location` ignores ProShop entirely (deliberate ownership, not a flag); a differing free-text `location` flags |
+| `location` (cabinet) | ProShop over Fusion; flag app | From `Location` (a bare bin **number**, no `LC-` prefix); Fusion's "Vendor" UI field (`expressions.tool_vendor`) holds the cabinet location → internal `location`. **Compared on the number only** — see the location rule below |
 | `purchasing` (Approved Brands → manufacturers/vendors) | PS wins, replace when present | Built from every row sharing a `Tool #` via `buildPurchasingFromGroup` — see Purchasing / Vendor Data Model |
 | `min_ooh` (MIN OOH floor) | PS wins | From `Length Below Holder - MIN OOH` (export id `lengthBelowShankDiameter`); metadata-only, always overwrites |
 | `geometry['shoulder-length']` (shoulder length) | Set to MIN OOH at normalization | See MIN OOH rule below |
@@ -1138,6 +1138,12 @@ These rules apply during the **initial ProShop CSV merge** and on any **subseque
 | All other differences | **Flag** to user | Do not auto-resolve |
 
 **Fill-gap fields flag a difference — "informed, not blocked" (`matchProShopToTools`, `ImportFlow.jsx`).** For the fill-gap fields above (`tool_id`, `location`, `coating`, `pitch`, `point_type`, `tip_to_first_thread`), a ProShop value is applied only when the app has **no** value; when the app already holds a **different** value the import neither overwrites nor silently ignores it — it records a **field conflict** (`{ field, values:[appValue, psValue] }`) via the existing conflict channel (`tool._combineConflicts` → `buildMetadataTool` → `mergeToolConflicts`), surfaced on the tool page in `ConflictBanner` (**Keep <app>** / **Use <ProShop>**), exactly like a load-time combine conflict. The app value is kept until the user picks. Equal values are a no-op (strings compared case/space-insensitively via `psStrEq`; lengths within tolerance via `psNumEq`). The **ProShop-authoritative** fields (`vendor`, `purchasing`, `min_ooh`, `tsc_capable`, `custom_grind`, and the description-rename flow) still **auto-win** — they are not flagged (purchasing is a complex multi-row object the Keep/Use banner can't represent as a single value). Both importers carry this: the bulk flow (`handleApplyMerge`) attaches `_combineConflicts` per matched tool and shows a "N flagged differences" summary chip; the single-tool `ProShopImportModal` shows a "differences to flag" table (app value vs. ProShop value) and records them on apply. Locked by `src/components/proShopImportMerge.test.js`.
+
+**Location is a special case — number-only, ProShop-over-Fusion (`matchProShopToTools`).** ProShop's `Location` is a bare bin **number** (`1405`), while the app composes a prefixed string (`LC-1405`) from the structured `tool_location` via the Location System. A same-ProShop-# match is the same physical tool, so the bin should agree. Comparison is therefore on the **number only** (`locationNumber(str)` in `src/utils/locationSystem.js` — strips non-digits; `LC-1405` and `1405` are the same bin):
+- **App owns a structured `tool_location`** (`bin != null`): a number mismatch is **flagged** (`location` field conflict) — never silently overwritten. Once the app auto-names locations, ProShop imports are rare, so this is the drift catch. Resolving the flag with **Use \<ProShop #\>** updates `tool_location.bin` (not the raw string), and `writeLogicalTool` recomposes `LC-…` — handled in `resolveToolConflict` (`toolActions.js`).
+- **No structured location** (legacy Fusion free-text, or empty): **ProShop wins over Fusion** — fill when empty, overwrite when the number differs, and **keep** the app's prefixed string when the number already matches (so `LC-8` isn't needlessly rewritten to `8`). A number already retired into `legacy_locations` is not re-imported (number-aware).
+
+This supersedes the earlier "differing free-text location flags" behavior: free-text location now defers to ProShop (auto-win), and only the app's own **structured** location flags.
 
 ### MIN OOH floor rule (read carefully)
 

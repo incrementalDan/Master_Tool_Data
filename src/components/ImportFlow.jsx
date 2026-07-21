@@ -10,6 +10,7 @@ import { vendorHasOwnCatalogNumber, resolveVendorName } from '../schema/vendorRe
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
 import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel } from '../utils/proShopHeaders.js';
+import { locationNumber } from '../utils/locationSystem.js';
 import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
 import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
 
@@ -1030,15 +1031,28 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
       }
       fillOrFlag('coating', tool.coating, r['Coating']);
       fillOrFlag('point_type', tool.point_type, r['Point Type']);
-      // Location: ProShop's free text applies only until this tool owns a structured
-      // Location System assignment. Once normalized (tool_location set), this app
-      // owns location — the ProShop import value is ignored (not a conflict, a
-      // deliberate ownership rule). A value already retired into legacy_locations is
-      // likewise not re-imported. Otherwise fill-gap, else flag.
+      // Location. ProShop's Location is a bare bin NUMBER (no "LC-" prefix); the
+      // app's location string carries the Location System prefix (e.g. "LC-1405").
+      // Compare on the NUMBER only so "LC-1405" and "1405" are the same bin. Same
+      // ProShop # ⇒ same tool ⇒ the bin should match. Rules:
+      //  • App owns a STRUCTURED location (tool_location.bin): a number mismatch is
+      //    FLAGGED for the user to reconcile — never silently overwritten. (Once the
+      //    app auto-names locations, ProShop imports are rare; this catches drift.)
+      //  • No app-owned location (legacy Fusion free-text or empty): ProShop wins
+      //    over Fusion — fill when empty, overwrite when the number differs, keep the
+      //    app's prefixed string when the number already matches.
       const psLoc = (r['Location'] || '').trim();
-      const isRetiredLoc = Array.isArray(tool.legacy_locations)
-        && tool.legacy_locations.some(l => String(l).trim() === psLoc);
-      if (!tool.tool_location && psLoc && !isRetiredLoc) fillOrFlag('location', tool.location, psLoc);
+      const psLocNum = locationNumber(psLoc);
+      if (psLoc && psLocNum != null) {
+        if (tool.tool_location && tool.tool_location.bin != null) {
+          if (Number(tool.tool_location.bin) !== psLocNum) {
+            conflicts.push({ field: 'location', values: [tool.location, psLoc] });
+          }
+        } else {
+          const retired = (tool.legacy_locations || []).some(l => locationNumber(l) === psLocNum);
+          if (!retired && locationNumber(tool.location) !== psLocNum) additions.location = psLoc;
+        }
+      }
       if (r['Thread'] || r['Pitch']) {
         const resolved = resolveThreadSize(r['Thread'] || r['Pitch'] || '');
         if (resolved.pitch) {
