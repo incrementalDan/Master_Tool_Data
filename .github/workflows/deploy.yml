@@ -40,6 +40,9 @@ jobs:
           VITE_APS_CALLBACK_URL: ${{ secrets.VITE_APS_CALLBACK_URL }}
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           VITE_METADATA_FILE_ID: ${{ secrets.VITE_METADATA_FILE_ID }}
+          # Optional: overrides the extractor Worker URL baked into the code.
+          # Leave the secret unset and the built-in default is used.
+          VITE_EXTRACTOR_API_URL: ${{ secrets.VITE_EXTRACTOR_API_URL }}
         run: npm run build
 
       - name: Upload Pages artifact
