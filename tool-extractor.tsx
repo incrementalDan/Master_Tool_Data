@@ -168,7 +168,7 @@ function buildFusionRow(f, outputUnit='inches'){
   const d=parseFloat(f.diameter)||"",loc=parseFloat(f.loc)||"",oal=parseFloat(f.oal)||"";
   const shk=parseFloat(f.shankDia)||(d||""),fl=parseInt(f.flutes)||"",mat=f.material||"carbide";
   const pn=f.toolNumber?parseFloat(f.toolNumber):"",ft=FT[f.toolType]||f.toolType||"";
-  const desc=buildDesc(f,false),pre=f.presetName||desc,edp=f.edpNumber||"",url=f.productLink||"";
+  const desc=buildDesc(f),pre=f.presetName||desc,edp=f.edpNumber||"",url=f.productLink||"";
   const coolant=f.coolant||"flood";
   const isTap=f.toolType==="tap";
   const cr=parseFloat(f.cornerRadius)||0;
@@ -219,7 +219,7 @@ function buildFusionRow(f, outputUnit='inches'){
 
 const PS_MAIN_COLS=[
   ["toolNumber",f=>f.psToolId||""],
-  ["description",f=>buildDesc(f,false)],["cutDiameter",f=>f.diameter||""],["lengthOfCut",f=>f.loc||""],
+  ["description",f=>buildDesc(f)],["cutDiameter",f=>f.diameter||""],["lengthOfCut",f=>f.loc||""],
   ["overallLength",f=>f.oal||""],["No. of Flutes",f=>f.flutes||""],["shankDiameter",f=>f.shankDia||f.diameter||""],
   ["bodyDiameter",f=>f.shankDia||f.diameter||""],["cornerRadius",f=>f.cornerRadius||""],["tipAngle",f=>f.tipAngle||""],
   ["helixAngle",f=>f.helixAngle||""],["coating",f=>f.coating||""],["toolMaterial",f=>f.material||""],
@@ -556,7 +556,7 @@ export default function App({ onExtract } = {}){
   const sf=(k,v)=>setF(p=>({...p,[k]:v}));
   const hi=(k)=>!!(exd&&F[k]!==undefined&&F[k]!==""&&F[k]!==false&&F[k]!=="0");
   const effGroup=groupOverride?F.grouping:(AUTO_GROUP[F.toolType]||"M");
-  const Feff={...F,grouping:effGroup};
+  const Feff={...F,grouping:effGroup,inputWasMm};
 
   const handleFile=useCallback((file)=>{
     if(!file) return;
@@ -972,7 +972,7 @@ export default function App({ onExtract } = {}){
               <Icon.download/> {psLbl}
             </button>
           </div>
-          {onExtract&&<button onClick={()=>onExtract({...F})} style={{width:"100%",marginTop:8,padding:"9px 0",background:"#45b36b",color:"#fff",border:"none",borderRadius:5,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
+          {onExtract&&<button onClick={()=>onExtract({...Feff})} style={{width:"100%",marginTop:8,padding:"9px 0",background:"#45b36b",color:"#fff",border:"none",borderRadius:5,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
             ＋ Add to Library
           </button>}
         </div>

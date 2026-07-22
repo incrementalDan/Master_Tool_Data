@@ -171,6 +171,9 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
       ? null
       : Number(meta.machine_tool_number ?? fusionInternal.machine_tool_number),
     no_fusion_link: Boolean(meta.no_fusion_link),
+    // Metric-size display intent — the diameter shows in mm in the description
+    // (e.g. "1.45mm (.0571)"). Metadata-only; regenerates the name metric-aware.
+    input_was_mm: Boolean(meta.input_was_mm),
     // Per-system ID membership (Tool ID / Machine Number / Location). A tool is a
     // member of every system by default; `true` = explicitly excluded, so bulk
     // ID/number/normalize actions skip it. Metadata-only, reversible. See
@@ -333,6 +336,7 @@ export function buildMetadataTool(tool) {
     // of what gets written to the Fusion JSON.
     machine_tool_number: (tool.machine_tool_number ?? null) === null ? null : Number(tool.machine_tool_number),
     no_fusion_link: tool.no_fusion_link || false,
+    input_was_mm: tool.input_was_mm || false,
     // Per-system ID membership (see src/utils/idSystems.js). Default = member
     // (all false); a bulk action or Settings can exclude a tool from a system.
     id_system_exclusions: {
