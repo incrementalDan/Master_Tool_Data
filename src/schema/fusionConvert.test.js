@@ -98,6 +98,12 @@ describe('preset stock-material assignment (Fusion-native, matched by name)', ()
     const out = outPreset(internalToFusionTool(makeTool({ preset, rawPreset: makePreset() })));
     expect('stock-materials' in out).toBe(false);
   });
+
+  it('never writes the app-only CAM-preset FK (material_preset_id) into Fusion JSON', () => {
+    const preset = makePreset({ material_preset_id: 'pre_n_al' });
+    const out = outPreset(internalToFusionTool(makeTool({ preset, rawPreset: makePreset() })));
+    expect('material_preset_id' in out).toBe(false);
+  });
 });
 
 describe('stepdown/stepover three-way sync (normalizePreset via internalToFusionTool)', () => {

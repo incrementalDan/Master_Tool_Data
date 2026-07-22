@@ -186,6 +186,10 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     job_ids: meta.job_ids || [],
     notes: meta.notes || '',
     last_used_job: meta.last_used_job || '',
+    // Preferred machine: FK into shop_settings.machines[] (rename-proof); the
+    // string is derived from it — see src/utils/machines.js. Null for a legacy
+    // free-text value not matching a configured machine.
+    preferred_machine_id: meta.preferred_machine_id || null,
     preferred_machine: meta.preferred_machine || '',
     material_suitability: meta.material_suitability || [],
     speed_feed_refs: meta.speed_feed_refs || [],
@@ -226,10 +230,13 @@ export function buildMetadataTool(tool) {
     // aggressive) — app-only, a name-modifier hint; 'normal' is the default so
     // it's only stored when it differs.
     const hasIntensity = p.intensity && p.intensity !== 'normal';
-    if (p.guid && (p.operation_type || p.machine_id || p.job_ids?.length || hasSmallBore || hasIntensity)) {
+    if (p.guid && (p.operation_type || p.machine_id || p.material_preset_id || p.job_ids?.length || hasSmallBore || hasIntensity)) {
       preset_meta[p.guid] = {
         ...(p.operation_type ? { operation_type: p.operation_type } : {}),
         ...(p.machine_id    ? { machine_id: p.machine_id }         : {}),
+        // CAM-preset foreign key (materials.json presets[].id) — the stable link
+        // to the picked material; the name is derived from it. See presetNaming.js.
+        ...(p.material_preset_id ? { material_preset_id: p.material_preset_id } : {}),
         // Job links (jobs.json registry ids) proven on this preset — see
         // src/utils/jobs.js. Metadata-only, never written to Fusion.
         ...(p.job_ids?.length ? { job_ids: p.job_ids } : {}),
@@ -272,6 +279,10 @@ export function buildMetadataTool(tool) {
     purchasing: {
       manufacturers: (tool.purchasing?.manufacturers || []).map((m, i) => ({
         id: m.id || generateId(),
+        // Stable FK into vendor_registry.json entities[] — the name is derived
+        // from it (rename-proof). Null for free-text names not in the registry.
+        // See vendorRegistry.js (syncPurchasingNames / backfillPurchasingRegistryIds).
+        registry_id: m.registry_id || null,
         name: m.name || '',
         edp: m.edp || '',
         edp_url: m.edp_url || '',
@@ -282,6 +293,7 @@ export function buildMetadataTool(tool) {
       vendors: (tool.purchasing?.vendors || []).map((v, i) => ({
         id: v.id || generateId(),
         manufacturer_id: v.manufacturer_id || null,
+        registry_id: v.registry_id || null, // FK into vendor_registry.json — see above
         name: v.name || '',
         vendor_num: v.vendor_num || '',
         vendor_num_url: v.vendor_num_url || '',
@@ -395,6 +407,7 @@ export function buildMetadataTool(tool) {
     job_ids: tool.job_ids || [],
     notes: tool.notes || '',
     last_used_job: tool.last_used_job || '',
+    preferred_machine_id: tool.preferred_machine_id || null, // FK — see machines.js
     preferred_machine: tool.preferred_machine || '',
     material_suitability: tool.material_suitability || [],
     // Per-CAM-preset SFM + chip-load starting-point reference (metadata-only).

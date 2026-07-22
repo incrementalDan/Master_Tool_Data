@@ -197,3 +197,71 @@ export function resolveVendorName(value, reg) {
   // 3. Unknown — pass through
   return trimmed;
 }
+
+// ─── Registry foreign key (store the id, render the name) ────────────────────
+// A tool's purchasing manufacturers/vendors link to the shared vendor_registry
+// entity by its STABLE id (`registry_id`), not by the mutable display name — so
+// renaming an entity in the /vendors editor doesn't orphan the tools pointing at
+// it. The name shown/exported is DERIVED from the id against the live registry.
+// Mirrors the CAM-preset FK (presetNaming.js) and how everything else stores ids
+// and composes labels at read time. Free-text names not in the registry keep
+// resolving as before (no id — the stored name is the value).
+
+// Find a registry entity by its stable id (null when absent/dangling).
+export function entityById(id, reg) {
+  if (!id) return null;
+  return entitiesOf(reg).find(e => e.id === id) || null;
+}
+
+// The registry entity id a free-text name/alias/ProShop-id refers to, or null
+// when it matches no entity (genuinely free text). Mirrors camPresetIdForQuery.
+export function registryIdForName(name, reg) {
+  if (!name) return null;
+  const trimmed = String(name).trim();
+  const up = trimmed.toUpperCase();
+  const byId = entitiesOf(reg).find(e => e.proshop_id && e.proshop_id.toUpperCase() === up);
+  if (byId) return byId.id;
+  return entityByName(trimmed, reg)?.id || null;
+}
+
+// Refresh one purchasing entry's `name` from its `registry_id` — the id is the
+// source of truth, the name is derived live. Also adopts the id from a
+// name-matched entry (so existing name-only links become rename-proof), and
+// tolerates a dangling id (keeps the stored name). Returns the entry unchanged
+// when it has no id AND no name match. Mirrors syncPresetMaterialName.
+function syncEntryName(entry, reg) {
+  if (!entry) return entry;
+  const id = entry.registry_id || registryIdForName(entry.name, reg);
+  if (!id) return entry;
+  const ent = entityById(id, reg);
+  if (!ent) return entry;                       // dangling id — keep stored name
+  if (entry.registry_id === id && entry.name === ent.name) return entry; // no change
+  return { ...entry, registry_id: id, name: ent.name };
+}
+
+// Refresh every manufacturer/vendor name in a purchasing object from its FK id.
+// Returns the same object when nothing changed (stable identity for memoization).
+export function syncPurchasingNames(purchasing, reg) {
+  if (!purchasing) return purchasing;
+  let changed = false;
+  const mapList = (list) => (list || []).map(e => {
+    const ne = syncEntryName(e, reg);
+    if (ne !== e) changed = true;
+    return ne;
+  });
+  const manufacturers = mapList(purchasing.manufacturers);
+  const vendors = mapList(purchasing.vendors);
+  return changed ? { ...purchasing, manufacturers, vendors } : purchasing;
+}
+
+// Walk a tool list and sync every purchasing name from its FK id — the load-time
+// backfill (mirrors backfillMaterialPresetIds / backfillAsmNumbers; persisted
+// lazily on each tool's next save).
+export function backfillPurchasingRegistryIds(tools, reg) {
+  if (!entitiesOf(reg).length) return tools;
+  return (tools || []).map(t => {
+    if (!t.purchasing) return t;
+    const np = syncPurchasingNames(t.purchasing, reg);
+    return np === t.purchasing ? t : { ...t, purchasing: np };
+  });
+}

@@ -7,6 +7,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { exportSingleTool as exportProShop } from '../utils/proShopExport.js';
 import { showsProShopUrl, toolIdLabel } from '../utils/toolIdSystem.js';
 import { conflictCount } from '../utils/toolConflicts.js';
+import { preferredMachineName } from '../utils/machines.js';
 
 function formatDim(v) {
   if (v === null || v === undefined || v === '') return null;
@@ -114,8 +115,8 @@ export default function ToolCard({ tool, variant = 'grid', matchedLegacyId = nul
       {formatDim(tool.flute_length) && <span className="meta-badge">{formatDim(tool.flute_length)}LOC</span>}
       {tool.vendor && <span className="meta-badge truncate" style={{ maxWidth: 120 }}>{tool.vendor}</span>}
       {tool.coating && <span className="meta-badge">{tool.coating}</span>}
-      {tool.preferred_machine && (
-        <span className="meta-badge meta-badge-blue">{tool.preferred_machine}</span>
+      {preferredMachineName(tool, shopSettings?.machines || []) && (
+        <span className="meta-badge meta-badge-blue">{preferredMachineName(tool, shopSettings?.machines || [])}</span>
       )}
     </div>
   );

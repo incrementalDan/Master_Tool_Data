@@ -15,6 +15,10 @@ import {
   parsePresetName,
   presetMatchesAssembly,
   suggestCamPresetName,
+  findCamPresetById,
+  camPresetIdForQuery,
+  syncPresetMaterialName,
+  backfillMaterialPresetIds,
 } from './presetNaming.js';
 
 describe('materialToCode', () => {
@@ -130,6 +134,68 @@ describe('Materials library resolution', () => {
     expect(presetMaterialColor('SS Austenitic 316', MATS)).toBe('#f5c842'); // preset → its group color
     expect(presetMaterialColor('AL FIN', MATS)).toBe('#5bad6f');         // legacy AL → N group color
     expect(presetMaterialColor('Wood', MATS)).toBe(null);
+  });
+});
+
+describe('CAM-preset foreign key (store the id, render the name)', () => {
+  const MATS = {
+    groups: [{ id: 'N', label: 'Non-Ferrous', code: 'AL', color: '#5bad6f' }],
+    presets: [{ id: 'pre_n_al', group_id: 'N', name: 'Al Wrought', code: '' }],
+    materials: [],
+  };
+  // Same library after the user RENAMED the CAM preset (id unchanged).
+  const RENAMED = { ...MATS, presets: [{ ...MATS.presets[0], name: 'Aluminum (wrought)' }] };
+
+  it('camPresetIdForQuery resolves an id only from an exact CAM preset NAME', () => {
+    expect(camPresetIdForQuery('Al Wrought', MATS)).toBe('pre_n_al');
+    expect(camPresetIdForQuery('al wrought', MATS)).toBe('pre_n_al'); // case-insensitive
+    expect(camPresetIdForQuery('AL', MATS)).toBe(null);               // group code, not a name
+    expect(camPresetIdForQuery('', MATS)).toBe(null);
+  });
+
+  it('findCamPresetById returns the live record (or null when dangling)', () => {
+    expect(findCamPresetById('pre_n_al', MATS).name).toBe('Al Wrought');
+    expect(findCamPresetById('gone', MATS)).toBe(null);
+    expect(findCamPresetById(null, MATS)).toBe(null);
+  });
+
+  it('renders the CURRENT name from the id after a rename (the whole point)', () => {
+    const preset = { guid: 'p1', material_preset_id: 'pre_n_al', material: { query: 'Al Wrought' } };
+    const synced = syncPresetMaterialName(preset, RENAMED);
+    expect(synced.material.query).toBe('Aluminum (wrought)');      // follows the rename
+    expect(synced['stock-materials']).toEqual(['Aluminum (wrought)']); // Fusion link follows too
+    expect(synced.material_preset_id).toBe('pre_n_al');            // id is stable
+  });
+
+  it('adopts the id from a name-matched query (existing name-only links become rename-proof)', () => {
+    const preset = { guid: 'p1', material: { query: 'Al Wrought' } }; // no id yet
+    const synced = syncPresetMaterialName(preset, MATS);
+    expect(synced.material_preset_id).toBe('pre_n_al');
+  });
+
+  it('leaves a legacy group-code query untouched (no id, no stock-materials)', () => {
+    const preset = { guid: 'p1', material: { query: 'AL' } };
+    const synced = syncPresetMaterialName(preset, MATS);
+    expect(synced).toBe(preset);                    // unchanged reference
+    expect('material_preset_id' in synced).toBe(false);
+  });
+
+  it('tolerates a dangling id — keeps the stored name, does not blank it', () => {
+    const preset = { guid: 'p1', material_preset_id: 'deleted', material: { query: 'Old Name' } };
+    expect(syncPresetMaterialName(preset, MATS)).toBe(preset);
+  });
+
+  it('backfillMaterialPresetIds walks every tool preset', () => {
+    const tools = [
+      { id: 't1', presets: [{ guid: 'p1', material: { query: 'Al Wrought' } }] },
+      { id: 't2', presets: [] },
+      { id: 't3' },
+    ];
+    const out = backfillMaterialPresetIds(tools, MATS);
+    expect(out[0].presets[0].material_preset_id).toBe('pre_n_al');
+    expect(out[0].presets[0].material.query).toBe('Al Wrought'); // resolved name
+    expect(out[1]).toBe(tools[1]); // untouched (no presets)
+    expect(out[2]).toBe(tools[2]);
   });
 });
 

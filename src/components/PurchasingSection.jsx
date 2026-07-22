@@ -1,7 +1,8 @@
 import { useState, useRef } from 'react';
 import { ShoppingCart, Plus, GripVertical, X, ExternalLink, Pencil, RefreshCw } from 'lucide-react';
 import { generateId } from '../schema/toolSchema.js';
-import { getManufacturerNames, getVendorNames, vendorHasOwnCatalogNumber } from '../schema/vendorRegistry.js';
+import { getManufacturerNames, getVendorNames, vendorHasOwnCatalogNumber, entityById, registryIdForName, syncPurchasingNames } from '../schema/vendorRegistry.js';
+import { useApp } from '../context/AppContext.jsx';
 import {
   generateManufacturerUrl, generateVendorUrl,
   manufacturerHasUrlGenerator, vendorHasUrlGenerator,
@@ -280,6 +281,7 @@ function VendorRow({ vendor, editing, isDragOver, revealed, onChange, onRemove, 
 }
 
 export default function PurchasingSection({ tool, onSave, isSaving }) {
+  const { vendorRegistry } = useApp();
   const [open, setOpen] = useState(true);
   const [editing, setEditing] = useState(false);
   const [data, setData] = useState(() => tool.purchasing || emptyPurchasing());
@@ -287,10 +289,27 @@ export default function PurchasingSection({ tool, onSave, isSaving }) {
   const [dragOverKey, setDragOverKey] = useState(null);
   const dragSrc = useRef(null);
 
-  const manufacturers = [...(data.manufacturers || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  // Resolve a name patch to its registry FK: matching an entity (by name, alias,
+  // or ProShop id) stamps the stable registry_id and canonicalizes the name;
+  // genuinely free text clears the id and keeps what was typed. This is what
+  // makes the link rename-proof — see vendorRegistry.js.
+  const withNameFk = (patch) => {
+    if (!('name' in patch)) return patch;
+    const id = registryIdForName(patch.name, vendorRegistry);
+    const canonical = id ? entityById(id, vendorRegistry)?.name : null;
+    return { ...patch, registry_id: id, name: canonical || patch.name };
+  };
+
+  // Display reads names DERIVED from the registry FK (rename-proof, live). While
+  // editing, `data` is the working buffer; in view mode we resolve the saved
+  // purchasing against the current registry so a rename in /vendors shows here
+  // without a reload.
+  const source = editing ? data : syncPurchasingNames(tool.purchasing || emptyPurchasing(), vendorRegistry);
+
+  const manufacturers = [...(source.manufacturers || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   // Order-based — used for drag-reorder bookkeeping (must match handleVendorDrop's view of the group).
   const vendorsFor = (mfgId) =>
-    (data.vendors || []).filter(v => v.manufacturer_id === mfgId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    (source.vendors || []).filter(v => v.manufacturer_id === mfgId).sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   // Display order — while editing, vendors stay in their drag-ordered sequence;
   // otherwise the cheapest vendor is shown first.
   const displayVendorsFor = (mfgId) => {
@@ -319,6 +338,7 @@ export default function PurchasingSection({ tool, onSave, isSaving }) {
   // generator matches the (possibly just-updated) manufacturer/vendor name.
   // Never overwrites a URL the user already has set.
   const updateMfg = (id, patch) => {
+    patch = withNameFk(patch);
     setData(d => ({
       ...d,
       manufacturers: d.manufacturers.map(m => {
@@ -337,6 +357,7 @@ export default function PurchasingSection({ tool, onSave, isSaving }) {
     }));
   };
   const updateVendor = (id, patch) => {
+    patch = withNameFk(patch);
     setData(d => ({
       ...d,
       vendors: d.vendors.map(v => {

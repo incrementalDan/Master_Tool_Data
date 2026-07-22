@@ -144,6 +144,69 @@ export function findMaterialInLibrary(query, materials) {
   return group ? { group, preset: null, alloy: null } : {};
 }
 
+// ─── CAM-preset foreign key (store the id, render the name) ──────────────────
+// A tool preset links to its CAM preset by a STABLE id (`material_preset_id`),
+// not by the mutable display name — so renaming a CAM preset in the Materials
+// editor doesn't orphan the presets pointing at it. The name shown (and the name
+// pushed to Fusion via material.query / stock-materials) is always DERIVED from
+// the id against the live library. Mirrors how locations/jobs/machines store ids
+// and compose their label at read time.
+
+// Find a CAM preset record by its stable id (null when absent/dangling).
+export function findCamPresetById(id, materials) {
+  if (!id) return null;
+  return (materials?.presets || []).find(p => p.id === id) || null;
+}
+
+// The CAM-preset id a stored `material.query` refers to, ONLY when the query is
+// exactly a CAM preset NAME (not an alloy/group/legacy code). Used to backfill
+// the foreign key onto presets that still hold only the name, so they become
+// rename-proof going forward.
+export function camPresetIdForQuery(query, materials) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return null;
+  const p = (materials?.presets || []).find(x => String(x.name || '').trim().toLowerCase() === q);
+  return p ? p.id : null;
+}
+
+// Refresh a preset's Fusion-facing material NAME fields (material.query +
+// stock-materials) from its `material_preset_id` — the id is the source of truth,
+// the name is derived live. Also opportunistically adopts the id from a
+// name-matched query (so existing name-only links become rename-proof). Returns
+// the preset unchanged when it has no id AND no name match, or when the id is
+// dangling (tolerated — the stored name is left as-is, same as any dangling-id
+// reference elsewhere in the app).
+export function syncPresetMaterialName(preset, materials) {
+  if (!preset) return preset;
+  const id = preset.material_preset_id || camPresetIdForQuery(preset.material?.query, materials);
+  if (!id) return preset;
+  const cam = findCamPresetById(id, materials);
+  if (!cam) return preset;
+  const query = cam.name;
+  return {
+    ...preset,
+    material_preset_id: id,
+    material: { ...(preset.material || {}), query, category: materialCategory(query) },
+    'stock-materials': [query],
+  };
+}
+
+// Walk a tool list and sync every preset's material name from its FK id — the
+// load-time backfill (mirrors backfillAsmNumbers; persisted lazily on next save).
+export function backfillMaterialPresetIds(tools, materials) {
+  if (!materials?.presets?.length) return tools;
+  return (tools || []).map(t => {
+    if (!t.presets?.length) return t;
+    let changed = false;
+    const presets = t.presets.map(p => {
+      const np = syncPresetMaterialName(p, materials);
+      if (np !== p) changed = true;
+      return np;
+    });
+    return changed ? { ...t, presets } : t;
+  });
+}
+
 // Short code for a preset name token, most-specific first: alloy code → CAM
 // preset code → group code → group id. Falls back to the legacy keyword code
 // (matchMaterial) for material strings not in the library (e.g. imported

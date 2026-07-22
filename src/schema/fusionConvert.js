@@ -121,6 +121,7 @@ export function fusionToolToInternal(fTool) {
     tags: [],
     notes: '',
     last_used_job: '',
+    preferred_machine_id: null,
     preferred_machine: '',
     updated_by: '',
     revision_notes: '',
@@ -147,9 +148,11 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
   const isTurning = TURNING_TYPES.has(toolType);
   const isMilling = !isHoleMaking && !isTurning && !isSpotDrill;
 
-  // operation_type, machine_id, job_ids, and the small-bore comp fields
-  // (small_bore / small_bore_diameter / f_z_base) are app-only per-preset fields
-  // (stored in preset_meta in tool_metadata.json, overlaid by buildLogicalTool).
+  // operation_type, machine_id, material_preset_id, job_ids, and the small-bore
+  // comp fields (small_bore / small_bore_diameter / f_z_base) are app-only
+  // per-preset fields (stored in preset_meta in tool_metadata.json, overlaid by
+  // buildLogicalTool). material_preset_id is the CAM-preset FK; only its derived
+  // NAME reaches Fusion (material.query / stock-materials), never the id itself.
   // They must never be written into the Fusion JSON (Fusion validates strictly)
   // — every app-only field stamped onto in-memory presets MUST be pulled out of
   // `rest` here, since the top-level isMetadataOnly guard only sweeps tool-level
@@ -158,7 +161,7 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
   // Note: `strategies` is Fusion-NATIVE (stays in `rest`, written to the JSON) —
   // only the app-only intensity is pulled out here alongside the others.
   const {
-    operation_type, machine_id, job_ids,
+    operation_type, machine_id, material_preset_id, job_ids,
     small_bore, small_bore_diameter, f_z_base, intensity,
     stepdown: _sd, stepover: _so, ...rest
   } = p;

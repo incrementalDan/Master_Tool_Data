@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Plus, X, Check, GripVertical, Trash2, ChevronDown, Cpu, Briefcase, Clipboard, AlertTriangle } from 'lucide-react';
 import { generateId, COOLANT_OPTS } from '../schema/toolSchema.js';
 import { copyPresetToClipboard } from '../utils/fusionExport.js';
@@ -19,7 +19,8 @@ import {
 } from '../schema/camStrategies.js';
 import {
   composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
-  materialNameCode, presetMaterialColor, findMaterialInLibrary, HOLE_MAKING_TYPES, TURNING_TYPES,
+  materialNameCode, presetMaterialColor, findMaterialInLibrary, syncPresetMaterialName,
+  HOLE_MAKING_TYPES, TURNING_TYPES,
 } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import {
@@ -197,17 +198,29 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool.presets, tool._fusionRaw]);
 
+  // Render presets with their material NAME resolved live from the CAM-preset FK
+  // id (material_preset_id) — so a CAM preset renamed in the Materials editor is
+  // reflected here immediately, without a reload. syncPresetMaterialName also
+  // adopts the id from a name-matched query, so name-only links follow renames
+  // too. Mutations still operate on raw `presets` (same order/guids); this is a
+  // display-only projection, and saves emit it so Fusion gets the fresh name.
+  const resolvedPresets = useMemo(
+    () => presets.map(p => syncPresetMaterialName(p, materials)),
+    [presets, materials],
+  );
+  const emitPresets = (list) => list.map(p => syncPresetMaterialName(p, materials));
+
   // ── Material counts for filter tabs ───────────────────────────────────────
   const materialCounts = {};
-  presets.forEach(p => {
+  resolvedPresets.forEach(p => {
     const m = matchMaterial(p.material?.query);
     materialCounts[m] = (materialCounts[m] || 0) + 1;
   });
   const tabs = ['All', ...Object.keys(materialCounts).sort()];
 
   const afterMaterialFilter = materialFilter === 'All'
-    ? presets
-    : presets.filter(p => matchMaterial(p.material?.query) === materialFilter);
+    ? resolvedPresets
+    : resolvedPresets.filter(p => matchMaterial(p.material?.query) === materialFilter);
   const visible = machineFilter === 'All'
     ? afterMaterialFilter
     : afterMaterialFilter.filter(p => p.machine_id === machineFilter);
@@ -231,7 +244,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
     dragSrcIdx.current = null;
     setDragOverIdx(null);
     setPresets(next);
-    onSave(next);
+    onSave(emitPresets(next));
   };
   const handleDragEnd = () => { dragSrcIdx.current = null; setDragOverIdx(null); };
 
@@ -241,7 +254,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
     setPresets(next);
     setEditorDirty(false);
     setEditingId(null);
-    onSave(next);
+    onSave(emitPresets(next));
   };
 
   const handleEditClick = (guid) => {
@@ -261,7 +274,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
     const next = presets.filter(p => p.guid !== deleteConfirmId);
     setPresets(next);
     setDeleteConfirmId(null);
-    onSave(next);
+    onSave(emitPresets(next));
   };
 
   // Open the "copy from" row, and scroll the Speeds & Feeds header to the top.
@@ -295,6 +308,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
       const cam = camPresetById(copySrc.id);
       np = blankPreset();
       if (cam) {
+        np.material_preset_id = cam.id; // CAM-preset FK — see onSelect
         np.material = { ...np.material, query: cam.name, category: materialCategory(cam.name) };
         np['stock-materials'] = [cam.name]; // Fusion's real material link — see onSelect
       }
@@ -404,7 +418,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
       <div className="preset-scroll">
         <div className="preset-row">
           {visible.map((preset, visIdx) => {
-            const globalIdx = presets.indexOf(preset);
+            const globalIdx = resolvedPresets.indexOf(preset);
             const prevVisible = visIdx > 0 ? visible[visIdx - 1] : null;
             const showDivider =
               materialFilter === 'All' && prevVisible &&
@@ -520,7 +534,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
 
       {/* Editor — opens as an overlay (like the CAM Preset picker) on add/edit */}
       {editingId && (() => {
-        const editing = presets.find(p => p.guid === editingId);
+        const editing = resolvedPresets.find(p => p.guid === editingId);
         if (!editing) return null;
         return (
           <EditCard
@@ -1109,9 +1123,10 @@ function EditCard({
               const sel = cur.preset || cur.group;
               const color = presetMaterialColor(draft.material?.query, materials);
               const clearMat = () => { touch(); setDraft(d => {
-                // Clearing the material also drops the Fusion `stock-materials`
-                // assignment (see onSelect) so the app and Fusion stay consistent.
-                const { 'stock-materials': _drop, ...restDraft } = d;
+                // Clearing drops the CAM-preset FK id AND the Fusion
+                // `stock-materials` assignment (see onSelect) so the app and Fusion
+                // stay consistent.
+                const { 'stock-materials': _drop, material_preset_id: _dropId, ...restDraft } = d;
                 const nd = { ...restDraft, material: { ...(d.material || {}), query: '', category: 'all' } };
                 nd.name = composeName(nd, assemblyId, nd.operation_type);
                 return nd;
@@ -1631,14 +1646,16 @@ function EditCard({
           onClose={() => setPickerOpen(false)}
           onSelect={(cp) => { touch(); setDraft(d => {
             const query = cp.name;
-            // Assign the material the way Fusion reads it: `stock-materials` is the
-            // real preset↔material link (matched by name, no UUID). cp.name is the
-            // CAM preset name — the same name the exported stock-material file
-            // carries — so Fusion matches it. `material.query` is only the
-            // free-text "Filter by Search" box; we keep it in sync for the app's
-            // own display but it is NOT the assignment. See fusionConvert.js.
+            // Store the CAM preset's STABLE id as the link (material_preset_id) —
+            // the name is derived from it, so renaming the CAM preset later won't
+            // orphan this preset. Also assign the material the way Fusion reads it:
+            // `stock-materials` is the real preset↔material link (matched by name,
+            // no UUID). cp.name matches the exported stock-material file, so Fusion
+            // resolves it. `material.query` is only the free-text "Filter by Search"
+            // box; kept in sync for display, but it is NOT the assignment.
             const nd = {
               ...d,
+              material_preset_id: cp.id,
               material: { ...(d.material || {}), query, category: materialCategory(query) },
               'stock-materials': [query],
             };

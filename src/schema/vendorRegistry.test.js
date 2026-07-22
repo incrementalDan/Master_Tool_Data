@@ -6,6 +6,10 @@ import {
   vendorHasOwnCatalogNumber,
   resolveVendorName,
   entityByName,
+  entityById,
+  registryIdForName,
+  syncPurchasingNames,
+  backfillPurchasingRegistryIds,
 } from './vendorRegistry.js';
 import {
   generateManufacturerUrl,
@@ -78,5 +82,70 @@ describe('urlGenerators (patterns sourced from the registry)', () => {
     expect(manufacturerHasUrlGenerator('Cleveland')).toBe(false);
     expect(vendorHasUrlGenerator('MSC Industrial')).toBe(true);
     expect(vendorHasUrlGenerator('Grainger')).toBe(false);
+  });
+});
+
+describe('registry foreign key (store the id, render the name)', () => {
+  // A tiny registry with a canonical name + alias and a renamed variant.
+  const REG = {
+    entities: [
+      { id: 'e_hel', name: 'Helical Solutions', aliases: ['Helical'], is_manufacturer: true, is_vendor: false },
+      { id: 'e_msc', name: 'MSC Industrial', aliases: [], proshop_id: 'MSC1', is_manufacturer: false, is_vendor: true },
+    ],
+  };
+  const RENAMED = { entities: [{ ...REG.entities[0], name: 'Helical (renamed)' }, REG.entities[1]] };
+
+  it('registryIdForName resolves canonical, alias, and ProShop id — null for free text', () => {
+    expect(registryIdForName('Helical Solutions', REG)).toBe('e_hel');
+    expect(registryIdForName('Helical', REG)).toBe('e_hel');        // alias
+    expect(registryIdForName('MSC1', REG)).toBe('e_msc');           // ProShop id
+    expect(registryIdForName('Some Random Shop', REG)).toBe(null);  // free text
+    expect(registryIdForName('', REG)).toBe(null);
+  });
+
+  it('entityById returns the live record (null when dangling)', () => {
+    expect(entityById('e_hel', REG).name).toBe('Helical Solutions');
+    expect(entityById('gone', REG)).toBe(null);
+  });
+
+  it('syncPurchasingNames renders the CURRENT name from the id after a rename', () => {
+    const purchasing = {
+      manufacturers: [{ id: 'm1', registry_id: 'e_hel', name: 'Helical Solutions' }],
+      vendors: [{ id: 'v1', manufacturer_id: 'm1', registry_id: 'e_msc', name: 'MSC Industrial' }],
+    };
+    const out = syncPurchasingNames(purchasing, RENAMED);
+    expect(out.manufacturers[0].name).toBe('Helical (renamed)'); // follows the rename
+    expect(out.manufacturers[0].registry_id).toBe('e_hel');      // id is stable
+    expect(out.vendors[0].name).toBe('MSC Industrial');          // unchanged entity
+  });
+
+  it('adopts the id from a name-matched entry (existing name-only links become rename-proof)', () => {
+    const purchasing = { manufacturers: [{ id: 'm1', name: 'Helical' }], vendors: [] }; // alias, no id
+    const out = syncPurchasingNames(purchasing, REG);
+    expect(out.manufacturers[0].registry_id).toBe('e_hel');
+    expect(out.manufacturers[0].name).toBe('Helical Solutions'); // canonicalized
+  });
+
+  it('leaves genuinely free-text names untouched (no id)', () => {
+    const purchasing = { manufacturers: [{ id: 'm1', name: 'Bob’s Custom Tools' }], vendors: [] };
+    const out = syncPurchasingNames(purchasing, REG);
+    expect(out).toBe(purchasing); // unchanged reference
+    expect('registry_id' in out.manufacturers[0]).toBe(false);
+  });
+
+  it('tolerates a dangling id — keeps the stored name', () => {
+    const purchasing = { manufacturers: [{ id: 'm1', registry_id: 'deleted', name: 'Old Vendor' }], vendors: [] };
+    const out = syncPurchasingNames(purchasing, REG);
+    expect(out.manufacturers[0].name).toBe('Old Vendor');
+  });
+
+  it('backfillPurchasingRegistryIds walks tools, skips those without purchasing', () => {
+    const tools = [
+      { id: 't1', purchasing: { manufacturers: [{ id: 'm1', name: 'Helical' }], vendors: [] } },
+      { id: 't2' },
+    ];
+    const out = backfillPurchasingRegistryIds(tools, REG);
+    expect(out[0].purchasing.manufacturers[0].registry_id).toBe('e_hel');
+    expect(out[1]).toBe(tools[1]); // untouched
   });
 });

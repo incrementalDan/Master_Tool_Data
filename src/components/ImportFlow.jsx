@@ -6,7 +6,7 @@ import ImportPhotosModal from './ImportPhotosModal.jsx';
 import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers, getNextMachineNumber, typeFromProShopGroup, resolveThreadSize } from '../schema/toolSchema.js';
 import { machineNumberArgs } from '../context/appState.js';
 import { insertComponentIndex, newComponent, normProShopId } from '../schema/insertFamilies.js';
-import { vendorHasOwnCatalogNumber, resolveVendorName } from '../schema/vendorRegistry.js';
+import { vendorHasOwnCatalogNumber, resolveVendorName, registryIdForName } from '../schema/vendorRegistry.js';
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
 import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel } from '../utils/proShopHeaders.js';
@@ -914,7 +914,9 @@ function buildPurchasingFromGroup(group) {
 
       let mfg = mfgByName.get(mfgName);
       if (!mfg) {
-        mfg = { id: generateId(), name: mfgName, edp: '', edp_url: '', mfg_num: '', mfg_num_url: '', order: manufacturers.length };
+        // Link to the registry by stable id (name is derived/rename-proof); null
+        // for a name not in the registry — see vendorRegistry.js.
+        mfg = { id: generateId(), registry_id: registryIdForName(mfgName), name: mfgName, edp: '', edp_url: '', mfg_num: '', mfg_num_url: '', order: manufacturers.length };
         manufacturers.push(mfg);
         mfgByName.set(mfgName, mfg);
       }
@@ -926,6 +928,7 @@ function buildPurchasingFromGroup(group) {
         vendors.push({
           id: generateId(),
           manufacturer_id: mfg.id,
+          registry_id: registryIdForName(vendorName),
           name: vendorName,
           vendor_num: vendorHasOwnNum ? edp : '',
           vendor_num_url: '',

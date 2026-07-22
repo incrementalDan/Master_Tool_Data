@@ -305,6 +305,31 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
               {/* Last Used Job (free text) retired — structured job links live in
                   ToolDetail's Jobs / Where Used panel + on presets. */}
               <FieldInput field="updated_by" label="Updated By" data={data} setField={setField} />
+              {/* Preferred Machine — stores the machine's stable id (rename-proof);
+                  the name is derived. A legacy free-text value with no matching
+                  machine is kept and offered until re-picked. See machines.js. */}
+              <div className="field-group">
+                <label className="field-label">Preferred Machine</label>
+                <select
+                  className="field-input"
+                  value={data.preferred_machine_id || ''}
+                  onChange={e => {
+                    const id = e.target.value || null;
+                    const m = (shopSettings?.machines || []).find(x => x.id === id);
+                    setField('preferred_machine_id', id);
+                    setField('preferred_machine', m ? m.model : '');
+                  }}
+                >
+                  <option value="">— none —</option>
+                  {(shopSettings?.machines || []).map(m => (
+                    <option key={m.id} value={m.id}>{m.model}</option>
+                  ))}
+                  {/* Legacy free-text value not in the machine list — keep it selectable. */}
+                  {!data.preferred_machine_id && data.preferred_machine && (
+                    <option value="__legacy__" disabled>{data.preferred_machine} (unlinked)</option>
+                  )}
+                </select>
+              </div>
             </div>
 
             <div className="field-group mt-12">
