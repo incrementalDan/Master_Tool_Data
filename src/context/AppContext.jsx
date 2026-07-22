@@ -14,6 +14,7 @@ import * as toolStore from '../services/toolStore.js';
 import * as aps from '../services/apsService.js';
 import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeUnlinkedTools, buildUnlinkedTool, isCompleteRecord, recordsNeedingBackfill, buildMetadataTool } from '../schema/toolSchema.js';
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
+import { backfillMaterialPresetIds } from '../utils/presetNaming.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS } from '../schema/sharedDefaults.js';
@@ -736,11 +737,11 @@ export function AppProvider({ children }) {
     const built = [];
     for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
     for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
-    const tools = derivePairings(
+    const tools = backfillMaterialPresetIds(derivePairings(
       combineToolsByToolId(built)
         .map(t => ({ ...t, library_id: 'demo', library_name: 'Demo library' })),
       components?.components || [],
-    );
+    ), materials);
     // Tag demo holders with a single synthetic library so the picker grouping works.
     const taggedHolders = (holders || []).map(h => ({ ...h, _libraryId: 'demo', _libraryName: 'Demo holders' }));
 
@@ -778,6 +779,10 @@ export function AppProvider({ children }) {
       // Component records (holder body / insert) — refreshed from Drive below;
       // falls back to whatever is already in state (APS-only sessions).
       let componentsFile = componentsRef.current;
+      // Materials library — refreshed from Drive below; falls back to state (the
+      // default seed or a prior load). Used by the CAM-preset-FK backfill so each
+      // preset's material name renders/writes from the live library.
+      let materialsFile = materialsRef.current;
       // Resolve the registry FIRST (multi-library needs to know which libraries to
       // download before downloading). When Drive is connected, shop_settings.json
       // is the shared source of truth; otherwise we fall back to the registry
@@ -803,6 +808,7 @@ export function AppProvider({ children }) {
           ]);
           metaList = meta;
           componentsFile = components;
+          materialsFile = materials;
           setActiveVendorRegistry(vendorRegistry);
           // shop_settings.json is the source of truth for the default unit —
           // mirror it into the localStorage cache the pure units helper reads.
@@ -860,7 +866,7 @@ export function AppProvider({ children }) {
               return composed ? { ...t, location: composed, proshop_location: proShopLocationValue(sys, composed) } : t;
             });
             const paired = derivePairings(provisional, componentsFile?.components || []);
-            dispatch({ type: 'LOAD_PROVISIONAL', tools: backfillAsmNumbers(paired, effectiveShop, componentsFile) });
+            dispatch({ type: 'LOAD_PROVISIONAL', tools: backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile), materialsFile) });
           }
         } catch { /* stage 2 below is authoritative */ }
       }
@@ -899,7 +905,7 @@ export function AppProvider({ children }) {
       if (!fusionEnabled) {
         const built = metaList.map(m => buildUnlinkedTool(m)).map(composeToolLocation);
         const paired = derivePairings(built, componentsFile?.components || []);
-        const finalTools = backfillAsmNumbers(paired, effectiveShop, componentsFile);
+        const finalTools = backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile), materialsFile);
         dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize: false, normalizeCount: 0 });
         return;
       }
@@ -986,7 +992,10 @@ export function AppProvider({ children }) {
       const pairedTools = derivePairings(withUnlinked, componentsFile?.components || []);
       // Assembly ID System: fill auto-mode asm_number in-memory for any assembly
       // missing one (deterministic; persisted lazily on the tool's next save).
-      const finalTools = backfillAsmNumbers(pairedTools, effectiveShop, componentsFile);
+      // backfillMaterialPresetIds: adopt the CAM-preset FK id from a name-matched
+      // material.query + refresh each preset's derived material name (same lazy
+      // persist-on-next-save pattern).
+      const finalTools = backfillMaterialPresetIds(backfillAsmNumbers(pairedTools, effectiveShop, componentsFile), materialsFile);
 
       dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize, normalizeCount: untrackedCount });
       // Surface the otherwise-invisible load-time auto-combine: entries sharing a

@@ -226,10 +226,13 @@ export function buildMetadataTool(tool) {
     // aggressive) — app-only, a name-modifier hint; 'normal' is the default so
     // it's only stored when it differs.
     const hasIntensity = p.intensity && p.intensity !== 'normal';
-    if (p.guid && (p.operation_type || p.machine_id || p.job_ids?.length || hasSmallBore || hasIntensity)) {
+    if (p.guid && (p.operation_type || p.machine_id || p.material_preset_id || p.job_ids?.length || hasSmallBore || hasIntensity)) {
       preset_meta[p.guid] = {
         ...(p.operation_type ? { operation_type: p.operation_type } : {}),
         ...(p.machine_id    ? { machine_id: p.machine_id }         : {}),
+        // CAM-preset foreign key (materials.json presets[].id) — the stable link
+        // to the picked material; the name is derived from it. See presetNaming.js.
+        ...(p.material_preset_id ? { material_preset_id: p.material_preset_id } : {}),
         // Job links (jobs.json registry ids) proven on this preset — see
         // src/utils/jobs.js. Metadata-only, never written to Fusion.
         ...(p.job_ids?.length ? { job_ids: p.job_ids } : {}),
