@@ -121,6 +121,7 @@ export function fusionToolToInternal(fTool) {
     tags: [],
     notes: '',
     last_used_job: '',
+    preferred_machine_id: null,
     preferred_machine: '',
     updated_by: '',
     revision_notes: '',

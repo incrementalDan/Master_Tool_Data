@@ -186,6 +186,10 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     job_ids: meta.job_ids || [],
     notes: meta.notes || '',
     last_used_job: meta.last_used_job || '',
+    // Preferred machine: FK into shop_settings.machines[] (rename-proof); the
+    // string is derived from it — see src/utils/machines.js. Null for a legacy
+    // free-text value not matching a configured machine.
+    preferred_machine_id: meta.preferred_machine_id || null,
     preferred_machine: meta.preferred_machine || '',
     material_suitability: meta.material_suitability || [],
     speed_feed_refs: meta.speed_feed_refs || [],
@@ -403,6 +407,7 @@ export function buildMetadataTool(tool) {
     job_ids: tool.job_ids || [],
     notes: tool.notes || '',
     last_used_job: tool.last_used_job || '',
+    preferred_machine_id: tool.preferred_machine_id || null, // FK — see machines.js
     preferred_machine: tool.preferred_machine || '',
     material_suitability: tool.material_suitability || [],
     // Per-CAM-preset SFM + chip-load starting-point reference (metadata-only).

@@ -84,6 +84,7 @@ export function newTool(toolType = 'flat end mill') {
     width_of_cut: null,
     notes: '',
     last_used_job: '',
+    preferred_machine_id: null,
     preferred_machine: '',
     tags: [],
     updated_by: '',
