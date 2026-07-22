@@ -134,27 +134,26 @@ Paste the `…workers.dev` address to me in chat. **That's your part done.**
 
 ---
 
-# PART B — My steps (after you send the URL)
+# PART B — My steps (DONE ✅)
 
-You don't do these — they're listed so you can see the whole path.
+Wired up on branch `claude/tool-extractor-claude-api-3v1h55` once your Worker
+URL was known.
 
-### ☐ Step 8 — Point the app's Extract button at your doorman
-> *I change one line in `tool-extractor.tsx` so the button calls your doorman
-> instead of calling Anthropic directly (which is why it does nothing today),
-> and I refresh the AI model it uses to a current one.*
+### ☑ Step 8 — Pointed the app's Extract button at your doorman
+> *Changed `tool-extractor.tsx` so the button calls your Worker
+> (`https://tooldex-extractor.yinglingd.workers.dev`) instead of Anthropic
+> directly, and updated the AI model to a current one (`claude-sonnet-5`).*
 
-### ☐ Step 9 — Add the doorman's URL as a build setting
-> *The app needs to know the doorman's address. The URL is safe to expose (it's
-> just a P.O. box, not the key), so it goes in as `VITE_EXTRACTOR_API_URL`. I'll
-> add it to the example file and tell you the exact one line to add as a GitHub
-> Secret — same place your Autodesk/Google settings already live.* **(You paste
-> that one value in; I give you the exact text.)**
+### ☑ Step 9 — Baked the URL in (no GitHub Secret needed)
+> *The Worker URL isn't a secret (the key lives inside the Worker), so it's set
+> directly in the code with an optional `VITE_EXTRACTOR_API_URL` override for
+> the future. **You do NOT need to add a GitHub Secret for this.***
 
-### ☐ Step 10 — Go live and test together
-> *You merge to `main` (that auto-deploys, as it does today), then we open Add
-> New Tool → Extract, drop in a screenshot of a tool, and watch the fields fill
-> in. If Claude reads something wrong, we tune the instructions — that's
-> normal fine-tuning, not a bug.*
+### ☐ Step 10 — Go live and test together **(your move)**
+> *Merge this branch to `main` (that auto-deploys, as it does today), then we
+> open Add New Tool → Extract, drop in a screenshot of a tool, and watch the
+> fields fill in. If Claude reads something wrong, we tune the instructions —
+> that's normal fine-tuning, not a bug.*
 
 ---
 

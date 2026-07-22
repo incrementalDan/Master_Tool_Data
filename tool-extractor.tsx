@@ -2,6 +2,17 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { THROUGH_COOLANT_VALUES, smartDiam, buildDesc } from "./src/utils/toolNaming.js";
 import { getManufacturerNames, getVendorNames, resolveVendorName } from "./src/schema/vendorRegistry.js";
 
+// The Cloudflare Worker "doorman" that holds the Anthropic API key and relays
+// extraction requests. The URL is not sensitive (the secret key lives inside
+// the Worker, never here), so it's safe to bake in. An optional env var can
+// override it. See docs/EXTRACTOR_SETUP.md.
+// NOTE: `import.meta.env` exists under Vite (browser) but is undefined under
+// plain Node — this module is imported by the schema barrel, which the
+// round-trip audit runs in Node. Optional-chain so it can't crash there.
+const EXTRACTOR_API_URL =
+  import.meta.env?.VITE_EXTRACTOR_API_URL ||
+  "https://tooldex-extractor.yinglingd.workers.dev";
+
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const BLUE   = "#4a8fff";
 const ORANGE = "#d97830";
@@ -565,7 +576,7 @@ export default function App({ onExtract } = {}){
       if(inputMode==="file"&&fileType==="image"&&imgB64) messages=[{role:"user",content:[{type:"image",source:{type:"base64",media_type:imgType,data:imgB64}},{type:"text",text:"Extract all tool data including price/cost if shown anywhere on this product page."}]}];
       else if(inputMode==="file"&&fileType==="pdf"&&pdfB64) messages=[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:pdfB64}},{type:"text",text:"Extract all tool data including price/cost if shown anywhere."}]}];
       else messages=[{role:"user",content:"Extract tool data including price/cost:\n\n"+txt}];
-      const r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1024,system:buildSYS(),messages})});
+      const r=await fetch(EXTRACTOR_API_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-5",max_tokens:2048,system:buildSYS(),messages})});
       if(!r.ok){const t=await r.text();throw new Error(`API ${r.status}: ${t.slice(0,200)}`);}
       const d=await r.json();
       const t=(d.content||[]).map(b=>b.text||"").join("").replace(/```json|```/g,"").trim();
