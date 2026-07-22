@@ -817,6 +817,9 @@ export function createLibraryOps(ctx) {
         const presets = (merged.presets || []).map(p => {
           // Link the material to the user's chosen (or auto-suggested) CAM preset
           // name. When no override is supplied the preset keeps its existing query.
+          // The override is always a real CAM preset name (NormalizeModal's
+          // CamPresetPicker), so also stamp Fusion's real material link
+          // (stock-materials, matched by name — see fusionConvert.js / PresetPanel).
           const overrideQuery = matOverrides[p.guid];
           const material = overrideQuery
             ? { ...(p.material || {}), query: overrideQuery, category: materialCategory(overrideQuery) }
@@ -832,7 +835,7 @@ export function createLibraryOps(ctx) {
                 opType,
               })
             : p.name;
-          return { ...p, material, name, operation_type: opType };
+          return { ...p, material, name, operation_type: opType, ...(overrideQuery ? { 'stock-materials': [overrideQuery] } : {}) };
         });
 
         const fusionLogical = {

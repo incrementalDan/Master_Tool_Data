@@ -67,6 +67,39 @@ describe('insert-style tool → Fusion round-trip', () => {
   });
 });
 
+describe('preset stock-material assignment (Fusion-native, matched by name)', () => {
+  it('writes stock-materials the picker set (matches the exported material file by name)', () => {
+    // PresetPanel's CamPresetPicker stamps stock-materials = [CAM preset name].
+    const preset = makePreset({
+      material: { category: 'metal', query: 'Aluminum hard test 2', 'use-hardness': false },
+      'stock-materials': ['Aluminum hard test 2'],
+    });
+    const out = outPreset(internalToFusionTool(makeTool({ preset, rawPreset: makePreset() })));
+    expect(out['stock-materials']).toEqual(['Aluminum hard test 2']);
+    // No UUID is written — Fusion assigns one on its side, keyed by name.
+    expect(JSON.stringify(out)).not.toMatch(/uuid/i);
+  });
+
+  it('preserves a real (multi-)assignment untouched — never mirrors material.query into it', () => {
+    // A real export carries query "SS" alongside a richer, different assignment.
+    const preset = makePreset({
+      material: { category: 'metal', query: 'SS', 'use-hardness': false },
+      'stock-materials': ['SS Harder', 'Steel, High-Carbon'],
+    });
+    const rawPreset = makePreset({ 'stock-materials': ['SS Harder', 'Steel, High-Carbon'] });
+    const out = outPreset(internalToFusionTool(makeTool({ preset, rawPreset })));
+    expect(out['stock-materials']).toEqual(['SS Harder', 'Steel, High-Carbon']);
+  });
+
+  it('does NOT seed stock-materials from a legacy material.query (e.g. group code "AL")', () => {
+    // Legacy presets encode a short group code in query, not a real CAM preset
+    // name — seeding it would push a material name Fusion can't resolve.
+    const preset = makePreset({ material: { category: 'metal', query: 'AL', 'use-hardness': false } });
+    const out = outPreset(internalToFusionTool(makeTool({ preset, rawPreset: makePreset() })));
+    expect('stock-materials' in out).toBe(false);
+  });
+});
+
 describe('stepdown/stepover three-way sync (normalizePreset via internalToFusionTool)', () => {
   it('rewrites the stepdown expression literal when the numeric value changed', () => {
     const rawPreset = makePreset();                       // stored: 0.018 + ".018 in"
