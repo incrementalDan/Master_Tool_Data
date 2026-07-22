@@ -294,7 +294,10 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
       const ref = sfRefs.find(r => r.preset_id === copySrc.id);
       const cam = camPresetById(copySrc.id);
       np = blankPreset();
-      if (cam) np.material = { ...np.material, query: cam.name, category: materialCategory(cam.name) };
+      if (cam) {
+        np.material = { ...np.material, query: cam.name, category: materialCategory(cam.name) };
+        np['stock-materials'] = [cam.name]; // Fusion's real material link — see onSelect
+      }
       // Seed speeds/feeds from the reference using THIS tool's diameter + flutes.
       const factor = isMetric ? 1000 : 12;
       const rpm = (ref?.sfm && diameter) ? (ref.sfm * factor) / (Math.PI * diameter) : 0;
@@ -1106,7 +1109,10 @@ function EditCard({
               const sel = cur.preset || cur.group;
               const color = presetMaterialColor(draft.material?.query, materials);
               const clearMat = () => { touch(); setDraft(d => {
-                const nd = { ...d, material: { ...(d.material || {}), query: '', category: 'all' } };
+                // Clearing the material also drops the Fusion `stock-materials`
+                // assignment (see onSelect) so the app and Fusion stay consistent.
+                const { 'stock-materials': _drop, ...restDraft } = d;
+                const nd = { ...restDraft, material: { ...(d.material || {}), query: '', category: 'all' } };
                 nd.name = composeName(nd, assemblyId, nd.operation_type);
                 return nd;
               }); };
@@ -1625,7 +1631,17 @@ function EditCard({
           onClose={() => setPickerOpen(false)}
           onSelect={(cp) => { touch(); setDraft(d => {
             const query = cp.name;
-            const nd = { ...d, material: { ...(d.material || {}), query, category: materialCategory(query) } };
+            // Assign the material the way Fusion reads it: `stock-materials` is the
+            // real preset↔material link (matched by name, no UUID). cp.name is the
+            // CAM preset name — the same name the exported stock-material file
+            // carries — so Fusion matches it. `material.query` is only the
+            // free-text "Filter by Search" box; we keep it in sync for the app's
+            // own display but it is NOT the assignment. See fusionConvert.js.
+            const nd = {
+              ...d,
+              material: { ...(d.material || {}), query, category: materialCategory(query) },
+              'stock-materials': [query],
+            };
             nd.name = composeName(nd, assemblyId, nd.operation_type);
             return nd;
           }); }}

@@ -254,6 +254,18 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
     v_c: p.v_c ?? 0,
   };
 
+  // Stock material — the preset↔material link Fusion actually reads. Fusion
+  // assigns a preset's material via the `stock-materials` array, matched BY NAME
+  // (no UUID — confirmed from a real export: the assigned material's uuid appears
+  // nowhere in the tool). It is Fusion-NATIVE and rides through untouched in
+  // `...rest`, so this converter neither injects nor clobbers it — the value is
+  // written where a real CAM preset is genuinely picked (PresetPanel's
+  // CamPresetPicker), so its name matches the exported stock-material file (whose
+  // description/filename is the CAM preset name too — see materialExport.js). It
+  // is INDEPENDENT of `material.query` (Fusion's free-text "Filter by Search"
+  // box): a real export carries query "SS" alongside stock-materials
+  // ["SS Harder","Steel, High-Carbon"], so query must never be mirrored into it.
+
   if (isMilling) {
     // Full milling preset: cutting feeds, ramp, lead-in/out, stepdown/stepover.
     out['ramp-angle'] = p['ramp-angle'] ?? 2;
