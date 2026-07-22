@@ -6,8 +6,11 @@ import { getManufacturerNames, getVendorNames, resolveVendorName } from "./src/s
 // extraction requests. The URL is not sensitive (the secret key lives inside
 // the Worker, never here), so it's safe to bake in. An optional env var can
 // override it. See docs/EXTRACTOR_SETUP.md.
+// NOTE: `import.meta.env` exists under Vite (browser) but is undefined under
+// plain Node — this module is imported by the schema barrel, which the
+// round-trip audit runs in Node. Optional-chain so it can't crash there.
 const EXTRACTOR_API_URL =
-  import.meta.env.VITE_EXTRACTOR_API_URL ||
+  import.meta.env?.VITE_EXTRACTOR_API_URL ||
   "https://tooldex-extractor.yinglingd.workers.dev";
 
 // ─── THEME ────────────────────────────────────────────────────────────────────
