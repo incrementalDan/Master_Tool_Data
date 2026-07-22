@@ -6,6 +6,7 @@ import {
 } from '../../tool-extractor.tsx';
 import { generateId } from './identity.js';
 import { getDefaultUnit } from '../utils/units.js';
+import { buildDesc } from '../utils/toolNaming.js';
 
 // ─── Facet fields per tool type (search filter order) ─────────────────────
 const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'custom_grind', 'flute_design', 'material_suitability', 'tags', 'no_fusion_link'];
@@ -137,7 +138,14 @@ export function extractorToTool(f) {
   return {
     tool_type: f.toolType || 'flat end mill',
     unit: f.unit || getDefaultUnit(),
-    description: '',
+    // Pre-fill the generated description so the Add form opens with the same name
+    // the extractor previewed (metric-aware via inputWasMm) — the user shouldn't
+    // have to re-click "Suggest" after extraction. It stays editable in the form.
+    description: buildDesc(f) || '',
+    // Whether this tool is conceptually a metric size (its diameter is shown in mm
+    // in the description, e.g. "1.45mm (.0571)"). Metadata-only; kept so the name
+    // regenerates metric-aware everywhere (re-Suggest, ProShop/Fusion export).
+    input_was_mm: !!f.inputWasMm,
     diameter: parseFloat(f.diameter) || null,
     flute_length: parseFloat(f.loc) || null,
     overall_length: parseFloat(f.oal) || null,
@@ -196,6 +204,8 @@ export function extractorToTool(f) {
 export function toolToExtractor(tool) {
   return {
     toolType: tool.tool_type || 'flat end mill',
+    unit: tool.unit,
+    inputWasMm: !!tool.input_was_mm,
     diameter: String(tool.diameter ?? ''),
     loc: String(tool.flute_length ?? ''),
     oal: String(tool.overall_length ?? ''),

@@ -482,15 +482,20 @@ export function internalToFusionTool(tool) {
     if (isBlankPreset) {
       // Fusion's universal spindle-speed formula (handles probe/tap/all other types).
       const SPINDLE_FORMULA = "tool_type == 'probe' ? 0 : tool_type == 'tap right hand' || tool_type == 'tap left hand' ? 500rpm : 5000rpm";
-      // Surface-speed companion formula (always evaluated by Fusion alongside RPM).
-      const SURFACE_FORMULA = 'tool_diameter * Math.PI * tool_spindleSpeed';
+      // Fusion stores exactly ONE speed mode (RPM tool_spindleSpeed OR surface speed
+      // tool_surfaceSpeed) and ONE feed mode (tool_feedCutting OR tool_feedPerTooth OR
+      // tool_feedPerRevolution) per preset — never both. Confirmed across 345 real
+      // reference presets: tool_surfaceSpeed/tool_spindleSpeed and
+      // tool_feedPerTooth/tool_feedCutting have ZERO co-occurrences. Seeding both makes
+      // Fusion flag the tool on load and strip the redundant expressions (the recurring
+      // "warning, then fixes itself when opened" bug). The paired NUMERICS (v_c, f_z) are
+      // still seeded above and stored by Fusion — only the redundant EXPRESSIONS are
+      // omitted. So seed the RPM + cutting-feed mode only.
       np.expressions = {
         ...origExprs,
         tool_spindleSpeed: SPINDLE_FORMULA,
-        tool_surfaceSpeed: SURFACE_FORMULA,
         ...((isMillingTool || isSpotDrillTool) ? {
           tool_feedCutting: `${np.v_f ?? 0} ${feedUnit}`,
-          tool_feedPerTooth: 'tool_spindleSpeed > 0 ? tool_feedCutting/(tool_spindleSpeed * tool_numberOfFlutes) : 0.0',
           tool_feedRamp: 'tool_feedPlunge',
           tool_feedTransition: 'tool_feedCutting',
         } : {}),

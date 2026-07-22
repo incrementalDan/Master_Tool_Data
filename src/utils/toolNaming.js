@@ -21,7 +21,22 @@ export const FRACS = {
 
 const r4 = x => parseFloat(parseFloat(x).toFixed(4));
 
-export const toFrac = d => FRACS[Math.round(d * 64) / 64] || null;
+// ±0.0003" snap tolerance for matching a diameter to a drill-chart size (#/letter)
+// OR an inch fraction. Genuine sizes store at nominal (within ~0.0001"), so this
+// tight gate keeps them while rejecting near-misses: a .0938" end mill is 0.0003"
+// from the #42 chart's .0935" and 0.00005" from 3/32 — it must read "3/32 (.0938)",
+// not "#42". Snapping with no tolerance also once called .0571" (a 1.45mm tool,
+// 0.0054" from 1/16") "1/16" and suppressed metric detection.
+// Unit-aware: a metric tool / metric shop uses the mm equivalent (snapTol).
+export const SNAP_TOL_IN = 0.0003;
+export const snapTol = unit =>
+  (unit === "millimeters" || unit === "mm") ? SNAP_TOL_IN * 25.4 : SNAP_TOL_IN;
+
+export const toFrac = (d, tol = SNAP_TOL_IN) => {
+  const snapped = Math.round(d * 64) / 64;
+  const label = FRACS[snapped];
+  return label && Math.abs(d - snapped) <= tol ? label : null;
+};
 
 export const NUM_DRILLS = {
   80:0.0135,79:0.0145,78:0.016,77:0.018,76:0.02,75:0.021,74:0.0225,73:0.024,72:0.025,71:0.026,70:0.028,69:0.0292,68:0.031,67:0.032,66:0.033,65:0.035,
@@ -37,6 +52,14 @@ export const LETTER_DRILLS = {
   A:0.234,B:0.238,C:0.242,D:0.246,F:0.257,G:0.261,H:0.266,I:0.272,J:0.277,K:0.281,L:0.29,M:0.295,N:0.302,O:0.316,P:0.323,Q:0.332,R:0.339,S:0.348,T:0.358,U:0.368,V:0.377,W:0.386,X:0.397,Y:0.404,Z:0.413,
 };
 
+// Only these tool types are named by a drill-chart size (#42, letter drills).
+// A milling tool that happens to sit within tolerance of a drill number (e.g. a
+// 3/32" end mill at .0938" is near a #42 at .0935") must NOT be called "#42" —
+// it should fall through to its fraction/metric/decimal like any other mill.
+export const DRILL_NUMBER_TYPES = new Set([
+  "drill", "center drill", "spot drill", "reamer",
+]);
+
 // Strip the UNC/UNF thread-series designation from a thread size for naming —
 // it's implied for inch taps. NPT/NPTF (pipe threads) are kept since they
 // change the tap's form and aren't implied.
@@ -49,10 +72,9 @@ export const descDec3 = x => { const s = String(parseFloat(parseFloat(x).toFixed
 // Detects whether an inch value is really a "nice" metric size (e.g. 8mm tool
 // stored as 0.3150"), so it can be displayed as "8mm" instead of ".315".
 // Numbers that already match a fraction or a standard drill size are excluded.
-export function isLikelyMetric(inches) {
+export function isLikelyMetric(inches, tol = SNAP_TOL_IN) {
   if (!inches) return false;
-  if (toFrac(inches)) return false;
-  const tol = 0.0005;
+  if (toFrac(inches, tol)) return false;
   for (const d of Object.values(NUM_DRILLS)) if (Math.abs(inches - d) <= tol) return false;
   for (const d of Object.values(LETTER_DRILLS)) if (Math.abs(inches - d) <= tol) return false;
   const mm = inches * 25.4;
@@ -64,24 +86,29 @@ export function metricDiamStr(inches) {
   return `${parseFloat(mm.toFixed(2))}mm`;
 }
 
-export function smartDiam(inches, inputWasMm) {
+export function smartDiam(inches, inputWasMm, isDrillType = false, tol = SNAP_TOL_IN) {
   if (!inches) return "";
-  const tol = 0.0005;
-  for (const [n, d] of Object.entries(NUM_DRILLS)) if (Math.abs(inches - d) <= tol) return `#${n} (${descDec(d)})`;
-  for (const [l, d] of Object.entries(LETTER_DRILLS)) if (Math.abs(inches - d) <= tol) return `${l} (${descDec(d)})`;
+  // Drill-chart naming (#42 / letter) only for actual drill-type tools, and the
+  // parenthetical always shows the tool's ACTUAL diameter — never the chart's
+  // rounded value. A real .0938" tool must read ".0938", not the #42 chart's
+  // ".0935" (never prioritize a rounded number over the more exact measurement).
+  if (isDrillType) {
+    for (const [n, d] of Object.entries(NUM_DRILLS)) if (Math.abs(inches - d) <= tol) return `#${n} (${descDec(inches)})`;
+    for (const [l, d] of Object.entries(LETTER_DRILLS)) if (Math.abs(inches - d) <= tol) return `${l} (${descDec(inches)})`;
+  }
   if (inputWasMm) {
     const mm = parseFloat((inches * 25.4).toFixed(3));
     const mmStr = mm % 1 === 0 ? String(mm) : String(parseFloat(mm.toFixed(2)));
     return `${mmStr}mm (${descDec(inches)})`;
   }
-  if (!inputWasMm && isLikelyMetric(inches)) {
+  if (!inputWasMm && isLikelyMetric(inches, tol)) {
     return `${metricDiamStr(inches)} (${descDec(inches)})`;
   }
-  const frac = toFrac(inches); if (frac) return `${frac} (${descDec(inches)})`;
+  const frac = toFrac(inches, tol); if (frac) return `${frac} (${descDec(inches)})`;
   return descDec(inches);
 }
 
-export function buildDesc(f, inputWasMm = false) {
+export function buildDesc(f, inputWasMm = !!(f && f.inputWasMm)) {
   const d = parseFloat(f.diameter) || 0,
     loc = parseFloat(f.loc) || 0,
     fl = f.flutes || "",
@@ -90,7 +117,9 @@ export function buildDesc(f, inputWasMm = false) {
     // Never assume a material when it's missing — an unset material must not
     // print "CARB" on the description (see Code Standards in CLAUDE.md).
     mat = f.material || "",
-    dStr = smartDiam(d, inputWasMm),
+    // Snap tolerance for drill/fraction matching is unit-aware: a metric tool
+    // (f.unit === "millimeters") uses the mm equivalent of ±0.0003".
+    dStr = smartDiam(d, inputWasMm, DRILL_NUMBER_TYPES.has(f.toolType), snapTol(f.unit)),
     loc3 = descDec3(loc),
     tsc = THROUGH_COOLANT_VALUES.has(f.coolant || "") ? " TSC" : "";
   // Tip/point angle suffix shared by drill, spot drill, chamfer mill, dovetail, center drill, counter sink
