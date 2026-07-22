@@ -275,6 +275,10 @@ export function buildMetadataTool(tool) {
     purchasing: {
       manufacturers: (tool.purchasing?.manufacturers || []).map((m, i) => ({
         id: m.id || generateId(),
+        // Stable FK into vendor_registry.json entities[] — the name is derived
+        // from it (rename-proof). Null for free-text names not in the registry.
+        // See vendorRegistry.js (syncPurchasingNames / backfillPurchasingRegistryIds).
+        registry_id: m.registry_id || null,
         name: m.name || '',
         edp: m.edp || '',
         edp_url: m.edp_url || '',
@@ -285,6 +289,7 @@ export function buildMetadataTool(tool) {
       vendors: (tool.purchasing?.vendors || []).map((v, i) => ({
         id: v.id || generateId(),
         manufacturer_id: v.manufacturer_id || null,
+        registry_id: v.registry_id || null, // FK into vendor_registry.json — see above
         name: v.name || '',
         vendor_num: v.vendor_num || '',
         vendor_num_url: v.vendor_num_url || '',

@@ -7,6 +7,7 @@ import {
 import { generateId } from './identity.js';
 import { getDefaultUnit } from '../utils/units.js';
 import { buildDesc } from '../utils/toolNaming.js';
+import { registryIdForName } from './vendorRegistry.js';
 
 // ─── Facet fields per tool type (search filter order) ─────────────────────
 const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'custom_grind', 'flute_design', 'material_suitability', 'tags', 'no_fusion_link'];
@@ -108,6 +109,7 @@ function buildPurchasingFromExtractor(f) {
     mfgId = generateId();
     manufacturers.push({
       id: mfgId,
+      registry_id: registryIdForName(f.approvedBrand || ''), // FK — see vendorRegistry.js
       name: f.approvedBrand || '',
       edp: f.edpNumber || '',
       edp_url: '',
@@ -122,6 +124,7 @@ function buildPurchasingFromExtractor(f) {
     vendors.push({
       id: generateId(),
       manufacturer_id: mfgId,
+      registry_id: registryIdForName(f.vendor || ''), // FK — see vendorRegistry.js
       name: f.vendor || '',
       vendor_num: f.vendorStockNum || '',
       vendor_num_url: '',

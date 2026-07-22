@@ -18,7 +18,7 @@ import { backfillMaterialPresetIds } from '../utils/presetNaming.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS } from '../schema/sharedDefaults.js';
-import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry } from '../schema/vendorRegistry.js';
+import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry, getActiveVendorRegistry, backfillPurchasingRegistryIds } from '../schema/vendorRegistry.js';
 import { findJob, newJob } from '../utils/jobs.js';
 import { setDefaultUnit } from '../utils/units.js';
 import { getDemoData, isDemoRequested } from '../demo/index.js';
@@ -737,11 +737,11 @@ export function AppProvider({ children }) {
     const built = [];
     for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
     for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
-    const tools = backfillMaterialPresetIds(derivePairings(
+    const tools = backfillPurchasingRegistryIds(backfillMaterialPresetIds(derivePairings(
       combineToolsByToolId(built)
         .map(t => ({ ...t, library_id: 'demo', library_name: 'Demo library' })),
       components?.components || [],
-    ), materials);
+    ), materials), vendorRegistry);
     // Tag demo holders with a single synthetic library so the picker grouping works.
     const taggedHolders = (holders || []).map(h => ({ ...h, _libraryId: 'demo', _libraryName: 'Demo holders' }));
 
@@ -783,6 +783,9 @@ export function AppProvider({ children }) {
       // default seed or a prior load). Used by the CAM-preset-FK backfill so each
       // preset's material name renders/writes from the live library.
       let materialsFile = materialsRef.current;
+      // Vendor registry — used by the purchasing-FK backfill so each tool's
+      // manufacturer/vendor names render/write from the live registry.
+      let vendorRegistryFile = getActiveVendorRegistry() || DEFAULT_VENDOR_REGISTRY;
       // Resolve the registry FIRST (multi-library needs to know which libraries to
       // download before downloading). When Drive is connected, shop_settings.json
       // is the shared source of truth; otherwise we fall back to the registry
@@ -809,6 +812,7 @@ export function AppProvider({ children }) {
           metaList = meta;
           componentsFile = components;
           materialsFile = materials;
+          vendorRegistryFile = vendorRegistry;
           setActiveVendorRegistry(vendorRegistry);
           // shop_settings.json is the source of truth for the default unit —
           // mirror it into the localStorage cache the pure units helper reads.
@@ -866,7 +870,7 @@ export function AppProvider({ children }) {
               return composed ? { ...t, location: composed, proshop_location: proShopLocationValue(sys, composed) } : t;
             });
             const paired = derivePairings(provisional, componentsFile?.components || []);
-            dispatch({ type: 'LOAD_PROVISIONAL', tools: backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile), materialsFile) });
+            dispatch({ type: 'LOAD_PROVISIONAL', tools: backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile), materialsFile), vendorRegistryFile) });
           }
         } catch { /* stage 2 below is authoritative */ }
       }
@@ -905,7 +909,7 @@ export function AppProvider({ children }) {
       if (!fusionEnabled) {
         const built = metaList.map(m => buildUnlinkedTool(m)).map(composeToolLocation);
         const paired = derivePairings(built, componentsFile?.components || []);
-        const finalTools = backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile), materialsFile);
+        const finalTools = backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile), materialsFile), vendorRegistryFile);
         dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize: false, normalizeCount: 0 });
         return;
       }
@@ -995,7 +999,7 @@ export function AppProvider({ children }) {
       // backfillMaterialPresetIds: adopt the CAM-preset FK id from a name-matched
       // material.query + refresh each preset's derived material name (same lazy
       // persist-on-next-save pattern).
-      const finalTools = backfillMaterialPresetIds(backfillAsmNumbers(pairedTools, effectiveShop, componentsFile), materialsFile);
+      const finalTools = backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(pairedTools, effectiveShop, componentsFile), materialsFile), vendorRegistryFile);
 
       dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize, normalizeCount: untrackedCount });
       // Surface the otherwise-invisible load-time auto-combine: entries sharing a
