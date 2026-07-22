@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { smartDiam, buildDesc } from './toolNaming.js';
+import { smartDiam, buildDesc, snapTol, SNAP_TOL_IN } from './toolNaming.js';
 
 describe('smartDiam — drill numbers only for drill-type tools', () => {
   // .0938" is a 3/32" tool that also sits within tolerance of a #42 drill (.0935").
@@ -30,6 +30,27 @@ describe('smartDiam — drill numbers only for drill-type tools', () => {
   it('a plain non-fraction, non-drill, non-metric inch value stays a decimal', () => {
     // .3376" isn't a fraction, drill, or clean metric size → raw decimal.
     expect(smartDiam(0.3376, false, false)).toBe('.3376');
+  });
+});
+
+describe('snap tolerance — ±0.0003", metric-scaled', () => {
+  it('is 0.0003" for inch, and the mm equivalent for metric', () => {
+    expect(SNAP_TOL_IN).toBe(0.0003);
+    expect(snapTol('inches')).toBe(0.0003);
+    expect(snapTol(undefined)).toBe(0.0003);
+    expect(snapTol('millimeters')).toBeCloseTo(0.0003 * 25.4, 10);
+  });
+
+  it('snaps a drill within 0.0003" but not one just outside it', () => {
+    // #42 = .0935". +0.0003" still snaps; +0.0004" does not.
+    expect(smartDiam(0.0938, false, true)).toBe('#42 (.0938)');
+    expect(smartDiam(0.0939, false, true)).not.toContain('#42');
+  });
+
+  it('snaps a fraction within 0.0003" but not one just outside it', () => {
+    // 1/8 = .125". .1252" snaps; .1254" does not.
+    expect(smartDiam(0.1252, false, false)).toBe('1/8 (.1252)');
+    expect(smartDiam(0.1254, false, false)).not.toContain('1/8');
   });
 });
 

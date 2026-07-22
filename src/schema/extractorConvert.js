@@ -204,6 +204,7 @@ export function extractorToTool(f) {
 export function toolToExtractor(tool) {
   return {
     toolType: tool.tool_type || 'flat end mill',
+    unit: tool.unit,
     inputWasMm: !!tool.input_was_mm,
     diameter: String(tool.diameter ?? ''),
     loc: String(tool.flute_length ?? ''),
