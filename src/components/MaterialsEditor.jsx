@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
 import {
   FlaskConical, Layers, GripVertical, Plus, X, Trash2, ChevronDown, ChevronRight,
-  Search, RotateCcw, ArrowRight, Pencil,
+  Search, RotateCcw, ArrowRight, Pencil, Download,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { useDragReorder } from './useDragReorder.js';
 import { DEFAULT_MATERIALS } from '../schema/sharedDefaults.js';
+import { exportStockMaterial, exportStockMaterials } from '../utils/materialExport.js';
 
 // Generate a short id for a custom group, a CAM preset, or an alloy.
 function uid(prefix = 'm') {
@@ -262,7 +263,9 @@ export default function MaterialsEditor() {
                           <Field label="ISO 513"><input className="field-input" style={{ width: 90 }} value={p.iso_513 || ''} onChange={e => setPreset(p.id, { iso_513: e.target.value })} /></Field>
                           <Field label="Kennametal"><input className="field-input" style={{ width: 90 }} value={p.kennametal || ''} onChange={e => setPreset(p.id, { kennametal: e.target.value })} /></Field>
                           <Field label="Haas / VDI 3323"><input className="field-input" style={{ width: 110 }} value={p.vdi_3323 || ''} onChange={e => setPreset(p.id, { vdi_3323: e.target.value })} /></Field>
-                          <button className="btn btn-ghost btn-sm cam-del" style={{ marginLeft: 'auto' }} onClick={() => deletePreset(p.id)}><Trash2 size={13} /> Delete</button>
+                          <button className="btn btn-secondary btn-sm" style={{ marginLeft: 'auto' }} title="Download this CAM preset as a Fusion stock-material JSON file"
+                            onClick={() => exportStockMaterial(p, doc.materials, doc.groups)}><Download size={13} /> Fusion material</button>
+                          <button className="btn btn-ghost btn-sm cam-del" onClick={() => deletePreset(p.id)}><Trash2 size={13} /> Delete</button>
                         </div>
                       </div>
                     )}
@@ -376,6 +379,22 @@ export default function MaterialsEditor() {
               </div>
             ))}
             <button className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={addGroup}><Plus size={14} /> Add Group</button>
+          </div>
+
+          <div className="card" style={{ marginTop: 12 }}>
+            <h3 style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 7 }}><Download size={15} /> Export for Fusion</h3>
+            <p className="text-sub text-xs mb-12">
+              One Fusion stock-material JSON per CAM preset. Import them into Fusion&apos;s material library (it fills in the UUID). Keywords = the preset&apos;s alloys + standard codes.
+            </p>
+            <button className="btn btn-secondary btn-sm" style={{ width: '100%' }}
+              onClick={() => exportStockMaterials(visiblePresets, doc.materials, doc.groups)}
+              disabled={visiblePresets.length === 0}
+              title="Download a Fusion stock-material file for every CAM preset shown (respects the group filter / search)">
+              <Download size={14} /> Export {groupFilter === 'All' && !q ? 'all' : 'shown'} ({visiblePresets.length})
+            </button>
+            <p className="text-sub text-xs" style={{ marginTop: 8, marginBottom: 0 }}>
+              Filter by group or search first to export just that set. Your browser may ask once to allow multiple downloads.
+            </p>
           </div>
 
           <div className="card" style={{ marginTop: 12 }}>
