@@ -36,6 +36,27 @@ describe('buildLogicalTool — preset union across instances', () => {
     const b = rawInstance({ guid: 'g2', holderGuid: 'H2', presets: [{ name: 'Rough', n: 8000 }] });
     const tool = buildLogicalTool([a, b]);
     expect(tool.presets).toHaveLength(1);
+    expect(tool._duplicatePresets).toBeUndefined(); // no real duplicates → no banner
+  });
+});
+
+describe('buildLogicalTool — duplicate-preset banner flag (_duplicatePresets)', () => {
+  it('flags differently-named same-value presets folded across assemblies', () => {
+    // Each assembly instance carried a preset named for its own OOH but identical
+    // values — the real duplicate the load-time merge now collapses.
+    const a = rawInstance({ guid: 'g1', lb: 2.25, holderGuid: 'H1', presets: [{ name: 'AL OOH2.25 - Rough', n: 8000, v_f: 40 }] });
+    const b = rawInstance({ guid: 'g2', lb: 3.0, holderGuid: 'H2', presets: [{ name: 'AL OOH3.0 - Rough', n: 8000, v_f: 40 }] });
+    const tool = buildLogicalTool([a, b]);
+    expect(tool.presets).toHaveLength(1);       // collapsed
+    expect(tool._duplicatePresets).toBe(1);     // one duplicate flagged
+  });
+
+  it('does NOT flag same-name different-value presets (legitimately kept + indexed)', () => {
+    const a = rawInstance({ guid: 'g1', holderGuid: 'H1', presets: [{ name: 'Rough', n: 8000 }] });
+    const b = rawInstance({ guid: 'g2', holderGuid: 'H2', presets: [{ name: 'Rough', n: 12000 }] });
+    const tool = buildLogicalTool([a, b]);
+    expect(tool.presets).toHaveLength(2);
+    expect(tool._duplicatePresets).toBeUndefined();
   });
 });
 

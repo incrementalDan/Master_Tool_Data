@@ -74,6 +74,20 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
   const sourcePresets = fusionPresets.length > 0 ? fusionPresets : (meta?.presets || []);
   const presets = overlayPresets(sourcePresets, presetMeta);
 
+  // Real duplicate presets = distinct preset NAMES across all Fusion instances
+  // minus the collapsed count. Normal shared-set replication (the same-named
+  // preset copied onto every instance) nets zero — a DIFFERENT-named preset that
+  // collapsed by operation+values (e.g. "… OOH2.25 - Rough" vs "… OOH3.0 - Rough")
+  // is the real duplicate the merge now folds. Runtime-only flag (like _drift /
+  // _productIdConflict); ToolDetail shows a one-click "clean up" banner that
+  // persists the collapse to Fusion on save. See mergePresetLists.
+  const rawPresetNames = new Set(
+    internalByRaw.flatMap(int => (int.presets || []).map(p => String(p?.name || '').trim().toLowerCase()))
+  );
+  const _duplicatePresets = fusionPresets.length > 0
+    ? Math.max(0, rawPresetNames.size - fusionPresets.length)
+    : 0;
+
   // Stale tracking-ID flag: all instances of one logical tool must share the same
   // product ID (ProShop number). If they DON'T, someone copied the tool in Fusion,
   // changed the product ID, but left this app's tracking ID behind in the comment —
@@ -108,6 +122,9 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
     // Distinct product IDs found across this tool's instances (stale tracking ID) —
     // null when consistent. Only present when there's a real conflict.
     ...(_productIdConflict ? { _productIdConflict } : {}),
+    // Count of real duplicate presets folded on load — the tool-page banner offers
+    // a one-click save to persist the cleanup. Only present when there are any.
+    ...(_duplicatePresets > 0 ? { _duplicatePresets } : {}),
   };
 }
 
