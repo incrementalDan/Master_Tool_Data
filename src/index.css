@@ -2033,7 +2033,10 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .preset-row {
   display: flex;
   gap: 10px;
-  align-items: flex-start;
+  /* Stretch so every collapsed card is the SAME height (the tallest one) — a
+     long name/holder wrapping to 2 rows no longer makes a card taller than its
+     neighbors. The group separators already use align-self: stretch. */
+  align-items: stretch;
   min-width: max-content;
   padding: 2px 1px 4px;
 }
@@ -2100,6 +2103,20 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   margin-bottom: 8px;
 }
 
+/* A long holder name (e.g. "NBT30-SK13C-120 ER16 12mm Shank-EX OOH2.25") would
+   overflow the narrow card as a single-line pill. Inside a preset card only, let
+   it wrap to a second row and stay within the card width — the global
+   .holder-pill token (never-truncate, single line) is unchanged elsewhere. The
+   pill becomes a rounded rect (radius 8) since a 999px pill looks wrong on 2 lines. */
+.preset-card .holder-pill {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  min-width: 0;
+  border-radius: 8px;
+  text-align: left;
+}
+
 .preset-card-stats { display: flex; flex-direction: column; gap: 3px; }
 
 .preset-stat-row {
@@ -2116,7 +2133,12 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   font-family: var(--font-mono);
   font-size: 11px;
   text-align: right;
-  white-space: nowrap;
+  /* Wrap rather than spill: numeric values have no break points so they stay on
+     one line, but a long coolant label ("Flood tool" / through-tool) wraps to a
+     second row inside the card instead of overflowing. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .preset-card-footer {
