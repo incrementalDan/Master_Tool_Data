@@ -112,6 +112,25 @@ export const QUICK_GROUPS = [
 ];
 export const quickGroupsContaining = (id) => QUICK_GROUPS.filter(g => g.members.includes(id));
 
+// Given the strategy ids selected on a preset, return the subset that is NOT
+// fully accounted for by any quick group. The editor seeds its "individual
+// picks" provenance from this: strategies that make up a recognizable group are
+// treated as group-derived (so clicking another group SWITCHES normally, and
+// clicking the active group CLEARS it), while only genuinely off-group picks
+// stay sticky. Without this, a COPIED preset marked every loaded strategy as an
+// individual pick, so group clicks couldn't switch or turn a group off — you had
+// to clear each one in the "all strategies" list.
+export function individualStrategyIds(selectedIds) {
+  const sel = new Set(selectedIds || []);
+  const covered = new Set();
+  for (const g of QUICK_GROUPS) {
+    if (g.members.length && g.members.every(id => sel.has(id))) {
+      g.members.forEach(id => covered.add(id));
+    }
+  }
+  return [...sel].filter(id => !covered.has(id));
+}
+
 // 2D↔3D twins that Fusion pairs — selecting one selects both.
 export const AUTO_LINK_PAIR = ['adaptive2d', 'adaptive'];
 

@@ -14,7 +14,7 @@ import InfoTip from './InfoTip.jsx';
 import { boreCompensation, SmallBoreIcon } from '../utils/boreCompensation.jsx';
 import {
   STRATEGIES, STRATEGY_COLUMNS, strategyById, strategiesForToolType,
-  QUICK_GROUPS, quickGroupsContaining, AUTO_LINK_PAIR, PINNED_STRATEGIES,
+  QUICK_GROUPS, quickGroupsContaining, individualStrategyIds, AUTO_LINK_PAIR, PINNED_STRATEGIES,
   SMALL_BORE_STRATEGIES, isNewFormatPreset, readStrategyBucket, buildStrategies, writeBucketStrategies,
 } from '../schema/camStrategies.js';
 import {
@@ -778,11 +778,13 @@ function EditCard({
   const [bucket, setBucket] = useState(initBucket.bucket);
   const [selected, setSelected] = useState(() => new Set(initBucket.ids));
   // Provenance: which selected strategies were chosen INDIVIDUALLY (the
-  // "All strategies…" popout, a pinned single, or a Fusion import) vs. pulled in
-  // by a quick group. Switching quick groups replaces the previous group's
-  // members but NEVER touches individual/Fusion picks. Strategies loaded from a
-  // preset are all treated as individual (they weren't chosen via a group here).
-  const [individualIds, setIndividualIds] = useState(() => new Set(initBucket.ids));
+  // "All strategies…" popout, a pinned single, or an off-group Fusion pick) vs.
+  // pulled in by a quick group. Switching quick groups replaces the previous
+  // group's members but NEVER touches individual picks. Loaded strategies that
+  // make up a recognizable quick group are treated as group-derived (NOT
+  // individual) — so a copied preset whose strategies form a group stays
+  // group-switchable; only genuinely off-group picks are sticky.
+  const [individualIds, setIndividualIds] = useState(() => new Set(individualStrategyIds(initBucket.ids)));
   const [intensity, setIntensity] = useState(preset.intensity || 'normal');
   const [listOpen, setListOpen] = useState(false);
   // Fusion can put strategies in BOTH buckets (its picker is a Rough/Finish
@@ -828,7 +830,9 @@ function EditCard({
     if (loadedDualBucket) {
       const forB = new Set(draft.strategies?.[b] || []);
       setSelected(forB);
-      setIndividualIds(new Set(forB));   // a bucket's loaded strategies are individual/Fusion
+      // Only off-group strategies in this bucket are sticky individual picks;
+      // group-matched ones stay switchable (same rule as the initial load).
+      setIndividualIds(new Set(individualStrategyIds([...forB])));
       syncStrategies(b, forB);
     } else {
       syncStrategies(b, selected);       // carry the current selection to the new bucket
