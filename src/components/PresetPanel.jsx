@@ -657,6 +657,7 @@ function CollapsedCard({
                 {assemblyHolderDesc && (
                   <span
                     className="holder-pill"
+                    title={assemblyHolderDesc}
                     style={assemblyHolderColor ? { '--badge-color': assemblyHolderColor } : {}}
                   >{assemblyHolderDesc}</span>
                 )}
