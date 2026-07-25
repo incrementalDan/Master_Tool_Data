@@ -882,7 +882,11 @@ function EditCard({
       return next;
     });
   };
-  const setIntensityVal = (v) => { setIntensity(v); touch(); setDraft(d => ({ ...d, intensity: v })); };
+  const setIntensityVal = (v) => {
+    setIntensity(v); touch();
+    // Recompose the name so the Fine/Fast prefix updates live with the meter.
+    setDraft(d => ({ ...d, intensity: v, name: composeName(d, assemblyId, bucketToOpType(bucket), undefined, v) }));
+  };
   const convertToNew = () => {
     setStrategyFormat('new');
     touch();
@@ -903,18 +907,25 @@ function EditCard({
   // hole-making tools, op type + strategy are omitted. `selOverride` lets a
   // strategy-changing handler pass the just-updated selection (state hasn't
   // settled yet). See presetStrategyLabel for the label rule.
-  const composeName = (d, asmId, opType, selOverride) => {
+  const composeName = (d, asmId, opType, selOverride, intensOverride) => {
     const a = assemblies.find(x => x.assembly_id === asmId);
     const selSet = selOverride ?? selected;
-    const strategyLabel = (!isHoleMaking && strategyFormat === 'new')
-      ? presetStrategyLabel([...selSet])
+    const intens = intensOverride ?? intensity;
+    const isNewMill = !isHoleMaking && strategyFormat === 'new';
+    // Intensity prefix (new format only): light → Fine, aggressive → Fast, before
+    // the operation word. New-format operation is the bucket (rough/finish), so
+    // this never touches the old fine_finish/rough_fast op-types.
+    const intensityWord = isNewMill
+      ? (intens === 'light' ? 'Fine' : intens === 'aggressive' ? 'Fast' : null)
       : null;
+    const strategyLabel = isNewMill ? presetStrategyLabel([...selSet]) : null;
     return composePresetName({
       // Material token comes from the Materials library code for the stored query.
       materialQuery: materialNameCode(d.material?.query, materials),
       ooh: a?.ooh,
       holderShort: a ? holderShortName(holderDescOf(a)) : null,
       opType: isHoleMaking ? null : opType,
+      intensityWord,
       strategyLabel,
     });
   };
@@ -1991,13 +2002,13 @@ const INTENSITIES = [
   { key: 'normal', label: 'Normal', dot: 6 },
   { key: 'aggressive', label: 'Aggressive', dot: 9 },
 ];
-// The name-modifier HINT (intensity is metadata-only this round — not folded
-// into the composed name; shown as a live badge only).
+// The name-modifier HINT badge — mirrors the intensity prefix now folded into
+// the preset name (light → Fine, aggressive → Fast; both buckets), so the badge
+// and the name always agree.
 function nameModifier(bucket, intensity, smallBore) {
   if (smallBore) return 'Small Bore';
   if (intensity === 'normal') return null;
-  if (bucket === 'roughing') return intensity === 'aggressive' ? 'Fast' : 'Light';
-  return intensity === 'light' ? 'Fine' : 'Fast';
+  return intensity === 'aggressive' ? 'Fast' : 'Fine';
 }
 
 function BucketToggle({ value, onChange, locked }) {

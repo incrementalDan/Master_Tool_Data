@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildLogicalTool, splitToFusionInstances } from './logicalTools.js';
+import { buildLogicalTool, splitToFusionInstances, overlayPresets } from './logicalTools.js';
 
 // Minimal raw Fusion instance. Per-instance: guid, holder, OOH (LB). Shared:
 // tracking-id comment, product-id, geometry, presets.
@@ -99,5 +99,26 @@ describe('splitToFusionInstances — shoulder never exceeds an instance OOH', ()
     // Long instance: shoulder (3.0) fits under its OOH (5.0), left as-is.
     expect(long.geometry['shoulder-length']).toBe(3.0);
     expect(long.geometry.LB).toBe(5.0);
+  });
+});
+
+describe('overlayPresets — operation_type source depends on format', () => {
+  it('new-format reads the bucket, not the name (intensity prefix never corrupts op_type)', () => {
+    // "Fine Finish" in the name would parse to the old fine_finish op-type, but a
+    // new-format preset's operation is its strategy bucket → plain finish.
+    const p = { guid: 'g1', name: 'SS 2.0 SK13 - Fine Finish 3D', strategies: { roughing: [], finishing: ['contour_new'] } };
+    const [out] = overlayPresets([p], { g1: { intensity: 'light' } });
+    expect(out.operation_type).toBe('finish');
+    expect(out.intensity).toBe('light');
+  });
+
+  it('new-format roughing bucket → rough', () => {
+    const p = { guid: 'g1', name: 'AL 1.0 SK13 - Fast Rough Adaptive', strategies: { roughing: ['adaptive2d', 'adaptive'], finishing: [] } };
+    expect(overlayPresets([p], {})[0].operation_type).toBe('rough');
+  });
+
+  it('old-format (no strategies) still parses the op-type from the name — unchanged', () => {
+    expect(overlayPresets([{ guid: 'g2', name: 'SS 2.0 SK13 - Fine Finish' }], {})[0].operation_type).toBe('fine_finish');
+    expect(overlayPresets([{ guid: 'g3', name: 'SS 2.0 SK13 - Rough' }], {})[0].operation_type).toBe('rough');
   });
 });

@@ -9,6 +9,7 @@ import { fusionToolToInternal, internalToFusionTool } from './fusionConvert.js';
 import { mergeFusionAndMetadata, buildMetadataTool, detectFusionDrift } from './metadataModel.js';
 import { buildHolderObject } from './holderGauge.js';
 import { parsePresetName, materialCategory, matchMaterial } from '../utils/presetNaming.js';
+import { isNewFormatPreset, readStrategyBucket } from './camStrategies.js';
 import { mergePresetLists } from '../utils/presetMerge.js';
 import { convertLength } from '../utils/units.js';
 
@@ -132,14 +133,30 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
 // and infer a blank material from the name. Shared by buildLogicalTool (source =
 // Fusion presets, overlay from preset_meta by guid) and buildUnlinkedTool (source
 // = the complete metadata presets, which already carry these — the `?? p.<field>`
-// tails preserve them when preset_meta has no entry). Name-parsed operation_type
-// wins; then preset_meta; then the preset's own value.
+// tails preserve them when preset_meta has no entry).
+//
+// operation_type source depends on FORMAT: an OLD-format preset (no strategies)
+// encodes its operation in the name (incl. the old rough_fast/fine_finish/
+// small_bore op-types), so name-parse wins. A NEW-format preset's operation is
+// its strategy BUCKET (always rough/finish) — the name's intensity prefix
+// ("Fine Finish", "Fast Rough") is display-only and MUST NOT be parsed back into
+// the old fine_finish/rough_fast op-types, so new-format reads the bucket, never
+// the name. Intensity itself rides in preset_meta (below), not operation_type.
 export function overlayPresets(sourcePresets, presetMeta = {}) {
   return (sourcePresets || []).map(p => {
     const inferredMat = !p.material?.query ? matchMaterial(p.name) : null;
+    let operation_type;
+    if (isNewFormatPreset(p)) {
+      const rb = readStrategyBucket(p);
+      operation_type = rb.ids.length > 0
+        ? (rb.bucket === 'roughing' ? 'rough' : 'finish')
+        : (presetMeta[p.guid]?.operation_type ?? p.operation_type ?? null);
+    } else {
+      operation_type = parsePresetName(p.name)?.opType ?? presetMeta[p.guid]?.operation_type ?? p.operation_type ?? null;
+    }
     return {
       ...p,
-      operation_type: parsePresetName(p.name)?.opType ?? presetMeta[p.guid]?.operation_type ?? p.operation_type ?? null,
+      operation_type,
       machine_id: presetMeta[p.guid]?.machine_id ?? p.machine_id ?? null,
       material_preset_id: presetMeta[p.guid]?.material_preset_id ?? p.material_preset_id ?? null,
       job_ids: presetMeta[p.guid]?.job_ids ?? p.job_ids ?? [],
