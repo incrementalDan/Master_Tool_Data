@@ -59,6 +59,33 @@ describe('mergePresetLists', () => {
     expect(out.map(x => x.name).sort()).toEqual(['Finish', 'Rough']);
   });
 
+  it('collapses assembly-named duplicates: same operation + values, different OOH in the name', () => {
+    // The real bug — each assembly instance carried a preset named for its own
+    // OOH but with identical values, so they piled up one per assembly.
+    const base = [p({ guid: 'a', name: 'AL 0.5 SK13 OOH2.25 - Rough' })];
+    const inc = [p({ guid: 'b', name: 'AL 0.5 SK13 OOH3.00 - Rough' })]; // same values
+    const out = mergePresetLists(base, inc, 'inches');
+    expect(out).toHaveLength(1);
+    expect(out[0].name).toBe('AL 0.5 SK13 OOH2.25 - Rough'); // first one kept
+  });
+
+  it('keeps a Rough and a Finish that share values (different operation)', () => {
+    // Different operations are never collapsed, even at identical speeds/feeds.
+    const out = mergePresetLists(
+      [p({ guid: 'a', name: 'AL OOH2.25 - Rough' })],
+      [p({ guid: 'b', name: 'AL OOH2.25 - Finish' })], // same values, different op
+      'inches',
+    );
+    expect(out).toHaveLength(2);
+  });
+
+  it('keeps genuinely different rough presets on different assemblies (same op, different values)', () => {
+    const base = [p({ guid: 'a', name: 'AL OOH2.25 - Rough', n: 8000 })];
+    const inc = [p({ guid: 'b', name: 'AL OOH3.00 - Rough', n: 12000 })]; // different values
+    const out = mergePresetLists(base, inc, 'inches');
+    expect(out).toHaveLength(2);
+  });
+
   it('mints a fresh guid for a kept variant whose guid collides with an existing one', () => {
     // A Fusion copy keeps the source guid; a kept variant must not duplicate it.
     const base = [p({ guid: 'dup', name: 'Rough', n: 8000 })];

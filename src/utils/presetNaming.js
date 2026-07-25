@@ -350,13 +350,23 @@ export function formatOoh(ooh) {
 // Compose a preset name from its parts. `holderShort` is already-derived
 // (call holderNaming.holderShortName on the holder description first), or pass
 // `holderDescription` and it will be derived here.
-export function composePresetName({ materialQuery, ooh, holderShort, holderDescription, opType }) {
+// The operation tail is `[<intensityWord>] <opWord> [<strategyLabel>]` —
+// intensityWord ("Fine"/"Fast") goes in FRONT of Rough/Finish when the strategy
+// intensity isn't normal, strategyLabel (a short group/strategy token) goes at
+// the END. Both are optional; when absent the name is just the op word, exactly
+// as before. Callers without strategy context (normalizeLibrary, DiffStep) omit
+// them. No op word (hole-making) → no tail, so intensity/strategy are dropped.
+export function composePresetName({ materialQuery, ooh, holderShort, holderDescription, opType, intensityWord, strategyLabel }) {
   const short = holderShort != null ? holderShort : holderShortName(holderDescription || '');
   const head = [materialToCode(materialQuery), formatOoh(ooh), short]
     .filter(s => s != null && String(s).trim() !== '')
     .join(' ');
   const word = opTypeWord(opType);
-  return word ? `${head} - ${word}` : head;
+  if (!word) return head;
+  const tail = [intensityWord, word, strategyLabel]
+    .filter(s => s != null && String(s).trim() !== '')
+    .join(' ');
+  return `${head} - ${tail}`;
 }
 
 // Parse a preset name back into its parts. Tolerant: returns null only for an

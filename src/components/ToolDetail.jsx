@@ -536,6 +536,37 @@ export default function ToolDetail() {
             before the normalize-time merge existed. */}
         <MergeSiblingBanner key={`merge-${tool.id}`} tool={tool} />
 
+        {/* Duplicate presets folded on load (identical presets that were repeated
+            per assembly). Already shown merged; this persists the cleanup to the
+            Fusion library on save. Non-blocking — clears once saved. */}
+        {!noFusion && tool._duplicatePresets > 0 && (
+          <div style={{
+            border: '1px solid var(--blue)', borderRadius: 'var(--radius)',
+            background: 'color-mix(in srgb, var(--blue) 8%, transparent)',
+            padding: 14, marginBottom: 16,
+            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          }}>
+            <Copy size={16} style={{ color: 'var(--blue)', flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 220, lineHeight: 1.5 }}>
+              <strong>{tool._duplicatePresets} duplicate preset{tool._duplicatePresets > 1 ? 's' : ''} merged.</strong>{' '}
+              This tool had identical presets repeated across assemblies — they&apos;re already shown merged here.
+              Clean up the Fusion library to make it permanent.
+            </span>
+            <button
+              className="btn btn-primary"
+              disabled={isSaving}
+              onClick={async () => {
+                try {
+                  await saveTool(tool);
+                  notify('Duplicate presets cleaned up', 'success');
+                } catch { /* saveTool surfaces its own error toast */ }
+              }}
+            >
+              {isSaving ? 'Cleaning up…' : 'Clean up library'}
+            </button>
+          </div>
+        )}
+
         {/* Reverse sync — the tool was deleted directly in Fusion 360, so it's
             gone from the live library. Offer to remove it from the app too, or
             keep it (informed, not blocked — never auto-deleted). */}

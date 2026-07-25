@@ -5,6 +5,7 @@ import { dirname, resolve } from 'path';
 import {
   STRATEGIES, strategyById, strategiesForToolType,
   isNewFormatPreset, readStrategyBucket, buildStrategies, writeBucketStrategies, SMALL_BORE_STRATEGIES,
+  individualStrategyIds, presetStrategyLabel, QUICK_GROUPS,
 } from './camStrategies.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -99,5 +100,54 @@ describe('camStrategies — writeBucketStrategies preserves the non-active bucke
   it('dual-bucket write dedupes the active selection', () => {
     expect(writeBucketStrategies('roughing', ['adaptive', 'adaptive'], { roughing: [], finishing: ['bore'] }, true))
       .toEqual({ roughing: ['adaptive'], finishing: ['bore'] });
+  });
+});
+
+describe('individualStrategyIds — a copied group stays group-switchable', () => {
+  const adaptive = QUICK_GROUPS.find(g => g.key === 'adaptive').members; // ['adaptive2d','adaptive']
+
+  it('returns nothing when the selection is exactly a quick group (group-derived, not sticky)', () => {
+    expect(individualStrategyIds(adaptive)).toEqual([]);
+  });
+
+  it('keeps only the off-group picks as individual', () => {
+    const out = individualStrategyIds([...adaptive, 'engrave']); // engrave alone isn't a full group
+    expect(out).toEqual(['engrave']);
+  });
+
+  it('treats a selection that matches no full group as all-individual (Fusion off-group picks preserved)', () => {
+    expect(individualStrategyIds(['engrave']).sort()).toEqual(['engrave']); // Engrave needs engrave+project
+    expect(individualStrategyIds(['bore', 'contour2d']).sort()).toEqual(['bore', 'contour2d']);
+  });
+
+  it('handles empty / nullish input', () => {
+    expect(individualStrategyIds([])).toEqual([]);
+    expect(individualStrategyIds(null)).toEqual([]);
+  });
+});
+
+describe('presetStrategyLabel — short, sensible name suffix', () => {
+  it('names an exact quick group by its short token', () => {
+    expect(presetStrategyLabel(['adaptive2d', 'adaptive'])).toBe('Adaptive');
+    // finish3d group → "3D" (the bucket word disambiguates Rough/Finish)
+    const finish3d = QUICK_GROUPS.find(g => g.key === 'finish3d').members;
+    expect(presetStrategyLabel(finish3d)).toBe('3D');
+  });
+
+  it('names a single strategy', () => {
+    expect(presetStrategyLabel(['bore'])).toBe('Bore');
+    expect(presetStrategyLabel(['contour2d'])).toBe('2D Contour');
+  });
+
+  it('names the two pinned picks together, in stable order', () => {
+    expect(presetStrategyLabel(['bore', 'contour2d'])).toBe('2D Contour + Bore');
+    expect(presetStrategyLabel(['contour2d', 'bore'])).toBe('2D Contour + Bore');
+  });
+
+  it('adds nothing for 2+ arbitrary strategies (avoid a mega name)', () => {
+    expect(presetStrategyLabel(['bore', 'contour2d', 'pocket2d'])).toBe(null); // 3
+    expect(presetStrategyLabel(['pocket2d', 'slot'])).toBe(null);              // 2 non-pinned
+    expect(presetStrategyLabel([])).toBe(null);
+    expect(presetStrategyLabel(null)).toBe(null);
   });
 });

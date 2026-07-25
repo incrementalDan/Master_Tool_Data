@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { FORMULAS, FIELD_PRECISION, roundForField } from '../utils/speedsAndFeedsCalc.js';
+import { FORMULAS, FIELD_PRECISION, roundForField, dynamicStep } from '../utils/speedsAndFeedsCalc.js';
 
 /* ── LinkedSlider — slider + number input over the existing fx calc ──────────
    The CloudNC-style control from the UnifiedPresetEditor mockup. It is a SKIN
@@ -224,7 +224,11 @@ export default function LinkedSlider({
       e.preventDefault();
       const { value: v, step, min, dynMax: dm } = wheelState.current;
       const dir = axis > 0 ? 1 : -1;
-      const next = roundForField(field, (Number(v) || 0) + dir * step);
+      // Dynamic step: ~8% of the current value (rounded to a nice increment,
+      // floored at the field's base step) so a notch stays proportional as the
+      // value changes — 0.010 nudges by 0.001, 0.005 by 0.0005, etc. A fixed step
+      // was too fine when large (endless scrolling) and too coarse when small.
+      const next = roundForField(field, (Number(v) || 0) + dir * dynamicStep(v, step));
       // Respect the current ceiling; wheel doesn't trigger soft-max growth.
       onChangeRef.current(Math.max(min, Math.min(dm, next)));
     };

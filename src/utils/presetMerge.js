@@ -9,6 +9,7 @@
 // same-name presets whose values genuinely differ are BOTH kept, the later one's
 // name indexed up (Rough, Rough 2, Rough 3, …).
 import { generateId } from '../schema/identity.js';
+import { parsePresetName } from './presetNaming.js';
 
 // ── Significance thresholds ───────────────────────────────────────────────────
 // A preset value counts as "changed" only when |a − b| > max(rel × magnitude,
@@ -96,6 +97,11 @@ export function presetValuesEquivalent(a, b, unit = 'inches') {
 
 const nameKey = (p) => String(p?.name || '').trim().toLowerCase();
 
+// A preset's operation (rough / finish / …), from its stored operation_type or
+// parsed from the name. Two presets only collapse when this AND their values
+// match — so a Rough and a Finish that happen to share values stay separate.
+const presetOp = (p) => p?.operation_type ?? parsePresetName(p?.name)?.opType ?? null;
+
 // Given a desired name and the set of names already used (lowercased), return the
 // name unchanged if free, else "<name> 2", "<name> 3", … until one is free.
 function nextIndexedName(name, usedLower) {
@@ -107,10 +113,15 @@ function nextIndexedName(name, usedLower) {
 }
 
 // Union `incoming` presets into `base`, per the shop rule:
-//   • an incoming preset that value-matches an EXISTING same-name preset within
-//     tolerance is dropped (they're the same setting) — collapse to one;
-//   • an incoming preset whose name collides but whose values genuinely differ is
-//     KEPT with its name indexed up (Rough → Rough 2 → Rough 3 …);
+//   • DUPLICATE = same OPERATION (rough/finish/…) AND speed/feed values equal
+//     within tolerance → dropped (collapse to one). The match is by VALUES, NOT
+//     the name: presets named per assembly ("… OOH2.25 - Rough" vs
+//     "… OOH3.0 - Rough") are the same preset when their values agree, so they
+//     must collapse instead of piling up one copy per assembly. (Keying on the
+//     name was the bug — the OOH in the name made every instance look distinct.)
+//   • an incoming preset whose values genuinely differ (or whose operation
+//     differs — Rough vs Finish, even at identical values) is KEPT; if its name
+//     collides with a kept preset it's indexed up (Rough → Rough 2 → Rough 3 …);
 //   • a fresh guid is minted for any kept preset whose guid already exists in the
 //     result (Fusion copies keep the source guid — a duplicate guid would corrupt
 //     preset_meta / assembly linked_preset_guids), so links stay unambiguous.
@@ -124,10 +135,12 @@ export function mergePresetLists(base = [], incoming = [], unit = 'inches') {
 
   for (const inc of (incoming || [])) {
     if (!inc) continue;
-    const sameName = result.filter(p => nameKey(p) === nameKey(inc));
-    if (sameName.some(p => presetValuesEquivalent(p, inc, unit))) continue;  // duplicate → drop
+    const incOp = presetOp(inc);
+    // Drop as a duplicate when an already-kept preset has the SAME operation and
+    // equivalent values — regardless of the assembly-encoded name.
+    if (result.some(p => presetOp(p) === incOp && presetValuesEquivalent(p, inc, unit))) continue;
 
-    const name = sameName.length ? nextIndexedName(inc.name, usedNames) : (inc.name || 'Preset');
+    const name = usedNames.has(nameKey(inc)) ? nextIndexedName(inc.name, usedNames) : (inc.name || 'Preset');
     let guid = inc.guid;
     if (!guid || usedGuids.has(guid)) guid = generateId();
     const kept = { ...inc, name, guid };

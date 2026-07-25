@@ -141,6 +141,14 @@ function mergeLogicalTools(group) {
   // no_fusion_link: clear the flag if any tool in the group is a real Fusion entry.
   const no_fusion_link = group.every(t => t.no_fusion_link) ? true : false;
 
+  // Duplicate-preset count: the intra-tool dupes each tool already folded (their
+  // _duplicatePresets) PLUS any cross-tool collapses this combine just did (the
+  // folded tools shared a tool_id, so a preset appearing in two of them is a real
+  // duplicate). Drives the tool-page "clean up" banner. See buildLogicalTool.
+  const groupDupes = group.reduce((s, t) => s + (t._duplicatePresets || 0), 0);
+  const crossCollapse = group.reduce((s, t) => s + (t.presets?.length || 0), 0) - presets.length;
+  const _duplicatePresets = groupDupes + Math.max(0, crossCollapse);
+
   return {
     ...merged,
     no_fusion_link,
@@ -152,6 +160,7 @@ function mergeLogicalTools(group) {
     _fusionRaw: primary._fusionRaw || raws[0] || null,
     _registeredAssemblies: registered,
     ...(combineConflicts.length > 0 ? { _combineConflicts: combineConflicts } : {}),
+    ...(_duplicatePresets > 0 ? { _duplicatePresets } : {}),
   };
 }
 

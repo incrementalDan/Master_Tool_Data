@@ -14,7 +14,7 @@ import InfoTip from './InfoTip.jsx';
 import { boreCompensation, SmallBoreIcon } from '../utils/boreCompensation.jsx';
 import {
   STRATEGIES, STRATEGY_COLUMNS, strategyById, strategiesForToolType,
-  QUICK_GROUPS, quickGroupsContaining, AUTO_LINK_PAIR, PINNED_STRATEGIES,
+  QUICK_GROUPS, quickGroupsContaining, individualStrategyIds, presetStrategyLabel, AUTO_LINK_PAIR, PINNED_STRATEGIES,
   SMALL_BORE_STRATEGIES, isNewFormatPreset, readStrategyBucket, buildStrategies, writeBucketStrategies,
 } from '../schema/camStrategies.js';
 import {
@@ -778,11 +778,13 @@ function EditCard({
   const [bucket, setBucket] = useState(initBucket.bucket);
   const [selected, setSelected] = useState(() => new Set(initBucket.ids));
   // Provenance: which selected strategies were chosen INDIVIDUALLY (the
-  // "All strategies…" popout, a pinned single, or a Fusion import) vs. pulled in
-  // by a quick group. Switching quick groups replaces the previous group's
-  // members but NEVER touches individual/Fusion picks. Strategies loaded from a
-  // preset are all treated as individual (they weren't chosen via a group here).
-  const [individualIds, setIndividualIds] = useState(() => new Set(initBucket.ids));
+  // "All strategies…" popout, a pinned single, or an off-group Fusion pick) vs.
+  // pulled in by a quick group. Switching quick groups replaces the previous
+  // group's members but NEVER touches individual picks. Loaded strategies that
+  // make up a recognizable quick group are treated as group-derived (NOT
+  // individual) — so a copied preset whose strategies form a group stays
+  // group-switchable; only genuinely off-group picks are sticky.
+  const [individualIds, setIndividualIds] = useState(() => new Set(individualStrategyIds(initBucket.ids)));
   const [intensity, setIntensity] = useState(preset.intensity || 'normal');
   const [listOpen, setListOpen] = useState(false);
   // Fusion can put strategies in BOTH buckets (its picker is a Rough/Finish
@@ -812,7 +814,9 @@ function EditCard({
     touch();
     setDraft(d => {
       const op = bucketToOpType(nextBucket);
-      const nd = { ...d, operation_type: op, name: composeName(d, assemblyId, op) };
+      // Pass nextSet so the strategy label reflects the just-changed selection
+      // (the `selected` state hasn't settled at this point).
+      const nd = { ...d, operation_type: op, name: composeName(d, assemblyId, op, nextSet) };
       if (strategyFormat === 'new') {
         nd.strategies = writeBucketStrategies(nextBucket, [...nextSet], d.strategies, loadedDualBucket);
       }
@@ -828,7 +832,9 @@ function EditCard({
     if (loadedDualBucket) {
       const forB = new Set(draft.strategies?.[b] || []);
       setSelected(forB);
-      setIndividualIds(new Set(forB));   // a bucket's loaded strategies are individual/Fusion
+      // Only off-group strategies in this bucket are sticky individual picks;
+      // group-matched ones stay switchable (same rule as the initial load).
+      setIndividualIds(new Set(individualStrategyIds([...forB])));
       syncStrategies(b, forB);
     } else {
       syncStrategies(b, selected);       // carry the current selection to the new bucket
@@ -876,7 +882,11 @@ function EditCard({
       return next;
     });
   };
-  const setIntensityVal = (v) => { setIntensity(v); touch(); setDraft(d => ({ ...d, intensity: v })); };
+  const setIntensityVal = (v) => {
+    setIntensity(v); touch();
+    // Recompose the name so the Fine/Fast prefix updates live with the meter.
+    setDraft(d => ({ ...d, intensity: v, name: composeName(d, assemblyId, bucketToOpType(bucket), undefined, v) }));
+  };
   const convertToNew = () => {
     setStrategyFormat('new');
     touch();
@@ -892,18 +902,31 @@ function EditCard({
   const holderDescOf = (a) =>
     a ? (a.holder_description || holders.find(h => h.guid === a.holder_guid)?.description || '') : '';
 
-  // Compose the convention name from material + the selected assembly + op type.
-  // For hole-making tools, op type is omitted — the name is material + OOH + holder.
-  // Falls back to the current draft name when no assembly is selected, or when a
-  // milling tool has no op type selected yet.
-  const composeName = (d, asmId, opType) => {
+  // Compose the convention name from material + the selected assembly + op type,
+  // plus a short strategy label at the end (new-format milling only). For
+  // hole-making tools, op type + strategy are omitted. `selOverride` lets a
+  // strategy-changing handler pass the just-updated selection (state hasn't
+  // settled yet). See presetStrategyLabel for the label rule.
+  const composeName = (d, asmId, opType, selOverride, intensOverride) => {
     const a = assemblies.find(x => x.assembly_id === asmId);
+    const selSet = selOverride ?? selected;
+    const intens = intensOverride ?? intensity;
+    const isNewMill = !isHoleMaking && strategyFormat === 'new';
+    // Intensity prefix (new format only): light → Fine, aggressive → Fast, before
+    // the operation word. New-format operation is the bucket (rough/finish), so
+    // this never touches the old fine_finish/rough_fast op-types.
+    const intensityWord = isNewMill
+      ? (intens === 'light' ? 'Fine' : intens === 'aggressive' ? 'Fast' : null)
+      : null;
+    const strategyLabel = isNewMill ? presetStrategyLabel([...selSet]) : null;
     return composePresetName({
       // Material token comes from the Materials library code for the stored query.
       materialQuery: materialNameCode(d.material?.query, materials),
       ooh: a?.ooh,
       holderShort: a ? holderShortName(holderDescOf(a)) : null,
       opType: isHoleMaking ? null : opType,
+      intensityWord,
+      strategyLabel,
     });
   };
 
@@ -1979,13 +2002,13 @@ const INTENSITIES = [
   { key: 'normal', label: 'Normal', dot: 6 },
   { key: 'aggressive', label: 'Aggressive', dot: 9 },
 ];
-// The name-modifier HINT (intensity is metadata-only this round — not folded
-// into the composed name; shown as a live badge only).
+// The name-modifier HINT badge — mirrors the intensity prefix now folded into
+// the preset name (light → Fine, aggressive → Fast; both buckets), so the badge
+// and the name always agree.
 function nameModifier(bucket, intensity, smallBore) {
   if (smallBore) return 'Small Bore';
   if (intensity === 'normal') return null;
-  if (bucket === 'roughing') return intensity === 'aggressive' ? 'Fast' : 'Light';
-  return intensity === 'light' ? 'Fine' : 'Fast';
+  return intensity === 'aggressive' ? 'Fast' : 'Fine';
 }
 
 function BucketToggle({ value, onChange, locked }) {
