@@ -657,6 +657,7 @@ function CollapsedCard({
                 {assemblyHolderDesc && (
                   <span
                     className="holder-pill"
+                    title={assemblyHolderDesc}
                     style={assemblyHolderColor ? { '--badge-color': assemblyHolderColor } : {}}
                   >{assemblyHolderDesc}</span>
                 )}
@@ -1694,6 +1695,9 @@ function FactorSlider({ label, value, onChange, refDim, refLabel, lenUnit, enabl
   const trackRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const [inchDraft, setInchDraft] = useState(null);
+  // Raw text while the % field is focused — lets the field go empty (and avoids a
+  // stuck leading "0") instead of snapping to the computed value on every keystroke.
+  const [pctDraft, setPctDraft] = useState(null);
   // Which side the user last drove. Percent leads by default — it's the
   // decision a machinist actually makes; inches are what falls out.
   const [driver, setDriver] = useState('pct');
@@ -1761,8 +1765,10 @@ function FactorSlider({ label, value, onChange, refDim, refLabel, lenUnit, enabl
       <div className="lslider-num">
         <input
           className="field-input td-noSpin" type="number" step="1" min="0" max="100"
-          value={pct} disabled={!enabled}
-          onChange={e => setPct(e.target.value)}
+          value={pctDraft !== null ? pctDraft : pct} disabled={!enabled}
+          onFocus={() => setPctDraft(String(pct))}
+          onBlur={() => setPctDraft(null)}
+          onChange={e => { setPctDraft(e.target.value); setPct(e.target.value); }}
         />
         <span className="lslider-unit">%</span>
       </div>

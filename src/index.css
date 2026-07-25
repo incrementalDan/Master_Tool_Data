@@ -2033,7 +2033,10 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .preset-row {
   display: flex;
   gap: 10px;
-  align-items: flex-start;
+  /* Stretch so every collapsed card is the SAME height (the tallest one) — a
+     long name/holder wrapping to 2 rows no longer makes a card taller than its
+     neighbors. The group separators already use align-self: stretch. */
+  align-items: stretch;
   min-width: max-content;
   padding: 2px 1px 4px;
 }
@@ -2080,24 +2083,65 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 
 .preset-card-name {
   margin-bottom: 4px;
+  position: relative;          /* anchor for the hover pop-out */
+  min-height: 34px;            /* reserve two rows so the pop-out never shifts layout */
 }
 
-/* The name pill on a preset card: smaller, and wraps so the full name is
-   visible (the shared .preset-tag token elsewhere is unchanged). */
+/* The name pill on a preset card: smaller, and CAPPED at two rows with an
+   ellipsis (the shared .preset-tag token elsewhere is unchanged). */
 .preset-card-name .preset-tag {
   padding: 2px 9px;
   font-size: 11px;
   font-weight: 600;
+  line-height: 1.3;
   border-radius: 8px;
-  white-space: normal;
-  word-break: break-word;
   text-align: left;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* Hover the name → it "pops out": un-clamps, widens a touch past the card, and
+   floats above neighbors so the full name is readable without shifting layout. */
+.preset-card-name:hover .preset-tag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 40;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+  width: max-content;
+  max-width: 230px;
+  background: var(--input-bg);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
 }
 
 .preset-card-mat {
   font-size: 10px;
   color: var(--text-sub);
   margin-bottom: 8px;
+}
+
+/* A long holder name (e.g. "NBT30-SK13C-120 ER16 12mm Shank-EX OOH2.25") would
+   overflow the narrow card as a single-line pill. Inside a preset card only, let
+   it wrap to a second row and stay within the card width — the global
+   .holder-pill token (never-truncate, single line) is unchanged elsewhere. The
+   pill becomes a rounded rect (radius 8) since a 999px pill looks wrong on 2 lines. */
+.preset-card .holder-pill {
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  min-width: 0;
+  border-radius: 8px;
+  text-align: left;
+  /* Cap at two rows with an ellipsis (hover the pill for the full name via its
+     title tooltip). -webkit-box handles both the wrap and the clamp. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
 }
 
 .preset-card-stats { display: flex; flex-direction: column; gap: 3px; }
@@ -2116,7 +2160,12 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   font-family: var(--font-mono);
   font-size: 11px;
   text-align: right;
-  white-space: nowrap;
+  /* Wrap rather than spill: numeric values have no break points so they stay on
+     one line, but a long coolant label ("Flood tool" / through-tool) wraps to a
+     second row inside the card instead of overflowing. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .preset-card-footer {
