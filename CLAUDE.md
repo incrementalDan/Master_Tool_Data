@@ -989,7 +989,11 @@ src/
                                   # rail (MRR) + Small Bore + the Strategy section.
                                   # See "Unified Preset Editor" + "Strategy section".
     LinkedSlider.jsx              # Speed/feed slider over the fx cascade — soft-max
-                                  # ceiling, unit-aware ranges, follower re-link control
+                                  # ceiling, unit-aware ranges, follower re-link control.
+                                  # Wheel nudge uses a DYNAMIC step (~8% of the current
+                                  # value, nice-rounded, floored at the field base step —
+                                  # dynamicStep/niceIncrement in speedsAndFeedsCalc.js) so
+                                  # a notch stays proportional (0.010→0.001, 0.005→0.0005)
     CamPresetPicker.jsx           # Modal "mini Materials page" — pick a CAM preset
                                   # for a preset's material (search by alloy + group pills)
     SpeedFeedSection.jsx          # ToolDetail panel: per-CAM-preset SFM + chip-load

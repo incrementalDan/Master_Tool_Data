@@ -68,3 +68,28 @@ export function roundForField(field, value) {
   const decimals = FIELD_PRECISION[field] ?? 4;
   return parseFloat(value.toFixed(decimals));
 }
+
+// Round a raw amount to a "nice" increment — 1, 2, or 5 × a power of ten
+// (0.00024 → 0.0002, 0.0008 → 0.001, 640 → 500). Used to keep a proportional
+// slider nudge on a clean number instead of an ugly float.
+export function niceIncrement(target) {
+  const t = Math.abs(Number(target) || 0);
+  if (!(t > 0)) return 0;
+  const base = Math.pow(10, Math.floor(Math.log10(t)));
+  const frac = t / base;
+  const nice = frac < 1.5 ? 1 : frac < 3.5 ? 2 : frac < 7.5 ? 5 : 10;
+  return nice * base;
+}
+
+// Fraction of the current value one wheel/scroll notch moves a slider. A fixed
+// step is too coarse for a small value and too fine for a large one; this scales
+// with the value so a nudge stays proportional (0.010 → 0.001, 0.005 → 0.0005).
+export const WHEEL_STEP_PCT = 0.08;
+
+// The dynamic step for one wheel notch: ~WHEEL_STEP_PCT of the current value,
+// rounded to a nice increment, floored at the field's base step so you can still
+// nudge up from zero (or a tiny value) and never get a sub-precision step.
+export function dynamicStep(value, baseStep = 0, pct = WHEEL_STEP_PCT) {
+  const dyn = niceIncrement((Math.abs(Number(value) || 0)) * pct);
+  return Math.max(dyn, baseStep) || baseStep || 1;
+}
