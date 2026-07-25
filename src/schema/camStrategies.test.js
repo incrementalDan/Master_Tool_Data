@@ -5,7 +5,7 @@ import { dirname, resolve } from 'path';
 import {
   STRATEGIES, strategyById, strategiesForToolType,
   isNewFormatPreset, readStrategyBucket, buildStrategies, writeBucketStrategies, SMALL_BORE_STRATEGIES,
-  individualStrategyIds, QUICK_GROUPS,
+  individualStrategyIds, presetStrategyLabel, QUICK_GROUPS,
 } from './camStrategies.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -123,5 +123,31 @@ describe('individualStrategyIds — a copied group stays group-switchable', () =
   it('handles empty / nullish input', () => {
     expect(individualStrategyIds([])).toEqual([]);
     expect(individualStrategyIds(null)).toEqual([]);
+  });
+});
+
+describe('presetStrategyLabel — short, sensible name suffix', () => {
+  it('names an exact quick group by its short token', () => {
+    expect(presetStrategyLabel(['adaptive2d', 'adaptive'])).toBe('Adaptive');
+    // finish3d group → "3D" (the bucket word disambiguates Rough/Finish)
+    const finish3d = QUICK_GROUPS.find(g => g.key === 'finish3d').members;
+    expect(presetStrategyLabel(finish3d)).toBe('3D');
+  });
+
+  it('names a single strategy', () => {
+    expect(presetStrategyLabel(['bore'])).toBe('Bore');
+    expect(presetStrategyLabel(['contour2d'])).toBe('2D Contour');
+  });
+
+  it('names the two pinned picks together, in stable order', () => {
+    expect(presetStrategyLabel(['bore', 'contour2d'])).toBe('2D Contour + Bore');
+    expect(presetStrategyLabel(['contour2d', 'bore'])).toBe('2D Contour + Bore');
+  });
+
+  it('adds nothing for 2+ arbitrary strategies (avoid a mega name)', () => {
+    expect(presetStrategyLabel(['bore', 'contour2d', 'pocket2d'])).toBe(null); // 3
+    expect(presetStrategyLabel(['pocket2d', 'slot'])).toBe(null);              // 2 non-pinned
+    expect(presetStrategyLabel([])).toBe(null);
+    expect(presetStrategyLabel(null)).toBe(null);
   });
 });

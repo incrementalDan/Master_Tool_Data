@@ -99,16 +99,19 @@ export function strategiesForToolType(toolType) {
 
 // Quick-pick groups — a starting point (Dan will refine later). Members are real
 // IDs. `suggestBucket` pre-selects Rough/Finish when the group is turned on.
+// `nameToken` is the SHORT label added to a preset name when this group is
+// selected (kept short so the name stays sensible — "… - Rough 3D", not
+// "… - Rough Rough 3D Surfacing"). See presetStrategyLabel.
 export const QUICK_GROUPS = [
-  { key: 'adaptive', label: 'Adaptive', members: ['adaptive2d', 'adaptive'], suggestBucket: null },
-  { key: 'facing',   label: 'Facing',   members: ['face', 'flat', 'horizontal_new'], suggestBucket: null },
-  { key: 'rough3d',  label: 'Rough 3D Surfacing',
+  { key: 'adaptive', label: 'Adaptive', nameToken: 'Adaptive', members: ['adaptive2d', 'adaptive'], suggestBucket: null },
+  { key: 'facing',   label: 'Facing',   nameToken: 'Facing',   members: ['face', 'flat', 'horizontal_new'], suggestBucket: null },
+  { key: 'rough3d',  label: 'Rough 3D Surfacing', nameToken: '3D',
     members: ['adaptive', 'moduleworks_three_plus_two', 'contour_new', 'parallel_new', 'scallop_new', 'moduleworks_multiaxis_roughing'],
     suggestBucket: 'roughing' },
-  { key: 'finish3d', label: 'Finish 3D Surfacing',
+  { key: 'finish3d', label: 'Finish 3D Surfacing', nameToken: '3D',
     members: ['contour_new', 'parallel_new', 'scallop_new', 'pencil_new', 'spiral_new', 'morphed_spiral', 'morph', 'radial_new', 'blend', 'flow2', 'inclined_walls', 'steep_and_shallow', 'rest_finishing', 'multiAxisContour', 'rotary_finishing', 'moduleworks_swarf'],
     suggestBucket: 'finishing' },
-  { key: 'engrave',  label: 'Engrave',  members: ['engrave', 'project'], suggestBucket: null },
+  { key: 'engrave',  label: 'Engrave',  nameToken: 'Engrave',  members: ['engrave', 'project'], suggestBucket: null },
 ];
 export const quickGroupsContaining = (id) => QUICK_GROUPS.filter(g => g.members.includes(id));
 
@@ -120,6 +123,29 @@ export const quickGroupsContaining = (id) => QUICK_GROUPS.filter(g => g.members.
 // stay sticky. Without this, a COPIED preset marked every loaded strategy as an
 // individual pick, so group clicks couldn't switch or turn a group off — you had
 // to clear each one in the "all strategies" list.
+// The short strategy label appended to a preset name for the current selection —
+// kept deliberately small so the name never becomes a mega-string:
+//   • the selection is exactly a quick GROUP        → the group's short nameToken
+//   • exactly one strategy                          → that strategy's name
+//   • exactly the two pinned picks (2D Contour+Bore)→ both, "2D Contour + Bore"
+//   • anything else (2+ arbitrary strategies)       → null (name it by hand)
+export function presetStrategyLabel(selectedIds) {
+  const sel = new Set(selectedIds || []);
+  if (sel.size === 0) return null;
+  for (const g of QUICK_GROUPS) {
+    if (g.members.length === sel.size && g.members.every(id => sel.has(id))) {
+      return g.nameToken || g.label;
+    }
+  }
+  const ids = [...sel];
+  if (ids.length === 1) return strategyById(ids[0])?.name || null;
+  if (ids.length === 2 && ids.every(id => PINNED_STRATEGIES.includes(id))) {
+    // Stable order (2D Contour then Bore) regardless of click order.
+    return PINNED_STRATEGIES.filter(id => sel.has(id)).map(id => strategyById(id)?.name).filter(Boolean).join(' + ');
+  }
+  return null;
+}
+
 export function individualStrategyIds(selectedIds) {
   const sel = new Set(selectedIds || []);
   const covered = new Set();

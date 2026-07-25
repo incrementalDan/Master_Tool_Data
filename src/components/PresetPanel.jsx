@@ -14,7 +14,7 @@ import InfoTip from './InfoTip.jsx';
 import { boreCompensation, SmallBoreIcon } from '../utils/boreCompensation.jsx';
 import {
   STRATEGIES, STRATEGY_COLUMNS, strategyById, strategiesForToolType,
-  QUICK_GROUPS, quickGroupsContaining, individualStrategyIds, AUTO_LINK_PAIR, PINNED_STRATEGIES,
+  QUICK_GROUPS, quickGroupsContaining, individualStrategyIds, presetStrategyLabel, AUTO_LINK_PAIR, PINNED_STRATEGIES,
   SMALL_BORE_STRATEGIES, isNewFormatPreset, readStrategyBucket, buildStrategies, writeBucketStrategies,
 } from '../schema/camStrategies.js';
 import {
@@ -814,7 +814,9 @@ function EditCard({
     touch();
     setDraft(d => {
       const op = bucketToOpType(nextBucket);
-      const nd = { ...d, operation_type: op, name: composeName(d, assemblyId, op) };
+      // Pass nextSet so the strategy label reflects the just-changed selection
+      // (the `selected` state hasn't settled at this point).
+      const nd = { ...d, operation_type: op, name: composeName(d, assemblyId, op, nextSet) };
       if (strategyFormat === 'new') {
         nd.strategies = writeBucketStrategies(nextBucket, [...nextSet], d.strategies, loadedDualBucket);
       }
@@ -896,18 +898,24 @@ function EditCard({
   const holderDescOf = (a) =>
     a ? (a.holder_description || holders.find(h => h.guid === a.holder_guid)?.description || '') : '';
 
-  // Compose the convention name from material + the selected assembly + op type.
-  // For hole-making tools, op type is omitted — the name is material + OOH + holder.
-  // Falls back to the current draft name when no assembly is selected, or when a
-  // milling tool has no op type selected yet.
-  const composeName = (d, asmId, opType) => {
+  // Compose the convention name from material + the selected assembly + op type,
+  // plus a short strategy label at the end (new-format milling only). For
+  // hole-making tools, op type + strategy are omitted. `selOverride` lets a
+  // strategy-changing handler pass the just-updated selection (state hasn't
+  // settled yet). See presetStrategyLabel for the label rule.
+  const composeName = (d, asmId, opType, selOverride) => {
     const a = assemblies.find(x => x.assembly_id === asmId);
+    const selSet = selOverride ?? selected;
+    const strategyLabel = (!isHoleMaking && strategyFormat === 'new')
+      ? presetStrategyLabel([...selSet])
+      : null;
     return composePresetName({
       // Material token comes from the Materials library code for the stored query.
       materialQuery: materialNameCode(d.material?.query, materials),
       ooh: a?.ooh,
       holderShort: a ? holderShortName(holderDescOf(a)) : null,
       opType: isHoleMaking ? null : opType,
+      strategyLabel,
     });
   };
 
