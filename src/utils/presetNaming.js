@@ -18,6 +18,9 @@
 // cannot be parsed, the UI prompts the user.
 
 import { holderShortName } from './holderNaming.js';
+import {
+  isNewFormatPreset, readStrategyBucket, presetStrategyLabel,
+} from '../schema/camStrategies.js';
 import { lengthEps } from './units.js';
 
 // Material query code -> the token used in preset names. The query value Fusion
@@ -191,6 +194,56 @@ export function syncPresetMaterialName(preset, materials) {
   };
 }
 
+// Compose the convention name for a preset against a given assembly, deriving
+// every piece from the preset itself (format, operation/bucket, intensity,
+// strategy label, small bore). This is the SAME composition the preset editor
+// shows live — shared so a name rebuilt elsewhere (e.g. when an assembly's OOH
+// or holder changes) can't drift from what the editor would produce.
+export function autoPresetName(preset, assembly, materials, { isHoleMaking = false } = {}) {
+  if (!preset) return '';
+  const newFmt = isNewFormatPreset(preset);
+  let opType = preset.operation_type ?? parsePresetName(preset.name)?.opType ?? null;
+  let intensityWord = null;
+  let strategyLabel = null;
+  if (newFmt) {
+    const rb = readStrategyBucket(preset);
+    // A new-format preset's operation is its BUCKET (never the name); with an
+    // empty selection the bucket is ambiguous, so keep the stored value.
+    if (rb.ids.length > 0) opType = rb.bucket === 'roughing' ? 'rough' : 'finish';
+    const intens = preset.intensity || 'normal';
+    intensityWord = intens === 'light' ? 'Fine' : intens === 'aggressive' ? 'Fast' : null;
+    strategyLabel = presetStrategyLabel(rb.ids);
+  }
+  return composePresetName({
+    materialQuery: materialNameCode(preset.material?.query, materials),
+    ooh: assembly?.ooh,
+    holderShort: assembly ? holderShortName(assembly.holder_description || '') : null,
+    opType: isHoleMaking ? null : opType,
+    intensityWord,
+    strategyLabel,
+    smallBore: newFmt && !!preset.small_bore,
+  });
+}
+
+// Presets whose material link is BROKEN: they hold a material string that
+// resolves to nothing in the Materials library and carry no CAM-preset FK id.
+// The main cause is a CAM preset renamed BEFORE the id was captured (the stored
+// old name can no longer be matched, so it can't self-heal — see
+// syncPresetMaterialName); legacy imported strings ("AL FIN") land here too, and
+// want the same fix. `suggestion` is a confident CAM-preset name to re-link to,
+// or null when the user must pick. Runtime-only — nothing is auto-changed.
+export function unresolvedMaterialPresets(presets, materials) {
+  if (!materials?.presets?.length) return [];
+  return (presets || []).reduce((out, p) => {
+    const query = String(p?.material?.query || '').trim();
+    if (!query || p?.material_preset_id) return out;
+    const hit = findMaterialInLibrary(query, materials);
+    if (hit.group || hit.preset || hit.alloy) return out;   // resolves by name — fine
+    out.push({ guid: p.guid, name: p.name || 'Unnamed preset', query, suggestion: suggestCamPresetName(query, materials) });
+    return out;
+  }, []);
+}
+
 // Walk a tool list and sync every preset's material name from its FK id — the
 // load-time backfill (mirrors backfillAsmNumbers; persisted lazily on next save).
 export function backfillMaterialPresetIds(tools, materials) {
@@ -356,13 +409,51 @@ export function formatOoh(ooh) {
 // the END. Both are optional; when absent the name is just the op word, exactly
 // as before. Callers without strategy context (normalizeLibrary, DiffStep) omit
 // them. No op word (hole-making) → no tail, so intensity/strategy are dropped.
-export function composePresetName({ materialQuery, ooh, holderShort, holderDescription, opType, intensityWord, strategyLabel }) {
+// Small bore is its own operation in the name and REPLACES the whole tail: it
+// already implies a fine finish, so "SM Bore" stands in for the intensity word,
+// the Rough/Finish word, and the (necessarily Bore/Contour) strategy label —
+// which would otherwise read "Fine Finish Bore". Matches the SM BORE alias in
+// OP_TYPES, so it still parses back to small_bore for old-format presets.
+export const SMALL_BORE_NAME_WORD = 'SM Bore';
+
+// Is this name one WE generated (so it may be safely refreshed), or one a human
+// typed (so it must be preserved)? Comparing against the currently-composed name
+// can't answer that: an auto name goes STALE the moment anything it's built from
+// changes (a Fusion edit, a renamed CAM preset, a different OOH), and a stale
+// auto name looks exactly like a custom one. So check the name's STRUCTURE
+// instead — a tail built only from tokens the composer emits (optional Fine/Fast,
+// an operation word, an optional known strategy label; or the standalone
+// "SM Bore") is ours. Anything else ("… - Rough Job 1042") is the user's.
+export function isAutoPresetName(name, strategyLabels = []) {
+  const raw = String(name || '').trim();
+  if (!raw) return false;
+  const sep = raw.lastIndexOf(' - ');
+  if (sep < 0) return false;                       // no convention tail → custom/legacy
+  let tail = raw.slice(sep + 3).trim();
+  if (!tail) return false;
+  if (tail.toLowerCase() === SMALL_BORE_NAME_WORD.toLowerCase()) return true;
+  // Optional intensity prefix.
+  const m = /^(fine|fast)\s+/i.exec(tail);
+  if (m) tail = tail.slice(m[0].length);
+  // Operation word (longest first so "Fine Finish" beats "Finish").
+  const words = OP_TYPES.map(o => o.word).sort((a, b) => b.length - a.length);
+  const word = words.find(w => tail.toLowerCase() === w.toLowerCase()
+    || tail.toLowerCase().startsWith(`${w.toLowerCase()} `));
+  if (!word) return false;
+  const rest = tail.slice(word.length).trim();
+  if (!rest) return true;                          // op word only
+  // Whatever follows must be a strategy label the composer could have produced.
+  return strategyLabels.some(l => l && rest.toLowerCase() === String(l).toLowerCase());
+}
+
+export function composePresetName({ materialQuery, ooh, holderShort, holderDescription, opType, intensityWord, strategyLabel, smallBore }) {
   const short = holderShort != null ? holderShort : holderShortName(holderDescription || '');
   const head = [materialToCode(materialQuery), formatOoh(ooh), short]
     .filter(s => s != null && String(s).trim() !== '')
     .join(' ');
   const word = opTypeWord(opType);
   if (!word) return head;
+  if (smallBore) return `${head} - ${SMALL_BORE_NAME_WORD}`;
   const tail = [intensityWord, word, strategyLabel]
     .filter(s => s != null && String(s).trim() !== '')
     .join(' ');

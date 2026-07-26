@@ -20,6 +20,7 @@ import PairingSections from './PairingSections.jsx';
 import ProShopImportModal from './ProShopImportModal.jsx';
 import DriftBanner from './DriftBanner.jsx';
 import ConflictBanner from './ConflictBanner.jsx';
+import MaterialLinkBanner from './MaterialLinkBanner.jsx';
 import MergeSiblingBanner from './MergeSiblingBanner.jsx';
 import {
   INSERT_FAMILY_BY_ID, ALWAYS_INSERT_TYPES, autoInsertFamily, newPairing,
@@ -535,6 +536,16 @@ export default function ToolDetail() {
             number) — offer to fold them into one. Handles duplicates created
             before the normalize-time merge existed. */}
         <MergeSiblingBanner key={`merge-${tool.id}`} tool={tool} />
+
+        {/* Presets whose material link can't self-heal (CAM preset renamed
+            before its id was captured, or a legacy imported string) — offers a
+            one-click re-link to a suggested CAM preset. Never auto-fixes. */}
+        <MaterialLinkBanner
+          key={`matlink-${tool.id}`}
+          tool={tool}
+          isSaving={isSaving}
+          onSave={async (updated) => { await saveTool(updated); }}
+        />
 
         {/* Duplicate presets folded on load (identical presets that were repeated
             per assembly). Already shown merged; this persists the cleanup to the

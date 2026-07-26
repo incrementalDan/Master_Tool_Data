@@ -2103,19 +2103,21 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   overflow-wrap: anywhere;
 }
 
-/* Hover the name → it "pops out": un-clamps, widens a touch past the card, and
-   floats above neighbors so the full name is readable without shifting layout. */
+/* Hover the name → it "pops out": un-clamps to show every row and floats over
+   the content below, without shifting layout. Deliberately stays within the
+   CARD's width — the row lives in a `overflow-x: auto` scroller, so a pop-out
+   wider than the card would extend the scrollable area and make the horizontal
+   scrollbar jump on hover (and clip at the right edge). Full name, no jitter. */
 .preset-card-name:hover .preset-tag {
   position: absolute;
   top: 0;
   left: 0;
+  right: 0;
   z-index: 40;
   -webkit-line-clamp: unset;
   overflow: visible;
-  width: max-content;
-  max-width: 230px;
   background: var(--input-bg);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 
 .preset-card-mat {

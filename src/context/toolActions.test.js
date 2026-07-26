@@ -452,3 +452,66 @@ describe('mergeTools — fold two records sharing a ProShop number (tool-page me
     expect(a7[0]['post-process'].comment).toBe('FTL-LINK');
   });
 });
+
+describe('updateAssembly — OOH/holder change re-derives everything built from it', () => {
+  // A no-Fusion tool so the write path stays metadata-only (no Fusion IO stubs
+  // needed). Two presets: one auto-named, one the user named by hand.
+  const makeTool = () => ({
+    id: 'FTL-AAA', tracking_id: 'FTL-AAA', tool_id: '1001',
+    tool_type: 'flat end mill', unit: 'inches', no_fusion_link: true,
+    description: '1/2 EM', diameter: 0.5,
+    assemblies: [{
+      assembly_id: 'as1', holder_guid: 'H1', holder_description: 'NBT30-SK13C-60',
+      ooh: 2.125, asm_number: '30-SK13-60-1001-2.125', linked_preset_guids: [],
+    }],
+    presets: [
+      { guid: 'p1', name: 'AL 2.125 30-SK13-60 - Rough', material: { query: 'AL' },
+        strategies: { roughing: ['adaptive2d', 'adaptive'], finishing: [] } },
+      { guid: 'p2', name: 'AL 2.125 30-SK13-60 - Rough Job 1042', material: { query: 'AL' },
+        strategies: { roughing: ['adaptive2d', 'adaptive'], finishing: [] } },
+    ],
+  });
+
+  it('updates the Auto asm_number and the auto preset name; leaves a custom name alone', async () => {
+    const tool = makeTool();
+    const ctx = makeCtx({ toolsRef: { current: [tool] }, materialsRef: { current: null } });
+    const { updateAssembly } = createToolActions(ctx);
+    const out = await updateAssembly('FTL-AAA', 'as1', { ooh: 3.0 });
+
+    // Auto asm_number re-derived from the new OOH (was …-2.125).
+    expect(out.assemblies[0].asm_number).toBe('30-SK13-60-1001-3');
+    // A re-derivable Auto value is not worth retiring.
+    expect(out.assemblies[0].legacy_asm_numbers ?? []).toEqual([]);
+
+    // The auto-named preset follows the new OOH — so presetMatchesAssembly still
+    // links it to the assembly instead of silently orphaning it.
+    const p1 = out.presets.find(p => p.guid === 'p1');
+    // Preset names carry OOH at 3 decimals (asm_number trims it) — both follow.
+    expect(p1.name).toBe('AL 3.000 30-SK13-60 - Rough Adaptive');
+
+    // The hand-typed name is the user's — untouched.
+    const p2 = out.presets.find(p => p.guid === 'p2');
+    expect(p2.name).toBe('AL 2.125 30-SK13-60 - Rough Job 1042');
+  });
+
+  it('leaves names alone when neither OOH nor holder changed', async () => {
+    const tool = makeTool();
+    const ctx = makeCtx({ toolsRef: { current: [tool] }, materialsRef: { current: null } });
+    const { updateAssembly } = createToolActions(ctx);
+    const out = await updateAssembly('FTL-AAA', 'as1', { notes: 'tweaked' });
+    expect(out.assemblies[0].asm_number).toBe('30-SK13-60-1001-2.125');
+    expect(out.presets.find(p => p.guid === 'p1').name).toBe('AL 2.125 30-SK13-60 - Rough');
+  });
+
+  it('does not touch a non-derived asm_number mode (ProShop RTA)', async () => {
+    const tool = makeTool();
+    tool.assemblies[0].asm_number = 'RTA-77';
+    const ctx = makeCtx({
+      toolsRef: { current: [tool] }, materialsRef: { current: null },
+      shopSettingsRef: { current: { assembly_id_system: { mode: 'proshop_rta' }, tool_id_system: {}, location_config: { systems: [] } } },
+    });
+    const { updateAssembly } = createToolActions(ctx);
+    const out = await updateAssembly('FTL-AAA', 'as1', { ooh: 3.0 });
+    expect(out.assemblies[0].asm_number).toBe('RTA-77');   // user-entered, not derived
+  });
+});
