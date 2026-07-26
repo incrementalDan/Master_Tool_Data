@@ -83,8 +83,10 @@ export function niceIncrement(target) {
 
 // Fraction of the current value one wheel/scroll notch moves a slider. A fixed
 // step is too coarse for a small value and too fine for a large one; this scales
-// with the value so a nudge stays proportional (0.010 → 0.001, 0.005 → 0.0005).
-export const WHEEL_STEP_PCT = 0.08;
+// with the value so a nudge stays proportional (0.010 → 0.0005, 0.005 → 0.0002).
+// Kept small because many mice report several wheel ticks per physical detent —
+// a big per-notch percentage overshoots badly on those.
+export const WHEEL_STEP_PCT = 0.04;
 
 // The dynamic step for one wheel notch: ~WHEEL_STEP_PCT of the current value,
 // rounded to a nice increment, floored at the field's base step so you can still
