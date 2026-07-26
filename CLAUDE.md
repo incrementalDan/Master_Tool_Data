@@ -1535,6 +1535,38 @@ The explicit, user-initiated batch flow — see the **Phase 2** section above. T
 
 -----
 
+## Self-healing — the app continuously re-establishes correctness (CRITICAL philosophy)
+
+**Why this exists.** This app introduces standardization (tracking IDs, the naming convention, the Materials/vendor/machine libraries, the location + ID systems) to data that never had any — the shop's Fusion library and ProShop export were maintained by hand, so **the data coming in is dirty**. Worse, it does not stay clean: **Fusion remains an editable second source of truth**, so every sync can re-introduce drift, duplicates, renamed-away links and hand-edited values. A one-time migration therefore does NOT hold. Correctness has to be **re-derived on every load**, not assumed — the app is the thing that keeps the library true, continuously.
+
+This is the other half of **Informed, not blocked** (next section). Together:
+
+| Situation | Response |
+|---|---|
+| The right answer is **unambiguous** | **Repair it silently** — no prompt, no ceremony |
+| The right answer is **a judgement call** | **Surface it, never guess** — the user decides, per record |
+
+**Repair silently (already built, run at load):** `combineToolsByToolId` (fold duplicate tool records), `mergePresetLists` (collapse duplicate presets by operation+values), `derivePairings` (detect insert tools from a combined product-id), `overlayPresets` (infer a blank material from the preset name), `materializeUnlinkedTools`, the FK backfills — `backfillMaterialPresetIds` / `backfillPurchasingRegistryIds` / `backfillPreferredMachineIds` / `backfillAsmNumbers` — the derive-from-id resolvers (`syncPresetMaterialName`, `syncPurchasingNames`, `syncPreferredMachine`), `isAutoPresetName`'s open-time preset-name refresh, `resolveLocationString`, and the Fusion round-trip invariants in `normalizePreset` / `buildHolderObject`.
+
+**Surface, don't guess (already built):** `ConflictBanner` (import/combine disagreements), `DriftBanner` (live Fusion edits), `MergeSiblingBanner` (same ProShop # on two records), `ReconcileModal` (entries dumped straight into Fusion), the duplicate-preset cleanup banner, `MaterialLinkBanner` (material links that can't self-heal), `_productIdConflict` (stale tracking ID), and the ProShop import's flagged field conflicts.
+
+### Rules for any NEW feature
+
+1. **Assume the stored data is wrong.** Ask "what happens when this field is missing, stale, duplicated, or was edited in Fusion?" — that's the normal case here, not the edge case.
+2. **Derive, don't store.** Store a stable id; compose the display value at read time (see the CAM-preset / vendor-registry / machine FKs). A stored copy of someone else's mutable value *will* go stale.
+3. **Repair in memory at load; persist lazily on the record's next save.** Never turn a load into a bulk write — that's slow, it fights concurrent editors, and it rewrites records the user never touched.
+4. **Detect structurally, not by equality.** Comparing a stored value to a freshly-computed one cannot tell *"the user customized this"* from *"this is ours and went stale"* — the `isAutoPresetName` lesson. Check the shape/provenance instead.
+5. **Every repair must be idempotent and self-clearing.** Running it twice changes nothing, and the action that fixes a flag must make the detector stop firing. A detector that re-fires after the user fixed it is a nag loop — the main way this philosophy turns hostile.
+6. **Never auto-resolve a real disagreement,** and never offer a bulk "fix everything" for ambiguous cases (see the cost note below).
+
+### On noise (deliberate trade-offs)
+
+- **Silent repairs are free to re-run.** They're pure in-memory passes over an already-loaded library — no IO, no writes — so running them on every load costs nothing and guarantees the app is never showing stale derived data.
+- **Prompts persist until handled, per record, by design.** If 200 tools are wrong, the flag shows on 200 tools until each is dealt with. That is accepted: a bulk "approve all" on ambiguous data would just launder the bad data into the standard at scale — the user would click yes 200 times without reading. Per-record review is the point.
+- **The failure mode to watch for** is a flag that cannot be cleared (no persist path, or detection that doesn't account for the fix). Before shipping a new flag, confirm the fix action actually makes it go away.
+
+-----
+
 ## Informed, not blocked — the conflict workflow (CRITICAL philosophy)
 
 The shop's real Fusion + ProShop data is a **mess** — the entire point of this app is to clean it into one true source of truth. So the load/import/normalize path must **NEVER block the user on a data disagreement**. It merges what it can, **flags** what it can't, and lets the user **keep working** — they resolve each flag later, on the tool page, when they actually go to use that tool. "Informed, not blocked." When touching any merge/normalize/reconcile code, preserve this: surface differences, never halt.
@@ -1860,6 +1892,8 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 -----
 
 ## TODO / Future Work
+
+- **Self-healing audit (not yet done).** The **Self-healing** philosophy section above was written *after* most of the mechanisms it describes, so it documents the pattern rather than verifying it holds everywhere. Worth one deliberate pass: (1) **coverage** — every derived/linked value that could go stale actually has a repair or a flag (candidates not yet reviewed: `material_suitability` free text, `tags`, `coating`/`pitch` fill-gap fields, holder library links, `speed_feed_refs.preset_id` dangling ids, `jobs[].program_id` dangling after a program delete); (2) **no nag loops** — for each existing flag, confirm the fix action clears the detector (walk `ConflictBanner`, `DriftBanner`, `MergeSiblingBanner`, the duplicate-preset banner, `MaterialLinkBanner`, `_productIdConflict`); (3) **load cost** — the silent repairs are all in-memory, but they're now a stack of full-library passes (`combineToolsByToolId` → `derivePairings` → 4 × backfill…), so confirm they're still cheap at real library size and consider folding them into one walk; (4) **noise calibration** — how many tools actually surface a flag against the real library, and whether any flag fires so broadly it becomes wallpaper (`MaterialLinkBanner` on legacy `"AL FIN"` strings is the likely candidate).
 
 - **Slot/key cutter (slitting saw) — verify corner-radius output to Fusion + terminology.** Two related open items from the key-cutter work: **(1)** `corner_radius` (`geometry.RE`) now *applies* to `slot/key cutter` (field registry `appliesToTypes`, extractor `FIELD_VISIBILITY` cornerRadius row, and the search facet), but we have **not confirmed how Fusion actually wants a slitting-saw/key-cutter corner radius written** — real Fusion exports for this type carry a distinct `tool_kerfWidth` field (see the FUSION_HDR reference list), and it's unclear whether the radius belongs in `RE`, in a kerf-specific field, or both. **The user will provide a real Fusion export example later** — audit `internalToFusionTool` for this type against it before trusting the `RE` write (mirror the chamfer-mill / tapered-mill per-type geometry-field audits). **(2)** "Slitting saw" is the shop's other word for this tool class — today it's folded into the single `slot/key cutter` type (UI labels flute length as "Flute Length (Kerf)" and shoulder length derives from flute length in `normalizeLibrary`). Revisit whether **slitting saw should be its own distinct `tool_type`** (own icon/filing/kerf semantics) rather than an alias — a bigger change to `TOOL_TYPES`, icons, `AUTO_GROUP`/ProShop mapping, and `FIELD_VISIBILITY`. Both deferred until the example arrives.
 
