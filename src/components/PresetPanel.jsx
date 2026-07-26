@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Plus, X, Check, GripVertical, Trash2, ChevronDown, Cpu, Briefcase, Clipboard, AlertTriangle } from 'lucide-react';
+import { Plus, X, Check, GripVertical, Trash2, ChevronDown, Cpu, Briefcase, Clipboard, AlertTriangle, RotateCcw } from 'lucide-react';
 import { generateId, COOLANT_OPTS } from '../schema/toolSchema.js';
 import { copyPresetToClipboard } from '../utils/fusionExport.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -149,6 +149,9 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
   // Transient "Copied ✓" feedback, keyed by preset guid (or '__editor__').
   const [copiedKey, setCopiedKey] = useState(null);
   const dragSrcIdx = useRef(null);
+  // Guid of the preset just created via Add — its name is a placeholder, so the
+  // editor keeps auto-naming on for it (see EditCard's name-manual detection).
+  const freshGuidRef = useRef(null);
 
   // Copy one preset as Fusion JSON (see fusionExport). `key` drives the transient
   // "Copied" feedback; the preset is normalized through the real Fusion path so
@@ -254,6 +257,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
     setPresets(next);
     setEditorDirty(false);
     setEditingId(null);
+    freshGuidRef.current = null;   // saved — no longer a fresh placeholder name
     onSave(emitPresets(next));
   };
 
@@ -268,6 +272,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
   const handleCancelEdit = () => {
     setEditorDirty(false);
     setEditingId(null);
+    freshGuidRef.current = null;
   };
 
   const handleDelete = () => {
@@ -345,6 +350,10 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
 
   const handleConfirmAdd = () => {
     const np = buildNewPreset();
+    // Remember which preset was just created: its name is a placeholder
+    // ("New Preset" / "… (copy)"), so the editor must NOT mistake it for a
+    // hand-typed custom name and switch off auto-naming.
+    freshGuidRef.current = np.guid;
     setPresets([...presets, np]);
     setAddOpen(false);
     setCopySrc({ type: 'blank', id: '' });
@@ -540,6 +549,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
           <EditCard
             key={editingId}
             preset={editing}
+            isFresh={freshGuidRef.current === editingId}
             toolType={toolType}
             accentColor={groupColorOf(editing.material?.query)}
             lenUnit={lenUnit}
@@ -722,7 +732,7 @@ function taperMatches(machTaper, holderDesc) {
 
 // ── Edit card ────────────────────────────────────────────────────────────────
 function EditCard({
-  preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
+  preset, isFresh, toolType, accentColor, lenUnit, feedUnit, speedUnit,
   diameter, fluteLength, numberOfFlutes,
   assemblies = [], holders = [], materials, shopSettings,
   jobsFile, findOrCreateJob, canAddJobs = false, currentUser = '',
@@ -816,7 +826,7 @@ function EditCard({
       const op = bucketToOpType(nextBucket);
       // Pass nextSet so the strategy label reflects the just-changed selection
       // (the `selected` state hasn't settled at this point).
-      const nd = { ...d, operation_type: op, name: composeName(d, assemblyId, op, nextSet) };
+      const nd = { ...d, operation_type: op, name: nextName(d, assemblyId, op, nextSet) };
       if (strategyFormat === 'new') {
         nd.strategies = writeBucketStrategies(nextBucket, [...nextSet], d.strategies, loadedDualBucket);
       }
@@ -885,13 +895,39 @@ function EditCard({
   const setIntensityVal = (v) => {
     setIntensity(v); touch();
     // Recompose the name so the Fine/Fast prefix updates live with the meter.
-    setDraft(d => ({ ...d, intensity: v, name: composeName(d, assemblyId, bucketToOpType(bucket), undefined, v) }));
+    setDraft(d => ({ ...d, intensity: v, name: nextName(d, assemblyId, bucketToOpType(bucket), undefined, v) }));
   };
+  // Old → new format. The old fast/fine/small-bore op-types are the OLD way of
+  // saying what the intensity meter + Small Bore toggle say in the new format
+  // (they don't coexist), so translate them instead of dropping them on the
+  // floor — otherwise "Rough Fast" converted to a plain "Rough" and the
+  // proven intent was silently lost.
   const convertToNew = () => {
+    const map = OLD_OP_TO_NEW[draft.operation_type];
+    const nb = map ? map.bucket : bucket;
+    const ni = map ? map.intensity : intensity;
     setStrategyFormat('new');
+    setBucket(nb);
+    setIntensity(ni);
     touch();
-    setDraft(d => ({ ...d, strategies: buildStrategies(bucket, [...selected]) }));
+    setDraft(d => {
+      const nd = {
+        ...d,
+        strategies: buildStrategies(nb, [...selected]),
+        operation_type: bucketToOpType(nb),
+        intensity: ni,
+        ...(map?.smallBore ? { small_bore: true } : {}),
+      };
+      // Recompose so the name reflects the new format (Fine/Fast prefix +
+      // strategy label) instead of keeping the old "Rough Fast" wording.
+      nd.name = nameManual ? d.name : composePresetNameFor(nd, nb, ni);
+      return nd;
+    });
   };
+  // composeName variant that takes an explicit bucket + intensity (state hasn't
+  // settled during convert).
+  const composePresetNameFor = (d, b, i) =>
+    composeName(d, assemblyId, bucketToOpType(b), undefined, i, 'new');
 
   // Which assembly (holder + OOH) this preset is named for. Initialised by
   // matching the current name; user can switch it to retarget the preset.
@@ -907,11 +943,13 @@ function EditCard({
   // hole-making tools, op type + strategy are omitted. `selOverride` lets a
   // strategy-changing handler pass the just-updated selection (state hasn't
   // settled yet). See presetStrategyLabel for the label rule.
-  const composeName = (d, asmId, opType, selOverride, intensOverride) => {
+  const composeName = (d, asmId, opType, selOverride, intensOverride, formatOverride) => {
     const a = assemblies.find(x => x.assembly_id === asmId);
     const selSet = selOverride ?? selected;
     const intens = intensOverride ?? intensity;
-    const isNewMill = !isHoleMaking && strategyFormat === 'new';
+    // formatOverride: during convertToNew the `strategyFormat` state hasn't
+    // settled yet, so the caller passes the format it's switching to.
+    const isNewMill = !isHoleMaking && (formatOverride ?? strategyFormat) === 'new';
     // Intensity prefix (new format only): light → Fine, aggressive → Fast, before
     // the operation word. New-format operation is the bucket (rough/finish), so
     // this never touches the old fine_finish/rough_fast op-types.
@@ -929,6 +967,36 @@ function EditCard({
       strategyLabel,
     });
   };
+
+  // Auto-name vs. hand-typed name. composeName is a LIVE PREVIEW that rebuilds
+  // the name whenever material / assembly / operation / intensity / strategies
+  // change. Once the user types their own name, that must win — otherwise an
+  // unrelated edit silently wipes it. This matters most for the documented
+  // "2+ arbitrary strategies → no auto label, name it by hand" case. `nextName`
+  // is used by every auto-rename path; the ↺ button clears the flag to resume
+  // auto-naming.
+  const [nameManual, setNameManual] = useState(false);
+  const nextName = (d, asmId, opType, selOverride, intensOverride) =>
+    (nameManual ? d.name : composeName(d, asmId, opType, selOverride, intensOverride));
+
+  // On open, decide whether the STORED name is auto-generated or custom: if it
+  // doesn't match what auto-naming would produce right now, treat it as custom
+  // so an unrelated edit can't rewrite it (protects legacy names and previously
+  // hand-typed ones, not just names typed in this session). The ↺ Auto button
+  // appears whenever this is on, so returning to auto-naming is one click.
+  const nameChecked = useRef(false);
+  useEffect(() => {
+    if (nameChecked.current) return;
+    nameChecked.current = true;
+    // A just-created preset carries a placeholder name ("New Preset" / "…
+    // (copy)") — never treat that as a custom name, or auto-naming would be off
+    // from the moment it's created.
+    if (isFresh) return;
+    const stored = (draft.name || '').trim();
+    const auto = (composeName(draft, assemblyId, draft.operation_type) || '').trim();
+    if (stored && auto && stored !== auto) setNameManual(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Unsaved-changes tracking ───────────────────────────────────────────────
   // `dirty` flips true on the first user edit; the parent uses it to warn before
@@ -1100,10 +1168,24 @@ function EditCard({
         <input
           className="field-input preset-name-input"
           value={draft.name || ''}
-          onChange={e => set('name', e.target.value)}
+          onChange={e => { set('name', e.target.value); setNameManual(true); }}
           placeholder="Preset name"
           autoFocus
         />
+        {nameManual && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            title="Custom name — click to resume auto-naming from material, assembly, operation and strategy"
+            onClick={() => {
+              setNameManual(false);
+              touch();
+              setDraft(d => ({ ...d, name: composeName(d, assemblyId, d.operation_type) }));
+            }}
+          >
+            <RotateCcw size={13} /> Auto
+          </button>
+        )}
         {isMilling && strategyFormat === 'new' && <ModifierBadge modifier={modifier} bucket={effectiveBucket} />}
         <span className="pe-tool-readout" title="Tool diameter · flute count">
           <span className="dia">⌀</span>{diameter ?? '—'}{numberOfFlutes ? ` · ${numberOfFlutes}FL` : ''}
@@ -1152,7 +1234,7 @@ function EditCard({
                 // stay consistent.
                 const { 'stock-materials': _drop, material_preset_id: _dropId, ...restDraft } = d;
                 const nd = { ...restDraft, material: { ...(d.material || {}), query: '', category: 'all' } };
-                nd.name = composeName(nd, assemblyId, nd.operation_type);
+                nd.name = nextName(nd, assemblyId, nd.operation_type);
                 return nd;
               }); };
               return (
@@ -1204,7 +1286,7 @@ function EditCard({
                 const aid = e.target.value;
                 touch();
                 setAssemblyId(aid);
-                setDraft(d => ({ ...d, name: composeName(d, aid, d.operation_type) }));
+                setDraft(d => ({ ...d, name: nextName(d, aid, d.operation_type) }));
               }}
             >
               {assemblies.length === 0 && <option value="">No assemblies</option>}
@@ -1273,7 +1355,7 @@ function EditCard({
                     const op = e.target.value || null;
                     touch();
                     if (op === 'rough' || op === 'finish') setBucket(opTypeToBucket(op));
-                    setDraft(d => ({ ...d, operation_type: op, name: composeName(d, assemblyId, op) }));
+                    setDraft(d => ({ ...d, operation_type: op, name: nextName(d, assemblyId, op) }));
                   }}
                 >
                   <option value="">—</option>
@@ -1683,7 +1765,7 @@ function EditCard({
               material: { ...(d.material || {}), query, category: materialCategory(query) },
               'stock-materials': [query],
             };
-            nd.name = composeName(nd, assemblyId, nd.operation_type);
+            nd.name = nextName(nd, assemblyId, nd.operation_type);
             return nd;
           }); }}
         />
@@ -1996,7 +2078,18 @@ function SmallBoreRow({
 // exactly like the old Operation dropdown does.
 const bucketColor = (b) => (b === 'roughing' ? 'var(--pe-rough)' : 'var(--pe-finish)');
 const bucketToOpType = (b) => (b === 'roughing' ? 'rough' : 'finish');
-const opTypeToBucket = (op) => (op === 'rough' ? 'roughing' : 'finishing');
+// Old op-types map onto the new Rough/Finish bucket: `rough_fast` is a ROUGHING
+// op (a bare `op === 'rough'` test sent it to finishing — so an old Rough Fast
+// preset opened/converted as a Finish preset).
+const opTypeToBucket = (op) => (op === 'rough' || op === 'rough_fast' ? 'roughing' : 'finishing');
+// Translating an OLD op-type into the new format: the old fast/fine variants ARE
+// the intensity meter (they don't coexist — see CLAUDE.md), and small_bore is the
+// Small Bore toggle. Returns the new-format equivalent.
+const OLD_OP_TO_NEW = {
+  rough_fast:  { bucket: 'roughing',  intensity: 'aggressive', smallBore: false },
+  fine_finish: { bucket: 'finishing', intensity: 'light',      smallBore: false },
+  small_bore:  { bucket: 'finishing', intensity: 'normal',     smallBore: true },
+};
 const INTENSITIES = [
   { key: 'light', label: 'Light', dot: 4 },
   { key: 'normal', label: 'Normal', dot: 6 },
