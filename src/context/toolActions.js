@@ -12,7 +12,12 @@ import {
   getNextMachineNumber, combineToolsByToolId, mergeNoFusionIntoFusion,
 } from '../schema/toolSchema.js';
 import { normProShopId } from '../schema/insertFamilies.js';
-import { composeAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
+import { composeAsmNumber, autoAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
+import {
+  presetMatchesAssembly, isAutoPresetName, autoPresetName, HOLE_MAKING_TYPES,
+} from '../utils/presetNaming.js';
+import { ALL_STRATEGY_LABELS } from '../schema/camStrategies.js';
+import { lengthEps } from '../utils/units.js';
 import { INSERT_FAMILY_BY_ID, pairedAsmIdPart } from '../schema/insertFamilies.js';
 import { resolveLocationString, analyzeSystem, findSystem, proShopLocationValue, locationNumber } from '../utils/locationSystem.js';
 import { isExcludedFrom, setToolExclusion } from '../utils/idSystems.js';
@@ -26,7 +31,7 @@ export function createToolActions(ctx) {
     dispatch, notify,
     downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary,
     saveLocationConfig,
-    toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef, fusionReadyRef,
+    toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef, fusionReadyRef, materialsRef,
   } = ctx;
 
   // Mode-2 two-stage load: until the full Fusion build has completed this session
@@ -747,9 +752,64 @@ export function createToolActions(ctx) {
     if (!tool) throw new Error('Tool not found');
     dispatch({ type: 'SAVE_START' });
     try {
-      const assemblies = (tool.assemblies || []).map(a =>
-        a.assembly_id === assemblyId ? { ...a, ...patch } : a);
-      const written = await writeLogicalTool({ ...tool, assemblies, updated_at: new Date().toISOString() });
+      const prev = (tool.assemblies || []).find(a => a.assembly_id === assemblyId) || {};
+      const next = { ...prev, ...patch };
+      // The OOH and holder are BAKED INTO derived names — the assembly's Auto
+      // asm_number and every linked preset's name. Editing them without
+      // re-deriving leaves both stale, and a stale OOH in a preset name also
+      // breaks presetMatchesAssembly (which links preset→assembly by the OOH
+      // parsed out of the name), silently orphaning the preset. So re-derive
+      // here, where we still know the OLD values. Self-healing: unambiguous →
+      // repair silently; a hand-typed name is the user's and is left alone.
+      const eps = lengthEps(tool.unit);
+      const oohChanged = Math.abs(Number(next.ooh ?? 0) - Number(prev.ooh ?? 0)) > eps;
+      const holderChanged = (next.holder_guid || '') !== (prev.holder_guid || '');
+      const derivedChanged = oohChanged || holderChanged;
+
+      const asmCfg = shopSettingsRef.current?.assembly_id_system || {};
+      const idCfg = shopSettingsRef.current?.tool_id_system || {};
+      const holderDescOf = (a) => a.holder_description
+        || holdersRef.current?.find(h => h.guid === a.holder_guid)?.description || '';
+
+      const assemblies = (tool.assemblies || []).map(a => {
+        if (a.assembly_id !== assemblyId) return a;
+        const upd = { ...a, ...patch };
+        // Auto asm_number is a pure product of holder + tool_id + OOH, so it must
+        // re-derive. Other modes (RTA / ERP / sequential) are NOT derived from
+        // these fields — leave those numbers alone.
+        if ((asmCfg.mode || 'auto') === 'auto' && derivedChanged) {
+          const before = autoAsmNumber(asmCfg, idCfg,
+            { holderDescription: holderDescOf(a), tool_id: tool.tool_id, ooh: a.ooh, assembly_id: a.assembly_id });
+          const after = autoAsmNumber(asmCfg, idCfg,
+            { holderDescription: holderDescOf(upd), tool_id: tool.tool_id, ooh: upd.ooh, assembly_id: upd.assembly_id });
+          // Only replace a value that WAS auto-derived; anything else (an RTA
+          // carried over from another mode) is external — retire it, never drop it.
+          if (after && after !== upd.asm_number) {
+            if (upd.asm_number && upd.asm_number !== before) {
+              upd.legacy_asm_numbers = [...(upd.legacy_asm_numbers || []), upd.asm_number];
+            }
+            upd.asm_number = after;
+          }
+        }
+        return upd;
+      });
+
+      // Refresh the names of presets that were linked to THIS assembly.
+      let presets = tool.presets;
+      if (derivedChanged && tool.presets?.length) {
+        const linkedGuids = new Set(prev.linked_preset_guids || []);
+        const isHoleMaking = HOLE_MAKING_TYPES.has(tool.tool_type);
+        presets = tool.presets.map(p => {
+          const wasLinked = linkedGuids.has(p.guid) || presetMatchesAssembly(p, prev, tool.unit);
+          if (!wasLinked) return p;
+          // A name we didn't generate is the user's — never rewrite it.
+          if (!isAutoPresetName(p.name, ALL_STRATEGY_LABELS)) return p;
+          const nn = autoPresetName(p, next, materialsRef?.current, { isHoleMaking });
+          return nn ? { ...p, name: nn } : p;
+        });
+      }
+
+      const written = await writeLogicalTool({ ...tool, assemblies, presets, updated_at: new Date().toISOString() });
       dispatch({ type: 'UPDATE_TOOL', tool: written });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify('Assembly updated', 'success');

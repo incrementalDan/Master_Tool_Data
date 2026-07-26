@@ -18,6 +18,9 @@
 // cannot be parsed, the UI prompts the user.
 
 import { holderShortName } from './holderNaming.js';
+import {
+  isNewFormatPreset, readStrategyBucket, presetStrategyLabel,
+} from '../schema/camStrategies.js';
 import { lengthEps } from './units.js';
 
 // Material query code -> the token used in preset names. The query value Fusion
@@ -189,6 +192,37 @@ export function syncPresetMaterialName(preset, materials) {
     material: { ...(preset.material || {}), query, category: materialCategory(query) },
     'stock-materials': [query],
   };
+}
+
+// Compose the convention name for a preset against a given assembly, deriving
+// every piece from the preset itself (format, operation/bucket, intensity,
+// strategy label, small bore). This is the SAME composition the preset editor
+// shows live — shared so a name rebuilt elsewhere (e.g. when an assembly's OOH
+// or holder changes) can't drift from what the editor would produce.
+export function autoPresetName(preset, assembly, materials, { isHoleMaking = false } = {}) {
+  if (!preset) return '';
+  const newFmt = isNewFormatPreset(preset);
+  let opType = preset.operation_type ?? parsePresetName(preset.name)?.opType ?? null;
+  let intensityWord = null;
+  let strategyLabel = null;
+  if (newFmt) {
+    const rb = readStrategyBucket(preset);
+    // A new-format preset's operation is its BUCKET (never the name); with an
+    // empty selection the bucket is ambiguous, so keep the stored value.
+    if (rb.ids.length > 0) opType = rb.bucket === 'roughing' ? 'rough' : 'finish';
+    const intens = preset.intensity || 'normal';
+    intensityWord = intens === 'light' ? 'Fine' : intens === 'aggressive' ? 'Fast' : null;
+    strategyLabel = presetStrategyLabel(rb.ids);
+  }
+  return composePresetName({
+    materialQuery: materialNameCode(preset.material?.query, materials),
+    ooh: assembly?.ooh,
+    holderShort: assembly ? holderShortName(assembly.holder_description || '') : null,
+    opType: isHoleMaking ? null : opType,
+    intensityWord,
+    strategyLabel,
+    smallBore: newFmt && !!preset.small_bore,
+  });
 }
 
 // Presets whose material link is BROKEN: they hold a material string that

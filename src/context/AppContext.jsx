@@ -1049,7 +1049,7 @@ export function AppProvider({ children }) {
     dispatch, notify,
     downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary,
     saveLocationConfig,
-    toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef, fusionReadyRef,
+    toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef, fusionReadyRef, materialsRef,
   }), [notify, downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary, saveLocationConfig]);
 
   const libraryOps = useMemo(() => createLibraryOps({
