@@ -537,6 +537,42 @@ export default function ToolDetail() {
             before the normalize-time merge existed. */}
         <MergeSiblingBanner key={`merge-${tool.id}`} tool={tool} />
 
+        {/* Assembly numbers corrected on load. In Auto mode asm_number is a pure
+            product of holder + tool_id + OOH with no edit UI, so a mismatch is
+            always stale (OOH edited in Fusion, a Tool ID renumber, …) — it's
+            fixed silently and merely reported here. Saving persists it and
+            clears the flag. Only ever set in Auto mode (see backfillAsmNumbers). */}
+        {tool._asmNumbersFixed > 0 && (
+          <div style={{
+            border: '1px solid var(--blue)', borderRadius: 'var(--radius)',
+            background: 'color-mix(in srgb, var(--blue) 8%, transparent)',
+            padding: 14, marginBottom: 16,
+            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          }}>
+            <Wrench size={16} style={{ color: 'var(--blue)', flexShrink: 0 }} />
+            <span style={{ flex: 1, minWidth: 220, lineHeight: 1.5 }}>
+              <strong>
+                {tool._asmNumbersFixed} assembly number{tool._asmNumbersFixed > 1 ? 's were' : ' was'} out of date and
+                {tool._asmNumbersFixed > 1 ? ' have' : ' has'} been corrected.
+              </strong>{' '}
+              Assembly numbers are built from the holder, tool ID and OOH, so they update automatically when
+              those change. Save to store the corrected {tool._asmNumbersFixed > 1 ? 'numbers' : 'number'}.
+            </span>
+            <button
+              className="btn btn-primary"
+              disabled={isSaving}
+              onClick={async () => {
+                try {
+                  await saveTool(tool);
+                  notify('Assembly numbers updated', 'success');
+                } catch { /* saveTool surfaces its own error toast */ }
+              }}
+            >
+              {isSaving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        )}
+
         {/* Presets whose material link can't self-heal (CAM preset renamed
             before its id was captured, or a legacy imported string) — offers a
             one-click re-link to a suggested CAM preset. Never auto-fixes. */}

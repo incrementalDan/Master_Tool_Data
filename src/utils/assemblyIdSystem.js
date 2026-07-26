@@ -156,18 +156,29 @@ export function backfillAsmNumbers(tools, shopSettings, components = null) {
     if (t.pairing && !pairedIdPart) return t;
     const idToken = t.pairing ? pairedIdPart : t.tool_id;
     let touched = false;
+    let corrected = 0;
     const assemblies = (t.assemblies || []).map(a => {
-      if (a.asm_number) return a;
       const asm_number = composeAsmNumber(asmConfig, toolIdConfig, {
         holderDescription: a.holder_description, tool_id: idToken, ooh: a.ooh, assembly_id: a.assembly_id,
       });
-      if (!asm_number) return a;
+      if (!asm_number || asm_number === a.asm_number) return a;
       touched = true;
+      // An Auto number is a PURE product of holder + tool_id + OOH and has no
+      // edit UI in this mode (AssemblyForm only exposes it for proshop_rta), so
+      // there is no custom value to protect: a stored value that differs is
+      // simply STALE and is corrected. Count only corrections — a first-time
+      // fill is normal stamping, not something to tell the user about. Sources
+      // of staleness the edit path can't catch: OOH edited in Fusion, a Tool ID
+      // renumber, a holder description change, or assemblies created before
+      // Auto mode was configured.
+      if (a.asm_number) corrected += 1;
       return { ...a, asm_number };
     });
     if (!touched) return t;
     changed = true;
-    return { ...t, assemblies };
+    // Runtime-only flag (like _duplicatePresets / _drift) — surfaced on the tool
+    // page and cleared by the next save, which persists the corrected numbers.
+    return { ...t, assemblies, ...(corrected > 0 ? { _asmNumbersFixed: corrected } : {}) };
   });
   return changed ? next : tools;
 }
