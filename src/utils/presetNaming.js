@@ -191,6 +191,25 @@ export function syncPresetMaterialName(preset, materials) {
   };
 }
 
+// Presets whose material link is BROKEN: they hold a material string that
+// resolves to nothing in the Materials library and carry no CAM-preset FK id.
+// The main cause is a CAM preset renamed BEFORE the id was captured (the stored
+// old name can no longer be matched, so it can't self-heal — see
+// syncPresetMaterialName); legacy imported strings ("AL FIN") land here too, and
+// want the same fix. `suggestion` is a confident CAM-preset name to re-link to,
+// or null when the user must pick. Runtime-only — nothing is auto-changed.
+export function unresolvedMaterialPresets(presets, materials) {
+  if (!materials?.presets?.length) return [];
+  return (presets || []).reduce((out, p) => {
+    const query = String(p?.material?.query || '').trim();
+    if (!query || p?.material_preset_id) return out;
+    const hit = findMaterialInLibrary(query, materials);
+    if (hit.group || hit.preset || hit.alloy) return out;   // resolves by name — fine
+    out.push({ guid: p.guid, name: p.name || 'Unnamed preset', query, suggestion: suggestCamPresetName(query, materials) });
+    return out;
+  }, []);
+}
+
 // Walk a tool list and sync every preset's material name from its FK id — the
 // load-time backfill (mirrors backfillAsmNumbers; persisted lazily on next save).
 export function backfillMaterialPresetIds(tools, materials) {

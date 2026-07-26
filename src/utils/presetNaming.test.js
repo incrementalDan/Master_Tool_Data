@@ -20,6 +20,7 @@ import {
   syncPresetMaterialName,
   backfillMaterialPresetIds,
   isAutoPresetName,
+  unresolvedMaterialPresets,
 } from './presetNaming.js';
 
 describe('materialToCode', () => {
@@ -423,5 +424,39 @@ describe('isAutoPresetName — ours (refreshable) vs the user\'s (protected)', (
     expect(auto('AL FIN')).toBe(false);                               // legacy, no tail
     expect(auto('Roughing pass for the big fixture')).toBe(false);
     expect(auto('')).toBe(false);
+  });
+});
+
+describe('unresolvedMaterialPresets — broken material links', () => {
+  const MATS = {
+    groups: [{ id: 'N', label: 'Non-Ferrous', code: 'AL' }, { id: 'M', label: 'Stainless Steel', code: 'SS' }],
+    presets: [{ id: 'pre_al', group_id: 'N', name: 'Aluminum (wrought)' }, { id: 'pre_316', group_id: 'M', name: 'SS Austenitic 316' }],
+    materials: [{ id: 'a1', group_id: 'M', preset_id: 'pre_316', label: '316 / 316L', aliases: ['316L', 'SS316'] }],
+  };
+
+  it('flags a preset whose CAM preset was renamed before its id was captured', () => {
+    // "Al Wrought" was the old name; the library now calls it "Aluminum (wrought)".
+    const out = unresolvedMaterialPresets([{ guid: 'p1', name: 'R', material: { query: 'Al Wrought' } }], MATS);
+    expect(out).toHaveLength(1);
+    expect(out[0].query).toBe('Al Wrought');
+    expect(out[0].suggestion).toBe('Aluminum (wrought)');   // confident re-link offered
+  });
+
+  it('ignores presets that already carry the CAM-preset id (rename-proof)', () => {
+    expect(unresolvedMaterialPresets(
+      [{ guid: 'p', material_preset_id: 'pre_al', material: { query: 'anything' } }], MATS)).toEqual([]);
+  });
+
+  it('ignores materials that still resolve by name (alloy alias, group label)', () => {
+    expect(unresolvedMaterialPresets([{ guid: 'p', material: { query: 'SS316' } }], MATS)).toEqual([]);
+    expect(unresolvedMaterialPresets([{ guid: 'p', material: { query: 'Non-Ferrous' } }], MATS)).toEqual([]);
+  });
+
+  it('ignores presets with no material set', () => {
+    expect(unresolvedMaterialPresets([{ guid: 'p', material: { query: '' } }, { guid: 'q' }], MATS)).toEqual([]);
+  });
+
+  it('is a no-op when the Materials library has not loaded', () => {
+    expect(unresolvedMaterialPresets([{ guid: 'p', material: { query: 'x' } }], { presets: [] })).toEqual([]);
   });
 });
