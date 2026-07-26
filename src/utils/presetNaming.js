@@ -356,13 +356,51 @@ export function formatOoh(ooh) {
 // the END. Both are optional; when absent the name is just the op word, exactly
 // as before. Callers without strategy context (normalizeLibrary, DiffStep) omit
 // them. No op word (hole-making) → no tail, so intensity/strategy are dropped.
-export function composePresetName({ materialQuery, ooh, holderShort, holderDescription, opType, intensityWord, strategyLabel }) {
+// Small bore is its own operation in the name and REPLACES the whole tail: it
+// already implies a fine finish, so "SM Bore" stands in for the intensity word,
+// the Rough/Finish word, and the (necessarily Bore/Contour) strategy label —
+// which would otherwise read "Fine Finish Bore". Matches the SM BORE alias in
+// OP_TYPES, so it still parses back to small_bore for old-format presets.
+export const SMALL_BORE_NAME_WORD = 'SM Bore';
+
+// Is this name one WE generated (so it may be safely refreshed), or one a human
+// typed (so it must be preserved)? Comparing against the currently-composed name
+// can't answer that: an auto name goes STALE the moment anything it's built from
+// changes (a Fusion edit, a renamed CAM preset, a different OOH), and a stale
+// auto name looks exactly like a custom one. So check the name's STRUCTURE
+// instead — a tail built only from tokens the composer emits (optional Fine/Fast,
+// an operation word, an optional known strategy label; or the standalone
+// "SM Bore") is ours. Anything else ("… - Rough Job 1042") is the user's.
+export function isAutoPresetName(name, strategyLabels = []) {
+  const raw = String(name || '').trim();
+  if (!raw) return false;
+  const sep = raw.lastIndexOf(' - ');
+  if (sep < 0) return false;                       // no convention tail → custom/legacy
+  let tail = raw.slice(sep + 3).trim();
+  if (!tail) return false;
+  if (tail.toLowerCase() === SMALL_BORE_NAME_WORD.toLowerCase()) return true;
+  // Optional intensity prefix.
+  const m = /^(fine|fast)\s+/i.exec(tail);
+  if (m) tail = tail.slice(m[0].length);
+  // Operation word (longest first so "Fine Finish" beats "Finish").
+  const words = OP_TYPES.map(o => o.word).sort((a, b) => b.length - a.length);
+  const word = words.find(w => tail.toLowerCase() === w.toLowerCase()
+    || tail.toLowerCase().startsWith(`${w.toLowerCase()} `));
+  if (!word) return false;
+  const rest = tail.slice(word.length).trim();
+  if (!rest) return true;                          // op word only
+  // Whatever follows must be a strategy label the composer could have produced.
+  return strategyLabels.some(l => l && rest.toLowerCase() === String(l).toLowerCase());
+}
+
+export function composePresetName({ materialQuery, ooh, holderShort, holderDescription, opType, intensityWord, strategyLabel, smallBore }) {
   const short = holderShort != null ? holderShort : holderShortName(holderDescription || '');
   const head = [materialToCode(materialQuery), formatOoh(ooh), short]
     .filter(s => s != null && String(s).trim() !== '')
     .join(' ');
   const word = opTypeWord(opType);
   if (!word) return head;
+  if (smallBore) return `${head} - ${SMALL_BORE_NAME_WORD}`;
   const tail = [intensityWord, word, strategyLabel]
     .filter(s => s != null && String(s).trim() !== '')
     .join(' ');

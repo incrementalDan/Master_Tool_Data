@@ -19,6 +19,7 @@ import {
   camPresetIdForQuery,
   syncPresetMaterialName,
   backfillMaterialPresetIds,
+  isAutoPresetName,
 } from './presetNaming.js';
 
 describe('materialToCode', () => {
@@ -384,5 +385,43 @@ describe('suggestCamPresetName', () => {
 
   it('returns null for a blank query', () => {
     expect(suggestCamPresetName('', materials)).toBe(null);
+  });
+});
+
+describe('composePresetName — Small Bore replaces the operation tail', () => {
+  const base = { materialQuery: 'SS', ooh: 2.125, holderShort: '30-SK13-60' };
+  it('emits "SM Bore" instead of intensity + op word + strategy', () => {
+    expect(composePresetName({ ...base, opType: 'finish', intensityWord: 'Fine', strategyLabel: 'Bore', smallBore: true }))
+      .toBe('SS 2.125 30-SK13-60 - SM Bore');
+  });
+  it('normal (non-small-bore) naming is unchanged', () => {
+    expect(composePresetName({ ...base, opType: 'finish', intensityWord: 'Fine', strategyLabel: 'Bore' }))
+      .toBe('SS 2.125 30-SK13-60 - Fine Finish Bore');
+  });
+});
+
+describe('isAutoPresetName — ours (refreshable) vs the user\'s (protected)', () => {
+  // The composer's own labels; the real call passes ALL_STRATEGY_LABELS.
+  const LABELS = ['Adaptive', 'Facing', '3D', 'Engrave', 'Bore', '2D Contour', '2D Contour + Bore'];
+  const auto = (n) => isAutoPresetName(n, LABELS);
+
+  it('recognizes every shape the composer emits', () => {
+    expect(auto('SS 2.125 30-SK13-60 - Rough')).toBe(true);
+    expect(auto('SS 2.125 30-SK13-60 - Fine Finish 3D')).toBe(true);
+    expect(auto('SS 2.125 30-SK13-60 - Fast Rough Adaptive')).toBe(true);
+    expect(auto('SS 2.125 30-SK13-60 - Finish 2D Contour + Bore')).toBe(true);
+    expect(auto('SS 2.125 30-SK13-60 - SM Bore')).toBe(true);
+  });
+
+  it('a STALE auto name is still recognized as ours (so it can self-correct)', () => {
+    // Composed under an older material/OOH/strategy — structure still ours.
+    expect(auto('AL 3.000 30-SK13-120 - Fast Rough Facing')).toBe(true);
+  });
+
+  it('protects names the composer could not have produced', () => {
+    expect(auto('SS 2.125 30-SK13-60 - Rough Job 1042')).toBe(false); // extra words
+    expect(auto('AL FIN')).toBe(false);                               // legacy, no tail
+    expect(auto('Roughing pass for the big fixture')).toBe(false);
+    expect(auto('')).toBe(false);
   });
 });

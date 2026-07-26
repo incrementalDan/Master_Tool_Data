@@ -14,12 +14,12 @@ import InfoTip from './InfoTip.jsx';
 import { boreCompensation, SmallBoreIcon } from '../utils/boreCompensation.jsx';
 import {
   STRATEGIES, STRATEGY_COLUMNS, strategyById, strategiesForToolType,
-  QUICK_GROUPS, quickGroupsContaining, individualStrategyIds, presetStrategyLabel, AUTO_LINK_PAIR, PINNED_STRATEGIES,
+  QUICK_GROUPS, quickGroupsContaining, individualStrategyIds, presetStrategyLabel, ALL_STRATEGY_LABELS, AUTO_LINK_PAIR, PINNED_STRATEGIES,
   SMALL_BORE_STRATEGIES, isNewFormatPreset, readStrategyBucket, buildStrategies, writeBucketStrategies,
 } from '../schema/camStrategies.js';
 import {
   composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
-  materialNameCode, presetMaterialColor, findMaterialInLibrary, syncPresetMaterialName,
+  materialNameCode, presetMaterialColor, findMaterialInLibrary, syncPresetMaterialName, isAutoPresetName,
   HOLE_MAKING_TYPES, TURNING_TYPES,
 } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
@@ -943,10 +943,14 @@ function EditCard({
   // hole-making tools, op type + strategy are omitted. `selOverride` lets a
   // strategy-changing handler pass the just-updated selection (state hasn't
   // settled yet). See presetStrategyLabel for the label rule.
-  const composeName = (d, asmId, opType, selOverride, intensOverride, formatOverride) => {
+  const composeName = (d, asmId, opType, selOverride, intensOverride, formatOverride, smallBoreOverride) => {
     const a = assemblies.find(x => x.assembly_id === asmId);
     const selSet = selOverride ?? selected;
     const intens = intensOverride ?? intensity;
+    // Small bore replaces the whole operation tail with "SM Bore" (it implies a
+    // fine finish). smallBoreOverride covers the toggle handler, where the
+    // `draft.small_bore` this reads hasn't settled yet.
+    const sb = smallBoreOverride ?? (!!d.small_bore && smallBoreAvailable);
     // formatOverride: during convertToNew the `strategyFormat` state hasn't
     // settled yet, so the caller passes the format it's switching to.
     const isNewMill = !isHoleMaking && (formatOverride ?? strategyFormat) === 'new';
@@ -965,6 +969,7 @@ function EditCard({
       opType: isHoleMaking ? null : opType,
       intensityWord,
       strategyLabel,
+      smallBore: isNewMill && sb,
     });
   };
 
@@ -976,8 +981,8 @@ function EditCard({
   // is used by every auto-rename path; the ↺ button clears the flag to resume
   // auto-naming.
   const [nameManual, setNameManual] = useState(false);
-  const nextName = (d, asmId, opType, selOverride, intensOverride) =>
-    (nameManual ? d.name : composeName(d, asmId, opType, selOverride, intensOverride));
+  const nextName = (d, asmId, opType, selOverride, intensOverride, formatOverride, smallBoreOverride) =>
+    (nameManual ? d.name : composeName(d, asmId, opType, selOverride, intensOverride, formatOverride, smallBoreOverride));
 
   // On open, decide whether the STORED name is auto-generated or custom: if it
   // doesn't match what auto-naming would produce right now, treat it as custom
@@ -993,8 +998,17 @@ function EditCard({
     // from the moment it's created.
     if (isFresh) return;
     const stored = (draft.name || '').trim();
+    if (!stored) return;
+    if (!isAutoPresetName(stored, ALL_STRATEGY_LABELS)) {
+      setNameManual(true);          // a name we could not have generated → the user's
+      return;
+    }
+    // One of ours, but possibly STALE (edited in Fusion, CAM preset renamed,
+    // assembly changed since it was written). Refresh it silently so it can't
+    // drift — no touch(), so merely opening a preset doesn't mark it dirty; the
+    // corrected name persists on the next save.
     const auto = (composeName(draft, assemblyId, draft.operation_type) || '').trim();
-    if (stored && auto && stored !== auto) setNameManual(true);
+    if (auto && auto !== stored) setDraft(d => ({ ...d, name: auto }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1560,12 +1574,16 @@ function EditCard({
             onToggle={(on) => {
               touch();
               setDraft(d => {
-                const nd = { ...d, small_bore: on };
+                let nd = { ...d, small_bore: on };
                 // Seed the uncompensated base from the current f_z the first
                 // time comp is turned on, so it has something to compensate.
                 if (on && (nd.f_z_base == null || nd.f_z_base === '')) nd.f_z_base = d.f_z ?? 0;
                 // Turning comp off restores the uncompensated feed.
-                if (!on && nd.f_z_base != null) return { ...nd, f_z: nd.f_z_base };
+                if (!on && nd.f_z_base != null) nd = { ...nd, f_z: nd.f_z_base };
+                // Small bore owns the operation tail ("SM Bore"), so the name has
+                // to track the toggle. `on` is passed explicitly — nd.small_bore
+                // is set above but composeName's own read is of the stale draft.
+                nd.name = nextName(nd, assemblyId, bucketToOpType(effectiveBucket), undefined, undefined, undefined, on);
                 return nd;
               });
             }}

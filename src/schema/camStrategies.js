@@ -166,6 +166,15 @@ export const PINNED_STRATEGIES = ['contour2d', 'bore'];
 // Strategies for which Small Bore compensation applies (bore / 2D + 3D contour).
 export const SMALL_BORE_STRATEGIES = ['bore', 'contour2d', 'contour_new'];
 
+// Every label presetStrategyLabel can produce — used to recognize one of OUR
+// auto-generated preset names (see isAutoPresetName in presetNaming.js).
+// Declared after PINNED_STRATEGIES so it isn't read in its temporal dead zone.
+export const ALL_STRATEGY_LABELS = [
+  ...QUICK_GROUPS.map(g => g.nameToken || g.label),
+  ...STRATEGIES.map(s => s.name),
+  PINNED_STRATEGIES.map(id => STRATEGIES.find(s => s.id === id)?.name).filter(Boolean).join(' + '),
+].filter(Boolean);
+
 // ── Format detection & read/write helpers ─────────────────────────────────────
 // A preset is NEW format when it carries a `strategies` object (Fusion's newer
 // shape). Old presets have no strategies key — their operation lives in the name
