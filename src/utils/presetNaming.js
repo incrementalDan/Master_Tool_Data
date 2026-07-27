@@ -310,17 +310,30 @@ function containsGrade(q, tok) {
 
 // The CAM preset id a material string implies via an alloy GRADE it contains,
 // or null. Longest grade wins so "316L" beats "316" and "17-4" beats "17".
+// The grade index is derived purely from the Materials library, so cache it per
+// library object — the load-time pass calls this once per unlinked preset and
+// would otherwise rebuild + re-sort ~200 candidates every time.
+const gradeIndexCache = new WeakMap();
+function gradeIndex(materials) {
+  const hit = gradeIndexCache.get(materials);
+  if (hit) return hit;
+  const presetIds = new Set((materials.presets || []).map(p => p.id));
+  const candidates = [];
+  for (const alloy of materials.materials || []) {
+    if (!alloy.preset_id || !presetIds.has(alloy.preset_id)) continue;   // skip dangling
+    for (const tok of alloyGradeTokens(alloy)) candidates.push({ tok, preset_id: alloy.preset_id });
+  }
+  // Longest grade first, so a short grade that prefixes a longer one can't win.
+  candidates.sort((a, b) => b.tok.length - a.tok.length);
+  gradeIndexCache.set(materials, candidates);
+  return candidates;
+}
+
 export function camPresetIdFromGrade(query, materials) {
   const q = String(query || '').trim();
   if (!q || !materials?.materials?.length) return null;
-  const candidates = [];
-  for (const alloy of materials.materials) {
-    if (!alloy.preset_id) continue;
-    for (const tok of alloyGradeTokens(alloy)) candidates.push({ tok, preset_id: alloy.preset_id });
-  }
-  candidates.sort((a, b) => b.tok.length - a.tok.length);
-  for (const c of candidates) {
-    if (containsGrade(q, c.tok) && materials.presets?.some(p => p.id === c.preset_id)) return c.preset_id;
+  for (const c of gradeIndex(materials)) {
+    if (containsGrade(q, c.tok)) return c.preset_id;
   }
   return null;
 }

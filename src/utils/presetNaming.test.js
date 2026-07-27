@@ -579,3 +579,42 @@ describe('camPresetIdFromGrade — link by the ALLOY GRADE in the string', () =>
     expect(autoLinkMaterialByGrade(out, MATS)).toBe(out);   // idempotent
   });
 });
+
+describe('material auto-link — stability once linked', () => {
+  const M = {
+    groups: [{ id: 'M', label: 'Stainless', code: 'SS' }],
+    presets: [{ id: 'p_316', group_id: 'M', name: 'SS Austenitic - 310, 316' },
+              { id: 'p_ph', group_id: 'M', name: 'SS PH - 17-4, 15-5' }],
+    materials: [
+      { id: 'a4', group_id: 'M', preset_id: 'p_316', label: '316 / 316L', aliases: ['SS316', '316L'] },
+      { id: 'a5', group_id: 'M', preset_id: 'p_316', label: '310', aliases: [] },
+      { id: 'a7', group_id: 'M', preset_id: 'p_ph', label: '17-4', aliases: ['15-5'] },
+    ],
+  };
+
+  it('316 and 316L resolve to the SAME CAM preset (they cut the same)', () => {
+    const ids = ['316', '316L', 'SS316', 'SS 316L FIN', '316 / 316L']
+      .map(q => camPresetIdFromGrade(q, M));
+    expect(new Set(ids)).toEqual(new Set(['p_316']));
+    expect(camPresetIdFromGrade('310 ROUGH', M)).toBe('p_316');   // 310 groups with 316
+  });
+
+  it('a preset already linked to a valid key is NEVER re-matched', () => {
+    // The FK wins outright: even a string whose grade points elsewhere must not
+    // override a deliberate link (e.g. the user re-picked the material by hand).
+    const tools = [{ id: 't', presets: [
+      { guid: 'a', material: { query: 'SS316 FIN' }, material_preset_id: 'p_ph' },
+    ] }];
+    const out = autoLinkMaterialByGrade(tools, M);
+    expect(out).toBe(tools);                                   // untouched reference
+    expect(out[0].presets[0].material_preset_id).toBe('p_ph'); // deliberate link kept
+  });
+
+  it('is stable across repeated loads (no churn once everything is linked)', () => {
+    const tools = [{ id: 't', presets: [{ guid: 'a', material: { query: 'SS316 FIN' } }] }];
+    const once = autoLinkMaterialByGrade(tools, M);
+    expect(once[0].presets[0].material_preset_id).toBe('p_316');
+    expect(autoLinkMaterialByGrade(once, M)).toBe(once);        // second pass: no-op
+    expect(autoLinkMaterialByGrade(once, M)).toBe(once);        // and again
+  });
+});
