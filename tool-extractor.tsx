@@ -168,7 +168,7 @@ function buildFusionRow(f, outputUnit='inches'){
   const d=parseFloat(f.diameter)||"",loc=parseFloat(f.loc)||"",oal=parseFloat(f.oal)||"";
   const shk=parseFloat(f.shankDia)||(d||""),fl=parseInt(f.flutes)||"",mat=f.material||"carbide";
   const pn=f.toolNumber?parseFloat(f.toolNumber):"",ft=FT[f.toolType]||f.toolType||"";
-  const desc=buildDesc(f),pre=f.presetName||desc,edp=f.edpNumber||"",url=f.productLink||"";
+  const desc=f.description||buildDesc(f),pre=f.presetName||desc,edp=f.edpNumber||"",url=f.productLink||"";
   const coolant=f.coolant||"flood";
   const isTap=f.toolType==="tap";
   const cr=parseFloat(f.cornerRadius)||0;
@@ -219,7 +219,10 @@ function buildFusionRow(f, outputUnit='inches'){
 
 const PS_MAIN_COLS=[
   ["toolNumber",f=>f.psToolId||""],
-  ["description",f=>buildDesc(f)],["cutDiameter",f=>f.diameter||""],["lengthOfCut",f=>f.loc||""],
+  // A tool has exactly ONE description — the stored one. buildDesc() is only a
+  // GENERATOR (specs → a suggested name) for the extractor/Add flow, where nothing
+  // is stored yet; it must never override a real tool's description on export.
+  ["description",f=>f.description||buildDesc(f)],["cutDiameter",f=>f.diameter||""],["lengthOfCut",f=>f.loc||""],
   ["overallLength",f=>f.oal||""],["No. of Flutes",f=>f.flutes||""],["shankDiameter",f=>f.shankDia||f.diameter||""],
   ["bodyDiameter",f=>f.shankDia||f.diameter||""],["cornerRadius",f=>f.cornerRadius||""],["tipAngle",f=>f.tipAngle||""],
   ["helixAngle",f=>f.helixAngle||""],["coating",f=>f.coating||""],["toolMaterial",f=>f.material||""],
