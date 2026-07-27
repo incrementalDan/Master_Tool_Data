@@ -339,6 +339,8 @@ The OOH and holder are **baked into derived names** — the assembly's Auto `asm
 
 Self-healing in miniature: unambiguous → repaired silently; the user's own name → left alone. Locked by `toolActions.test.js`.
 
+**Load-time correction of a stale Auto `asm_number`** (`backfillAsmNumbers`). The edit path above can't catch every source of staleness — the OOH can change in Fusion, a Tool ID renumber changes the id token, a holder description can change, and assemblies may pre-date Auto mode being configured. Because an Auto number is a **pure product** of holder + tool_id + OOH **and has no edit UI** (`AssemblyForm` exposes the field only in `proshop_rta` mode), a stored value that differs from the composed one is always **stale, never custom** — so `backfillAsmNumbers` **re-derives** it (it previously only filled a missing one) and reports the count on the tool via a runtime **`_asmNumbersFixed`** flag, surfaced as a blue "N assembly numbers … corrected — Save" banner in `ToolDetail`. Only **corrections** are counted (a first-time fill is normal stamping, not news). This is **strictly `auto`-mode**: the function already early-returns for every other mode, so `proshop_rta` / `erp_external` / `sequential` numbers — which are NOT derived from these fields — are never touched and never flag. In-memory at load, persisted on the next save (which clears the flag); idempotent, so a correct library is a no-op. ⚠️ Corollary: switching an existing shop **from `proshop_rta` to `auto`** means those RTA numbers get re-derived at load — the Auto value is the source of truth in that mode.
+
 ### Gauge-length tiers (per assembly — CRITICAL, never confuse)
 All metadata-only, added to the assembly record (`buildMetadataTool` / `buildLogicalTool`):
 - **`geometry.assemblyGaugeLength`** (Fusion JSON, **not** an assembly metadata field) — Fusion's `holder gauge length + OOH`; we write it on export but **never override** the formula (breaks the holder link). Read-only from our side.
@@ -1544,6 +1546,56 @@ The explicit, user-initiated batch flow — see the **Phase 2** section above. T
 
 -----
 
+## Relational integrity — every link is an ID (CRITICAL)
+
+This app is a **relational database wearing JSON files**, and it is meant to migrate to SQLite with a schema translation, not a rewrite. So every relationship between two records must be a **stored, stable ID** — the thing a SQL foreign key would be.
+
+**Two rules, and you need BOTH. Applying only the first produces exactly the bug this section exists to prevent.**
+
+| | Rule | Applies to |
+|---|---|---|
+| 1 | **Derive, don't store** — store the id; compose the display value at read time | **Display values** (a name, a label, a composed string) |
+| 2 | **Store the link, never re-derive it** — a relationship is a stored id, never recovered by parsing a formatted string | **Relationships** (which record points at which) |
+
+Rule 2 is the one that was missing, and its absence let `presetMatchesAssembly` become the *de facto* preset↔assembly link by parsing the OOH and holder short-name out of a preset's **display name** — so renaming/re-spec'ing silently severed a relationship, and no SQL schema could express it. A formatted string is a **transport format**, never a join key.
+
+**Corollary — the Fusion boundary is the one legitimate use of a name as a carrier.** Fusion has nowhere to store our FKs, so encoding a link in a preset name is the correct way to survive the round-trip. That name is an **import seed and a recovery hint** — it is *not* the in-app link. Parse it once on import to populate the FK, then read the FK forever after.
+
+### Relationship inventory — audit against THIS
+
+Every entity link in the app. When you add a relationship, add a row. When you touch one, verify the key is still an id.
+
+| From → To | Key | Stored in | Status |
+|---|---|---|---|
+| assembly → Fusion entry | `instance_guid` | metadata | ✅ |
+| assembly → holder | `holder_guid` (+ cached `holder_description`) | metadata | ✅ |
+| **assembly → presets** | **`linked_preset_guids[]`** | metadata | ⚠️ **FK exists but is write-only — reads parse the preset NAME (`presetMatchesAssembly`). See TODO.** |
+| preset → CAM preset | `preset_meta[guid].material_preset_id` | metadata | ✅ |
+| preset → machine | `preset_meta[guid].machine_id` | metadata | ✅ |
+| preset → jobs | `preset_meta[guid].job_ids[]` | metadata | ✅ |
+| tool → jobs | `job_ids[]` | metadata | ✅ |
+| tool → preferred machine | `preferred_machine_id` | metadata | ✅ |
+| tool → location | `location.{system_id,zone_id,station_id,drawer_id}` | metadata → `shop_settings.location_config` | ✅ |
+| tool → bin size | `bin_size_id` | metadata → `location_config.bin_sizes[]` | ✅ |
+| tool → speed/feed ref | `speed_feed_refs[].preset_id` | metadata → `materials.presets[]` | ✅ |
+| tool → components (insert) | `pairing.holder_component_id` / `insert_component_id` | metadata → `tool_components.json` | ✅ |
+| purchasing mfg/vendor → registry | `registry_id` | metadata → `vendor_registry.entities[]` | ✅ |
+| purchasing vendor → its mfg | `manufacturer_id` (per-tool row id) | metadata | ✅ cascades on mfg delete |
+| CAM preset → group | `presets[].group_id` | `materials.json` | ✅ group delete RESTRICTed |
+| alloy → CAM preset | `materials[].preset_id` | `materials.json` | ✅ preset delete SET NULLs it |
+| alloy → group | `materials[].group_id` | `materials.json` | ✅ |
+| program → part | `programs[].part_id` | `jobs.json` | ✅ |
+| program/part → alloy | `material_id` | `jobs.json` → `materials.materials[]` | ✅ |
+| program → machine | `machine_id` (+ cached `machine_label`) | `jobs.json` → `shop_settings.machines[]` | ✅ |
+| job → program | `jobs[].program_id` | `jobs.json` | ✅ dangling tolerated |
+| shop → default machine | `default_machine_id` | `shop_settings.json` | ✅ |
+
+**Dangling ids are tolerated everywhere** (the referenced record may be deleted) — resolvers return null and callers fall back to a stored label. That's deliberate: it's soft-delete tolerance, not a broken link.
+
+Locked by `src/schema/relationalIntegrity.test.js` — seed-data FK integrity plus a metadata round-trip that fails if any FK field stops being persisted.
+
+-----
+
 ## Self-healing — the app continuously re-establishes correctness (CRITICAL philosophy)
 
 **Why this exists.** This app introduces standardization (tracking IDs, the naming convention, the Materials/vendor/machine libraries, the location + ID systems) to data that never had any — the shop's Fusion library and ProShop export were maintained by hand, so **the data coming in is dirty**. Worse, it does not stay clean: **Fusion remains an editable second source of truth**, so every sync can re-introduce drift, duplicates, renamed-away links and hand-edited values. A one-time migration therefore does NOT hold. Correctness has to be **re-derived on every load**, not assumed — the app is the thing that keeps the library true, continuously.
@@ -1902,6 +1954,8 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 
 ## TODO / Future Work
 
+- **Make the assembly↔preset link a real FK (the one open Relational-integrity violation).** `assemblies[].linked_preset_guids[]` exists and persists, but is **write-only**: only the Sync Job merge flow (`DiffStep`) populates it — the app's own preset editor never does — while EVERY read (`AssemblyCard`, `AssemblyForm`, `PresetPanel` ×2, `DiffStep`) resolves "which presets belong to this assembly" by calling `presetMatchesAssembly`, which parses the holder short-name and OOH out of the preset's **display name**. Consequences: editing an assembly's OOH/holder silently severs the relationship (mitigated for the in-app edit path by `updateAssembly`'s re-derive, but not for a Fusion-side change), and on the tool page the assembly's preset **count** (from the FK) and its preset **list** (from name-parsing) can disagree. Plan: (1) populate `linked_preset_guids` on every preset save/create/delete, not just in the merge flow; (2) read the FK first at all five sites; (3) keep `presetMatchesAssembly` **only** as the import/legacy seed — parse once to populate the FK (Fusion has nowhere to store it, so the name stays the round-trip carrier); (4) load-time backfill from the current name match for existing data, mirroring the other FK backfills. Touches 5 read sites + both write paths + a backfill — real regression risk, do it deliberately.
+
 - **Self-healing audit (not yet done).** The **Self-healing** philosophy section above was written *after* most of the mechanisms it describes, so it documents the pattern rather than verifying it holds everywhere. Worth one deliberate pass: (1) **coverage** — every derived/linked value that could go stale actually has a repair or a flag (candidates not yet reviewed: `material_suitability` free text, `tags`, `coating`/`pitch` fill-gap fields, holder library links, `speed_feed_refs.preset_id` dangling ids, `jobs[].program_id` dangling after a program delete); (2) **no nag loops** — for each existing flag, confirm the fix action clears the detector (walk `ConflictBanner`, `DriftBanner`, `MergeSiblingBanner`, the duplicate-preset banner, `MaterialLinkBanner`, `_productIdConflict`); (3) **load cost** — the silent repairs are all in-memory, but they're now a stack of full-library passes (`combineToolsByToolId` → `derivePairings` → 4 × backfill…), so confirm they're still cheap at real library size and consider folding them into one walk; (4) **noise calibration** — how many tools actually surface a flag against the real library, and whether any flag fires so broadly it becomes wallpaper (`MaterialLinkBanner` on legacy `"AL FIN"` strings is the likely candidate).
 
 - **Slot/key cutter (slitting saw) — verify corner-radius output to Fusion + terminology.** Two related open items from the key-cutter work: **(1)** `corner_radius` (`geometry.RE`) now *applies* to `slot/key cutter` (field registry `appliesToTypes`, extractor `FIELD_VISIBILITY` cornerRadius row, and the search facet), but we have **not confirmed how Fusion actually wants a slitting-saw/key-cutter corner radius written** — real Fusion exports for this type carry a distinct `tool_kerfWidth` field (see the FUSION_HDR reference list), and it's unclear whether the radius belongs in `RE`, in a kerf-specific field, or both. **The user will provide a real Fusion export example later** — audit `internalToFusionTool` for this type against it before trusting the `RE` write (mirror the chamfer-mill / tapered-mill per-type geometry-field audits). **(2)** "Slitting saw" is the shop's other word for this tool class — today it's folded into the single `slot/key cutter` type (UI labels flute length as "Flute Length (Kerf)" and shoulder length derives from flute length in `normalizeLibrary`). Revisit whether **slitting saw should be its own distinct `tool_type`** (own icon/filing/kerf semantics) rather than an alias — a bigger change to `TOOL_TYPES`, icons, `AUTO_GROUP`/ProShop mapping, and `FIELD_VISIBILITY`. Both deferred until the example arrives.
@@ -1916,7 +1970,7 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 
 - **Multi-device concurrent-edit guard (future, decided: block-on-conflict).** Stamp the metadata file's Drive `modifiedTime` at load; on save, if it changed, **block the write and tell the user why** ("Someone else saved since you loaded — reload, then retry") rather than clobbering. Implement in the `toolStore` seam. See `DECOUPLING_FOLLOWUP_FINDINGS.md` suggestion #4.
 
-- **SQLite migration (future, no audit needed now).** The current storage layer (Fusion JSON in APS + `tool_metadata.json` on Drive) works for the shop's scale, but several data structures were deliberately designed with a future SQLite backend in mind: stable UUIDs at every entity level (`tracking_id` FTL-XXXXXX, assembly `assembly_id`, vendor/material/machine `id`s, location system `zone.id`/`station.id`/`drawer.id`/`bin.id`), normalized relational shapes (`purchasing.manufacturers[]` / `purchasing.vendors[]`, `assemblies[]` with a foreign-key `instance_guid`, `preset_meta` keyed by GUID, `speed_feed_refs` with a `preset_id` FK), and parent-id chains in the location hierarchy. **No code audit or migration work needed now** — just keep this in mind when adding new data structures: prefer stable UUIDs over positional indexes, avoid denormalized blobs when a normalized join table would be cleaner, and don't collapse IDs that a relational row would naturally separate. The goal is that a future migration produces clean tables, not a years-long untangling.
+- **SQLite migration (future).** The current storage layer (Fusion JSON in APS + `tool_metadata.json` on Drive) works for the shop's scale, but several data structures were deliberately designed with a future SQLite backend in mind: stable UUIDs at every entity level (`tracking_id` FTL-XXXXXX, assembly `assembly_id`, vendor/material/machine `id`s, location system `zone.id`/`station.id`/`drawer.id`/`bin.id`), normalized relational shapes (`purchasing.manufacturers[]` / `purchasing.vendors[]`, `assemblies[]` with a foreign-key `instance_guid`, `preset_meta` keyed by GUID, `speed_feed_refs` with a `preset_id` FK), and parent-id chains in the location hierarchy. The **Relational integrity** section above is the standing audit surface — keep its inventory current, and when adding new data structures: prefer stable UUIDs over positional indexes, avoid denormalized blobs when a normalized join table would be cleaner, and don't collapse IDs that a relational row would naturally separate. The goal is that a future migration produces clean tables, not a years-long untangling.
 
 - **✅ "No Fusion Link" tools no longer need a Fusion entry (built — Fusion-decoupling Phase A/B).** `no_fusion_link: true` is now a real state, not just a reminder flag: a marked tool is built from metadata alone (`buildUnlinkedTool` / `materializeUnlinkedTools`, `src/schema/logicalTools.js`), `writeLogicalTool` early-branches to a **metadata-only write** (no Fusion round-trip, `library_id` null), and `saveFullLibrary` **partitions** no-Fusion tools out of the Fusion write — so a ProShop unmatched row no longer mints a placeholder Fusion entry. Tools can also be promoted into Fusion (`promoteToolToFusion`) or detached from it (`detachToolFromFusion`), and the whole Fusion integration can be turned off after setup (`integrations.fusion.enabled`). Drift between the app record and a live Fusion entry is always surfaced (never silently overwritten) at both load time (`DriftBanner` / `detectFusionDrift`) and write time (the 3-way merges' `conflicts` accumulator → warning toast + `_drift`). The complete-record schema + ownership taxonomy + design decisions (D1/D2/D3) live in **`PHASE_A_TOOL_RECORD_SCHEMA.md`**; the audit that scoped it is **`FUSION_DECOUPLING_AUDIT.md`**. **Mode-2 load (B6) is also built:** `loadTools` is two-stage — **stage 1 paints the whole library from the app's own complete metadata records immediately** (`isCompleteRecord` → `buildUnlinkedTool` → `LOAD_PROVISIONAL`), then the unchanged Fusion build confirms and replaces it (`LOAD_SUCCESS`, which alone sets `fusionReady`). Until `fusionReady`, `writeLogicalTool` (linked path), `saveFullLibrary`, and reconcile-on-open refuse with a "still syncing" message — provisional tools have no `_instancesRaw` merge base, so linked writes must never run against them (demo/local/fusion-disabled set the flag true; their own guards message correctly). A **one-time backfill** after stage 2 (`recordsNeedingBackfill` → `toolStore.upsertMany`) completes any missing/overlay-shaped records — keyed off BUILT tools so orphan metadata stays dormant. Fidelity is locked by `src/schema/completeRecord.test.js` (Fusion build → `buildMetadataTool` → `buildUnlinkedTool` reproduces scalars/presets/assemblies/flat mirror). **Still deferred:** the never-connect-Autodesk onboarding gate (B4b-2 — the `App.jsx` AppShell library-requirement relaxation) and the SQLite storage swap.
 

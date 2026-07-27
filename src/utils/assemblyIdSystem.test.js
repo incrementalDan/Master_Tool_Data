@@ -79,17 +79,40 @@ describe('retirement — digital reference vs. re-derivable Auto', () => {
 
 describe('backfillAsmNumbers', () => {
   const shop = { assembly_id_system: { mode: 'auto', separator: null }, tool_id_system: { separator: '-' } };
-  it('fills auto asm_number for assemblies missing one, leaves existing untouched', () => {
+  it('fills a missing auto asm_number, and CORRECTS a stale one', () => {
+    // An Auto number is purely derived and has no edit UI in this mode, so a
+    // stored value that no longer matches the fields is stale, not custom —
+    // e.g. the OOH was changed in Fusion, or the tool was re-numbered.
     const tools = [{
       tool_id: '1001',
       assemblies: [
         { assembly_id: 'a', holder_description: 'NBT30-SK13C-60', ooh: 2.125 },
-        { assembly_id: 'b', holder_description: 'NBT30-SK13C-90', ooh: 3, asm_number: 'KEEP-ME' },
+        { assembly_id: 'b', holder_description: 'NBT30-SK13C-90', ooh: 3, asm_number: '30-SK13-90-1001-2.5' },
       ],
     }];
     const out = backfillAsmNumbers(tools, shop);
-    expect(out[0].assemblies[0].asm_number).toBe('30-SK13-60-1001-2.125');
-    expect(out[0].assemblies[1].asm_number).toBe('KEEP-ME');
+    expect(out[0].assemblies[0].asm_number).toBe('30-SK13-60-1001-2.125'); // filled
+    expect(out[0].assemblies[1].asm_number).toBe('30-SK13-90-1001-3');     // corrected
+    expect(out[0]._asmNumbersFixed).toBe(1);   // only the correction is counted
+  });
+
+  it('is idempotent and raises no flag when every number is already correct', () => {
+    const tools = [{
+      tool_id: '1001',
+      assemblies: [{ assembly_id: 'a', holder_description: 'NBT30-SK13C-60', ooh: 2.125, asm_number: '30-SK13-60-1001-2.125' }],
+    }];
+    const out = backfillAsmNumbers(tools, shop);
+    expect(out).toBe(tools);                        // untouched reference
+    expect(out[0]._asmNumbersFixed).toBeUndefined();
+  });
+
+  it('never touches numbers in a non-derived mode (ProShop RTA)', () => {
+    const tools = [{
+      tool_id: '1001',
+      assemblies: [{ assembly_id: 'a', holder_description: 'NBT30-SK13C-60', ooh: 2.125, asm_number: 'RTA-77' }],
+    }];
+    const rta = { ...shop, assembly_id_system: { ...shop.assembly_id_system, mode: 'proshop_rta' } };
+    expect(backfillAsmNumbers(tools, rta)).toBe(tools);
   });
   it('is a no-op for non-auto modes', () => {
     const tools = [{ tool_id: '1', assemblies: [{ assembly_id: 'a', holder_description: 'X', ooh: 1 }] }];
