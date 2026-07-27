@@ -542,7 +542,7 @@ export default function ToolDetail() {
             always stale (OOH edited in Fusion, a Tool ID renumber, …) — it's
             fixed silently and merely reported here. Saving persists it and
             clears the flag. Only ever set in Auto mode (see backfillAsmNumbers). */}
-        {tool._asmNumbersFixed > 0 && (
+        {tool._asmNumbersFixed?.length > 0 && (
           <div style={{
             border: '1px solid var(--blue)', borderRadius: 'var(--radius)',
             background: 'color-mix(in srgb, var(--blue) 8%, transparent)',
@@ -552,11 +552,19 @@ export default function ToolDetail() {
             <Wrench size={16} style={{ color: 'var(--blue)', flexShrink: 0 }} />
             <span style={{ flex: 1, minWidth: 220, lineHeight: 1.5 }}>
               <strong>
-                {tool._asmNumbersFixed} assembly number{tool._asmNumbersFixed > 1 ? 's were' : ' was'} out of date and
-                {tool._asmNumbersFixed > 1 ? ' have' : ' has'} been corrected.
+                {tool._asmNumbersFixed.length} assembly number{tool._asmNumbersFixed.length > 1 ? 's were' : ' was'} out
+                of date and {tool._asmNumbersFixed.length > 1 ? 'have' : 'has'} been corrected.
               </strong>{' '}
               Assembly numbers are built from the holder, tool ID and OOH, so they update automatically when
-              those change. Save to store the corrected {tool._asmNumbersFixed > 1 ? 'numbers' : 'number'}.
+              those change. Save to store {tool._asmNumbersFixed.length > 1 ? 'them' : 'it'}.
+              <span style={{ display: 'block', marginTop: 6 }}>
+                {tool._asmNumbersFixed.map((c, i) => (
+                  <span key={i} style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                    <span className="text-sub" style={{ textDecoration: 'line-through' }}>{c.from}</span>
+                    {' → '}{c.to}
+                  </span>
+                ))}
+              </span>
             </span>
             <button
               className="btn btn-primary"

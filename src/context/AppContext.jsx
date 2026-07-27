@@ -871,7 +871,7 @@ export function AppProvider({ children }) {
               return composed ? { ...t, location: composed, proshop_location: proShopLocationValue(sys, composed) } : t;
             });
             const paired = derivePairings(provisional, componentsFile?.components || []);
-            dispatch({ type: 'LOAD_PROVISIONAL', tools: backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)) });
+            dispatch({ type: 'LOAD_PROVISIONAL', tools: backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile, holdersRef.current), materialsFile), vendorRegistryFile), effectiveShop.machines)) });
           }
         } catch { /* stage 2 below is authoritative */ }
       }
@@ -910,7 +910,7 @@ export function AppProvider({ children }) {
       if (!fusionEnabled) {
         const built = metaList.map(m => buildUnlinkedTool(m)).map(composeToolLocation);
         const paired = derivePairings(built, componentsFile?.components || []);
-        const finalTools = backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile), materialsFile), vendorRegistryFile), effectiveShop.machines));
+        const finalTools = backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile, holdersRef.current), materialsFile), vendorRegistryFile), effectiveShop.machines));
         dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize: false, normalizeCount: 0 });
         return;
       }
@@ -1000,7 +1000,7 @@ export function AppProvider({ children }) {
       // backfillMaterialPresetIds: adopt the CAM-preset FK id from a name-matched
       // material.query + refresh each preset's derived material name (same lazy
       // persist-on-next-save pattern).
-      const finalTools = backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(pairedTools, effectiveShop, componentsFile), materialsFile), vendorRegistryFile), effectiveShop.machines));
+      const finalTools = backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(pairedTools, effectiveShop, componentsFile, holdersRef.current), materialsFile), vendorRegistryFile), effectiveShop.machines));
 
       dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize, normalizeCount: untrackedCount });
       // Surface the otherwise-invisible load-time auto-combine: entries sharing a
