@@ -18,7 +18,7 @@ import {
   SMALL_BORE_STRATEGIES, isNewFormatPreset, readStrategyBucket, buildStrategies, writeBucketStrategies,
 } from '../schema/camStrategies.js';
 import {
-  composePresetName, parsePresetName, presetMatchesAssembly, OP_TYPES, materialCategory,
+  composePresetName, parsePresetName, assemblyForPreset, OP_TYPES, materialCategory,
   materialNameCode, presetMaterialColor, findMaterialInLibrary, syncPresetMaterialName, isAutoPresetName,
   HOLE_MAKING_TYPES, TURNING_TYPES,
 } from '../utils/presetNaming.js';
@@ -456,9 +456,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
                   onPick={() => setCopySrc({ type: 'preset', id: preset.guid })}
                   isDragOver={dragOverIdx === globalIdx}
                   dragEnabled={materialFilter === 'All' && machineFilter === 'All' && !addOpen}
-                  linkedAssemblies={(tool.assemblies || []).filter(a =>
-                    presetMatchesAssembly(preset, a, tool.unit)
-                  )}
+                  linkedAssemblies={[assemblyForPreset(preset, tool.assemblies, tool.unit)].filter(Boolean)}
                   holders={holders}
                   machines={machines}
                   jobsFile={jobs}
@@ -932,7 +930,7 @@ function EditCard({
   // Which assembly (holder + OOH) this preset is named for. Initialised by
   // matching the current name; user can switch it to retarget the preset.
   const [assemblyId, setAssemblyId] = useState(() =>
-    assemblies.find(a => presetMatchesAssembly(preset, a, lenUnit))?.assembly_id || ''
+    assemblyForPreset(preset, assemblies, lenUnit)?.assembly_id || ''
   );
 
   const holderDescOf = (a) =>
@@ -1300,7 +1298,10 @@ function EditCard({
                 const aid = e.target.value;
                 touch();
                 setAssemblyId(aid);
-                setDraft(d => ({ ...d, name: nextName(d, aid, d.operation_type) }));
+                // The dropdown IS the preset→assembly link: store the FK. The
+                // name still encodes it too (Fusion's only carrier), but the FK
+                // is what the app reads. See presetNaming → assemblyForPreset.
+                setDraft(d => ({ ...d, assembly_id: aid || null, name: nextName(d, aid, d.operation_type) }));
               }}
             >
               {assemblies.length === 0 && <option value="">No assemblies</option>}

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { ArrowLeft, Tag, Ruler, Gauge, Settings2, StickyNote, AlertTriangle, RefreshCw, Plus, CheckCircle, Wrench } from 'lucide-react';
 import { generateId, generateAssemblyId } from '../../schema/toolSchema.js';
 import { fieldLabel } from '../../schema/fieldRegistry.js';
-import { composePresetName, parsePresetName, presetMatchesAssembly, materialNameCode, presetMaterialColor, HOLE_MAKING_TYPES } from '../../utils/presetNaming.js';
+import { composePresetName, parsePresetName, assemblyForPreset, materialNameCode, presetMaterialColor, HOLE_MAKING_TYPES } from '../../utils/presetNaming.js';
 import { lengthEps, unitAbbr } from '../../utils/units.js';
 import {
   PRESET_DIFF_FIELDS, NUMERIC_PRESET_FIELDS, presetTolerance, valuesEqual,
@@ -94,7 +94,7 @@ function formatValue(v) {
 // a millimeters tool.
 function checkDifferentAssembly(masterPreset, incomingOoh, incomingHolderGuid, masterAssemblies, unit = 'inches') {
   if (incomingOoh == null || incomingOoh <= 0) return false;
-  const linked = (masterAssemblies || []).filter(a => presetMatchesAssembly(masterPreset, a, unit));
+  const linked = [assemblyForPreset(masterPreset, masterAssemblies, unit)].filter(Boolean);
   if (linked.length === 0) return true;
   // OOH (both incoming and stored) is in the tool's own unit; tolerance scales with it.
   const oohTol = lengthEps(unit);

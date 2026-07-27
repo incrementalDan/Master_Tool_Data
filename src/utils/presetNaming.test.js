@@ -21,6 +21,9 @@ import {
   backfillMaterialPresetIds,
   isAutoPresetName,
   unresolvedMaterialPresets,
+  assemblyForPreset,
+  presetsForAssembly,
+  backfillPresetAssemblyLinks,
 } from './presetNaming.js';
 
 describe('materialToCode', () => {
@@ -458,5 +461,47 @@ describe('unresolvedMaterialPresets — broken material links', () => {
 
   it('is a no-op when the Materials library has not loaded', () => {
     expect(unresolvedMaterialPresets([{ guid: 'p', material: { query: 'x' } }], { presets: [] })).toEqual([]);
+  });
+});
+
+describe('preset↔assembly link — FK first, name only as legacy seed', () => {
+  const asmA = { assembly_id: 'as1', holder_description: 'NBT30-SK13C-60', ooh: 2.125 };
+  const asmB = { assembly_id: 'as2', holder_description: 'NBT30-SK13C-90', ooh: 3.0 };
+  const assemblies = [asmA, asmB];
+
+  it('resolves by the FK, ignoring what the NAME says', () => {
+    // Name still encodes assembly A (the Fusion carrier), but the FK says B.
+    const p = { guid: 'p1', name: 'AL 2.125 30-SK13-60 - Rough', assembly_id: 'as2' };
+    expect(assemblyForPreset(p, assemblies, 'inches').assembly_id).toBe('as2');
+    expect(presetsForAssembly(asmB, [p], 'inches')).toHaveLength(1);
+    expect(presetsForAssembly(asmA, [p], 'inches')).toHaveLength(0);
+  });
+
+  it('the link SURVIVES an OOH change (the bug that started this)', () => {
+    const p = { guid: 'p1', name: 'AL 2.125 30-SK13-60 - Rough', assembly_id: 'as1' };
+    const moved = { ...asmA, ooh: 4.5 };   // OOH changed; name not yet recomposed
+    expect(assemblyForPreset(p, [moved], 'inches').assembly_id).toBe('as1');
+    expect(presetsForAssembly(moved, [p], 'inches')).toHaveLength(1);
+  });
+
+  it('falls back to the name only while a preset has no FK (legacy data)', () => {
+    const legacy = { guid: 'p2', name: 'AL 3.000 30-SK13-90 - Finish' };
+    expect(assemblyForPreset(legacy, assemblies, 'inches').assembly_id).toBe('as2');
+  });
+
+  it('backfillPresetAssemblyLinks seeds the FK once from the name match', () => {
+    const tools = [{
+      id: 't1', unit: 'inches', assemblies,
+      presets: [
+        { guid: 'p1', name: 'AL 2.125 30-SK13-60 - Rough' },
+        { guid: 'p2', name: 'AL 3.000 30-SK13-90 - Finish' },
+        { guid: 'p3', name: 'no assembly in this name' },
+      ],
+    }];
+    const out = backfillPresetAssemblyLinks(tools);
+    expect(out[0].presets[0].assembly_id).toBe('as1');
+    expect(out[0].presets[1].assembly_id).toBe('as2');
+    expect(out[0].presets[2].assembly_id).toBeUndefined();  // nothing to seed from
+    expect(backfillPresetAssemblyLinks(out)).toBe(out);     // idempotent
   });
 });

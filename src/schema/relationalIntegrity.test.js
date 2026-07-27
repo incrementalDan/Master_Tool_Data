@@ -83,6 +83,7 @@ const FK_TOOL = {
     material: { category: 'metal', query: 'Al Wrought', 'use-hardness': false },
     material_preset_id: 'pre_N_al_wrought',
     machine_id: 'mc_m300',
+    assembly_id: 'as1',
     job_ids: ['job_a'],
   }],
 };
@@ -91,7 +92,8 @@ const FK_TOOL = {
 const FK_ROUND_TRIP = [
   ['assembly → Fusion entry',        t => t.assemblies[0].instance_guid,            'inst-guid-1'],
   ['assembly → holder',              t => t.assemblies[0].holder_guid,              'hold-guid-1'],
-  ['assembly → presets',             t => t.assemblies[0].linked_preset_guids,      ['p1']],
+  ['assembly → presets (reverse idx)', t => t.assemblies[0].linked_preset_guids,     ['p1']],
+  ['preset → assembly (the FK)',     t => t.presets[0].assembly_id,                 'as1'],
   ['preset → CAM preset',            t => t.presets[0].material_preset_id,          'pre_N_al_wrought'],
   ['preset → machine',               t => t.presets[0].machine_id,                  'mc_m300'],
   ['preset → jobs',                  t => t.presets[0].job_ids,                     ['job_a']],
@@ -126,5 +128,6 @@ describe('every foreign key survives the metadata round-trip', () => {
     expect(meta.preferred_machine_id).toBe('mc_m300');
     expect(meta.purchasing.manufacturers[0].registry_id).toBe('reg_mfg');
     expect(meta.assemblies[0].linked_preset_guids).toEqual(['p1']);
+    expect(meta.preset_meta.p1.assembly_id).toBe('as1');
   });
 });
