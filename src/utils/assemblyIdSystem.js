@@ -47,7 +47,11 @@ export function trimOoh(ooh) {
   if (ooh === null || ooh === undefined || ooh === '') return '';
   const n = Number(ooh);
   if (Number.isNaN(n)) return '';
-  return String(n);
+  // Round before stringifying: a raw String(n) leaks float noise straight into
+  // the id (Fusion's geometry.LB can arrive as 1.4000000000000001, which would
+  // compose "…-1.4000000000000001" and never match a cleanly-composed value —
+  // a permanent false "out of date"). 4dp is finer than any real stick-out.
+  return String(parseFloat(n.toFixed(4)));
 }
 
 // Last 6 chars of a UUID — the auto-mode fallback when a tool has no tool_id yet.
@@ -136,7 +140,7 @@ export function previewAsmNumber(asmConfig, toolIdConfig) {
 // deterministic (composed from holder/tool_id/ooh) so it's stable across loads;
 // sequential/RTA are NOT backfilled here (they need stored state / user input —
 // they get their number at assembly creation / entry). Returns a new tools array.
-export function backfillAsmNumbers(tools, shopSettings, components = null) {
+export function backfillAsmNumbers(tools, shopSettings, components = null, holders = null) {
   const asmConfig = shopSettings?.assembly_id_system;
   if (!asmConfig || asmConfig.mode !== 'auto') return tools;
   const toolIdConfig = shopSettings?.tool_id_system;
@@ -156,10 +160,16 @@ export function backfillAsmNumbers(tools, shopSettings, components = null) {
     if (t.pairing && !pairedIdPart) return t;
     const idToken = t.pairing ? pairedIdPart : t.tool_id;
     let touched = false;
-    let corrected = 0;
+    const corrected = [];
     const assemblies = (t.assemblies || []).map(a => {
       const asm_number = composeAsmNumber(asmConfig, toolIdConfig, {
-        holderDescription: a.holder_description, tool_id: idToken, ooh: a.ooh, assembly_id: a.assembly_id,
+        // Resolve the holder EXACTLY as writeLogicalTool's stamper does — cached
+        // description first, then the holder library by guid. If this differs
+        // from the stamper the two compose different numbers and the "out of
+        // date" flag fires on every load and can never be saved away.
+        holderDescription: a.holder_description
+          || (holders || []).find(h => h.guid === a.holder_guid)?.description || '',
+        tool_id: idToken, ooh: a.ooh, assembly_id: a.assembly_id,
       });
       if (!asm_number || asm_number === a.asm_number) return a;
       touched = true;
@@ -171,14 +181,14 @@ export function backfillAsmNumbers(tools, shopSettings, components = null) {
       // of staleness the edit path can't catch: OOH edited in Fusion, a Tool ID
       // renumber, a holder description change, or assemblies created before
       // Auto mode was configured.
-      if (a.asm_number) corrected += 1;
+      if (a.asm_number) corrected.push({ from: a.asm_number, to: asm_number });
       return { ...a, asm_number };
     });
     if (!touched) return t;
     changed = true;
     // Runtime-only flag (like _duplicatePresets / _drift) — surfaced on the tool
     // page and cleared by the next save, which persists the corrected numbers.
-    return { ...t, assemblies, ...(corrected > 0 ? { _asmNumbersFixed: corrected } : {}) };
+    return { ...t, assemblies, ...(corrected.length > 0 ? { _asmNumbersFixed: corrected } : {}) };
   });
   return changed ? next : tools;
 }

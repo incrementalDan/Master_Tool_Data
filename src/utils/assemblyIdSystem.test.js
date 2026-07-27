@@ -93,7 +93,9 @@ describe('backfillAsmNumbers', () => {
     const out = backfillAsmNumbers(tools, shop);
     expect(out[0].assemblies[0].asm_number).toBe('30-SK13-60-1001-2.125'); // filled
     expect(out[0].assemblies[1].asm_number).toBe('30-SK13-90-1001-3');     // corrected
-    expect(out[0]._asmNumbersFixed).toBe(1);   // only the correction is counted
+    expect(out[0]._asmNumbersFixed).toEqual([          // reports old → new, not just a count
+      { from: '30-SK13-90-1001-2.5', to: '30-SK13-90-1001-3' },
+    ]);
   });
 
   it('is idempotent and raises no flag when every number is already correct', () => {
@@ -146,5 +148,41 @@ describe('backfillAsmNumbers', () => {
     }];
     const out = backfillAsmNumbers(tools, shop, { components });
     expect(out[0].assemblies[0].asm_number).toBe('30-SK13-60-1001+1042-2.125');
+  });
+});
+
+describe('backfillAsmNumbers — no FALSE "out of date" flags', () => {
+  const shopAuto = { assembly_id_system: { mode: 'auto' }, tool_id_system: { separator: '-' } };
+
+  it('resolves the holder from the LIBRARY when the cached description is blank', () => {
+    // The stamper (writeLogicalTool) falls back to the holder library by guid.
+    // If this checker didn't, the two would compose different numbers and the
+    // flag would fire on every load and could never be saved away.
+    const tools = [{
+      tool_id: '1001',
+      assemblies: [{
+        assembly_id: 'a', holder_guid: 'H1', holder_description: '', ooh: 1.4,
+        asm_number: '30-SK13-150-1001-1.4',
+      }],
+    }];
+    const holders = [{ guid: 'H1', description: 'NBT30-SK13C-150' }];
+    const out = backfillAsmNumbers(tools, shopAuto, null, holders);
+    expect(out).toBe(tools);                        // nothing to correct
+    expect(out[0]._asmNumbersFixed).toBeUndefined();
+  });
+
+  it('float noise in the OOH does not produce a spurious mismatch', () => {
+    // Fusion's geometry.LB can arrive as 1.4000000000000001; a raw String()
+    // would compose "…-1.4000000000000001" and never match.
+    const tools = [{
+      tool_id: 'M-132',
+      assemblies: [{
+        assembly_id: 'a', holder_description: 'NBT30-SK13C-150',
+        ooh: 1.4000000000000001, asm_number: '30-SK13-150-M-132-1.4',
+      }],
+    }];
+    const out = backfillAsmNumbers(tools, shopAuto, null, []);
+    expect(out).toBe(tools);
+    expect(out[0]._asmNumbersFixed).toBeUndefined();
   });
 });
