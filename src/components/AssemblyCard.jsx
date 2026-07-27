@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Pencil, X } from 'lucide-react';
-import { presetMatchesAssembly, presetMaterialColor } from '../utils/presetNaming.js';
+import { presetsForAssembly, presetMaterialColor } from '../utils/presetNaming.js';
 import { unitAbbr } from '../utils/units.js';
 import { useApp } from '../context/AppContext.jsx';
 
@@ -50,7 +50,7 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
   const holderDescription = assembly.holder_description || holder?.description || '—';
   const color = holderColor(holderDescription === '—' ? null : holderDescription);
 
-  const linkedPresets = (tool.presets || []).filter(p => presetMatchesAssembly(p, assembly, tool.unit));
+  const linkedPresets = presetsForAssembly(assembly, tool.presets, tool.unit);
 
   return (
     <div style={{ border: '1px solid rgba(100, 116, 139, 0.30)', borderRadius: 'var(--radius-sm)', overflow: 'hidden', background: 'var(--surface-2)' }}>

@@ -14,7 +14,7 @@ import * as toolStore from '../services/toolStore.js';
 import * as aps from '../services/apsService.js';
 import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeUnlinkedTools, buildUnlinkedTool, isCompleteRecord, recordsNeedingBackfill, buildMetadataTool } from '../schema/toolSchema.js';
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
-import { backfillMaterialPresetIds } from '../utils/presetNaming.js';
+import { backfillMaterialPresetIds, backfillPresetAssemblyLinks } from '../utils/presetNaming.js';
 import { backfillPreferredMachineIds } from '../utils/machines.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
@@ -738,11 +738,11 @@ export function AppProvider({ children }) {
     const built = [];
     for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
     for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
-    const tools = backfillPreferredMachineIds(backfillPurchasingRegistryIds(backfillMaterialPresetIds(derivePairings(
+    const tools = backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(backfillMaterialPresetIds(derivePairings(
       combineToolsByToolId(built)
         .map(t => ({ ...t, library_id: 'demo', library_name: 'Demo library' })),
       components?.components || [],
-    ), materials), vendorRegistry), shopSettings?.machines);
+    ), materials), vendorRegistry), shopSettings?.machines));
     // Tag demo holders with a single synthetic library so the picker grouping works.
     const taggedHolders = (holders || []).map(h => ({ ...h, _libraryId: 'demo', _libraryName: 'Demo holders' }));
 
@@ -871,7 +871,7 @@ export function AppProvider({ children }) {
               return composed ? { ...t, location: composed, proshop_location: proShopLocationValue(sys, composed) } : t;
             });
             const paired = derivePairings(provisional, componentsFile?.components || []);
-            dispatch({ type: 'LOAD_PROVISIONAL', tools: backfillPreferredMachineIds(backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile), materialsFile), vendorRegistryFile), effectiveShop.machines) });
+            dispatch({ type: 'LOAD_PROVISIONAL', tools: backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)) });
           }
         } catch { /* stage 2 below is authoritative */ }
       }
@@ -910,7 +910,7 @@ export function AppProvider({ children }) {
       if (!fusionEnabled) {
         const built = metaList.map(m => buildUnlinkedTool(m)).map(composeToolLocation);
         const paired = derivePairings(built, componentsFile?.components || []);
-        const finalTools = backfillPreferredMachineIds(backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile), materialsFile), vendorRegistryFile), effectiveShop.machines);
+        const finalTools = backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile), materialsFile), vendorRegistryFile), effectiveShop.machines));
         dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize: false, normalizeCount: 0 });
         return;
       }
@@ -1000,7 +1000,7 @@ export function AppProvider({ children }) {
       // backfillMaterialPresetIds: adopt the CAM-preset FK id from a name-matched
       // material.query + refresh each preset's derived material name (same lazy
       // persist-on-next-save pattern).
-      const finalTools = backfillPreferredMachineIds(backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(pairedTools, effectiveShop, componentsFile), materialsFile), vendorRegistryFile), effectiveShop.machines);
+      const finalTools = backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(backfillMaterialPresetIds(backfillAsmNumbers(pairedTools, effectiveShop, componentsFile), materialsFile), vendorRegistryFile), effectiveShop.machines));
 
       dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize, normalizeCount: untrackedCount });
       // Surface the otherwise-invisible load-time auto-combine: entries sharing a

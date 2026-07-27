@@ -161,7 +161,7 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
   // Note: `strategies` is Fusion-NATIVE (stays in `rest`, written to the JSON) —
   // only the app-only intensity is pulled out here alongside the others.
   const {
-    operation_type, machine_id, material_preset_id, job_ids,
+    operation_type, machine_id, material_preset_id, assembly_id, job_ids,
     small_bore, small_bore_diameter, f_z_base, intensity,
     stepdown: _sd, stepover: _so, ...rest
   } = p;

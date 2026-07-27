@@ -225,6 +225,54 @@ export function autoPresetName(preset, assembly, materials, { isHoleMaking = fal
   });
 }
 
+// ─── The preset↔assembly link (relational integrity) ─────────────────────────
+// `preset.assembly_id` is the FOREIGN KEY (metadata-only, in preset_meta —
+// many presets → one assembly, so the key belongs on the preset). It is the
+// authoritative link. `presetMatchesAssembly` — which parses the holder short
+// name and OOH out of the preset's display NAME — is ONLY an import/legacy seed:
+// Fusion has nowhere to store our FK, so the name carries the link across that
+// boundary, but a formatted string is a transport format, never a join key.
+// Read the FK first; fall back to the name only while a preset has no FK yet.
+
+export function assemblyForPreset(preset, assemblies, unit = 'inches') {
+  if (!preset) return null;
+  const list = assemblies || [];
+  if (preset.assembly_id) return list.find(a => a.assembly_id === preset.assembly_id) || null;
+  return list.find(a => presetMatchesAssembly(preset, a, unit)) || null;   // legacy seed
+}
+
+export function presetsForAssembly(assembly, presets, unit = 'inches') {
+  if (!assembly) return [];
+  return (presets || []).filter(p => (p.assembly_id
+    ? p.assembly_id === assembly.assembly_id
+    : presetMatchesAssembly(p, assembly, unit)));
+}
+
+// Load-time backfill: give every preset an explicit assembly_id derived ONCE
+// from the name match, so the FK becomes complete and the name stops being the
+// link. Mirrors the other FK backfills — in memory at load, persisted on the
+// tool's next save. Idempotent.
+export function backfillPresetAssemblyLinks(tools) {
+  let any = false;
+  const next = (tools || []).map(t => {
+    if (!t.presets?.length || !t.assemblies?.length) return t;
+    let changed = false;
+    const presets = t.presets.map(p => {
+      if (p.assembly_id) return p;
+      const a = t.assemblies.find(x => presetMatchesAssembly(p, x, t.unit));
+      if (!a) return p;
+      changed = true;
+      return { ...p, assembly_id: a.assembly_id };
+    });
+    if (!changed) return t;
+    any = true;
+    return { ...t, presets };
+  });
+  // Same reference when nothing changed — keeps the load pass free of needless
+  // re-renders and makes idempotency observable (mirrors the other backfills).
+  return any ? next : tools;
+}
+
 // Presets whose material link is BROKEN: they hold a material string that
 // resolves to nothing in the Materials library and carry no CAM-preset FK id.
 // The main cause is a CAM preset renamed BEFORE the id was captured (the stored

@@ -101,7 +101,7 @@ export function createToolActions(ctx) {
     const skipAsmStamp = !!(pairingFamily && !pairingFamily.hasTier3Assembly)
       || !!(tool.pairing && !pairedIdPart);
     const asmIdToken = tool.pairing ? pairedIdPart : tool.tool_id;
-    const assemblies = baseAssemblies.map(a => {
+    const assemblies0 = baseAssemblies.map(a => {
       const withIds = {
         ...a,
         assembly_id: a.assembly_id || generateAssemblyId(),
@@ -120,6 +120,23 @@ export function createToolActions(ctx) {
       }
       return withIds;
     });
+
+    // Keep the assembly→preset REVERSE INDEX (linked_preset_guids) true. The
+    // authoritative link is preset.assembly_id (many presets → one assembly);
+    // this cache exists so readers of the assembly side stay correct. Recomputed
+    // from the FK on every write, so it can't drift. Assemblies whose presets
+    // have no FK yet keep whatever they had (pre-backfill data).
+    const presetsForIndex = tool.presets || [];
+    const anyLinked = presetsForIndex.some(p => p.assembly_id);
+    const assemblies = anyLinked
+      ? assemblies0.map(a => ({
+          ...a,
+          linked_preset_guids: presetsForIndex
+            .filter(p => p.assembly_id === a.assembly_id)
+            .map(p => p.guid)
+            .filter(Boolean),
+        }))
+      : assemblies0;
 
     // A structured location is the single source of truth for the derived
     // DISPLAY values only — the composed string (Fusion vendor) and the ProShop
