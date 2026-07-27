@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildProShopCSV } from '../../tool-extractor.tsx';
+import { buildProShopCSV, buildDesc } from '../../tool-extractor.tsx';
 import { toolToExtractor } from '../schema/toolSchema.js';
 import { canonicalProShopHeader } from './proShopHeaders.js';
 
@@ -28,6 +28,38 @@ describe('ProShop export: Location + Point Type columns', () => {
   it('those export headers canonicalize back to the import keys', () => {
     expect(canonicalProShopHeader('location')).toBe('Location');
     expect(canonicalProShopHeader('pointType')).toBe('Point Type');
+  });
+});
+
+// A tool has exactly ONE description — the stored one. buildDesc() is a GENERATOR
+// (specs → a suggested name) for the extractor/Add flow; the export used to call it
+// unconditionally, so ProShop received a regenerated name that didn't match the app.
+describe('ProShop export: description is the stored one, not regenerated', () => {
+  const base = {
+    id: 'FTL-CCC333', tool_type: 'flat end mill', tool_id: 'A-7',
+    diameter: 0.5, number_of_flutes: 4, flute_length: 1.0, unit: 'inches', assemblies: [],
+  };
+  const descCol = (tool) => {
+    const csv = buildProShopCSV(toolToExtractor(tool));
+    const [header, firstRow] = csv.split('\n');
+    return firstRow.split(',')[header.split(',').indexOf('description')];
+  };
+
+  it('exports the tool\'s own description verbatim', () => {
+    // A hand-typed name buildDesc would never produce.
+    expect(descCol({ ...base, description: 'RGH 1/2 EM — Job 1042 proven' }))
+      .toBe('RGH 1/2 EM — Job 1042 proven');
+  });
+
+  it('tracks the stored description, so it can never drift from the app', () => {
+    const generated = buildDesc(toolToExtractor(base));
+    const stored = 'ROUGHER 1/2 4FL';
+    expect(stored).not.toBe(generated);            // guard: the two really differ
+    expect(descCol({ ...base, description: stored })).toBe(stored);
+  });
+
+  it('falls back to the generated name only when nothing is stored', () => {
+    expect(descCol({ ...base, description: '' })).toBe(buildDesc(toolToExtractor(base)));
   });
 });
 

@@ -141,10 +141,11 @@ export function extractorToTool(f) {
   return {
     tool_type: f.toolType || 'flat end mill',
     unit: f.unit || getDefaultUnit(),
-    // Pre-fill the generated description so the Add form opens with the same name
-    // the extractor previewed (metric-aware via inputWasMm) — the user shouldn't
-    // have to re-click "Suggest" after extraction. It stays editable in the form.
-    description: buildDesc(f) || '',
+    // An already-stored description always wins; otherwise pre-fill the generated
+    // one so the Add form opens with the same name the extractor previewed
+    // (metric-aware via inputWasMm) — the user shouldn't have to re-click
+    // "Suggest" after extraction. It stays editable in the form.
+    description: f.description || buildDesc(f) || '',
     // Whether this tool is conceptually a metric size (its diameter is shown in mm
     // in the description, e.g. "1.45mm (.0571)"). Metadata-only; kept so the name
     // regenerates metric-aware everywhere (re-Suggest, ProShop/Fusion export).
@@ -209,6 +210,10 @@ export function toolToExtractor(tool) {
     toolType: tool.tool_type || 'flat end mill',
     unit: tool.unit,
     inputWasMm: !!tool.input_was_mm,
+    // The tool's ONE description. Carried through so the ProShop/Fusion exports
+    // emit what the app shows instead of regenerating a name from the specs —
+    // buildDesc() is only the fallback for the extractor flow (nothing stored yet).
+    description: tool.description || '',
     diameter: String(tool.diameter ?? ''),
     loc: String(tool.flute_length ?? ''),
     oal: String(tool.overall_length ?? ''),
