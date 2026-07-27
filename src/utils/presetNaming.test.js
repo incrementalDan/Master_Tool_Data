@@ -24,6 +24,8 @@ import {
   assemblyForPreset,
   presetsForAssembly,
   backfillPresetAssemblyLinks,
+  camPresetIdFromGrade,
+  autoLinkMaterialByGrade,
 } from './presetNaming.js';
 
 describe('materialToCode', () => {
@@ -503,5 +505,116 @@ describe('preset↔assembly link — FK first, name only as legacy seed', () => 
     expect(out[0].presets[1].assembly_id).toBe('as2');
     expect(out[0].presets[2].assembly_id).toBeUndefined();  // nothing to seed from
     expect(backfillPresetAssemblyLinks(out)).toBe(out);     // idempotent
+  });
+});
+
+describe('camPresetIdFromGrade — link by the ALLOY GRADE in the string', () => {
+  // Mirrors the shop's real rules: the grade in a legacy string decides the CAM
+  // preset, via the alloy's preset_id. Matching never reads a CAM preset NAME,
+  // so renaming one ("Al Wrought" → "Al Wrought - 6061+") changes nothing.
+  const MATS = {
+    groups: [{ id: 'N', label: 'Non-Ferrous', code: 'AL' }, { id: 'M', label: 'Stainless', code: 'SS' }, { id: 'P', label: 'Steel', code: 'ST' }],
+    presets: [
+      { id: 'p_alw', group_id: 'N', name: 'Al Wrought - 6061+' },      // renamed — must not matter
+      { id: 'p_free', group_id: 'M', name: 'SS Free Machining - 303, 416' },
+      { id: 'p_316', group_id: 'M', name: 'SS Austenitic - 310, 316' },
+      { id: 'p_304', group_id: 'M', name: 'SS Austenitic - 304' },
+      { id: 'p_ph', group_id: 'M', name: 'SS PH - 17-4, 15-5' },
+      { id: 'p_low', group_id: 'P', name: 'Steel Low Carbon - 1018' },
+    ],
+    materials: [
+      { id: 'a1', group_id: 'N', preset_id: 'p_alw', label: '6061', aliases: ['6061-T6'] },
+      { id: 'a2', group_id: 'M', preset_id: 'p_free', label: '303', aliases: [] },
+      { id: 'a3', group_id: 'M', preset_id: 'p_free', label: '416', aliases: [] },
+      { id: 'a4', group_id: 'M', preset_id: 'p_316', label: '316 / 316L', aliases: ['SS316'] },
+      { id: 'a5', group_id: 'M', preset_id: 'p_316', label: '310', aliases: [] },
+      { id: 'a6', group_id: 'M', preset_id: 'p_304', label: '304', aliases: [] },
+      { id: 'a7', group_id: 'M', preset_id: 'p_ph', label: '17-4', aliases: ['15-5'] },
+      { id: 'a8', group_id: 'P', preset_id: 'p_low', label: '1018', aliases: [] },
+    ],
+  };
+  const g = (q) => camPresetIdFromGrade(q, MATS);
+
+  it('applies the shop rules regardless of surrounding text or separators', () => {
+    expect(g('AL 6061')).toBe('p_alw');
+    expect(g('AL6061')).toBe('p_alw');       // no separator
+    expect(g('6061-T6 FIN')).toBe('p_alw');
+    expect(g('SS 416 FIN')).toBe('p_free');
+    expect(g('303/416')).toBe('p_free');
+    expect(g('310')).toBe('p_316');
+    expect(g('SS316 ROUGH')).toBe('p_316');
+    expect(g('304 SS')).toBe('p_304');
+    expect(g('17-4 PH')).toBe('p_ph');        // hyphenated grade
+    expect(g('15-5')).toBe('p_ph');
+    expect(g('1018 STEEL')).toBe('p_low');
+  });
+
+  it('refuses to guess when the string carries NO grade', () => {
+    for (const q of ['AL FIN', 'SS', 'BRZ ROUGH', 'ST', 'CI', '']) expect(g(q)).toBe(null);
+  });
+
+  it('does not match a grade inside a longer number', () => {
+    expect(g('3160')).toBe(null);
+    expect(g('60610')).toBe(null);
+  });
+
+  it('a longer grade is tried first (17-4 is not read as bare 17)', () => {
+    // Longest-first ordering matters where a short grade is a prefix of a long
+    // one. When two alloys legitimately share a grade token the library itself
+    // is ambiguous — that's a Materials-editor question, not a matcher one.
+    expect(camPresetIdFromGrade('17-4', MATS)).toBe('p_ph');
+    expect(camPresetIdFromGrade('SS 15-5 FIN', MATS)).toBe('p_ph');
+  });
+
+  it('autoLinkMaterialByGrade stamps the FK only where a grade is found', () => {
+    const tools = [{ id: 't1', presets: [
+      { guid: 'p1', material: { query: 'SS316 FIN' } },   // grade → linked
+      { guid: 'p2', material: { query: 'AL FIN' } },      // no grade → left for the user
+      { guid: 'p3', material: { query: '6061' }, material_preset_id: 'already' }, // untouched
+    ] }];
+    const out = autoLinkMaterialByGrade(tools, MATS);
+    expect(out[0].presets[0].material_preset_id).toBe('p_316');
+    expect(out[0].presets[1].material_preset_id).toBeUndefined();
+    expect(out[0].presets[2].material_preset_id).toBe('already');
+    expect(autoLinkMaterialByGrade(out, MATS)).toBe(out);   // idempotent
+  });
+});
+
+describe('material auto-link — stability once linked', () => {
+  const M = {
+    groups: [{ id: 'M', label: 'Stainless', code: 'SS' }],
+    presets: [{ id: 'p_316', group_id: 'M', name: 'SS Austenitic - 310, 316' },
+              { id: 'p_ph', group_id: 'M', name: 'SS PH - 17-4, 15-5' }],
+    materials: [
+      { id: 'a4', group_id: 'M', preset_id: 'p_316', label: '316 / 316L', aliases: ['SS316', '316L'] },
+      { id: 'a5', group_id: 'M', preset_id: 'p_316', label: '310', aliases: [] },
+      { id: 'a7', group_id: 'M', preset_id: 'p_ph', label: '17-4', aliases: ['15-5'] },
+    ],
+  };
+
+  it('316 and 316L resolve to the SAME CAM preset (they cut the same)', () => {
+    const ids = ['316', '316L', 'SS316', 'SS 316L FIN', '316 / 316L']
+      .map(q => camPresetIdFromGrade(q, M));
+    expect(new Set(ids)).toEqual(new Set(['p_316']));
+    expect(camPresetIdFromGrade('310 ROUGH', M)).toBe('p_316');   // 310 groups with 316
+  });
+
+  it('a preset already linked to a valid key is NEVER re-matched', () => {
+    // The FK wins outright: even a string whose grade points elsewhere must not
+    // override a deliberate link (e.g. the user re-picked the material by hand).
+    const tools = [{ id: 't', presets: [
+      { guid: 'a', material: { query: 'SS316 FIN' }, material_preset_id: 'p_ph' },
+    ] }];
+    const out = autoLinkMaterialByGrade(tools, M);
+    expect(out).toBe(tools);                                   // untouched reference
+    expect(out[0].presets[0].material_preset_id).toBe('p_ph'); // deliberate link kept
+  });
+
+  it('is stable across repeated loads (no churn once everything is linked)', () => {
+    const tools = [{ id: 't', presets: [{ guid: 'a', material: { query: 'SS316 FIN' } }] }];
+    const once = autoLinkMaterialByGrade(tools, M);
+    expect(once[0].presets[0].material_preset_id).toBe('p_316');
+    expect(autoLinkMaterialByGrade(once, M)).toBe(once);        // second pass: no-op
+    expect(autoLinkMaterialByGrade(once, M)).toBe(once);        // and again
   });
 });

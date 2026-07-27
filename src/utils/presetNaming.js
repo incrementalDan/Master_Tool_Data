@@ -273,6 +273,100 @@ export function backfillPresetAssemblyLinks(tools) {
   return any ? next : tools;
 }
 
+// ─── Grade-based material auto-linking ───────────────────────────────────────
+// The shop's legacy material strings carry the ALLOY GRADE ("AL 6061", "SS316
+// FIN", "17-4 PH", "303/416"). Every grade already lives in the Materials
+// library as an alloy with a `preset_id`, so a grade found in the string
+// resolves to a CAM preset with high confidence — no guessing. This is
+// deliberately narrower than suggestCamPresetName, which ALSO falls back to a
+// bare-code default ("AL" → the wrought preset); that fallback is a judgement
+// call and stays user-confirmed. Grade matches are unambiguous, so they
+// self-heal silently.
+//
+// Because the link is the alloy's `preset_id`, renaming a CAM preset to carry
+// its grades ("Al Wrought" → "Al Wrought - 6061+") changes nothing here —
+// matching never reads the CAM preset's name. Adding a grade is just adding an
+// alias to the alloy in the Materials editor.
+
+// Grade-ish tokens for an alloy: anything containing a digit, from its label
+// and aliases ("316 / 316L" → 316, 316L; "17-4 PH" → 17-4).
+function alloyGradeTokens(alloy) {
+  const out = [];
+  for (const field of [alloy.label, ...(alloy.aliases || [])]) {
+    for (const tok of String(field || '').split(/[\s/,]+/).filter(Boolean)) {
+      if (/\d/.test(tok)) out.push(tok);
+    }
+  }
+  return out;
+}
+
+// Does `q` contain `tok` as a grade — letters may abut it ("SS316", "AL6061"),
+// but another DIGIT may not ("316" must not match inside "3160").
+function containsGrade(q, tok) {
+  const esc = tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  try { return new RegExp(`(?<!\\d)${esc}(?!\\d)`, 'i').test(q); }
+  catch { return q.toLowerCase().includes(tok.toLowerCase()); }
+}
+
+// The CAM preset id a material string implies via an alloy GRADE it contains,
+// or null. Longest grade wins so "316L" beats "316" and "17-4" beats "17".
+// The grade index is derived purely from the Materials library, so cache it per
+// library object — the load-time pass calls this once per unlinked preset and
+// would otherwise rebuild + re-sort ~200 candidates every time.
+const gradeIndexCache = new WeakMap();
+function gradeIndex(materials) {
+  const hit = gradeIndexCache.get(materials);
+  if (hit) return hit;
+  const presetIds = new Set((materials.presets || []).map(p => p.id));
+  const candidates = [];
+  for (const alloy of materials.materials || []) {
+    if (!alloy.preset_id || !presetIds.has(alloy.preset_id)) continue;   // skip dangling
+    for (const tok of alloyGradeTokens(alloy)) candidates.push({ tok, preset_id: alloy.preset_id });
+  }
+  // Longest grade first, so a short grade that prefixes a longer one can't win.
+  candidates.sort((a, b) => b.tok.length - a.tok.length);
+  gradeIndexCache.set(materials, candidates);
+  return candidates;
+}
+
+export function camPresetIdFromGrade(query, materials) {
+  const q = String(query || '').trim();
+  if (!q || !materials?.materials?.length) return null;
+  for (const c of gradeIndex(materials)) {
+    if (containsGrade(q, c.tok)) return c.preset_id;
+  }
+  return null;
+}
+
+// Load-time self-heal: stamp the CAM-preset FK on any preset whose material
+// string contains a recognizable alloy grade but carries no link yet. In memory
+// at load, persisted on the tool's next save (mirrors the other backfills).
+// Presets with no grade in their string are left alone — those stay surfaced in
+// MaterialLinkBanner for the user to decide.
+export function autoLinkMaterialByGrade(tools, materials) {
+  if (!materials?.presets?.length) return tools;
+  let any = false;
+  const next = (tools || []).map(t => {
+    if (!t.presets?.length) return t;
+    let changed = false;
+    const presets = t.presets.map(p => {
+      if (p.material_preset_id) return p;
+      const q = p.material?.query;
+      if (!q) return p;
+      const hit = findMaterialInLibrary(q, materials);
+      if (hit.group || hit.preset || hit.alloy) return p;   // already resolves by name
+      const id = camPresetIdFromGrade(q, materials);
+      if (!id) return p;
+      changed = true;
+      return { ...p, material_preset_id: id };
+    });
+    if (!changed) return t;
+    any = true;
+    return { ...t, presets };
+  });
+  return any ? next : tools;
+}
+
 // Presets whose material link is BROKEN: they hold a material string that
 // resolves to nothing in the Materials library and carry no CAM-preset FK id.
 // The main cause is a CAM preset renamed BEFORE the id was captured (the stored

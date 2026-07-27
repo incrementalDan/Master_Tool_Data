@@ -19,7 +19,7 @@ import { mergeToolConflicts } from '../utils/toolConflicts.js';
 import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSystem.js';
 import { isExcludedFrom } from '../utils/idSystems.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
-import { composePresetName, opTypeWord, parsePresetName, materialNameCode, materialCategory, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
+import { composePresetName, opTypeWord, parsePresetName, materialNameCode, materialCategory, findMaterialInLibrary, camPresetIdFromGrade, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import { defaultToolLibraryId, machineNumberArgs } from './appState.js';
 
@@ -824,6 +824,17 @@ export function createLibraryOps(ctx) {
           const material = overrideQuery
             ? { ...(p.material || {}), query: overrideQuery, category: materialCategory(overrideQuery) }
             : p.material;
+          // Stamp the CAM-preset FOREIGN KEY, not just the name — otherwise a
+          // normalized preset stays name-only and is orphaned the moment that
+          // CAM preset is renamed (and shows up in MaterialLinkBanner forever).
+          // Falls back to a grade found in the existing string so a preset the
+          // user didn't override still gets linked ("SS316 FIN" → SS Austenitic).
+          const matPresetId = (overrideQuery
+            ? findMaterialInLibrary(overrideQuery, materialsRef.current).preset?.id
+            : null)
+            ?? p.material_preset_id
+            ?? camPresetIdFromGrade(p.material?.query, materialsRef.current)
+            ?? null;
           const opType = isHoleMakingTool
             ? null
             : (parsePresetName(p.name)?.opType ?? opOverrides[p.guid] ?? p.operation_type ?? null);
@@ -835,7 +846,11 @@ export function createLibraryOps(ctx) {
                 opType,
               })
             : p.name;
-          return { ...p, material, name, operation_type: opType, ...(overrideQuery ? { 'stock-materials': [overrideQuery] } : {}) };
+          return {
+            ...p, material, name, operation_type: opType,
+            ...(matPresetId ? { material_preset_id: matPresetId } : {}),
+            ...(overrideQuery ? { 'stock-materials': [overrideQuery] } : {}),
+          };
         });
 
         const fusionLogical = {
