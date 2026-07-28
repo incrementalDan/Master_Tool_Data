@@ -25,6 +25,8 @@ import {
   presetsForAssembly,
   backfillPresetAssemblyLinks,
   camPresetIdFromGrade,
+  bareMaterialCode,
+  bareCodeGroups,
   autoLinkMaterialByGrade,
 } from './presetNaming.js';
 
@@ -616,5 +618,48 @@ describe('material auto-link — stability once linked', () => {
     expect(once[0].presets[0].material_preset_id).toBe('p_316');
     expect(autoLinkMaterialByGrade(once, M)).toBe(once);        // second pass: no-op
     expect(autoLinkMaterialByGrade(once, M)).toBe(once);        // and again
+  });
+});
+
+describe('bare material codes — the shop\'s one-per-code default', () => {
+  // A string with no grade ("AL FIN", "SS") is a judgement call the matcher
+  // deliberately refuses. These helpers surface those in the normalize flow so
+  // the shop declares its standard once per code instead of per preset.
+  const M = {
+    groups: [{ id: 'N', label: 'Non-Ferrous', code: 'AL' }, { id: 'M', label: 'Stainless', code: 'SS' }],
+    presets: [{ id: 'p_alw', group_id: 'N', name: 'Al Wrought - 6061+' },
+              { id: 'p_316', group_id: 'M', name: 'SS Austenitic - 310, 316' }],
+    materials: [{ id: 'a1', group_id: 'N', preset_id: 'p_alw', label: '6061', aliases: [] },
+                { id: 'a4', group_id: 'M', preset_id: 'p_316', label: '316 / 316L', aliases: ['SS316'] }],
+  };
+
+  it('reads the broad code out of a gradeless legacy string', () => {
+    expect(bareMaterialCode('AL FIN', M)).toBe('AL');
+    expect(bareMaterialCode('AL', M)).toBe('AL');
+    expect(bareMaterialCode('SS', M)).toBe('SS');
+    expect(bareMaterialCode('ST', M)).toBe('STEEL');
+    expect(bareMaterialCode('BRZ ROUGH', M)).toBe('BRONZE');
+  });
+
+  it('returns null when the matcher can already resolve it (nothing to ask)', () => {
+    expect(bareMaterialCode('SS316 FIN', M)).toBe(null);      // grade → auto-linked
+    expect(bareMaterialCode('6061', M)).toBe(null);           // grade → auto-linked
+    expect(bareMaterialCode('Al Wrought - 6061+', M)).toBe(null); // a real CAM preset name
+    expect(bareMaterialCode('Non-Ferrous', M)).toBe(null);    // a real group label
+    expect(bareMaterialCode('', M)).toBe(null);
+  });
+
+  it('groups the presets needing a decision, skipping ones already linked', () => {
+    const presets = [
+      { guid: 'p1', material: { query: 'AL FIN' } },
+      { guid: 'p2', material: { query: 'AL ROUGH' } },
+      { guid: 'p3', material: { query: 'SS' } },
+      { guid: 'p4', material: { query: 'SS316 FIN' } },                       // grade → not asked
+      { guid: 'p5', material: { query: 'AL' }, material_preset_id: 'p_alw' },  // linked → not asked
+    ];
+    const g = bareCodeGroups(presets, M);
+    expect([...g.keys()].sort()).toEqual(['AL', 'SS']);
+    expect(g.get('AL').map(p => p.guid)).toEqual(['p1', 'p2']);
+    expect(g.get('SS')).toHaveLength(1);
   });
 });
