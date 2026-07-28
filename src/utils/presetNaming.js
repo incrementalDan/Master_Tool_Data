@@ -367,6 +367,36 @@ export function autoLinkMaterialByGrade(tools, materials) {
   return any ? next : tools;
 }
 
+// The legacy CODE a material string reduces to when it carries NO alloy grade
+// and doesn't resolve in the library — "AL FIN" → AL, "SS" → SS, "BRZ" → BRONZE.
+// These are the genuinely ambiguous ones the app must never guess at: the
+// library has several aluminium CAM presets (wrought / cast / high-Si), so only
+// the shop knows which one a bare "AL" means. normalizeLibrary surfaces one
+// picker per distinct code so the whole backlog is fixed in one decision.
+// Returns null when the string has a grade, resolves already, or is unknown.
+export function bareMaterialCode(query, materials) {
+  const q = String(query || '').trim();
+  if (!q) return null;
+  const hit = findMaterialInLibrary(q, materials);
+  if (hit.group || hit.preset || hit.alloy) return null;   // resolves by name
+  if (camPresetIdFromGrade(q, materials)) return null;      // has a grade — unambiguous
+  return matchMaterial(q);                                  // e.g. AL / SS / STEEL / null
+}
+
+// Distinct bare codes across a set of presets, each with the presets that use
+// it — what the normalize modal turns into "pick your default for AL" rows.
+export function bareCodeGroups(presets, materials) {
+  const out = new Map();
+  for (const p of presets || []) {
+    if (p?.material_preset_id) continue;                    // already linked
+    const code = bareMaterialCode(p?.material?.query, materials);
+    if (!code) continue;
+    if (!out.has(code)) out.set(code, []);
+    out.get(code).push(p);
+  }
+  return out;
+}
+
 // Presets whose material link is BROKEN: they hold a material string that
 // resolves to nothing in the Materials library and carry no CAM-preset FK id.
 // The main cause is a CAM preset renamed BEFORE the id was captured (the stored

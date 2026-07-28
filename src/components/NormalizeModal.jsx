@@ -3,7 +3,7 @@ import { X, AlertTriangle, ChevronDown, GitMerge } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import {
   OP_TYPES, HOLE_MAKING_TYPES, findMaterialInLibrary, presetMaterialColor,
-  suggestCamPresetName,
+  suggestCamPresetName, camPresetIdFromGrade, bareCodeGroups, MATERIAL_LABELS,
 } from '../utils/presetNaming.js';
 import { findNoFusionMergeCandidates } from '../schema/toolSchema.js';
 import { normProShopId } from '../schema/insertFamilies.js';
@@ -29,6 +29,11 @@ export default function NormalizeModal({ onClose }) {
   const [overrides, setOverrides] = useState({}); // presetGuid -> op value ('' = leave blank)
   const [matPicks, setMatPicks] = useState({});   // presetGuid -> CAM preset name (undefined = use suggestion)
   const [pickerFor, setPickerFor] = useState(null); // presetGuid whose material picker is open
+  // Shop default per bare legacy code ("AL" → "Al Wrought - 6061+"). Bare codes
+  // carry no grade, so only the shop knows which CAM preset they mean — one
+  // choice here fixes every preset using that code in the whole library.
+  const [codeDefaults, setCodeDefaults] = useState({});
+  const [codePickerFor, setCodePickerFor] = useState(null); // code whose picker is open
 
   // New (untracked) Fusion tools that share a ProShop number with an existing
   // no-Fusion tool — the user decides whether to merge each. Default: merge (on).
@@ -48,18 +53,45 @@ export default function NormalizeModal({ onClose }) {
     return out;
   }, [tools]);
 
-  // Confident material suggestion per preset (CAM preset name, or '' when none).
+  // Unambiguous suggestion per preset — the alloy GRADE in its string only.
+  // Bare codes are deliberately NOT guessed here; they're resolved in bulk by
+  // the shop's per-code default below.
   const suggested = useMemo(() => {
     const m = {};
+    const nameOf = (id) => (materials?.presets || []).find(x => x.id === id)?.name || '';
     for (const g of groups) {
-      for (const p of g.presets) m[p.guid] = suggestCamPresetName(p.material?.query, materials) || '';
+      for (const p of g.presets) {
+        const byGrade = camPresetIdFromGrade(p.material?.query, materials);
+        m[p.guid] = byGrade ? nameOf(byGrade)
+          : (findMaterialInLibrary(p.material?.query, materials).preset?.name || '');
+      }
     }
     return m;
   }, [groups, materials]);
 
+  // Bare codes present across every un-normalized preset, each with its count.
+  const codeGroups = useMemo(
+    () => bareCodeGroups(groups.flatMap(g => g.presets), materials),
+    [groups, materials]);
+  // Pre-fill each code with the app's legacy hint (AL → Al Wrought) so the row
+  // starts sensible; the shop can change it, and THAT choice is what applies.
+  const codeValue = (code) => (codeDefaults[code] !== undefined
+    ? codeDefaults[code]
+    : (suggestCamPresetName(code, materials) || ''));
+  // The bare code a preset falls under, or null.
+  const codeOf = useMemo(() => {
+    const m = {};
+    for (const [code, presets] of codeGroups) for (const p of presets) m[p.guid] = code;
+    return m;
+  }, [codeGroups]);
+
   const presetCount = groups.reduce((n, g) => n + g.presets.length, 0);
   // The effective material for a preset: an explicit pick wins, else the suggestion.
-  const matValue = (guid) => (matPicks[guid] !== undefined ? matPicks[guid] : (suggested[guid] || ''));
+  // Explicit per-preset pick wins, then the grade suggestion, then the shop's
+  // default for this preset's bare code.
+  const matValue = (guid) => (matPicks[guid] !== undefined
+    ? matPicks[guid]
+    : (suggested[guid] || (codeOf[guid] ? codeValue(codeOf[guid]) : '') || ''));
 
   const setOp = (guid, value) => setOverrides(prev => ({ ...prev, [guid]: value }));
   const setMat = (guid, value) => setMatPicks(prev => ({ ...prev, [guid]: value }));
@@ -172,6 +204,70 @@ export default function NormalizeModal({ onClose }) {
             </div>
           ) : (
             <>
+              {codeGroups.size > 0 && (
+                <div style={{
+                  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                  padding: '10px 12px', marginBottom: 14,
+                }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                    Shop default material
+                  </div>
+                  <div className="text-sub text-xs" style={{ marginBottom: 10 }}>
+                    These presets name only a broad material code, with no alloy grade — so only
+                    you know which CAM preset the shop means by it. Pick once per code and it
+                    applies to every preset using it. Anything with a grade in its name
+                    (<code>SS316</code>, <code>6061</code>) is matched automatically and isn't listed here.
+                  </div>
+                  {[...codeGroups].map(([code, ps]) => {
+                    const q = codeValue(code);
+                    const found = findMaterialInLibrary(q, materials);
+                    const sel = found.preset || found.group;
+                    const color = presetMaterialColor(q, materials);
+                    return (
+                      <div key={code} style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '7px 0', borderTop: '1px solid var(--border)',
+                      }}>
+                        <span style={{ flex: 1, minWidth: 0, fontSize: 13 }}>
+                          <strong>{code}</strong>
+                          <span className="text-sub text-xs" style={{ marginLeft: 6 }}>
+                            {MATERIAL_LABELS[code] || 'Other'} · {ps.length} preset{ps.length === 1 ? '' : 's'}
+                          </span>
+                        </span>
+                        <div
+                          className="preset-mat-field"
+                          style={{ width: 220, flexShrink: 0 }}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setCodePickerFor(code)}
+                          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setCodePickerFor(code); } }}
+                        >
+                          {sel ? (
+                            <span className="preset-mat-sel">
+                              <span className="cam-dot" style={{ background: color || '#888' }} />
+                              {found.preset ? found.preset.name : found.group.label}
+                            </span>
+                          ) : (
+                            <span className="text-sub">Choose material…</span>
+                          )}
+                          <span className="preset-mat-actions">
+                            {sel && (
+                              <span
+                                className="preset-mat-clear"
+                                title="Leave these unchanged"
+                                onClick={e => { e.stopPropagation(); setCodeDefaults(prev => ({ ...prev, [code]: '' })); }}
+                              >
+                                <X size={13} />
+                              </span>
+                            )}
+                            <ChevronDown size={14} className="text-sub" />
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
               <div className="text-sub text-xs" style={{ marginBottom: 10 }}>
                 Link each preset's material to a CAM preset (search or browse — just like the
                 preset editor) and set its operation type. Confident materials are pre-filled;
@@ -267,6 +363,15 @@ export default function NormalizeModal({ onClose }) {
           currentQuery={matValue(pickerFor)}
           onClose={() => setPickerFor(null)}
           onSelect={(cp) => setMat(pickerFor, cp.name)}
+        />
+      )}
+
+      {codePickerFor && (
+        <CamPresetPicker
+          materials={materials}
+          currentQuery={codeValue(codePickerFor)}
+          onClose={() => setCodePickerFor(null)}
+          onSelect={(cp) => setCodeDefaults(prev => ({ ...prev, [codePickerFor]: cp.name }))}
         />
       )}
     </div>
