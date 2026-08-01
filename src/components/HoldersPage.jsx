@@ -13,6 +13,7 @@ import {
 import { newHolderRecord } from '../schema/holderRecord.js';
 import { deriveGaugeLength, deriveExtensionOoh, formatHolderLen, holderLenIn, nominalLengthCheck } from '../utils/holderGeometry.js';
 import { healHolderDescription, applyHealToRecord } from '../utils/holderDescription.js';
+import { recordsWithBodyDivergence } from '../utils/holderBody.js';
 import { unitAbbr } from '../utils/units.js';
 
 const CONF_ORDER = ['high', 'medium', 'low'];
@@ -111,6 +112,7 @@ function HolderList({
   const [fExt, setFExt] = useState(false);
   const [fTap, setFTap] = useState(false);
   const [fCheck, setFCheck] = useState(false);
+  const [fClash, setFClash] = useState(false);
   // Grouping is ON by default — with 20+ holders across several tapers a flat
   // alphabetical list stops being useful fast. Sorting by a column is the
   // escape hatch, so picking a sort AUTO-UNGROUPS: grouped-and-sorted at the
@@ -125,6 +127,11 @@ function HolderList({
   };
   const enableGrouping = (on) => { setGrouped(on); if (on) setSortCol(null); };
 
+  const pendingCount = useMemo(() => holders.filter(h => pendingLengthCheck(h, config)).length, [holders, config]);
+  // Records whose base body disagrees with another record of the same holder.
+  // Declared BEFORE `visible` — the filter reads it.
+  const clashIds = useMemo(() => recordsWithBodyDivergence(holders, config), [holders, config]);
+
   const visible = useMemo(() => holders.filter(h => {
     if (fType && h.type_id !== fType) return false;
     if (fTaper && h.taper_id !== fTaper) return false;
@@ -132,16 +139,16 @@ function HolderList({
     if (fExt && !h.has_extension) return false;
     if (fTap && !h.is_tap_collet) return false;
     if (fCheck && !pendingLengthCheck(h, config)) return false;
+    if (fClash && !clashIds.has(h.id)) return false;
     if (q) {
       const hay = [h.description, h.vendor, h.manufacturer, h.part_number, h.notes, h.location, ...(h.legacy_ids || [])]
         .join(' ').toLowerCase();
       if (!hay.includes(q.toLowerCase())) return false;
     }
     return true;
-  }), [holders, q, fType, fTaper, fCollet, fExt, fTap, fCheck, config]);
+  }), [holders, q, fType, fTaper, fCollet, fExt, fTap, fCheck, fClash, clashIds, config]);
 
   const usedIds = (key) => [...new Set(holders.map(h => h[key]).filter(Boolean))];
-  const pendingCount = useMemo(() => holders.filter(h => pendingLengthCheck(h, config)).length, [holders, config]);
 
   // Gauge and Ext OOH compare as NUMBERS in one common unit, not as the
   // formatted strings in the cells — an mm-native and an inch-native holder in
@@ -287,6 +294,13 @@ function HolderList({
               onClick={() => setFCheck(!fCheck)}
             >Needs length check ({pendingCount})</button>
           )}
+          {clashIds.size > 0 && (
+            <button
+              className={`chip holder-clash-chip${fClash ? ' active' : ''}`}
+              title="Records of the same physical holder whose base body geometry disagrees"
+              onClick={() => setFClash(!fClash)}
+            >Body mismatch ({clashIds.size})</button>
+          )}
         </div>
       </div>
 
@@ -354,6 +368,9 @@ function HolderList({
                       <div className="holder-row-desc">
                         <HolderPill holder={h} config={config} compact />
                         {h.is_tap_collet && <span className="holder-tap-tag">TAP</span>}
+                        {clashIds.has(h.id) && (
+                          <span className="holder-clash-tag" title="This holder body disagrees with another record of the same holder">≠</span>
+                        )}
                         {pending && (
                           <span
                             className={`holder-check-tag ${pending.status}`}
@@ -496,6 +513,7 @@ export default function HoldersPage() {
           allLocations={allLocations} readOnly={!canEdit}
           onBack={() => setOpenId(null)}
           updatedBy={googleUser?.email || ''}
+          siblings={records}
           onSave={onSave}
           onDelete={onDelete}
           onAddOption={addOption}

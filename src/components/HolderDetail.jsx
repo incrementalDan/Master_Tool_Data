@@ -17,6 +17,7 @@ import {
   SEG_HEIGHT, SEG_UPPER, SEG_LOWER, segHeight,
 } from '../utils/holderGeometry.js';
 import { composeHolderDescription, HOLDER_DESC_LIMIT } from '../utils/holderDescription.js';
+import { bodyDivergenceFor } from '../utils/holderBody.js';
 import { unitAbbr, normalizeUnit } from '../utils/units.js';
 
 const THEME_SWATCHES = [
@@ -322,7 +323,7 @@ function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setAc
 }
 
 export default function HolderDetail({
-  holder, config, usage = 0, allLocations = [], readOnly, updatedBy = '',
+  holder, config, usage = 0, allLocations = [], readOnly, updatedBy = '', siblings = [],
   onBack, onSave, onDelete, onAddOption, onViewTools,
 }) {
   const [h, setH] = useState(holder);
@@ -340,6 +341,12 @@ export default function HolderDetail({
   // The band is scoped to the COLLET FAMILY, so the check needs its label.
   const familyLabel = holderOptionLabel(config, 'collet_families', h.collet_family_id);
   const nominal = useMemo(() => nominalLengthCheck(h, familyLabel), [h, familyLabel]);
+  // A holder body and its extension are separate parts assembled at several
+  // stickouts, so the same body is duplicated across records — and duplicated
+  // data drifts. When two records of one physical holder disagree, at least one
+  // is wrong and nothing here can tell which, so it names the siblings and
+  // stops there.
+  const bodyClash = useMemo(() => bodyDivergenceFor(h, siblings, config), [h, siblings, config]);
 
   const save = async () => {
     setSaving('Saving…');
@@ -384,6 +391,29 @@ export default function HolderDetail({
           that aren't wired up yet.
         </span>
       </div>
+
+      {bodyClash && (
+        <div className="holder-clash-banner">
+          <AlertTriangle size={14} />
+          <div>
+            <strong>This holder body doesn’t match its other records.</strong>{' '}
+            The taper holder and the extension are separate parts, so the same body
+            appears on every record built from it — these disagree, which means at
+            least one is wrong.
+            <ul>
+              {bodyClash.others.map((v, i) => (
+                <li key={i}>
+                  {v.records.map(r => r.description || r.holder_ref).join(' · ')}
+                  {' '}— different body geometry
+                </li>
+              ))}
+            </ul>
+            <span className="holder-clash-note">
+              Compare the segment tables and correct whichever is wrong. Nothing is changed for you.
+            </span>
+          </div>
+        </div>
+      )}
 
       <div className="holder-detail-grid">
         <Section label="Identity" accent="var(--accent)">

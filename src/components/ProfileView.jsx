@@ -50,8 +50,16 @@ export default function ProfileView({
   onSelect,
   hoverIndex = null,
   onHover,
-  maxHeight = 340,
-  width = 150,
+  // The box is sized to the DRAWING, not the other way round. A fixed-width box
+  // wastes most of its width on a typical holder (a 180mm × Ø46 holder drawn at
+  // a height-limited scale only fills about half of it), and that dead space is
+  // width the drawing could have used to be bigger. So: pick the scale from
+  // whichever budget binds, then make the SVG exactly as wide as the widest
+  // segment needs. maxWidth stops a short, fat holder (a face-mill arbor) from
+  // running away with the row.
+  maxHeight = 560,
+  maxWidth = 320,
+  minWidth = 110,
   kindOf = defaultKindOf,
 }) {
   const totalH = segments.reduce((a, s) => a + segHeight(s), 0);
@@ -59,14 +67,16 @@ export default function ProfileView({
 
   if (!totalH || !maxD) {
     return (
-      <div className="profile-empty" style={{ width }}>Add segments to see the profile</div>
+      <div className="profile-empty" style={{ width: minWidth }}>Add segments to see the profile</div>
     );
   }
 
   const padY = 14;
   const padX = 12;
-  const scale = Math.min((maxHeight - padY * 2) / totalH, (width - padX * 2) / maxD);
+  // Still ONE uniform scale for both axes — true proportions, never stretched.
+  const scale = Math.min((maxHeight - padY * 2) / totalH, (maxWidth - padX * 2) / maxD);
   const svgH = totalH * scale + padY * 2;
+  const width = Math.max(minWidth, Math.min(maxWidth, maxD * scale + padX * 2));
   const cx = width / 2;
 
   // The gauge line sits below the above-gauge segments (which are at the
