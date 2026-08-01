@@ -197,35 +197,62 @@ export function readAboveGaugeFlags(fusionHolder) {
 // The -60 / -90 / -120 in a part number is the manufacturer's NOMINAL gauge
 // length, measured with the collet nut backed off, and it's engraved on the
 // holder. Fusion's modelled geometry is measured with the nut TIGHT, so the
-// computed gauge runs a few mm shorter. Subtracting any extension first, the
-// delta clusters tightly — which is what makes this a usable third check.
+// computed gauge runs a few mm shorter.
 //
-// ⚠️ MEASURED FROM THE REAL LIBRARY (Master-Holder.json), which does NOT match
-// the band quoted in the spec. 16 holders carry a nominal:
+// ⚠️ THE DELTA IS COLLET-FAMILY SPECIFIC. It is a property of how that collet
+// system seats, so there is no single shop-wide band:
+//   · SK collets — the rule holds. Measured across the real library, every
+//     well-formed SK holder lands in +4.2 … +7.0mm.
+//   · Other collet families (ER, TG) — NOT necessarily, and unverified here.
+//   · End mill / side-lock holders and other non-collet types — no nut to back
+//     off, so the premise doesn't apply at all.
+// A family with no rule returns status 'unknown': the app makes NO claim rather
+// than inventing a band. Add a family here only with data behind it.
 //
-//   14 cluster at  +4.239 … +7.001 mm   (SK13 ≈ 5.0, SK20 ≈ 6.0–7.0)
-//    2 are outliers, and they are the SAME two the spec names:
-//      NBT30-SK20C-60                      delta   0.000  (gauge == nominal
-//                                          exactly — no nut-tight shortening,
-//                                          which is backwards)
-//      NBT30-SK20C-60 w/ER16 EXT 2.385OOH  delta +30.155  (base gauge ~30mm
-//                                          short — looks like missing segments)
-//
-// The spec quotes "+2.2 to +5.0 (13 of 15)" and deltas of −2.000 / +28.155 for
-// those two; the file says otherwise. The SHAPE of the claim holds (tight
-// cluster + those two outliers), only the numbers differ, so the default band
-// below is taken from the file. It is a SOFT, configurable check that only ever
-// reports — nothing auto-fixes. ⚠️ Confirm the band before treating it as
-// authoritative; the sample is small and the delta looks collet-family
-// dependent.
-export const NOMINAL_DELTA_BAND_MM = { min: 3, max: 8 };
+// Nothing here ever auto-fixes. The app's guess is a starting point; the USER
+// confirms each holder once (see holderNominalSignature / the nominal_check
+// record field), and is asked again if anything the verdict depends on changes.
+export const NOMINAL_BANDS_MM = {
+  SK: { min: 3, max: 8 },
+};
 
-// Returns null when the check doesn't apply (no engraved nominal, no geometry).
-// Otherwise { deltaMm, within, band } — deltaMm is nominal − base gauge, where
-// base gauge is the gauge length with any extension removed. `nominal` is
-// always in millimetres: it is a designation off the part number (…-60, …-90),
-// which the shop's holders publish in mm regardless of the modelled unit.
-export function nominalLengthCheck(holder, band = NOMINAL_DELTA_BAND_MM) {
+// Collet families the check knows nothing about return null → 'unknown'.
+export function nominalBandFor(familyLabel) {
+  const key = String(familyLabel || '').trim().toUpperCase();
+  return NOMINAL_BANDS_MM[key] || null;
+}
+
+// The verdict depends on exactly these inputs, so a confirmation is only valid
+// while they hold. Change the nominal, the geometry, the unit or the collet
+// family and the stored confirmation goes stale and the user is asked again.
+export function holderNominalSignature(holder, familyLabel) {
+  const gauge = deriveGaugeLength(holder?.segments);
+  const ext = deriveExtensionOoh(holder?.segments) || 0;
+  const baseMm = convertLength(gauge - ext, holder?.unit, 'millimeters');
+  return [
+    holder?.length ?? '',
+    Number.isFinite(baseMm) ? baseMm.toFixed(3) : '',
+    normalizeUnit(holder?.unit),
+    String(familyLabel || '').toUpperCase(),
+  ].join('|');
+}
+
+// Best-guess length check. Returns:
+//   { status, deltaMm, baseGaugeMm, nominalMm, band, signature, confirmed }
+//
+//   'na'        — doesn't apply (no engraved nominal, no geometry, or an
+//                 extension whose segments aren't flagged yet so the base gauge
+//                 isn't knowable)
+//   'unknown'   — applies, but there is no verified band for this collet family
+//                 (or it isn't a collet holder). The app reports the delta and
+//                 says nothing about whether it's right.
+//   'ok'/'flag' — inside / outside this family's band
+//
+// `confirmed` is true when the record carries a confirmation whose signature
+// still matches — i.e. a human has looked at THIS combination and accepted it.
+// The status is reported alongside it either way, so a confirmed-but-flagged
+// holder still reads as flagged; it just stops asking.
+export function nominalLengthCheck(holder, familyLabel, band) {
   const nominal = Number(holder?.length);
   const segs = holder?.segments;
   if (!isFinite(nominal) || nominal <= 0 || !Array.isArray(segs) || !segs.length) return null;
@@ -238,14 +265,39 @@ export function nominalLengthCheck(holder, band = NOMINAL_DELTA_BAND_MM) {
   // assembled length against the base nominal would flag every un-flagged
   // extension holder with a large bogus delta. Stay silent until it's knowable.
   if (holder?.has_extension && ext == null) return null;
+
   const baseMm = convertLength(gauge - (ext || 0), holder.unit, 'millimeters');
   const deltaMm = nominal - baseMm;
+  const useBand = band !== undefined ? band : nominalBandFor(familyLabel);
+  const signature = holderNominalSignature(holder, familyLabel);
+  const confirmed = !!holder?.nominal_check?.signature
+    && holder.nominal_check.signature === signature;
+
+  const status = !useBand ? 'unknown'
+    : (deltaMm >= useBand.min && deltaMm <= useBand.max) ? 'ok' : 'flag';
+
   return {
+    status,
+    confirmed,
+    needsConfirmation: !confirmed,
     deltaMm,
     baseGaugeMm: baseMm,
     nominalMm: nominal,
-    within: deltaMm >= band.min && deltaMm <= band.max,
-    band,
+    band: useBand,
+    familyLabel: familyLabel || null,
+    signature,
+  };
+}
+
+// Stamp a confirmation onto a record. The signature is what makes it expire.
+export function confirmHolderNominal(holder, familyLabel, by) {
+  return {
+    ...holder,
+    nominal_check: {
+      signature: holderNominalSignature(holder, familyLabel),
+      confirmed_at: new Date().toISOString(),
+      confirmed_by: by || '',
+    },
   };
 }
 

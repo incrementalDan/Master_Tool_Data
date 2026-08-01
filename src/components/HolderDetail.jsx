@@ -13,7 +13,7 @@ import {
 import {
   deriveGaugeLength, deriveExtensionOoh, deriveExtensionShankDia, extensionFlagMismatch,
   convertHolderUnits, formatHolderLen, trimHolderLen, holderLenIn, holderLenMm,
-  nominalLengthCheck, newSegment, displaySegments, realSegmentIndex,
+  nominalLengthCheck, confirmHolderNominal, newSegment, displaySegments, realSegmentIndex,
   SEG_HEIGHT, SEG_UPPER, SEG_LOWER, segHeight,
 } from '../utils/holderGeometry.js';
 import { composeHolderDescription, HOLDER_DESC_LIMIT } from '../utils/holderDescription.js';
@@ -322,7 +322,7 @@ function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setAc
 }
 
 export default function HolderDetail({
-  holder, config, usage = 0, allLocations = [], readOnly,
+  holder, config, usage = 0, allLocations = [], readOnly, updatedBy = '',
   onBack, onSave, onDelete, onAddOption, onViewTools,
 }) {
   const [h, setH] = useState(holder);
@@ -337,7 +337,9 @@ export default function HolderDetail({
   const extOoh = deriveExtensionOoh(h.segments);
   const shankDia = deriveExtensionShankDia(h.segments);
   const mismatch = extensionFlagMismatch(h);
-  const nominal = useMemo(() => nominalLengthCheck(h), [h]);
+  // The band is scoped to the COLLET FAMILY, so the check needs its label.
+  const familyLabel = holderOptionLabel(config, 'collet_families', h.collet_family_id);
+  const nominal = useMemo(() => nominalLengthCheck(h, familyLabel), [h, familyLabel]);
 
   const save = async () => {
     setSaving('Saving…');
@@ -482,15 +484,47 @@ export default function HolderDetail({
             </Field>
           </div>
 
-          {/* The nominal-length soft check. Informational only — never a fix.
+          {/* Length check — the app's BEST GUESS, confirmed once by the user.
               The engraved nominal is measured with the collet nut backed off,
-              so the modelled gauge runs a few mm shorter; a delta outside the
-              usual band means something is worth a look. */}
+              so the modelled gauge runs a few mm shorter. That delta is a
+              property of the collet system, so there's a verified band for SK
+              and none for the rest (see NOMINAL_BANDS_MM) — where there's no
+              rule the app reports the number and claims nothing.
+
+              Either way this is never a fix and never auto-resolves: the user
+              accepts each holder once, and the confirmation expires by itself
+              if the nominal, the geometry, the unit or the collet family
+              changes (holderNominalSignature). */}
           {nominal && (
-            <div className={`holder-nominal${nominal.within ? ' ok' : ' flag'}`}>
-              {nominal.within
-                ? `Nominal ${nominal.nominalMm} vs base gauge ${nominal.baseGaugeMm.toFixed(2)}mm — Δ ${nominal.deltaMm.toFixed(2)}mm, normal range.`
-                : `Nominal ${nominal.nominalMm} vs base gauge ${nominal.baseGaugeMm.toFixed(2)}mm — Δ ${nominal.deltaMm.toFixed(2)}mm is outside the usual ${nominal.band.min}–${nominal.band.max}mm. Worth reviewing.`}
+            <div className={`holder-nominal ${nominal.confirmed ? 'confirmed' : nominal.status}`}>
+              <div className="holder-nominal-text">
+                <strong>
+                  Nominal {nominal.nominalMm} vs base gauge {nominal.baseGaugeMm.toFixed(2)}mm
+                  {' '}— Δ {nominal.deltaMm.toFixed(2)}mm
+                </strong>
+                {nominal.status === 'ok' && ` — within the usual ${nominal.band.min}–${nominal.band.max}mm for ${nominal.familyLabel} collets.`}
+                {nominal.status === 'flag' && ` — outside the usual ${nominal.band.min}–${nominal.band.max}mm for ${nominal.familyLabel} collets. Worth reviewing.`}
+                {nominal.status === 'unknown' && (
+                  nominal.familyLabel
+                    ? ` — no verified range for ${nominal.familyLabel} yet, so this is unchecked.`
+                    : ' — the nut-tight offset only applies to collet holders, so this is unchecked.'
+                )}
+              </div>
+              {nominal.confirmed ? (
+                <div className="holder-nominal-actions">
+                  <span className="holder-nominal-confirmed">
+                    ✓ Confirmed{h.nominal_check?.confirmed_at ? ` ${new Date(h.nominal_check.confirmed_at).toLocaleDateString()}` : ''}
+                  </span>
+                  <button className="btn btn-ghost btn-sm" onClick={() => set('nominal_check', null)}>Re-check</button>
+                </div>
+              ) : (
+                <div className="holder-nominal-actions">
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setH(p => confirmHolderNominal(p, nominal.familyLabel, updatedBy))}
+                  >Confirm this length</button>
+                </div>
+              )}
             </div>
           )}
 

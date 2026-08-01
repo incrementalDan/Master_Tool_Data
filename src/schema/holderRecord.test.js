@@ -8,7 +8,7 @@ import {
 import {
   deriveGaugeLength, deriveExtensionOoh, deriveExtensionShankDia,
   convertHolderUnits, buildGaugeExpressionFromFlags, readAboveGaugeFlags,
-  nominalLengthCheck, totalSegmentHeight, formatHolderLen,
+  nominalLengthCheck, confirmHolderNominal, totalSegmentHeight, formatHolderLen,
 } from '../utils/holderGeometry.js';
 
 // The real 20-record holder library — every claim below is checked against it
@@ -235,34 +235,56 @@ describe('unit conversion', () => {
   });
 });
 
-describe('nominal-length soft check', () => {
-  it('lands in the band for the well-formed holders and flags the two known outliers', () => {
-    // Measured from the real file: 14 of 16 cluster at +4.239 … +7.001mm.
-    const check = (desc, length) => {
-      const r = fusionHolderToRecord(byDesc(desc));
-      r.length = length;
-      return nominalLengthCheck(r);
-    };
-    expect(check('NBT30-SK13C-60', 60).within).toBe(true);
-    expect(check('NBT30-SK13C-120', 120).within).toBe(true);
-    expect(check('NBT30-SK20C-90', 90).within).toBe(true);
-    expect(check('NBT30-SK13C-150', 150).within).toBe(true);
+describe('nominal-length check (family-scoped best guess + one-time confirmation)', () => {
+  // The delta is a property of how the COLLET SYSTEM seats, so the band is
+  // scoped per family. SK is the only one measured against real data.
+  const check = (desc, length, family = 'SK', patch = {}) => {
+    const r = { ...fusionHolderToRecord(byDesc(desc)), length, ...patch };
+    return nominalLengthCheck(r, family);
+  };
 
-    // Outlier 1: gauge == nominal exactly, i.e. no nut-tight shortening at all.
-    const flat = check('NBT30-SK20C-60', 60);
-    expect(flat.deltaMm).toBeCloseTo(0, 1);
-    expect(flat.within).toBe(false);
+  it('passes every well-formed SK holder in the real library', () => {
+    expect(check('NBT30-SK13C-60', 60).status).toBe('ok');
+    expect(check('NBT30-SK13C-90 (85mm)', 90).status).toBe('ok');
+    expect(check('NBT30-SK13C-120', 120).status).toBe('ok');
+    expect(check('NBT30-SK13C-150', 150).status).toBe('ok');
+    expect(check('NBT30-SK20C-90', 90).status).toBe('ok');
+  });
 
-    // Outlier 2: base gauge ~30mm short — looks like missing segments. (Its
-    // extension segments are not flagged here, so the raw delta is large and
-    // negative; either way it is nowhere near the band.)
-    const short = check('NBT30-SK20C-60 w/ER16 EXT 2.385OOH', 60);
-    expect(short.within).toBe(false);
-    expect(Math.abs(short.deltaMm)).toBeGreaterThan(20);
+  it('flags NBT30-SK20C-60 — its gauge equals the nominal exactly, which is backwards', () => {
+    const n = check('NBT30-SK20C-60', 60);
+    expect(n.deltaMm).toBeCloseTo(0, 1);
+    expect(n.status).toBe('flag');
+  });
+
+  it('flags the other SK20C-60 record too — same body, 30mm of it missing', () => {
+    // The two records are the same holder body except the tip-most segment
+    // (40.001 vs 9.846). Its EXTENSION is correct — the two flagged tip
+    // segments sum to 60.579mm = exactly the 2.385" in its own name — so this
+    // is a body problem, not an extension problem.
+    const r = fusionHolderToRecord(byDesc('NBT30-SK20C-60 w/ER16 EXT 2.385OOH'));
+    r.length = 60;
+    r.has_extension = true;
+    r.segments = r.segments.map((s, i) => (i < 2 ? { ...s, ext: true } : s));
+    expect(deriveExtensionOoh(r.segments) / 25.4).toBeCloseTo(2.385, 4);
+    const n = nominalLengthCheck(r, 'SK');
+    expect(n.baseGaugeMm).toBeCloseTo(29.845, 2);
+    expect(n.status).toBe('flag');
+  });
+
+  it('claims NOTHING for a family with no verified band', () => {
+    // ER / TG are unverified, and an end-mill / side-lock holder has no nut to
+    // back off at all — the premise doesn't apply. Report the number, no verdict.
+    for (const family of ['ER', 'TG', null, '']) {
+      const n = check('NBT30-SK13C-60', 60, family);
+      expect(n.status).toBe('unknown');
+      expect(n.band).toBeNull();
+      expect(n.deltaMm).toBeCloseTo(5.001, 2);   // still reported
+    }
   });
 
   it('does not apply without an engraved nominal', () => {
-    expect(nominalLengthCheck(fusionHolderToRecord(byDesc('NBT30-SK13C-60')))).toBeNull();
+    expect(nominalLengthCheck(fusionHolderToRecord(byDesc('NBT30-SK13C-60')), 'SK')).toBeNull();
   });
 
   it('stays silent on an extension holder whose segments are not flagged yet', () => {
@@ -272,9 +294,45 @@ describe('nominal-length soft check', () => {
     const r = fusionHolderToRecord(byDesc('NBT30-SK13C-120 er16 12mm shank ext OOH2.5'));
     r.length = 120;
     r.has_extension = true;
-    expect(nominalLengthCheck(r)).toBeNull();
-    // Once flagged, the check applies and the holder lands in the band.
+    expect(nominalLengthCheck(r, 'SK')).toBeNull();
     r.segments = r.segments.map((s, i) => (i < 3 ? { ...s, ext: true } : s));
-    expect(nominalLengthCheck(r).within).toBe(true);
+    expect(nominalLengthCheck(r, 'SK').status).toBe('ok');
+  });
+
+  it('needs confirmation until the user gives it — even when the app says ok', () => {
+    let r = { ...fusionHolderToRecord(byDesc('NBT30-SK13C-60')), length: 60 };
+    expect(nominalLengthCheck(r, 'SK').needsConfirmation).toBe(true);
+    r = confirmHolderNominal(r, 'SK', 'dan@example.com');
+    const n = nominalLengthCheck(r, 'SK');
+    expect(n.confirmed).toBe(true);
+    expect(n.needsConfirmation).toBe(false);
+    // A confirmed-but-flagged holder still READS as flagged; it just stops asking.
+    let bad = confirmHolderNominal({ ...fusionHolderToRecord(byDesc('NBT30-SK20C-60')), length: 60 }, 'SK');
+    expect(nominalLengthCheck(bad, 'SK')).toMatchObject({ status: 'flag', confirmed: true });
+  });
+
+  it('EXPIRES the confirmation when anything the verdict depends on changes', () => {
+    const base = { ...fusionHolderToRecord(byDesc('NBT30-SK13C-60')), length: 60 };
+    const confirmed = confirmHolderNominal(base, 'SK');
+    expect(nominalLengthCheck(confirmed, 'SK').confirmed).toBe(true);
+
+    // the engraved nominal
+    expect(nominalLengthCheck({ ...confirmed, length: 90 }, 'SK').confirmed).toBe(false);
+    // the geometry
+    const moved = {
+      ...confirmed,
+      segments: confirmed.segments.map((s, i) => (i === 0 ? { ...s, height: s.height + 3 } : s)),
+    };
+    expect(nominalLengthCheck(moved, 'SK').confirmed).toBe(false);
+    // the collet family
+    expect(nominalLengthCheck(confirmed, 'ER').confirmed).toBe(false);
+    // the unit (a real conversion rewrites every dimension)
+    expect(nominalLengthCheck(convertHolderUnits(confirmed, 'inches'), 'SK').confirmed).toBe(false);
+  });
+
+  it('is a per-holder record field, and never reaches Fusion', () => {
+    const r = confirmHolderNominal({ ...fusionHolderToRecord(byDesc('NBT30-SK13C-60')), length: 60 }, 'SK');
+    expect(r.nominal_check.signature).toBeTruthy();
+    expect(holderRecordToFusion(r)).not.toHaveProperty('nominal_check');
   });
 });

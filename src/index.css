@@ -5186,3 +5186,50 @@ input.sf-ref-num { text-align: right; }
   .holder-geo-row { flex-wrap: wrap; }
   .holder-field-triple { grid-template-columns: 1fr; }
 }
+
+/* Length check — the app's best guess plus a per-holder one-time confirmation.
+   `unknown` is deliberately NOT a warning colour: there's no verified band for
+   that collet family, so the app is reporting a number, not raising a concern. */
+.holder-nominal {
+  margin-top: 10px;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: var(--text-xs);
+  line-height: var(--lh-normal);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.holder-nominal-text { flex: 1; min-width: 200px; }
+.holder-nominal-actions { display: flex; align-items: center; gap: 8px; }
+.holder-nominal.ok { color: var(--text-sub); background: var(--input-bg); border: 1px solid var(--border); }
+.holder-nominal.unknown { color: var(--text-sub); background: var(--input-bg); border: 1px dashed var(--border); }
+.holder-nominal.flag {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
+}
+.holder-nominal.confirmed { color: var(--text-faint); background: var(--input-bg); border: 1px solid var(--border); }
+.holder-nominal-confirmed { color: var(--green); font-weight: var(--fw-semibold); white-space: nowrap; }
+
+.chip.holder-check-chip.active {
+  border-color: color-mix(in srgb, var(--amber) 55%, transparent);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+  color: var(--amber);
+}
+.holder-check-tag {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--text-sub);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.holder-check-tag.flag {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+  border-color: color-mix(in srgb, var(--amber) 45%, transparent);
+}

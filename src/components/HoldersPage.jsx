@@ -11,11 +11,21 @@ import {
   holderOptions, holderOption, holderOptionLabel, newHolderOption, holderConfigOf,
 } from '../schema/holderOptions.js';
 import { newHolderRecord } from '../schema/holderRecord.js';
-import { deriveGaugeLength, deriveExtensionOoh, formatHolderLen, holderLenIn } from '../utils/holderGeometry.js';
+import { deriveGaugeLength, deriveExtensionOoh, formatHolderLen, holderLenIn, nominalLengthCheck } from '../utils/holderGeometry.js';
 import { healHolderDescription, applyHealToRecord } from '../utils/holderDescription.js';
 import { unitAbbr } from '../utils/units.js';
 
 const CONF_ORDER = ['high', 'medium', 'low'];
+
+// The length check is a per-holder ONE-TIME confirmation, so the list needs to
+// show what's still outstanding — otherwise the sweep after an import has no
+// worklist. Returns the check when it applies and hasn't been confirmed for the
+// CURRENT values (a confirmation expires by itself when they change).
+function pendingLengthCheck(h, config) {
+  const family = holderOptionLabel(config, 'collet_families', h.collet_family_id);
+  const n = nominalLengthCheck(h, family);
+  return n && n.needsConfirmation ? n : null;
+}
 
 // ─── Healer preview → commit ────────────────────────────────────────────────
 // Parses legacy free-text descriptions into structured fields. Preview only —
@@ -100,6 +110,7 @@ function HolderList({
   const [fCollet, setFCollet] = useState(null);
   const [fExt, setFExt] = useState(false);
   const [fTap, setFTap] = useState(false);
+  const [fCheck, setFCheck] = useState(false);
   // Grouping is ON by default — with 20+ holders across several tapers a flat
   // alphabetical list stops being useful fast. Sorting by a column is the
   // escape hatch, so picking a sort AUTO-UNGROUPS: grouped-and-sorted at the
@@ -120,15 +131,17 @@ function HolderList({
     if (fCollet && h.collet_size_id !== fCollet) return false;
     if (fExt && !h.has_extension) return false;
     if (fTap && !h.is_tap_collet) return false;
+    if (fCheck && !pendingLengthCheck(h, config)) return false;
     if (q) {
       const hay = [h.description, h.vendor, h.manufacturer, h.part_number, h.notes, h.location, ...(h.legacy_ids || [])]
         .join(' ').toLowerCase();
       if (!hay.includes(q.toLowerCase())) return false;
     }
     return true;
-  }), [holders, q, fType, fTaper, fCollet, fExt, fTap]);
+  }), [holders, q, fType, fTaper, fCollet, fExt, fTap, fCheck, config]);
 
   const usedIds = (key) => [...new Set(holders.map(h => h[key]).filter(Boolean))];
+  const pendingCount = useMemo(() => holders.filter(h => pendingLengthCheck(h, config)).length, [holders, config]);
 
   // Gauge and Ext OOH compare as NUMBERS in one common unit, not as the
   // formatted strings in the cells — an mm-native and an inch-native holder in
@@ -267,6 +280,13 @@ function HolderList({
           <span className="holder-filter-divider" />
           <button className={`chip holder-ext-chip${fExt ? ' active' : ''}`} onClick={() => setFExt(!fExt)}>Has extension</button>
           <button className={`chip${fTap ? ' active' : ''}`} onClick={() => setFTap(!fTap)}>Tap collet</button>
+          {pendingCount > 0 && (
+            <button
+              className={`chip holder-check-chip${fCheck ? ' active' : ''}`}
+              title="Holders whose engraved length hasn't been confirmed against the modelled geometry yet"
+              onClick={() => setFCheck(!fCheck)}
+            >Needs length check ({pendingCount})</button>
+          )}
         </div>
       </div>
 
@@ -327,12 +347,21 @@ function HolderList({
                 const ext = deriveExtensionOoh(h.segments);
                 const gauge = deriveGaugeLength(h.segments);
                 const used = usageOf(h);
+                const pending = pendingLengthCheck(h, config);
                 return (
                   <tr key={h.id} className="holder-row" onClick={() => onOpen(h)}>
                     <td>
                       <div className="holder-row-desc">
                         <HolderPill holder={h} config={config} compact />
                         {h.is_tap_collet && <span className="holder-tap-tag">TAP</span>}
+                        {pending && (
+                          <span
+                            className={`holder-check-tag ${pending.status}`}
+                            title={pending.status === 'flag'
+                              ? `Δ ${pending.deltaMm.toFixed(2)}mm is outside the usual range — open to review and confirm`
+                              : 'Engraved length not confirmed against the geometry yet'}
+                          >{pending.status === 'flag' ? '⚠' : '?'}</span>
+                        )}
                       </div>
                     </td>
                     <td className="muted">{holderOptionLabel(config, 'types', h.type_id) || '—'}</td>
@@ -368,7 +397,7 @@ export default function HoldersPage() {
   const {
     holderLibrary, holders: fusionHolders, shopSettings, tools,
     saveHolderRecord, deleteHolderRecord, saveHolderLibrary, saveShopSettings,
-    importHoldersFromFusion, googleAuthenticated, demoMode, notify,
+    importHoldersFromFusion, googleAuthenticated, googleUser, demoMode, notify,
   } = useApp();
   const navigate = useNavigate();
   const [openId, setOpenId] = useState(null);
@@ -466,6 +495,7 @@ export default function HoldersPage() {
           holder={open} config={config} usage={usageOf(open)}
           allLocations={allLocations} readOnly={!canEdit}
           onBack={() => setOpenId(null)}
+          updatedBy={googleUser?.email || ''}
           onSave={onSave}
           onDelete={onDelete}
           onAddOption={addOption}

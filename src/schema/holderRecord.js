@@ -50,7 +50,7 @@ export const HOLDER_APP_ONLY_FIELDS = [
   'manufacturer', 'part_number', 'purchasing',
   'color', 'location', 'notes', 'tags',
   'primary_photo_id', 'primary_photo_name', 'attachments',
-  'legacy_ids', 'description_manual',
+  'legacy_ids', 'description_manual', 'nominal_check',
   'created_at', 'updated_at', 'updated_by',
 ];
 
@@ -96,6 +96,12 @@ export function newHolderRecord(overrides = {}) {
     primary_photo_name: null,
     attachments: [],
     legacy_ids: [],             // retired product-id / reference values, searchable
+
+    // The user's one-time acceptance of the engraved-nominal vs modelled-gauge
+    // check (see nominalLengthCheck). `signature` captures the inputs the
+    // verdict depends on, so the confirmation expires by itself if any of them
+    // change and the user is asked again. null = never confirmed.
+    nominal_check: null,        // { signature, confirmed_at, confirmed_by }
 
     // A hand-typed description must survive later field changes — same
     // nameManual + "↺ Auto" protection the preset names use. Records imported
