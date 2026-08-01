@@ -5411,3 +5411,70 @@ input.sf-ref-num { text-align: right; }
   border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);
   border-radius: 5px; padding: 2px 7px; white-space: nowrap;
 }
+
+/* ─── Re-stamp preview ────────────────────────────────────────────────────── */
+.modal.holder-restamp-modal {
+  max-width: 880px; max-height: 90vh;
+  display: flex; flex-direction: column; padding: 0;
+}
+.holder-restamp-modal .modal-header {
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; gap: 10px;
+}
+.holder-restamp-modal .modal-header h3 { margin: 0; font-size: var(--text-md); font-weight: var(--fw-bold); }
+.holder-restamp-modal .modal-sub { margin: 3px 0 0; font-size: var(--text-xs); color: var(--text-sub); line-height: var(--lh-normal); }
+.holder-restamp-modal .modal-header > div:first-child { flex: 1; }
+.holder-restamp-modal .modal-body { flex: 1; overflow-y: auto; padding: 12px 16px; margin: 0; }
+.holder-restamp-modal .modal-footer {
+  padding: 11px 16px; border-top: 1px solid var(--border);
+  display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+}
+.holder-restamp-modal .modal-footer-note { flex: 1; font-size: var(--text-xs); color: var(--text-sub); min-width: 200px; }
+
+.restamp-toolbar {
+  display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap;
+  padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2);
+}
+.restamp-tol { flex: 1; min-width: 260px; }
+.restamp-tol > label {
+  display: block; font-size: var(--text-2xs); font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-label); text-transform: uppercase;
+  color: var(--text-sub); margin-bottom: 5px;
+}
+.restamp-tol-input { display: flex; align-items: center; gap: 7px; }
+.restamp-tol-input .field-input { width: 110px; font-family: var(--font-mono); }
+.restamp-tol-input .unit { font-size: var(--text-xs); color: var(--text-sub); font-family: var(--font-mono); }
+.restamp-tol-input .alt { font-size: var(--text-2xs); color: var(--text-faint); font-family: var(--font-mono); }
+.restamp-tol-presets { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 7px; }
+.restamp-tol-hint { font-size: 9.5px; color: var(--text-faint); margin-top: 7px; line-height: var(--lh-normal); max-width: 460px; }
+
+.restamp-counts { display: flex; gap: 8px; flex-wrap: wrap; }
+.restamp-stat {
+  border-radius: var(--radius-md); padding: 7px 12px; min-width: 86px;
+  border: 1px solid var(--border); background: var(--input-bg);
+}
+.restamp-stat b { display: block; font-family: var(--font-mono); font-size: 19px; font-weight: var(--fw-bold); line-height: 1.1; }
+.restamp-stat span { font-size: 9.5px; color: var(--text-sub); }
+.restamp-stat.ok b { color: var(--green); }
+.restamp-stat.warn b { color: var(--amber); }
+.restamp-stat.err b { color: var(--red); }
+
+.restamp-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.restamp-table th {
+  font-size: 9.5px; font-weight: var(--fw-bold); letter-spacing: var(--ls-label);
+  text-transform: uppercase; color: var(--text-sub); text-align: left;
+  padding: 0 8px 7px; white-space: nowrap;
+}
+.restamp-table th.num, .restamp-table td.num { text-align: right; }
+.restamp-table th.sel, .restamp-table td.sel { width: 28px; text-align: center; padding-left: 0; }
+.restamp-table td {
+  padding: 7px 8px; font-size: var(--text-sm);
+  border-top: 1px solid var(--border); color: var(--text-sub);
+}
+.restamp-table td.mono { font-family: var(--font-mono); }
+.restamp-table tr.off td { opacity: 0.4; }
+.restamp-table tr.warn td.delta { color: var(--amber); font-weight: var(--fw-semibold); }
+.restamp-table tr.error td { color: var(--red); }
+.restamp-table tr.error td.delta { color: var(--red); }
+.restamp-tool-name { color: var(--text); }
+.restamp-sub { font-size: 9.5px; color: var(--text-faint); margin-top: 1px; }

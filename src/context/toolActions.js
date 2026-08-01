@@ -294,13 +294,21 @@ export function createToolActions(ctx) {
       }
     }
 
+    // A single save can't stop to ask — the user is mid-edit, and blocking here
+    // would be useless. So it REPORTS, with the old and new number so the change
+    // is judgeable at a glance, and it respects the same per-holder tolerance
+    // the re-stamp screen sets: raise it there and this stops nagging about that
+    // holder too.
     const gaugeWarnings = (gaugeChecks || []).filter(c => c.level === 'warn');
     if (gaugeWarnings.length) {
-      const w = gaugeWarnings[0];
+      const w = [...gaugeWarnings].sort((a, b) => Math.abs(b.deltaIn ?? 0) - Math.abs(a.deltaIn ?? 0))[0];
+      const span = (w.before != null && Number.isFinite(w.after))
+        ? `${Number(w.before).toFixed(4)} → ${Number(w.after).toFixed(4)} (${w.deltaIn > 0 ? '+' : ''}${w.deltaIn.toFixed(4)}")`
+        : w.reason;
       notify(
         gaugeWarnings.length === 1
-          ? `Heads up — ${w.holderDescription || 'this holder'}: ${w.reason}`
-          : `Heads up — the assembly gauge length moved on ${gaugeWarnings.length} assemblies. Check the holders are right.`,
+          ? `Assembly gauge length changed on ${w.holderDescription || 'this holder'}: ${span}`
+          : `Assembly gauge length changed on ${gaugeWarnings.length} assemblies — largest ${span}`,
         'warning', 9000);
     }
 

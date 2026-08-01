@@ -938,13 +938,22 @@ export function createLibraryOps(ctx) {
   // the affected tools' entries are dropped and re-appended, and everything else
   // in the file is left byte-for-byte alone. `dryRun` returns the same summary
   // without writing anything, which is what the preview shows.
-  const restampHolderTools = async (holderRecord, { dryRun = false } = {}) => {
+  //   dryRun      — compute and report, write nothing (backs the preview)
+  //   toolIds     — restrict the write to these tools (the user's selection);
+  //                 omit for all of them
+  //   toleranceIn — override the holder's stored tolerance for this preview,
+  //                 so the modal can re-grade live as the number is dragged
+  const restampHolderTools = async (holderRecord, { dryRun = false, toolIds = null, toleranceIn = null } = {}) => {
     const guids = new Set(holderGuidsOf(holderRecord));
     if (!guids.size) return { tools: [], byLibrary: [], wrote: false };
 
-    const affected = (toolsRef.current || []).filter(t =>
+    const allAffected = (toolsRef.current || []).filter(t =>
       (t.assemblies || []).some(a => a.holder_guid && guids.has(a.holder_guid))
       && t.no_fusion_link !== true);
+    // The preview always describes EVERY affected tool; only the write is
+    // narrowed to the selection, so deselecting a tool never hides it.
+    const selected = toolIds ? new Set(toolIds) : null;
+    const affected = selected ? allAffected.filter(t => selected.has(t.id)) : allAffected;
 
     const byLibrary = new Map();
     for (const t of affected) {
@@ -956,21 +965,31 @@ export function createLibraryOps(ctx) {
     // assembly-gauge backstop can be shown before anything is written rather
     // than reported after the fact.
     const holdersNow = holdersRef.current || [];
-    const recordsNow = holderLibraryRef?.current?.holders || null;
+    // An explicit tolerance (the modal's slider) overrides the holder's stored
+    // one for this preview only — nothing is persisted until the user commits.
+    const recordsNow = (holderLibraryRef?.current?.holders || null);
+    const previewRecords = (toleranceIn == null || !recordsNow)
+      ? recordsNow
+      : recordsNow.map(h => (h.id === holderRecord.id ? { ...h, restamp_tolerance_in: toleranceIn } : h));
+
     const checks = [];
-    for (const t of affected) {
+    for (const t of allAffected) {
       try {
-        const { gaugeChecks } = splitToFusionInstances(t, holdersNow, recordsNow);
-        for (const c of gaugeChecks || []) {
-          if (c.level !== 'ok') checks.push({ ...c, tool: t });
-        }
-      } catch { /* a tool that can't be split is reported by the write itself */ }
+        const { gaugeChecks } = splitToFusionInstances(t, holdersNow, previewRecords);
+        for (const c of gaugeChecks || []) checks.push({ ...c, tool: t, toolId: t.id });
+      } catch {
+        checks.push({ level: 'error', tool: t, toolId: t.id, before: null, after: NaN,
+          reason: 'This tool could not be rebuilt — open it to see why.' });
+      }
     }
     const summary = {
-      tools: affected,
+      tools: allAffected,
+      selectedCount: affected.length,
       byLibrary: [...byLibrary.entries()].map(([libId, ts]) => ({ libId, count: ts.length })),
+      checks,
       gaugeWarnings: checks.filter(c => c.level === 'warn'),
       gaugeErrors: checks.filter(c => c.level === 'error'),
+      toleranceIn: toleranceIn ?? holderRecord.restamp_tolerance_in ?? null,
       wrote: false,
     };
     if (dryRun || !affected.length) return summary;

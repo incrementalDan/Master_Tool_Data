@@ -8,7 +8,7 @@ import {
 import { fusionToolToInternal, internalToFusionTool } from './fusionConvert.js';
 import { mergeFusionAndMetadata, buildMetadataTool, detectFusionDrift } from './metadataModel.js';
 import { buildHolderObject } from './holderGauge.js';
-import { resolveHolderForWrite, assemblyGaugeCheck } from './holderResolve.js';
+import { resolveHolderForWrite, assemblyGaugeCheck, holderToleranceIn } from './holderResolve.js';
 import { parsePresetName, materialCategory, matchMaterial } from '../utils/presetNaming.js';
 import { isNewFormatPreset, readStrategyBucket } from './camStrategies.js';
 import { mergePresetLists } from '../utils/presetMerge.js';
@@ -513,6 +513,7 @@ export function splitToFusionInstances(tool, holders = [], holderRecords = null)
     }
 
     // Per-instance holder.
+    let resolvedRecord = null;
     // buildHolderObject always uses holderEntry.guid (the original GUID from the
     // holder library entry), never generates a new one — Fusion requires the
     // original GUID to maintain its link back to the holder library.
@@ -525,6 +526,7 @@ export function splitToFusionInstances(tool, holders = [], holderRecords = null)
       const resolved = resolveHolderForWrite(a.holder_guid, {
         records: holderRecords, fusionHolders: holders,
       });
+      resolvedRecord = resolved?.record || null;
       base.holder = resolved ? buildHolderObject(resolved.entry) : (raw.holder || undefined);
       if (!base.holder) delete base.holder;
       // A tool pointing at a holder that was merged away now carries the
@@ -592,6 +594,9 @@ export function splitToFusionInstances(tool, holders = [], holderRecords = null)
         toolUnit: tool.unit,
         assemblyId: a.assembly_id || a.instance_guid,
         holderDescription: base.holder.description || '',
+        // The holder's OWN tolerance when it has one — see holderToleranceIn,
+        // which is the single place the unset-vs-zero distinction is decided.
+        tolIn: holderToleranceIn(resolvedRecord?.restamp_tolerance_in),
       }));
     }
 

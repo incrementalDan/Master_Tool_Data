@@ -81,11 +81,32 @@ export function toolHolderIsStale(assembly, rawInstance, ctx) {
 // seen before committing; a big move is flagged; only arithmetic that came out
 // non-finite is treated as an error, because that is unambiguously broken
 // rather than merely surprising.
+// The DEFAULT only — the real tolerance is per holder (`restamp_tolerance_in`
+// on the record), because how much movement is reasonable depends entirely on
+// how wrong the holder was to start with. A holder whose body was 30mm short
+// will legitimately move every tool on it by more than an inch when corrected,
+// and being asked to confirm that 40 times is noise, not safety. The user sets
+// the number once per holder, sees the old and new gauge for every tool, and
+// that choice is remembered.
 export const ASSEMBLY_GAUGE_WARN_IN = 0.04;   // ≈1mm
+
+// Read a stored per-holder tolerance, falling back to the default.
+// ⚠️ ONE rule, in one place, because the obvious test is wrong twice over:
+// Number(null) and Number('') are both 0, and Number.isFinite(0) is true — so
+// a coercion-only check reads "no tolerance set" as "tolerate nothing" and
+// flags every tool on every holder over floating-point noise.
+export function holderToleranceIn(value, fallback = ASSEMBLY_GAUGE_WARN_IN) {
+  if (value === null || value === undefined || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
 
 // `before` / `after` are in the TOOL's unit; the delta is in inches so one
 // threshold covers mm- and inch-native tools alike.
-export function assemblyGaugeCheck({ before, after, toolUnit, assemblyId, holderDescription }) {
+export function assemblyGaugeCheck({
+  before, after, toolUnit, assemblyId, holderDescription,
+  tolIn = ASSEMBLY_GAUGE_WARN_IN,
+}) {
   const b = Number(before);
   const a = Number(after);
   const known = Number.isFinite(b);
@@ -101,9 +122,9 @@ export function assemblyGaugeCheck({ before, after, toolUnit, assemblyId, holder
   } else if (a <= 0) {
     level = 'warn';
     reason = 'The new assembly gauge length is zero or negative — the holder may have no usable geometry.';
-  } else if (deltaIn != null && Math.abs(deltaIn) > ASSEMBLY_GAUGE_WARN_IN) {
+  } else if (deltaIn != null && Math.abs(deltaIn) > tolIn) {
     level = 'warn';
     reason = `Assembly gauge length moves ${deltaIn > 0 ? '+' : ''}${deltaIn.toFixed(4)}" — check the holder is the right one.`;
   }
-  return { assemblyId, holderDescription, before: known ? b : null, after: a, deltaIn, level, reason };
+  return { assemblyId, holderDescription, before: known ? b : null, after: a, deltaIn, level, reason, tolIn };
 }

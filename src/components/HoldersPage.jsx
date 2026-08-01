@@ -1,7 +1,7 @@
 // ─── Holders page — the app-owned holder library ────────────────────────────
 // List → detail, ported from docs/HolderManager.tsx onto the app's tokens.
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
@@ -17,6 +17,7 @@ import { recordsWithBodyDivergence } from '../utils/holderBody.js';
 import { proposeHolderParts, applyPartProposals, holdersWithPartDrift, holderPartsOf } from '../utils/holderParts.js';
 import { findHolderDuplicates, holdersInDuplicates, applyHolderMerge, compareHolders, holderGuidsOf } from '../utils/holderDuplicates.js';
 import HolderMergeModal from './HolderMergeModal.jsx';
+import RestampModal from './RestampModal.jsx';
 import { unitAbbr } from '../utils/units.js';
 
 const CONF_ORDER = ['high', 'medium', 'low'];
@@ -594,6 +595,7 @@ export default function HoldersPage() {
   const [linkingParts, setLinkingParts] = useState(false);
   const [dupesOpen, setDupesOpen] = useState(false);
   const [merging, setMerging] = useState(null);   // { a, b, match }
+  const [restampOpen, setRestampOpen] = useState(false);
 
   // Falls back to the seeded lookups for a shop whose settings file predates
   // holder_config — see holderConfigOf.
@@ -665,38 +667,30 @@ export default function HoldersPage() {
     return () => { live = false; };
   }, [open, restampHolderTools, tools]);
 
-  const onRestamp = async () => {
-    if (!open) return;
-    const n = restampPreview?.tools?.length || 0;
-    const warn = restampPreview?.gaugeWarnings || [];
-    const err = restampPreview?.gaugeErrors || [];
+  // Opening the preview is all this does — every decision (tolerance, which
+  // tools) is made in the modal against real before/after numbers.
+  const onRestamp = () => setRestampOpen(true);
 
-    // The backstop, shown BEFORE the write. The assembly gauge length is where
-    // the cutting edge sits, so a tool whose gauge is about to move is the
-    // thing worth seeing — named, with the actual delta, not just a count.
-    let msg = `Re-stamp ${n} tool${n === 1 ? '' : 's'} with this holder's current geometry?\n\n`
-      + `Each tool's own copy of the holder is rebuilt and its assembly gauge length recomputed. `
-      + `Nothing else about those tools changes.`;
-    if (err.length) {
-      window.alert(
-        `Can't re-stamp: the assembly gauge length doesn't compute for ${err.length} `
-        + `assembl${err.length === 1 ? 'y' : 'ies'}. Check this holder's geometry first.`);
-      return;
-    }
-    if (warn.length) {
-      const lines = warn.slice(0, 6).map(c => {
-        const name = c.tool?.description || c.tool?.tool_id || 'tool';
-        const d = c.deltaIn == null ? '—' : `${c.deltaIn > 0 ? '+' : ''}${c.deltaIn.toFixed(4)}"`;
-        return `  • ${name}: assembly gauge ${d}`;
-      });
-      msg += `\n\n⚠ The assembly gauge length changes on ${warn.length} `
-        + `assembl${warn.length === 1 ? 'y' : 'ies'} — that's where the cutting edge sits:\n`
-        + lines.join('\n')
-        + (warn.length > 6 ? `\n  • …and ${warn.length - 6} more` : '')
-        + `\n\nThat's expected if you corrected this holder. Continue?`;
-    }
-    if (!window.confirm(msg)) return;
-    try { await restampHolderTools(open); } catch { /* toasted */ }
+  // Re-grade the preview against a tolerance the user is trying out. Pure
+  // computation; writes nothing.
+  const previewAtTolerance = useCallback((toleranceIn) => {
+    if (!open || !restampHolderTools) return;
+    Promise.resolve(restampHolderTools(open, { dryRun: true, toleranceIn }))
+      .then(setRestampPreview)
+      .catch(() => {});
+  }, [open, restampHolderTools]);
+
+  const commitRestamp = async (toolIds, toleranceIn) => {
+    if (!open) return;
+    try {
+      await restampHolderTools(open, { toolIds, toleranceIn });
+      // Remember the tolerance on the holder, so the ordinary single-tool save
+      // path stops warning about this same holder too.
+      if (Number(toleranceIn) !== Number(open.restamp_tolerance_in)) {
+        await saveHolderRecord({ ...open, restamp_tolerance_in: Number(toleranceIn) });
+      }
+      setRestampOpen(false);
+    } catch { /* toasted */ }
   };
 
   const onNew = async () => {
@@ -778,6 +772,14 @@ export default function HoldersPage() {
           onLinkParts={() => setLinkingParts(true)}
           onDuplicates={() => setDupesOpen(true)}
           driftIds={driftIds} partCount={parts.length} duplicateIds={duplicateIds}
+        />
+      )}
+      {restampOpen && open && (
+        <RestampModal
+          holder={open} preview={restampPreview}
+          onPreview={previewAtTolerance}
+          onCommit={commitRestamp}
+          onClose={() => setRestampOpen(false)}
         />
       )}
       {dupesOpen && (

@@ -52,7 +52,7 @@ export const HOLDER_APP_ONLY_FIELDS = [
   'color', 'location', 'notes', 'tags',
   'primary_photo_id', 'primary_photo_name', 'attachments',
   'legacy_ids', 'legacy_fusion_guids', 'description_manual', 'nominal_check',
-  'body_part_id', 'extension_part_id',
+  'body_part_id', 'extension_part_id', 'restamp_tolerance_in',
   'created_at', 'updated_at', 'updated_by',
 ];
 
@@ -118,6 +118,13 @@ export function newHolderRecord(overrides = {}) {
     // verdict depends on, so the confirmation expires by itself if any of them
     // change and the user is asked again. null = never confirmed.
     nominal_check: null,        // { signature, confirmed_at, confirmed_by }
+
+    // How much the ASSEMBLY gauge length may move when this holder's geometry
+    // is pushed to the tools using it, before each tool is flagged for review.
+    // Per holder on purpose: a holder that was badly modelled will move every
+    // tool on it a long way when corrected, and that is expected once the user
+    // has seen it. null = use the app default (ASSEMBLY_GAUGE_WARN_IN).
+    restamp_tolerance_in: null,
 
     // A hand-typed description must survive later field changes — same
     // nameManual + "↺ Auto" protection the preset names use. Records imported

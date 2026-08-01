@@ -442,7 +442,9 @@ export default function HolderDetail({
           <div className="holder-restamp-actions">
             {restampPreview.gaugeWarnings?.length > 0 && (
               <span className="holder-restamp-flag" title="The assembly gauge length is where the cutting edge sits — a change here is worth looking at before it lands">
-                ⚠ gauge moves on {restampPreview.gaugeWarnings.length}
+                {/* Assemblies, not tools — one tool can have several, so the
+                    two counts legitimately differ and shouldn't look like a bug. */}
+                ⚠ gauge moves on {restampPreview.gaugeWarnings.length} assembl{restampPreview.gaugeWarnings.length === 1 ? 'y' : 'ies'}
               </span>
             )}
             <button className="btn btn-secondary btn-sm" onClick={onRestamp}>

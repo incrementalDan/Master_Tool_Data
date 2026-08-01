@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { resolveHolderForWrite, toolHolderIsStale, assemblyGaugeCheck, ASSEMBLY_GAUGE_WARN_IN } from './holderResolve.js';
+import { resolveHolderForWrite, toolHolderIsStale, assemblyGaugeCheck, holderToleranceIn, ASSEMBLY_GAUGE_WARN_IN } from './holderResolve.js';
 import { fusionHolderToRecord } from './holderRecord.js';
 import { mergeHolderRecords } from '../utils/holderDuplicates.js';
 import { splitToFusionInstances } from './logicalTools.js';
@@ -232,5 +232,94 @@ describe('the write path emits the check', () => {
     const { gaugeChecks } = splitToFusionInstances(toolWith(4.0), REAL, [oldRecord()]);
     expect(gaugeChecks[0].holderDescription).toBe('NBT30-SK13C-60');
     expect(gaugeChecks[0].assemblyId).toBe('a1');
+  });
+});
+
+// The tolerance is PER HOLDER — a holder that was badly modelled moves every
+// tool on it, and once the user has seen that it shouldn't keep asking.
+describe('per-holder tolerance', () => {
+  it('respects an explicit tolerance instead of the default', () => {
+    const big = assemblyGaugeCheck({ before: 4.5, after: 5.5, toolUnit: 'inches' });
+    expect(big.level).toBe('warn');
+    // The same 1" move is fine once the user says so for this holder.
+    const allowed = assemblyGaugeCheck({ before: 4.5, after: 5.5, toolUnit: 'inches', tolIn: 2 });
+    expect(allowed.level).toBe('ok');
+    expect(allowed.tolIn).toBe(2);
+  });
+
+  it('a tolerance of 0 flags any movement at all', () => {
+    expect(assemblyGaugeCheck({ before: 4.5, after: 4.5001, toolUnit: 'inches', tolIn: 0 }).level).toBe('warn');
+    expect(assemblyGaugeCheck({ before: 4.5, after: 4.5, toolUnit: 'inches', tolIn: 0 }).level).toBe('ok');
+  });
+
+  it('never lets a tolerance excuse arithmetic that did not compute', () => {
+    // The one thing a tolerance can't wave through.
+    expect(assemblyGaugeCheck({ before: 4.5, after: NaN, toolUnit: 'inches', tolIn: 99 }).level).toBe('error');
+  });
+
+  it('the WRITE PATH reads the tolerance off the resolved holder record', () => {
+    const tool = (baked) => ({
+      id: 'FTL-CCCCCC', tracking_id: 'FTL-CCCCCC', tool_type: 'flat end mill',
+      unit: 'inches', diameter: 0.5, description: 'test',
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'inst-1', holder_guid: OLD.guid, ooh: 1.5 }],
+      _instancesRaw: [{ guid: 'inst-1', type: 'flat end mill', holder: { ...OLD },
+        geometry: { assemblyGaugeLength: baked } }],
+    });
+    // A holder shortened by 30mm — a 1.19" move on every tool using it.
+    const shortened = (tolIn) => ({
+      ...oldRecord(),
+      restamp_tolerance_in: tolIn,
+      segments: oldRecord().segments.map((s, i) => (i === 0 ? { ...s, height: 5 } : s)),
+    });
+    const baked = splitToFusionInstances(tool(undefined), REAL, [oldRecord()])
+      .fusionInstances[0].geometry.assemblyGaugeLength;
+
+    // Default tolerance: flagged.
+    expect(splitToFusionInstances(tool(baked), REAL, [shortened(null)])
+      .gaugeChecks[0].level).toBe('warn');
+    // The user accepted a 2" tolerance for this holder's fix: no longer flagged.
+    expect(splitToFusionInstances(tool(baked), REAL, [shortened(2)])
+      .gaugeChecks[0].level).toBe('ok');
+  });
+
+  it('treats an UNSET tolerance as the default, not as zero', () => {
+    // Number(null) is 0 and Number.isFinite(0) is true, so a coercion-only
+    // check reads "no tolerance set" as "tolerate nothing" and flags every tool
+    // on every holder over floating-point noise.
+    const tool = (baked) => ({
+      id: 'FTL-DDDDDD', tracking_id: 'FTL-DDDDDD', tool_type: 'flat end mill',
+      unit: 'inches', diameter: 0.5, description: 'test',
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'inst-1', holder_guid: OLD.guid, ooh: 1.5 }],
+      _instancesRaw: [{ guid: 'inst-1', type: 'flat end mill', holder: { ...OLD },
+        geometry: { assemblyGaugeLength: baked } }],
+    });
+    const baked = splitToFusionInstances(tool(undefined), REAL, [oldRecord()])
+      .fusionInstances[0].geometry.assemblyGaugeLength;
+    for (const unset of [null, undefined, '']) {
+      const rec = { ...oldRecord(), restamp_tolerance_in: unset };
+      const c = splitToFusionInstances(tool(baked), REAL, [rec]).gaugeChecks[0];
+      expect(c.level).toBe('ok');
+      expect(c.tolIn).toBe(ASSEMBLY_GAUGE_WARN_IN);
+    }
+  });
+
+  it('holderToleranceIn is the ONE place unset-vs-zero is decided', () => {
+    // Both traps: Number(null) and Number('') are 0, and Number.isFinite(0) is
+    // true. A real zero must still mean zero.
+    expect(holderToleranceIn(null)).toBe(ASSEMBLY_GAUGE_WARN_IN);
+    expect(holderToleranceIn(undefined)).toBe(ASSEMBLY_GAUGE_WARN_IN);
+    expect(holderToleranceIn('')).toBe(ASSEMBLY_GAUGE_WARN_IN);
+    expect(holderToleranceIn('nonsense')).toBe(ASSEMBLY_GAUGE_WARN_IN);
+    expect(holderToleranceIn(0)).toBe(0);
+    expect(holderToleranceIn(2)).toBe(2);
+    expect(holderToleranceIn('0.25')).toBe(0.25);
+  });
+
+  it('always reports the old and new value, flagged or not', () => {
+    const c = assemblyGaugeCheck({ before: 4.5, after: 4.75, toolUnit: 'inches', tolIn: 2 });
+    expect(c.level).toBe('ok');
+    expect(c.before).toBe(4.5);
+    expect(c.after).toBe(4.75);
+    expect(c.deltaIn).toBeCloseTo(0.25, 6);
   });
 });
