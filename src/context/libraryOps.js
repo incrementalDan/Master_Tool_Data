@@ -21,6 +21,7 @@ import { isExcludedFrom } from '../utils/idSystems.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
 import { composePresetName, opTypeWord, parsePresetName, materialNameCode, materialCategory, findMaterialInLibrary, camPresetIdFromGrade, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
+import { holderGuidsOf } from '../utils/holderDuplicates.js';
 import { defaultToolLibraryId, machineNumberArgs } from './appState.js';
 
 export function createLibraryOps(ctx) {
@@ -28,7 +29,7 @@ export function createLibraryOps(ctx) {
     dispatch, notify,
     uploadFusionList, downloadAllLibraries, markSetupStepInSettings,
     toolsRef, holdersRef, shopSettingsRef, googleRef, demoModeRef, materialsRef,
-    fusionReadyRef,
+    fusionReadyRef, holderLibraryRef, downloadFusionList,
   } = ctx;
 
   // Mode-2 two-stage load: until the full Fusion build completes (fusionReady),
@@ -98,7 +99,8 @@ export function createLibraryOps(ctx) {
           instance_guid: a.instance_guid || generateId(),
         }));
         const { fusionInstances, metadataTool } =
-          splitToFusionInstances({ ...tool, tracking_id, assemblies: withIds }, holders);
+          splitToFusionInstances({ ...tool, tracking_id, assemblies: withIds }, holders,
+            holderLibraryRef?.current?.holders || null);
         if (!byLibrary.has(libId)) byLibrary.set(libId, []);
         byLibrary.get(libId).push(...fusionInstances);
         allMeta.push(metadataTool);
@@ -927,5 +929,83 @@ export function createLibraryOps(ctx) {
     }
   };
 
-  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary };
+  // ─── Re-stamp the tools that use a holder ─────────────────────────────────
+  // Fusion BAKES holder geometry into every tool, so a corrected holder only
+  // reaches an existing tool when that tool is written. Saving a tool does it
+  // lazily; this is the "make it land now" button.
+  //
+  // TARGETED, not a full-library replace: each library is downloaded once, only
+  // the affected tools' entries are dropped and re-appended, and everything else
+  // in the file is left byte-for-byte alone. `dryRun` returns the same summary
+  // without writing anything, which is what the preview shows.
+  const restampHolderTools = async (holderRecord, { dryRun = false } = {}) => {
+    const guids = new Set(holderGuidsOf(holderRecord));
+    if (!guids.size) return { tools: [], byLibrary: [], wrote: false };
+
+    const affected = (toolsRef.current || []).filter(t =>
+      (t.assemblies || []).some(a => a.holder_guid && guids.has(a.holder_guid))
+      && t.no_fusion_link !== true);
+
+    const byLibrary = new Map();
+    for (const t of affected) {
+      const lib = t.library_id || defaultToolLibraryId(shopSettingsRef.current);
+      if (!byLibrary.has(lib)) byLibrary.set(lib, []);
+      byLibrary.get(lib).push(t);
+    }
+    const summary = {
+      tools: affected,
+      byLibrary: [...byLibrary.entries()].map(([libId, ts]) => ({ libId, count: ts.length })),
+      wrote: false,
+    };
+    if (dryRun || !affected.length) return summary;
+
+    dispatch({ type: 'SAVE_START' });
+    try {
+      assertFusionReady();
+      const holders = holdersRef.current || [];
+      const holderRecords = holderLibraryRef?.current?.holders || null;
+      const updated = [];
+      const metaOut = [];
+
+      for (const [libId, toolsInLib] of byLibrary) {
+        // One download per library, not per tool.
+        const fusionList = await downloadFusionList(libId);
+        const dropGuids = new Set();
+        const dropTracking = new Set();
+        const appended = [];
+
+        for (const tool of toolsInLib) {
+          const tracking_id = tool.tracking_id || tool.id;
+          dropTracking.add(tracking_id);
+          for (const a of tool.assemblies || []) if (a.instance_guid) dropGuids.add(a.instance_guid);
+          for (const r of tool._instancesRaw || []) if (r?.guid) dropGuids.add(r.guid);
+
+          const { fusionInstances, metadataTool } =
+            splitToFusionInstances(tool, holders, holderRecords);
+          appended.push(...fusionInstances);
+          metaOut.push(metadataTool);
+          // The metadata assembly may have been migrated onto a merged holder's
+          // surviving guid — carry that into the in-memory tool too.
+          updated.push({ ...tool, assemblies: metadataTool.assemblies || tool.assemblies });
+        }
+
+        const next = fusionList
+          .filter(f => !dropTracking.has(readTrackingId(f)) && !dropGuids.has(f.guid))
+          .concat(appended);
+        await uploadFusionList(libId, next);
+      }
+
+      if (googleRef.current && metaOut.length) await toolStore.upsertMany(metaOut);
+      for (const t of updated) dispatch({ type: 'UPDATE_TOOL', tool: t });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify(`Re-stamped ${affected.length} tool${affected.length === 1 ? '' : 's'} with the current holder geometry`, 'success');
+      return { ...summary, wrote: true };
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Re-stamp failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  };
+
+  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary, restampHolderTools };
 }

@@ -8,6 +8,7 @@ import {
 import { fusionToolToInternal, internalToFusionTool } from './fusionConvert.js';
 import { mergeFusionAndMetadata, buildMetadataTool, detectFusionDrift } from './metadataModel.js';
 import { buildHolderObject } from './holderGauge.js';
+import { resolveHolderForWrite } from './holderResolve.js';
 import { parsePresetName, materialCategory, matchMaterial } from '../utils/presetNaming.js';
 import { isNewFormatPreset, readStrategyBucket } from './camStrategies.js';
 import { mergePresetLists } from '../utils/presetMerge.js';
@@ -443,7 +444,12 @@ export function materializeUnlinkedTools(builtTools, metaList) {
 // Produces one Fusion entry per assembly. All entries share every field except
 // guid, holder, and geometry.LB (per-instance OOH). holders is the holder
 // library (for resolving holder_guid → full holder object on new assemblies).
-export function splitToFusionInstances(tool, holders = []) {
+// `holderRecords` are the app-owned holder records (holder_library.json). When
+// supplied they are the SOURCE OF TRUTH for holder geometry, with `holders`
+// (the read-only Fusion holder library) as the fallback for holders not yet
+// imported — see holderResolve.js. Callers that don't have them behave exactly
+// as before.
+export function splitToFusionInstances(tool, holders = [], holderRecords = null) {
   const tracking_id = tool.tracking_id || tool.id;
   const isMetric = tool.unit === 'millimeters';
 
@@ -459,6 +465,8 @@ export function splitToFusionInstances(tool, holders = []) {
       }];
 
   const rawByGuid = new Map((tool._instancesRaw || []).map(r => [r.guid, r]));
+  // assembly key → the guid its holder resolved to, when it differs (a merge).
+  const guidMigrations = new Map();
 
   const fusionInstances = assemblies.map(a => {
     const instanceGuid = a.instance_guid || generateId();
@@ -510,9 +518,19 @@ export function splitToFusionInstances(tool, holders = []) {
     // marks "above the gauge line"). Raw Fusion entries may carry a stale/wrong
     // gaugeLength from a previous bad write; always re-read from the library.
     if (a.holder_guid) {
-      const holder = holders.find(h => h.guid === a.holder_guid);
-      base.holder = holder ? buildHolderObject(holder) : (raw.holder || undefined);
+      // App record first (following merge aliases), Fusion library second.
+      const resolved = resolveHolderForWrite(a.holder_guid, {
+        records: holderRecords, fusionHolders: holders,
+      });
+      base.holder = resolved ? buildHolderObject(resolved.entry) : (raw.holder || undefined);
       if (!base.holder) delete base.holder;
+      // A tool pointing at a holder that was merged away now carries the
+      // survivor's guid. Record it so the metadata assembly is migrated in the
+      // SAME write — otherwise metadata and Fusion would disagree about which
+      // holder this assembly uses.
+      if (resolved?.guidChanged && base.holder?.guid) {
+        guidMigrations.set(a.assembly_id || a.instance_guid, base.holder.guid);
+      }
     } else if (raw.holder) {
       base.holder = raw.holder;
     } else {
@@ -562,7 +580,19 @@ export function splitToFusionInstances(tool, holders = []) {
     return base;
   });
 
-  return { fusionInstances, metadataTool: buildMetadataTool({ ...tool, tracking_id }) };
+  // Carry any merged-holder guid migration into the metadata record, so the
+  // assembly stops referencing a holder that no longer exists.
+  const migratedAssemblies = guidMigrations.size
+    ? assemblies.map(a => {
+        const next = guidMigrations.get(a.assembly_id || a.instance_guid);
+        return next ? { ...a, holder_guid: next } : a;
+      })
+    : assemblies;
+
+  return {
+    fusionInstances,
+    metadataTool: buildMetadataTool({ ...tool, tracking_id, assemblies: migratedAssemblies }),
+  };
 }
 
 // Legacy single-entry split — retained for any caller that still needs a single

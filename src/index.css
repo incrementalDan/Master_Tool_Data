@@ -4764,3 +4764,643 @@ input.sf-ref-num { text-align: right; }
 @media (max-width: 900px) {
   .pairing-groups { grid-template-columns: 1fr; }
 }
+
+/* ─── Holders page (app-owned holder library) ─────────────────────────────────
+   Built on the shared tokens; nothing here hard-codes a hex. Two semantic
+   mappings worth naming:
+     · EXTENSION green = --green, with its tint and border derived from it BY
+       ALPHA (color-mix) so the hue can't drift apart between the profile, the
+       segment row, the Extension section and the filter pill. It was teal in
+       one place and orange in another in the mockup and read as unrelated
+       features — deriving both from one token is what prevents that.
+     · ABOVE-GAUGE dimming = the muted end of the text/border ramp. */
+:root {
+  --profile-steel: #8b95a3;
+  --profile-steel-edge: #b6c0cc;
+  --profile-dim: #3f434b;
+  --profile-dim-edge: #6c727d;
+  --profile-ext-edge: color-mix(in srgb, var(--green) 55%, #ffffff);
+  --profile-shank-edge: var(--accent);
+  --holder-ext-tint: color-mix(in srgb, var(--green) 14%, transparent);
+  --holder-ext-border: color-mix(in srgb, var(--green) 45%, transparent);
+}
+
+.holders-page { padding: 20px 24px 40px; max-width: 1180px; }
+
+/* ── Holder pill — color as end caps + border, never a background fill ─────
+   The neutral middle is the whole reason the holder color and the collet-size
+   text color can't fight: the collet text always sits on the same surface no
+   matter which holder color is active. overflow:hidden clips the caps to the
+   pill's own radius for free. */
+.holder-scoop-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-2);
+  border: 1.5px solid var(--holder-default);
+  overflow: hidden;
+  max-width: 100%;
+  vertical-align: middle;
+}
+.holder-scoop-cap { position: absolute; top: 0; }
+.holder-scoop-cap.left { left: 0; }
+.holder-scoop-cap.right { right: 0; transform: scaleX(-1); }
+.holder-scoop-label {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: var(--fw-semibold);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.holder-scoop-pill.compact .holder-scoop-label { font-size: 11.5px; }
+.holder-scoop-collet { font-weight: var(--fw-bold); }
+
+/* ── 2D profile preview ──────────────────────────────────────────────────── */
+.profile-view { flex-shrink: 0; }
+.profile-svg {
+  display: block;
+  border-radius: var(--radius-md);
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+}
+.profile-centerline { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3; }
+.profile-seg { cursor: pointer; }
+.profile-gaugeline { stroke: var(--amber); stroke-width: 1; stroke-dasharray: 4 3; }
+.profile-gaugelabel { fill: var(--amber); font-size: 9px; font-family: var(--font-mono); }
+.profile-empty {
+  min-height: 140px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+  text-align: center;
+  padding: 10px;
+}
+.profile-legend { display: flex; flex-direction: column; gap: 3px; margin-top: 7px; }
+.profile-legend-row {
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--text-2xs); color: var(--text-sub);
+}
+.profile-legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.profile-total { font-size: var(--text-2xs); color: var(--text-faint); margin-top: 3px; font-family: var(--font-mono); }
+
+/* ── List ────────────────────────────────────────────────────────────────── */
+.holder-page-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px; flex-wrap: wrap;
+}
+.holder-page-head h2 { margin: 0; font-size: var(--text-xl); font-weight: var(--fw-bold); font-family: var(--font-display); }
+.holder-page-sub { font-size: var(--text-xs); color: var(--text-sub); margin-top: 2px; }
+.holder-page-actions { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+.holder-filters { margin-bottom: 12px; }
+.holder-filters > .field-input { margin-bottom: 9px; }
+.holder-filter-row {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 7px;
+}
+.holder-filter-label {
+  font-size: 9.5px; font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-label); color: var(--text-sub); margin-right: 2px;
+}
+.holder-filter-divider { width: 1px; align-self: stretch; background: var(--border); margin: 0 4px; }
+.chip.holder-ext-chip.active {
+  border-color: var(--holder-ext-border);
+  background: var(--holder-ext-tint);
+  color: var(--green);
+}
+
+.holder-table-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 4px 4px;
+}
+.holder-table-toolbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 10px 10px; flex-wrap: wrap;
+}
+.holder-group-toggle {
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--text-sm); font-weight: var(--fw-semibold);
+  color: var(--text-sub); cursor: pointer;
+}
+.holder-group-toggle.on { color: var(--text); }
+.holder-table-note { font-size: var(--text-2xs); color: var(--text-faint); }
+/* The bounded height is what makes the sticky header work — overflow-x alone
+   gives a scroll context with no vertical bound to stick against. */
+.holder-table-scroll { overflow: auto; max-height: calc(100vh - 340px); min-height: 160px; }
+/* border-collapse MUST be `separate`: in `collapse` mode browsers don't paint
+   backgrounds on sticky cells reliably, so rows show through the header. */
+.holder-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 760px; }
+.holder-table th {
+  font-size: 9.5px; font-weight: var(--fw-bold); letter-spacing: var(--ls-label);
+  text-transform: uppercase; color: var(--text-sub); text-align: left;
+  padding: 8px 10px; white-space: nowrap; cursor: pointer; user-select: none;
+  position: sticky; top: 0; z-index: 2;
+  background: var(--surface);
+  box-shadow: inset 0 -1px 0 var(--border);
+}
+.holder-table th.active { color: var(--blue); }
+.holder-table th.right { text-align: right; }
+.holder-table th .sort-arrow { margin-left: 4px; opacity: 0.25; }
+.holder-table th.active .sort-arrow { opacity: 1; }
+.holder-table td {
+  padding: 6px 10px; font-size: var(--text-sm);
+  border-top: 1px solid var(--border);
+}
+.holder-table td.muted { color: var(--text-sub); }
+.holder-table td.faint { color: var(--text-faint); font-size: var(--text-xs); }
+.holder-table td.mono { font-family: var(--font-mono); color: var(--text-sub); }
+.holder-table td.mono .faint { color: var(--text-faint); font-size: var(--text-2xs); }
+.holder-table td.mono.is-ext { color: var(--green); }
+.holder-table td.right { text-align: right; }
+.holder-row { cursor: pointer; }
+.holder-row:hover td { background: var(--surface-2); }
+.holder-row-desc { display: flex; align-items: center; gap: 7px; }
+.holder-tap-tag {
+  flex-shrink: 0; font-size: 9px; font-weight: var(--fw-bold);
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);
+  border-radius: 4px; padding: 1px 5px;
+}
+/* Group headers are deliberately NOT sticky — they would all pin to the same
+   offset and pile up on each other. */
+.holder-group-row td {
+  padding: 7px 10px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.holder-group-row .label {
+  font-size: var(--text-sm); font-weight: var(--fw-bold);
+  letter-spacing: 0.04em; color: var(--text); margin-right: 8px;
+}
+.holder-group-row .count {
+  font-family: var(--font-mono); font-size: 9.5px; color: var(--text-sub);
+  background: var(--surface-3); border-radius: 10px; padding: 1px 7px;
+}
+.holder-empty { padding: 24px; text-align: center; font-size: var(--text-sm); color: var(--text-sub); }
+
+/* ── Detail ──────────────────────────────────────────────────────────────── */
+.holder-detail-head {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 14px; flex-wrap: wrap;
+}
+.holder-detail-title { flex: 1; min-width: 160px; }
+.holder-detail-id {
+  font-size: var(--text-2xs); color: var(--text-sub);
+  font-family: var(--font-mono); margin-top: 4px;
+}
+.holder-save-msg { font-size: var(--text-xs); color: var(--text-sub); }
+.holder-note-banner {
+  display: flex; align-items: flex-start; gap: 9px;
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+  border-radius: var(--radius-md);
+  padding: 10px 13px; margin-bottom: 10px;
+  font-size: var(--text-xs); color: var(--text-sub); line-height: var(--lh-normal);
+}
+.holder-note-banner svg { color: var(--amber); flex-shrink: 0; margin-top: 1px; }
+
+.holder-detail-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 10px; margin-bottom: 10px;
+}
+.holder-section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+}
+.holder-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.holder-section-label {
+  font-size: var(--text-sm); font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--blue);
+}
+.holder-section-rule { flex: 1; height: 1px; background: var(--border); }
+.holder-ext-section, .holder-geo-section { margin-bottom: 10px; }
+
+.holder-field + .holder-field { margin-top: 12px; }
+.holder-field-label {
+  font-size: var(--text-2xs); font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-label); text-transform: uppercase;
+  color: var(--text-sub); margin-bottom: 5px;
+}
+.holder-field-hint { font-size: 9.5px; color: var(--text-faint); margin-top: 3px; }
+.holder-field-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.holder-field-triple { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 10px; }
+.holder-field-pair .holder-field + .holder-field,
+.holder-field-triple .holder-field + .holder-field { margin-top: 0; }
+.field-input.over-limit { border-color: var(--red); }
+.holder-desc-meta {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 5px; flex-wrap: wrap;
+}
+.holder-desc-meta .count { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--text-faint); }
+.holder-desc-meta .count.over { color: var(--red); }
+.holder-desc-meta .suggested { font-size: var(--text-2xs); color: var(--text-sub); font-family: var(--font-mono); }
+.holder-color-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.holder-legacy { margin-top: 10px; font-size: var(--text-xs); color: var(--text-faint); font-family: var(--font-mono); }
+
+.holder-color-picker { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.holder-swatch {
+  border-radius: 50%; cursor: pointer; padding: 0;
+  border: 2px solid transparent; transition: box-shadow 0.12s, border-color 0.12s;
+}
+.holder-swatch.active { border-color: #fff; }
+.holder-swatch.custom {
+  position: relative; overflow: hidden; border: 1px dashed var(--border);
+  display: flex; align-items: center; justify-content: center;
+}
+.holder-swatch.custom.active { border: 2px solid #fff; }
+.holder-swatch.custom input[type='color'] {
+  position: absolute; inset: -4px; opacity: 0; cursor: pointer; border: none;
+}
+.holder-swatch-plus { font-size: var(--text-2xs); color: var(--text-sub); }
+.holder-swatch-divider { width: 1px; align-self: stretch; background: var(--border); margin: 0 2px; }
+
+.holder-bool-row { display: flex; align-items: center; gap: 16px; margin-top: 12px; flex-wrap: wrap; }
+.holder-bool-pill {
+  --pill-accent: var(--blue);
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 14px; border-radius: 20px; cursor: pointer;
+  border: 1.5px solid var(--border); background: transparent;
+  color: var(--text-sub); font-size: var(--text-sm); font-weight: var(--fw-bold);
+  font-family: inherit; transition: all 0.14s;
+}
+.holder-bool-pill.active {
+  border-color: color-mix(in srgb, var(--pill-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--pill-accent) 14%, transparent);
+  color: var(--pill-accent);
+}
+.holder-bool-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--text-faint); flex-shrink: 0; transition: background 0.14s;
+}
+.holder-bool-pill.active .holder-bool-dot { background: var(--pill-accent); }
+
+.holder-dc-pill {
+  margin-top: 8px; display: inline-flex; align-items: center; gap: 7px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 20px; padding: 4px 11px;
+}
+.holder-dc-pill .tag {
+  font-size: var(--text-2xs); font-weight: var(--fw-bold);
+  color: var(--accent); letter-spacing: 0.05em;
+}
+.holder-dc-pill .text { font-size: var(--text-xs); color: var(--text-sub); }
+
+.holder-nominal {
+  margin-top: 10px; border-radius: var(--radius-sm);
+  padding: 7px 10px; font-size: var(--text-xs); line-height: var(--lh-normal);
+}
+.holder-nominal.ok { color: var(--text-faint); }
+.holder-nominal.flag {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
+}
+
+.holder-warn {
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+  border-radius: var(--radius-sm);
+  padding: 8px 11px; font-size: var(--text-xs); color: var(--amber); margin-bottom: 10px;
+}
+.holder-ext-readout { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: var(--fw-bold); color: var(--green); }
+.holder-ext-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.holder-ext-grid .holder-field + .holder-field { margin-top: 0; }
+.field-input.holder-readonly { font-family: var(--font-mono); font-weight: var(--fw-semibold); cursor: not-allowed; opacity: 0.85; }
+.field-input.holder-readonly.ext { color: var(--green); }
+.holder-notes { min-height: 70px; resize: vertical; }
+
+/* ── Segment table ───────────────────────────────────────────────────────── */
+.holder-unit-toggle { flex-shrink: 0; }
+.holder-geo-row { display: flex; gap: 14px; align-items: flex-start; flex-wrap: nowrap; }
+.holder-geo-tablecol { flex: 1; min-width: 0; }
+.holder-seg-scroll { overflow-x: auto; position: relative; }
+.holder-seg-table { width: 100%; border-collapse: collapse; min-width: 430px; }
+.holder-seg-table th {
+  font-size: 9.5px; font-weight: var(--fw-bold); letter-spacing: var(--ls-label);
+  text-transform: uppercase; color: var(--text-sub); text-align: left;
+  padding: 0 0 6px; white-space: nowrap;
+}
+.holder-seg-table th.ctr, .holder-seg-table td.ctr { text-align: center; }
+.holder-seg-table th.num { width: 34px; }
+.holder-seg-table th.ext { color: var(--green); }
+.holder-seg-table th.shank { color: var(--accent); }
+.holder-seg-table td { padding: 3px 5px 3px 0; }
+.holder-seg-table tr.is-ext { background: var(--holder-ext-tint); }
+.holder-seg-table tr.hover { background: var(--surface-2); }
+.holder-seg-table tr.selected { background: var(--blue-tint); box-shadow: inset 0 0 0 1px var(--blue-tint-2); }
+.holder-seg-table tr.active { background: var(--blue-tint); box-shadow: inset 0 0 0 1px var(--blue); }
+.holder-seg-num {
+  font-family: var(--font-mono); font-size: var(--text-xs);
+  color: var(--text-sub); cursor: pointer; user-select: none; padding: 3px 0;
+}
+.holder-seg-table tr.selected .holder-seg-num { color: var(--blue); font-weight: var(--fw-bold); }
+/* A segment dimension is 5-7 monospace characters — the inputs were stretching
+   to fill the table and taking width the profile could use. Cap them and let
+   the columns collapse to their content. */
+.field-input.holder-seg-input { padding: 4px 7px; font-family: var(--font-mono); font-size: var(--text-sm); max-width: 104px; }
+.holder-seg-table td:nth-child(2),
+.holder-seg-table td:nth-child(3),
+.holder-seg-table td:nth-child(4),
+.holder-seg-table th:nth-child(2),
+.holder-seg-table th:nth-child(3),
+.holder-seg-table th:nth-child(4) { width: 104px; }
+.holder-seg-table td:last-child, .holder-seg-table th:last-child { width: 28px; }
+.holder-seg-note { font-size: 9.5px; color: var(--text-faint); margin-top: 5px; line-height: var(--lh-normal); }
+.holder-add-seg { margin-top: 8px; }
+/* Floating range total — pointer-events off so it never blocks the row under it. */
+.holder-seg-total {
+  position: absolute; left: 38px; z-index: 5; pointer-events: none;
+  display: flex; align-items: center; gap: 9px;
+  background: var(--blue); color: #fff;
+  border-radius: 7px; padding: 6px 12px;
+  font-size: var(--text-xs); font-weight: var(--fw-semibold);
+  box-shadow: var(--shadow-lg); white-space: nowrap;
+}
+.holder-seg-total .count { opacity: 0.85; }
+.holder-seg-total .sum { font-family: var(--font-mono); font-size: 13.5px; font-weight: var(--fw-bold); }
+
+.holder-derived-row { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.holder-derived {
+  flex: 1; min-width: 180px; background: var(--input-bg);
+  border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 12px;
+}
+.holder-derived.ext { background: var(--holder-ext-tint); border-color: var(--holder-ext-border); }
+.holder-derived-label {
+  font-size: 9.5px; font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-label); color: var(--text-sub);
+}
+.holder-derived.ext .holder-derived-label { color: var(--green); }
+.holder-derived-value { display: flex; align-items: baseline; gap: 6px; margin-top: 3px; font-family: var(--font-mono); }
+.holder-derived-value .big { font-size: 19px; font-weight: var(--fw-bold); color: var(--text); }
+.holder-derived.ext .holder-derived-value .big { color: var(--green); }
+.holder-derived-value .unit { font-size: var(--text-2xs); color: var(--text-sub); }
+.holder-derived-value .alt { font-size: var(--text-2xs); color: var(--text-faint); }
+.holder-derived-hint { font-size: 9px; color: var(--text-faint); margin-top: 2px; }
+
+/* ── Healer modal ────────────────────────────────────────────────────────── */
+.modal.holder-healer {
+  max-width: 900px; max-height: 88vh;
+  display: flex; flex-direction: column; padding: 0;
+}
+.holder-healer .modal-header {
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.holder-healer .modal-header h3 { margin: 0; font-size: var(--text-md); font-weight: var(--fw-bold); }
+.holder-healer .modal-sub { margin: 2px 0 0; font-size: var(--text-xs); color: var(--text-sub); }
+.holder-healer .modal-header > div:first-child { flex: 1; min-width: 200px; }
+.holder-healer .modal-body {
+  flex: 1; overflow-y: auto; padding: 12px 16px; margin: 0;
+}
+.holder-healer .modal-footer {
+  padding: 11px 16px; border-top: 1px solid var(--border);
+  display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+}
+.holder-healer .modal-footer-note { flex: 1; font-size: var(--text-xs); color: var(--text-sub); min-width: 200px; }
+.holder-conf {
+  font-size: var(--text-2xs); font-weight: var(--fw-bold);
+  border-radius: var(--radius-sm); padding: 2px 7px;
+}
+.holder-conf.high { color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); border: 1px solid color-mix(in srgb, var(--green) 40%, transparent); }
+.holder-conf.medium { color: var(--amber); background: color-mix(in srgb, var(--amber) 12%, transparent); border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent); }
+.holder-conf.low { color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); border: 1px solid color-mix(in srgb, var(--red) 40%, transparent); }
+.holder-heal-row {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 11px 13px; margin-bottom: 8px;
+}
+.holder-heal-row.high { border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+.holder-heal-row.medium { border-color: color-mix(in srgb, var(--amber) 40%, transparent); }
+.holder-heal-row.low { border-color: color-mix(in srgb, var(--red) 40%, transparent); }
+.holder-heal-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.holder-heal-desc { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text); }
+.holder-heal-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.holder-heal-flags { margin-top: 7px; }
+.holder-heal-flags .flag { font-size: var(--text-xs); }
+.holder-heal-flags .flag.high { color: var(--green); }
+.holder-heal-flags .flag.medium { color: var(--amber); }
+.holder-heal-flags .flag.low { color: var(--red); }
+
+@media (max-width: 900px) {
+  .holder-geo-row { flex-wrap: wrap; }
+  .holder-field-triple { grid-template-columns: 1fr; }
+}
+
+/* Length check — the app's best guess plus a per-holder one-time confirmation.
+   `unknown` is deliberately NOT a warning colour: there's no verified band for
+   that collet family, so the app is reporting a number, not raising a concern. */
+.holder-nominal {
+  margin-top: 10px;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: var(--text-xs);
+  line-height: var(--lh-normal);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.holder-nominal-text { flex: 1; min-width: 200px; }
+.holder-nominal-actions { display: flex; align-items: center; gap: 8px; }
+.holder-nominal.ok { color: var(--text-sub); background: var(--input-bg); border: 1px solid var(--border); }
+.holder-nominal.unknown { color: var(--text-sub); background: var(--input-bg); border: 1px dashed var(--border); }
+.holder-nominal.flag {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
+}
+.holder-nominal.confirmed { color: var(--text-faint); background: var(--input-bg); border: 1px solid var(--border); }
+.holder-nominal-confirmed { color: var(--green); font-weight: var(--fw-semibold); white-space: nowrap; }
+
+.chip.holder-check-chip.active {
+  border-color: color-mix(in srgb, var(--amber) 55%, transparent);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+  color: var(--amber);
+}
+.holder-check-tag {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: var(--fw-bold);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--text-sub);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.holder-check-tag.flag {
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+  border-color: color-mix(in srgb, var(--amber) 45%, transparent);
+}
+
+/* Body mismatch — two records of ONE physical holder disagree about its base
+   geometry. Red rather than amber: it isn't a soft check, it's a contradiction
+   in the data. Never auto-resolved — the app can't tell which record is right. */
+.holder-clash-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+  border-radius: var(--radius-md);
+  padding: 10px 13px;
+  margin-bottom: 10px;
+  font-size: var(--text-xs);
+  color: var(--text-sub);
+  line-height: var(--lh-normal);
+}
+.holder-clash-banner svg { color: var(--red); flex-shrink: 0; margin-top: 1px; }
+.holder-clash-banner strong { color: var(--text); }
+.holder-clash-banner ul { margin: 6px 0 0; padding-left: 18px; }
+.holder-clash-banner li { font-family: var(--font-mono); color: var(--red); margin-bottom: 2px; }
+.holder-clash-note { display: block; margin-top: 6px; color: var(--text-faint); }
+
+.chip.holder-clash-chip.active {
+  border-color: color-mix(in srgb, var(--red) 55%, transparent);
+  background: color-mix(in srgb, var(--red) 14%, transparent);
+  color: var(--red);
+}
+.holder-clash-tag {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: var(--fw-bold);
+  border-radius: 4px;
+  padding: 0 5px;
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 45%, transparent);
+}
+
+/* ─── Holder parts (the body / extension a holder is assembled from) ───────── */
+.holder-parts { display: flex; flex-direction: column; gap: 10px; }
+.holder-part-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--input-bg);
+  padding: 10px 12px;
+}
+.holder-part-row.drifted { border-color: color-mix(in srgb, var(--amber) 45%, transparent); }
+.holder-part-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.holder-part-role {
+  font-size: var(--text-2xs); font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-sub);
+  min-width: 88px;
+}
+.holder-part-name { font-size: var(--text-sm); font-weight: var(--fw-semibold); color: var(--text); }
+.holder-part-none { font-size: var(--text-sm); color: var(--text-faint); font-style: italic; }
+.holder-part-used {
+  font-size: var(--text-2xs); color: var(--text-sub); font-family: var(--font-mono);
+  background: var(--surface-2); border-radius: 10px; padding: 1px 8px;
+}
+.holder-part-picker { margin-top: 8px; }
+.holder-part-meta {
+  display: flex; gap: 14px; flex-wrap: wrap; margin-top: 7px;
+  font-size: var(--text-xs); color: var(--text-sub);
+}
+.holder-part-meta em { color: var(--text-faint); font-style: normal; margin-right: 4px; }
+.holder-part-empty { color: var(--text-faint); font-style: italic; }
+.holder-part-drift {
+  display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap;
+  margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--border);
+  font-size: var(--text-xs); color: var(--amber);
+}
+.holder-part-drift svg { flex-shrink: 0; margin-top: 1px; }
+.holder-part-drift-text { flex: 1; min-width: 200px; color: var(--text-sub); }
+.holder-part-drift-actions { display: flex; gap: 6px; }
+.holder-parts-note { font-size: 9.5px; color: var(--text-faint); line-height: var(--lh-normal); }
+.holder-parts-section { margin-bottom: 10px; }
+
+/* ─── Duplicate holders + merge ───────────────────────────────────────────── */
+.holder-dup-vs { font-size: var(--text-2xs); color: var(--text-faint); text-transform: uppercase; letter-spacing: var(--ls-label); }
+.modal.holder-merge-modal {
+  max-width: 780px; max-height: 88vh;
+  display: flex; flex-direction: column; padding: 0;
+}
+.holder-merge-modal .modal-header {
+  padding: 14px 16px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.holder-merge-modal .modal-header h3 { margin: 0; font-size: var(--text-md); font-weight: var(--fw-bold); }
+.holder-merge-modal .modal-sub { margin: 2px 0 0; font-size: var(--text-xs); color: var(--text-sub); }
+.holder-merge-modal .modal-header > div:first-child { flex: 1; min-width: 200px; }
+.holder-merge-modal .modal-body { flex: 1; overflow-y: auto; padding: 14px 16px; margin: 0; }
+.holder-merge-modal .modal-footer {
+  padding: 11px 16px; border-top: 1px solid var(--border);
+  display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+}
+.holder-merge-modal .modal-footer-note { flex: 1; font-size: var(--text-xs); color: var(--text-sub); min-width: 180px; }
+
+.holder-merge-why {
+  border-radius: var(--radius-md); padding: 9px 12px; margin-bottom: 12px;
+  font-size: var(--text-xs); color: var(--text-sub);
+}
+.holder-merge-why.duplicate { background: color-mix(in srgb, var(--green) 10%, transparent); border: 1px solid color-mix(in srgb, var(--green) 35%, transparent); }
+.holder-merge-why.possible { background: color-mix(in srgb, var(--amber) 10%, transparent); border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent); }
+.holder-merge-why strong { color: var(--text); }
+.holder-merge-why ul { margin: 5px 0 0; padding-left: 18px; }
+
+.holder-merge-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.holder-merge-card {
+  text-align: left; font: inherit; color: inherit; cursor: pointer;
+  background: var(--input-bg); border: 1.5px solid var(--border);
+  border-radius: var(--radius-md); padding: 11px 13px;
+  transition: border-color 0.12s, background 0.12s;
+}
+.holder-merge-card:hover { border-color: var(--text-sub); }
+.holder-merge-card.selected { border-color: var(--green); background: color-mix(in srgb, var(--green) 8%, var(--input-bg)); }
+.holder-merge-card-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.holder-merge-card-head svg { color: var(--green); }
+.holder-merge-role {
+  font-size: 9px; font-weight: var(--fw-bold); letter-spacing: var(--ls-label);
+  border-radius: 4px; padding: 2px 6px;
+}
+.holder-merge-role.keep { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); border: 1px solid color-mix(in srgb, var(--green) 45%, transparent); }
+.holder-merge-role.drop { color: var(--text-faint); background: var(--surface-2); border: 1px solid var(--border); }
+.holder-merge-specs { margin: 9px 0 0; display: flex; flex-direction: column; gap: 3px; }
+.holder-merge-specs > div { display: flex; gap: 8px; font-size: var(--text-xs); }
+.holder-merge-specs dt { color: var(--text-faint); min-width: 62px; }
+.holder-merge-specs dd { margin: 0; color: var(--text-sub); font-family: var(--font-mono); }
+.holder-merge-specs dd .alt { color: var(--text-faint); }
+
+.holder-merge-effect {
+  margin-top: 12px; display: flex; flex-direction: column; gap: 7px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 10px 12px;
+}
+.holder-merge-effect .row {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: var(--text-xs); color: var(--text-sub); line-height: var(--lh-normal);
+}
+.holder-merge-effect .row svg { flex-shrink: 0; margin-top: 2px; color: var(--blue); }
+.holder-merge-effect .row.muted { color: var(--text-faint); }
+.holder-merge-effect .row.muted svg { color: var(--text-faint); }
+.holder-merge-effect strong { color: var(--text); }
+
+@media (max-width: 700px) {
+  .holder-merge-cards { grid-template-columns: 1fr; }
+}
+
+/* Re-stamp — the "push corrected geometry to the tools now" banner. */
+.holder-restamp-banner {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: color-mix(in srgb, var(--blue) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--blue) 38%, transparent);
+  border-radius: var(--radius-md);
+  padding: 10px 13px; margin-bottom: 10px;
+}
+.holder-restamp-text {
+  flex: 1; min-width: 240px;
+  font-size: var(--text-xs); color: var(--text-sub); line-height: var(--lh-normal);
+}
+.holder-restamp-text strong { color: var(--text); }

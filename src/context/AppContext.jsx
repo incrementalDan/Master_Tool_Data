@@ -18,9 +18,10 @@ import { backfillMaterialPresetIds, backfillPresetAssemblyLinks, autoLinkMateria
 import { backfillPreferredMachineIds } from '../utils/machines.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
-import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS } from '../schema/sharedDefaults.js';
+import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry, getActiveVendorRegistry, backfillPurchasingRegistryIds } from '../schema/vendorRegistry.js';
 import { findJob, newJob } from '../utils/jobs.js';
+import { fusionHolderToRecord } from '../schema/holderRecord.js';
 import { setDefaultUnit } from '../utils/units.js';
 import { getDemoData, isDemoRequested } from '../demo/index.js';
 import {
@@ -60,6 +61,7 @@ export function AppProvider({ children }) {
   const materialsRef = useRef(state.materials);
   const jobsRef = useRef(state.jobs);
   const componentsRef = useRef(state.components);
+  const holderLibraryRef = useRef(state.holderLibrary);
   // Pending debounced shared-Drive-file writes, keyed by file key →
   // { timer, write(keepalive) }. Lets typing coalesce into one write and lets
   // flushSharedWrites fire the latest pending write early on page hide/close.
@@ -99,6 +101,7 @@ export function AppProvider({ children }) {
   materialsRef.current = state.materials;
   jobsRef.current = state.jobs;
   componentsRef.current = state.components;
+  holderLibraryRef.current = state.holderLibrary;
 
   // Guards the once-per-session seeding of an established shop's setup completion
   // (see loadTools). Seeding writes the shop-wide setup_steps timestamps, and only
@@ -304,6 +307,7 @@ export function AppProvider({ children }) {
         : key === 'materials' ? materialsRef.current
         : key === 'jobs' ? jobsRef.current
         : key === 'components' ? componentsRef.current
+        : key === 'holderLibrary' ? holderLibraryRef.current
         : fallbackData;
       return driveService.saveSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, payload, { keepalive })
         .catch(err => {
@@ -340,6 +344,7 @@ export function AppProvider({ children }) {
       : key === 'vendorRegistry' ? 'vendorRegistry'
       : key === 'jobs' ? 'jobs'
       : key === 'components' ? 'components'
+      : key === 'holderLibrary' ? 'holderLibrary'
       : 'materials';
     // Demo mode: update in-memory state only (no Drive write, no Google guard) so
     // the sandbox can edit shop settings / materials / vendors — lost on refresh.
@@ -388,6 +393,85 @@ export function AppProvider({ children }) {
     saveSharedFile('jobs', jobs, 'SET_JOBS'), [saveSharedFile]);
   const saveComponents = useCallback((components) =>
     saveSharedFile('components', components, 'SET_COMPONENTS'), [saveSharedFile]);
+
+  // ─── App-owned holder library (holder_library.json) ───────────────────────
+  // The holder table is the source of truth; the Fusion holder library is an
+  // import source and (later) an export target. Writes here are metadata-only —
+  // nothing touches Fusion or any tool. Propagation to tools is deliberately a
+  // separate, explicit step (see the re-stamp work).
+  const saveHolderLibrary = useCallback((holderLibrary) =>
+    saveSharedFile('holderLibrary', holderLibrary, 'SET_HOLDER_LIBRARY'), [saveSharedFile]);
+
+  // Upsert one holder record by id. Reads the ref so concurrent edits in the
+  // same tick compose instead of clobbering.
+  const saveHolderRecord = useCallback((record) => {
+    if (!record?.id) return Promise.reject(new Error('Holder record needs an id'));
+    const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
+    const list = file.holders || [];
+    const next = { ...record, updated_at: new Date().toISOString() };
+    const holders = list.some(h => h.id === next.id)
+      ? list.map(h => (h.id === next.id ? next : h))
+      : [...list, next];
+    return saveHolderLibrary({ ...file, holders });
+  }, [saveHolderLibrary]);
+
+  // ── Holder PARTS (the body / extension records holders are assembled from) ──
+  // Same file, same debounced write. Nothing here changes a holder's geometry:
+  // linking a holder to a part only stamps the id, and drift between the two is
+  // surfaced for the user to resolve.
+  const saveHolderPart = useCallback((part) => {
+    if (!part?.id) return Promise.reject(new Error('Holder part needs an id'));
+    const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
+    const list = file.parts || [];
+    const next = { ...part, updated_at: new Date().toISOString() };
+    const parts = list.some(p => p.id === next.id)
+      ? list.map(p => (p.id === next.id ? next : p))
+      : [...list, next];
+    return saveHolderLibrary({ ...file, parts });
+  }, [saveHolderLibrary]);
+
+  // Deleting a part UNLINKS every holder pointing at it rather than leaving a
+  // dangling id — the holders keep their own geometry either way.
+  const deleteHolderPart = useCallback((id) => {
+    const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
+    return saveHolderLibrary({
+      ...file,
+      parts: (file.parts || []).filter(p => p.id !== id),
+      holders: (file.holders || []).map(h => (
+        h.body_part_id === id ? { ...h, body_part_id: null }
+          : h.extension_part_id === id ? { ...h, extension_part_id: null }
+            : h
+      )),
+    });
+  }, [saveHolderLibrary]);
+
+  const deleteHolderRecord = useCallback((id) => {
+    const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
+    return saveHolderLibrary({ ...file, holders: (file.holders || []).filter(h => h.id !== id) });
+  }, [saveHolderLibrary]);
+
+  // One-time migration: build app records from the linked read-only Fusion
+  // holder library. Import only — it writes holder_library.json and nothing
+  // else (no Fusion write, no tool write). Records already imported (matched by
+  // the Fusion guid) are SKIPPED, never overwritten, so re-running is safe and
+  // can't discard hand-entered classification. Structured fields are left blank
+  // on purpose: parsing them out of the free-text description is the healer's
+  // job, and the healer is preview → commit.
+  const importHoldersFromFusion = useCallback((entries) => {
+    const source = entries || holdersRef.current || [];
+    const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
+    const existing = file.holders || [];
+    const known = new Set(existing.map(h => h.fusion_guid).filter(Boolean));
+    const added = [];
+    for (const f of source) {
+      if (!f?.guid || known.has(f.guid)) continue;
+      added.push(fusionHolderToRecord(f, { library_id: f._libraryId, library_name: f._libraryName }));
+      known.add(f.guid);
+    }
+    if (!added.length) return Promise.resolve({ added: 0, skipped: source.length });
+    return saveHolderLibrary({ ...file, holders: [...existing, ...added] })
+      .then(() => ({ added: added.length, skipped: source.length - added.length }));
+  }, [saveHolderLibrary]);
 
   // Persist the jobs registry to Drive IMMEDIATELY (not on the shared-file 600ms
   // debounce). Used when a job is CREATED/enriched and its id is about to be
@@ -731,7 +815,7 @@ export function AppProvider({ children }) {
   // downloadFusionList/uploadFusionList make every save path fail gracefully
   // (the "Demo Mode — changes are not saved" banner sets the expectation).
   const enterDemoMode = useCallback(() => {
-    const { fusionList, metaList, holders, materials, vendorRegistry, shopSettings, jobs, components } = getDemoData();
+    const { fusionList, metaList, holders, holderLibrary, materials, vendorRegistry, shopSettings, jobs, components } = getDemoData();
     // Build logical tools through the exact same pipeline as a live load.
     const metaByTracking = new Map(metaList.map(m => [m.id, m]));
     const { groups, untracked } = groupByTrackingId(fusionList);
@@ -751,7 +835,7 @@ export function AppProvider({ children }) {
     setActiveVendorRegistry(vendorRegistry);
     if (shopSettings?.default_units) setDefaultUnit(shopSettings.default_units);
 
-    dispatch({ type: 'ENTER_DEMO_MODE', tools, holders: taggedHolders, materials, vendorRegistry, shopSettings, jobs, components });
+    dispatch({ type: 'ENTER_DEMO_MODE', tools, holders: taggedHolders, holderLibrary, materials, vendorRegistry, shopSettings, jobs, components });
   }, []);
 
   const exitDemoMode = useCallback(() => {
@@ -802,13 +886,14 @@ export function AppProvider({ children }) {
           driveService.loadOrCreateSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, def)
             .catch(e => { if (e.code === 'TOKEN_EXPIRED') throw e; return def; });
         try {
-          const [meta, materials, vendorRegistry, shopSettings, jobs, components] = await Promise.all([
+          const [meta, materials, vendorRegistry, shopSettings, jobs, components, holderLibrary] = await Promise.all([
             toolStore.loadAll(),
             sharedSafe('materials', DEFAULT_MATERIALS),
             sharedSafe('vendorRegistry', DEFAULT_VENDOR_REGISTRY),
             sharedSafe('shopSettings', DEFAULT_SHOP_SETTINGS),
             sharedSafe('jobs', DEFAULT_JOBS),
             sharedSafe('components', DEFAULT_COMPONENTS),
+            sharedSafe('holderLibrary', DEFAULT_HOLDER_LIBRARY),
           ]);
           metaList = meta;
           componentsFile = components;
@@ -831,7 +916,7 @@ export function AppProvider({ children }) {
           }
           effectiveShop = ss;
           saveRegistryMirror(ss);
-          dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings: ss, jobs, components });
+          dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings: ss, jobs, components, holderLibrary });
           dispatch({ type: 'SET_LIBRARIES', shopSettings: ss }); // sync pointers
           // Shared files are now loaded — Drive writes are safe. Set synchronously
           // (it's a ref) so the setup-step effects that re-fire on this dispatch,
@@ -1050,10 +1135,11 @@ export function AppProvider({ children }) {
     downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary,
     saveLocationConfig,
     toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef, fusionReadyRef, materialsRef,
+    holderLibraryRef,
   }), [notify, downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary, saveLocationConfig]);
 
   const libraryOps = useMemo(() => createLibraryOps({
-    dispatch, notify,
+    dispatch, notify, holderLibraryRef, downloadFusionList,
     uploadFusionList, downloadAllLibraries, markSetupStepInSettings,
     toolsRef, holdersRef, shopSettingsRef, googleRef, demoModeRef, materialsRef, fusionReadyRef,
   }), [notify, uploadFusionList, downloadAllLibraries, markSetupStepInSettings]);
@@ -1133,6 +1219,13 @@ export function AppProvider({ children }) {
       ...attachmentActions,
       // Holder body / insert component records (componentActions.js)
       ...componentActions,
+      // App-owned holder library (holder_library.json) — metadata-only writes
+      saveHolderLibrary,
+      saveHolderRecord,
+      saveHolderPart,
+      deleteHolderPart,
+      deleteHolderRecord,
+      importHoldersFromFusion,
       clearError,
       notify,
       dismissToast,

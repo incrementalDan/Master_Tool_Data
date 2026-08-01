@@ -144,3 +144,22 @@ export function ToolTypeIcon({ type, size = 24, className = '', style }) {
 }
 
 export default ToolTypeIcon;
+
+// ─── Holder rail icon ───────────────────────────────────────────────────────
+// Line-art matching the app's icon language (thin stroke, no fill) — a simple
+// holder silhouette so it reads distinctly from Sync Job's chain-link at a
+// glance in the left rail.
+export function HolderRailIcon({ size = 24, className = '', style }) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"
+      className={className} style={style} aria-hidden="true"
+    >
+      <path d="M8 3h8v3.5c0 1-.8 1.8-1.8 1.8h-4.4C8.8 8.3 8 7.5 8 6.5V3Z" />
+      <path d="M9.5 8.3v3.2c0 .5.2 1 .5 1.4l1 1.2c.3.4.5.9.5 1.4V21" />
+      <path d="M14.5 8.3v3.2c0 .5-.2 1-.5 1.4l-1 1.2c-.3.4-.5.9-.5 1.4V21" />
+      <path d="M9.5 21h5" />
+    </svg>
+  );
+}

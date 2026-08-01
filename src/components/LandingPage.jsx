@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { applyFilters, matchedLegacyId } from '../services/searchEngine.js';
 import { getDefaultUnit } from '../utils/units.js';
 import { machineColor } from '../utils/machineColors.js';
+import { HolderRailIcon } from './icons/ToolTypeIcon.jsx';
 import ToolTypeGrid from './ToolTypeGrid.jsx';
 import FacetFilters from './FacetFilters.jsx';
 import ToolCard from './ToolCard.jsx';
@@ -170,6 +171,17 @@ export default function LandingPage() {
         >
           <GitMerge size={22} />
           <span>Sync Job</span>
+        </button>
+        {/* Holders sits in the RAIL under Sync Job — deliberately not a new top
+            tab. A line-art holder silhouette so it reads distinctly from Sync
+            Job's chain-link at a glance. */}
+        <button
+          className="tool-sidebar-btn"
+          onClick={() => navigate('/holders')}
+          title="The app-owned holder library"
+        >
+          <HolderRailIcon size={22} />
+          <span>Holders</span>
         </button>
       </aside>
       <div className="landing-main">

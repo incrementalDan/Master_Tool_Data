@@ -17,6 +17,9 @@ import demoVendorRegistry from './demo_vendor_registry.json';
 import demoShopSettings from './demo_shop_settings.json';
 import demoJobs from './demo_jobs.json';
 import demoComponents from './demo_components.json';
+import { fusionHolderToRecord } from '../schema/holderRecord.js';
+import { healHolderDescription, applyHealToRecord, suggestExtensionSegments } from '../utils/holderDescription.js';
+import { DEFAULT_HOLDER_CONFIG } from '../schema/holderOptions.js';
 
 // True when the current URL requests demo mode (`?demo=true`). HashRouter puts
 // the route after `#`, so the query lives in window.location.search as usual.
@@ -36,10 +39,33 @@ export function getDemoData() {
   const metaList = Array.isArray(demoMetadata) ? demoMetadata : [];
   const holders = (Array.isArray(demoHolders?.data) ? demoHolders.data : [])
     .filter(h => h.type === 'holder');
+  // The app-owned holder table, built from the same demo Fusion holders. In a
+  // live shop this is the one-time import followed by a preview→commit heal;
+  // demo is a throwaway sandbox, so it runs both up front to show the page with
+  // classified records. It seeds against DEFAULT_HOLDER_CONFIG because the
+  // option UUIDs are minted at module load and can't live in a static JSON.
+  const holderRecords = holders.map(h => {
+    const heal = healHolderDescription(h.description, DEFAULT_HOLDER_CONFIG);
+    const rec = applyHealToRecord(
+      fusionHolderToRecord(h, { library_id: 'demo', library_name: 'Demo holders' }),
+      heal,
+    );
+    // …and accepts the extension-segment suggestion too, so the derived
+    // extension OOH is visible in demo. In a live shop this is a proposal the
+    // user ticks off in the segment table — it is never applied for them.
+    const idx = suggestExtensionSegments(rec, heal.matched.ext_ooh_in);
+    if (!idx) return rec;
+    return {
+      ...rec,
+      segments: rec.segments.map((s, i) => (idx.includes(i) ? { ...s, ext: true } : s)),
+    };
+  });
+
   return {
     fusionList,
     metaList,
     holders,
+    holderLibrary: { version: 1, holders: holderRecords },
     materials: demoMaterials,
     vendorRegistry: demoVendorRegistry,
     shopSettings: demoShopSettings,

@@ -32,6 +32,7 @@ export function createToolActions(ctx) {
     downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary,
     saveLocationConfig,
     toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef, fusionReadyRef, materialsRef,
+    holderLibraryRef,
   } = ctx;
 
   // Mode-2 two-stage load: until the full Fusion build has completed this session
@@ -249,7 +250,13 @@ export function createToolActions(ctx) {
       ...locExtra,
     };
 
-    const { fusionInstances, metadataTool } = splitToFusionInstances(toWrite, holders);
+    // The app-owned holder records are the source of truth for holder geometry;
+    // `holders` (the read-only Fusion holder library) is the fallback for holders
+    // not yet imported. This is the channel by which a corrected or merged holder
+    // reaches an existing tool — Fusion bakes the geometry in, so it only ever
+    // updates when the tool is written. See schema/holderResolve.js.
+    const holderRecords = holderLibraryRef?.current?.holders || null;
+    const { fusionInstances, metadataTool } = splitToFusionInstances(toWrite, holders, holderRecords);
 
     // Drop every entry this logical tool owns before re-appending the fresh set:
     // its tracking ID, plus any guid carried by an assembly or absorbed raw

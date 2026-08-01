@@ -3,6 +3,7 @@
 // lives in vendorRegistry.js (it's assembled from the existing registry data).
 
 import { genLocId } from '../utils/locationSystem.js';
+import { DEFAULT_HOLDER_CONFIG } from './holderOptions.js';
 
 // jobs.json — the shop-wide jobs registry. A job = program number + part
 // number, with a stable UUID; presets/tools reference jobs by id (see
@@ -16,6 +17,12 @@ export const DEFAULT_JOBS = { version: 1, jobs: [] };
 // purchasing, photo) but NO Fusion entry — Fusion sees one entity per pairing.
 // Starts empty — components are created inline from the pairing picker.
 export const DEFAULT_COMPONENTS = { version: 1, components: [] };
+
+// holder_library.json — the APP-OWNED holder table (see schema/holderRecord.js).
+// The Fusion holder library becomes an export target; this is the source of
+// truth. Starts empty and is populated by the one-time migration from the
+// linked Fusion holder library (AppContext.importHoldersFromFusion).
+export { DEFAULT_HOLDER_LIBRARY } from './holderRecord.js';
 
 // ─── Material code systems ───────────────────────────────────────────────────
 // The material-classification standards we track a code for on each CAM preset
@@ -230,6 +237,11 @@ export const DEFAULT_SHOP_SETTINGS = {
     serial_start: 10000,
     show_legacy: false,
   },
+  // Holder option lookups — UUID-referenced shared lists (type / taper / collet
+  // family / collet size) that holder records point at by id, so renaming a
+  // label once updates every holder referencing it. Same machinery as
+  // location_config.bin_sizes; seeded in schema/holderOptions.js.
+  holder_config: DEFAULT_HOLDER_CONFIG,
   // Tool presetter integration — reserved placeholder (serial format/start).
   presetter: { serial_format: null, serial_start: null },
   // CAM / external integrations (Fusion-decoupling — see FUSION_DECOUPLING_AUDIT.md
