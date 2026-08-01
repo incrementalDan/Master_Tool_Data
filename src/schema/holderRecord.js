@@ -51,7 +51,7 @@ export const HOLDER_APP_ONLY_FIELDS = [
   'manufacturer', 'part_number', 'purchasing',
   'color', 'location', 'notes', 'tags',
   'primary_photo_id', 'primary_photo_name', 'attachments',
-  'legacy_ids', 'description_manual', 'nominal_check',
+  'legacy_ids', 'legacy_fusion_guids', 'description_manual', 'nominal_check',
   'body_part_id', 'extension_part_id',
   'created_at', 'updated_at', 'updated_by',
 ];
@@ -107,6 +107,11 @@ export function newHolderRecord(overrides = {}) {
     primary_photo_name: null,
     attachments: [],
     legacy_ids: [],             // retired product-id / reference values, searchable
+    // Fusion guids of holders MERGED INTO this one. A tool references a holder
+    // by the guid Fusion absorbed into it, so adopting the merged holder's guid
+    // makes every tool that pointed at it resolve here — with no writes to the
+    // tool library at all (utils/holderDuplicates.js).
+    legacy_fusion_guids: [],
 
     // The user's one-time acceptance of the engraved-nominal vs modelled-gauge
     // check (see nominalLengthCheck). `signature` captures the inputs the
@@ -266,7 +271,16 @@ export function applyHolderRecordsToFusionList(list, records) {
 export function findHolderRecord(records, { id, fusion_guid, holder_ref } = {}) {
   const list = records || [];
   if (id) { const r = list.find(x => x.id === id); if (r) return r; }
-  if (holder_ref) { const r = list.find(x => x.holder_ref === holder_ref); if (r) return r; }
-  if (fusion_guid) { const r = list.find(x => x.fusion_guid === fusion_guid); if (r) return r; }
+  if (holder_ref) {
+    const r = list.find(x => x.holder_ref === holder_ref
+      || (x.legacy_ids || []).includes(holder_ref));
+    if (r) return r;
+  }
+  if (fusion_guid) {
+    // Follows merges: a record that ABSORBED this guid resolves for it.
+    const r = list.find(x => x.fusion_guid === fusion_guid
+      || (x.legacy_fusion_guids || []).includes(fusion_guid));
+    if (r) return r;
+  }
   return null;
 }

@@ -326,7 +326,7 @@ function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setAc
 
 export default function HolderDetail({
   holder, config, usage = 0, allLocations = [], readOnly, updatedBy = '', siblings = [],
-  holderFile, onSavePart,
+  holderFile, onSavePart, onMergeWith,
   onBack, onSave, onDelete, onAddOption, onViewTools,
 }) {
   const [h, setH] = useState(holder);
@@ -708,12 +708,31 @@ export default function HolderDetail({
             placeholder="Setup notes, quirks, min OOH…"
           />
         </Section>
-        <Section label="Danger zone" accent="var(--text-sub)">
-          <button className="btn btn-ghost btn-sm" onClick={() => onDelete?.(h)}>
-            <Trash2 size={13} /> Delete this holder record
-          </button>
-          <div className="holder-field-hint" style={{ marginTop: 6 }}>
-            Removes the app record only. The Fusion holder library is untouched.
+        <Section label="Duplicates & cleanup" accent="var(--text-sub)">
+          {/* Manual merge — the app doesn't have to have spotted the pair.
+              Pick any other holder; the merge screen is where the survivor is
+              chosen and what follows it is spelled out. */}
+          <Field label="Merge with another holder" hint="Everything that used the other one will resolve to whichever you keep">
+            <select
+              className="field-input" value=""
+              onChange={e => {
+                const other = (siblings || []).find(x => x.id === e.target.value);
+                if (other) onMergeWith?.(other);
+              }}
+            >
+              <option value="">Choose a holder to merge with…</option>
+              {(siblings || [])
+                .filter(x => x.id !== h.id)
+                .map(x => <option key={x.id} value={x.id}>{x.description || x.holder_ref}</option>)}
+            </select>
+          </Field>
+          <div style={{ marginTop: 14 }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => onDelete?.(h)}>
+              <Trash2 size={13} /> Delete this holder record
+            </button>
+            <div className="holder-field-hint" style={{ marginTop: 6 }}>
+              Removes the app record only. The Fusion holder library is untouched.
+            </div>
           </div>
         </Section>
       </div>

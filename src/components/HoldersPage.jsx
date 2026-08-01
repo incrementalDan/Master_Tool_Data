@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Download, Wand2, X, ArrowLeft, Boxes } from 'lucide-react';
+import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import HolderPill from './HolderPill.jsx';
 import HolderDetail from './HolderDetail.jsx';
@@ -15,6 +15,8 @@ import { deriveGaugeLength, deriveExtensionOoh, formatHolderLen, holderLenIn, no
 import { healHolderDescription, applyHealToRecord } from '../utils/holderDescription.js';
 import { recordsWithBodyDivergence } from '../utils/holderBody.js';
 import { proposeHolderParts, applyPartProposals, holdersWithPartDrift, holderPartsOf } from '../utils/holderParts.js';
+import { findHolderDuplicates, holdersInDuplicates, applyHolderMerge, compareHolders, holderGuidsOf } from '../utils/holderDuplicates.js';
+import HolderMergeModal from './HolderMergeModal.jsx';
 import { unitAbbr } from '../utils/units.js';
 
 const CONF_ORDER = ['high', 'medium', 'low'];
@@ -185,9 +187,69 @@ function PartsModal({ holders, config, existingParts, onCommit, onClose }) {
   );
 }
 
+// ─── Duplicate holders ──────────────────────────────────────────────────────
+// Matched on description + specs + gauge length, never segment-by-segment (the
+// same priority the audit uses — two records of one physical assembly agree
+// about what they are and how long they are). Nothing merges from here without
+// choosing a survivor in the merge screen.
+function DuplicatesModal({ holders, config, tools, onMerge, onClose }) {
+  const matches = useMemo(() => findHolderDuplicates(holders, config), [holders, config]);
+  return (
+    <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal holder-healer">
+        <div className="modal-header">
+          <div>
+            <h3>Possible duplicate holders</h3>
+            <p className="modal-sub">
+              Same specs and same gauge length — usually one holder entered twice, or a corrected
+              rebuild sitting beside the original.
+            </p>
+          </div>
+          <span className="holder-conf high">{matches.filter(m => m.verdict === 'duplicate').length} likely</span>
+          {matches.some(m => m.verdict === 'possible') && (
+            <span className="holder-conf medium">{matches.filter(m => m.verdict === 'possible').length} possible</span>
+          )}
+          <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+        </div>
+        <div className="modal-body">
+          {!matches.length && (
+            <div className="holder-empty">
+              No duplicates found. Holders that share specs but differ in gauge length are
+              different stickouts of the same parts, not duplicates.
+            </div>
+          )}
+          {matches.map((m, i) => (
+            <div key={i} className={`holder-heal-row ${m.verdict === 'duplicate' ? 'high' : 'medium'}`}>
+              <div className="holder-heal-head">
+                <span className={`holder-conf ${m.verdict === 'duplicate' ? 'high' : 'medium'}`}>
+                  {m.verdict === 'duplicate' ? 'LIKELY' : 'POSSIBLE'}
+                </span>
+                <HolderPill holder={m.a} config={config} compact />
+                <span className="holder-dup-vs">vs</span>
+                <HolderPill holder={m.b} config={config} compact />
+                <span style={{ flex: 1 }} />
+                <button className="btn btn-primary btn-sm" onClick={() => onMerge(m)}>Merge…</button>
+              </div>
+              <div className="holder-heal-flags">
+                {m.reasons.map((r, k) => (
+                  <div key={k} className={`flag ${r.startsWith('⚠') ? 'medium' : 'high'}`}>{r}</div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="modal-footer">
+          <span className="modal-footer-note">Nothing is merged until you choose which record to keep.</span>
+          <button className="btn btn-secondary btn-sm" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HolderList({
-  holders, config, usageOf, onOpen, onNew, onHeal, onImport, onLinkParts,
-  importable, googleAuthenticated, driftIds, partCount,
+  holders, config, usageOf, onOpen, onNew, onHeal, onImport, onLinkParts, onDuplicates,
+  importable, googleAuthenticated, driftIds, partCount, duplicateIds,
 }) {
   const [q, setQ] = useState('');
   const [fType, setFType] = useState(null);
@@ -198,6 +260,7 @@ function HolderList({
   const [fCheck, setFCheck] = useState(false);
   const [fClash, setFClash] = useState(false);
   const [fDrift, setFDrift] = useState(false);
+  const [fDupe, setFDupe] = useState(false);
   // Grouping is ON by default — with 20+ holders across several tapers a flat
   // alphabetical list stops being useful fast. Sorting by a column is the
   // escape hatch, so picking a sort AUTO-UNGROUPS: grouped-and-sorted at the
@@ -226,13 +289,14 @@ function HolderList({
     if (fCheck && !pendingLengthCheck(h, config)) return false;
     if (fClash && !clashIds.has(h.id)) return false;
     if (fDrift && !driftIds.has(h.id)) return false;
+    if (fDupe && !duplicateIds.has(h.id)) return false;
     if (q) {
       const hay = [h.description, h.vendor, h.manufacturer, h.part_number, h.notes, h.location, ...(h.legacy_ids || [])]
         .join(' ').toLowerCase();
       if (!hay.includes(q.toLowerCase())) return false;
     }
     return true;
-  }), [holders, q, fType, fTaper, fCollet, fExt, fTap, fCheck, fClash, fDrift, clashIds, driftIds, config]);
+  }), [holders, q, fType, fTaper, fCollet, fExt, fTap, fCheck, fClash, fDrift, fDupe, clashIds, driftIds, duplicateIds, config]);
 
   const usedIds = (key) => [...new Set(holders.map(h => h[key]).filter(Boolean))];
 
@@ -329,6 +393,10 @@ function HolderList({
               <Download size={14} /> Import {importable} from Fusion
             </button>
           )}
+          <button className="btn btn-secondary btn-sm" onClick={onDuplicates} disabled={holders.length < 2}
+            title="Find holders that look like the same physical holder entered twice">
+            <Copy size={14} /> {duplicateIds.size ? `Duplicates (${duplicateIds.size})` : 'Duplicates'}
+          </button>
           <button className="btn btn-secondary btn-sm" onClick={onLinkParts} disabled={!holders.length}
             title="Create body / extension part records and link the holders to them">
             <Boxes size={14} /> {partCount ? `Parts (${partCount})` : 'Link parts…'}
@@ -397,6 +465,13 @@ function HolderList({
               title="Holders whose geometry has drifted from the part record they point at"
               onClick={() => setFDrift(!fDrift)}
             >Part drift ({driftIds.size})</button>
+          )}
+          {duplicateIds.size > 0 && (
+            <button
+              className={`chip holder-clash-chip${fDupe ? ' active' : ''}`}
+              title="Holders that look like the same physical holder entered twice"
+              onClick={() => setFDupe(!fDupe)}
+            >Duplicates ({duplicateIds.size})</button>
           )}
         </div>
       </div>
@@ -517,6 +592,8 @@ export default function HoldersPage() {
   const [openId, setOpenId] = useState(null);
   const [healing, setHealing] = useState(false);
   const [linkingParts, setLinkingParts] = useState(false);
+  const [dupesOpen, setDupesOpen] = useState(false);
+  const [merging, setMerging] = useState(null);   // { a, b, match }
 
   // Falls back to the seeded lookups for a shop whose settings file predates
   // holder_config — see holderConfigOf.
@@ -525,6 +602,7 @@ export default function HoldersPage() {
   const parts = holderLibrary?.parts || [];
   // Holders whose geometry no longer matches the part record they point at.
   const driftIds = useMemo(() => holdersWithPartDrift(records, holderLibrary), [records, holderLibrary]);
+  const duplicateIds = useMemo(() => holdersInDuplicates(records, config), [records, config]);
   const open = records.find(h => h.id === openId) || null;
   const allLocations = [...new Set(records.map(h => h.location).filter(Boolean))];
 
@@ -545,7 +623,9 @@ export default function HoldersPage() {
         if (a.holder_guid) counts.set(a.holder_guid, (counts.get(a.holder_guid) || 0) + 1);
       }
     }
-    return (h) => (h.fusion_guid ? counts.get(h.fusion_guid) || 0 : 0);
+    // Counts through EVERY guid the record owns, including any it absorbed in
+    // a merge — so a merged-away holder's tools show under the survivor.
+    return (h) => holderGuidsOf(h).reduce((a, g) => a + (counts.get(g) || 0), 0);
   }, [tools]);
 
   const canEdit = googleAuthenticated || demoMode;
@@ -592,6 +672,17 @@ export default function HoldersPage() {
     }
   };
 
+  // Merge: the survivor absorbs the loser's Fusion guid, so every tool that
+  // referenced the loser resolves to it — no tool is written.
+  const commitMerge = async (survivorId, loserId) => {
+    try {
+      await saveHolderLibrary(applyHolderMerge(holderLibrary, survivorId, loserId));
+      notify('Holders merged — anything that used the old one now resolves to the kept record', 'success');
+      setMerging(null);
+      if (openId === loserId) setOpenId(survivorId);
+    } catch { /* toasted */ }
+  };
+
   const commitParts = async (proposals) => {
     try {
       await saveHolderLibrary(applyPartProposals(holderLibrary, proposals, config));
@@ -620,6 +711,7 @@ export default function HoldersPage() {
           key={open.id}
           holder={open} config={config} usage={usageOf(open)}
           holderFile={holderLibrary} onSavePart={saveHolderPart}
+          onMergeWith={(other) => setMerging({ a: open, b: other, match: compareHolders(open, other, config) })}
           allLocations={allLocations} readOnly={!canEdit}
           onBack={() => setOpenId(null)}
           updatedBy={googleUser?.email || ''}
@@ -636,7 +728,21 @@ export default function HoldersPage() {
           onOpen={h => setOpenId(h.id)}
           onNew={onNew} onHeal={() => setHealing(true)} onImport={onImport}
           onLinkParts={() => setLinkingParts(true)}
-          driftIds={driftIds} partCount={parts.length}
+          onDuplicates={() => setDupesOpen(true)}
+          driftIds={driftIds} partCount={parts.length} duplicateIds={duplicateIds}
+        />
+      )}
+      {dupesOpen && (
+        <DuplicatesModal
+          holders={records} config={config} tools={tools}
+          onMerge={(m) => { setDupesOpen(false); setMerging({ a: m.a, b: m.b, match: m }); }}
+          onClose={() => setDupesOpen(false)}
+        />
+      )}
+      {merging && (
+        <HolderMergeModal
+          a={merging.a} b={merging.b} match={merging.match} config={config} tools={tools}
+          onCommit={commitMerge} onClose={() => setMerging(null)}
         />
       )}
       {linkingParts && (
