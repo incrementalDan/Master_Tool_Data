@@ -952,9 +952,25 @@ export function createLibraryOps(ctx) {
       if (!byLibrary.has(lib)) byLibrary.set(lib, []);
       byLibrary.get(lib).push(t);
     }
+    // Run the split for the PREVIEW too — it's pure computation, no IO — so the
+    // assembly-gauge backstop can be shown before anything is written rather
+    // than reported after the fact.
+    const holdersNow = holdersRef.current || [];
+    const recordsNow = holderLibraryRef?.current?.holders || null;
+    const checks = [];
+    for (const t of affected) {
+      try {
+        const { gaugeChecks } = splitToFusionInstances(t, holdersNow, recordsNow);
+        for (const c of gaugeChecks || []) {
+          if (c.level !== 'ok') checks.push({ ...c, tool: t });
+        }
+      } catch { /* a tool that can't be split is reported by the write itself */ }
+    }
     const summary = {
       tools: affected,
       byLibrary: [...byLibrary.entries()].map(([libId, ts]) => ({ libId, count: ts.length })),
+      gaugeWarnings: checks.filter(c => c.level === 'warn'),
+      gaugeErrors: checks.filter(c => c.level === 'error'),
       wrote: false,
     };
     if (dryRun || !affected.length) return summary;
@@ -980,8 +996,16 @@ export function createLibraryOps(ctx) {
           for (const a of tool.assemblies || []) if (a.instance_guid) dropGuids.add(a.instance_guid);
           for (const r of tool._instancesRaw || []) if (r?.guid) dropGuids.add(r.guid);
 
-          const { fusionInstances, metadataTool } =
+          const { fusionInstances, metadataTool, gaugeChecks } =
             splitToFusionInstances(tool, holders, holderRecords);
+          // Same backstop as the single-tool write: refuse an assembly gauge
+          // length that didn't compute rather than pushing it to N tools.
+          const bad = (gaugeChecks || []).filter(c => c.level === 'error');
+          if (bad.length) {
+            throw new Error(
+              `Refusing to re-stamp — the assembly gauge length could not be computed for `
+              + `"${tool.description || tool.tool_id || tool.id}". Check the holder's geometry.`);
+          }
           appended.push(...fusionInstances);
           metaOut.push(metadataTool);
           // The metadata assembly may have been migrated onto a merged holder's

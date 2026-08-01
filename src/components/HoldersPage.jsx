@@ -668,10 +668,34 @@ export default function HoldersPage() {
   const onRestamp = async () => {
     if (!open) return;
     const n = restampPreview?.tools?.length || 0;
-    if (!window.confirm(
-      `Re-stamp ${n} tool${n === 1 ? '' : 's'} with this holder's current geometry?\n\n`
+    const warn = restampPreview?.gaugeWarnings || [];
+    const err = restampPreview?.gaugeErrors || [];
+
+    // The backstop, shown BEFORE the write. The assembly gauge length is where
+    // the cutting edge sits, so a tool whose gauge is about to move is the
+    // thing worth seeing — named, with the actual delta, not just a count.
+    let msg = `Re-stamp ${n} tool${n === 1 ? '' : 's'} with this holder's current geometry?\n\n`
       + `Each tool's own copy of the holder is rebuilt and its assembly gauge length recomputed. `
-      + `Nothing else about those tools changes.`)) return;
+      + `Nothing else about those tools changes.`;
+    if (err.length) {
+      window.alert(
+        `Can't re-stamp: the assembly gauge length doesn't compute for ${err.length} `
+        + `assembl${err.length === 1 ? 'y' : 'ies'}. Check this holder's geometry first.`);
+      return;
+    }
+    if (warn.length) {
+      const lines = warn.slice(0, 6).map(c => {
+        const name = c.tool?.description || c.tool?.tool_id || 'tool';
+        const d = c.deltaIn == null ? '—' : `${c.deltaIn > 0 ? '+' : ''}${c.deltaIn.toFixed(4)}"`;
+        return `  • ${name}: assembly gauge ${d}`;
+      });
+      msg += `\n\n⚠ The assembly gauge length changes on ${warn.length} `
+        + `assembl${warn.length === 1 ? 'y' : 'ies'} — that's where the cutting edge sits:\n`
+        + lines.join('\n')
+        + (warn.length > 6 ? `\n  • …and ${warn.length - 6} more` : '')
+        + `\n\nThat's expected if you corrected this holder. Continue?`;
+    }
+    if (!window.confirm(msg)) return;
     try { await restampHolderTools(open); } catch { /* toasted */ }
   };
 

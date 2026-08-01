@@ -5404,3 +5404,10 @@ input.sf-ref-num { text-align: right; }
   font-size: var(--text-xs); color: var(--text-sub); line-height: var(--lh-normal);
 }
 .holder-restamp-text strong { color: var(--text); }
+.holder-restamp-actions { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.holder-restamp-flag {
+  font-size: var(--text-2xs); font-weight: var(--fw-bold); color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent);
+  border-radius: 5px; padding: 2px 7px; white-space: nowrap;
+}

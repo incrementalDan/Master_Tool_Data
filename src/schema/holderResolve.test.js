@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { resolveHolderForWrite, toolHolderIsStale } from './holderResolve.js';
+import { resolveHolderForWrite, toolHolderIsStale, assemblyGaugeCheck, ASSEMBLY_GAUGE_WARN_IN } from './holderResolve.js';
 import { fusionHolderToRecord } from './holderRecord.js';
 import { mergeHolderRecords } from '../utils/holderDuplicates.js';
 import { splitToFusionInstances } from './logicalTools.js';
@@ -139,5 +139,98 @@ describe('staleness (what the re-stamp preview counts)', () => {
 
   it('is not stale for a holder nothing knows about — there is nothing to say', () => {
     expect(toolHolderIsStale({ holder_guid: 'nope' }, { holder: {} }, ctx([]))).toBe(false);
+  });
+});
+
+// ⚠️ THE BACKSTOP. The assembly gauge length (holder gauge + the tool's OOH) is
+// where the cutting edge actually sits, so it's the number that catches a
+// holder swap going wrong before it lands on N tools.
+describe('assembly gauge-length check', () => {
+  const chk = (before, after, toolUnit = 'inches') =>
+    assemblyGaugeCheck({ before, after, toolUnit, assemblyId: 'a1', holderDescription: 'H' });
+
+  it('passes an unchanged assembly', () => {
+    expect(chk(4.5, 4.5).level).toBe('ok');
+    expect(chk(4.5, 4.5).deltaIn).toBeCloseTo(0, 9);
+  });
+
+  it('passes a small move — a corrected holder is SUPPOSED to move it', () => {
+    expect(chk(4.5, 4.5 + ASSEMBLY_GAUGE_WARN_IN / 2).level).toBe('ok');
+  });
+
+  it('flags a big move, with the direction and size', () => {
+    const c = chk(4.5, 4.5 + 0.25);
+    expect(c.level).toBe('warn');
+    expect(c.deltaIn).toBeCloseTo(0.25, 6);
+    expect(c.reason).toMatch(/\+0\.2500"/);
+  });
+
+  it('would have caught the real 30mm body disagreement', () => {
+    // The two NBT30-SK20C-60 records differ by 30.155mm = 1.187". Re-stamping
+    // onto the wrong one moves every tool using it by that much.
+    const c = assemblyGaugeCheck({ before: 90.424, after: 90.424 - 30.155, toolUnit: 'millimeters' });
+    expect(c.level).toBe('warn');
+    expect(c.deltaIn).toBeCloseTo(-1.1872, 3);
+  });
+
+  it('compares in inches so one threshold covers a millimetre tool', () => {
+    // 0.5mm ≈ 0.0197" — under the threshold, so not a flag on an mm tool.
+    expect(assemblyGaugeCheck({ before: 100, after: 100.5, toolUnit: 'millimeters' }).level).toBe('ok');
+    // 2mm ≈ 0.0787" — over it.
+    expect(assemblyGaugeCheck({ before: 100, after: 102, toolUnit: 'millimeters' }).level).toBe('warn');
+  });
+
+  it('ERRORS only on arithmetic that did not compute — that is unambiguously broken', () => {
+    expect(chk(4.5, NaN).level).toBe('error');
+    expect(chk(4.5, undefined).level).toBe('error');
+    // A zero/negative result is suspicious but not nonsense — warn, don't block.
+    expect(chk(4.5, 0).level).toBe('warn');
+  });
+
+  it('still reports the new value when there is no previous one to compare', () => {
+    const c = chk(undefined, 4.5);
+    expect(c.level).toBe('ok');
+    expect(c.before).toBeNull();
+    expect(c.deltaIn).toBeNull();
+    expect(c.after).toBe(4.5);
+  });
+});
+
+describe('the write path emits the check', () => {
+  const toolWith = (bakedAssemblyGauge) => ({
+    id: 'FTL-BBBBBB', tracking_id: 'FTL-BBBBBB', tool_type: 'flat end mill',
+    unit: 'inches', diameter: 0.5, description: 'test',
+    assemblies: [{ assembly_id: 'a1', instance_guid: 'inst-1', holder_guid: OLD.guid, ooh: 1.5 }],
+    _instancesRaw: [{
+      guid: 'inst-1', type: 'flat end mill', holder: { ...OLD },
+      geometry: { assemblyGaugeLength: bakedAssemblyGauge },
+    }],
+  });
+
+  it('reports ok when the holder did not change', () => {
+    const before = splitToFusionInstances(toolWith(undefined), REAL, [oldRecord()]);
+    const baked = before.fusionInstances[0].geometry.assemblyGaugeLength;
+    const { gaugeChecks } = splitToFusionInstances(toolWith(baked), REAL, [oldRecord()]);
+    expect(gaugeChecks).toHaveLength(1);
+    expect(gaugeChecks[0].level).toBe('ok');
+  });
+
+  it('warns when a corrected holder moves the assembly gauge', () => {
+    const first = splitToFusionInstances(toolWith(undefined), REAL, [oldRecord()]);
+    const baked = first.fusionInstances[0].geometry.assemblyGaugeLength;
+    // Same holder record, body shortened by 30mm — the real failure mode.
+    const shortened = {
+      ...oldRecord(),
+      segments: oldRecord().segments.map((s, i) => (i === 0 ? { ...s, height: 5 } : s)),
+    };
+    const { gaugeChecks } = splitToFusionInstances(toolWith(baked), REAL, [shortened]);
+    expect(gaugeChecks[0].level).toBe('warn');
+    expect(Math.abs(gaugeChecks[0].deltaIn)).toBeGreaterThan(ASSEMBLY_GAUGE_WARN_IN);
+  });
+
+  it('carries the holder name so the warning can say WHICH holder', () => {
+    const { gaugeChecks } = splitToFusionInstances(toolWith(4.0), REAL, [oldRecord()]);
+    expect(gaugeChecks[0].holderDescription).toBe('NBT30-SK13C-60');
+    expect(gaugeChecks[0].assemblyId).toBe('a1');
   });
 });

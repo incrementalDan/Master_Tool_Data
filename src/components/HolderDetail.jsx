@@ -439,9 +439,16 @@ export default function HolderDetail({
             They each carry their own frozen copy of its geometry — Fusion bakes it in. They pick up
             the current geometry the next time each is saved, or you can push it now.
           </div>
-          <button className="btn btn-secondary btn-sm" onClick={onRestamp}>
-            <RefreshCw size={13} /> Re-stamp {restampPreview.tools.length} tool{restampPreview.tools.length === 1 ? '' : 's'}
-          </button>
+          <div className="holder-restamp-actions">
+            {restampPreview.gaugeWarnings?.length > 0 && (
+              <span className="holder-restamp-flag" title="The assembly gauge length is where the cutting edge sits — a change here is worth looking at before it lands">
+                ⚠ gauge moves on {restampPreview.gaugeWarnings.length}
+              </span>
+            )}
+            <button className="btn btn-secondary btn-sm" onClick={onRestamp}>
+              <RefreshCw size={13} /> Re-stamp {restampPreview.tools.length} tool{restampPreview.tools.length === 1 ? '' : 's'}
+            </button>
+          </div>
         </div>
       ) : (
         <div className="holder-note-banner">

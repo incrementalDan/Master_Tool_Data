@@ -20,6 +20,7 @@
 
 import { holderRecordToFusion } from './holderRecord.js';
 import { holderForGuid } from '../utils/holderDuplicates.js';
+import { convertLength } from '../utils/units.js';
 
 // Returns { entry, record, source, guidChanged } or null when the guid resolves
 // to nothing at all.
@@ -63,4 +64,46 @@ export function toolHolderIsStale(assembly, rawInstance, ctx) {
       || round(a['lower-diameter']) !== round(b['lower-diameter'])) return true;
   }
   return current.unit !== want.unit;
+}
+
+// ─── Assembly gauge-length sanity check ─────────────────────────────────────
+// A BACKSTOP before a tool's holder is overwritten. The assembly gauge length
+// (holder gauge + the tool's OOH) is where the cutting edge actually sits, so
+// it is the one number that catches "something went wrong" with a holder swap:
+// if the replacement holder's body is wrong, the tool silently moves.
+//
+// Real example from the shop's own library: the two NBT30-SK20C-60 records
+// disagree about the body by 30.155mm. Re-stamping onto the wrong one would
+// shift every tool using it by 1.19" with nothing to show for it.
+//
+// Deliberately NOT a hard gate on size: a corrected holder is SUPPOSED to move
+// the number, that's the point. Anything that moves is reported so it can be
+// seen before committing; a big move is flagged; only arithmetic that came out
+// non-finite is treated as an error, because that is unambiguously broken
+// rather than merely surprising.
+export const ASSEMBLY_GAUGE_WARN_IN = 0.04;   // ≈1mm
+
+// `before` / `after` are in the TOOL's unit; the delta is in inches so one
+// threshold covers mm- and inch-native tools alike.
+export function assemblyGaugeCheck({ before, after, toolUnit, assemblyId, holderDescription }) {
+  const b = Number(before);
+  const a = Number(after);
+  const known = Number.isFinite(b);
+  const deltaIn = known && Number.isFinite(a)
+    ? convertLength(a - b, toolUnit, 'inches')
+    : null;
+
+  let level = 'ok';
+  let reason = null;
+  if (!Number.isFinite(a)) {
+    level = 'error';
+    reason = 'The new assembly gauge length did not compute — refusing to write it.';
+  } else if (a <= 0) {
+    level = 'warn';
+    reason = 'The new assembly gauge length is zero or negative — the holder may have no usable geometry.';
+  } else if (deltaIn != null && Math.abs(deltaIn) > ASSEMBLY_GAUGE_WARN_IN) {
+    level = 'warn';
+    reason = `Assembly gauge length moves ${deltaIn > 0 ? '+' : ''}${deltaIn.toFixed(4)}" — check the holder is the right one.`;
+  }
+  return { assemblyId, holderDescription, before: known ? b : null, after: a, deltaIn, level, reason };
 }

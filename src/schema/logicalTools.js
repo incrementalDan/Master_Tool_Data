@@ -8,7 +8,7 @@ import {
 import { fusionToolToInternal, internalToFusionTool } from './fusionConvert.js';
 import { mergeFusionAndMetadata, buildMetadataTool, detectFusionDrift } from './metadataModel.js';
 import { buildHolderObject } from './holderGauge.js';
-import { resolveHolderForWrite } from './holderResolve.js';
+import { resolveHolderForWrite, assemblyGaugeCheck } from './holderResolve.js';
 import { parsePresetName, materialCategory, matchMaterial } from '../utils/presetNaming.js';
 import { isNewFormatPreset, readStrategyBucket } from './camStrategies.js';
 import { mergePresetLists } from '../utils/presetMerge.js';
@@ -467,6 +467,9 @@ export function splitToFusionInstances(tool, holders = [], holderRecords = null)
   const rawByGuid = new Map((tool._instancesRaw || []).map(r => [r.guid, r]));
   // assembly key → the guid its holder resolved to, when it differs (a merge).
   const guidMigrations = new Map();
+  // Assembly-gauge sanity results, one per assembly that has both a holder and
+  // an OOH. The caller decides what to do with them (warn / refuse / preview).
+  const gaugeChecks = [];
 
   const fusionInstances = assemblies.map(a => {
     const instanceGuid = a.instance_guid || generateId();
@@ -574,7 +577,22 @@ export function splitToFusionInstances(tool, holders = [], holderRecords = null)
     // the tool's unit). Mirrors the export path in fusionExport.js.
     if (base.holder && typeof base.holder.gaugeLength === 'number' && a.ooh != null && !isNaN(Number(a.ooh))) {
       const holderGaugeNative = convertLength(base.holder.gaugeLength, base.holder.unit, tool.unit);
-      base.geometry = { ...(base.geometry || {}), assemblyGaugeLength: holderGaugeNative + Number(a.ooh) };
+      const assemblyGauge = holderGaugeNative + Number(a.ooh);
+      base.geometry = { ...(base.geometry || {}), assemblyGaugeLength: assemblyGauge };
+
+      // BACKSTOP before this overwrites the tool's frozen copy: the assembly
+      // gauge length is where the cutting edge actually sits, so a holder swap
+      // that moved it is the signal that something went wrong. Computed HERE,
+      // at the one place the value is derived, so the check can't drift from
+      // what is actually written. Reported to the caller — this function stays
+      // pure and decides nothing.
+      gaugeChecks.push(assemblyGaugeCheck({
+        before: raw?.geometry?.assemblyGaugeLength,
+        after: assemblyGauge,
+        toolUnit: tool.unit,
+        assemblyId: a.assembly_id || a.instance_guid,
+        holderDescription: base.holder.description || '',
+      }));
     }
 
     return base;
@@ -592,6 +610,7 @@ export function splitToFusionInstances(tool, holders = [], holderRecords = null)
   return {
     fusionInstances,
     metadataTool: buildMetadataTool({ ...tool, tracking_id, assemblies: migratedAssemblies }),
+    gaugeChecks,
   };
 }
 
