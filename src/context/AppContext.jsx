@@ -1135,10 +1135,11 @@ export function AppProvider({ children }) {
     downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary,
     saveLocationConfig,
     toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef, fusionReadyRef, materialsRef,
+    holderLibraryRef,
   }), [notify, downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary, saveLocationConfig]);
 
   const libraryOps = useMemo(() => createLibraryOps({
-    dispatch, notify,
+    dispatch, notify, holderLibraryRef, downloadFusionList,
     uploadFusionList, downloadAllLibraries, markSetupStepInSettings,
     toolsRef, holdersRef, shopSettingsRef, googleRef, demoModeRef, materialsRef, fusionReadyRef,
   }), [notify, uploadFusionList, downloadAllLibraries, markSetupStepInSettings]);

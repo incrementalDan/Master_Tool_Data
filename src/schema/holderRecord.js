@@ -220,7 +220,11 @@ export function holderRecordToFusion(record, existing = null) {
     ...(existing ? { expressions: { ...(existing.expressions || {}) } } : { expressions: {} }),
     description: record.description || '',
     gaugeLength,
-    guid: record.fusion_guid || existing?.guid || generateId(),
+    // DETERMINISTIC — never generateId() here. This runs on every tool write
+    // (see holderResolve.js); a fresh guid each time would re-point the tool's
+    // holder link on every save. A record that has never been pushed to Fusion
+    // uses its own stable app id.
+    guid: record.fusion_guid || existing?.guid || record.id,
     'product-id': record.holder_ref || '',
     'product-link': record.product_link || '',
     segments,

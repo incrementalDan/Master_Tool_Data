@@ -1,7 +1,7 @@
 // ─── Holders page — the app-owned holder library ────────────────────────────
 // List → detail, ported from docs/HolderManager.tsx onto the app's tokens.
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
@@ -586,7 +586,7 @@ export default function HoldersPage() {
   const {
     holderLibrary, holders: fusionHolders, shopSettings, tools,
     saveHolderRecord, deleteHolderRecord, saveHolderLibrary, saveShopSettings, saveHolderPart,
-    importHoldersFromFusion, googleAuthenticated, googleUser, demoMode, notify,
+    importHoldersFromFusion, restampHolderTools, googleAuthenticated, googleUser, demoMode, notify,
   } = useApp();
   const navigate = useNavigate();
   const [openId, setOpenId] = useState(null);
@@ -653,6 +653,28 @@ export default function HoldersPage() {
     notify('Holder record deleted', 'success');
   };
 
+  // Which tools would be re-stamped — a read-only count, refreshed as the open
+  // holder changes. `dryRun` writes nothing.
+  const [restampPreview, setRestampPreview] = useState(null);
+  useEffect(() => {
+    let live = true;
+    if (!open || !restampHolderTools) { setRestampPreview(null); return undefined; }
+    Promise.resolve(restampHolderTools(open, { dryRun: true }))
+      .then(r => { if (live) setRestampPreview(r); })
+      .catch(() => { if (live) setRestampPreview(null); });
+    return () => { live = false; };
+  }, [open, restampHolderTools, tools]);
+
+  const onRestamp = async () => {
+    if (!open) return;
+    const n = restampPreview?.tools?.length || 0;
+    if (!window.confirm(
+      `Re-stamp ${n} tool${n === 1 ? '' : 's'} with this holder's current geometry?\n\n`
+      + `Each tool's own copy of the holder is rebuilt and its assembly gauge length recomputed. `
+      + `Nothing else about those tools changes.`)) return;
+    try { await restampHolderTools(open); } catch { /* toasted */ }
+  };
+
   const onNew = async () => {
     const record = newHolderRecord({ unit: shopSettings?.default_units || 'inches' });
     try {
@@ -712,6 +734,8 @@ export default function HoldersPage() {
           holder={open} config={config} usage={usageOf(open)}
           holderFile={holderLibrary} onSavePart={saveHolderPart}
           onMergeWith={(other) => setMerging({ a: open, b: other, match: compareHolders(open, other, config) })}
+          restampPreview={restampPreview}
+          onRestamp={onRestamp}
           allLocations={allLocations} readOnly={!canEdit}
           onBack={() => setOpenId(null)}
           updatedBy={googleUser?.email || ''}

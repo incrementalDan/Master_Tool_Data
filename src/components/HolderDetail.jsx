@@ -4,7 +4,7 @@
 // the comments call out the ones that were deliberate.
 
 import { useState, useMemo, useRef } from 'react';
-import { ArrowLeft, Check, Plus, X, RotateCcw, Trash2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Check, Plus, X, RotateCcw, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
 import HolderPill from './HolderPill.jsx';
 import ProfileView from './ProfileView.jsx';
 import {
@@ -326,7 +326,7 @@ function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setAc
 
 export default function HolderDetail({
   holder, config, usage = 0, allLocations = [], readOnly, updatedBy = '', siblings = [],
-  holderFile, onSavePart, onMergeWith,
+  holderFile, onSavePart, onMergeWith, onRestamp, restampPreview,
   onBack, onSave, onDelete, onAddOption, onViewTools,
 }) {
   const [h, setH] = useState(holder);
@@ -428,18 +428,31 @@ export default function HolderDetail({
         {!readOnly && <button className="btn btn-primary btn-sm" onClick={save}><Check size={14} /> Save</button>}
       </div>
 
-      {/* ⚠️ Propagation to tools is NOT wired yet — the re-stamp push and the
-          lazy "next tool save pulls current geometry" both depend on the
-          tool→holder FK, which is the next phase. Stated plainly rather than
-          shown as a button that does nothing. */}
-      <div className="holder-note-banner">
-        <AlertTriangle size={14} />
-        <span>
-          Holder records are app-owned and saved here only. Pushing geometry to the Fusion
-          holder library, and re-stamping the tools that use a holder, are separate steps
-          that aren't wired up yet.
-        </span>
-      </div>
+      {/* Propagation. Fusion BAKES holder geometry into every tool, so a
+          corrected holder only reaches an existing tool when that tool is
+          written. That happens by itself on each tool's next save; this is the
+          "make it land now" button. */}
+      {restampPreview?.tools?.length > 0 ? (
+        <div className="holder-restamp-banner">
+          <div className="holder-restamp-text">
+            <strong>{restampPreview.tools.length} tool{restampPreview.tools.length === 1 ? '' : 's'} use this holder.</strong>{' '}
+            They each carry their own frozen copy of its geometry — Fusion bakes it in. They pick up
+            the current geometry the next time each is saved, or you can push it now.
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={onRestamp}>
+            <RefreshCw size={13} /> Re-stamp {restampPreview.tools.length} tool{restampPreview.tools.length === 1 ? '' : 's'}
+          </button>
+        </div>
+      ) : (
+        <div className="holder-note-banner">
+          <AlertTriangle size={14} />
+          <span>
+            Holder records are app-owned. No tool references this holder yet, so there is nothing
+            to propagate. Pushing the record back to the Fusion holder library is a separate step
+            that isn’t wired up yet.
+          </span>
+        </div>
+      )}
 
       {bodyClash && (
         <div className="holder-clash-banner">
