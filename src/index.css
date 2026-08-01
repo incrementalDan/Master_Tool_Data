@@ -5281,3 +5281,42 @@ input.sf-ref-num { text-align: right; }
   background: color-mix(in srgb, var(--red) 14%, transparent);
   border: 1px solid color-mix(in srgb, var(--red) 45%, transparent);
 }
+
+/* ─── Holder parts (the body / extension a holder is assembled from) ───────── */
+.holder-parts { display: flex; flex-direction: column; gap: 10px; }
+.holder-part-row {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--input-bg);
+  padding: 10px 12px;
+}
+.holder-part-row.drifted { border-color: color-mix(in srgb, var(--amber) 45%, transparent); }
+.holder-part-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.holder-part-role {
+  font-size: var(--text-2xs); font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-sub);
+  min-width: 88px;
+}
+.holder-part-name { font-size: var(--text-sm); font-weight: var(--fw-semibold); color: var(--text); }
+.holder-part-none { font-size: var(--text-sm); color: var(--text-faint); font-style: italic; }
+.holder-part-used {
+  font-size: var(--text-2xs); color: var(--text-sub); font-family: var(--font-mono);
+  background: var(--surface-2); border-radius: 10px; padding: 1px 8px;
+}
+.holder-part-picker { margin-top: 8px; }
+.holder-part-meta {
+  display: flex; gap: 14px; flex-wrap: wrap; margin-top: 7px;
+  font-size: var(--text-xs); color: var(--text-sub);
+}
+.holder-part-meta em { color: var(--text-faint); font-style: normal; margin-right: 4px; }
+.holder-part-empty { color: var(--text-faint); font-style: italic; }
+.holder-part-drift {
+  display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap;
+  margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--border);
+  font-size: var(--text-xs); color: var(--amber);
+}
+.holder-part-drift svg { flex-shrink: 0; margin-top: 1px; }
+.holder-part-drift-text { flex: 1; min-width: 200px; color: var(--text-sub); }
+.holder-part-drift-actions { display: flex; gap: 6px; }
+.holder-parts-note { font-size: 9.5px; color: var(--text-faint); line-height: var(--lh-normal); }
+.holder-parts-section { margin-bottom: 10px; }

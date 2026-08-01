@@ -415,6 +415,36 @@ export function AppProvider({ children }) {
     return saveHolderLibrary({ ...file, holders });
   }, [saveHolderLibrary]);
 
+  // ── Holder PARTS (the body / extension records holders are assembled from) ──
+  // Same file, same debounced write. Nothing here changes a holder's geometry:
+  // linking a holder to a part only stamps the id, and drift between the two is
+  // surfaced for the user to resolve.
+  const saveHolderPart = useCallback((part) => {
+    if (!part?.id) return Promise.reject(new Error('Holder part needs an id'));
+    const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
+    const list = file.parts || [];
+    const next = { ...part, updated_at: new Date().toISOString() };
+    const parts = list.some(p => p.id === next.id)
+      ? list.map(p => (p.id === next.id ? next : p))
+      : [...list, next];
+    return saveHolderLibrary({ ...file, parts });
+  }, [saveHolderLibrary]);
+
+  // Deleting a part UNLINKS every holder pointing at it rather than leaving a
+  // dangling id — the holders keep their own geometry either way.
+  const deleteHolderPart = useCallback((id) => {
+    const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
+    return saveHolderLibrary({
+      ...file,
+      parts: (file.parts || []).filter(p => p.id !== id),
+      holders: (file.holders || []).map(h => (
+        h.body_part_id === id ? { ...h, body_part_id: null }
+          : h.extension_part_id === id ? { ...h, extension_part_id: null }
+            : h
+      )),
+    });
+  }, [saveHolderLibrary]);
+
   const deleteHolderRecord = useCallback((id) => {
     const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
     return saveHolderLibrary({ ...file, holders: (file.holders || []).filter(h => h.id !== id) });
@@ -1191,6 +1221,8 @@ export function AppProvider({ children }) {
       // App-owned holder library (holder_library.json) — metadata-only writes
       saveHolderLibrary,
       saveHolderRecord,
+      saveHolderPart,
+      deleteHolderPart,
       deleteHolderRecord,
       importHoldersFromFusion,
       clearError,

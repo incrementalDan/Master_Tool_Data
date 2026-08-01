@@ -28,7 +28,8 @@ import {
 
 // holder_library.json — starts empty; populated by the one-time migration from
 // the linked Fusion holder library (importHoldersFromFusion) or by hand.
-export const DEFAULT_HOLDER_LIBRARY = { version: 1, holders: [] };
+// `parts` holds the body / extension records the holders are assembled from.
+export const DEFAULT_HOLDER_LIBRARY = { version: 1, holders: [], parts: [] };
 
 // The app's reference token, written into Fusion's `product-id` so a Fusion
 // entry can be traced back to its record. Mirrors the tool tracking ID
@@ -51,6 +52,7 @@ export const HOLDER_APP_ONLY_FIELDS = [
   'color', 'location', 'notes', 'tags',
   'primary_photo_id', 'primary_photo_name', 'attachments',
   'legacy_ids', 'description_manual', 'nominal_check',
+  'body_part_id', 'extension_part_id',
   'created_at', 'updated_at', 'updated_by',
 ];
 
@@ -83,6 +85,15 @@ export function newHolderRecord(overrides = {}) {
     length: null,               // the ENGRAVED NOMINAL, not the computed gauge length
     has_extension: false,
     extension: { collet_size_id: null, manufacturer: '', part_number: '', vendor: '' },
+
+    // ── links to the physical PARTS this holder is assembled from ──
+    // A taper holder and an extension are separate parts bought separately, so
+    // their purchasing / location / part number belong on ONE record each
+    // rather than copied onto every holder built from them (utils/holderParts.js).
+    // The holder still stores its own segments; when they drift from the part's,
+    // that is surfaced, never auto-applied. Dangling ids read as "not linked".
+    body_part_id: null,
+    extension_part_id: null,
 
     manufacturer: '',
     part_number: '',

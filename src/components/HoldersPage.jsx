@@ -3,7 +3,7 @@
 
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Download, Wand2, X, ArrowLeft } from 'lucide-react';
+import { Plus, Download, Wand2, X, ArrowLeft, Boxes } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import HolderPill from './HolderPill.jsx';
 import HolderDetail from './HolderDetail.jsx';
@@ -14,6 +14,7 @@ import { newHolderRecord } from '../schema/holderRecord.js';
 import { deriveGaugeLength, deriveExtensionOoh, formatHolderLen, holderLenIn, nominalLengthCheck } from '../utils/holderGeometry.js';
 import { healHolderDescription, applyHealToRecord } from '../utils/holderDescription.js';
 import { recordsWithBodyDivergence } from '../utils/holderBody.js';
+import { proposeHolderParts, applyPartProposals, holdersWithPartDrift, holderPartsOf } from '../utils/holderParts.js';
 import { unitAbbr } from '../utils/units.js';
 
 const CONF_ORDER = ['high', 'medium', 'low'];
@@ -101,9 +102,92 @@ function HealerModal({ holders, config, onCommit, onClose }) {
   );
 }
 
+// ─── Link parts: preview → commit ───────────────────────────────────────────
+// Proposes one BODY part per physical base holder and one EXTENSION part per
+// distinct extension, then links every holder to them.
+//
+// ⚠️ It LINKS; it does not decide which geometry is right. Where a group's
+// records disagree, one part is seeded from the majority (preferring a bare
+// holder on a tie) and the odd ones out are listed here BEFORE you commit —
+// they become a drift flag on a named holder instead of invisible duplication.
+// No holder's segments are changed.
+function PartsModal({ holders, config, existingParts, onCommit, onClose }) {
+  const { bodies, extensions } = useMemo(() => proposeHolderParts(holders, config), [holders, config]);
+  const all = [...bodies, ...extensions];
+  const driftTotal = bodies.reduce((a, b) => a + b.willDrift.length, 0);
+
+  return (
+    <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal holder-healer">
+        <div className="modal-header">
+          <div>
+            <h3>Link holders to their parts</h3>
+            <p className="modal-sub">
+              A taper holder and an extension are separate parts. This creates one record per part
+              and links the holders to it — nothing’s geometry is changed.
+            </p>
+          </div>
+          <span className="holder-conf high">{bodies.length} bodies</span>
+          <span className="holder-conf high">{extensions.length} extensions</span>
+          {driftTotal > 0 && <span className="holder-conf medium">{driftTotal} will drift</span>}
+          <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+        </div>
+
+        <div className="modal-body">
+          {existingParts > 0 && (
+            <div className="holder-warn" style={{ marginBottom: 10 }}>
+              {existingParts} part{existingParts === 1 ? '' : 's'} already exist. Committing again would
+              create duplicates — unlink or delete those first.
+            </div>
+          )}
+          {all.map(p => (
+            <div key={p.key} className={`holder-heal-row ${p.willDrift.length ? 'medium' : 'high'}`}>
+              <div className="holder-heal-head">
+                <span className={`holder-conf ${p.willDrift.length ? 'medium' : 'high'}`}>
+                  {p.role === 'body' ? 'BODY' : 'EXTENSION'}
+                </span>
+                <span className="holder-heal-desc">{p.label}</span>
+                <span className="holder-part-used">{p.holders.length} holder{p.holders.length === 1 ? '' : 's'}</span>
+              </div>
+              <div className="holder-heal-chips">
+                {p.holders.map(h => (
+                  <span
+                    key={h.id}
+                    className={`chip${p.willDrift.some(d => d.id === h.id) ? ' holder-clash-chip active' : ''}`}
+                  >{h.description || h.holder_ref}</span>
+                ))}
+              </div>
+              {p.willDrift.length > 0 && (
+                <div className="holder-heal-flags">
+                  <div className="flag medium">
+                    ⚠ {p.willDrift.length} of these disagree about this part’s geometry — they’ll be
+                    flagged as drift so you can decide which is right.
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="modal-footer">
+          <span className="modal-footer-note">
+            ⚠ Creates part records and links. No holder’s segments are changed.
+          </span>
+          <button className="btn btn-secondary btn-sm" onClick={onClose}>Cancel</button>
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={!all.length || existingParts > 0}
+            onClick={() => onCommit(all)}
+          >Create {all.length} part{all.length === 1 ? '' : 's'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HolderList({
-  holders, config, usageOf, onOpen, onNew, onHeal, onImport,
-  importable, googleAuthenticated,
+  holders, config, usageOf, onOpen, onNew, onHeal, onImport, onLinkParts,
+  importable, googleAuthenticated, driftIds, partCount,
 }) {
   const [q, setQ] = useState('');
   const [fType, setFType] = useState(null);
@@ -113,6 +197,7 @@ function HolderList({
   const [fTap, setFTap] = useState(false);
   const [fCheck, setFCheck] = useState(false);
   const [fClash, setFClash] = useState(false);
+  const [fDrift, setFDrift] = useState(false);
   // Grouping is ON by default — with 20+ holders across several tapers a flat
   // alphabetical list stops being useful fast. Sorting by a column is the
   // escape hatch, so picking a sort AUTO-UNGROUPS: grouped-and-sorted at the
@@ -140,13 +225,14 @@ function HolderList({
     if (fTap && !h.is_tap_collet) return false;
     if (fCheck && !pendingLengthCheck(h, config)) return false;
     if (fClash && !clashIds.has(h.id)) return false;
+    if (fDrift && !driftIds.has(h.id)) return false;
     if (q) {
       const hay = [h.description, h.vendor, h.manufacturer, h.part_number, h.notes, h.location, ...(h.legacy_ids || [])]
         .join(' ').toLowerCase();
       if (!hay.includes(q.toLowerCase())) return false;
     }
     return true;
-  }), [holders, q, fType, fTaper, fCollet, fExt, fTap, fCheck, fClash, clashIds, config]);
+  }), [holders, q, fType, fTaper, fCollet, fExt, fTap, fCheck, fClash, fDrift, clashIds, driftIds, config]);
 
   const usedIds = (key) => [...new Set(holders.map(h => h[key]).filter(Boolean))];
 
@@ -243,6 +329,10 @@ function HolderList({
               <Download size={14} /> Import {importable} from Fusion
             </button>
           )}
+          <button className="btn btn-secondary btn-sm" onClick={onLinkParts} disabled={!holders.length}
+            title="Create body / extension part records and link the holders to them">
+            <Boxes size={14} /> {partCount ? `Parts (${partCount})` : 'Link parts…'}
+          </button>
           <button className="btn btn-secondary btn-sm" onClick={onHeal} disabled={!holders.length}>
             <Wand2 size={14} /> Normalize names…
           </button>
@@ -300,6 +390,13 @@ function HolderList({
               title="Records of the same physical holder whose base body geometry disagrees"
               onClick={() => setFClash(!fClash)}
             >Body mismatch ({clashIds.size})</button>
+          )}
+          {driftIds.size > 0 && (
+            <button
+              className={`chip holder-clash-chip${fDrift ? ' active' : ''}`}
+              title="Holders whose geometry has drifted from the part record they point at"
+              onClick={() => setFDrift(!fDrift)}
+            >Part drift ({driftIds.size})</button>
           )}
         </div>
       </div>
@@ -413,17 +510,21 @@ function HolderList({
 export default function HoldersPage() {
   const {
     holderLibrary, holders: fusionHolders, shopSettings, tools,
-    saveHolderRecord, deleteHolderRecord, saveHolderLibrary, saveShopSettings,
+    saveHolderRecord, deleteHolderRecord, saveHolderLibrary, saveShopSettings, saveHolderPart,
     importHoldersFromFusion, googleAuthenticated, googleUser, demoMode, notify,
   } = useApp();
   const navigate = useNavigate();
   const [openId, setOpenId] = useState(null);
   const [healing, setHealing] = useState(false);
+  const [linkingParts, setLinkingParts] = useState(false);
 
   // Falls back to the seeded lookups for a shop whose settings file predates
   // holder_config — see holderConfigOf.
   const config = holderConfigOf(shopSettings);
   const records = holderLibrary?.holders || [];
+  const parts = holderLibrary?.parts || [];
+  // Holders whose geometry no longer matches the part record they point at.
+  const driftIds = useMemo(() => holdersWithPartDrift(records, holderLibrary), [records, holderLibrary]);
   const open = records.find(h => h.id === openId) || null;
   const allLocations = [...new Set(records.map(h => h.location).filter(Boolean))];
 
@@ -491,6 +592,14 @@ export default function HoldersPage() {
     }
   };
 
+  const commitParts = async (proposals) => {
+    try {
+      await saveHolderLibrary(applyPartProposals(holderLibrary, proposals, config));
+      notify(`Created ${proposals.length} part record${proposals.length === 1 ? '' : 's'} and linked the holders`, 'success');
+      setLinkingParts(false);
+    } catch { /* toasted */ }
+  };
+
   const commitHeal = async (rows) => {
     const byId = new Map(rows.map(r => [r.h.id, applyHealToRecord(r.h, r.heal)]));
     const next = {
@@ -510,6 +619,7 @@ export default function HoldersPage() {
         <HolderDetail
           key={open.id}
           holder={open} config={config} usage={usageOf(open)}
+          holderFile={holderLibrary} onSavePart={saveHolderPart}
           allLocations={allLocations} readOnly={!canEdit}
           onBack={() => setOpenId(null)}
           updatedBy={googleUser?.email || ''}
@@ -525,6 +635,14 @@ export default function HoldersPage() {
           importable={importable} googleAuthenticated={canEdit}
           onOpen={h => setOpenId(h.id)}
           onNew={onNew} onHeal={() => setHealing(true)} onImport={onImport}
+          onLinkParts={() => setLinkingParts(true)}
+          driftIds={driftIds} partCount={parts.length}
+        />
+      )}
+      {linkingParts && (
+        <PartsModal
+          holders={records} config={config} existingParts={parts.length}
+          onCommit={commitParts} onClose={() => setLinkingParts(false)}
         />
       )}
       {healing && (

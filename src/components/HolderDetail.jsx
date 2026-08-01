@@ -17,7 +17,9 @@ import {
   SEG_HEIGHT, SEG_UPPER, SEG_LOWER, segHeight,
 } from '../utils/holderGeometry.js';
 import { composeHolderDescription, HOLDER_DESC_LIMIT } from '../utils/holderDescription.js';
-import { bodyDivergenceFor } from '../utils/holderBody.js';
+import { bodyDivergenceFor, roleSegments } from '../utils/holderBody.js';
+import HolderPartsSection from './HolderPartsSection.jsx';
+import { newHolderPart, holderPartFor, adoptHolderGeometryIntoPart } from '../utils/holderParts.js';
 import { unitAbbr, normalizeUnit } from '../utils/units.js';
 
 const THEME_SWATCHES = [
@@ -324,6 +326,7 @@ function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setAc
 
 export default function HolderDetail({
   holder, config, usage = 0, allLocations = [], readOnly, updatedBy = '', siblings = [],
+  holderFile, onSavePart,
   onBack, onSave, onDelete, onAddOption, onViewTools,
 }) {
   const [h, setH] = useState(holder);
@@ -347,6 +350,52 @@ export default function HolderDetail({
   // is wrong and nothing here can tell which, so it names the siblings and
   // stops there.
   const bodyClash = useMemo(() => bodyDivergenceFor(h, siblings, config), [h, siblings, config]);
+
+  // Create a part seeded from THIS holder's geometry for that role, and link
+  // it. Two writes (the part, then the holder on Save) — the part is saved
+  // immediately because other holders need to be able to find it.
+  const createPart = async (role) => {
+    const segs = roleSegments(h, role);
+    if (!segs) return;
+    const part = newHolderPart(role, {
+      description: role === 'extension'
+        ? `${holderOptionLabel(config, 'collet_sizes', h.extension?.collet_size_id) || 'Extension'} from ${h.description || h.holder_ref}`
+        : (h.description || h.holder_ref),
+      unit: h.unit,
+      segments: segs.map(s => ({ ...s })),
+      taper_id: role === 'body' ? h.taper_id : null,
+      collet_size_id: role === 'body' ? h.collet_size_id : (h.extension?.collet_size_id || null),
+      length: role === 'body' ? h.length : null,
+      manufacturer: role === 'body' ? h.manufacturer : (h.extension?.manufacturer || ''),
+      part_number: role === 'body' ? h.part_number : (h.extension?.part_number || ''),
+      vendor: role === 'body' ? h.vendor : (h.extension?.vendor || ''),
+      location: role === 'body' ? h.location : '',
+    });
+    await onSavePart?.(part);
+    set(role === 'extension' ? 'extension_part_id' : 'body_part_id', part.id);
+  };
+
+  // Drift resolution, both directions. Neither is the default — the app can't
+  // know which side was corrected.
+  const adoptFromHolder = async (role) => {
+    const part = holderPartFor(h, role, holderFile);
+    if (!part) return;
+    if (!window.confirm(`Update "${part.description}" to this holder's geometry?\n\nEvery holder linked to that part will then show as matching it.`)) return;
+    await onSavePart?.(adoptHolderGeometryIntoPart(part, h, role));
+  };
+  const adoptIntoHolder = (role) => {
+    const part = holderPartFor(h, role, holderFile);
+    if (!part) return;
+    // Replace just this role's segments, keeping the other role's in place and
+    // the array in its stored bottom-up order (extension segments are at the tip).
+    const others = (h.segments || []).filter(s => (role === 'extension' ? !s.ext : !!s.ext));
+    const incoming = (part.segments || []).map(s => ({ ...s, ext: role === 'extension' }));
+    setH(p => ({
+      ...p,
+      unit: part.unit,
+      segments: role === 'extension' ? [...incoming, ...others] : [...others, ...incoming],
+    }));
+  };
 
   const save = async () => {
     setSaving('Saving…');
@@ -612,6 +661,17 @@ export default function HolderDetail({
             </Field>
           </div>
         )}
+      </Section>
+
+      <Section label="Assembled from" accent="var(--accent)" className="holder-parts-section">
+        <HolderPartsSection
+          holder={h} file={holderFile} holders={siblings} readOnly={readOnly}
+          onLink={(role, partId) => set(role === 'extension' ? 'extension_part_id' : 'body_part_id', partId)}
+          onUnlink={(role) => set(role === 'extension' ? 'extension_part_id' : 'body_part_id', null)}
+          onCreate={createPart}
+          onAdoptFromHolder={adoptFromHolder}
+          onAdoptIntoHolder={adoptIntoHolder}
+        />
       </Section>
 
       <Section

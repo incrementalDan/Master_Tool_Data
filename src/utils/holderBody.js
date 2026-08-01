@@ -35,14 +35,40 @@ export function bodySegments(holder) {
   return segs.filter(s => !s?.ext);
 }
 
-// A comparable fingerprint of the body, normalized to millimetres so an
+// A comparable fingerprint of a segment list, normalized to millimetres so an
 // inch-native and an mm-native record of the same part still compare. 3
-// decimals of mm is finer than anything the source data carries.
+// decimals of mm is finer than anything the source data carries. THE one
+// implementation — holder parts compare against it too.
+export function segmentsSignature(segments, unit) {
+  if (!Array.isArray(segments)) return null;
+  const mm = (v) => convertLength(v, unit, 'millimeters').toFixed(3);
+  return segments.map(s => `${mm(segHeight(s))}/${mm(segUpper(s))}/${mm(segLower(s))}`).join(' ');
+}
+
+// The fingerprint of a holder's BASE BODY (its segments minus the extension).
 export function bodySignature(holder) {
   const segs = bodySegments(holder);
   if (!segs) return null;
-  const mm = (v) => convertLength(v, holder.unit, 'millimeters').toFixed(3);
-  return segs.map(s => `${mm(segHeight(s))}/${mm(segUpper(s))}/${mm(segLower(s))}`).join(' ');
+  return segmentsSignature(segs, holder.unit);
+}
+
+// The fingerprint of a holder's EXTENSION segments, or null when it has none
+// (or they aren't flagged yet).
+export function extensionSignature(holder) {
+  const segs = holder?.segments;
+  if (!Array.isArray(segs) || !holder?.has_extension) return null;
+  const ext = segs.filter(s => s?.ext);
+  return ext.length ? segmentsSignature(ext, holder.unit) : null;
+}
+
+// A holder's segments for one role, in its own unit.
+export function roleSegments(holder, role) {
+  if (role === 'extension') {
+    if (!holder?.has_extension) return null;
+    const ext = (holder.segments || []).filter(s => s?.ext);
+    return ext.length ? ext : null;
+  }
+  return bodySegments(holder);
 }
 
 // Which physical base holder a record is built on: taper (normalized, so
