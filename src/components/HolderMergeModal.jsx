@@ -118,6 +118,20 @@ export default function HolderMergeModal({ a, b, config, tools = [], match, onCo
                 The other record is removed from the app; the Fusion library is untouched.
               </span>
             </div>
+            {/* Be explicit about what a merge does NOT do. Fusion bakes holder
+                geometry into each tool, so those tools still physically carry
+                the old holder's segments until they're written. The merge makes
+                the app resolve them to the kept record — which is what lets the
+                corrected geometry reach them later — but it is not itself the
+                fix. Saying "no tool is rewritten" without this reads as "done". */}
+            <div className="row muted">
+              <ArrowRight size={13} />
+              <span>
+                Those tools still carry the <strong>old holder’s geometry</strong> in their own
+                Fusion data. Merging points them at the kept record; the corrected geometry
+                reaches them when each tool is next written (re-stamping isn’t wired up yet).
+              </span>
+            </div>
           </div>
         </div>
 
