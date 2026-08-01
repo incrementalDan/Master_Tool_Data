@@ -264,4 +264,17 @@ describe('nominal-length soft check', () => {
   it('does not apply without an engraved nominal', () => {
     expect(nominalLengthCheck(fusionHolderToRecord(byDesc('NBT30-SK13C-60')))).toBeNull();
   });
+
+  it('stays silent on an extension holder whose segments are not flagged yet', () => {
+    // The base gauge isn't knowable until the extension segments are flagged, so
+    // reporting the whole assembled length against the base nominal would flag
+    // every un-flagged extension holder with a large bogus delta.
+    const r = fusionHolderToRecord(byDesc('NBT30-SK13C-120 er16 12mm shank ext OOH2.5'));
+    r.length = 120;
+    r.has_extension = true;
+    expect(nominalLengthCheck(r)).toBeNull();
+    // Once flagged, the check applies and the holder lands in the band.
+    r.segments = r.segments.map((s, i) => (i < 3 ? { ...s, ext: true } : s));
+    expect(nominalLengthCheck(r).within).toBe(true);
+  });
 });

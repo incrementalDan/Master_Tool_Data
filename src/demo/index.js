@@ -18,7 +18,7 @@ import demoShopSettings from './demo_shop_settings.json';
 import demoJobs from './demo_jobs.json';
 import demoComponents from './demo_components.json';
 import { fusionHolderToRecord } from '../schema/holderRecord.js';
-import { healHolderDescription, applyHealToRecord } from '../utils/holderDescription.js';
+import { healHolderDescription, applyHealToRecord, suggestExtensionSegments } from '../utils/holderDescription.js';
 import { DEFAULT_HOLDER_CONFIG } from '../schema/holderOptions.js';
 
 // True when the current URL requests demo mode (`?demo=true`). HashRouter puts
@@ -44,11 +44,22 @@ export function getDemoData() {
   // demo is a throwaway sandbox, so it runs both up front to show the page with
   // classified records. It seeds against DEFAULT_HOLDER_CONFIG because the
   // option UUIDs are minted at module load and can't live in a static JSON.
-  const holderRecords = holders.map(h =>
-    applyHealToRecord(
+  const holderRecords = holders.map(h => {
+    const heal = healHolderDescription(h.description, DEFAULT_HOLDER_CONFIG);
+    const rec = applyHealToRecord(
       fusionHolderToRecord(h, { library_id: 'demo', library_name: 'Demo holders' }),
-      healHolderDescription(h.description, DEFAULT_HOLDER_CONFIG),
-    ));
+      heal,
+    );
+    // …and accepts the extension-segment suggestion too, so the derived
+    // extension OOH is visible in demo. In a live shop this is a proposal the
+    // user ticks off in the segment table — it is never applied for them.
+    const idx = suggestExtensionSegments(rec, heal.matched.ext_ooh_in);
+    if (!idx) return rec;
+    return {
+      ...rec,
+      segments: rec.segments.map((s, i) => (idx.includes(i) ? { ...s, ext: true } : s)),
+    };
+  });
 
   return {
     fusionList,

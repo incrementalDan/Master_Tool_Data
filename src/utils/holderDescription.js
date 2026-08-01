@@ -245,19 +245,28 @@ export function applyHealToRecord(record, heal) {
 // healer read an OOH out of the name, the tip segments that add up to it can be
 // proposed. Returns the segment indices to flag, or null when no run matches —
 // suggestion only, shown in the preview for the user to accept.
-export function suggestExtensionSegments(holder, oohIn, tolIn = 0.002) {
+// ⚠️ The tolerance is DELIBERATELY LOOSE (0.02" ≈ 0.5mm), because the OOH in a
+// description is a hand-written, hand-rounded number, not a measurement. Real
+// case: "NBT30-SK13C-120 er16 12mm shank ext OOH2.5" has a 3-segment extension
+// summing to 63.8mm = 2.512", so a tight tolerance proposes nothing on exactly
+// the holders that most need the help. A wrong run is unlikely to sneak in —
+// segment heights are ≥1mm, well outside the band — and the closest run wins
+// rather than the first one that fits.
+export function suggestExtensionSegments(holder, oohIn, tolIn = 0.02) {
   const segs = holder?.segments || [];
   if (!segs.length || oohIn == null) return null;
   const tol = convertLength(tolIn, 'inches', holder.unit);
   const target = convertLength(oohIn, 'inches', holder.unit);
   let sum = 0;
+  let best = null;
   // The array is bottom-up, so the tip is index 0 — walk forward from it.
   for (let i = 0; i < segs.length; i++) {
     sum += segHeight(segs[i]);
-    if (Math.abs(sum - target) <= tol) return Array.from({ length: i + 1 }, (_, k) => k);
-    if (sum - target > tol) return null;
+    const err = Math.abs(sum - target);
+    if (err <= tol && (best == null || err < best.err)) best = { i, err };
+    if (sum - target > tol) break;   // past the target — nothing longer can fit
   }
-  return null;
+  return best ? Array.from({ length: best.i + 1 }, (_, k) => k) : null;
 }
 
 export { formatHolderLen };

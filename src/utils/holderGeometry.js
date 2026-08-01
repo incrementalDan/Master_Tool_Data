@@ -231,8 +231,14 @@ export function nominalLengthCheck(holder, band = NOMINAL_DELTA_BAND_MM) {
   if (!isFinite(nominal) || nominal <= 0 || !Array.isArray(segs) || !segs.length) return null;
   const gauge = deriveGaugeLength(segs);
   if (!gauge) return null;
-  const ext = deriveExtensionOoh(segs) || 0;
-  const baseMm = convertLength(gauge - ext, holder.unit, 'millimeters');
+  const ext = deriveExtensionOoh(segs);
+  // The check compares the nominal against the BASE gauge, so it needs the
+  // extension subtracted. On a holder that has an extension whose segments
+  // aren't flagged yet, that subtraction can't be made — reporting the whole
+  // assembled length against the base nominal would flag every un-flagged
+  // extension holder with a large bogus delta. Stay silent until it's knowable.
+  if (holder?.has_extension && ext == null) return null;
+  const baseMm = convertLength(gauge - (ext || 0), holder.unit, 'millimeters');
   const deltaMm = nominal - baseMm;
   return {
     deltaMm,

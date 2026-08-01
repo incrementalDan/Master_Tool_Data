@@ -178,6 +178,14 @@ describe('suggestExtensionSegments', () => {
     expect(suggestExtensionSegments(r, 1.2)).toEqual([0]);
   });
 
+  it('tolerates a hand-rounded OOH in the name', () => {
+    // The name says 2.5; the three tip segments actually sum to 63.8mm = 2.512".
+    // A tight tolerance would propose nothing on exactly the holder that needs
+    // the help most.
+    const r = fusionHolderToRecord(byDesc('NBT30-SK13C-120 er16 12mm shank ext OOH2.5'));
+    expect(suggestExtensionSegments(r, 2.5)).toEqual([0, 1, 2]);
+  });
+
   it('returns null rather than guessing when nothing adds up', () => {
     const r = fusionHolderToRecord(byDesc('NBT30-SK13C-60'));
     expect(suggestExtensionSegments(r, 1.2)).toBeNull();
