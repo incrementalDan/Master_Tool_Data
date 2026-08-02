@@ -8,7 +8,7 @@ import {
 import { fusionToolToInternal, internalToFusionTool } from './fusionConvert.js';
 import { mergeFusionAndMetadata, buildMetadataTool, detectFusionDrift } from './metadataModel.js';
 import { buildHolderObject } from './holderGauge.js';
-import { resolveHolderForWrite, assemblyGaugeCheck, holderToleranceIn } from './holderResolve.js';
+import { resolveHolderForWrite, assemblyGaugeCheck, gaugeToleranceIn } from './holderResolve.js';
 import { parsePresetName, materialCategory, matchMaterial } from '../utils/presetNaming.js';
 import { isNewFormatPreset, readStrategyBucket } from './camStrategies.js';
 import { mergePresetLists } from '../utils/presetMerge.js';
@@ -453,7 +453,12 @@ export function materializeUnlinkedTools(builtTools, metaList) {
 // (the read-only Fusion holder library) as the fallback for holders not yet
 // imported — see holderResolve.js. Callers that don't have them behave exactly
 // as before.
-export function splitToFusionInstances(tool, holders = [], holderRecords = null) {
+// `opts.gaugeToleranceIn` grades the returned gaugeChecks for THIS call only —
+// the bulk re-stamp dialog's slider. It is never stored anywhere: see
+// ASSEMBLY_GAUGE_WARN_IN in holderResolve.js for why a remembered tolerance
+// silences exactly the stragglers worth flagging.
+export function splitToFusionInstances(tool, holders = [], holderRecords = null, opts = {}) {
+  const gaugeTolIn = gaugeToleranceIn(opts.gaugeToleranceIn);
   const tracking_id = tool.tracking_id || tool.id;
   const isMetric = tool.unit === 'millimeters';
 
@@ -521,7 +526,6 @@ export function splitToFusionInstances(tool, holders = [], holderRecords = null)
     }
 
     // Per-instance holder.
-    let resolvedRecord = null;
     // buildHolderObject always uses holderEntry.guid (the original GUID from the
     // holder library entry), never generates a new one — Fusion requires the
     // original GUID to maintain its link back to the holder library.
@@ -535,7 +539,6 @@ export function splitToFusionInstances(tool, holders = [], holderRecords = null)
       const resolved = resolveHolderForWrite(a.holder_guid, {
         records: holderRecords, fusionHolders: holders, holderId: a.holder_id,
       });
-      resolvedRecord = resolved?.record || null;
       base.holder = resolved ? buildHolderObject(resolved.entry) : (raw.holder || undefined);
       if (!base.holder) delete base.holder;
       const key = a.assembly_id || a.instance_guid;
@@ -609,9 +612,7 @@ export function splitToFusionInstances(tool, holders = [], holderRecords = null)
         toolUnit: tool.unit,
         assemblyId: a.assembly_id || a.instance_guid,
         holderDescription: base.holder.description || '',
-        // The holder's OWN tolerance when it has one — see holderToleranceIn,
-        // which is the single place the unset-vs-zero distinction is decided.
-        tolIn: holderToleranceIn(resolvedRecord?.restamp_tolerance_in),
+        tolIn: gaugeTolIn,
       }));
     }
 

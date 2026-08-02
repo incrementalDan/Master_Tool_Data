@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
-  resolveHolderForWrite, toolHolderIsStale, assemblyGaugeCheck, holderToleranceIn,
+  resolveHolderForWrite, toolHolderIsStale, assemblyGaugeCheck, gaugeToleranceIn,
   ASSEMBLY_GAUGE_WARN_IN, ASSEMBLY_GAUGE_IMPLAUSIBLE_MM, ASSEMBLY_GAUGE_IMPLAUSIBLE_IN,
   backfillHolderIds,
 } from './holderResolve.js';
@@ -241,7 +241,7 @@ describe('the write path emits the check', () => {
 
 // The tolerance is PER HOLDER — a holder that was badly modelled moves every
 // tool on it, and once the user has seen that it shouldn't keep asking.
-describe('per-holder tolerance', () => {
+describe('gauge tolerance', () => {
   it('respects an explicit tolerance instead of the default', () => {
     // 5mm move: flagged at the default, fine at a 6mm tolerance.
     const mm5 = 5 / 25.4;
@@ -263,12 +263,12 @@ describe('per-holder tolerance', () => {
     }
   });
 
-  it('clamps a stored tolerance to the ceiling rather than trusting it', () => {
-    expect(holderToleranceIn(2)).toBeCloseTo(ASSEMBLY_GAUGE_IMPLAUSIBLE_IN, 9);
-    expect(holderToleranceIn(99)).toBeCloseTo(ASSEMBLY_GAUGE_IMPLAUSIBLE_IN, 9);
-    expect(holderToleranceIn(-5)).toBe(0);
+  it('clamps a supplied tolerance to the ceiling rather than trusting it', () => {
+    expect(gaugeToleranceIn(2)).toBeCloseTo(ASSEMBLY_GAUGE_IMPLAUSIBLE_IN, 9);
+    expect(gaugeToleranceIn(99)).toBeCloseTo(ASSEMBLY_GAUGE_IMPLAUSIBLE_IN, 9);
+    expect(gaugeToleranceIn(-5)).toBe(0);
     // Anything inside the band is kept as-is.
-    expect(holderToleranceIn(5 / 25.4)).toBeCloseTo(5 / 25.4, 9);
+    expect(gaugeToleranceIn(5 / 25.4)).toBeCloseTo(5 / 25.4, 9);
   });
 
   it('the ceiling is 10mm — the shop\'s own judgement of "very odd"', () => {
@@ -294,7 +294,9 @@ describe('per-holder tolerance', () => {
     expect(assemblyGaugeCheck({ before: 4.5, after: NaN, toolUnit: 'inches', tolIn: 99 }).level).toBe('error');
   });
 
-  it('the WRITE PATH reads the tolerance off the resolved holder record', () => {
+  it('the WRITE PATH grades against the tolerance the CALLER passed', () => {
+    // Per-call, never off the record: a stored tolerance would outlive the one
+    // correction it described and silence the stragglers afterwards.
     const tool = (baked) => ({
       id: 'FTL-CCCCCC', tracking_id: 'FTL-CCCCCC', tool_type: 'flat end mill',
       unit: 'inches', diameter: 0.5, description: 'test',
@@ -303,27 +305,41 @@ describe('per-holder tolerance', () => {
         geometry: { assemblyGaugeLength: baked } }],
     });
     // A holder shortened by 30mm — a 1.19" move on every tool using it.
-    const shortened = (tolIn) => ({
+    const shortened = {
       ...oldRecord(),
-      restamp_tolerance_in: tolIn,
       segments: oldRecord().segments.map((s, i) => (i === 0 ? { ...s, height: 5 } : s)),
-    });
+    };
     const baked = splitToFusionInstances(tool(undefined), REAL, [oldRecord()])
       .fusionInstances[0].geometry.assemblyGaugeLength;
 
     // Default tolerance: flagged.
-    expect(splitToFusionInstances(tool(baked), REAL, [shortened(null)])
+    expect(splitToFusionInstances(tool(baked), REAL, [shortened])
       .gaugeChecks[0].level).toBe('warn');
     // This one is a ~30mm move, so even a maxed-out tolerance keeps it flagged.
-    const maxed = splitToFusionInstances(tool(baked), REAL, [shortened(99)]).gaugeChecks[0];
+    const maxed = splitToFusionInstances(tool(baked), REAL, [shortened],
+      { gaugeToleranceIn: 99 }).gaugeChecks[0];
     expect(maxed.level).toBe('warn');
     expect(maxed.implausible).toBe(true);
   });
 
-  it('treats an UNSET tolerance as the default, not as zero', () => {
+  it('a tolerance is NEVER read off the holder record', () => {
+    // The field is gone; a leftover one on an old Drive record must be inert,
+    // never quietly re-silencing a tool.
+    const tool = {
+      id: 'FTL-EEEEEE', tracking_id: 'FTL-EEEEEE', tool_type: 'flat end mill',
+      unit: 'inches', diameter: 0.5, description: 'test',
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'inst-1', holder_guid: OLD.guid, ooh: 1.5 }],
+      _instancesRaw: [{ guid: 'inst-1', type: 'flat end mill', holder: { ...OLD },
+        geometry: { assemblyGaugeLength: 0.001 } }],
+    };
+    const rec = { ...oldRecord(), restamp_tolerance_in: 99 };   // stale, ignored
+    expect(splitToFusionInstances(tool, REAL, [rec]).gaugeChecks[0].level).toBe('warn');
+  });
+
+  it('treats NO tolerance as the default, not as zero', () => {
     // Number(null) is 0 and Number.isFinite(0) is true, so a coercion-only
-    // check reads "no tolerance set" as "tolerate nothing" and flags every tool
-    // on every holder over floating-point noise.
+    // check reads "no tolerance given" as "tolerate nothing" and flags every
+    // tool on every holder over floating-point noise.
     const tool = (baked) => ({
       id: 'FTL-DDDDDD', tracking_id: 'FTL-DDDDDD', tool_type: 'flat end mill',
       unit: 'inches', diameter: 0.5, description: 'test',
@@ -334,24 +350,24 @@ describe('per-holder tolerance', () => {
     const baked = splitToFusionInstances(tool(undefined), REAL, [oldRecord()])
       .fusionInstances[0].geometry.assemblyGaugeLength;
     for (const unset of [null, undefined, '']) {
-      const rec = { ...oldRecord(), restamp_tolerance_in: unset };
-      const c = splitToFusionInstances(tool(baked), REAL, [rec]).gaugeChecks[0];
+      const c = splitToFusionInstances(tool(baked), REAL, [oldRecord()],
+        { gaugeToleranceIn: unset }).gaugeChecks[0];
       expect(c.level).toBe('ok');
       expect(c.tolIn).toBe(ASSEMBLY_GAUGE_WARN_IN);
     }
   });
 
-  it('holderToleranceIn is the ONE place unset-vs-zero is decided', () => {
+  it('gaugeToleranceIn is the ONE place unset-vs-zero is decided', () => {
     // Both traps: Number(null) and Number('') are 0, and Number.isFinite(0) is
     // true. A real zero must still mean zero.
-    expect(holderToleranceIn(null)).toBe(ASSEMBLY_GAUGE_WARN_IN);
-    expect(holderToleranceIn(undefined)).toBe(ASSEMBLY_GAUGE_WARN_IN);
-    expect(holderToleranceIn('')).toBe(ASSEMBLY_GAUGE_WARN_IN);
-    expect(holderToleranceIn('nonsense')).toBe(ASSEMBLY_GAUGE_WARN_IN);
-    expect(holderToleranceIn(0)).toBe(0);
-    expect(holderToleranceIn('0.25')).toBe(0.25);
+    expect(gaugeToleranceIn(null)).toBe(ASSEMBLY_GAUGE_WARN_IN);
+    expect(gaugeToleranceIn(undefined)).toBe(ASSEMBLY_GAUGE_WARN_IN);
+    expect(gaugeToleranceIn('')).toBe(ASSEMBLY_GAUGE_WARN_IN);
+    expect(gaugeToleranceIn('nonsense')).toBe(ASSEMBLY_GAUGE_WARN_IN);
+    expect(gaugeToleranceIn(0)).toBe(0);
+    expect(gaugeToleranceIn('0.25')).toBe(0.25);
     // …and an out-of-band value is clamped, not trusted (see the ceiling test).
-    expect(holderToleranceIn(2)).toBeCloseTo(ASSEMBLY_GAUGE_IMPLAUSIBLE_IN, 9);
+    expect(gaugeToleranceIn(2)).toBeCloseTo(ASSEMBLY_GAUGE_IMPLAUSIBLE_IN, 9);
   });
 
   it('always reports the old and new value, flagged or not', () => {

@@ -941,8 +941,10 @@ export function createLibraryOps(ctx) {
   //   dryRun      — compute and report, write nothing (backs the preview)
   //   toolIds     — restrict the write to these tools (the user's selection);
   //                 omit for all of them
-  //   toleranceIn — override the holder's stored tolerance for this preview,
-  //                 so the modal can re-grade live as the number is dragged
+  //   toleranceIn — how much gauge movement counts as expected for THIS
+  //                 correction, so the dialog can re-grade live as the number is
+  //                 dragged. A one-off grading choice, never stored: see
+  //                 ASSEMBLY_GAUGE_WARN_IN in holderResolve.js
   const restampHolderTools = async (holderRecord, { dryRun = false, toolIds = null, toleranceIn = null } = {}) => {
     const guids = new Set(holderGuidsOf(holderRecord));
     if (!guids.size) return { tools: [], byLibrary: [], wrote: false };
@@ -965,17 +967,13 @@ export function createLibraryOps(ctx) {
     // assembly-gauge backstop can be shown before anything is written rather
     // than reported after the fact.
     const holdersNow = holdersRef.current || [];
-    // An explicit tolerance (the modal's slider) overrides the holder's stored
-    // one for this preview only — nothing is persisted until the user commits.
     const recordsNow = (holderLibraryRef?.current?.holders || null);
-    const previewRecords = (toleranceIn == null || !recordsNow)
-      ? recordsNow
-      : recordsNow.map(h => (h.id === holderRecord.id ? { ...h, restamp_tolerance_in: toleranceIn } : h));
 
     const checks = [];
     for (const t of allAffected) {
       try {
-        const { gaugeChecks } = splitToFusionInstances(t, holdersNow, previewRecords);
+        const { gaugeChecks } = splitToFusionInstances(t, holdersNow, recordsNow,
+          { gaugeToleranceIn: toleranceIn });
         for (const c of gaugeChecks || []) checks.push({ ...c, tool: t, toolId: t.id });
       } catch {
         checks.push({ level: 'error', tool: t, toolId: t.id, before: null, after: NaN,
@@ -989,7 +987,7 @@ export function createLibraryOps(ctx) {
       checks,
       gaugeWarnings: checks.filter(c => c.level === 'warn'),
       gaugeErrors: checks.filter(c => c.level === 'error'),
-      toleranceIn: toleranceIn ?? holderRecord.restamp_tolerance_in ?? null,
+      toleranceIn: toleranceIn ?? null,
       wrote: false,
     };
     if (dryRun || !affected.length) return summary;
@@ -1016,7 +1014,7 @@ export function createLibraryOps(ctx) {
           for (const r of tool._instancesRaw || []) if (r?.guid) dropGuids.add(r.guid);
 
           const { fusionInstances, metadataTool, gaugeChecks } =
-            splitToFusionInstances(tool, holders, holderRecords);
+            splitToFusionInstances(tool, holders, holderRecords, { gaugeToleranceIn: toleranceIn });
           // Same backstop as the single-tool write: refuse an assembly gauge
           // length that didn't compute rather than pushing it to N tools.
           const bad = (gaugeChecks || []).filter(c => c.level === 'error');

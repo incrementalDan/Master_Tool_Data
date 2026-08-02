@@ -6,27 +6,28 @@
 // becomes wallpaper. So the user sets the tolerance for THIS holder's fix, sees
 // the old and new assembly gauge length for every affected tool, and decides.
 //
-// The tolerance is remembered on the holder record, which is also what the
-// single-tool save path reads — so raising it here stops the ordinary
-// save-a-tool warning nagging about the same holder too.
+// ⚠️ The tolerance is NOT remembered. It describes this one correction. Once
+// these tools are re-stamped they match the holder and move by nothing on their
+// own, so there is nothing left for a stored tolerance to quiet except the
+// stragglers — a tool deselected here, or one that turns up later from Fusion
+// still carrying the old holder. Those are exactly the ones worth flagging.
 
 import { useState, useMemo, useEffect } from 'react';
 import { X, RefreshCw, AlertTriangle } from 'lucide-react';
 import {
   ASSEMBLY_GAUGE_WARN_IN, ASSEMBLY_GAUGE_IMPLAUSIBLE_MM, ASSEMBLY_GAUGE_IMPLAUSIBLE_IN,
-  holderToleranceIn,
 } from '../schema/holderResolve.js';
 import { formatHolderLen } from '../utils/holderGeometry.js';
 import { unitAbbr } from '../utils/units.js';
 
 const MM = 25.4;
 
-export default function RestampModal({ holder, preview, onPreview, onCommit, onClose }) {
+export default function RestampModal({ preview, onPreview, onCommit, onClose }) {
   // Set in MILLIMETRES: holders are published in mm and the shop reasons about
-  // this in mm ("more than 10mm would be very odd"). Stored in inches to match
-  // the cross-unit delta, converted at this boundary only.
-  const [tolMm, setTolMm] = useState(
-    () => holderToleranceIn(holder?.restamp_tolerance_in) * MM);
+  // this in mm ("more than 10mm would be very odd"). Held in inches to match the
+  // cross-unit delta, converted at this boundary only. Starts at the standing
+  // default every time — this is a per-correction judgement, not a setting.
+  const [tolMm, setTolMm] = useState(() => ASSEMBLY_GAUGE_WARN_IN * MM);
   const tol = Math.min(tolMm / MM, ASSEMBLY_GAUGE_IMPLAUSIBLE_IN);
   const [excluded, setExcluded] = useState(() => new Set());
   const [busy, setBusy] = useState(false);
@@ -117,9 +118,10 @@ export default function RestampModal({ holder, preview, onPreview, onCommit, onC
                   "make the warnings stop" would silence exactly the case this
                   check exists for. */}
               Raise this when you already know this holder’s old data was bad — those tools will
-              all move and that’s expected. Saved on the holder, so ordinary tool saves stop
-              warning about it too. Capped at {ASSEMBLY_GAUGE_IMPLAUSIBLE_MM}mm: a bigger jump than
-              that isn’t a correction, it’s a mistake, and stays flagged either way.
+              all move and that’s expected. It applies to this fix only and isn’t saved: anything
+              still on the old geometry afterwards should keep flagging. Capped at
+              {ASSEMBLY_GAUGE_IMPLAUSIBLE_MM}mm: a bigger jump than that isn’t a correction, it’s a
+              mistake, and stays flagged either way.
             </div>
           </div>
 

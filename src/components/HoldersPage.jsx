@@ -687,15 +687,14 @@ export default function HoldersPage() {
       .catch(() => {});
   }, [open, restampHolderTools]);
 
+  // The tolerance is NOT remembered. It described this one correction; once the
+  // tools are re-stamped they match the holder and move by nothing on their own.
+  // Anything still on the old geometry afterwards — one deselected here, or one
+  // arriving later from Fusion — should keep flagging.
   const commitRestamp = async (toolIds, toleranceIn) => {
     if (!open) return;
     try {
       await restampHolderTools(open, { toolIds, toleranceIn });
-      // Remember the tolerance on the holder, so the ordinary single-tool save
-      // path stops warning about this same holder too.
-      if (Number(toleranceIn) !== Number(open.restamp_tolerance_in)) {
-        await saveHolderRecord({ ...open, restamp_tolerance_in: Number(toleranceIn) });
-      }
       setRestampOpen(false);
     } catch { /* toasted */ }
   };
@@ -783,7 +782,7 @@ export default function HoldersPage() {
       )}
       {restampOpen && open && (
         <RestampModal
-          holder={open} preview={restampPreview}
+          preview={restampPreview}
           onPreview={previewAtTolerance}
           onCommit={commitRestamp}
           onClose={() => setRestampOpen(false)}

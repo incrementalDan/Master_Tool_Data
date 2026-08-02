@@ -138,9 +138,19 @@ export function toolHolderIsStale(assembly, rawInstance, ctx) {
 // seen before committing; a big move is flagged; only arithmetic that came out
 // non-finite is treated as an error, because that is unambiguously broken
 // rather than merely surprising.
-// The DEFAULT tolerance — a noise floor, ~1mm. The real tolerance is per holder
-// (`restamp_tolerance_in` on the record), because how much movement is
-// reasonable depends on how wrong the holder was to start with.
+// The tolerance — a noise floor, ~1mm. This is the standing threshold and it
+// is NEVER stored on a holder.
+//
+// ⚠️ IT WAS, BRIEFLY, AND THAT WAS BACKWARDS. Raising the tolerance is a
+// judgement about ONE bulk correction: "I know this holder's old data was bad,
+// so of course these forty tools all move." That judgement expires the moment
+// the correction lands — the re-stamped tools now match the holder, so they
+// move by nothing and warn about nothing on their own. The only tools a stored
+// tolerance would still be silencing are the STRAGGLERS: one deselected here, or
+// one that arrives later from Fusion still carrying the old holder. Those are
+// exactly the ones worth flagging, and there are few enough to fix by hand.
+// So the tolerance lives for the length of the re-stamp dialog and is then
+// forgotten.
 export const ASSEMBLY_GAUGE_WARN_IN = 0.04;   // ≈1mm
 
 // ⚠️ THE CEILING, AND IT IS NOT ADJUSTABLE.
@@ -157,12 +167,13 @@ export const ASSEMBLY_GAUGE_WARN_IN = 0.04;   // ≈1mm
 export const ASSEMBLY_GAUGE_IMPLAUSIBLE_MM = 10;
 export const ASSEMBLY_GAUGE_IMPLAUSIBLE_IN = ASSEMBLY_GAUGE_IMPLAUSIBLE_MM / 25.4;
 
-// Read a stored per-holder tolerance, falling back to the default.
+// Normalize a tolerance a caller supplied for ONE grading pass (the re-stamp
+// dialog's slider), falling back to the standing default.
 // ⚠️ ONE rule, in one place, because the obvious test is wrong twice over:
 // Number(null) and Number('') are both 0, and Number.isFinite(0) is true — so
-// a coercion-only check reads "no tolerance set" as "tolerate nothing" and
+// a coercion-only check reads "no tolerance given" as "tolerate nothing" and
 // flags every tool on every holder over floating-point noise.
-export function holderToleranceIn(value, fallback = ASSEMBLY_GAUGE_WARN_IN) {
+export function gaugeToleranceIn(value, fallback = ASSEMBLY_GAUGE_WARN_IN) {
   if (value === null || value === undefined || value === '') return fallback;
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
