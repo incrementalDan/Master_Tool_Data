@@ -15,7 +15,7 @@ import { deriveGaugeLength, deriveExtensionOoh, formatHolderLen, holderLenIn, no
 import { healHolderDescription, applyHealToRecord } from '../utils/holderDescription.js';
 import { recordsWithBodyDivergence } from '../utils/holderBody.js';
 import { proposeHolderParts, applyPartProposals, holdersWithPartDrift, holderPartsOf } from '../utils/holderParts.js';
-import { findHolderDuplicates, holdersInDuplicates, applyHolderMerge, compareHolders, holderGuidsOf } from '../utils/holderDuplicates.js';
+import { findHolderDuplicates, holdersInDuplicates, applyHolderMerge, compareHolders, holderGuidsOf, toolsFollowingMerge } from '../utils/holderDuplicates.js';
 import HolderMergeModal from './HolderMergeModal.jsx';
 import RestampModal from './RestampModal.jsx';
 import { unitAbbr } from '../utils/units.js';
@@ -649,7 +649,14 @@ export default function HoldersPage() {
   };
 
   const onDelete = async (record) => {
-    if (!window.confirm(`Delete the holder record "${record.description}"?\n\nThis removes the app record only — the Fusion holder library is untouched.`)) return;
+    // Say how many tools resolve through this record. Deleting it isn't
+    // cosmetic for them: their next save falls back to the Fusion library's
+    // version of the holder, quietly undoing any correction made here.
+    const inUse = toolsFollowingMerge(record, tools);
+    const warn = inUse
+      ? `\n\n⚠ ${inUse} tool assembl${inUse === 1 ? 'y uses' : 'ies use'} this holder. They will fall back to the Fusion holder library the next time each tool is saved — any correction made here is lost for them.`
+      : '';
+    if (!window.confirm(`Delete the holder record "${record.description}"?\n\nThis removes the app record only — the Fusion holder library is untouched.${warn}`)) return;
     await deleteHolderRecord(record.id);
     setOpenId(null);
     notify('Holder record deleted', 'success');
