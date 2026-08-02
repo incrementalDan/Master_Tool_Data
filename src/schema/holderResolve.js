@@ -22,31 +22,88 @@ import { holderRecordToFusion } from './holderRecord.js';
 import { holderForGuid } from '../utils/holderDuplicates.js';
 import { convertLength } from '../utils/units.js';
 
-// Returns { entry, record, source, guidChanged } or null when the guid resolves
-// to nothing at all.
+// ⚠️ A record with NO SEGMENTS is not a geometry source. A holder created in
+// the app but not yet drawn would otherwise blank out the geometry a tool
+// already carries — a silent data loss on an ordinary save, which the gauge
+// backstop below only *warns* about. Better to leave the tool's baked holder
+// alone until the record has real geometry.
+const hasGeometry = (r) => Array.isArray(r?.segments) && r.segments.length > 0;
+
+// Returns { entry, record, recordId, source, guidChanged, idChanged } or null
+// when nothing resolves at all.
 //   entry        — a Fusion-shaped holder object, ready for buildHolderObject
 //   record       — the app record it came from (null when it came from Fusion)
+//   recordId     — that record's app UUID: the FK the caller stamps back onto
+//                  the assembly (holder_id)
 //   source       — 'app' | 'fusion'
 //   guidChanged  — the resolved holder's guid differs from the one asked for,
 //                  i.e. this tool is pointing at a holder that was merged away
-export function resolveHolderForWrite(guid, { records, fusionHolders } = {}) {
-  if (!guid) return null;
+//   idChanged    — the resolved record differs from the stored FK, so the
+//                  assembly's holder_id is stale and should be re-stamped
+//
+// ORDER, AND WHY. The Fusion guid is tried FIRST even though holder_id is the
+// real foreign key: the guid is what the tool physically carries, so if someone
+// re-points the assembly at a different holder in Fusion, that is the live
+// truth and the FK is the stale copy — the same "Fusion changed it, adopt it"
+// rule the rest of the write path follows. The FK takes over exactly where the
+// guid can't answer: an app-only holder that was never pushed to Fusion, or a
+// Fusion library that was rebuilt and re-issued its guids. Either way the
+// caller re-stamps holder_id from `recordId`, so the FK self-heals on write.
+export function resolveHolderForWrite(guid, { records, fusionHolders, holderId } = {}) {
+  const byId = holderId ? (records || []).find(h => h?.id === holderId) : null;
 
-  const record = holderForGuid(records, guid);
-  if (record) {
+  const record = (guid ? holderForGuid(records, guid) : null) || byId;
+  if (record && hasGeometry(record)) {
     const entry = holderRecordToFusion(record);
-    return { entry, record, source: 'app', guidChanged: entry.guid !== guid };
+    return {
+      entry, record, recordId: record.id, source: 'app',
+      guidChanged: !!guid && entry.guid !== guid,
+      idChanged: record.id !== (holderId || null),
+    };
   }
 
-  const entry = (fusionHolders || []).find(h => h?.guid === guid);
-  return entry ? { entry, record: null, source: 'fusion', guidChanged: false } : null;
+  const entry = guid ? (fusionHolders || []).find(h => h?.guid === guid) : null;
+  if (entry) {
+    return {
+      entry, record: null, recordId: record?.id ?? null, source: 'fusion',
+      guidChanged: false, idChanged: false,
+    };
+  }
+  return null;
+}
+
+// ─── holder_id backfill (load-time, in memory) ──────────────────────────────
+// Assemblies predating the FK carry only the absorbed Fusion guid. Resolve it
+// once at load and stamp the app id, so everything downstream reads a real
+// foreign key instead of a foreign system's string. Mirrors backfillAsmNumbers
+// / backfillMaterialPresetIds: pure, idempotent, persisted lazily on each
+// tool's next save. A guid that resolves to nothing is left alone — a dangling
+// reference is tolerated everywhere else and is tolerated here.
+export function backfillHolderIds(tools, holderRecords) {
+  const records = holderRecords || [];
+  if (!records.length) return tools;
+  return (tools || []).map(t => {
+    if (!t?.assemblies?.length) return t;
+    let changed = false;
+    const assemblies = t.assemblies.map(a => {
+      // Same precedence as resolveHolderForWrite: the guid the tool actually
+      // carries wins; the FK answers only where the guid can't.
+      const rec = (a.holder_guid ? holderForGuid(records, a.holder_guid) : null)
+        || (a.holder_id ? records.find(h => h.id === a.holder_id) : null);
+      if (!rec || rec.id === a.holder_id) return a;
+      changed = true;
+      return { ...a, holder_id: rec.id };
+    });
+    return changed ? { ...t, assemblies } : t;
+  });
 }
 
 // Is this tool carrying holder geometry that no longer matches the holder it
 // resolves to? Read-only — this is what the re-stamp preview counts, and what
 // tells the user a tool is stale before anything is written.
 export function toolHolderIsStale(assembly, rawInstance, ctx) {
-  const resolved = resolveHolderForWrite(assembly?.holder_guid, ctx);
+  const resolved = resolveHolderForWrite(assembly?.holder_guid,
+    { ...ctx, holderId: assembly?.holder_id });
   if (!resolved) return false;
   if (resolved.guidChanged) return true;             // points at a merged-away holder
   const current = rawInstance?.holder;

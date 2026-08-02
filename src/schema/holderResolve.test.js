@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import {
   resolveHolderForWrite, toolHolderIsStale, assemblyGaugeCheck, holderToleranceIn,
   ASSEMBLY_GAUGE_WARN_IN, ASSEMBLY_GAUGE_IMPLAUSIBLE_MM, ASSEMBLY_GAUGE_IMPLAUSIBLE_IN,
+  backfillHolderIds,
 } from './holderResolve.js';
 import { fusionHolderToRecord } from './holderRecord.js';
 import { mergeHolderRecords } from '../utils/holderDuplicates.js';
@@ -359,5 +360,64 @@ describe('per-holder tolerance', () => {
     expect(c.before).toBe(4.5);
     expect(c.after).toBe(4.75);
     expect(c.deltaIn).toBeCloseTo(0.25, 6);
+  });
+});
+
+// ─── holder_id: the app foreign key ─────────────────────────────────────────
+// holder_guid is what Fusion absorbed into the tool; holder_id is the real
+// relationship (SQL: assemblies.holder_id REFERENCES holders(id)). These lock
+// the precedence rule, because getting it backwards silently pins a tool to the
+// wrong holder.
+describe('holder_id FK', () => {
+  it('resolves by the FK when the guid answers nothing (app-only holder)', () => {
+    const rec = { ...oldRecord(), id: 'rec-app-only', fusion_guid: null };
+    const r = resolveHolderForWrite(null, { records: [rec], fusionHolders: REAL, holderId: 'rec-app-only' });
+    expect(r.source).toBe('app');
+    expect(r.recordId).toBe('rec-app-only');
+  });
+
+  it('the GUID WINS over a stale FK — a Fusion-side re-point is the live truth', () => {
+    const a = { ...oldRecord(), id: 'rec-a' };
+    const b = { ...newRecord(), id: 'rec-b' };
+    // The assembly still claims rec-a, but the tool physically carries b's guid.
+    const r = resolveHolderForWrite(b.fusion_guid, { records: [a, b], holderId: 'rec-a' });
+    expect(r.recordId).toBe('rec-b');
+    expect(r.idChanged).toBe(true);      // caller re-stamps holder_id
+  });
+
+  it('backfillHolderIds stamps the FK from the guid, and is idempotent', () => {
+    const rec = oldRecord();
+    const tools = [{ id: 't1', assemblies: [{ assembly_id: 'as1', holder_guid: OLD.guid }] }];
+    const once = backfillHolderIds(tools, [rec]);
+    expect(once[0].assemblies[0].holder_id).toBe(rec.id);
+    expect(backfillHolderIds(once, [rec])[0]).toBe(once[0]);   // no churn
+  });
+
+  it('backfillHolderIds leaves a guid that resolves to nothing alone', () => {
+    const tools = [{ id: 't1', assemblies: [{ assembly_id: 'as1', holder_guid: 'gone' }] }];
+    expect(backfillHolderIds(tools, [oldRecord()])[0].assemblies[0].holder_id).toBeUndefined();
+  });
+
+  it('a write re-stamps a stale holder_id onto the metadata assembly', () => {
+    const rec = oldRecord();
+    const tool = {
+      id: 'FTL-1', tracking_id: 'FTL-1', tool_type: 'flat end mill', unit: 'inches',
+      diameter: 0.5, description: 'EM',
+      assemblies: [{ assembly_id: 'as1', instance_guid: 'i1', holder_guid: OLD.guid, holder_id: 'wrong', ooh: 2 }],
+    };
+    const { metadataTool } = splitToFusionInstances(tool, REAL, [rec]);
+    expect(metadataTool.assemblies[0].holder_id).toBe(rec.id);
+  });
+});
+
+describe('a record with no geometry is never a write source', () => {
+  it('falls through to Fusion rather than blanking the tool’s baked holder', () => {
+    // A holder created in the app but not yet drawn. Using it would silently
+    // wipe geometry the tool already carries — a data loss the gauge backstop
+    // can only warn about after the fact.
+    const empty = { ...oldRecord(), segments: [] };
+    const r = resolveHolderForWrite(OLD.guid, { records: [empty], fusionHolders: REAL });
+    expect(r.source).toBe('fusion');
+    expect(r.entry.segments.length).toBeGreaterThan(0);
   });
 });

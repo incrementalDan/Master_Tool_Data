@@ -1580,7 +1580,12 @@ Every entity link in the app. When you add a relationship, add a row. When you t
 | From → To | Key | Stored in | Status |
 |---|---|---|---|
 | assembly → Fusion entry | `instance_guid` | metadata | ✅ |
-| assembly → holder | `holder_guid` (+ cached `holder_description`) | metadata | ✅ |
+| **assembly → holder record** | **`holder_id`** | metadata → `holder_library.holders[]` | ✅ the authoritative link |
+| assembly → holder (Fusion mirror) | `holder_guid` (+ cached `holder_description`) | metadata | ✅ what Fusion absorbed; wins on a Fusion-side re-point, then `holder_id` is re-stamped |
+| holder → Fusion holder entry | `fusion_guid` (+ `legacy_fusion_guids[]` merge aliases) | `holder_library.json` | ✅ |
+| holder → body part / extension part | `body_part_id` / `extension_part_id` | `holder_library.json` → `parts[]` | ✅ part delete UNLINKs both slots |
+| holder → type / taper / collet family / collet size | `type_id` / `taper_id` / `collet_family_id` / `collet_size_id` | `holder_library.json` → `shop_settings.holder_config` | ✅ seed ids are stable slugs, never per-load UUIDs |
+| collet size → collet family | `family_id` | `shop_settings.holder_config` | ✅ |
 | **preset → assembly** | **`preset_meta[guid].assembly_id`** | metadata | ✅ the authoritative link (many presets → one assembly) |
 | assembly → presets (reverse index) | `linked_preset_guids[]` | metadata | ✅ derived from the FK on every write |
 | preset → CAM preset | `preset_meta[guid].material_preset_id` | metadata | ✅ |

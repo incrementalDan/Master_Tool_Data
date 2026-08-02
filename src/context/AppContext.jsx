@@ -16,6 +16,8 @@ import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeU
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { backfillMaterialPresetIds, backfillPresetAssemblyLinks, autoLinkMaterialByGrade } from '../utils/presetNaming.js';
 import { backfillPreferredMachineIds } from '../utils/machines.js';
+import { backfillHolderIds } from '../schema/holderResolve.js';
+import { holderGuidsOf } from '../utils/holderDuplicates.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
@@ -437,10 +439,17 @@ export function AppProvider({ children }) {
     return saveHolderLibrary({
       ...file,
       parts: (file.parts || []).filter(p => p.id !== id),
+      // Both slots are cleared independently — an if/else here would leave the
+      // second one dangling in the (odd but possible) case one part is linked
+      // as both a body and an extension.
       holders: (file.holders || []).map(h => (
-        h.body_part_id === id ? { ...h, body_part_id: null }
-          : h.extension_part_id === id ? { ...h, extension_part_id: null }
-            : h
+        (h.body_part_id === id || h.extension_part_id === id)
+          ? {
+              ...h,
+              body_part_id: h.body_part_id === id ? null : h.body_part_id,
+              extension_part_id: h.extension_part_id === id ? null : h.extension_part_id,
+            }
+          : h
       )),
     });
   }, [saveHolderLibrary]);
@@ -461,7 +470,12 @@ export function AppProvider({ children }) {
     const source = entries || holdersRef.current || [];
     const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
     const existing = file.holders || [];
-    const known = new Set(existing.map(h => h.fusion_guid).filter(Boolean));
+    // ⚠️ Known = EVERY guid the library already answers for, including the ones
+    // a survivor adopted in a merge. Matching on fusion_guid alone would let a
+    // re-import resurrect a holder that was deliberately merged away — and two
+    // records would then claim the same guid, making holder resolution
+    // order-dependent.
+    const known = new Set(existing.flatMap(holderGuidsOf));
     const added = [];
     for (const f of source) {
       if (!f?.guid || known.has(f.guid)) continue;
@@ -822,11 +836,11 @@ export function AppProvider({ children }) {
     const built = [];
     for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
     for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
-    const tools = backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(derivePairings(
+    const tools = backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(derivePairings(
       combineToolsByToolId(built)
         .map(t => ({ ...t, library_id: 'demo', library_name: 'Demo library' })),
       components?.components || [],
-    ), materials), materials), vendorRegistry), shopSettings?.machines));
+    ), materials), materials), vendorRegistry), shopSettings?.machines)), holderLibrary?.holders || []);
     // Tag demo holders with a single synthetic library so the picker grouping works.
     const taggedHolders = (holders || []).map(h => ({ ...h, _libraryId: 'demo', _libraryName: 'Demo holders' }));
 
@@ -871,6 +885,8 @@ export function AppProvider({ children }) {
       // Vendor registry — used by the purchasing-FK backfill so each tool's
       // manufacturer/vendor names render/write from the live registry.
       let vendorRegistryFile = getActiveVendorRegistry() || DEFAULT_VENDOR_REGISTRY;
+      // App-owned holder records — the target of each assembly's holder_id FK.
+      let holderRecords = holderLibraryRef.current?.holders || [];
       // Resolve the registry FIRST (multi-library needs to know which libraries to
       // download before downloading). When Drive is connected, shop_settings.json
       // is the shared source of truth; otherwise we fall back to the registry
@@ -898,6 +914,7 @@ export function AppProvider({ children }) {
           metaList = meta;
           componentsFile = components;
           materialsFile = materials;
+          holderRecords = holderLibrary?.holders || [];
           vendorRegistryFile = vendorRegistry;
           setActiveVendorRegistry(vendorRegistry);
           // shop_settings.json is the source of truth for the default unit —
@@ -956,7 +973,7 @@ export function AppProvider({ children }) {
               return composed ? { ...t, location: composed, proshop_location: proShopLocationValue(sys, composed) } : t;
             });
             const paired = derivePairings(provisional, componentsFile?.components || []);
-            dispatch({ type: 'LOAD_PROVISIONAL', tools: backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)) });
+            dispatch({ type: 'LOAD_PROVISIONAL', tools: backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords) });
           }
         } catch { /* stage 2 below is authoritative */ }
       }
@@ -995,7 +1012,7 @@ export function AppProvider({ children }) {
       if (!fusionEnabled) {
         const built = metaList.map(m => buildUnlinkedTool(m)).map(composeToolLocation);
         const paired = derivePairings(built, componentsFile?.components || []);
-        const finalTools = backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines));
+        const finalTools = backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords);
         dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize: false, normalizeCount: 0 });
         return;
       }
@@ -1085,7 +1102,7 @@ export function AppProvider({ children }) {
       // backfillMaterialPresetIds: adopt the CAM-preset FK id from a name-matched
       // material.query + refresh each preset's derived material name (same lazy
       // persist-on-next-save pattern).
-      const finalTools = backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(pairedTools, effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines));
+      const finalTools = backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(pairedTools, effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords);
 
       dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize, normalizeCount: untrackedCount });
       // Surface the otherwise-invisible load-time auto-combine: entries sharing a
