@@ -17,7 +17,7 @@ import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { backfillMaterialPresetIds, backfillPresetAssemblyLinks, autoLinkMaterialByGrade } from '../utils/presetNaming.js';
 import { backfillPreferredMachineIds } from '../utils/machines.js';
 import { backfillHolderIds } from '../schema/holderResolve.js';
-import { holderGuidsOf } from '../utils/holderDuplicates.js';
+import { matchFusionHolder } from '../schema/holderIdentity.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
@@ -459,32 +459,38 @@ export function AppProvider({ children }) {
     return saveHolderLibrary({ ...file, holders: (file.holders || []).filter(h => h.id !== id) });
   }, [saveHolderLibrary]);
 
-  // One-time migration: build app records from the linked read-only Fusion
-  // holder library. Import only — it writes holder_library.json and nothing
-  // else (no Fusion write, no tool write). Records already imported (matched by
-  // the Fusion guid) are SKIPPED, never overwritten, so re-running is safe and
-  // can't discard hand-entered classification. Structured fields are left blank
-  // on purpose: parsing them out of the free-text description is the healer's
-  // job, and the healer is preview → commit.
+  // Import app records from the linked read-only Fusion holder library. Import
+  // only — it writes holder_library.json and nothing else (no Fusion write, no
+  // tool write). Structured fields are left blank on purpose: parsing them out
+  // of the free-text description is the healer's job, and the healer is
+  // preview → commit.
+  //
+  // ⚠️ ALREADY-KNOWN IS DECIDED BY holderIdentity, NOT BY THE GUID. Fusion's
+  // holder guid churns, so skipping on it would re-import the same physical
+  // holder as a fresh duplicate the next time it changed. A holder is known
+  // when the app's own ID (stamped in Fusion's product-id) AND its segments
+  // both point at one record. Anything that half-matches is NOT imported and
+  // NOT silently linked — it comes back as a flag for a person to resolve.
   const importHoldersFromFusion = useCallback((entries) => {
     const source = entries || holdersRef.current || [];
     const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
     const existing = file.holders || [];
-    // ⚠️ Known = EVERY guid the library already answers for, including the ones
-    // a survivor adopted in a merge. Matching on fusion_guid alone would let a
-    // re-import resurrect a holder that was deliberately merged away — and two
-    // records would then claim the same guid, making holder resolution
-    // order-dependent.
-    const known = new Set(existing.flatMap(holderGuidsOf));
     const added = [];
+    const flagged = [];
+    let known = 0;
+    const pool = [...existing];
     for (const f of source) {
-      if (!f?.guid || known.has(f.guid)) continue;
-      added.push(fusionHolderToRecord(f, { library_id: f._libraryId, library_name: f._libraryName }));
-      known.add(f.guid);
+      if (!f?.guid && !f?.segments) continue;
+      const m = matchFusionHolder(f, pool);
+      if (m.status === 'exact') { known++; continue; }
+      if (m.status !== 'none') { flagged.push({ entry: f, ...m }); continue; }
+      const rec = fusionHolderToRecord(f, { library_id: f._libraryId, library_name: f._libraryName });
+      added.push(rec);
+      pool.push(rec);   // so two identical entries in one import don't both land
     }
-    if (!added.length) return Promise.resolve({ added: 0, skipped: source.length });
-    return saveHolderLibrary({ ...file, holders: [...existing, ...added] })
-      .then(() => ({ added: added.length, skipped: source.length - added.length }));
+    const result = { added: added.length, skipped: known, flagged };
+    if (!added.length) return Promise.resolve(result);
+    return saveHolderLibrary({ ...file, holders: [...existing, ...added] }).then(() => result);
   }, [saveHolderLibrary]);
 
   // Persist the jobs registry to Drive IMMEDIATELY (not on the shared-file 600ms

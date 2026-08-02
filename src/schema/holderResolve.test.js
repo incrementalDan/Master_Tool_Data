@@ -392,13 +392,22 @@ describe('holder_id FK', () => {
     expect(r.recordId).toBe('rec-app-only');
   });
 
-  it('the GUID WINS over a stale FK — a Fusion-side re-point is the live truth', () => {
+  it('the FK OUTRANKS the Fusion guid — the guid is not a stable identity', () => {
+    // Fusion re-issues holder guids for reasons that aren't ours to model, so
+    // a guid pointing somewhere else is noise, not an instruction. Re-linking
+    // to Fusion is a separate, strict job (holderIdentity.js).
     const a = { ...oldRecord(), id: 'rec-a' };
     const b = { ...newRecord(), id: 'rec-b' };
-    // The assembly still claims rec-a, but the tool physically carries b's guid.
     const r = resolveHolderForWrite(b.fusion_guid, { records: [a, b], holderId: 'rec-a' });
+    expect(r.recordId).toBe('rec-a');
+    expect(r.idChanged).toBe(false);
+  });
+
+  it('the guid is still the fallback for an assembly with no FK yet', () => {
+    const b = { ...newRecord(), id: 'rec-b' };
+    const r = resolveHolderForWrite(b.fusion_guid, { records: [b] });
     expect(r.recordId).toBe('rec-b');
-    expect(r.idChanged).toBe(true);      // caller re-stamps holder_id
+    expect(r.idChanged).toBe(true);      // caller stamps holder_id
   });
 
   it('backfillHolderIds stamps the FK from the guid, and is idempotent', () => {

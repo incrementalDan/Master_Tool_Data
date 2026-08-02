@@ -1558,6 +1558,26 @@ The explicit, user-initiated batch flow — see the **Phase 2** section above. T
 
 -----
 
+## Holder identity — Fusion's holder GUID is NOT stable (CRITICAL)
+
+**Fusion's holder `guid` does not match a holder to itself over time.** It serves some purpose inside Fusion, but it churns for reasons that aren't ours to model. So the app never treats it as identity. This is why the app owns its own holder library and its own IDs.
+
+**The durable Fusion↔app link is TWO signals, and BOTH must agree** (`src/schema/holderIdentity.js`):
+
+1. **`holder_ref`** — the app's own id, stamped into Fusion's free-text **`product-id`** field on the holder. The identity *we* control.
+2. **The segments** — matched shape-for-shape within **`SEGMENT_MATCH_TOL_IN = 0.001"`** (rounding only; unit-agnostic, count must match too).
+
+Neither field is managed by Fusion and either can be broken by an ordinary human action — someone duplicates a holder in Fusion and edits its segments without touching the product-id (**`ref-only`**), or rebuilds one and loses the ref (**`geometry-only`**). Either signal alone would silently link the wrong holder, so `matchFusionHolder` returns **`exact`** only when both point at one record; `conflict` / `ambiguous` / `ref-only` / `geometry-only` are **flagged for a person**, never acted on. `auditFusionHolders` sweeps the library into matched / flagged / unknown / unpushed.
+
+**This is NOT the migration matcher.** Matching the shop's messy legacy library to the controlled one is a different job with different rules — description + gauge length, a generous tolerance, user-confirmed (`holderAudit.js`, `holderDuplicates.js`). That runs **once**, to get the data under control. Holder identity runs **forever after**, to keep it there, and is deliberately strict. Don't merge the two.
+
+**Consequences elsewhere:**
+- `resolveHolderForWrite` (`holderResolve.js`) resolves **`holder_id` FIRST**. `holder_guid` is a hint — the fallback for an assembly that predates the FK, and for a holder not yet imported. A guid pointing somewhere else is noise, not an instruction.
+- `importHoldersFromFusion` decides "already known" with `matchFusionHolder`, **not** the guid. Skipping on the guid would re-import the same physical holder as a fresh duplicate every time Fusion re-issued it.
+- Matching on `holder_ref` also searches `legacy_ids`, which holds whatever was in Fusion's `product-id` at import (often a vendor SKU) — useful on the first pass, and still fail-safe because the segments must agree too.
+
+-----
+
 ## Relational integrity — every link is an ID (CRITICAL)
 
 This app is a **relational database wearing JSON files**, and it is meant to migrate to SQLite with a schema translation, not a rewrite. So every relationship between two records must be a **stored, stable ID** — the thing a SQL foreign key would be.
@@ -1581,8 +1601,9 @@ Every entity link in the app. When you add a relationship, add a row. When you t
 |---|---|---|---|
 | assembly → Fusion entry | `instance_guid` | metadata | ✅ |
 | **assembly → holder record** | **`holder_id`** | metadata → `holder_library.holders[]` | ✅ the authoritative link |
-| assembly → holder (Fusion mirror) | `holder_guid` (+ cached `holder_description`) | metadata | ✅ what Fusion absorbed; wins on a Fusion-side re-point, then `holder_id` is re-stamped |
-| holder → Fusion holder entry | `fusion_guid` (+ `legacy_fusion_guids[]` merge aliases) | `holder_library.json` | ✅ |
+| assembly → holder (Fusion mirror) | `holder_guid` (+ cached `holder_description`) | metadata | ✅ what Fusion absorbed — a HINT for an assembly with no FK yet, never an authority |
+| **holder → Fusion holder entry** | **`holder_ref` (stamped in Fusion `product-id`) + a segment match** | `holder_library.json` ↔ Fusion | ✅ both required — see Holder identity |
+| holder → Fusion guid (hint only) | `fusion_guid` (+ `legacy_fusion_guids[]` merge aliases) | `holder_library.json` | ⚠️ Fusion re-issues these; never an identity |
 | holder → body part / extension part | `body_part_id` / `extension_part_id` | `holder_library.json` → `parts[]` | ✅ part delete UNLINKs both slots |
 | holder → type / taper / collet family / collet size | `type_id` / `taper_id` / `collet_family_id` / `collet_size_id` | `holder_library.json` → `shop_settings.holder_config` | ✅ seed ids are stable slugs, never per-load UUIDs |
 | collet size → collet family | `family_id` | `shop_settings.holder_config` | ✅ |

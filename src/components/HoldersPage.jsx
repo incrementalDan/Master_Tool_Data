@@ -16,6 +16,7 @@ import { healHolderDescription, applyHealToRecord } from '../utils/holderDescrip
 import { recordsWithBodyDivergence } from '../utils/holderBody.js';
 import { proposeHolderParts, applyPartProposals, holdersWithPartDrift, holderPartsOf } from '../utils/holderParts.js';
 import { findHolderDuplicates, holdersInDuplicates, applyHolderMerge, compareHolders, holderGuidsOf, toolsFollowingMerge } from '../utils/holderDuplicates.js';
+import { auditFusionHolders } from '../schema/holderIdentity.js';
 import HolderMergeModal from './HolderMergeModal.jsx';
 import RestampModal from './RestampModal.jsx';
 import { unitAbbr } from '../utils/units.js';
@@ -608,11 +609,12 @@ export default function HoldersPage() {
   const open = records.find(h => h.id === openId) || null;
   const allLocations = [...new Set(records.map(h => h.location).filter(Boolean))];
 
-  // How many linked Fusion holders have no app record yet.
-  const importable = useMemo(() => {
-    const known = new Set(records.map(h => h.fusion_guid).filter(Boolean));
-    return (fusionHolders || []).filter(f => f.guid && !known.has(f.guid)).length;
-  }, [records, fusionHolders]);
+  // How many linked Fusion holders have no app record yet. Counted with the
+  // strict identity check (app ID + segments), NOT the guid — Fusion's guid
+  // churns, so a guid-based count reads settled holders as importable.
+  const importable = useMemo(
+    () => auditFusionHolders(fusionHolders || [], records).unknown.length,
+    [records, fusionHolders]);
 
   // "Used by N tools" — counted through the assemblies' holder_guid, which is
   // the only link that exists today (a tool's absorbed Fusion snapshot). It is
@@ -707,12 +709,20 @@ export default function HoldersPage() {
     } catch { /* toasted */ }
   };
 
+  // Anything the strict identity check couldn't confirm is NOT imported and NOT
+  // linked — it's a half-match (our ID on a re-shaped holder, or a known shape
+  // with our ID missing), which is a person's call, not the importer's.
+  const [importFlags, setImportFlags] = useState([]);
   const onImport = async () => {
     try {
       const res = await importHoldersFromFusion();
-      notify(res.added
-        ? `Imported ${res.added} holder${res.added === 1 ? '' : 's'} from the Fusion library`
-        : 'Nothing new to import — every Fusion holder already has a record', 'success');
+      setImportFlags(res.flagged || []);
+      const parts = [];
+      if (res.added) parts.push(`Imported ${res.added} holder${res.added === 1 ? '' : 's'}`);
+      if (res.skipped) parts.push(`${res.skipped} already matched`);
+      if (res.flagged?.length) parts.push(`${res.flagged.length} need a look`);
+      notify(parts.length ? parts.join(' · ') : 'Nothing to import',
+        res.flagged?.length ? 'warning' : 'success');
     } catch (e) {
       notify(`Import failed: ${e.message}`, 'error');
     }
@@ -770,6 +780,24 @@ export default function HoldersPage() {
           onViewTools={() => navigate('/')}
         />
       ) : (
+        <>
+        {importFlags.length > 0 && (
+          <div className="holder-warn holder-import-flags">
+            <div className="holder-import-flags-head">
+              <b>{importFlags.length} Fusion holder{importFlags.length === 1 ? '' : 's'} need a look</b>
+              <button className="icon-btn" onClick={() => setImportFlags([])}><X size={14} /></button>
+            </div>
+            {/* Half-matches only: our ID and the segments disagree, so linking
+                either way would be a guess. Nothing was imported for these. */}
+            {importFlags.map((f, i) => (
+              <div key={i} className="holder-import-flag">
+                <span className="holder-conf medium">{f.status.replace('-', ' ')}</span>
+                <span className="holder-import-flag-desc">{f.entry.description || '(no description)'}</span>
+                <span className="holder-import-flag-why">{f.reason}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <HolderList
           holders={records} config={config} usageOf={usageOf}
           importable={importable} googleAuthenticated={canEdit}
@@ -779,6 +807,7 @@ export default function HoldersPage() {
           onDuplicates={() => setDupesOpen(true)}
           driftIds={driftIds} partCount={parts.length} duplicateIds={duplicateIds}
         />
+        </>
       )}
       {restampOpen && open && (
         <RestampModal

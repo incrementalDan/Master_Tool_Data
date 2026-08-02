@@ -36,23 +36,22 @@ const hasGeometry = (r) => Array.isArray(r?.segments) && r.segments.length > 0;
 //   recordId     — that record's app UUID: the FK the caller stamps back onto
 //                  the assembly (holder_id)
 //   source       — 'app' | 'fusion'
-//   guidChanged  — the resolved holder's guid differs from the one asked for,
-//                  i.e. this tool is pointing at a holder that was merged away
+//   guidChanged  — the resolved holder's guid differs from the one asked for
 //   idChanged    — the resolved record differs from the stored FK, so the
 //                  assembly's holder_id is stale and should be re-stamped
 //
-// ORDER, AND WHY. The Fusion guid is tried FIRST even though holder_id is the
-// real foreign key: the guid is what the tool physically carries, so if someone
-// re-points the assembly at a different holder in Fusion, that is the live
-// truth and the FK is the stale copy — the same "Fusion changed it, adopt it"
-// rule the rest of the write path follows. The FK takes over exactly where the
-// guid can't answer: an app-only holder that was never pushed to Fusion, or a
-// Fusion library that was rebuilt and re-issued its guids. Either way the
-// caller re-stamps holder_id from `recordId`, so the FK self-heals on write.
+// ⚠️ ORDER: holder_id FIRST. Fusion's holder guid is NOT a stable identity —
+// it churns for reasons that aren't ours to model (see holderIdentity.js), so
+// it can never outrank the app's own foreign key. It is a HINT: useful for an
+// assembly that predates the FK, and for a holder the app hasn't imported yet.
+//
+// This is why re-establishing the Fusion link is a separate, strict job
+// (holder_ref + a segment match, both required — holderIdentity.js) rather than
+// something the write path infers from a guid it happened to find.
 export function resolveHolderForWrite(guid, { records, fusionHolders, holderId } = {}) {
   const byId = holderId ? (records || []).find(h => h?.id === holderId) : null;
 
-  const record = (guid ? holderForGuid(records, guid) : null) || byId;
+  const record = byId || (guid ? holderForGuid(records, guid) : null);
   if (record && hasGeometry(record)) {
     const entry = holderRecordToFusion(record);
     return {
@@ -86,10 +85,10 @@ export function backfillHolderIds(tools, holderRecords) {
     if (!t?.assemblies?.length) return t;
     let changed = false;
     const assemblies = t.assemblies.map(a => {
-      // Same precedence as resolveHolderForWrite: the guid the tool actually
-      // carries wins; the FK answers only where the guid can't.
-      const rec = (a.holder_guid ? holderForGuid(records, a.holder_guid) : null)
-        || (a.holder_id ? records.find(h => h.id === a.holder_id) : null);
+      // Same precedence as resolveHolderForWrite: the app FK wins; the Fusion
+      // guid is only a hint for an assembly that doesn't have one yet.
+      const rec = (a.holder_id ? records.find(h => h.id === a.holder_id) : null)
+        || (a.holder_guid ? holderForGuid(records, a.holder_guid) : null);
       if (!rec || rec.id === a.holder_id) return a;
       changed = true;
       return { ...a, holder_id: rec.id };

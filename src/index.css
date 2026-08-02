@@ -5479,3 +5479,21 @@ input.sf-ref-num { text-align: right; }
 .restamp-tool-name { color: var(--text); }
 .restamp-sub { font-size: 9.5px; color: var(--text-faint); margin-top: 1px; }
 .restamp-odd { font-size: 9.5px; color: var(--red); margin-top: 2px; font-weight: var(--fw-semibold); }
+
+/* Fusion-import flags — half-matches the strict identity check refused to
+   guess at (see schema/holderIdentity.js). */
+.holder-import-flags { margin-bottom: var(--sp-3); }
+.holder-import-flags-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: var(--sp-2);
+}
+.holder-import-flag {
+  display: grid; grid-template-columns: auto minmax(120px, 1fr) 2fr;
+  gap: var(--sp-2); align-items: baseline;
+  padding: var(--sp-1) 0; border-top: 1px solid var(--border);
+}
+.holder-import-flag-desc { font-family: var(--font-mono); font-size: var(--fs-sm); }
+.holder-import-flag-why { color: var(--text-sub); font-size: var(--fs-sm); }
+@media (max-width: 768px) {
+  .holder-import-flag { grid-template-columns: 1fr; }
+}
