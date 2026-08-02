@@ -81,14 +81,24 @@ export function toolHolderIsStale(assembly, rawInstance, ctx) {
 // seen before committing; a big move is flagged; only arithmetic that came out
 // non-finite is treated as an error, because that is unambiguously broken
 // rather than merely surprising.
-// The DEFAULT only — the real tolerance is per holder (`restamp_tolerance_in`
-// on the record), because how much movement is reasonable depends entirely on
-// how wrong the holder was to start with. A holder whose body was 30mm short
-// will legitimately move every tool on it by more than an inch when corrected,
-// and being asked to confirm that 40 times is noise, not safety. The user sets
-// the number once per holder, sees the old and new gauge for every tool, and
-// that choice is remembered.
+// The DEFAULT tolerance — a noise floor, ~1mm. The real tolerance is per holder
+// (`restamp_tolerance_in` on the record), because how much movement is
+// reasonable depends on how wrong the holder was to start with.
 export const ASSEMBLY_GAUGE_WARN_IN = 0.04;   // ≈1mm
+
+// ⚠️ THE CEILING, AND IT IS NOT ADJUSTABLE.
+// A gauge change beyond ~10mm is not a "big correction", it's a sign something
+// is wrong — a holder swapped for the wrong one, a body missing segments, a
+// unit mix-up. The shop's own judgement: more than 10mm would be very odd.
+//
+// This exists because a freely-raisable tolerance defeats its own purpose. The
+// real failure this backstop was built for — the two NBT30-SK20C-60 records
+// disagreeing by 30.155mm — is exactly what someone would silence by dragging
+// the number up to "make the warnings stop". So the per-holder tolerance is
+// CLAMPED to this, and anything past it stays flagged no matter what: it can
+// still be written, but only by ticking that specific tool by hand.
+export const ASSEMBLY_GAUGE_IMPLAUSIBLE_MM = 10;
+export const ASSEMBLY_GAUGE_IMPLAUSIBLE_IN = ASSEMBLY_GAUGE_IMPLAUSIBLE_MM / 25.4;
 
 // Read a stored per-holder tolerance, falling back to the default.
 // ⚠️ ONE rule, in one place, because the obvious test is wrong twice over:
@@ -98,7 +108,9 @@ export const ASSEMBLY_GAUGE_WARN_IN = 0.04;   // ≈1mm
 export function holderToleranceIn(value, fallback = ASSEMBLY_GAUGE_WARN_IN) {
   if (value === null || value === undefined || value === '') return fallback;
   const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
+  if (!Number.isFinite(n)) return fallback;
+  // Clamped — a tolerance can quiet the expected, never the implausible.
+  return Math.min(Math.max(0, n), ASSEMBLY_GAUGE_IMPLAUSIBLE_IN);
 }
 
 // `before` / `after` are in the TOOL's unit; the delta is in inches so one
@@ -114,6 +126,9 @@ export function assemblyGaugeCheck({
     ? convertLength(a - b, toolUnit, 'inches')
     : null;
 
+  const mm = deltaIn == null ? null : deltaIn * 25.4;
+  const implausible = deltaIn != null && Math.abs(deltaIn) > ASSEMBLY_GAUGE_IMPLAUSIBLE_IN;
+
   let level = 'ok';
   let reason = null;
   if (!Number.isFinite(a)) {
@@ -122,9 +137,17 @@ export function assemblyGaugeCheck({
   } else if (a <= 0) {
     level = 'warn';
     reason = 'The new assembly gauge length is zero or negative — the holder may have no usable geometry.';
+  } else if (implausible) {
+    // Past the ceiling: reported regardless of the tolerance, because this is
+    // the shape of a mistake, not of a correction.
+    level = 'warn';
+    reason = `Assembly gauge length moves ${mm > 0 ? '+' : ''}${mm.toFixed(2)}mm — more than ${ASSEMBLY_GAUGE_IMPLAUSIBLE_MM}mm is very odd for a holder correction. Check this is the right holder.`;
   } else if (deltaIn != null && Math.abs(deltaIn) > tolIn) {
     level = 'warn';
-    reason = `Assembly gauge length moves ${deltaIn > 0 ? '+' : ''}${deltaIn.toFixed(4)}" — check the holder is the right one.`;
+    reason = `Assembly gauge length moves ${mm > 0 ? '+' : ''}${mm.toFixed(2)}mm — check the holder is the right one.`;
   }
-  return { assemblyId, holderDescription, before: known ? b : null, after: a, deltaIn, level, reason, tolIn };
+  return {
+    assemblyId, holderDescription, before: known ? b : null, after: a,
+    deltaIn, deltaMm: mm, level, reason, tolIn, implausible,
+  };
 }

@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { resolveHolderForWrite, toolHolderIsStale, assemblyGaugeCheck, holderToleranceIn, ASSEMBLY_GAUGE_WARN_IN } from './holderResolve.js';
+import {
+  resolveHolderForWrite, toolHolderIsStale, assemblyGaugeCheck, holderToleranceIn,
+  ASSEMBLY_GAUGE_WARN_IN, ASSEMBLY_GAUGE_IMPLAUSIBLE_MM, ASSEMBLY_GAUGE_IMPLAUSIBLE_IN,
+} from './holderResolve.js';
 import { fusionHolderToRecord } from './holderRecord.js';
 import { mergeHolderRecords } from '../utils/holderDuplicates.js';
 import { splitToFusionInstances } from './logicalTools.js';
@@ -162,7 +165,7 @@ describe('assembly gauge-length check', () => {
     const c = chk(4.5, 4.5 + 0.25);
     expect(c.level).toBe('warn');
     expect(c.deltaIn).toBeCloseTo(0.25, 6);
-    expect(c.reason).toMatch(/\+0\.2500"/);
+    expect(c.reason).toMatch(/\+6\.35mm/);   // reported in mm
   });
 
   it('would have caught the real 30mm body disagreement', () => {
@@ -239,12 +242,46 @@ describe('the write path emits the check', () => {
 // tool on it, and once the user has seen that it shouldn't keep asking.
 describe('per-holder tolerance', () => {
   it('respects an explicit tolerance instead of the default', () => {
-    const big = assemblyGaugeCheck({ before: 4.5, after: 5.5, toolUnit: 'inches' });
-    expect(big.level).toBe('warn');
-    // The same 1" move is fine once the user says so for this holder.
-    const allowed = assemblyGaugeCheck({ before: 4.5, after: 5.5, toolUnit: 'inches', tolIn: 2 });
+    // 5mm move: flagged at the default, fine at a 6mm tolerance.
+    const mm5 = 5 / 25.4;
+    expect(assemblyGaugeCheck({ before: 4.5, after: 4.5 + mm5, toolUnit: 'inches' }).level).toBe('warn');
+    const allowed = assemblyGaugeCheck({ before: 4.5, after: 4.5 + mm5, toolUnit: 'inches', tolIn: 6 / 25.4 });
     expect(allowed.level).toBe('ok');
-    expect(allowed.tolIn).toBe(2);
+  });
+
+  // ⚠️ THE CEILING. A tolerance that could be dragged up far enough would
+  // silence the exact failure this check was built for.
+  it('a tolerance can NEVER wave through a move beyond the plausible ceiling', () => {
+    // The real case: the two NBT30-SK20C-60 records differ by 30.155mm.
+    const move = { before: 90.424, after: 90.424 - 30.155, toolUnit: 'millimeters' };
+    for (const tolIn of [ASSEMBLY_GAUGE_WARN_IN, 1, 2, 99]) {
+      const c = assemblyGaugeCheck({ ...move, tolIn });
+      expect(c.level).toBe('warn');
+      expect(c.implausible).toBe(true);
+      expect(c.reason).toMatch(new RegExp(`${ASSEMBLY_GAUGE_IMPLAUSIBLE_MM}mm`));
+    }
+  });
+
+  it('clamps a stored tolerance to the ceiling rather than trusting it', () => {
+    expect(holderToleranceIn(2)).toBeCloseTo(ASSEMBLY_GAUGE_IMPLAUSIBLE_IN, 9);
+    expect(holderToleranceIn(99)).toBeCloseTo(ASSEMBLY_GAUGE_IMPLAUSIBLE_IN, 9);
+    expect(holderToleranceIn(-5)).toBe(0);
+    // Anything inside the band is kept as-is.
+    expect(holderToleranceIn(5 / 25.4)).toBeCloseTo(5 / 25.4, 9);
+  });
+
+  it('the ceiling is 10mm — the shop\'s own judgement of "very odd"', () => {
+    expect(ASSEMBLY_GAUGE_IMPLAUSIBLE_MM).toBe(10);
+    const just_under = assemblyGaugeCheck({ before: 100, after: 109.5, toolUnit: 'millimeters', tolIn: 1 });
+    expect(just_under.implausible).toBe(false);
+    const just_over = assemblyGaugeCheck({ before: 100, after: 110.5, toolUnit: 'millimeters', tolIn: 1 });
+    expect(just_over.implausible).toBe(true);
+  });
+
+  it('reports the change in mm — holders are published in mm', () => {
+    const c = assemblyGaugeCheck({ before: 100, after: 105, toolUnit: 'millimeters' });
+    expect(c.deltaMm).toBeCloseTo(5, 6);
+    expect(c.reason).toMatch(/\+5\.00mm/);
   });
 
   it('a tolerance of 0 flags any movement at all', () => {
@@ -253,7 +290,6 @@ describe('per-holder tolerance', () => {
   });
 
   it('never lets a tolerance excuse arithmetic that did not compute', () => {
-    // The one thing a tolerance can't wave through.
     expect(assemblyGaugeCheck({ before: 4.5, after: NaN, toolUnit: 'inches', tolIn: 99 }).level).toBe('error');
   });
 
@@ -277,9 +313,10 @@ describe('per-holder tolerance', () => {
     // Default tolerance: flagged.
     expect(splitToFusionInstances(tool(baked), REAL, [shortened(null)])
       .gaugeChecks[0].level).toBe('warn');
-    // The user accepted a 2" tolerance for this holder's fix: no longer flagged.
-    expect(splitToFusionInstances(tool(baked), REAL, [shortened(2)])
-      .gaugeChecks[0].level).toBe('ok');
+    // This one is a ~30mm move, so even a maxed-out tolerance keeps it flagged.
+    const maxed = splitToFusionInstances(tool(baked), REAL, [shortened(99)]).gaugeChecks[0];
+    expect(maxed.level).toBe('warn');
+    expect(maxed.implausible).toBe(true);
   });
 
   it('treats an UNSET tolerance as the default, not as zero', () => {
@@ -311,8 +348,9 @@ describe('per-holder tolerance', () => {
     expect(holderToleranceIn('')).toBe(ASSEMBLY_GAUGE_WARN_IN);
     expect(holderToleranceIn('nonsense')).toBe(ASSEMBLY_GAUGE_WARN_IN);
     expect(holderToleranceIn(0)).toBe(0);
-    expect(holderToleranceIn(2)).toBe(2);
     expect(holderToleranceIn('0.25')).toBe(0.25);
+    // …and an out-of-band value is clamped, not trusted (see the ceiling test).
+    expect(holderToleranceIn(2)).toBeCloseTo(ASSEMBLY_GAUGE_IMPLAUSIBLE_IN, 9);
   });
 
   it('always reports the old and new value, flagged or not', () => {

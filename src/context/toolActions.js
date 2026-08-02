@@ -303,13 +303,15 @@ export function createToolActions(ctx) {
     if (gaugeWarnings.length) {
       const w = [...gaugeWarnings].sort((a, b) => Math.abs(b.deltaIn ?? 0) - Math.abs(a.deltaIn ?? 0))[0];
       const span = (w.before != null && Number.isFinite(w.after))
-        ? `${Number(w.before).toFixed(4)} → ${Number(w.after).toFixed(4)} (${w.deltaIn > 0 ? '+' : ''}${w.deltaIn.toFixed(4)}")`
+        ? `${Number(w.before).toFixed(4)} → ${Number(w.after).toFixed(4)} (${w.deltaMm > 0 ? '+' : ''}${w.deltaMm.toFixed(2)}mm)`
         : w.reason;
+      const odd = gaugeWarnings.some(c => c.implausible);
       notify(
-        gaugeWarnings.length === 1
+        (gaugeWarnings.length === 1
           ? `Assembly gauge length changed on ${w.holderDescription || 'this holder'}: ${span}`
-          : `Assembly gauge length changed on ${gaugeWarnings.length} assemblies — largest ${span}`,
-        'warning', 9000);
+          : `Assembly gauge length changed on ${gaugeWarnings.length} assemblies — largest ${span}`)
+        + (odd ? ' — that is a bigger jump than a holder correction should cause. Check the holder.' : ''),
+        'warning', odd ? 12000 : 9000);
     }
 
     if (conflicts.length) {

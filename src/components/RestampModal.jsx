@@ -12,15 +12,22 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { X, RefreshCw, AlertTriangle } from 'lucide-react';
-import { ASSEMBLY_GAUGE_WARN_IN, holderToleranceIn } from '../schema/holderResolve.js';
+import {
+  ASSEMBLY_GAUGE_WARN_IN, ASSEMBLY_GAUGE_IMPLAUSIBLE_MM, ASSEMBLY_GAUGE_IMPLAUSIBLE_IN,
+  holderToleranceIn,
+} from '../schema/holderResolve.js';
 import { formatHolderLen } from '../utils/holderGeometry.js';
 import { unitAbbr } from '../utils/units.js';
 
 const MM = 25.4;
 
 export default function RestampModal({ holder, preview, onPreview, onCommit, onClose }) {
-  // Same unset-vs-zero rule the write path uses — see holderToleranceIn.
-  const [tol, setTol] = useState(() => holderToleranceIn(holder?.restamp_tolerance_in));
+  // Set in MILLIMETRES: holders are published in mm and the shop reasons about
+  // this in mm ("more than 10mm would be very odd"). Stored in inches to match
+  // the cross-unit delta, converted at this boundary only.
+  const [tolMm, setTolMm] = useState(
+    () => holderToleranceIn(holder?.restamp_tolerance_in) * MM);
+  const tol = Math.min(tolMm / MM, ASSEMBLY_GAUGE_IMPLAUSIBLE_IN);
   const [excluded, setExcluded] = useState(() => new Set());
   const [busy, setBusy] = useState(false);
 
@@ -43,18 +50,29 @@ export default function RestampModal({ holder, preview, onPreview, onCommit, onC
   }, [preview]);
 
   const errorRows = rows.filter(r => r.worst === 'error');
-  const warnRows = rows.filter(r => r.worst === 'warn');
+  const oddRows = rows.filter(r => r.checks.some(c => c.implausible));
+  const warnRows = rows.filter(r => r.worst === 'warn' && !r.checks.some(c => c.implausible));
   // A tool whose gauge couldn't be computed is never writable — excluded
   // structurally, not by choice, so it can't be selected back in.
   const selectable = rows.filter(r => r.worst !== 'error');
-  const selectedIds = selectable.filter(r => !excluded.has(r.tool.id)).map(r => r.tool.id);
+  // An implausible move starts UNTICKED. It can still be written — the data may
+  // genuinely have been that wrong — but only by someone deliberately choosing
+  // that one tool, never by dragging a tolerance up until the warnings stop.
+  const isOdd = (r) => r.checks.some(c => c.implausible);
+  const off = (r) => r.worst === 'error' || (isOdd(r) ? !excluded.has(`on:${r.tool.id}`) : excluded.has(r.tool.id));
+  const selectedIds = selectable.filter(r => !off(r)).map(r => r.tool.id);
 
-  const toggle = (id) => setExcluded(prev => {
+  const toggleRow = (r) => setExcluded(prev => {
     const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
+    const key = isOdd(r) ? `on:${r.tool.id}` : r.tool.id;
+    if (next.has(key)) next.delete(key); else next.add(key);
     return next;
   });
-  const setAll = (on) => setExcluded(on ? new Set() : new Set(selectable.map(r => r.tool.id)));
+
+  // "Select all" never silently opts in the implausible ones.
+  const setAll = (on) => setExcluded(on
+    ? new Set(oddRows.map(r => `on:${r.tool.id}`).filter(k => excluded.has(k)))
+    : new Set(selectable.filter(r => !isOdd(r)).map(r => r.tool.id)));
 
   const gauge = (v, unit) => (v == null ? '—' : `${formatHolderLen(v, unit)} ${unitAbbr(unit)}`);
 
@@ -78,33 +96,42 @@ export default function RestampModal({ holder, preview, onPreview, onCommit, onC
             <label htmlFor="restamp-tol">Allowed gauge change</label>
             <div className="restamp-tol-input">
               <input
-                id="restamp-tol" className="field-input" type="number" step="0.005" min="0"
-                value={tol}
-                onChange={e => setTol(Math.max(0, Number(e.target.value) || 0))}
+                id="restamp-tol" className="field-input" type="number" step="0.5" min="0"
+                max={ASSEMBLY_GAUGE_IMPLAUSIBLE_MM}
+                value={Number(tolMm.toFixed(2))}
+                onChange={e => setTolMm(Math.max(0, Math.min(ASSEMBLY_GAUGE_IMPLAUSIBLE_MM, Number(e.target.value) || 0)))}
               />
-              <span className="unit">in</span>
-              <span className="alt">({(tol * MM).toFixed(2)} mm)</span>
+              <span className="unit">mm</span>
+              <span className="alt">({(tolMm / MM).toFixed(4)}")</span>
             </div>
             <div className="restamp-tol-presets">
-              {[ASSEMBLY_GAUGE_WARN_IN, 0.1, 0.25, 1, 2].map(v => (
+              {[+(ASSEMBLY_GAUGE_WARN_IN * MM).toFixed(1), 2, 5, ASSEMBLY_GAUGE_IMPLAUSIBLE_MM].map(v => (
                 <button
-                  key={v} className={`chip${Math.abs(tol - v) < 1e-9 ? ' active' : ''}`}
-                  onClick={() => setTol(v)}
-                >{v}"</button>
+                  key={v} className={`chip${Math.abs(tolMm - v) < 0.01 ? ' active' : ''}`}
+                  onClick={() => setTolMm(v)}
+                >{v}mm</button>
               ))}
             </div>
             <div className="restamp-tol-hint">
-              {/* The whole point: a holder that was wrong moves everything on it,
-                  and once that's understood it shouldn't keep asking. */}
-              Raise this when you already know this holder’s old data was bad — the tools will
+              {/* The ceiling is the point. A tolerance that could be dragged to
+                  "make the warnings stop" would silence exactly the case this
+                  check exists for. */}
+              Raise this when you already know this holder’s old data was bad — those tools will
               all move and that’s expected. Saved on the holder, so ordinary tool saves stop
-              warning about it too.
+              warning about it too. Capped at {ASSEMBLY_GAUGE_IMPLAUSIBLE_MM}mm: a bigger jump than
+              that isn’t a correction, it’s a mistake, and stays flagged either way.
             </div>
           </div>
 
           <div className="restamp-counts">
-            <div className="restamp-stat ok"><b>{rows.length - warnRows.length - errorRows.length}</b><span>within tolerance</span></div>
+            {/* The three flagged buckets are mutually exclusive, so "within"
+                is what's left after ALL of them — an implausible row is not
+                also a quiet one. */}
+            <div className="restamp-stat ok"><b>{rows.length - warnRows.length - oddRows.length - errorRows.length}</b><span>within tolerance</span></div>
             <div className="restamp-stat warn"><b>{warnRows.length}</b><span>over tolerance</span></div>
+            {oddRows.length > 0 && (
+              <div className="restamp-stat err"><b>{oddRows.length}</b><span>over {ASSEMBLY_GAUGE_IMPLAUSIBLE_MM}mm</span></div>
+            )}
             {errorRows.length > 0 && (
               <div className="restamp-stat err"><b>{errorRows.length}</b><span>can’t compute</span></div>
             )}
@@ -142,26 +169,32 @@ export default function RestampModal({ holder, preview, onPreview, onCommit, onC
                 const unit = r.tool.unit;
                 const c = r.checks.reduce((a, x) =>
                   (Math.abs(x.deltaIn ?? 0) > Math.abs(a?.deltaIn ?? 0) ? x : a), r.checks[0]);
-                const off = r.worst === 'error' || excluded.has(r.tool.id);
+                const odd = isOdd(r);
+                const rowOff = off(r);
                 return (
-                  <tr key={r.tool.id} className={`${r.worst}${off ? ' off' : ''}`}>
+                  <tr key={r.tool.id} className={`${odd ? 'error' : r.worst}${rowOff ? ' off' : ''}`}>
                     <td className="sel">
                       <input
                         type="checkbox"
                         disabled={r.worst === 'error'}
-                        checked={r.worst !== 'error' && !excluded.has(r.tool.id)}
-                        onChange={() => toggle(r.tool.id)}
+                        checked={r.worst !== 'error' && !rowOff}
+                        onChange={() => toggleRow(r)}
                       />
                     </td>
                     <td>
                       <div className="restamp-tool-name">{r.tool.description || r.tool.tool_id || r.tool.id}</div>
                       {r.checks.length > 1 && <div className="restamp-sub">{r.checks.length} assemblies</div>}
+                      {odd && (
+                        <div className="restamp-odd">
+                          over {ASSEMBLY_GAUGE_IMPLAUSIBLE_MM}mm — tick it yourself if this is really right
+                        </div>
+                      )}
                     </td>
                     <td className="num mono">{gauge(c?.before, unit)}</td>
                     <td className="num mono">{gauge(c?.after, unit)}</td>
-                    <td className={`num mono delta ${r.worst}`}>
-                      {c?.deltaIn == null ? '—'
-                        : `${c.deltaIn > 0 ? '+' : ''}${c.deltaIn.toFixed(4)}"`}
+                    <td className={`num mono delta ${odd ? 'error' : r.worst}`}>
+                      {c?.deltaMm == null ? '—'
+                        : `${c.deltaMm > 0 ? '+' : ''}${c.deltaMm.toFixed(2)} mm`}
                     </td>
                   </tr>
                 );

@@ -5478,3 +5478,4 @@ input.sf-ref-num { text-align: right; }
 .restamp-table tr.error td.delta { color: var(--red); }
 .restamp-tool-name { color: var(--text); }
 .restamp-sub { font-size: 9.5px; color: var(--text-faint); margin-top: 1px; }
+.restamp-odd { font-size: 9.5px; color: var(--red); margin-top: 2px; font-weight: var(--fw-semibold); }
