@@ -938,13 +938,24 @@ export function createLibraryOps(ctx) {
   // the affected tools' entries are dropped and re-appended, and everything else
   // in the file is left byte-for-byte alone. `dryRun` returns the same summary
   // without writing anything, which is what the preview shows.
-  const restampHolderTools = async (holderRecord, { dryRun = false } = {}) => {
+  //   dryRun      — compute and report, write nothing (backs the preview)
+  //   toolIds     — restrict the write to these tools (the user's selection);
+  //                 omit for all of them
+  //   toleranceIn — how much gauge movement counts as expected for THIS
+  //                 correction, so the dialog can re-grade live as the number is
+  //                 dragged. A one-off grading choice, never stored: see
+  //                 ASSEMBLY_GAUGE_WARN_IN in holderResolve.js
+  const restampHolderTools = async (holderRecord, { dryRun = false, toolIds = null, toleranceIn = null } = {}) => {
     const guids = new Set(holderGuidsOf(holderRecord));
     if (!guids.size) return { tools: [], byLibrary: [], wrote: false };
 
-    const affected = (toolsRef.current || []).filter(t =>
+    const allAffected = (toolsRef.current || []).filter(t =>
       (t.assemblies || []).some(a => a.holder_guid && guids.has(a.holder_guid))
       && t.no_fusion_link !== true);
+    // The preview always describes EVERY affected tool; only the write is
+    // narrowed to the selection, so deselecting a tool never hides it.
+    const selected = toolIds ? new Set(toolIds) : null;
+    const affected = selected ? allAffected.filter(t => selected.has(t.id)) : allAffected;
 
     const byLibrary = new Map();
     for (const t of affected) {
@@ -952,9 +963,31 @@ export function createLibraryOps(ctx) {
       if (!byLibrary.has(lib)) byLibrary.set(lib, []);
       byLibrary.get(lib).push(t);
     }
+    // Run the split for the PREVIEW too — it's pure computation, no IO — so the
+    // assembly-gauge backstop can be shown before anything is written rather
+    // than reported after the fact.
+    const holdersNow = holdersRef.current || [];
+    const recordsNow = (holderLibraryRef?.current?.holders || null);
+
+    const checks = [];
+    for (const t of allAffected) {
+      try {
+        const { gaugeChecks } = splitToFusionInstances(t, holdersNow, recordsNow,
+          { gaugeToleranceIn: toleranceIn });
+        for (const c of gaugeChecks || []) checks.push({ ...c, tool: t, toolId: t.id });
+      } catch {
+        checks.push({ level: 'error', tool: t, toolId: t.id, before: null, after: NaN,
+          reason: 'This tool could not be rebuilt — open it to see why.' });
+      }
+    }
     const summary = {
-      tools: affected,
+      tools: allAffected,
+      selectedCount: affected.length,
       byLibrary: [...byLibrary.entries()].map(([libId, ts]) => ({ libId, count: ts.length })),
+      checks,
+      gaugeWarnings: checks.filter(c => c.level === 'warn'),
+      gaugeErrors: checks.filter(c => c.level === 'error'),
+      toleranceIn: toleranceIn ?? null,
       wrote: false,
     };
     if (dryRun || !affected.length) return summary;
@@ -980,8 +1013,16 @@ export function createLibraryOps(ctx) {
           for (const a of tool.assemblies || []) if (a.instance_guid) dropGuids.add(a.instance_guid);
           for (const r of tool._instancesRaw || []) if (r?.guid) dropGuids.add(r.guid);
 
-          const { fusionInstances, metadataTool } =
-            splitToFusionInstances(tool, holders, holderRecords);
+          const { fusionInstances, metadataTool, gaugeChecks } =
+            splitToFusionInstances(tool, holders, holderRecords, { gaugeToleranceIn: toleranceIn });
+          // Same backstop as the single-tool write: refuse an assembly gauge
+          // length that didn't compute rather than pushing it to N tools.
+          const bad = (gaugeChecks || []).filter(c => c.level === 'error');
+          if (bad.length) {
+            throw new Error(
+              `Refusing to re-stamp — the assembly gauge length could not be computed for `
+              + `"${tool.description || tool.tool_id || tool.id}". Check the holder's geometry.`);
+          }
           appended.push(...fusionInstances);
           metaOut.push(metadataTool);
           // The metadata assembly may have been migrated onto a merged holder's

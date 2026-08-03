@@ -256,7 +256,20 @@ export function createToolActions(ctx) {
     // reaches an existing tool — Fusion bakes the geometry in, so it only ever
     // updates when the tool is written. See schema/holderResolve.js.
     const holderRecords = holderLibraryRef?.current?.holders || null;
-    const { fusionInstances, metadataTool } = splitToFusionInstances(toWrite, holders, holderRecords);
+    const { fusionInstances, metadataTool, gaugeChecks } = splitToFusionInstances(toWrite, holders, holderRecords);
+
+    // Backstop before the tool's frozen holder copy is overwritten (see
+    // schema/holderResolve.js). An assembly gauge length that didn't compute is
+    // refused outright — writing it would put the cutting edge nowhere. A gauge
+    // that MOVED is surfaced, not blocked: a corrected holder is supposed to
+    // move it, and blocking every save that improves a holder would be useless.
+    const gaugeErrors = (gaugeChecks || []).filter(c => c.level === 'error');
+    if (gaugeErrors.length) {
+      throw new Error(
+        `Refusing to save — the assembly gauge length could not be computed for `
+        + `${gaugeErrors.length} assembly${gaugeErrors.length === 1 ? '' : 's'}. `
+        + `Check the holder's geometry.`);
+    }
 
     // Drop every entry this logical tool owns before re-appending the fresh set:
     // its tracking ID, plus any guid carried by an assembly or absorbed raw
@@ -279,6 +292,26 @@ export function createToolActions(ctx) {
         if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
         throw err; // Still fail the save so the user knows metadata didn't persist
       }
+    }
+
+    // A single save can't stop to ask — the user is mid-edit, and blocking here
+    // would be useless. So it REPORTS, with the old and new number so the change
+    // is judgeable at a glance, and it respects the same per-holder tolerance
+    // the re-stamp screen sets: raise it there and this stops nagging about that
+    // holder too.
+    const gaugeWarnings = (gaugeChecks || []).filter(c => c.level === 'warn');
+    if (gaugeWarnings.length) {
+      const w = [...gaugeWarnings].sort((a, b) => Math.abs(b.deltaIn ?? 0) - Math.abs(a.deltaIn ?? 0))[0];
+      const span = (w.before != null && Number.isFinite(w.after))
+        ? `${Number(w.before).toFixed(4)} → ${Number(w.after).toFixed(4)} (${w.deltaMm > 0 ? '+' : ''}${w.deltaMm.toFixed(2)}mm)`
+        : w.reason;
+      const odd = gaugeWarnings.some(c => c.implausible);
+      notify(
+        (gaugeWarnings.length === 1
+          ? `Assembly gauge length changed on ${w.holderDescription || 'this holder'}: ${span}`
+          : `Assembly gauge length changed on ${gaugeWarnings.length} assemblies — largest ${span}`)
+        + (odd ? ' — that is a bigger jump than a holder correction should cause. Check the holder.' : ''),
+        'warning', odd ? 12000 : 9000);
     }
 
     if (conflicts.length) {

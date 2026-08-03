@@ -32,7 +32,7 @@ const seedOption = (id, label, extra = {}, order = 0) => ({ id, label, order, ..
 // load, and any holder record referencing one would dangle after a reload.
 // Slugs make the fallback stable and idempotent. Same pattern as the materials
 // seed ('P', 'pre_M_aus_316'). Options the USER adds still get real UUIDs.
-function seedHolderConfig() {
+export function seedHolderConfig() {
   const types = [
     ['ht-collet', 'Collet'], ['ht-shrink', 'Shrink Fit'], ['ht-sidelock', 'End Mill / Side Lock'],
     ['ht-hydraulic', 'Hydraulic'], ['ht-drillchuck', 'Drill Chuck'], ['ht-shellmill', 'Shell Mill'],

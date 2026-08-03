@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { resolveHolderForWrite, toolHolderIsStale } from './holderResolve.js';
+import {
+  resolveHolderForWrite, toolHolderIsStale, assemblyGaugeCheck, gaugeToleranceIn,
+  ASSEMBLY_GAUGE_WARN_IN, ASSEMBLY_GAUGE_IMPLAUSIBLE_MM, ASSEMBLY_GAUGE_IMPLAUSIBLE_IN,
+  backfillHolderIds,
+} from './holderResolve.js';
 import { fusionHolderToRecord } from './holderRecord.js';
 import { mergeHolderRecords } from '../utils/holderDuplicates.js';
 import { splitToFusionInstances } from './logicalTools.js';
@@ -139,5 +143,306 @@ describe('staleness (what the re-stamp preview counts)', () => {
 
   it('is not stale for a holder nothing knows about — there is nothing to say', () => {
     expect(toolHolderIsStale({ holder_guid: 'nope' }, { holder: {} }, ctx([]))).toBe(false);
+  });
+});
+
+// ⚠️ THE BACKSTOP. The assembly gauge length (holder gauge + the tool's OOH) is
+// where the cutting edge actually sits, so it's the number that catches a
+// holder swap going wrong before it lands on N tools.
+describe('assembly gauge-length check', () => {
+  const chk = (before, after, toolUnit = 'inches') =>
+    assemblyGaugeCheck({ before, after, toolUnit, assemblyId: 'a1', holderDescription: 'H' });
+
+  it('passes an unchanged assembly', () => {
+    expect(chk(4.5, 4.5).level).toBe('ok');
+    expect(chk(4.5, 4.5).deltaIn).toBeCloseTo(0, 9);
+  });
+
+  it('passes a small move — a corrected holder is SUPPOSED to move it', () => {
+    expect(chk(4.5, 4.5 + ASSEMBLY_GAUGE_WARN_IN / 2).level).toBe('ok');
+  });
+
+  it('flags a big move, with the direction and size', () => {
+    const c = chk(4.5, 4.5 + 0.25);
+    expect(c.level).toBe('warn');
+    expect(c.deltaIn).toBeCloseTo(0.25, 6);
+    expect(c.reason).toMatch(/\+6\.35mm/);   // reported in mm
+  });
+
+  it('would have caught the real 30mm body disagreement', () => {
+    // The two NBT30-SK20C-60 records differ by 30.155mm = 1.187". Re-stamping
+    // onto the wrong one moves every tool using it by that much.
+    const c = assemblyGaugeCheck({ before: 90.424, after: 90.424 - 30.155, toolUnit: 'millimeters' });
+    expect(c.level).toBe('warn');
+    expect(c.deltaIn).toBeCloseTo(-1.1872, 3);
+  });
+
+  it('compares in inches so one threshold covers a millimetre tool', () => {
+    // 0.5mm ≈ 0.0197" — under the threshold, so not a flag on an mm tool.
+    expect(assemblyGaugeCheck({ before: 100, after: 100.5, toolUnit: 'millimeters' }).level).toBe('ok');
+    // 2mm ≈ 0.0787" — over it.
+    expect(assemblyGaugeCheck({ before: 100, after: 102, toolUnit: 'millimeters' }).level).toBe('warn');
+  });
+
+  it('ERRORS only on arithmetic that did not compute — that is unambiguously broken', () => {
+    expect(chk(4.5, NaN).level).toBe('error');
+    expect(chk(4.5, undefined).level).toBe('error');
+    // A zero/negative result is suspicious but not nonsense — warn, don't block.
+    expect(chk(4.5, 0).level).toBe('warn');
+  });
+
+  it('still reports the new value when there is no previous one to compare', () => {
+    const c = chk(undefined, 4.5);
+    expect(c.level).toBe('ok');
+    expect(c.before).toBeNull();
+    expect(c.deltaIn).toBeNull();
+    expect(c.after).toBe(4.5);
+  });
+});
+
+describe('the write path emits the check', () => {
+  const toolWith = (bakedAssemblyGauge) => ({
+    id: 'FTL-BBBBBB', tracking_id: 'FTL-BBBBBB', tool_type: 'flat end mill',
+    unit: 'inches', diameter: 0.5, description: 'test',
+    assemblies: [{ assembly_id: 'a1', instance_guid: 'inst-1', holder_guid: OLD.guid, ooh: 1.5 }],
+    _instancesRaw: [{
+      guid: 'inst-1', type: 'flat end mill', holder: { ...OLD },
+      geometry: { assemblyGaugeLength: bakedAssemblyGauge },
+    }],
+  });
+
+  it('reports ok when the holder did not change', () => {
+    const before = splitToFusionInstances(toolWith(undefined), REAL, [oldRecord()]);
+    const baked = before.fusionInstances[0].geometry.assemblyGaugeLength;
+    const { gaugeChecks } = splitToFusionInstances(toolWith(baked), REAL, [oldRecord()]);
+    expect(gaugeChecks).toHaveLength(1);
+    expect(gaugeChecks[0].level).toBe('ok');
+  });
+
+  it('warns when a corrected holder moves the assembly gauge', () => {
+    const first = splitToFusionInstances(toolWith(undefined), REAL, [oldRecord()]);
+    const baked = first.fusionInstances[0].geometry.assemblyGaugeLength;
+    // Same holder record, body shortened by 30mm — the real failure mode.
+    const shortened = {
+      ...oldRecord(),
+      segments: oldRecord().segments.map((s, i) => (i === 0 ? { ...s, height: 5 } : s)),
+    };
+    const { gaugeChecks } = splitToFusionInstances(toolWith(baked), REAL, [shortened]);
+    expect(gaugeChecks[0].level).toBe('warn');
+    expect(Math.abs(gaugeChecks[0].deltaIn)).toBeGreaterThan(ASSEMBLY_GAUGE_WARN_IN);
+  });
+
+  it('carries the holder name so the warning can say WHICH holder', () => {
+    const { gaugeChecks } = splitToFusionInstances(toolWith(4.0), REAL, [oldRecord()]);
+    expect(gaugeChecks[0].holderDescription).toBe('NBT30-SK13C-60');
+    expect(gaugeChecks[0].assemblyId).toBe('a1');
+  });
+});
+
+// The tolerance is PER HOLDER — a holder that was badly modelled moves every
+// tool on it, and once the user has seen that it shouldn't keep asking.
+describe('gauge tolerance', () => {
+  it('respects an explicit tolerance instead of the default', () => {
+    // 5mm move: flagged at the default, fine at a 6mm tolerance.
+    const mm5 = 5 / 25.4;
+    expect(assemblyGaugeCheck({ before: 4.5, after: 4.5 + mm5, toolUnit: 'inches' }).level).toBe('warn');
+    const allowed = assemblyGaugeCheck({ before: 4.5, after: 4.5 + mm5, toolUnit: 'inches', tolIn: 6 / 25.4 });
+    expect(allowed.level).toBe('ok');
+  });
+
+  // ⚠️ THE CEILING. A tolerance that could be dragged up far enough would
+  // silence the exact failure this check was built for.
+  it('a tolerance can NEVER wave through a move beyond the plausible ceiling', () => {
+    // The real case: the two NBT30-SK20C-60 records differ by 30.155mm.
+    const move = { before: 90.424, after: 90.424 - 30.155, toolUnit: 'millimeters' };
+    for (const tolIn of [ASSEMBLY_GAUGE_WARN_IN, 1, 2, 99]) {
+      const c = assemblyGaugeCheck({ ...move, tolIn });
+      expect(c.level).toBe('warn');
+      expect(c.implausible).toBe(true);
+      expect(c.reason).toMatch(new RegExp(`${ASSEMBLY_GAUGE_IMPLAUSIBLE_MM}mm`));
+    }
+  });
+
+  it('clamps a supplied tolerance to the ceiling rather than trusting it', () => {
+    expect(gaugeToleranceIn(2)).toBeCloseTo(ASSEMBLY_GAUGE_IMPLAUSIBLE_IN, 9);
+    expect(gaugeToleranceIn(99)).toBeCloseTo(ASSEMBLY_GAUGE_IMPLAUSIBLE_IN, 9);
+    expect(gaugeToleranceIn(-5)).toBe(0);
+    // Anything inside the band is kept as-is.
+    expect(gaugeToleranceIn(5 / 25.4)).toBeCloseTo(5 / 25.4, 9);
+  });
+
+  it('the ceiling is 10mm — the shop\'s own judgement of "very odd"', () => {
+    expect(ASSEMBLY_GAUGE_IMPLAUSIBLE_MM).toBe(10);
+    const just_under = assemblyGaugeCheck({ before: 100, after: 109.5, toolUnit: 'millimeters', tolIn: 1 });
+    expect(just_under.implausible).toBe(false);
+    const just_over = assemblyGaugeCheck({ before: 100, after: 110.5, toolUnit: 'millimeters', tolIn: 1 });
+    expect(just_over.implausible).toBe(true);
+  });
+
+  it('reports the change in mm — holders are published in mm', () => {
+    const c = assemblyGaugeCheck({ before: 100, after: 105, toolUnit: 'millimeters' });
+    expect(c.deltaMm).toBeCloseTo(5, 6);
+    expect(c.reason).toMatch(/\+5\.00mm/);
+  });
+
+  it('a tolerance of 0 flags any movement at all', () => {
+    expect(assemblyGaugeCheck({ before: 4.5, after: 4.5001, toolUnit: 'inches', tolIn: 0 }).level).toBe('warn');
+    expect(assemblyGaugeCheck({ before: 4.5, after: 4.5, toolUnit: 'inches', tolIn: 0 }).level).toBe('ok');
+  });
+
+  it('never lets a tolerance excuse arithmetic that did not compute', () => {
+    expect(assemblyGaugeCheck({ before: 4.5, after: NaN, toolUnit: 'inches', tolIn: 99 }).level).toBe('error');
+  });
+
+  it('the WRITE PATH grades against the tolerance the CALLER passed', () => {
+    // Per-call, never off the record: a stored tolerance would outlive the one
+    // correction it described and silence the stragglers afterwards.
+    const tool = (baked) => ({
+      id: 'FTL-CCCCCC', tracking_id: 'FTL-CCCCCC', tool_type: 'flat end mill',
+      unit: 'inches', diameter: 0.5, description: 'test',
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'inst-1', holder_guid: OLD.guid, ooh: 1.5 }],
+      _instancesRaw: [{ guid: 'inst-1', type: 'flat end mill', holder: { ...OLD },
+        geometry: { assemblyGaugeLength: baked } }],
+    });
+    // A holder shortened by 30mm — a 1.19" move on every tool using it.
+    const shortened = {
+      ...oldRecord(),
+      segments: oldRecord().segments.map((s, i) => (i === 0 ? { ...s, height: 5 } : s)),
+    };
+    const baked = splitToFusionInstances(tool(undefined), REAL, [oldRecord()])
+      .fusionInstances[0].geometry.assemblyGaugeLength;
+
+    // Default tolerance: flagged.
+    expect(splitToFusionInstances(tool(baked), REAL, [shortened])
+      .gaugeChecks[0].level).toBe('warn');
+    // This one is a ~30mm move, so even a maxed-out tolerance keeps it flagged.
+    const maxed = splitToFusionInstances(tool(baked), REAL, [shortened],
+      { gaugeToleranceIn: 99 }).gaugeChecks[0];
+    expect(maxed.level).toBe('warn');
+    expect(maxed.implausible).toBe(true);
+  });
+
+  it('a tolerance is NEVER read off the holder record', () => {
+    // The field is gone; a leftover one on an old Drive record must be inert,
+    // never quietly re-silencing a tool.
+    const tool = {
+      id: 'FTL-EEEEEE', tracking_id: 'FTL-EEEEEE', tool_type: 'flat end mill',
+      unit: 'inches', diameter: 0.5, description: 'test',
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'inst-1', holder_guid: OLD.guid, ooh: 1.5 }],
+      _instancesRaw: [{ guid: 'inst-1', type: 'flat end mill', holder: { ...OLD },
+        geometry: { assemblyGaugeLength: 0.001 } }],
+    };
+    const rec = { ...oldRecord(), restamp_tolerance_in: 99 };   // stale, ignored
+    expect(splitToFusionInstances(tool, REAL, [rec]).gaugeChecks[0].level).toBe('warn');
+  });
+
+  it('treats NO tolerance as the default, not as zero', () => {
+    // Number(null) is 0 and Number.isFinite(0) is true, so a coercion-only
+    // check reads "no tolerance given" as "tolerate nothing" and flags every
+    // tool on every holder over floating-point noise.
+    const tool = (baked) => ({
+      id: 'FTL-DDDDDD', tracking_id: 'FTL-DDDDDD', tool_type: 'flat end mill',
+      unit: 'inches', diameter: 0.5, description: 'test',
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'inst-1', holder_guid: OLD.guid, ooh: 1.5 }],
+      _instancesRaw: [{ guid: 'inst-1', type: 'flat end mill', holder: { ...OLD },
+        geometry: { assemblyGaugeLength: baked } }],
+    });
+    const baked = splitToFusionInstances(tool(undefined), REAL, [oldRecord()])
+      .fusionInstances[0].geometry.assemblyGaugeLength;
+    for (const unset of [null, undefined, '']) {
+      const c = splitToFusionInstances(tool(baked), REAL, [oldRecord()],
+        { gaugeToleranceIn: unset }).gaugeChecks[0];
+      expect(c.level).toBe('ok');
+      expect(c.tolIn).toBe(ASSEMBLY_GAUGE_WARN_IN);
+    }
+  });
+
+  it('gaugeToleranceIn is the ONE place unset-vs-zero is decided', () => {
+    // Both traps: Number(null) and Number('') are 0, and Number.isFinite(0) is
+    // true. A real zero must still mean zero.
+    expect(gaugeToleranceIn(null)).toBe(ASSEMBLY_GAUGE_WARN_IN);
+    expect(gaugeToleranceIn(undefined)).toBe(ASSEMBLY_GAUGE_WARN_IN);
+    expect(gaugeToleranceIn('')).toBe(ASSEMBLY_GAUGE_WARN_IN);
+    expect(gaugeToleranceIn('nonsense')).toBe(ASSEMBLY_GAUGE_WARN_IN);
+    expect(gaugeToleranceIn(0)).toBe(0);
+    expect(gaugeToleranceIn('0.25')).toBe(0.25);
+    // …and an out-of-band value is clamped, not trusted (see the ceiling test).
+    expect(gaugeToleranceIn(2)).toBeCloseTo(ASSEMBLY_GAUGE_IMPLAUSIBLE_IN, 9);
+  });
+
+  it('always reports the old and new value, flagged or not', () => {
+    const c = assemblyGaugeCheck({ before: 4.5, after: 4.75, toolUnit: 'inches', tolIn: 2 });
+    expect(c.level).toBe('ok');
+    expect(c.before).toBe(4.5);
+    expect(c.after).toBe(4.75);
+    expect(c.deltaIn).toBeCloseTo(0.25, 6);
+  });
+});
+
+// ─── holder_id: the app foreign key ─────────────────────────────────────────
+// holder_guid is what Fusion absorbed into the tool; holder_id is the real
+// relationship (SQL: assemblies.holder_id REFERENCES holders(id)). These lock
+// the precedence rule, because getting it backwards silently pins a tool to the
+// wrong holder.
+describe('holder_id FK', () => {
+  it('resolves by the FK when the guid answers nothing (app-only holder)', () => {
+    const rec = { ...oldRecord(), id: 'rec-app-only', fusion_guid: null };
+    const r = resolveHolderForWrite(null, { records: [rec], fusionHolders: REAL, holderId: 'rec-app-only' });
+    expect(r.source).toBe('app');
+    expect(r.recordId).toBe('rec-app-only');
+  });
+
+  it('the FK OUTRANKS the Fusion guid — the guid is not a stable identity', () => {
+    // Fusion re-issues holder guids for reasons that aren't ours to model, so
+    // a guid pointing somewhere else is noise, not an instruction. Re-linking
+    // to Fusion is a separate, strict job (holderIdentity.js).
+    const a = { ...oldRecord(), id: 'rec-a' };
+    const b = { ...newRecord(), id: 'rec-b' };
+    const r = resolveHolderForWrite(b.fusion_guid, { records: [a, b], holderId: 'rec-a' });
+    expect(r.recordId).toBe('rec-a');
+    expect(r.idChanged).toBe(false);
+  });
+
+  it('the guid is still the fallback for an assembly with no FK yet', () => {
+    const b = { ...newRecord(), id: 'rec-b' };
+    const r = resolveHolderForWrite(b.fusion_guid, { records: [b] });
+    expect(r.recordId).toBe('rec-b');
+    expect(r.idChanged).toBe(true);      // caller stamps holder_id
+  });
+
+  it('backfillHolderIds stamps the FK from the guid, and is idempotent', () => {
+    const rec = oldRecord();
+    const tools = [{ id: 't1', assemblies: [{ assembly_id: 'as1', holder_guid: OLD.guid }] }];
+    const once = backfillHolderIds(tools, [rec]);
+    expect(once[0].assemblies[0].holder_id).toBe(rec.id);
+    expect(backfillHolderIds(once, [rec])[0]).toBe(once[0]);   // no churn
+  });
+
+  it('backfillHolderIds leaves a guid that resolves to nothing alone', () => {
+    const tools = [{ id: 't1', assemblies: [{ assembly_id: 'as1', holder_guid: 'gone' }] }];
+    expect(backfillHolderIds(tools, [oldRecord()])[0].assemblies[0].holder_id).toBeUndefined();
+  });
+
+  it('a write re-stamps a stale holder_id onto the metadata assembly', () => {
+    const rec = oldRecord();
+    const tool = {
+      id: 'FTL-1', tracking_id: 'FTL-1', tool_type: 'flat end mill', unit: 'inches',
+      diameter: 0.5, description: 'EM',
+      assemblies: [{ assembly_id: 'as1', instance_guid: 'i1', holder_guid: OLD.guid, holder_id: 'wrong', ooh: 2 }],
+    };
+    const { metadataTool } = splitToFusionInstances(tool, REAL, [rec]);
+    expect(metadataTool.assemblies[0].holder_id).toBe(rec.id);
+  });
+});
+
+describe('a record with no geometry is never a write source', () => {
+  it('falls through to Fusion rather than blanking the tool’s baked holder', () => {
+    // A holder created in the app but not yet drawn. Using it would silently
+    // wipe geometry the tool already carries — a data loss the gauge backstop
+    // can only warn about after the fact.
+    const empty = { ...oldRecord(), segments: [] };
+    const r = resolveHolderForWrite(OLD.guid, { records: [empty], fusionHolders: REAL });
+    expect(r.source).toBe('fusion');
+    expect(r.entry.segments.length).toBeGreaterThan(0);
   });
 });

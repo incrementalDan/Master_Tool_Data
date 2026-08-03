@@ -247,29 +247,10 @@ export function holderRecordToFusion(record, existing = null) {
   return out;
 }
 
-// Replace the holder entries of a raw Fusion library list with the records'
-// exports, leaving every non-holder entry untouched. The holder library file is
-// the same shape as the tool library ({ data: [...], version }) and may contain
-// other entry types — a write must never drop them.
-export function applyHolderRecordsToFusionList(list, records) {
-  const byGuid = new Map();
-  for (const r of records || []) if (r?.fusion_guid) byGuid.set(r.fusion_guid, r);
-  const seen = new Set();
-  const out = (list || []).map(entry => {
-    if (entry?.type !== 'holder') return entry;
-    const rec = byGuid.get(entry.guid);
-    if (!rec) return entry;
-    seen.add(rec.id);
-    return holderRecordToFusion(rec, entry);
-  });
-  // Records with no Fusion entry yet are appended.
-  for (const r of records || []) {
-    if (!r || seen.has(r.id)) continue;
-    if (r.fusion_guid && byGuid.has(r.fusion_guid)) continue;
-    out.push(holderRecordToFusion(r, null));
-  }
-  return out;
-}
+// NOTE: writing records back into a raw Fusion list lives in holderIdentity.js
+// (holderPushPlan / applyHolderPushPlan). It is NOT done by matching the Fusion
+// guid — that guid is not a stable identity, so a guid-keyed write would
+// rewrite the wrong entry the moment Fusion re-issued one.
 
 // Find a record by any of the signals a tool might carry.
 export function findHolderRecord(records, { id, fusion_guid, holder_ref } = {}) {

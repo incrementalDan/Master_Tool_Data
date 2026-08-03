@@ -195,3 +195,24 @@ describe('merge', () => {
     expect(out.guid).toBe('guid-new');
   });
 });
+
+// The import guard. A merge is only durable if the merged-away holder stays
+// merged away — otherwise re-running the Fusion import resurrects it and TWO
+// records claim the same guid, which makes holderForGuid order-dependent.
+describe('re-importing after a merge', () => {
+  const a = { ...LIB[0], id: 'rec-a', fusion_guid: 'guid-a' };
+  const b = { ...LIB[1], id: 'rec-b', fusion_guid: 'guid-b' };
+  const survivor = mergeHolderRecords(a, b).record;
+
+  it('an adopted guid is one the library already answers for', () => {
+    // This is the set importHoldersFromFusion skips on. Matching on
+    // fusion_guid alone would miss the adopted one.
+    const known = new Set([survivor].flatMap(holderGuidsOf));
+    expect(known.has('guid-b')).toBe(true);
+    expect(new Set([survivor].map(h => h.fusion_guid)).has('guid-b')).toBe(false);
+  });
+
+  it('and only one record resolves for it', () => {
+    expect(holderForGuid([survivor], 'guid-b')).toBe(survivor);
+  });
+});

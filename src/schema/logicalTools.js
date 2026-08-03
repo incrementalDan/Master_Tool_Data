@@ -8,7 +8,7 @@ import {
 import { fusionToolToInternal, internalToFusionTool } from './fusionConvert.js';
 import { mergeFusionAndMetadata, buildMetadataTool, detectFusionDrift } from './metadataModel.js';
 import { buildHolderObject } from './holderGauge.js';
-import { resolveHolderForWrite } from './holderResolve.js';
+import { resolveHolderForWrite, assemblyGaugeCheck, gaugeToleranceIn } from './holderResolve.js';
 import { parsePresetName, materialCategory, matchMaterial } from '../utils/presetNaming.js';
 import { isNewFormatPreset, readStrategyBucket } from './camStrategies.js';
 import { mergePresetLists } from '../utils/presetMerge.js';
@@ -34,6 +34,9 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
     return {
       assembly_id: m.assembly_id || generateAssemblyId(),
       instance_guid: raw.guid,
+      // The app FK (see buildMetadataTool). Backfilled from the guid at load
+      // for assemblies that predate it — backfillHolderIds in holderResolve.js.
+      holder_id: m.holder_id || null,
       holder_guid: raw.holder?.guid || m.holder_guid || null,
       holder_description: raw.holder?.description || m.holder_description || '',
       ooh: readOohFromFusion(raw) ?? (m.ooh ?? null),
@@ -376,6 +379,7 @@ export function buildUnlinkedTool(meta) {
   const assemblies = (meta?.assemblies || []).map(a => ({
     assembly_id: a.assembly_id || generateAssemblyId(),
     instance_guid: a.instance_guid || null,   // null = no Fusion entry for this assembly
+    holder_id: a.holder_id || null,           // the app FK; holder_guid is Fusion's mirror
     holder_guid: a.holder_guid || null,
     holder_description: a.holder_description || '',
     ooh: a.ooh ?? null,
@@ -449,7 +453,12 @@ export function materializeUnlinkedTools(builtTools, metaList) {
 // (the read-only Fusion holder library) as the fallback for holders not yet
 // imported — see holderResolve.js. Callers that don't have them behave exactly
 // as before.
-export function splitToFusionInstances(tool, holders = [], holderRecords = null) {
+// `opts.gaugeToleranceIn` grades the returned gaugeChecks for THIS call only —
+// the bulk re-stamp dialog's slider. It is never stored anywhere: see
+// ASSEMBLY_GAUGE_WARN_IN in holderResolve.js for why a remembered tolerance
+// silences exactly the stragglers worth flagging.
+export function splitToFusionInstances(tool, holders = [], holderRecords = null, opts = {}) {
+  const gaugeTolIn = gaugeToleranceIn(opts.gaugeToleranceIn);
   const tracking_id = tool.tracking_id || tool.id;
   const isMetric = tool.unit === 'millimeters';
 
@@ -465,8 +474,15 @@ export function splitToFusionInstances(tool, holders = [], holderRecords = null)
       }];
 
   const rawByGuid = new Map((tool._instancesRaw || []).map(r => [r.guid, r]));
-  // assembly key → the guid its holder resolved to, when it differs (a merge).
-  const guidMigrations = new Map();
+  // assembly key → { holder_guid?, holder_id? } corrections the write implies:
+  // a merged-away guid re-pointed at the survivor, and/or the app-side FK
+  // re-stamped from whatever the holder actually resolved to.
+  const holderMigrations = new Map();
+  const migrate = (key, patch) =>
+    holderMigrations.set(key, { ...(holderMigrations.get(key) || {}), ...patch });
+  // Assembly-gauge sanity results, one per assembly that has both a holder and
+  // an OOH. The caller decides what to do with them (warn / refuse / preview).
+  const gaugeChecks = [];
 
   const fusionInstances = assemblies.map(a => {
     const instanceGuid = a.instance_guid || generateId();
@@ -517,19 +533,26 @@ export function splitToFusionInstances(tool, holders = [], holderRecords = null)
     // correct value (total segment height minus the last segment, which Fusion
     // marks "above the gauge line"). Raw Fusion entries may carry a stale/wrong
     // gaugeLength from a previous bad write; always re-read from the library.
-    if (a.holder_guid) {
-      // App record first (following merge aliases), Fusion library second.
+    if (a.holder_guid || a.holder_id) {
+      // App record first (by the guid, following merge aliases; then by the
+      // holder_id FK), Fusion library second.
       const resolved = resolveHolderForWrite(a.holder_guid, {
-        records: holderRecords, fusionHolders: holders,
+        records: holderRecords, fusionHolders: holders, holderId: a.holder_id,
       });
       base.holder = resolved ? buildHolderObject(resolved.entry) : (raw.holder || undefined);
       if (!base.holder) delete base.holder;
+      const key = a.assembly_id || a.instance_guid;
       // A tool pointing at a holder that was merged away now carries the
       // survivor's guid. Record it so the metadata assembly is migrated in the
       // SAME write — otherwise metadata and Fusion would disagree about which
       // holder this assembly uses.
       if (resolved?.guidChanged && base.holder?.guid) {
-        guidMigrations.set(a.assembly_id || a.instance_guid, base.holder.guid);
+        migrate(key, { holder_guid: base.holder.guid });
+      }
+      // Re-stamp the app FK from whatever actually resolved, so holder_id can
+      // never drift from the holder this write just baked in.
+      if (resolved?.idChanged && resolved.recordId) {
+        migrate(key, { holder_id: resolved.recordId });
       }
     } else if (raw.holder) {
       base.holder = raw.holder;
@@ -574,24 +597,42 @@ export function splitToFusionInstances(tool, holders = [], holderRecords = null)
     // the tool's unit). Mirrors the export path in fusionExport.js.
     if (base.holder && typeof base.holder.gaugeLength === 'number' && a.ooh != null && !isNaN(Number(a.ooh))) {
       const holderGaugeNative = convertLength(base.holder.gaugeLength, base.holder.unit, tool.unit);
-      base.geometry = { ...(base.geometry || {}), assemblyGaugeLength: holderGaugeNative + Number(a.ooh) };
+      const assemblyGauge = holderGaugeNative + Number(a.ooh);
+      base.geometry = { ...(base.geometry || {}), assemblyGaugeLength: assemblyGauge };
+
+      // BACKSTOP before this overwrites the tool's frozen copy: the assembly
+      // gauge length is where the cutting edge actually sits, so a holder swap
+      // that moved it is the signal that something went wrong. Computed HERE,
+      // at the one place the value is derived, so the check can't drift from
+      // what is actually written. Reported to the caller — this function stays
+      // pure and decides nothing.
+      gaugeChecks.push(assemblyGaugeCheck({
+        before: raw?.geometry?.assemblyGaugeLength,
+        after: assemblyGauge,
+        toolUnit: tool.unit,
+        assemblyId: a.assembly_id || a.instance_guid,
+        holderDescription: base.holder.description || '',
+        tolIn: gaugeTolIn,
+      }));
     }
 
     return base;
   });
 
-  // Carry any merged-holder guid migration into the metadata record, so the
-  // assembly stops referencing a holder that no longer exists.
-  const migratedAssemblies = guidMigrations.size
+  // Carry the holder corrections into the metadata record: a merged-away guid
+  // stops referencing a holder that no longer exists, and holder_id is brought
+  // in line with the holder whose geometry was just written.
+  const migratedAssemblies = holderMigrations.size
     ? assemblies.map(a => {
-        const next = guidMigrations.get(a.assembly_id || a.instance_guid);
-        return next ? { ...a, holder_guid: next } : a;
+        const patch = holderMigrations.get(a.assembly_id || a.instance_guid);
+        return patch ? { ...a, ...patch } : a;
       })
     : assemblies;
 
   return {
     fusionInstances,
     metadataTool: buildMetadataTool({ ...tool, tracking_id, assemblies: migratedAssemblies }),
+    gaugeChecks,
   };
 }
 

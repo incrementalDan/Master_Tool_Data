@@ -17,6 +17,7 @@ import { DEFAULT_MATERIALS, DEFAULT_JOBS } from './sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY } from './vendorRegistry.js';
 import { buildMetadataTool } from './metadataModel.js';
 import { buildUnlinkedTool } from './logicalTools.js';
+import { DEFAULT_HOLDER_CONFIG, HOLDER_OPTION_LISTS, seedHolderConfig } from './holderOptions.js';
 
 const ids = (arr) => new Set((arr || []).map(x => x.id));
 const dupes = (arr, key = 'id') => (arr || []).length - new Set((arr || []).map(x => x[key])).size;
@@ -51,6 +52,25 @@ describe('seed data — no dangling FKs, no duplicate ids', () => {
     expect(e.length - new Set(e.map(x => x.name.toLowerCase().trim())).size).toBe(0);
   });
 
+  it('shop_settings.holder_config: collet sizes point at real families, ids unique', () => {
+    const C = DEFAULT_HOLDER_CONFIG;
+    const familyIds = ids(C.collet_families);
+    expect(C.collet_sizes.filter(s => s.family_id && !familyIds.has(s.family_id)).map(s => s.id)).toEqual([]);
+    for (const list of HOLDER_OPTION_LISTS) expect(dupes(C[list])).toBe(0);
+  });
+
+  it('shop_settings.holder_config: seed option ids are STABLE, not regenerated', () => {
+    // These ids are stored on every holder record. If the seed minted a fresh
+    // UUID per load, every reference would dangle after a refresh — which is
+    // exactly what happened once. Two independent seeds must agree.
+    const a = seedHolderConfig();
+    const b = seedHolderConfig();
+    for (const list of HOLDER_OPTION_LISTS) {
+      expect(a[list].map(x => x.id)).toEqual(b[list].map(x => x.id));
+      expect(a[list].every(x => x.id && !/^[0-9a-f-]{36}$/i.test(x.id))).toBe(true);
+    }
+  });
+
   it('jobs.json: programs point at real parts', () => {
     const partIds = ids(DEFAULT_JOBS.parts);
     expect((DEFAULT_JOBS.programs || []).filter(p => p.part_id && !partIds.has(p.part_id))).toEqual([]);
@@ -74,7 +94,8 @@ const FK_TOOL = {
     vendors: [{ id: 'v1', manufacturer_id: 'm1', registry_id: 'reg_vendor', name: 'MSC Industrial', order: 0 }],
   },
   assemblies: [{
-    assembly_id: 'as1', instance_guid: 'inst-guid-1', holder_guid: 'hold-guid-1',
+    assembly_id: 'as1', instance_guid: 'inst-guid-1',
+    holder_id: 'hold-rec-1', holder_guid: 'hold-guid-1',
     holder_description: 'NBT30-SK13C-60', ooh: 2.125,
     linked_preset_guids: ['p1'], asm_number: '30-SK13-60-1001-2.125',
   }],
@@ -91,7 +112,8 @@ const FK_TOOL = {
 // path → expected. Each row is one arrow in the CLAUDE.md inventory table.
 const FK_ROUND_TRIP = [
   ['assembly → Fusion entry',        t => t.assemblies[0].instance_guid,            'inst-guid-1'],
-  ['assembly → holder',              t => t.assemblies[0].holder_guid,              'hold-guid-1'],
+  ['assembly → holder record (the FK)', t => t.assemblies[0].holder_id,             'hold-rec-1'],
+  ['assembly → holder (Fusion mirror)', t => t.assemblies[0].holder_guid,           'hold-guid-1'],
   ['assembly → presets (reverse idx)', t => t.assemblies[0].linked_preset_guids,     ['p1']],
   ['preset → assembly (the FK)',     t => t.presets[0].assembly_id,                 'as1'],
   ['preset → CAM preset',            t => t.presets[0].material_preset_id,          'pre_N_al_wrought'],

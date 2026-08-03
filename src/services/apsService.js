@@ -275,6 +275,21 @@ export async function loadHolderLibrary(projectId, itemId) {
   return data.filter(e => e.type === 'holder');
 }
 
+// ─── Holder library, RAW (the whole file, wrapper included) ──────────────────
+// The write path needs the wrapper, not just the holder entries: the file is
+// { data: [...], version: N } and the version must survive a save untouched —
+// same rule as the tool library.
+export async function loadHolderLibraryRaw(projectId, itemId) {
+  return loadToolLibrary(projectId, itemId);
+}
+
+// Save the holder library. Identical mechanics to the tool library (same file
+// shape, same versioned-item write), so it reuses that path rather than
+// duplicating five APS steps.
+export async function saveHolderLibrary(projectId, folderId, itemId, fileName, json) {
+  return saveToolLibrary(projectId, folderId, itemId, fileName, json);
+}
+
 // ─── Optional: current user profile (for display) ────────────────────────────
 export async function getUserProfile() {
   try {

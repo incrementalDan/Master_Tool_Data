@@ -426,7 +426,8 @@ Google Drive (shared team folder)
 ├── vendor_registry.json         ← Unified manufacturer/vendor entity list (shared)
 ├── shop_settings.json           ← Shop-wide settings (shared)
 ├── jobs.json                    ← Jobs registry: program # + part # pairs w/ UUIDs (shared)
-└── tool_components.json         ← Holder body / insert component records for insert-style tools (shared)
+├── tool_components.json         ← Holder body / insert component records for insert-style tools (shared)
+└── holder_library.json          ← The APP-OWNED holder library: holder records + parts (shared)
 
 Web App (GitHub Pages, client-side only)
 ├── APS PKCE OAuth login (required — gates all library access)
@@ -704,7 +705,7 @@ Stored in a single file on Google Drive. The file contains an array of metadata 
 
 ### Holder Library
 
-The holder library is a separate JSON file stored in APS (same hub/project as the Fusion tool library). It is **read-only** in the app — holders are managed externally in Fusion 360.
+The Fusion holder library is a separate JSON file stored in APS (same hub/project as the Fusion tool library). ⚠️ **It is no longer the source of truth** — the app owns `holder_library.json` on Drive (see **Holder Management System** below); the Fusion file is an import source and an export target. `state.holders` is the raw Fusion list, still read at load and still the fallback for a holder the app hasn't imported yet.
 
 Key holder object fields:
 ```json
@@ -865,6 +866,18 @@ src/
                                   # (load-time duplicate folding)
     holderGauge.js                # computeGaugeLength, buildGaugeLengthExpression,
                                   # buildHolderObject (expression-derived gauge length)
+    holderRecord.js               # The APP-OWNED holder record (holder_library.json):
+                                  # newHolderRecord / fusionHolderToRecord /
+                                  # holderRecordToFusion + the app-only strip guard
+    holderIdentity.js             # The durable Fusion↔app holder link: holder_ref
+                                  # + a segment match, BOTH required. matchFusionHolder /
+                                  # auditFusionHolders / holderPushPlan. Fusion's holder
+                                  # guid is NOT an identity — see "Holder identity"
+    holderResolve.js              # Which holder a tool write takes its geometry from
+                                  # (holder_id FK first, guid as a hint) + the
+                                  # assembly-gauge backstop + backfillHolderIds
+    holderOptions.js              # Holder type / taper / collet lookups in
+                                  # shop_settings.holder_config (STABLE SLUG seed ids)
     fusionConvert.js              # fusionToolToInternal / internalToFusionTool /
                                   # normalizePreset — the round-trip seam the audit exercises
     threads.js                    # INCH/METRIC_THREAD_SIZES, threadKey, resolveThreadSize,
@@ -927,6 +940,17 @@ src/
     presetNaming.js               # composePresetName, parsePresetName, presetMatchesAssembly,
                                   # OP_TYPES / opTypeWord / matchOpType
     holderNaming.js               # holder short names (strip NBT, drop SK<n> C, override map)
+    holderGeometry.js             # Derived holder geometry: gauge length, unit
+                                  # conversion, extension OOH, the nominal-length check
+    holderDescription.js          # Holder description compose + healer (preview→commit;
+                                  # a description is NEVER rewritten automatically)
+    holderAudit.js                # MIGRATION matching — messy legacy holders scored on
+                                  # description + gauge (loose, user-confirmed).
+                                  # NOT the identity matcher (holderIdentity.js)
+    holderBody.js                 # Body-vs-extension segment signatures
+    holderParts.js                # Body / extension as their own part records
+    holderDuplicates.js           # Duplicate detection + merge (guid aliasing, so a
+                                  # merge repoints every tool with zero tool writes)
     materialExport.js             # Fusion "stock material" JSON export — one file
                                   # per CAM preset (buildFusionStockMaterial /
                                   # buildDesignators / stockMaterialFilename +
@@ -1004,6 +1028,18 @@ src/
                                   #      to LibrarySetup wizard exactly as before.
                                   # Returning devices (libraryLocation already in localStorage)
                                   # never see this screen.
+    HoldersPage.jsx               # /holders — the app-owned holder library (list →
+                                  # detail, import/push/merge/parts/normalize actions)
+    HolderDetail.jsx              # One holder: geometry table, 2D profile, parts,
+                                  # classification, usage, re-stamp
+    PushHoldersModal.jsx          # Push holder records to Fusion: preview → commit.
+                                  # Names what it will NOT touch (half-matches)
+    RestampModal.jsx              # Re-stamp a holder's tools: per-tool old→new assembly
+                                  # gauge, a per-fix tolerance (never stored), pick rows
+    HolderMergeModal.jsx          # Merge two holder records (survivor adopts the
+                                  # loser's Fusion guids)
+    HolderPill.jsx                # Holder badge (scoop-cap mark), colored by size
+    ProfileView.jsx               # 2D holder/tool profile drawing
     HolderPicker.jsx              # Modal for selecting a holder from the holder library
     ReconcileModal.jsx            # Reconcile-on-open prompt: delete duplicates, add/delete
                                   # new assemblies, review conflicts (→ Sync Job diff)
@@ -1558,6 +1594,54 @@ The explicit, user-initiated batch flow — see the **Phase 2** section above. T
 
 -----
 
+## Holder Management System
+
+**The goal, in the shop's words.** There is a cutting-tool library where every tool has a holder, and a holder library that most of those tools were originally built against — but **in Fusion there is no real connection between the two**: a tool carries a frozen copy of the holder's geometry and nothing more. So: (1) match the existing cutting tools to the existing holders **once**, using description + gauge length + whatever else the app can score; (2) from then on, freely change anything about a holder — including replacing one wholesale with a more accurately drawn one — and have it **push to every tool that references it**. The app's holder library becomes the source of truth for holder geometry, and the cutting tools follow it.
+
+**⚠️ Two matching jobs, deliberately different. Do not merge them.**
+
+| | Migration matching | Holder identity |
+|---|---|---|
+| **When** | ONCE, to get messy data under control | FOREVER after, to keep it there |
+| **Matches on** | Description + gauge length + specs | `holder_ref` **AND** the segments |
+| **Tolerance** | Generous — the old data is hand-entered | `0.001"`, rounding only |
+| **On a wrong answer** | The user confirms, so it's cheap | Silently the wrong holder |
+| **Rule** | Score it, rank it, ask | Both agree, or **flag** |
+| **Code** | `holderAudit.js`, `holderDuplicates.js` | `holderIdentity.js` |
+
+**The app-owned record** lives in `holder_library.json` (the 6th shared Drive file, `{ version, holders[], parts[] }` — `DEFAULT_HOLDER_LIBRARY`). Schema + Fusion conversion: `src/schema/holderRecord.js` (`newHolderRecord`, `fusionHolderToRecord`, `holderRecordToFusion`, `HOLDER_APP_ONLY_FIELDS` — the strip guard, since Fusion validates strictly). Each record carries a stable app `id`, a human `holder_ref` (`HLD-…`), classification ids (`type_id` / `taper_id` / `collet_family_id` / `collet_size_id` — into `shop_settings.holder_config`), its own `segments[]` + `unit`, purchasing/location/photo/notes, `legacy_ids[]`, and `legacy_fusion_guids[]` (guids adopted in a merge). Pure helpers: `holderGeometry.js` (derived gauge, unit conversion, the nominal-length check), `holderOptions.js` (the UUID-referenced lookups — **seed ids are stable slugs, never per-load UUIDs**), `holderDescription.js` (the healer — preview→commit, and **a description is never rewritten automatically**), `holderBody.js` (body-vs-extension signatures), `holderParts.js` (body / extension as their own records — you buy them separately and assemble at more than one stickout), `holderDuplicates.js` (find + merge), `holderResolve.js` (which holder a tool write uses + the assembly-gauge backstop).
+
+**How a corrected holder reaches a tool.** Fusion **absorbs** holder geometry into each cutting tool — one-way, at copy time — so the tool's own write is the ONLY channel. `splitToFusionInstances` rebuilds the holder object on every tool write from `resolveHolderForWrite`, so:
+- **Lazily** — any ordinary save of a tool picks up the current holder geometry.
+- **Now** — **Re-stamp** on the holder page rewrites every tool using it, one download per library, with a per-tool old→new assembly-gauge preview (see the gauge backstop in `holderResolve.js`).
+- **A merge needs no tool writes at all**: the survivor adopts the loser's guid into `legacy_fusion_guids`, so every tool that referenced the old holder resolves to the survivor. ⚠️ That fixes the **link**, not the **data** — those tools still carry the old geometry until they're written.
+
+**The nominal-length check is collet-family scoped and user-confirmed.** The engraved nominal vs the modelled gauge length holds a known band **for SK collets only** (`NOMINAL_BANDS_MM`) — not for other collet families, and especially not for end-mill holders. So the app makes a best guess and the user does a **one-time confirmation per holder**, which **expires by itself** when any input it depended on changes (`nominal_check.signature`).
+
+-----
+
+## Holder identity — Fusion's holder GUID is NOT stable (CRITICAL)
+
+**Fusion's holder `guid` does not match a holder to itself over time.** It serves some purpose inside Fusion, but it churns for reasons that aren't ours to model. So the app never treats it as identity. This is why the app owns its own holder library and its own IDs.
+
+**The durable Fusion↔app link is TWO signals, and BOTH must agree** (`src/schema/holderIdentity.js`):
+
+1. **`holder_ref`** — the app's own id, stamped into Fusion's free-text **`product-id`** field on the holder. The identity *we* control.
+2. **The segments** — matched shape-for-shape within **`SEGMENT_MATCH_TOL_IN = 0.001"`** (rounding only; unit-agnostic, count must match too).
+
+Neither field is managed by Fusion and either can be broken by an ordinary human action — someone duplicates a holder in Fusion and edits its segments without touching the product-id (**`ref-only`**), or rebuilds one and loses the ref (**`geometry-only`**). Either signal alone would silently link the wrong holder, so `matchFusionHolder` returns **`exact`** only when both point at one record; `conflict` / `ambiguous` / `ref-only` / `geometry-only` are **flagged for a person**, never acted on. `auditFusionHolders` sweeps the library into matched / flagged / unknown / unpushed.
+
+**This is NOT the migration matcher.** Matching the shop's messy legacy library to the controlled one is a different job with different rules — description + gauge length, a generous tolerance, user-confirmed (`holderAudit.js`, `holderDuplicates.js`). That runs **once**, to get the data under control. Holder identity runs **forever after**, to keep it there, and is deliberately strict. Don't merge the two.
+
+**Pushing OUT is what settles a library** (`holderPushPlan` / `applyHolderPushPlan`, driven by `AppContext.pushHoldersToFusion` and the **Push to Fusion** preview on the Holders page). Until each record's `holder_ref` reaches Fusion's `product-id`, every holder reads `geometry-only` and the link is one signal short. The plan rewrites a Fusion entry ONLY when it can identify it: `exact` → update; `geometry-only` with exactly ONE matching record **and a blank `product-id`** → **adopt** (nothing is overwritten — this is the bootstrap that lets the very first push land). Everything else is left **byte-for-byte alone** and reported: a half-match is the shape of a human edit, and overwriting it destroys the only evidence of what changed. A record no entry matched is appended as a new holder. Non-holder entries in the file are never touched. The push writes the holder library file only — **no cutting tool changes** (a tool gets corrected geometry from its own next write, or from **Re-stamp**). Idempotent: a second push has nothing to create. ⚠️ The `product-id` field is the app's from then on — a vendor SKU that was there is preserved in the record's `legacy_ids`/`part_number`, and still resolves via `recordForRef`.
+
+**Consequences elsewhere:**
+- `resolveHolderForWrite` (`holderResolve.js`) resolves **`holder_id` FIRST**. `holder_guid` is a hint — the fallback for an assembly that predates the FK, and for a holder not yet imported. A guid pointing somewhere else is noise, not an instruction.
+- `importHoldersFromFusion` decides "already known" with `matchFusionHolder`, **not** the guid. Skipping on the guid would re-import the same physical holder as a fresh duplicate every time Fusion re-issued it.
+- Matching on `holder_ref` also searches `legacy_ids`, which holds whatever was in Fusion's `product-id` at import (often a vendor SKU) — useful on the first pass, and still fail-safe because the segments must agree too.
+
+-----
+
 ## Relational integrity — every link is an ID (CRITICAL)
 
 This app is a **relational database wearing JSON files**, and it is meant to migrate to SQLite with a schema translation, not a rewrite. So every relationship between two records must be a **stored, stable ID** — the thing a SQL foreign key would be.
@@ -1580,7 +1664,13 @@ Every entity link in the app. When you add a relationship, add a row. When you t
 | From → To | Key | Stored in | Status |
 |---|---|---|---|
 | assembly → Fusion entry | `instance_guid` | metadata | ✅ |
-| assembly → holder | `holder_guid` (+ cached `holder_description`) | metadata | ✅ |
+| **assembly → holder record** | **`holder_id`** | metadata → `holder_library.holders[]` | ✅ the authoritative link |
+| assembly → holder (Fusion mirror) | `holder_guid` (+ cached `holder_description`) | metadata | ✅ what Fusion absorbed — a HINT for an assembly with no FK yet, never an authority |
+| **holder → Fusion holder entry** | **`holder_ref` (stamped in Fusion `product-id`) + a segment match** | `holder_library.json` ↔ Fusion | ✅ both required — see Holder identity |
+| holder → Fusion guid (hint only) | `fusion_guid` (+ `legacy_fusion_guids[]` merge aliases) | `holder_library.json` | ⚠️ Fusion re-issues these; never an identity |
+| holder → body part / extension part | `body_part_id` / `extension_part_id` | `holder_library.json` → `parts[]` | ✅ part delete UNLINKs both slots |
+| holder → type / taper / collet family / collet size | `type_id` / `taper_id` / `collet_family_id` / `collet_size_id` | `holder_library.json` → `shop_settings.holder_config` | ✅ seed ids are stable slugs, never per-load UUIDs |
+| collet size → collet family | `family_id` | `shop_settings.holder_config` | ✅ |
 | **preset → assembly** | **`preset_meta[guid].assembly_id`** | metadata | ✅ the authoritative link (many presets → one assembly) |
 | assembly → presets (reverse index) | `linked_preset_guids[]` | metadata | ✅ derived from the FK on every write |
 | preset → CAM preset | `preset_meta[guid].material_preset_id` | metadata | ✅ |
@@ -1967,7 +2057,7 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 
 ## TODO / Future Work
 
-- **First-class holder library (deferred).** Holders currently come **only** from the Fusion holder library (read-only via APS); the app has no holder records of its own. The link itself is sound — `assemblies[].holder_guid` → the holder entry's `guid`, and every one of the ~13 holder lookups in the codebase joins on that guid (`holder_description` is only a cached display label). So this is **not** a relational-integrity gap. What's missing is app-side holder **metadata**: purchasing/vendor links, photos, notes, gauge-length overrides, taper, tags, a location. Doing it means a 6th shared Drive file (`holder_library.json`), a holder record shape + editor page, migration from the Fusion-only holders, and — the real decision — **who owns holder identity**: keep Fusion's guid as the key (simplest, but breaks if Fusion rebuilds the library) or mint our own id with the Fusion guid as a linked field (mirrors the tool `tracking_id` ↔ `guid` split). Add the new relationships to the Relational-integrity inventory when built. Big enough to scope on its own.
+- **✅ First-class holder library (built).** See **Holder Management System** + **Holder identity** above. The app owns `holder_library.json`; identity is `holder_ref` + a segment match (never Fusion's guid); assemblies carry a real `holder_id` FK. **Still deferred:** machine-taper filtering for assemblies, swapping `HolderPill` in at every existing call site, and fully deriving a holder's segments from its parts rather than storing both.
 
 
 - **Self-healing audit (not yet done).** The **Self-healing** philosophy section above was written *after* most of the mechanisms it describes, so it documents the pattern rather than verifying it holds everywhere. Worth one deliberate pass: (1) **coverage** — every derived/linked value that could go stale actually has a repair or a flag (candidates not yet reviewed: `material_suitability` free text, `tags`, `coating`/`pitch` fill-gap fields, holder library links, `speed_feed_refs.preset_id` dangling ids, `jobs[].program_id` dangling after a program delete); (2) **no nag loops** — for each existing flag, confirm the fix action clears the detector (walk `ConflictBanner`, `DriftBanner`, `MergeSiblingBanner`, the duplicate-preset banner, `MaterialLinkBanner`, `_productIdConflict`); (3) **load cost** — the silent repairs are all in-memory, but they're now a stack of full-library passes (`combineToolsByToolId` → `derivePairings` → 4 × backfill…), so confirm they're still cheap at real library size and consider folding them into one walk; (4) **noise calibration** — how many tools actually surface a flag against the real library, and whether any flag fires so broadly it becomes wallpaper (`MaterialLinkBanner` on legacy `"AL FIN"` strings is the likely candidate).

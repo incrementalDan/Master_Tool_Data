@@ -365,6 +365,14 @@ export function buildMetadataTool(tool) {
     assemblies: (tool.assemblies || []).map(a => ({
       assembly_id: a.assembly_id || generateAssemblyId(),
       instance_guid: a.instance_guid || null,
+      // TWO holder links, and they are not the same thing:
+      //   holder_id   — the app FK into holder_library.json's holders[]. This is
+      //                 the real relationship (SQL: REFERENCES holders(id)).
+      //   holder_guid — the Fusion-side mirror, i.e. the guid Fusion absorbed
+      //                 into the tool. Kept because it is what the tool
+      //                 physically carries and how a Fusion-side re-point is
+      //                 detected — the same role instance_guid plays.
+      holder_id: a.holder_id || null,
       holder_guid: a.holder_guid || null,
       holder_description: a.holder_description || '',
       ooh: a.ooh ?? null,

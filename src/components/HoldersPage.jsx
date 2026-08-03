@@ -1,9 +1,9 @@
 // ─── Holders page — the app-owned holder library ────────────────────────────
 // List → detail, ported from docs/HolderManager.tsx onto the app's tokens.
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy } from 'lucide-react';
+import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy, Upload } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import HolderPill from './HolderPill.jsx';
 import HolderDetail from './HolderDetail.jsx';
@@ -15,8 +15,11 @@ import { deriveGaugeLength, deriveExtensionOoh, formatHolderLen, holderLenIn, no
 import { healHolderDescription, applyHealToRecord } from '../utils/holderDescription.js';
 import { recordsWithBodyDivergence } from '../utils/holderBody.js';
 import { proposeHolderParts, applyPartProposals, holdersWithPartDrift, holderPartsOf } from '../utils/holderParts.js';
-import { findHolderDuplicates, holdersInDuplicates, applyHolderMerge, compareHolders, holderGuidsOf } from '../utils/holderDuplicates.js';
+import { findHolderDuplicates, holdersInDuplicates, applyHolderMerge, compareHolders, holderGuidsOf, toolsFollowingMerge } from '../utils/holderDuplicates.js';
+import { auditFusionHolders } from '../schema/holderIdentity.js';
 import HolderMergeModal from './HolderMergeModal.jsx';
+import RestampModal from './RestampModal.jsx';
+import PushHoldersModal from './PushHoldersModal.jsx';
 import { unitAbbr } from '../utils/units.js';
 
 const CONF_ORDER = ['high', 'medium', 'low'];
@@ -248,7 +251,7 @@ function DuplicatesModal({ holders, config, tools, onMerge, onClose }) {
 }
 
 function HolderList({
-  holders, config, usageOf, onOpen, onNew, onHeal, onImport, onLinkParts, onDuplicates,
+  holders, config, usageOf, onOpen, onNew, onHeal, onImport, onLinkParts, onDuplicates, onPush, unlinked, canPush,
   importable, googleAuthenticated, driftIds, partCount, duplicateIds,
 }) {
   const [q, setQ] = useState('');
@@ -393,6 +396,16 @@ function HolderList({
               <Download size={14} /> Import {importable} from Fusion
             </button>
           )}
+          {/* The two-way link isn't real until our IDs are in Fusion — until
+              then a holder matches on shape alone, which isn't enough to act
+              on. Badged with how many are still one signal short. */}
+          <button className="btn btn-secondary btn-sm" onClick={onPush}
+            disabled={!holders.length || !googleAuthenticated || !canPush}
+            title={canPush
+              ? "Write each holder's ID and geometry into the Fusion holder library — the link that survives Fusion re-issuing its GUIDs"
+              : 'Link a Fusion holder library in Settings first — there is nowhere to push to'}>
+            <Upload size={14} /> {unlinked ? `Push to Fusion (${unlinked})` : 'Push to Fusion'}
+          </button>
           <button className="btn btn-secondary btn-sm" onClick={onDuplicates} disabled={holders.length < 2}
             title="Find holders that look like the same physical holder entered twice">
             <Copy size={14} /> {duplicateIds.size ? `Duplicates (${duplicateIds.size})` : 'Duplicates'}
@@ -586,7 +599,7 @@ export default function HoldersPage() {
   const {
     holderLibrary, holders: fusionHolders, shopSettings, tools,
     saveHolderRecord, deleteHolderRecord, saveHolderLibrary, saveShopSettings, saveHolderPart,
-    importHoldersFromFusion, restampHolderTools, googleAuthenticated, googleUser, demoMode, notify,
+    importHoldersFromFusion, pushHoldersToFusion, restampHolderTools, googleAuthenticated, googleUser, demoMode, notify,
   } = useApp();
   const navigate = useNavigate();
   const [openId, setOpenId] = useState(null);
@@ -594,6 +607,7 @@ export default function HoldersPage() {
   const [linkingParts, setLinkingParts] = useState(false);
   const [dupesOpen, setDupesOpen] = useState(false);
   const [merging, setMerging] = useState(null);   // { a, b, match }
+  const [restampOpen, setRestampOpen] = useState(false);
 
   // Falls back to the seeded lookups for a shop whose settings file predates
   // holder_config — see holderConfigOf.
@@ -606,11 +620,12 @@ export default function HoldersPage() {
   const open = records.find(h => h.id === openId) || null;
   const allLocations = [...new Set(records.map(h => h.location).filter(Boolean))];
 
-  // How many linked Fusion holders have no app record yet.
-  const importable = useMemo(() => {
-    const known = new Set(records.map(h => h.fusion_guid).filter(Boolean));
-    return (fusionHolders || []).filter(f => f.guid && !known.has(f.guid)).length;
-  }, [records, fusionHolders]);
+  // How many linked Fusion holders have no app record yet. Counted with the
+  // strict identity check (app ID + segments), NOT the guid — Fusion's guid
+  // churns, so a guid-based count reads settled holders as importable.
+  const importable = useMemo(
+    () => auditFusionHolders(fusionHolders || [], records).unknown.length,
+    [records, fusionHolders]);
 
   // "Used by N tools" — counted through the assemblies' holder_guid, which is
   // the only link that exists today (a tool's absorbed Fusion snapshot). It is
@@ -647,7 +662,14 @@ export default function HoldersPage() {
   };
 
   const onDelete = async (record) => {
-    if (!window.confirm(`Delete the holder record "${record.description}"?\n\nThis removes the app record only — the Fusion holder library is untouched.`)) return;
+    // Say how many tools resolve through this record. Deleting it isn't
+    // cosmetic for them: their next save falls back to the Fusion library's
+    // version of the holder, quietly undoing any correction made here.
+    const inUse = toolsFollowingMerge(record, tools);
+    const warn = inUse
+      ? `\n\n⚠ ${inUse} tool assembl${inUse === 1 ? 'y uses' : 'ies use'} this holder. They will fall back to the Fusion holder library the next time each tool is saved — any correction made here is lost for them.`
+      : '';
+    if (!window.confirm(`Delete the holder record "${record.description}"?\n\nThis removes the app record only — the Fusion holder library is untouched.${warn}`)) return;
     await deleteHolderRecord(record.id);
     setOpenId(null);
     notify('Holder record deleted', 'success');
@@ -665,14 +687,29 @@ export default function HoldersPage() {
     return () => { live = false; };
   }, [open, restampHolderTools, tools]);
 
-  const onRestamp = async () => {
+  // Opening the preview is all this does — every decision (tolerance, which
+  // tools) is made in the modal against real before/after numbers.
+  const onRestamp = () => setRestampOpen(true);
+
+  // Re-grade the preview against a tolerance the user is trying out. Pure
+  // computation; writes nothing.
+  const previewAtTolerance = useCallback((toleranceIn) => {
+    if (!open || !restampHolderTools) return;
+    Promise.resolve(restampHolderTools(open, { dryRun: true, toleranceIn }))
+      .then(setRestampPreview)
+      .catch(() => {});
+  }, [open, restampHolderTools]);
+
+  // The tolerance is NOT remembered. It described this one correction; once the
+  // tools are re-stamped they match the holder and move by nothing on their own.
+  // Anything still on the old geometry afterwards — one deselected here, or one
+  // arriving later from Fusion — should keep flagging.
+  const commitRestamp = async (toolIds, toleranceIn) => {
     if (!open) return;
-    const n = restampPreview?.tools?.length || 0;
-    if (!window.confirm(
-      `Re-stamp ${n} tool${n === 1 ? '' : 's'} with this holder's current geometry?\n\n`
-      + `Each tool's own copy of the holder is rebuilt and its assembly gauge length recomputed. `
-      + `Nothing else about those tools changes.`)) return;
-    try { await restampHolderTools(open); } catch { /* toasted */ }
+    try {
+      await restampHolderTools(open, { toolIds, toleranceIn });
+      setRestampOpen(false);
+    } catch { /* toasted */ }
   };
 
   const onNew = async () => {
@@ -683,12 +720,47 @@ export default function HoldersPage() {
     } catch { /* toasted */ }
   };
 
+  // ─── Push to Fusion ──────────────────────────────────────────────────────
+  // Preview first, always: this is the one holder action that writes to
+  // Autodesk, and the preview is also where the entries it REFUSES to touch
+  // are named.
+  const [pushOpen, setPushOpen] = useState(false);
+  const [pushPreview, setPushPreview] = useState(null);
+  const onPush = async () => {
+    setPushPreview(null);
+    setPushOpen(true);
+    try { setPushPreview(await pushHoldersToFusion({ dryRun: true })); }
+    catch (e) { notify(e.message, 'error'); setPushOpen(false); }
+  };
+  const commitPush = async () => {
+    await pushHoldersToFusion();
+    setPushPreview(await pushHoldersToFusion({ dryRun: true }).catch(() => null));
+  };
+
+  // How many records Fusion doesn't confidently know yet — the badge on the
+  // button, and the reason to press it.
+  const unlinked = useMemo(
+    () => auditFusionHolders(fusionHolders || [], records).unpushed.length,
+    [fusionHolders, records]);
+  // Nowhere to push to unless a Fusion holder library is actually linked (demo
+  // has holders but no registry entry) — better a disabled button that says why
+  // than one that opens and immediately errors.
+  const canPush = (shopSettings?.holder_libraries || []).length > 0;
+
+  // Anything the strict identity check couldn't confirm is NOT imported and NOT
+  // linked — it's a half-match (our ID on a re-shaped holder, or a known shape
+  // with our ID missing), which is a person's call, not the importer's.
+  const [importFlags, setImportFlags] = useState([]);
   const onImport = async () => {
     try {
       const res = await importHoldersFromFusion();
-      notify(res.added
-        ? `Imported ${res.added} holder${res.added === 1 ? '' : 's'} from the Fusion library`
-        : 'Nothing new to import — every Fusion holder already has a record', 'success');
+      setImportFlags(res.flagged || []);
+      const parts = [];
+      if (res.added) parts.push(`Imported ${res.added} holder${res.added === 1 ? '' : 's'}`);
+      if (res.skipped) parts.push(`${res.skipped} already matched`);
+      if (res.flagged?.length) parts.push(`${res.flagged.length} need a look`);
+      notify(parts.length ? parts.join(' · ') : 'Nothing to import',
+        res.flagged?.length ? 'warning' : 'success');
     } catch (e) {
       notify(`Import failed: ${e.message}`, 'error');
     }
@@ -746,14 +818,49 @@ export default function HoldersPage() {
           onViewTools={() => navigate('/')}
         />
       ) : (
+        <>
+        {importFlags.length > 0 && (
+          <div className="holder-warn holder-import-flags">
+            <div className="holder-import-flags-head">
+              <b>{importFlags.length} Fusion holder{importFlags.length === 1 ? '' : 's'} need a look</b>
+              <button className="icon-btn" onClick={() => setImportFlags([])}><X size={14} /></button>
+            </div>
+            {/* Half-matches only: our ID and the segments disagree, so linking
+                either way would be a guess. Nothing was imported for these. */}
+            {importFlags.map((f, i) => (
+              <div key={i} className="holder-import-flag">
+                <span className="holder-conf medium">{f.status.replace('-', ' ')}</span>
+                <span className="holder-import-flag-desc">{f.entry.description || '(no description)'}</span>
+                <span className="holder-import-flag-why">{f.reason}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <HolderList
           holders={records} config={config} usageOf={usageOf}
           importable={importable} googleAuthenticated={canEdit}
           onOpen={h => setOpenId(h.id)}
           onNew={onNew} onHeal={() => setHealing(true)} onImport={onImport}
+          onPush={onPush} unlinked={unlinked} canPush={canPush}
           onLinkParts={() => setLinkingParts(true)}
           onDuplicates={() => setDupesOpen(true)}
           driftIds={driftIds} partCount={parts.length} duplicateIds={duplicateIds}
+        />
+        </>
+      )}
+      {pushOpen && (
+        <PushHoldersModal
+          preview={pushPreview}
+          onCommit={commitPush}
+          onClose={() => setPushOpen(false)}
+        />
+      )}
+      {restampOpen && open && (
+        <RestampModal
+          preview={restampPreview}
+          onPreview={previewAtTolerance}
+          onCommit={commitRestamp}
+          onClose={() => setRestampOpen(false)}
         />
       )}
       {dupesOpen && (
