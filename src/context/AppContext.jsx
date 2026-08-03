@@ -17,13 +17,13 @@ import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { backfillMaterialPresetIds, backfillPresetAssemblyLinks, autoLinkMaterialByGrade } from '../utils/presetNaming.js';
 import { backfillPreferredMachineIds } from '../utils/machines.js';
 import { backfillHolderIds } from '../schema/holderResolve.js';
-import { matchFusionHolder } from '../schema/holderIdentity.js';
+import { matchFusionHolder, holderPushPlan, applyHolderPushPlan } from '../schema/holderIdentity.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry, getActiveVendorRegistry, backfillPurchasingRegistryIds } from '../schema/vendorRegistry.js';
 import { findJob, newJob } from '../utils/jobs.js';
-import { fusionHolderToRecord } from '../schema/holderRecord.js';
+import { fusionHolderToRecord, holderRecordToFusion } from '../schema/holderRecord.js';
 import { setDefaultUnit } from '../utils/units.js';
 import { getDemoData, isDemoRequested } from '../demo/index.js';
 import {
@@ -492,6 +492,105 @@ export function AppProvider({ children }) {
     if (!added.length) return Promise.resolve(result);
     return saveHolderLibrary({ ...file, holders: [...existing, ...added] }).then(() => result);
   }, [saveHolderLibrary]);
+
+  // ─── Push our holder records OUT to the Fusion holder library ─────────────
+  // THE STEP THAT SETTLES THE LIBRARY. Until each record's holder_ref reaches
+  // Fusion's product-id, the link is one signal short and every holder reads
+  // `geometry-only`. After this, a holder matches on both signals and keeps
+  // matching however often Fusion re-issues its guid.
+  //
+  // Only entries the app can identify with certainty are rewritten — see
+  // holderPushPlan. Half-matches are left byte-for-byte alone and reported.
+  // `dryRun` builds the same plan and writes nothing, which is what the preview
+  // shows.
+  const pushHoldersToFusion = useCallback(async ({ dryRun = false } = {}) => {
+    const libs = shopSettingsRef.current?.holder_libraries || [];
+    if (!libs.length) throw new Error('No Fusion holder library is linked');
+    if (localModeRef.current) throw new Error('Local mode is read-only');
+
+    const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
+    const allRecords = file.holders || [];
+    const defaultLib = libs[0].id;
+    const byLibrary = [];
+
+    for (const lib of libs) {
+      // ALWAYS re-download immediately before writing — a teammate may have
+      // saved since this session loaded (same rule as the tool library).
+      const raw = demoModeRef.current
+        ? { data: (holdersRef.current || []).filter(h => h._libraryId === lib.id) }
+        : await aps.loadHolderLibraryRaw(lib.projectId, lib.itemId);
+      const list = Array.isArray(raw?.data) ? raw.data : [];
+      // Records belong to the library they came from; one that has never been
+      // pushed anywhere goes to the default.
+      const scoped = allRecords.filter(r => (r.library_id || defaultLib) === lib.id);
+      const plan = holderPushPlan(list, scoped);
+      byLibrary.push({ lib, raw, list, plan });
+    }
+
+    const summary = {
+      byLibrary: byLibrary.map(({ lib, plan }) => ({
+        libId: lib.id,
+        libName: lib.fileName,
+        updates: plan.updates.filter(u => u.kind === 'update').length,
+        adopts: plan.updates.filter(u => u.kind === 'adopt').length,
+        creates: plan.creates.length,
+        flagged: plan.flagged,
+      })),
+      updated: byLibrary.reduce((a, b) => a + b.plan.updates.length, 0),
+      created: byLibrary.reduce((a, b) => a + b.plan.creates.length, 0),
+      flagged: byLibrary.flatMap(b => b.plan.flagged),
+      wrote: false,
+    };
+    if (dryRun) return summary;
+
+    dispatch({ type: 'SAVE_START' });
+    try {
+      // The Fusion guid a record now sits on — refreshed as a HINT only, never
+      // as identity (see holderIdentity.js). Stamped after each library's write
+      // so a failure can't leave the app claiming a link that isn't there.
+      const guidByRecord = new Map();
+      const demoNext = [];
+      for (const { lib, raw, list, plan } of byLibrary) {
+        if (!plan.updates.length && !plan.creates.length) continue;
+        const next = applyHolderPushPlan(list, plan, holderRecordToFusion);
+        if (demoModeRef.current) {
+          // Demo is a real sandbox: the write lands in memory so a second push
+          // correctly reports nothing left to do, exactly as it would live.
+          demoNext.push(...next.map(e => ({ ...e, _libraryId: lib.id, _libraryName: lib.fileName })));
+        } else {
+          await aps.saveHolderLibrary(lib.projectId, lib.folderId, lib.itemId, lib.fileName,
+            { ...raw, data: next });
+        }
+        for (const u of plan.updates) guidByRecord.set(u.record.id, u.entry.guid || null);
+        for (const c of plan.creates) {
+          const made = next.find(e => e?.['product-id'] === c.holder_ref);
+          guidByRecord.set(c.id, made?.guid || null);
+        }
+      }
+      if (guidByRecord.size) {
+        const live = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
+        await saveHolderLibrary({
+          ...live,
+          holders: (live.holders || []).map(h => (guidByRecord.has(h.id)
+            ? { ...h, fusion_guid: guidByRecord.get(h.id), library_id: h.library_id || defaultLib }
+            : h)),
+        });
+      }
+      // Re-read so the page reflects what Fusion now holds. In demo there is no
+      // APS to read from — the in-memory result IS the new state.
+      if (demoModeRef.current) dispatch({ type: 'SET_HOLDERS', holders: demoNext });
+      else await loadHolders();
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify(`Pushed ${summary.updated + summary.created} holder${summary.updated + summary.created === 1 ? '' : 's'} to Fusion`
+        + (summary.flagged.length ? ` · ${summary.flagged.length} left alone for review` : ''),
+        summary.flagged.length ? 'warning' : 'success');
+      return { ...summary, wrote: true };
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Push to Fusion failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  }, [saveHolderLibrary, loadHolders, notify]);
 
   // Persist the jobs registry to Drive IMMEDIATELY (not on the shared-file 600ms
   // debounce). Used when a job is CREATED/enriched and its id is about to be
@@ -1249,6 +1348,7 @@ export function AppProvider({ children }) {
       deleteHolderPart,
       deleteHolderRecord,
       importHoldersFromFusion,
+      pushHoldersToFusion,
       clearError,
       notify,
       dismissToast,

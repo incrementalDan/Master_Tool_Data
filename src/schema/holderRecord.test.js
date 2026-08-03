@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   newHolderRecord, fusionHolderToRecord, holderRecordToFusion,
-  applyHolderRecordsToFusionList, triageProductId, vendorLooksLikeManufacturer,
+  triageProductId, vendorLooksLikeManufacturer,
   HOLDER_APP_ONLY_FIELDS, SEGMENT_APP_ONLY_FIELDS, HOLDER_REF_RE,
 } from './holderRecord.js';
 import {
@@ -127,20 +127,7 @@ describe('record → fusion (export)', () => {
     expect(out.gaugeLength).toBeLessThanOrEqual(totalSegmentHeight(r.segments));
   });
 
-  it('leaves non-holder entries alone when writing a library list', () => {
-    const list = [{ type: 'tool', guid: 't1' }, ...REAL.slice(0, 2)];
-    const recs = REAL.slice(0, 2).map(f => fusionHolderToRecord(f));
-    const out = applyHolderRecordsToFusionList(list, recs);
-    expect(out[0]).toEqual({ type: 'tool', guid: 't1' });
-    expect(out.filter(e => e.type === 'holder')).toHaveLength(2);
-  });
 
-  it('appends a record that has no Fusion entry yet', () => {
-    const fresh = newHolderRecord({ description: 'New holder', segments: [] });
-    const out = applyHolderRecordsToFusionList([], [fresh]);
-    expect(out).toHaveLength(1);
-    expect(out[0].description).toBe('New holder');
-  });
 });
 
 describe('gauge expression ⇄ above-gauge flags', () => {

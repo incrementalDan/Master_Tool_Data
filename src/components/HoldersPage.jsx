@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy } from 'lucide-react';
+import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy, Upload } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import HolderPill from './HolderPill.jsx';
 import HolderDetail from './HolderDetail.jsx';
@@ -19,6 +19,7 @@ import { findHolderDuplicates, holdersInDuplicates, applyHolderMerge, compareHol
 import { auditFusionHolders } from '../schema/holderIdentity.js';
 import HolderMergeModal from './HolderMergeModal.jsx';
 import RestampModal from './RestampModal.jsx';
+import PushHoldersModal from './PushHoldersModal.jsx';
 import { unitAbbr } from '../utils/units.js';
 
 const CONF_ORDER = ['high', 'medium', 'low'];
@@ -250,7 +251,7 @@ function DuplicatesModal({ holders, config, tools, onMerge, onClose }) {
 }
 
 function HolderList({
-  holders, config, usageOf, onOpen, onNew, onHeal, onImport, onLinkParts, onDuplicates,
+  holders, config, usageOf, onOpen, onNew, onHeal, onImport, onLinkParts, onDuplicates, onPush, unlinked, canPush,
   importable, googleAuthenticated, driftIds, partCount, duplicateIds,
 }) {
   const [q, setQ] = useState('');
@@ -395,6 +396,16 @@ function HolderList({
               <Download size={14} /> Import {importable} from Fusion
             </button>
           )}
+          {/* The two-way link isn't real until our IDs are in Fusion — until
+              then a holder matches on shape alone, which isn't enough to act
+              on. Badged with how many are still one signal short. */}
+          <button className="btn btn-secondary btn-sm" onClick={onPush}
+            disabled={!holders.length || !googleAuthenticated || !canPush}
+            title={canPush
+              ? "Write each holder's ID and geometry into the Fusion holder library — the link that survives Fusion re-issuing its GUIDs"
+              : 'Link a Fusion holder library in Settings first — there is nowhere to push to'}>
+            <Upload size={14} /> {unlinked ? `Push to Fusion (${unlinked})` : 'Push to Fusion'}
+          </button>
           <button className="btn btn-secondary btn-sm" onClick={onDuplicates} disabled={holders.length < 2}
             title="Find holders that look like the same physical holder entered twice">
             <Copy size={14} /> {duplicateIds.size ? `Duplicates (${duplicateIds.size})` : 'Duplicates'}
@@ -588,7 +599,7 @@ export default function HoldersPage() {
   const {
     holderLibrary, holders: fusionHolders, shopSettings, tools,
     saveHolderRecord, deleteHolderRecord, saveHolderLibrary, saveShopSettings, saveHolderPart,
-    importHoldersFromFusion, restampHolderTools, googleAuthenticated, googleUser, demoMode, notify,
+    importHoldersFromFusion, pushHoldersToFusion, restampHolderTools, googleAuthenticated, googleUser, demoMode, notify,
   } = useApp();
   const navigate = useNavigate();
   const [openId, setOpenId] = useState(null);
@@ -709,6 +720,33 @@ export default function HoldersPage() {
     } catch { /* toasted */ }
   };
 
+  // ─── Push to Fusion ──────────────────────────────────────────────────────
+  // Preview first, always: this is the one holder action that writes to
+  // Autodesk, and the preview is also where the entries it REFUSES to touch
+  // are named.
+  const [pushOpen, setPushOpen] = useState(false);
+  const [pushPreview, setPushPreview] = useState(null);
+  const onPush = async () => {
+    setPushPreview(null);
+    setPushOpen(true);
+    try { setPushPreview(await pushHoldersToFusion({ dryRun: true })); }
+    catch (e) { notify(e.message, 'error'); setPushOpen(false); }
+  };
+  const commitPush = async () => {
+    await pushHoldersToFusion();
+    setPushPreview(await pushHoldersToFusion({ dryRun: true }).catch(() => null));
+  };
+
+  // How many records Fusion doesn't confidently know yet — the badge on the
+  // button, and the reason to press it.
+  const unlinked = useMemo(
+    () => auditFusionHolders(fusionHolders || [], records).unpushed.length,
+    [fusionHolders, records]);
+  // Nowhere to push to unless a Fusion holder library is actually linked (demo
+  // has holders but no registry entry) — better a disabled button that says why
+  // than one that opens and immediately errors.
+  const canPush = (shopSettings?.holder_libraries || []).length > 0;
+
   // Anything the strict identity check couldn't confirm is NOT imported and NOT
   // linked — it's a half-match (our ID on a re-shaped holder, or a known shape
   // with our ID missing), which is a person's call, not the importer's.
@@ -803,11 +841,19 @@ export default function HoldersPage() {
           importable={importable} googleAuthenticated={canEdit}
           onOpen={h => setOpenId(h.id)}
           onNew={onNew} onHeal={() => setHealing(true)} onImport={onImport}
+          onPush={onPush} unlinked={unlinked} canPush={canPush}
           onLinkParts={() => setLinkingParts(true)}
           onDuplicates={() => setDupesOpen(true)}
           driftIds={driftIds} partCount={parts.length} duplicateIds={duplicateIds}
         />
         </>
+      )}
+      {pushOpen && (
+        <PushHoldersModal
+          preview={pushPreview}
+          onCommit={commitPush}
+          onClose={() => setPushOpen(false)}
+        />
       )}
       {restampOpen && open && (
         <RestampModal

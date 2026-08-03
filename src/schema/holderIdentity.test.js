@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import {
   segmentsMatch, recordForRef, recordsForGeometry, matchFusionHolder,
   isConfidentMatch, auditFusionHolders, SEGMENT_MATCH_TOL_IN,
+  holderPushPlan, applyHolderPushPlan,
 } from './holderIdentity.js';
 import { fusionHolderToRecord, holderRecordToFusion } from './holderRecord.js';
 import { convertHolderUnits } from '../utils/holderGeometry.js';
@@ -152,5 +153,82 @@ describe('library sweep', () => {
     const a = settled();
     const b = { ...settled(), id: 'dup' };
     expect(recordsForGeometry([a, b], pushed(a))).toHaveLength(2);
+  });
+});
+
+// ─── Pushing OUT ────────────────────────────────────────────────────────────
+// The one holder action that writes to Autodesk. What it refuses to touch
+// matters as much as what it writes.
+describe('push plan', () => {
+  const rec = settled();
+
+  it('bootstraps: our shape + a blank product-id is ADOPTED, so a first push lands', () => {
+    // Before any push every settled holder is geometry-only. If that were
+    // treated as a flag the push could never get started.
+    const entry = { ...pushed(rec), 'product-id': '' };
+    const plan = holderPushPlan([entry], [rec]);
+    expect(plan.updates).toHaveLength(1);
+    expect(plan.updates[0].kind).toBe('adopt');
+    expect(plan.creates).toHaveLength(0);
+    expect(plan.flagged).toHaveLength(0);
+  });
+
+  it('an already-linked holder is refreshed, not duplicated', () => {
+    const plan = holderPushPlan([pushed(rec)], [rec]);
+    expect(plan.updates[0].kind).toBe('update');
+    expect(plan.creates).toHaveLength(0);
+  });
+
+  it('REFUSES to overwrite a half-match, and does not re-add it either', () => {
+    // Someone edited this holder's segments in Fusion but left our ID on it.
+    // Writing over it would destroy the only evidence of what they changed —
+    // and appending the record as a new holder would leave two.
+    const entry = pushed(rec);
+    entry.segments = entry.segments.map((s, i) => (i === 0 ? { ...s, height: s.height + 5 } : s));
+    const plan = holderPushPlan([entry], [rec]);
+    expect(plan.updates).toHaveLength(0);
+    expect(plan.creates).toHaveLength(0);      // claimed by the flag
+    expect(plan.flagged[0].status).toBe('ref-only');
+  });
+
+  it('will not adopt a shape whose product-id holds something we do not know', () => {
+    // A non-empty product-id is somebody's data. Stamping over it is a write,
+    // not a bootstrap.
+    const entry = { ...pushed(rec), 'product-id': 'SOMEONE-ELSES-SKU' };
+    const plan = holderPushPlan([entry], [rec]);
+    expect(plan.updates).toHaveLength(0);
+    expect(plan.flagged[0].status).toBe('geometry-only');
+  });
+
+  it('a record Fusion has never seen is created', () => {
+    const plan = holderPushPlan([], [rec]);
+    expect(plan.creates).toEqual([rec]);
+  });
+
+  it('leaves non-holder entries and untouched holders byte-for-byte alone', () => {
+    // The holder library file may hold other entry types; a write must never
+    // drop or reshape them.
+    const other = { type: 'tool', guid: 'not-a-holder', description: 'keep me' };
+    const strange = { ...pushed(fusionHolderToRecord(OTHER)) };
+    const list = [other, strange, { ...pushed(rec), 'product-id': '' }];
+    const plan = holderPushPlan(list, [rec]);
+    const out = applyHolderPushPlan(list, plan, holderRecordToFusion);
+    expect(out[0]).toBe(other);        // same object, untouched
+    expect(out[1]).toBe(strange);      // unknown holder, left alone
+    expect(out[2]['product-id']).toBe(rec.holder_ref);
+  });
+
+  it('one push settles the whole real library, and a second changes nothing', () => {
+    const records = REAL.map(fusionHolderToRecord);
+    const plan1 = holderPushPlan(REAL, records);
+    const after = applyHolderPushPlan(REAL, plan1, holderRecordToFusion);
+    expect(auditFusionHolders(after, records).flagged).toHaveLength(0);
+    expect(auditFusionHolders(after, records).matched).toHaveLength(records.length);
+
+    // Idempotent: nothing new to create the second time round.
+    const plan2 = holderPushPlan(after, records);
+    expect(plan2.creates).toHaveLength(0);
+    expect(plan2.flagged).toHaveLength(0);
+    expect(plan2.updates.every(u => u.kind === 'update')).toBe(true);
   });
 });

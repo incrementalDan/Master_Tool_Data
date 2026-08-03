@@ -144,3 +144,70 @@ export function auditFusionHolders(fusionEntries, records, tolIn = SEGMENT_MATCH
   const unpushed = (records || []).filter(r => !matchedIds.has(r.id));
   return { matched, flagged, unknown, unpushed };
 }
+
+// ─── Pushing our records OUT to Fusion ──────────────────────────────────────
+// The other half of the link, and the step that actually settles a library:
+// until our holder_ref reaches Fusion's product-id, every holder reads
+// `geometry-only` and the connection is one signal short.
+//
+// WHAT IT WILL AND WON'T TOUCH. A Fusion entry is only rewritten when we are
+// certain which record it is:
+//   · 'exact'                       → UPDATE it.
+//   · 'geometry-only', ONE matching record, and Fusion's product-id is EMPTY
+//                                   → ADOPT it. Nothing is overwritten — we are
+//                                     stamping our id onto a holder whose exact
+//                                     shape we already own. This is what
+//                                     bootstraps the very first push.
+//   · anything else                 → LEFT ALONE and reported. A half-match is
+//                                     the shape of a human edit, and writing
+//                                     over it would destroy the evidence.
+// A record no entry matched at all is appended as a NEW Fusion holder.
+//
+// `records` should be scoped to one holder library before calling.
+export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL_IN) {
+  const updates = [];   // { entry, record, kind: 'update' | 'adopt' }
+  const flagged = [];   // { entry, ...match } — untouched
+  const spokenFor = new Set();
+
+  for (const entry of fusionEntries || []) {
+    if (entry?.type !== 'holder') continue;
+    const m = matchFusionHolder(entry, records, tolIn);
+
+    if (m.status === 'exact') {
+      updates.push({ entry, record: m.record, kind: 'update' });
+      spokenFor.add(m.record.id);
+      continue;
+    }
+    // The bootstrap case: our shape, and Fusion has no id of its own on it.
+    const blankRef = !String(entry['product-id'] ?? '').trim();
+    if (m.status === 'geometry-only' && m.geoRecords.length === 1 && blankRef) {
+      updates.push({ entry, record: m.geoRecords[0], kind: 'adopt' });
+      spokenFor.add(m.geoRecords[0].id);
+      continue;
+    }
+    if (m.status !== 'none') {
+      flagged.push({ entry, ...m });
+      // Every record this entry could plausibly be stays claimed, so it is
+      // never ALSO appended as a new holder while the flag is unresolved.
+      if (m.refRecord) spokenFor.add(m.refRecord.id);
+      for (const r of m.geoRecords) spokenFor.add(r.id);
+    }
+  }
+
+  const creates = (records || []).filter(r => r?.id && !spokenFor.has(r.id));
+  return { updates, creates, flagged };
+}
+
+// Apply a plan to the raw Fusion library list. Entries that are not holders —
+// and holders the plan chose not to touch — are returned BYTE-FOR-BYTE as they
+// were: the holder library file may hold other entry types, and a write must
+// never drop or reshape them.
+export function applyHolderPushPlan(list, plan, toFusion) {
+  const byEntry = new Map(plan.updates.map(u => [u.entry, u.record]));
+  const out = (list || []).map(entry => {
+    const record = byEntry.get(entry);
+    return record ? toFusion(record, entry) : entry;
+  });
+  for (const record of plan.creates) out.push(toFusion(record, null));
+  return out;
+}

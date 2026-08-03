@@ -5497,3 +5497,16 @@ input.sf-ref-num { text-align: right; }
 @media (max-width: 768px) {
   .holder-import-flag { grid-template-columns: 1fr; }
 }
+
+/* Push holders to Fusion — preview of what will and won't be written. */
+.holder-push-modal { max-width: 720px; }
+.holder-push-lib { margin-bottom: var(--sp-3); }
+.holder-push-lib-head {
+  display: flex; align-items: center; gap: var(--sp-2);
+  flex-wrap: wrap; margin-bottom: var(--sp-2);
+}
+.holder-push-kinds { display: grid; gap: 4px; font-size: var(--fs-sm); color: var(--text-sub); }
+.holder-push-flags { margin-top: var(--sp-3); }
+.holder-push-flags-head {
+  display: flex; align-items: center; gap: 6px; margin-bottom: var(--sp-2);
+}
