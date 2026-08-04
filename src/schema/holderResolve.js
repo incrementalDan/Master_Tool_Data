@@ -19,7 +19,8 @@
 // and the caller decides when to act on it.
 
 import { holderRecordToFusion } from './holderRecord.js';
-import { holderForGuid } from '../utils/holderDuplicates.js';
+import { holderForGuid, holderOwnsGuid } from '../utils/holderDuplicates.js';
+import { recordsForGeometry } from './holderIdentity.js';
 import { convertLength } from '../utils/units.js';
 
 // ⚠️ A record with NO SEGMENTS is not a geometry source. A holder created in
@@ -69,32 +70,6 @@ export function resolveHolderForWrite(guid, { records, fusionHolders, holderId }
     };
   }
   return null;
-}
-
-// ─── holder_id backfill (load-time, in memory) ──────────────────────────────
-// Assemblies predating the FK carry only the absorbed Fusion guid. Resolve it
-// once at load and stamp the app id, so everything downstream reads a real
-// foreign key instead of a foreign system's string. Mirrors backfillAsmNumbers
-// / backfillMaterialPresetIds: pure, idempotent, persisted lazily on each
-// tool's next save. A guid that resolves to nothing is left alone — a dangling
-// reference is tolerated everywhere else and is tolerated here.
-export function backfillHolderIds(tools, holderRecords) {
-  const records = holderRecords || [];
-  if (!records.length) return tools;
-  return (tools || []).map(t => {
-    if (!t?.assemblies?.length) return t;
-    let changed = false;
-    const assemblies = t.assemblies.map(a => {
-      // Same precedence as resolveHolderForWrite: the app FK wins; the Fusion
-      // guid is only a hint for an assembly that doesn't have one yet.
-      const rec = (a.holder_id ? records.find(h => h.id === a.holder_id) : null)
-        || (a.holder_guid ? holderForGuid(records, a.holder_guid) : null);
-      if (!rec || rec.id === a.holder_id) return a;
-      changed = true;
-      return { ...a, holder_id: rec.id };
-    });
-    return changed ? { ...t, assemblies } : t;
-  });
 }
 
 // Is this tool carrying holder geometry that no longer matches the holder it
@@ -217,4 +192,72 @@ export function assemblyGaugeCheck({
     assemblyId, holderDescription, before: known ? b : null, after: a,
     deltaIn, deltaMm: mm, level, reason, tolIn, implausible,
   };
+}
+
+// ─── Does this assembly use this holder? ────────────────────────────────────
+// THE one predicate for "which tools use holder X" — re-stamp selection, the
+// usage count, the merge-follows count. It must read the FK first: keying these
+// on the Fusion guid alone (as they used to) silently skips every tool whose
+// baked guid has since churned, so a "push this correction to all its tools"
+// action would quietly cover a fraction of them.
+export function assemblyUsesHolder(assembly, record) {
+  if (!assembly || !record) return false;
+  if (assembly.holder_id) return assembly.holder_id === record.id;
+  return !!assembly.holder_guid && holderOwnsGuid(record, assembly.holder_guid);
+}
+
+export const toolsUsingHolder = (tools, record) =>
+  (tools || []).filter(t => (t.assemblies || []).some(a => assemblyUsesHolder(a, record)));
+
+export const assemblyCountUsingHolder = (tools, record) =>
+  (tools || []).reduce((n, t) =>
+    n + (t.assemblies || []).filter(a => assemblyUsesHolder(a, record)).length, 0);
+
+// ─── holder_id backfill (load-time, in memory) ──────────────────────────────
+// Assemblies predating the FK carry only what Fusion baked in. Resolve that
+// once at load and stamp the app id, so everything downstream reads a real
+// foreign key instead of a foreign system's string. Mirrors backfillAsmNumbers
+// / backfillMaterialPresetIds: pure, idempotent, persisted lazily on each
+// tool's next save.
+//
+// TWO WAYS IN, and the second is the one that matters:
+//   1. The baked holder GUID → a record that owns it. Works only while Fusion
+//      hasn't re-issued that guid since the tool was made.
+//   2. The baked holder's SEGMENTS → the one record with that exact shape.
+//      This is the same strict identity rule used at the Fusion boundary
+//      (holderIdentity.js), applied to the copy Fusion absorbed into the tool.
+//
+// Why (2) is not optional: measured against the shop's real library, the guid
+// links 45% of tools and the shape links 93%. Without it, half the library
+// could never be connected to the holders it demonstrably uses. It is only ever
+// applied when EXACTLY ONE record has that shape — two would be a duplicate to
+// merge, and picking between them is not the backfill's call.
+//
+// A tool that matches neither is left alone: that's the loose, user-confirmed
+// migration matcher's job (holderAudit.js), not a silent guess.
+export function backfillHolderIds(tools, holderRecords) {
+  const records = holderRecords || [];
+  if (!records.length) return tools;
+  return (tools || []).map(t => {
+    if (!t?.assemblies?.length) return t;
+    const bakedByGuid = new Map((t._instancesRaw || [])
+      .filter(r => r?.guid && r.holder)
+      .map(r => [r.guid, r.holder]));
+    let changed = false;
+    const assemblies = t.assemblies.map(a => {
+      const byId = a.holder_id ? records.find(h => h.id === a.holder_id) : null;
+      if (byId) return a;                       // already linked and resolvable
+      const byGuid = a.holder_guid ? holderForGuid(records, a.holder_guid) : null;
+      let rec = byGuid;
+      if (!rec) {
+        const baked = bakedByGuid.get(a.instance_guid);
+        const shapes = baked ? recordsForGeometry(records, baked) : [];
+        if (shapes.length === 1) rec = shapes[0];
+      }
+      if (!rec || rec.id === a.holder_id) return a;
+      changed = true;
+      return { ...a, holder_id: rec.id };
+    });
+    return changed ? { ...t, assemblies } : t;
+  });
 }

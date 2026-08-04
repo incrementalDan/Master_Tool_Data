@@ -164,24 +164,46 @@ export function auditFusionHolders(fusionEntries, records, tolIn = SEGMENT_MATCH
 // A record no entry matched at all is appended as a NEW Fusion holder.
 //
 // `records` should be scoped to one holder library before calling.
-export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL_IN) {
-  const updates = [];   // { entry, record, kind: 'update' | 'adopt' }
+// Would writing this record change the Fusion entry at all? Used to tell
+// "Fusion already agrees" from "Fusion is stale" — a description or vendor
+// edited in the app doesn't move the segments, so identity matching alone would
+// call it settled while Fusion still showed the old name.
+export function fusionEntryIsStale(entry, record, toFusion) {
+  if (!toFusion) return false;
+  const next = toFusion(record, entry);
+  return stableJson(next) !== stableJson(entry);
+}
+
+const stableJson = (v) => JSON.stringify(v, (_k, val) => (
+  val && typeof val === 'object' && !Array.isArray(val)
+    ? Object.fromEntries(Object.keys(val).sort().map(k => [k, val[k]]))
+    : val));
+
+export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL_IN, toFusion = null) {
+  const updates = [];   // { index, entry, record, kind: 'update' | 'adopt', stale }
   const flagged = [];   // { entry, ...match } — untouched
   const spokenFor = new Set();
 
-  for (const entry of fusionEntries || []) {
+  const list = fusionEntries || [];
+  for (let index = 0; index < list.length; index++) {
+    const entry = list[index];
     if (entry?.type !== 'holder') continue;
     const m = matchFusionHolder(entry, records, tolIn);
 
     if (m.status === 'exact') {
-      updates.push({ entry, record: m.record, kind: 'update' });
+      // `stale` is what the badge counts: an identity match only proves Fusion
+      // has the right HOLDER, not the right VALUES.
+      updates.push({
+        index, entry, record: m.record, kind: 'update',
+        stale: fusionEntryIsStale(entry, m.record, toFusion),
+      });
       spokenFor.add(m.record.id);
       continue;
     }
     // The bootstrap case: our shape, and Fusion has no id of its own on it.
     const blankRef = !String(entry['product-id'] ?? '').trim();
     if (m.status === 'geometry-only' && m.geoRecords.length === 1 && blankRef) {
-      updates.push({ entry, record: m.geoRecords[0], kind: 'adopt' });
+      updates.push({ index, entry, record: m.geoRecords[0], kind: 'adopt', stale: true });
       spokenFor.add(m.geoRecords[0].id);
       continue;
     }
@@ -202,12 +224,25 @@ export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL
 // and holders the plan chose not to touch — are returned BYTE-FOR-BYTE as they
 // were: the holder library file may hold other entry types, and a write must
 // never drop or reshape them.
+// ⚠️ Keyed by INDEX, not by object identity. The plan and this call must be
+// given the same list, and identity-keying quietly did nothing when a caller
+// rebuilt the array in between — the write looked like it ran and changed
+// nothing. Index is the honest expression of that contract.
 export function applyHolderPushPlan(list, plan, toFusion) {
-  const byEntry = new Map(plan.updates.map(u => [u.entry, u.record]));
-  const out = (list || []).map(entry => {
-    const record = byEntry.get(entry);
+  const byIndex = new Map(plan.updates.map(u => [u.index, u.record]));
+  const out = (list || []).map((entry, i) => {
+    const record = byIndex.get(i);
     return record ? toFusion(record, entry) : entry;
   });
   for (const record of plan.creates) out.push(toFusion(record, null));
   return out;
+}
+
+// How many holder records Fusion does not yet agree with — never pushed, or
+// pushed and since edited here. THE number that answers "if this app went away,
+// what would be lost?" (see "If Fusion has a place for it, Fusion must have it"
+// in CLAUDE.md), so it is shown on the Holders page rather than left implicit.
+export function holdersOutOfSync(fusionEntries, records, toFusion, tolIn = SEGMENT_MATCH_TOL_IN) {
+  const plan = holderPushPlan(fusionEntries, records, tolIn, toFusion);
+  return plan.creates.length + plan.updates.filter(u => u.stale).length;
 }

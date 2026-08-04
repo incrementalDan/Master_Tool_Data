@@ -214,16 +214,18 @@ export function applyHolderMerge(file, survivorId, loserId) {
   };
 }
 
-// How many tools would follow the merge — i.e. how many currently reference the
-// loser and will resolve to the survivor afterwards. Counted through the
-// assemblies' absorbed holder_guid, which is the only link that exists today.
-export function toolsFollowingMerge(loser, tools) {
+// How many tool assemblies would follow the merge — i.e. how many currently
+// resolve to the loser and will resolve to the survivor afterwards.
+// `usesHolder` is injected rather than imported so this module stays free of a
+// schema dependency; callers pass assemblyUsesHolder (holderResolve.js).
+export function toolsFollowingMerge(loser, tools, usesHolder) {
   const guids = new Set(holderGuidsOf(loser));
+  const hit = usesHolder
+    ? (a) => usesHolder(a, loser)
+    : (a) => !!a.holder_guid && guids.has(a.holder_guid);
   let count = 0;
   for (const t of tools || []) {
-    for (const a of t.assemblies || []) {
-      if (a.holder_guid && guids.has(a.holder_guid)) count++;
-    }
+    for (const a of t.assemblies || []) if (hit(a)) count++;
   }
   return count;
 }

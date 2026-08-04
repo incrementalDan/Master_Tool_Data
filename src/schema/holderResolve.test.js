@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import {
   resolveHolderForWrite, toolHolderIsStale, assemblyGaugeCheck, gaugeToleranceIn,
   ASSEMBLY_GAUGE_WARN_IN, ASSEMBLY_GAUGE_IMPLAUSIBLE_MM, ASSEMBLY_GAUGE_IMPLAUSIBLE_IN,
-  backfillHolderIds,
+  backfillHolderIds, assemblyUsesHolder, toolsUsingHolder, assemblyCountUsingHolder,
 } from './holderResolve.js';
 import { fusionHolderToRecord } from './holderRecord.js';
 import { mergeHolderRecords } from '../utils/holderDuplicates.js';
@@ -444,5 +444,95 @@ describe('a record with no geometry is never a write source', () => {
     const r = resolveHolderForWrite(OLD.guid, { records: [empty], fusionHolders: REAL });
     expect(r.source).toBe('fusion');
     expect(r.entry.segments.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── Linking the existing cutting tools to the controlled holders ───────────
+// The FIRST step of the whole exercise: the tools are already out there
+// carrying a baked copy of a holder, and the app has to work out which record
+// each one is. Fusion's guid can't answer that on its own.
+describe('tool → holder linking', () => {
+  const REALH = JSON.parse(
+    readFileSync(new URL('../../FUSION TOOL Library REF/Master-Holder.json', import.meta.url), 'utf8')
+  ).data;
+
+  const toolWith = (baked, guid) => ({
+    id: 't1',
+    assemblies: [{ assembly_id: 'a1', instance_guid: 'i1', holder_guid: guid ?? baked.guid }],
+    _instancesRaw: [{ guid: 'i1', holder: baked }],
+  });
+
+  it('links by the baked SEGMENTS when the guid has churned', () => {
+    // THE CASE THAT MATTERS. Fusion re-issued the holder's guid after this tool
+    // was made, so the guid the tool carries matches nothing. Its shape does.
+    const rec = fusionHolderToRecord(OLD);
+    const out = backfillHolderIds([toolWith({ ...OLD }, 'a-guid-fusion-has-since-replaced')], [rec]);
+    expect(out[0].assemblies[0].holder_id).toBe(rec.id);
+  });
+
+  it('refuses to guess when two records share that shape', () => {
+    const a = fusionHolderToRecord(OLD);
+    const b = { ...fusionHolderToRecord(OLD), id: 'dup' };
+    const out = backfillHolderIds([toolWith({ ...OLD }, 'churned')], [a, b]);
+    expect(out[0].assemblies[0].holder_id).toBeUndefined();
+  });
+
+  it('leaves a holder we simply do not have — that is the loose matcher’s job', () => {
+    const rec = fusionHolderToRecord(OLD);
+    const alien = { ...OLD, guid: 'x', segments: [{ height: 1, 'upper-diameter': 1, 'lower-diameter': 1 }] };
+    expect(backfillHolderIds([toolWith(alien, 'x')], [rec])[0].assemblies[0].holder_id).toBeUndefined();
+  });
+
+  it('the guid still wins when it resolves — no needless work', () => {
+    const rec = fusionHolderToRecord(OLD);
+    const out = backfillHolderIds([toolWith({ ...OLD })], [rec]);
+    expect(out[0].assemblies[0].holder_id).toBe(rec.id);
+  });
+
+  it('measured on the REAL library: shape links far more tools than the guid', () => {
+    // Not a synthetic case. Against the shop's own data the guid connects a
+    // minority of tools and the shape connects nearly all of them; this is the
+    // reason the segment fallback exists at all.
+    const records = REALH.map(fusionHolderToRecord);
+    const files = ['Full_Type_List Examples.json', 'Special Cases.json', 'InsertToolREF.json'];
+    const tools = [];
+    for (const f of files) {
+      const data = JSON.parse(readFileSync(
+        new URL(`../../FUSION TOOL Library REF/${f}`, import.meta.url), 'utf8')).data || [];
+      for (const t of data) {
+        if (t.type === 'holder' || !t.holder) continue;
+        tools.push(toolWith(t.holder));
+      }
+    }
+    const guidOnly = tools.filter(t =>
+      records.some(r => r.fusion_guid === t.assemblies[0].holder_guid)).length;
+    const linked = backfillHolderIds(tools, records)
+      .filter(t => t.assemblies[0].holder_id).length;
+
+    expect(tools.length).toBeGreaterThan(200);
+    expect(linked).toBeGreaterThan(guidOnly * 1.8);       // ~93% vs ~45%
+    expect(linked / tools.length).toBeGreaterThan(0.9);
+  });
+});
+
+// The one predicate every "which tools use this holder" question goes through.
+describe('assemblyUsesHolder', () => {
+  const rec = { id: 'r1', fusion_guid: 'g1', legacy_fusion_guids: ['g-merged'] };
+
+  it('reads the FK first', () => {
+    expect(assemblyUsesHolder({ holder_id: 'r1', holder_guid: 'anything' }, rec)).toBe(true);
+    expect(assemblyUsesHolder({ holder_id: 'other', holder_guid: 'g1' }, rec)).toBe(false);
+  });
+
+  it('falls back to the guid, following merges, when there is no FK', () => {
+    expect(assemblyUsesHolder({ holder_guid: 'g1' }, rec)).toBe(true);
+    expect(assemblyUsesHolder({ holder_guid: 'g-merged' }, rec)).toBe(true);
+    expect(assemblyUsesHolder({ holder_guid: 'nope' }, rec)).toBe(false);
+  });
+
+  it('counts every assembly, not every tool — a tool can use one holder twice', () => {
+    const tools = [{ assemblies: [{ holder_id: 'r1' }, { holder_id: 'r1' }, { holder_id: 'x' }] }];
+    expect(assemblyCountUsingHolder(tools, rec)).toBe(2);
+    expect(toolsUsingHolder(tools, rec)).toHaveLength(1);
   });
 });

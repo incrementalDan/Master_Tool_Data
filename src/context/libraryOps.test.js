@@ -6,7 +6,10 @@ const { loadMetadata, saveAllMetadata } = vi.hoisted(() => ({
 }));
 vi.mock('../services/driveService.js', () => ({ loadMetadata, saveAllMetadata }));
 
+import { readFileSync } from 'node:fs';
 import { createLibraryOps } from './libraryOps.js';
+import { fusionHolderToRecord } from '../schema/holderRecord.js';
+import { deriveGaugeLength, holderLenIn } from '../utils/holderGeometry.js';
 
 function makeCtx(overrides = {}) {
   return {
@@ -346,5 +349,115 @@ describe('saveFullLibrary — merges metadata by id (does not wipe records not p
     const setTools = ctx.dispatch.mock.calls.find(c => c[0].type === 'SET_TOOLS');
     expect(setTools).toBeTruthy();
     expect(setTools[0].tools.some(t => t.id === 'FTL-NF')).toBe(true);
+  });
+});
+
+// ─── Linking a tool must CORRECT FUSION, not just store a pointer ───────────
+// The whole reason to link is that Fusion holds bad holder data. Stopping at
+// the FK would leave the library looking linked and still wrong.
+describe('linkToolsToHolders — the corrected geometry reaches Fusion', () => {
+  const REAL = JSON.parse(
+    readFileSync(new URL('../../FUSION TOOL Library REF/Master-Holder.json', import.meta.url), 'utf8')
+  ).data;
+  const GOOD = REAL.find(h => h.description.trim() === 'NBT30-SK13C-120');
+  const record = () => fusionHolderToRecord(GOOD);
+
+  // A tool carrying the same holder drawn 2mm short — the real NBT30-SK13C-120
+  // case: its record exists, but every tool baked a slightly different drawing.
+  const badCopy = () => ({
+    ...GOOD,
+    segments: GOOD.segments.map((s, i) => (i === 0 ? { ...s, height: s.height - 2 } : { ...s })),
+  });
+
+  const setup = (rec) => {
+    const raw = {
+      guid: 'inst-1', type: 'flat end mill', description: 'EM', unit: 'inches',
+      // The assembly gauge length Fusion currently holds, derived from the BAD
+      // copy the same way the app derives it — through the record, so the
+      // above-gauge segment is excluded. (Deriving straight off the raw Fusion
+      // segments counts that segment and lands, by coincidence, on the CORRECT
+      // holder's gauge — which made this look like a no-op.) This reproduces
+      // the real tool exactly: 4.44878in of holder + 1.5in of stick-out.
+      geometry: {
+        DC: 0.5, LB: 1.5,
+        assemblyGaugeLength:
+          holderLenIn(deriveGaugeLength(fusionHolderToRecord(badCopy()).segments), GOOD.unit) + 1.5,
+      },
+      holder: badCopy(),
+      'post-process': { comment: 'FTL-LINK1' },
+    };
+    const tool = {
+      id: 'FTL-LINK1', tracking_id: 'FTL-LINK1', tool_type: 'flat end mill',
+      unit: 'inches', diameter: 0.5, description: 'EM', library_id: 'lib1',
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'inst-1', holder_guid: GOOD.guid, ooh: 1.5 }],
+      _instancesRaw: [raw],
+    };
+    const uploaded = [];
+    const ctx = makeCtx({
+      toolsRef: { current: [tool] },
+      holdersRef: { current: [GOOD] },
+      holderLibraryRef: { current: { holders: [rec] } },
+      fusionReadyRef: { current: true },
+      downloadFusionList: vi.fn(async () => [raw]),
+      uploadFusionList: vi.fn(async (libId, list) => { uploaded.push({ libId, list }); }),
+    });
+    return { ctx, uploaded, tool, rec };
+  };
+
+  it('rewrites the tool so Fusion carries the RECORD’s geometry, not the bad copy', async () => {
+    const rec = record();
+    const { ctx, uploaded } = setup(rec);
+    const { linkToolsToHolders } = createLibraryOps(ctx);
+
+    const r = await linkToolsToHolders([{ toolId: 'FTL-LINK1', assemblyId: 'a1', holderId: rec.id }]);
+    expect(r.linked).toBe(1);
+    expect(r.rewritten).toBe(1);
+
+    // What actually went to Fusion.
+    expect(uploaded).toHaveLength(1);
+    const written = uploaded[0].list.find(e => e.guid === 'inst-1');
+    expect(written.holder.segments[0].height).toBeCloseTo(GOOD.segments[0].height, 4);
+    // …and the stale 2mm-short value is gone.
+    expect(written.holder.segments[0].height).not.toBeCloseTo(GOOD.segments[0].height - 2, 4);
+  });
+
+  it('does NOT rewrite a tool whose baked copy already matches — nothing to correct', async () => {
+    const rec = record();
+    const { ctx, uploaded } = setup(rec);
+    // Same geometry as the record: the exact tier.
+    ctx.toolsRef.current[0]._instancesRaw[0].holder = { ...GOOD };
+    const { linkToolsToHolders } = createLibraryOps(ctx);
+
+    const r = await linkToolsToHolders([{ toolId: 'FTL-LINK1', assemblyId: 'a1', holderId: rec.id }]);
+    expect(r.linked).toBe(1);
+    expect(r.rewritten).toBe(0);
+    expect(uploaded).toHaveLength(0);        // no Fusion round-trip at all
+  });
+
+  it('reports the assembly-gauge change BEFORE writing (dryRun writes nothing)', async () => {
+    const rec = record();
+    const { ctx, uploaded } = setup(rec);
+    const { linkToolsToHolders } = createLibraryOps(ctx);
+
+    const r = await linkToolsToHolders(
+      [{ toolId: 'FTL-LINK1', assemblyId: 'a1', holderId: rec.id }], { dryRun: true });
+    expect(r.wrote).toBe(false);
+    expect(uploaded).toHaveLength(0);
+    expect(r.rewritten).toBe(1);
+    // The 2mm correction shows up as a 2mm move in where the cutting edge sits.
+    expect(Math.abs(r.checks[0].deltaMm)).toBeCloseTo(2, 1);
+  });
+
+  it('leaves memory untouched when the Fusion write fails', async () => {
+    // The optimistic order claimed the tools were linked while the write had
+    // failed. Nothing may be marked linked unless Fusion actually took it.
+    const rec = record();
+    const { ctx } = setup(rec);
+    ctx.uploadFusionList = vi.fn(async () => { throw new Error('read-only'); });
+    const { linkToolsToHolders } = createLibraryOps(ctx);
+
+    await expect(linkToolsToHolders(
+      [{ toolId: 'FTL-LINK1', assemblyId: 'a1', holderId: rec.id }])).rejects.toThrow('read-only');
+    expect(ctx.dispatch.mock.calls.filter(c => c[0].type === 'SET_TOOLS')).toHaveLength(0);
   });
 });

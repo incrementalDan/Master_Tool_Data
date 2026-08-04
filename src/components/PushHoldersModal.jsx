@@ -14,7 +14,7 @@ import { useState, useEffect } from 'react';
 import { X, Upload, AlertTriangle } from 'lucide-react';
 
 const KIND_NOTE = {
-  update: 'Already linked — its geometry and name are refreshed.',
+  update: 'Already linked, but Fusion is holding older values — refreshed.',
   adopt: 'Same shape, no ID in Fusion yet — this stamps ours on. Nothing is overwritten.',
   create: 'Not in the Fusion library — added as a new holder.',
 };
@@ -50,7 +50,7 @@ export default function PushHoldersModal({ preview, onCommit, onClose }) {
             <div key={l.libId} className="holder-push-lib">
               <div className="holder-push-lib-head">
                 <b>{l.libName}</b>
-                <span className="holder-conf high">{l.updates} refreshed</span>
+                {l.updates > 0 && <span className="holder-conf high">{l.updates} refreshed</span>}
                 {l.adopts > 0 && <span className="holder-conf high">{l.adopts} newly linked</span>}
                 {l.creates > 0 && <span className="holder-conf high">{l.creates} added</span>}
                 {l.flagged.length > 0 && <span className="holder-conf medium">{l.flagged.length} left alone</span>}

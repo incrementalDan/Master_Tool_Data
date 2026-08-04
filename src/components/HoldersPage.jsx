@@ -3,23 +3,26 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy, Upload } from 'lucide-react';
+import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy, Upload, Link2 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import HolderPill from './HolderPill.jsx';
 import HolderDetail from './HolderDetail.jsx';
 import {
   holderOptions, holderOption, holderOptionLabel, newHolderOption, holderConfigOf,
 } from '../schema/holderOptions.js';
-import { newHolderRecord } from '../schema/holderRecord.js';
+import { newHolderRecord, holderRecordToFusion } from '../schema/holderRecord.js';
 import { deriveGaugeLength, deriveExtensionOoh, formatHolderLen, holderLenIn, nominalLengthCheck } from '../utils/holderGeometry.js';
 import { healHolderDescription, applyHealToRecord } from '../utils/holderDescription.js';
 import { recordsWithBodyDivergence } from '../utils/holderBody.js';
 import { proposeHolderParts, applyPartProposals, holdersWithPartDrift, holderPartsOf } from '../utils/holderParts.js';
 import { findHolderDuplicates, holdersInDuplicates, applyHolderMerge, compareHolders, holderGuidsOf, toolsFollowingMerge } from '../utils/holderDuplicates.js';
-import { auditFusionHolders } from '../schema/holderIdentity.js';
+import { auditFusionHolders, holdersOutOfSync } from '../schema/holderIdentity.js';
+import { assemblyCountUsingHolder, assemblyUsesHolder } from '../schema/holderResolve.js';
 import HolderMergeModal from './HolderMergeModal.jsx';
 import RestampModal from './RestampModal.jsx';
 import PushHoldersModal from './PushHoldersModal.jsx';
+import LinkToolsModal from './LinkToolsModal.jsx';
+import { buildHolderLinkPlan } from '../utils/holderLink.js';
 import { unitAbbr } from '../utils/units.js';
 
 const CONF_ORDER = ['high', 'medium', 'low'];
@@ -252,6 +255,7 @@ function DuplicatesModal({ holders, config, tools, onMerge, onClose }) {
 
 function HolderList({
   holders, config, usageOf, onOpen, onNew, onHeal, onImport, onLinkParts, onDuplicates, onPush, unlinked, canPush,
+  onLinkTools, unlinkedTools,
   importable, googleAuthenticated, driftIds, partCount, duplicateIds,
 }) {
   const [q, setQ] = useState('');
@@ -402,10 +406,21 @@ function HolderList({
           <button className="btn btn-secondary btn-sm" onClick={onPush}
             disabled={!holders.length || !googleAuthenticated || !canPush}
             title={canPush
-              ? "Write each holder's ID and geometry into the Fusion holder library — the link that survives Fusion re-issuing its GUIDs"
+              ? (unlinked
+                ? `${unlinked} holder record${unlinked === 1 ? '' : 's'} Fusion doesn't have yet — until you push, that work only exists in this app`
+                : "Fusion already has every holder record's ID and geometry")
               : 'Link a Fusion holder library in Settings first — there is nowhere to push to'}>
             <Upload size={14} /> {unlinked ? `Push to Fusion (${unlinked})` : 'Push to Fusion'}
           </button>
+          {/* The migration pass: work out which record each tool's baked
+              holder copy is. Badged with how many assemblies still have no
+              link — the whole point is to get that to zero. */}
+          {unlinkedTools > 0 && (
+            <button className="btn btn-secondary btn-sm" onClick={onLinkTools} disabled={!googleAuthenticated}
+              title="Match every tool's frozen holder copy to a holder record and store the link">
+              <Link2 size={14} /> Link {unlinkedTools} tool{unlinkedTools === 1 ? '' : 's'}
+            </button>
+          )}
           <button className="btn btn-secondary btn-sm" onClick={onDuplicates} disabled={holders.length < 2}
             title="Find holders that look like the same physical holder entered twice">
             <Copy size={14} /> {duplicateIds.size ? `Duplicates (${duplicateIds.size})` : 'Duplicates'}
@@ -599,7 +614,7 @@ export default function HoldersPage() {
   const {
     holderLibrary, holders: fusionHolders, shopSettings, tools,
     saveHolderRecord, deleteHolderRecord, saveHolderLibrary, saveShopSettings, saveHolderPart,
-    importHoldersFromFusion, pushHoldersToFusion, restampHolderTools, googleAuthenticated, googleUser, demoMode, notify,
+    importHoldersFromFusion, pushHoldersToFusion, restampHolderTools, linkToolsToHolders, googleAuthenticated, googleUser, demoMode, notify,
   } = useApp();
   const navigate = useNavigate();
   const [openId, setOpenId] = useState(null);
@@ -627,21 +642,11 @@ export default function HoldersPage() {
     () => auditFusionHolders(fusionHolders || [], records).unknown.length,
     [records, fusionHolders]);
 
-  // "Used by N tools" — counted through the assemblies' holder_guid, which is
-  // the only link that exists today (a tool's absorbed Fusion snapshot). It is
-  // NOT the app FK: that comes with the linking phase, and until then a holder
-  // record with no Fusion guid always reads 0.
-  const usageOf = useMemo(() => {
-    const counts = new Map();
-    for (const t of tools || []) {
-      for (const a of t.assemblies || []) {
-        if (a.holder_guid) counts.set(a.holder_guid, (counts.get(a.holder_guid) || 0) + 1);
-      }
-    }
-    // Counts through EVERY guid the record owns, including any it absorbed in
-    // a merge — so a merged-away holder's tools show under the survivor.
-    return (h) => holderGuidsOf(h).reduce((a, g) => a + (counts.get(g) || 0), 0);
-  }, [tools]);
+  // "Used by N tools" — through assemblyUsesHolder, so a tool linked by the app
+  // FK counts even when Fusion has since re-issued the guid it carries.
+  const usageOf = useMemo(
+    () => (h) => assemblyCountUsingHolder(tools, h),
+    [tools]);
 
   const canEdit = googleAuthenticated || demoMode;
 
@@ -665,7 +670,7 @@ export default function HoldersPage() {
     // Say how many tools resolve through this record. Deleting it isn't
     // cosmetic for them: their next save falls back to the Fusion library's
     // version of the holder, quietly undoing any correction made here.
-    const inUse = toolsFollowingMerge(record, tools);
+    const inUse = toolsFollowingMerge(record, tools, assemblyUsesHolder);
     const warn = inUse
       ? `\n\n⚠ ${inUse} tool assembl${inUse === 1 ? 'y uses' : 'ies use'} this holder. They will fall back to the Fusion holder library the next time each tool is saved — any correction made here is lost for them.`
       : '';
@@ -720,6 +725,32 @@ export default function HoldersPage() {
     } catch { /* toasted */ }
   };
 
+  // ─── Link tools to holders (the migration pass) ──────────────────────────
+  // Proposed live off the current tools + records, so the badge is always the
+  // real remaining count and the modal never works from a stale plan.
+  const linkPlan = useMemo(
+    () => buildHolderLinkPlan(tools, records, config),
+    [tools, records, config]);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const onLinkTools = () => setLinkOpen(true);
+  // Preview of what the CURRENT selection would do to Fusion — re-run as rows
+  // are ticked, because the interesting number is how many tools get their
+  // holder geometry corrected, not how many pointers get stored.
+  const previewLinks = useCallback(
+    (links) => linkToolsToHolders(links, { dryRun: true }),
+    [linkToolsToHolders]);
+  const commitLinks = async (links) => {
+    // Errors are already toasted by the action; swallow the rejection here so a
+    // failed write doesn't surface as an unhandled promise.
+    const r = await linkToolsToHolders(links).catch(() => null);
+    if (!r) return null;
+    notify(r.rewritten
+      ? `Linked ${r.linked} assembl${r.linked === 1 ? 'y' : 'ies'} · corrected ${r.rewritten} tool${r.rewritten === 1 ? '' : 's'} in Fusion`
+      : `Linked ${r.linked} assembl${r.linked === 1 ? 'y' : 'ies'} — Fusion already had the right geometry`,
+      'success');
+    return r;
+  };
+
   // ─── Push to Fusion ──────────────────────────────────────────────────────
   // Preview first, always: this is the one holder action that writes to
   // Autodesk, and the preview is also where the entries it REFUSES to touch
@@ -739,8 +770,14 @@ export default function HoldersPage() {
 
   // How many records Fusion doesn't confidently know yet — the badge on the
   // button, and the reason to press it.
+  // ⚠️ Counts records Fusion doesn't agree with — never pushed OR pushed and
+  // since edited here. Not just "unmatched": editing a description doesn't move
+  // the segments, so an identity match alone would call it settled while Fusion
+  // still showed the old name. This number is how you can see, at a glance,
+  // what would be lost if this app went away (CLAUDE.md → "If Fusion has a
+  // place for it, Fusion must have it").
   const unlinked = useMemo(
-    () => auditFusionHolders(fusionHolders || [], records).unpushed.length,
+    () => holdersOutOfSync(fusionHolders || [], records, holderRecordToFusion),
     [fusionHolders, records]);
   // Nowhere to push to unless a Fusion holder library is actually linked (demo
   // has holders but no registry entry) — better a disabled button that says why
@@ -842,11 +879,19 @@ export default function HoldersPage() {
           onOpen={h => setOpenId(h.id)}
           onNew={onNew} onHeal={() => setHealing(true)} onImport={onImport}
           onPush={onPush} unlinked={unlinked} canPush={canPush}
+          onLinkTools={onLinkTools} unlinkedTools={linkPlan.rows.length}
           onLinkParts={() => setLinkingParts(true)}
           onDuplicates={() => setDupesOpen(true)}
           driftIds={driftIds} partCount={parts.length} duplicateIds={duplicateIds}
         />
         </>
+      )}
+      {linkOpen && (
+        <LinkToolsModal
+          plan={linkPlan} holders={records}
+          onPreview={previewLinks} onCommit={commitLinks}
+          onClose={() => setLinkOpen(false)}
+        />
       )}
       {pushOpen && (
         <PushHoldersModal

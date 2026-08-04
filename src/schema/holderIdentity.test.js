@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import {
   segmentsMatch, recordForRef, recordsForGeometry, matchFusionHolder,
   isConfidentMatch, auditFusionHolders, SEGMENT_MATCH_TOL_IN,
-  holderPushPlan, applyHolderPushPlan,
+  holderPushPlan, applyHolderPushPlan, holdersOutOfSync,
 } from './holderIdentity.js';
 import { fusionHolderToRecord, holderRecordToFusion } from './holderRecord.js';
 import { convertHolderUnits } from '../utils/holderGeometry.js';
@@ -230,5 +230,62 @@ describe('push plan', () => {
     expect(plan2.creates).toHaveLength(0);
     expect(plan2.flagged).toHaveLength(0);
     expect(plan2.updates.every(u => u.kind === 'update')).toBe(true);
+  });
+});
+
+// ─── "If Fusion has a place for it, Fusion must have it" ────────────────────
+// See the CLAUDE.md section of that name. The failure this locks: work done in
+// the app on a Fusion-native field looks settled because the IDENTITY still
+// matches, while Fusion quietly holds the old value. If this app went away,
+// that work would be gone from a system that had a field for it.
+describe('out-of-sync detection', () => {
+  const rec = settled();
+  const inFusion = () => pushed(rec);
+
+  it('a settled holder reports nothing to push', () => {
+    expect(holdersOutOfSync([inFusion()], [rec], holderRecordToFusion)).toBe(0);
+  });
+
+  it('RENAMING in the app is out of sync, even though identity still matches', () => {
+    // The description is Fusion-native. Editing it doesn't move the segments,
+    // so matchFusionHolder still says 'exact' — which is why counting only
+    // unmatched records let a rename sit unpushed forever.
+    const renamed = { ...rec, description: 'NBT30-SK13C-60 (re-measured)' };
+    expect(matchFusionHolder(inFusion(), [renamed]).status).toBe('exact');
+    expect(holdersOutOfSync([inFusion()], [renamed], holderRecordToFusion)).toBe(1);
+  });
+
+  it('a vendor or part-number edit counts too', () => {
+    const edited = { ...rec, vendor: 'Maritool' };
+    expect(holdersOutOfSync([inFusion()], [edited], holderRecordToFusion)).toBe(1);
+  });
+
+  it('a record Fusion has never seen counts', () => {
+    expect(holdersOutOfSync([], [rec], holderRecordToFusion)).toBe(1);
+  });
+
+  it('the push then clears it — the count is actionable, not decorative', () => {
+    const renamed = { ...rec, description: 'NBT30-SK13C-60 (re-measured)' };
+    const list = [inFusion()];
+    const plan = holderPushPlan(list, [renamed], undefined, holderRecordToFusion);
+    const after = applyHolderPushPlan(list, plan, holderRecordToFusion);
+    expect(holdersOutOfSync(after, [renamed], holderRecordToFusion)).toBe(0);
+  });
+
+  it('the plan applies to an EQUAL list, not only the identical one', () => {
+    // The plan and the write are handed the same array in practice, but keying
+    // on object identity meant a rebuilt array silently applied nothing — the
+    // write appeared to run and changed nothing.
+    const renamed = { ...rec, description: 'NBT30-SK13C-60 (re-measured)' };
+    const plan = holderPushPlan([inFusion()], [renamed], undefined, holderRecordToFusion);
+    const after = applyHolderPushPlan([inFusion()], plan, holderRecordToFusion);
+    expect(after[0].description).toBe('NBT30-SK13C-60 (re-measured)');
+  });
+
+  it('an app-only field never makes a record look out of sync', () => {
+    // Fusion has nowhere to put these, so editing them is not a sync problem —
+    // flagging them would make the badge permanent noise.
+    const noted = { ...rec, notes: 'lives in the top drawer', location: 'A-4', type_id: 'ht-collet' };
+    expect(holdersOutOfSync([inFusion()], [noted], holderRecordToFusion)).toBe(0);
   });
 });
