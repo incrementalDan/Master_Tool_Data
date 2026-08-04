@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy, Upload } from 'lucide-react';
+import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy, Upload, Link2 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import HolderPill from './HolderPill.jsx';
 import HolderDetail from './HolderDetail.jsx';
@@ -21,6 +21,8 @@ import { assemblyCountUsingHolder, assemblyUsesHolder } from '../schema/holderRe
 import HolderMergeModal from './HolderMergeModal.jsx';
 import RestampModal from './RestampModal.jsx';
 import PushHoldersModal from './PushHoldersModal.jsx';
+import LinkToolsModal from './LinkToolsModal.jsx';
+import { buildHolderLinkPlan } from '../utils/holderLink.js';
 import { unitAbbr } from '../utils/units.js';
 
 const CONF_ORDER = ['high', 'medium', 'low'];
@@ -253,6 +255,7 @@ function DuplicatesModal({ holders, config, tools, onMerge, onClose }) {
 
 function HolderList({
   holders, config, usageOf, onOpen, onNew, onHeal, onImport, onLinkParts, onDuplicates, onPush, unlinked, canPush,
+  onLinkTools, unlinkedTools,
   importable, googleAuthenticated, driftIds, partCount, duplicateIds,
 }) {
   const [q, setQ] = useState('');
@@ -407,6 +410,15 @@ function HolderList({
               : 'Link a Fusion holder library in Settings first — there is nowhere to push to'}>
             <Upload size={14} /> {unlinked ? `Push to Fusion (${unlinked})` : 'Push to Fusion'}
           </button>
+          {/* The migration pass: work out which record each tool's baked
+              holder copy is. Badged with how many assemblies still have no
+              link — the whole point is to get that to zero. */}
+          {unlinkedTools > 0 && (
+            <button className="btn btn-secondary btn-sm" onClick={onLinkTools} disabled={!googleAuthenticated}
+              title="Match every tool's frozen holder copy to a holder record and store the link">
+              <Link2 size={14} /> Link {unlinkedTools} tool{unlinkedTools === 1 ? '' : 's'}
+            </button>
+          )}
           <button className="btn btn-secondary btn-sm" onClick={onDuplicates} disabled={holders.length < 2}
             title="Find holders that look like the same physical holder entered twice">
             <Copy size={14} /> {duplicateIds.size ? `Duplicates (${duplicateIds.size})` : 'Duplicates'}
@@ -600,7 +612,7 @@ export default function HoldersPage() {
   const {
     holderLibrary, holders: fusionHolders, shopSettings, tools,
     saveHolderRecord, deleteHolderRecord, saveHolderLibrary, saveShopSettings, saveHolderPart,
-    importHoldersFromFusion, pushHoldersToFusion, restampHolderTools, googleAuthenticated, googleUser, demoMode, notify,
+    importHoldersFromFusion, pushHoldersToFusion, restampHolderTools, linkToolsToHolders, googleAuthenticated, googleUser, demoMode, notify,
   } = useApp();
   const navigate = useNavigate();
   const [openId, setOpenId] = useState(null);
@@ -709,6 +721,20 @@ export default function HoldersPage() {
       await saveHolderRecord(record);
       setOpenId(record.id);
     } catch { /* toasted */ }
+  };
+
+  // ─── Link tools to holders (the migration pass) ──────────────────────────
+  // Proposed live off the current tools + records, so the badge is always the
+  // real remaining count and the modal never works from a stale plan.
+  const linkPlan = useMemo(
+    () => buildHolderLinkPlan(tools, records, config),
+    [tools, records, config]);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const onLinkTools = () => setLinkOpen(true);
+  const commitLinks = async (links) => {
+    const n = await linkToolsToHolders(links);
+    notify(`Linked ${n} assembl${n === 1 ? 'y' : 'ies'} to holder records`, 'success');
+    return n;
   };
 
   // ─── Push to Fusion ──────────────────────────────────────────────────────
@@ -833,11 +859,19 @@ export default function HoldersPage() {
           onOpen={h => setOpenId(h.id)}
           onNew={onNew} onHeal={() => setHealing(true)} onImport={onImport}
           onPush={onPush} unlinked={unlinked} canPush={canPush}
+          onLinkTools={onLinkTools} unlinkedTools={linkPlan.rows.length}
           onLinkParts={() => setLinkingParts(true)}
           onDuplicates={() => setDupesOpen(true)}
           driftIds={driftIds} partCount={parts.length} duplicateIds={duplicateIds}
         />
         </>
+      )}
+      {linkOpen && (
+        <LinkToolsModal
+          plan={linkPlan} holders={records}
+          onCommit={commitLinks}
+          onClose={() => setLinkOpen(false)}
+        />
       )}
       {pushOpen && (
         <PushHoldersModal
