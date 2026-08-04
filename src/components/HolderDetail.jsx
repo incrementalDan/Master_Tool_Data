@@ -759,31 +759,44 @@ export default function HolderDetail({
         )}
 
         {h.has_extension && (
-          <div className="holder-ext-grid">
-            <Field label="Extension collet">
-              <OptionSelect
-                config={config} list="collet_sizes" value={h.extension?.collet_size_id}
-                onChange={v => setExt('collet_size_id', v)} onAddOption={onAddOption}
-              />
-            </Field>
-            <Field label="Manufacturer">
-              <input className="field-input" value={h.extension?.manufacturer || ''} onChange={e => setExt('manufacturer', e.target.value)} />
-            </Field>
-            <Field label="Part number">
-              <input className="field-input" value={h.extension?.part_number || ''} onChange={e => setExt('part_number', e.target.value)} />
-            </Field>
-            <Field label="Vendor / source">
-              <input className="field-input" value={h.extension?.vendor || ''} onChange={e => setExt('vendor', e.target.value)} />
-            </Field>
-            <Field label="OOH (derived)" hint="Set by flagging segments below">
-              <input className="field-input holder-readonly ext" readOnly
-                value={extOoh != null ? `${formatHolderLen(holderLenIn(extOoh, h.unit), 'inches')} in` : '—'} />
-            </Field>
-            <Field label="Extension shank diameter (derived)" hint="Mark one segment as the shank below">
-              <input className={`field-input holder-readonly${shankDia != null ? ' ext' : ''}`} readOnly
-                value={shankDia != null ? `${trimHolderLen(shankDia, h.unit)} ${unitAbbr(h.unit)}` : '—'} />
-            </Field>
-          </div>
+          <>
+            {/* What you TYPE. Four fields, so they sit on one row without
+                being squeezed. */}
+            <div className="holder-ext-grid">
+              <Field label="Extension collet">
+                <OptionSelect
+                  config={config} list="collet_sizes" value={h.extension?.collet_size_id}
+                  onChange={v => setExt('collet_size_id', v)} onAddOption={onAddOption}
+                />
+              </Field>
+              <Field label="Manufacturer">
+                <input className="field-input" value={h.extension?.manufacturer || ''} onChange={e => setExt('manufacturer', e.target.value)} />
+              </Field>
+              <Field label="Part number">
+                <input className="field-input" value={h.extension?.part_number || ''} onChange={e => setExt('part_number', e.target.value)} />
+              </Field>
+              <Field label="Vendor / source">
+                <input className="field-input" value={h.extension?.vendor || ''} onChange={e => setExt('vendor', e.target.value)} />
+              </Field>
+            </div>
+
+            {/* What the SEGMENTS decide. Split out because mixing read-only
+                values into the same row read as more fields to fill in, and
+                their longer labels wrapped, so nothing lined up. */}
+            <div className="holder-ext-derived">
+              <div className="holder-ext-derived-label">From the segments below</div>
+              <div className="holder-ext-derived-grid">
+                <Field label="OOH" hint="Flag the extension segments">
+                  <input className="field-input holder-readonly ext" readOnly
+                    value={extOoh != null ? `${formatHolderLen(holderLenIn(extOoh, h.unit), 'inches')} in` : '—'} />
+                </Field>
+                <Field label="Shank Ø" hint="Mark one segment as the shank">
+                  <input className={`field-input holder-readonly${shankDia != null ? ' ext' : ''}`} readOnly
+                    value={shankDia != null ? `${trimHolderLen(shankDia, h.unit)} ${unitAbbr(h.unit)}` : '—'} />
+                </Field>
+              </div>
+            </div>
+          </>
         )}
       </Section>
 
