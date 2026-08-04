@@ -236,6 +236,38 @@ export function holderPushDiff(entry, next) {
   return out;
 }
 
+// ─── Grouping a change by what KIND it is ───────────────────────────────────
+// A list of twenty holders reads as twenty separate decisions. In practice
+// they fall into a few kinds, and the kind is what tells you whether to look
+// closely: stamping an ID is nothing to think about; geometry moving is.
+//
+// A holder lands in the group of its MOST significant change, so it appears
+// once — geometry beats text beats a bare ID stamp.
+export const PUSH_GROUPS = {
+  geometry: {
+    key: 'geometry', label: 'Geometry',
+    note: 'The shape or gauge length Fusion holds differs from the record. Worth a look.',
+  },
+  text: {
+    key: 'text', label: 'Names & text',
+    note: 'Description, vendor or link. The holder itself is unchanged.',
+  },
+  id: {
+    key: 'id', label: 'ID only',
+    note: 'Nothing but the app’s ID written into Fusion’s product-id field. The geometry Fusion already holds is identical.',
+  },
+};
+
+const GEOMETRY_KEYS = new Set(['segments', 'gaugeLength', 'unit']);
+const TEXT_KEYS = new Set(['description', 'vendor', 'product-link', 'expressions']);
+
+export function pushChangeGroup(diff) {
+  const keys = (diff || []).map(d => d.key);
+  if (keys.some(k => GEOMETRY_KEYS.has(k))) return 'geometry';
+  if (keys.some(k => TEXT_KEYS.has(k))) return 'text';
+  return 'id';
+}
+
 // Would writing this record change the Fusion entry at all?
 export function fusionEntryIsStale(entry, record, toFusion) {
   if (!toFusion) return false;

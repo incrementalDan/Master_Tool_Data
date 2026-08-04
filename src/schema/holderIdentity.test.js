@@ -7,7 +7,7 @@ import {
   segmentsMatch, recordForRef, recordsForGeometry, matchFusionHolder,
   isConfidentMatch, auditFusionHolders, SEGMENT_MATCH_TOL_IN,
   holderPushPlan, applyHolderPushPlan, holdersOutOfSync,
-  holderPushDiff, fusionEntryIsStale,
+  holderPushDiff, fusionEntryIsStale, pushChangeGroup, PUSH_GROUPS,
 } from './holderIdentity.js';
 import { fusionHolderToRecord, holderRecordToFusion } from './holderRecord.js';
 import { convertHolderUnits } from '../utils/holderGeometry.js';
@@ -340,5 +340,37 @@ describe('what a push would change', () => {
     // And most of them are a pure ID stamp — the reassuring case.
     const idOnly = stale.filter(u => u.diff.length === 1 && u.diff[0].key === 'product-id');
     expect(idOnly.length).toBeGreaterThan(stale.length / 2);
+  });
+});
+
+// A list of twenty holders reads as twenty decisions unless it's grouped by
+// what KIND of change each one is — which is what tells you whether to look.
+describe('grouping a change by kind', () => {
+  const g = (...keys) => pushChangeGroup(keys.map(key => ({ key })));
+
+  it('geometry outranks everything — it is the one worth reading', () => {
+    expect(g('segments')).toBe('geometry');
+    expect(g('gaugeLength')).toBe('geometry');
+    expect(g('segments', 'description', 'product-id')).toBe('geometry');
+  });
+
+  it('text beats a bare ID stamp', () => {
+    expect(g('description')).toBe('text');
+    expect(g('vendor', 'product-id')).toBe('text');
+  });
+
+  it('an ID stamp on its own is the quiet group', () => {
+    expect(g('product-id')).toBe('id');
+  });
+
+  it('every holder lands in exactly one group', () => {
+    const records = REAL.map(fusionHolderToRecord);
+    const plan = holderPushPlan(REAL, records, undefined, holderRecordToFusion);
+    const stale = plan.updates.filter(u => u.stale);
+    const groups = stale.map(u => pushChangeGroup(u.diff));
+    expect(groups.every(x => x in PUSH_GROUPS)).toBe(true);
+    expect(groups).toHaveLength(stale.length);
+    // On a first push nothing's geometry moves — it was read from Fusion.
+    expect(groups.filter(x => x === 'geometry')).toHaveLength(0);
   });
 });
