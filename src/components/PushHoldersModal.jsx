@@ -11,7 +11,8 @@
 // of what they changed.
 
 import { useState, useEffect } from 'react';
-import { X, Upload, AlertTriangle } from 'lucide-react';
+import { X, Upload, AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
+import { PUSH_GROUPS } from '../schema/holderIdentity.js';
 
 const KIND_NOTE = {
   update: 'already in Fusion',
@@ -22,39 +23,49 @@ const KIND_NOTE = {
 // One row per holder, naming every field the write would change. "5 refreshed"
 // on its own asked you to take the app's word for it; this says which holders
 // and what moves.
-function PushRow({ entry, record, kind, diff }) {
+function PushRow({ entry, record, kind, diff, group }) {
   const name = record?.description || entry?.description || '(no description)';
-  const idOnly = diff.length === 1 && diff[0].key === 'product-id';
   return (
     <div className="push-row">
       <div className="push-row-head">
         <span className="push-row-name">{name}</span>
         <span className="push-row-kind">{KIND_NOTE[kind]}</span>
       </div>
-      {idOnly ? (
-        <div className="push-row-field">
-          <b>App ID</b>
-          <span className="mono push-from">{diff[0].from}</span>
-          <span className="push-arrow">→</span>
-          <span className="mono push-to">{diff[0].to}</span>
-          <span className="push-only">nothing else changes</span>
+      {/* In the ID-only group the group header already says what happens, so
+          the row is just the value — repeating the sentence twenty times is
+          how a list stops being read. */}
+      {diff.map(d => (
+        <div key={d.key} className="push-row-field">
+          {group !== 'id' && <b>{d.label}</b>}
+          {d.note ? (
+            <span>— {d.note}</span>
+          ) : (
+            <>
+              <span className="mono push-from">{d.from}</span>
+              <span className="push-arrow">→</span>
+              <span className="mono push-to">{d.to}</span>
+            </>
+          )}
         </div>
-      ) : (
-        diff.map(d => (
-          <div key={d.key} className="push-row-field">
-            <b>{d.label}</b>
-            {d.note ? (
-              <span>— {d.note}</span>
-            ) : (
-              <>
-                <span className="mono push-from">{d.from}</span>
-                <span className="push-arrow">→</span>
-                <span className="mono push-to">{d.to}</span>
-              </>
-            )}
-          </div>
-        ))
-      )}
+      ))}
+    </div>
+  );
+}
+
+// Collapsible, and the DEFAULT state is the point: geometry open because it's
+// the one worth reading, ID-only shut because it's the one that isn't.
+function PushGroup({ group, rows, defaultOpen }) {
+  const [open, setOpen] = useState(defaultOpen);
+  if (!rows.length) return null;
+  return (
+    <div className={`push-group ${group.key}`}>
+      <button className="push-group-head" onClick={() => setOpen(o => !o)}>
+        {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        <b>{group.label}</b>
+        <span className="push-group-count">{rows.length}</span>
+        <span className="push-group-note">{group.note}</span>
+      </button>
+      {open && <div className="push-rows">{rows.map((r, i) => <PushRow key={i} {...r} />)}</div>}
     </div>
   );
 }
@@ -86,36 +97,30 @@ export default function PushHoldersModal({ preview, onCommit, onClose }) {
         <div className="modal-body">
           {!preview && <div className="holder-empty">Working out what would change…</div>}
 
-          {preview && libs.map(l => (
-            <div key={l.libId} className="holder-push-lib">
-              <div className="holder-push-lib-head">
-                <b>{l.libName}</b>
-                <span className="holder-conf high">
-                  {l.updates + l.adopts + l.creates} to write
-                </span>
-                {l.flagged.length > 0 && (
-                  <span className="holder-conf medium">{l.flagged.length} left alone</span>
+          {preview && libs.map(l => {
+            const byGroup = (g) => (l.rows || []).filter(r => r.group === g);
+            return (
+              <div key={l.libId} className="holder-push-lib">
+                <div className="holder-push-lib-head">
+                  <b>{l.libName}</b>
+                  <span className="holder-conf high">
+                    {l.updates + l.adopts + l.creates} to write
+                  </span>
+                  {l.flagged.length > 0 && (
+                    <span className="holder-conf medium">{l.flagged.length} left alone</span>
+                  )}
+                </div>
+                <PushGroup group={PUSH_GROUPS.geometry} rows={byGroup('geometry')} defaultOpen />
+                <PushGroup group={PUSH_GROUPS.text} rows={byGroup('text')} defaultOpen />
+                <PushGroup group={PUSH_GROUPS.id} rows={byGroup('id')} defaultOpen={false} />
+                {l.creates > 0 && (
+                  <div className="push-row-field" style={{ marginTop: 6 }}>
+                    <b>{l.creates}</b> holder{l.creates === 1 ? '' : 's'} {KIND_NOTE.create}.
+                  </div>
                 )}
               </div>
-              {/* Said once, not on all fifteen rows. */}
-              {l.idOnly > 0 && (
-                <p className="modal-sub" style={{ margin: '4px 0 0' }}>
-                  {l.idOnly} of these get nothing but their ID written — the geometry Fusion
-                  already holds for them is identical.
-                </p>
-              )}
-              {l.rows?.length > 0 && (
-                <div className="push-rows">
-                  {l.rows.map((r, i) => <PushRow key={i} {...r} />)}
-                </div>
-              )}
-              {l.creates > 0 && (
-                <div className="push-row-field" style={{ marginTop: 6 }}>
-                  <b>{l.creates}</b> holder{l.creates === 1 ? '' : 's'} {KIND_NOTE.create}.
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
 
           {flagged.length > 0 && (
             <div className="holder-warn holder-push-flags">

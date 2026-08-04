@@ -17,7 +17,7 @@ import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { backfillMaterialPresetIds, backfillPresetAssemblyLinks, autoLinkMaterialByGrade } from '../utils/presetNaming.js';
 import { backfillPreferredMachineIds } from '../utils/machines.js';
 import { backfillHolderIds } from '../schema/holderResolve.js';
-import { matchFusionHolder, holderPushPlan, applyHolderPushPlan } from '../schema/holderIdentity.js';
+import { matchFusionHolder, holderPushPlan, applyHolderPushPlan, pushChangeGroup } from '../schema/holderIdentity.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
@@ -539,12 +539,10 @@ export function AppProvider({ children }) {
         flagged: plan.flagged,
         // Every holder the write touches, with the fields that move — so the
         // dialog can name them instead of showing a bare count.
-        rows: plan.updates.filter(u => u.stale)
-          .map(u => ({ entry: u.entry, record: u.record, kind: u.kind, diff: u.diff || [] })),
-        // How many are a pure ID stamp — the reassuring number, said once
-        // rather than repeated on every row.
-        idOnly: plan.updates.filter(u => u.stale
-          && (u.diff || []).length === 1 && u.diff[0].key === 'product-id').length,
+        rows: plan.updates.filter(u => u.stale).map(u => ({
+          entry: u.entry, record: u.record, kind: u.kind, diff: u.diff || [],
+          group: pushChangeGroup(u.diff),
+        })),
       })),
       updated: byLibrary.reduce((a, b) => a + b.plan.updates.filter(u => u.stale).length, 0),
       created: byLibrary.reduce((a, b) => a + b.plan.creates.length, 0),
