@@ -1031,7 +1031,9 @@ src/
     HoldersPage.jsx               # /holders — the app-owned holder library (list →
                                   # detail, import/push/merge/parts/normalize actions)
     HolderDetail.jsx              # One holder: geometry table, 2D profile, parts,
-                                  # classification, usage, re-stamp
+                                  # classification, usage, re-stamp. AUTOSAVES
+                                  # (900ms after the last edit) + asks before
+                                  # leaving with anything unsaved
     PushHoldersModal.jsx          # Push holder records to Fusion: preview → commit.
                                   # Names what it will NOT touch (half-matches)
     LinkToolsModal.jsx            # Link tools to holders: auto/near/manual tiers +
@@ -1633,6 +1635,8 @@ The explicit, user-initiated batch flow — see the **Phase 2** section above. T
 - **Now** — **Re-stamp** on the holder page rewrites every tool using it, with a per-tool old→new assembly-gauge preview (see the gauge backstop in `holderResolve.js`).
 - **During linking** — **Link tools to holders** rewrites the tools whose baked copy is out of date as part of the same commit (below). Both routes share `writeToolsToFusion`.
 - **A merge needs no tool writes at all**: the survivor adopts the loser's guid into `legacy_fusion_guids`, so every tool that referenced the old holder resolves to the survivor. ⚠️ That fixes the **link**, not the **data** — those tools still carry the old geometry until they're written.
+
+**Editing a holder autosaves.** `HolderDetail` keeps a local draft and writes it ~900ms after the last edit (`AUTOSAVE_MS`), on top of the shared-file layer's own 600ms debounce, so a burst of typing is one Drive write. The header carries the state — **Unsaved…** (amber) → **Saving…** → **Saved** — and `onSave` deliberately does **not** toast, since a toast per pause in typing is constant noise. Leaving with an edit the timer hasn't picked up yet shows an inline **Save & leave / Discard / Stay** bar instead of dropping it; `beforeunload` covers a tab close, and an unmount fires the pending save best-effort. Rare by design (the window is under a second) — it exists because losing fiddly multi-field work to a stray Back click is what makes people stop trusting the app.
 
 **The workflow is stated on the page** (`HolderWorkflowBanner.jsx`) — a small card above the holder list: the one-time setup order (Import → Normalize names → Duplicates → Link tools to holders → Push to Fusion) and the ongoing one (edit here → Re-stamp → Push). It leads with the rule that actually costs something: **change a holder HERE, not in Fusion.** Redraw it in Fusion first and the segments move while our ID stays put, so identity reads `ref-only` and the app stops and asks instead of following the change everywhere; the recovery is Import + merge via Duplicates. Shown by default, dismissed for good (localStorage `holder_workflow_dismissed`), brought back by the ⓘ in the page header. Deliberately **not** a progress tracker — several steps are optional or repeatable, so a checklist that can't be completed would just nag.
 

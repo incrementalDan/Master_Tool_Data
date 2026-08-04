@@ -3,7 +3,7 @@
 // app's design tokens. Behaviours that look arbitrary here mostly aren't —
 // the comments call out the ones that were deliberate.
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { ArrowLeft, Check, Plus, X, RotateCcw, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
 import HolderPill from './HolderPill.jsx';
 import ProfileView from './ProfileView.jsx';
@@ -324,6 +324,21 @@ function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setAc
   );
 }
 
+// ─── Autosave ───────────────────────────────────────────────────────────────
+// Editing a holder is fiddly, multi-field work (segment tables, classification,
+// purchasing), and losing it to a stray Back click is the kind of thing that
+// makes people stop trusting the app. So edits save themselves shortly after
+// you stop, and leaving with anything unsaved asks first rather than dropping
+// it. The Save button stays as "do it now".
+const AUTOSAVE_MS = 900;
+
+// A stable fingerprint of the record, so "has this changed?" doesn't depend on
+// key order (a spread reorders keys and would otherwise read as an edit).
+const sig = (o) => JSON.stringify(o, (_k, v) => (
+  v && typeof v === 'object' && !Array.isArray(v)
+    ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]]))
+    : v));
+
 export default function HolderDetail({
   holder, config, usage = 0, allLocations = [], readOnly, updatedBy = '', siblings = [],
   holderFile, onSavePart, onMergeWith, onRestamp, restampPreview,
@@ -397,21 +412,68 @@ export default function HolderDetail({
     }));
   };
 
-  const save = async () => {
+  // What we last got safely stored. A ref, not state: it must be readable from
+  // the unmount handler, and updating it shouldn't itself cause a render.
+  const savedSig = useRef(sig(holder));
+  const dirty = sig(h) !== savedSig.current;
+  const [leaveAsk, setLeaveAsk] = useState(false);
+  // Latest values for the unmount flush, which can't read render-scope state.
+  const live = useRef({ h, dirty, readOnly });
+  live.current = { h, dirty, readOnly };
+
+  const save = useCallback(async (draft) => {
     setSaving('Saving…');
     try {
-      await onSave(h);
+      await onSave(draft);
+      savedSig.current = sig(draft);
       setSaving('Saved');
-      setTimeout(() => setSaving(''), 1200);
+      setTimeout(() => setSaving(s => (s === 'Saved' ? '' : s)), 1200);
+      return true;
     } catch (e) {
       setSaving(e?.message || 'Save failed');
+      return false;
     }
+  }, [onSave]);
+
+  // Autosave a short pause after the last edit. Re-armed on every change, so a
+  // burst of typing is one write, not one per keystroke — and the shared-file
+  // layer debounces the Drive call again underneath.
+  useEffect(() => {
+    if (readOnly || !dirty) return undefined;
+    const t = setTimeout(() => { save(h); }, AUTOSAVE_MS);
+    return () => clearTimeout(t);
+  }, [h, dirty, readOnly, save]);
+
+  // Closing the tab or refreshing mid-edit: the browser's own guard, because
+  // nothing of ours runs after that.
+  useEffect(() => {
+    if (readOnly) return undefined;
+    const onBeforeUnload = (e) => {
+      if (!live.current.dirty) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [readOnly]);
+
+  // Unmounted with an edit still pending (the autosave timer hadn't fired) —
+  // fire it rather than drop it. Best-effort: nothing is left to await it.
+  useEffect(() => () => {
+    const { h: last, dirty: d, readOnly: ro } = live.current;
+    if (!ro && d) Promise.resolve(onSave(last)).catch(() => {});
+  }, [onSave]);
+
+  // Leaving with something unsaved asks instead of discarding.
+  const tryBack = () => {
+    if (readOnly || !dirty) { onBack(); return; }
+    setLeaveAsk(true);
   };
 
   return (
     <div className="holder-detail">
       <div className="holder-detail-head">
-        <button className="btn btn-ghost btn-sm" onClick={onBack}><ArrowLeft size={14} /> Holders</button>
+        <button className="btn btn-ghost btn-sm" onClick={tryBack}><ArrowLeft size={14} /> Holders</button>
         <div className="holder-detail-title">
           <HolderPill holder={h} config={config} />
           {/* What actually IDENTIFIES a holder to a person: the manufacturer and
@@ -436,9 +498,37 @@ export default function HolderDetail({
         >
           used by {usage} tool{usage === 1 ? '' : 's'}{usage > 0 ? ' →' : ''}
         </button>
-        {saving && <span className="holder-save-msg">{saving}</span>}
-        {!readOnly && <button className="btn btn-primary btn-sm" onClick={save}><Check size={14} /> Save</button>}
+        {/* One status, three states: saving, saved, or "there's an edit the
+            timer hasn't picked up yet". */}
+        {!readOnly && (
+          <span className={`holder-save-msg${dirty && !saving ? ' pending' : ''}`}>
+            {saving || (dirty ? 'Unsaved…' : '')}
+          </span>
+        )}
+        {!readOnly && (
+          <button className="btn btn-primary btn-sm" onClick={() => save(h)} disabled={!dirty}>
+            <Check size={14} /> Save
+          </button>
+        )}
       </div>
+
+      {/* Rare by design — autosave catches almost everything — but a click on
+          Back a beat after typing must not throw the edit away. */}
+      {leaveAsk && (
+        <div className="holder-leave-ask">
+          <AlertTriangle size={14} />
+          <span>You have unsaved changes to this holder.</span>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={async () => { const ok = await save(h); setLeaveAsk(false); if (ok) onBack(); }}
+          >Save &amp; leave</button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => { setLeaveAsk(false); onBack(); }}
+          >Discard</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setLeaveAsk(false)}>Stay</button>
+        </div>
+      )}
 
       {/* Propagation. Fusion BAKES holder geometry into every tool, so a
           corrected holder only reaches an existing tool when that tool is

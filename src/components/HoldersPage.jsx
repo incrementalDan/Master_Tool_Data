@@ -670,10 +670,11 @@ export default function HoldersPage() {
     try { await saveShopSettings(next); } catch { /* saveSharedFile already toasts */ }
   };
 
-  const onSave = async (record) => {
-    await saveHolderRecord(record);
-    notify('Holder saved', 'success');
-  };
+  // No toast: this now runs on autosave, so a toast per pause in typing would
+  // be constant noise. The detail header carries the state (Unsaved… / Saving…
+  // / Saved), which is where you're already looking, and a failure surfaces
+  // there too.
+  const onSave = (record) => saveHolderRecord(record);
 
   const onDelete = async (record) => {
     // Say how many tools resolve through this record. Deleting it isn't
