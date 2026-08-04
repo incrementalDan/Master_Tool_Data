@@ -28,7 +28,11 @@ const NAMED_COLORS = {
 export const HOLDER_DEFAULT = '#2dd4bf';  // teal — unknown / no holder
 const FALLBACK = ['#ec4899', '#a855f7', '#14b8a6', '#fbbf24', '#ef4444', '#10b981'];
 
-export function holderColor(description) {
+// `chosen` is a holder record's own color when it has one — it always wins.
+// Passing it here (rather than `chosen || holderColor(...)` at each call site)
+// keeps the whole precedence chain in one place: chosen → by-size → teal.
+export function holderColor(description, chosen) {
+  if (chosen) return chosen;
   if (!description) return HOLDER_DEFAULT;
   const norm = description.trim().toUpperCase();
   if (NAMED_COLORS[norm]) return NAMED_COLORS[norm];

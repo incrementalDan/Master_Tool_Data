@@ -30,8 +30,6 @@ import { holderForGuid } from '../utils/holderDuplicates.js';
 import { holderColor } from '../utils/holderColors.js';
 import { useApp } from '../context/AppContext.jsx';
 
-export const DEFAULT_HOLDER_COLOR = 'var(--holder-default)';
-
 // ─── Scoop cap geometry ─────────────────────────────────────────────────────
 // The caps need a curved inner wall whose radius is LARGER than the pill's own
 // corner radius, while still meeting the pill's top and bottom edges without a
@@ -74,7 +72,12 @@ export function findColletSpan(description, colletLabel) {
 
 export default function HolderPill({ holder, config, compact = false, title, style }) {
   if (!holder) return null;
-  const color = holder.color || DEFAULT_HOLDER_COLOR;
+  // ⚠️ ONE place decides a holder's color, so the Holders page and every tool
+  // page can't disagree. A record's own `color` is null until someone picks
+  // one, so falling straight to the default made every holder teal HERE while
+  // the tool pages showed the by-size color — the same holder, two colors.
+  // holderColor() already returns that same teal when there's no description.
+  const color = holderColor(holder.description, holder.color);
   const colletOpt = holderOption(config, 'collet_sizes', holder.collet_size_id);
   const span = colletOpt ? findColletSpan(holder.description, colletOpt.label) : null;
 
@@ -120,14 +123,12 @@ export function holderForDisplay({ records, holderId, holderGuid, description })
   const list = records || [];
   const rec = (holderId ? list.find(r => r?.id === holderId) : null)
     || (holderGuid ? holderForGuid(list, holderGuid) : null);
-  // ⚠️ A record's own `color` is null until someone picks one, so linking a
-  // tool must NOT cost it the color it already had. Fall back to the by-size
-  // list — the colors already in people's heads — and let a chosen color
-  // override it.
-  if (rec) return rec.color ? rec : { ...rec, color: holderColor(rec.description) };
+  if (rec) return rec;
   const desc = (description || '').trim();
   if (!desc || desc === '—') return null;
-  return { description: desc, color: holderColor(desc), collet_size_id: null, _synthetic: true };
+  // No color: HolderPill derives it from the description, same as for a record
+  // that hasn't been given one.
+  return { description: desc, collet_size_id: null, _synthetic: true };
 }
 
 // The connected form — THE way a holder is shown outside the Holders page.
