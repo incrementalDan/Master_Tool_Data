@@ -3783,7 +3783,12 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .assembly-picker-option:hover { border-color: var(--text-sub); }
 .assembly-picker-option.selected { border-color: var(--accent); background: rgba(99,102,241,0.08); }
 
-/* ─── Holder pill — teal by default; AssemblyCard overrides per-holder ─────── */
+/* ─── Holder pill (RETIRED look) ────────────────────────────────────────────
+   Superseded by .holder-scoop-pill, which is now the one holder treatment
+   everywhere (see components/HolderPill.jsx). No JSX renders this any more;
+   kept only because the token table in CLAUDE.md documents it and a stray
+   class name shouldn't silently render unstyled. Delete once nothing in the
+   docs refers to it. */
 .holder-pill {
   /* Color follows the HOLDER SIZE — host sets --badge-color per holder
      (holderColor). Defaults to the unknown-holder teal. Full holder names are
@@ -4965,6 +4970,20 @@ input.sf-ref-num { text-align: right; }
 .holder-detail-mfg { color: var(--text); font-weight: var(--fw-medium); }
 .holder-detail-pn { color: var(--text-sub); font-family: var(--font-mono); }
 .holder-save-msg { font-size: var(--text-xs); color: var(--text-sub); }
+/* An edit the autosave timer hasn't picked up yet — visible, not alarming. */
+.holder-save-msg.pending { color: var(--amber, #f59e0b); }
+
+/* Leaving with something unsaved. Inline, not a modal: it belongs to this
+   holder, and the choice is one click either way. */
+.holder-leave-ask {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 8px 12px; margin-bottom: var(--sp-2);
+  border: 1px solid var(--amber, #f59e0b); border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--amber, #f59e0b) 8%, transparent);
+  font-size: var(--text-xs);
+}
+.holder-leave-ask > svg { color: var(--amber, #f59e0b); flex: none; }
+.holder-leave-ask > span { flex: 1; }
 .holder-note-banner {
   display: flex; align-items: flex-start; gap: 9px;
   background: color-mix(in srgb, var(--amber) 10%, transparent);
@@ -5082,8 +5101,38 @@ input.sf-ref-num { text-align: right; }
   padding: 8px 11px; font-size: var(--text-xs); color: var(--amber); margin-bottom: 10px;
 }
 .holder-ext-readout { font-family: var(--font-mono); font-size: var(--text-sm); font-weight: var(--fw-bold); color: var(--green); }
-.holder-ext-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+/* The four editable extension fields. A fixed 4-up (not auto-fit) so they
+   don't reflow into an odd 5th/6th column, and align-items:end keeps the
+   inputs on one line even if a label wraps. */
+.holder-ext-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 10px 14px; align-items: end; margin-top: 14px;
+}
 .holder-ext-grid .holder-field + .holder-field { margin-top: 0; }
+
+/* The two values the segment table decides — grouped and set apart, so they
+   don't read as more fields to fill in. */
+.holder-ext-derived {
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+.holder-ext-derived-label {
+  font-size: var(--text-2xs); font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-label); text-transform: uppercase;
+  color: var(--text-faint); margin-bottom: 8px;
+}
+.holder-ext-derived-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 220px));
+  gap: 10px 14px; align-items: end;
+}
+.holder-ext-derived-grid .holder-field + .holder-field { margin-top: 0; }
+@media (max-width: 900px) {
+  .holder-ext-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .holder-ext-grid,
+  .holder-ext-derived-grid { grid-template-columns: 1fr; }
+}
 .field-input.holder-readonly { font-family: var(--font-mono); font-weight: var(--fw-semibold); cursor: not-allowed; opacity: 0.85; }
 .field-input.holder-readonly.ext { color: var(--green); }
 .holder-notes { min-height: 70px; resize: vertical; }

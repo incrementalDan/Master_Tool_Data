@@ -14,13 +14,21 @@
 // They can't clash precisely because (1) never touches the background, so the
 // collet text always sits on the same surface regardless of holder color.
 //
-// ⚠️ This is intended to REPLACE the app's existing `.holder-pill` treatment
-// (a flat --badge-color tint keyed off a hashed description). It is NOT swapped
-// in at the existing call sites yet: those render a holder from a tool's
-// absorbed Fusion snapshot, which has no link to a holder record and therefore
-// no color to read. That swap belongs with the tool→holder FK work.
+// This REPLACED the app's older flat `.holder-pill` tint everywhere. The thing
+// that used to block the swap — a tool's holder comes from the snapshot Fusion
+// baked in, with no link to a record and so no color to read — is gone now that
+// assemblies carry `holder_id`. Where a record still can't be resolved (an
+// unlinked tool, an empty holder library), `holderForDisplay` synthesizes one
+// from the description + the legacy color list, so the TREATMENT is identical
+// everywhere even when the data behind it isn't.
+//
+// Use <HolderTag> at call sites. <HolderPill> stays pure (no context) for the
+// Holders page, which already has the record in hand.
 
-import { holderOption } from '../schema/holderOptions.js';
+import { holderOption, holderConfigOf } from '../schema/holderOptions.js';
+import { holderForGuid } from '../utils/holderDuplicates.js';
+import { holderColor } from '../utils/holderColors.js';
+import { useApp } from '../context/AppContext.jsx';
 
 export const DEFAULT_HOLDER_COLOR = 'var(--holder-default)';
 
@@ -64,7 +72,7 @@ export function findColletSpan(description, colletLabel) {
   };
 }
 
-export default function HolderPill({ holder, config, compact = false, title }) {
+export default function HolderPill({ holder, config, compact = false, title, style }) {
   if (!holder) return null;
   const color = holder.color || DEFAULT_HOLDER_COLOR;
   const colletOpt = holderOption(config, 'collet_sizes', holder.collet_size_id);
@@ -80,7 +88,7 @@ export default function HolderPill({ holder, config, compact = false, title }) {
   return (
     <span
       className={`holder-scoop-pill${compact ? ' compact' : ''}`}
-      style={{ height: `${H}px`, borderRadius: `${H / 2}px`, borderColor: color }}
+      style={{ height: `${H}px`, borderRadius: `${H / 2}px`, borderColor: color, ...style }}
       title={title || holder.description || undefined}
     >
       <svg className="holder-scoop-cap left" width={capW} height={H} viewBox={`0 0 ${capW} ${H}`} aria-hidden="true">
@@ -99,5 +107,45 @@ export default function HolderPill({ holder, config, compact = false, title }) {
         ) : (holder.description || 'Untitled holder')}
       </span>
     </span>
+  );
+}
+
+// ─── Resolving "which holder is this" from what a call site actually has ────
+// Call sites hold an assembly (holder_id + the guid Fusion baked in) or just a
+// description. Record first — that's the one with a chosen color and a collet
+// classification — then the guid (following merges), then a synthetic stand-in
+// so an unlinked holder still renders as the same pill rather than a different
+// kind of chip.
+export function holderForDisplay({ records, holderId, holderGuid, description }) {
+  const list = records || [];
+  const rec = (holderId ? list.find(r => r?.id === holderId) : null)
+    || (holderGuid ? holderForGuid(list, holderGuid) : null);
+  // ⚠️ A record's own `color` is null until someone picks one, so linking a
+  // tool must NOT cost it the color it already had. Fall back to the by-size
+  // list — the colors already in people's heads — and let a chosen color
+  // override it.
+  if (rec) return rec.color ? rec : { ...rec, color: holderColor(rec.description) };
+  const desc = (description || '').trim();
+  if (!desc || desc === '—') return null;
+  return { description: desc, color: holderColor(desc), collet_size_id: null, _synthetic: true };
+}
+
+// The connected form — THE way a holder is shown outside the Holders page.
+// `holder` (a record) short-circuits the lookup for callers that already have
+// one. Renders nothing when there's no holder to show, so call sites don't each
+// need their own em-dash branch.
+export function HolderTag({
+  holder, holderId, holderGuid, description, compact = true, title, style,
+}) {
+  const { holderLibrary, shopSettings } = useApp();
+  const resolved = holder || holderForDisplay({
+    records: holderLibrary?.holders, holderId, holderGuid, description,
+  });
+  if (!resolved) return null;
+  return (
+    <HolderPill
+      holder={resolved} config={holderConfigOf(shopSettings)}
+      compact={compact} title={title} style={style}
+    />
   );
 }

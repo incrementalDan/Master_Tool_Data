@@ -7,7 +7,9 @@ import {
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
 import LocationPicker from './LocationPicker.jsx';
-import AssemblyCard, { holderColor } from './AssemblyCard.jsx';
+import AssemblyCard from './AssemblyCard.jsx';
+import { HolderTag, holderForDisplay } from './HolderPill.jsx';
+import { holderColor } from '../utils/holderColors.js';
 import AssemblyForm from './AssemblyForm.jsx';
 import ReconcileModal from './ReconcileModal.jsx';
 import FilesSection from './FilesSection.jsx';
@@ -995,13 +997,16 @@ function AssembliesSection({ tool, holders, onSave }) {
         </div>
       )}
       {groups.map(([holderDesc, group]) => {
-        const c = holderColor(holderDesc === '—' ? null : holderDesc);
+        // The group key is the description; every assembly in it shares the
+        // holder, so the first one carries the link to resolve the record.
+        const first = group[0] || {};
         return (
           <div key={holderDesc} style={{ marginBottom: 10 }}>
             <div style={{ marginBottom: 4 }}>
-              <span className="holder-pill" style={{ '--badge-color': c }}>
-                {holderDesc}
-              </span>
+              <HolderTag
+                holderId={first.holder_id} holderGuid={first.holder_guid}
+                description={holderDesc}
+              />
             </div>
             <div className="assemblies-grid">
               {group.map(a => (
@@ -1021,13 +1026,13 @@ function AssembliesSection({ tool, holders, onSave }) {
 
       {/* Optimistic placeholder card while save is in flight */}
       {pendingAssembly && (() => {
-        const c = holderColor(pendingAssembly.holder_description || null);
         return (
           <div style={{ marginBottom: 10 }}>
             <div style={{ marginBottom: 4 }}>
-              <span className="holder-pill" style={{ '--badge-color': c }}>
-                {pendingAssembly.holder_description || '—'}
-              </span>
+              <HolderTag
+                holderId={pendingAssembly.holder_id} holderGuid={pendingAssembly.holder_guid}
+                description={pendingAssembly.holder_description}
+              />
             </div>
             <div className="assemblies-grid">
               <div style={{
@@ -1098,6 +1103,13 @@ function Section({ title, icon: Icon, children, defaultOpen = true }) {
 }
 
 function AssemblyExportPicker({ tool, holders, onConfirm, onCancel }) {
+  // The selected row's tint must be the SAME color the pill shows, so resolve
+  // it the same way rather than always falling back to the legacy list.
+  const { holderLibrary } = useApp();
+  const rowColor = (a) => holderForDisplay({
+    records: holderLibrary?.holders, holderId: a.holder_id,
+    holderGuid: a.holder_guid, description: a.holder_description,
+  })?.color || holderColor(a.holder_description || null);
   const assemblies = tool.assemblies || [];
   const [selected, setSelected] = useState('none'); // 'none' | assembly_id | 'new'
   const [newHolderGuid, setNewHolderGuid] = useState('');
@@ -1142,7 +1154,7 @@ function AssemblyExportPicker({ tool, holders, onConfirm, onCancel }) {
           <>
             <div className="text-sub" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '12px 0 6px' }}>Saved assemblies</div>
             {assemblies.map(a => {
-              const c = holderColor(a.holder_description || null);
+              const c = rowColor(a);
               const isSel = selected === a.assembly_id;
               return (
                 <div
@@ -1151,9 +1163,10 @@ function AssemblyExportPicker({ tool, holders, onConfirm, onCancel }) {
                   style={isSel ? { borderColor: c, background: `color-mix(in srgb, ${c} 12%, var(--input-bg))` } : {}}
                   onClick={() => setSelected(a.assembly_id)}
                 >
-                  <span className="holder-pill" style={{ '--badge-color': c }}>
-                    {a.holder_description || '—'}
-                  </span>
+                  <HolderTag
+                    holderId={a.holder_id} holderGuid={a.holder_guid}
+                    description={a.holder_description}
+                  />
                   <span style={{ fontSize: 13 }}>OOH: {a.ooh?.toFixed(3)} {unitAbbr(tool.unit)}</span>
                   {(a.linked_preset_guids?.length > 0) && (
                     <span className="text-sub" style={{ fontSize: 11, marginLeft: 'auto' }}>

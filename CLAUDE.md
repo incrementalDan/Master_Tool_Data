@@ -1031,7 +1031,9 @@ src/
     HoldersPage.jsx               # /holders — the app-owned holder library (list →
                                   # detail, import/push/merge/parts/normalize actions)
     HolderDetail.jsx              # One holder: geometry table, 2D profile, parts,
-                                  # classification, usage, re-stamp
+                                  # classification, usage, re-stamp. AUTOSAVES
+                                  # (900ms after the last edit) + asks before
+                                  # leaving with anything unsaved
     PushHoldersModal.jsx          # Push holder records to Fusion: preview → commit.
                                   # Names what it will NOT touch (half-matches)
     LinkToolsModal.jsx            # Link tools to holders: auto/near/manual tiers +
@@ -1042,7 +1044,12 @@ src/
                                   # gauge, a per-fix tolerance (never stored), pick rows
     HolderMergeModal.jsx          # Merge two holder records (survivor adopts the
                                   # loser's Fusion guids)
-    HolderPill.jsx                # Holder badge (scoop-cap mark), colored by size
+    HolderPill.jsx                # THE holder badge. <HolderTag> (connected)
+                                  # resolves the record from an assembly's
+                                  # holder_id / holder_guid and falls back to a
+                                  # synthetic one, so every screen shows a
+                                  # holder identically; <HolderPill> is the pure
+                                  # form for callers holding a record already
     ProfileView.jsx               # 2D holder/tool profile drawing
     HolderPicker.jsx              # Modal for selecting a holder from the holder library
     ReconcileModal.jsx            # Reconcile-on-open prompt: delete duplicates, add/delete
@@ -1634,6 +1641,8 @@ The explicit, user-initiated batch flow — see the **Phase 2** section above. T
 - **During linking** — **Link tools to holders** rewrites the tools whose baked copy is out of date as part of the same commit (below). Both routes share `writeToolsToFusion`.
 - **A merge needs no tool writes at all**: the survivor adopts the loser's guid into `legacy_fusion_guids`, so every tool that referenced the old holder resolves to the survivor. ⚠️ That fixes the **link**, not the **data** — those tools still carry the old geometry until they're written.
 
+**Editing a holder autosaves.** `HolderDetail` keeps a local draft and writes it ~900ms after the last edit (`AUTOSAVE_MS`), on top of the shared-file layer's own 600ms debounce, so a burst of typing is one Drive write. The header carries the state — **Unsaved…** (amber) → **Saving…** → **Saved** — and `onSave` deliberately does **not** toast, since a toast per pause in typing is constant noise. Leaving with an edit the timer hasn't picked up yet shows an inline **Save & leave / Discard / Stay** bar instead of dropping it; `beforeunload` covers a tab close, and an unmount fires the pending save best-effort. Rare by design (the window is under a second) — it exists because losing fiddly multi-field work to a stray Back click is what makes people stop trusting the app.
+
 **The workflow is stated on the page** (`HolderWorkflowBanner.jsx`) — a small card above the holder list: the one-time setup order (Import → Normalize names → Duplicates → Link tools to holders → Push to Fusion) and the ongoing one (edit here → Re-stamp → Push). It leads with the rule that actually costs something: **change a holder HERE, not in Fusion.** Redraw it in Fusion first and the segments move while our ID stays put, so identity reads `ref-only` and the app stops and asks instead of following the change everywhere; the recovery is Import + merge via Duplicates. Shown by default, dismissed for good (localStorage `holder_workflow_dismissed`), brought back by the ⓘ in the page header. Deliberately **not** a progress tracker — several steps are optional or repeatable, so a checklist that can't be completed would just nag.
 
 **The nominal-length check is collet-family scoped and user-confirmed.** The engraved nominal vs the modelled gauge length holds a known band **for SK collets only** (`NOMINAL_BANDS_MM`) — not for other collet families, and especially not for end-mill holders. So the app makes a best guess and the user does a **one-time confirmation per holder**, which **expires by itself** when any input it depended on changes (`nominal_check.signature`).
@@ -1855,7 +1864,7 @@ Machine tool number is shown inside the Identity section, in the same row as the
 |---|---|---|---|
 | Tool Description | `.description-badge` | Rounded rect (r=7px) | Violet — `rgba(124,58,237,…)` |
 | Tool ID | `.tool-id-pill` | Pill | Amber — `#f59e0b`, mono (`--font-mono`) |
-| Holder | `.holder-pill` | Pill | Colored by **holder SIZE** via `--badge-color` (host sets it from `holderColor`); default teal `--holder-default`, mono |
+| Holder | `<HolderTag>` → `.holder-scoop-pill` | Pill with colored end caps | **The one holder treatment, everywhere.** Caps + border take the holder RECORD's color, falling back to the by-size list (`holderColor`, `src/utils/holderColors.js`) then teal. The collet substring (`SK13` in `NBT30-SK13C-60`) is tinted separately by its collet-size option — the background is never filled, so the two colors can't clash. The old flat `.holder-pill` is retired |
 | Machine Tool # | `.machine-num-badge` | Slightly rounded rect (r=5px) | Green — `#4ade80`, mono |
 | Location/Cabinet | `.location-tag` | Rounded rect (r=7px) | Indigo — `#818cf8`, mono |
 | Preset Name | `.preset-tag` | Pill | Colored by **material's ISO group** via `--badge-color` (host sets it from `presetMaterialColor`); default `--iso-p` (steel) |
@@ -1865,14 +1874,14 @@ Machine tool number is shown inside the Identity section, in the same row as the
 
 All these classes are defined in `src/index.css` in the "Data-field visual tokens" block.
 
-**`--badge-color` pattern (holder + preset)**: these two badges are no longer a single flat color. The class carries a default `--badge-color` and derives its fill/border/text from it (`color-mix`); each host sets `--badge-color` per instance via an inline style (`style={{ '--badge-color': color }}`). For holders the color comes from `holderColor(description)` (returns a single base color — canonical `--holder-*` per known size, stable-hash fallback, teal `--holder-default` for unknown); for presets from `presetMaterialColor(query, materials)` (the material's ISO-group color). Pass `undefined` when there's no color so the CSS default applies. This replaced the old approach where `holderColor` returned a `{bg,border,text}` object overriding all three inline and `.preset-tag` was a flat emerald token.
+**`--badge-color` pattern (preset)**: this badge is no longer a single flat color. (Holders left this pattern entirely — see `<HolderTag>` above.) The class carries a default `--badge-color` and derives its fill/border/text from it (`color-mix`); each host sets `--badge-color` per instance via an inline style (`style={{ '--badge-color': color }}`). For holders the color comes from `holderColor(description)` (returns a single base color — canonical `--holder-*` per known size, stable-hash fallback, teal `--holder-default` for unknown); for presets from `presetMaterialColor(query, materials)` (the material's ISO-group color). Pass `undefined` when there's no color so the CSS default applies. This replaced the old approach where `holderColor` returned a `{bg,border,text}` object overriding all three inline and `.preset-tag` was a flat emerald token.
 
 **`.dia` glyph utility**: the orange diameter symbol. Wrap the `⌀` in `<span className="dia">⌀</span>` everywhere a diameter renders inline (`ToolCard` meta badge, `QueuePanel`, `MatchStep`); the number/units stay neutral. `.dia { color: var(--orange); font-weight: 600 }`.
 
 **Current usages:**
 - `.description-badge` — `ToolCard` (grid + list), `ToolDetail` sticky header
 - `.tool-id-pill` — `ToolCard`, `ToolDetail` sticky header, `AssemblyCard` operator tag (as `.tag-proshot-oval` — physical tag format exception)
-- `.holder-pill` — `AssemblyCard`, `ToolDetail` (assembly groups, pending assembly, export picker), `PresetPanel` (single-assembly preset card)
+- `<HolderTag>` — `AssemblyCard`, `AssemblyForm`, `HolderPicker`, `PresetPanel` (single-assembly preset card), `ToolDetail` (assembly groups, pending assembly, export picker). `<HolderPill>` (the pure form, no context) is used by the Holders page, which already holds the record
 - `.machine-num-badge` — `ToolCard` badge, `ToolDetail` Identity section (T/H/D)
 - `.location-tag` — `ToolCard` badge (when location is set)
 - `.preset-tag` — `AssemblyCard` linked presets, `AssemblyForm` matched presets, `PresetPanel` collapsed card, `DiffStep`/`CommitStep` new-preset rows
