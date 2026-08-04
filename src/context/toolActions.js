@@ -398,54 +398,6 @@ export function createToolActions(ctx) {
   // — a full Fusion round-trip per tool would re-upload the whole library for
   // each of potentially hundreds of matches. The composed string re-syncs to the
   // Fusion vendor field the next time each tool is individually saved.
-  // ─── Link cutting tools to holder records (the migration pass) ───────────
-  // holder_id is METADATA-ONLY, so this is a metadata batch write — never a
-  // Fusion round-trip per tool. Writing the whole library through Fusion to set
-  // a field Fusion doesn't have would re-upload it hundreds of times for
-  // nothing. The composed geometry reaches Fusion the next time each tool is
-  // saved (or via Re-stamp), exactly like a location normalize.
-  //
-  // `links` = [{ toolId, assemblyId, holderId }] — the rows the user accepted.
-  // Nothing is inferred here; the proposing is holderLink.js's job.
-  const linkToolsToHolders = async (links) => {
-    const wanted = new Map();
-    for (const l of links || []) {
-      if (!l?.toolId || !l.assemblyId || !l.holderId) continue;
-      if (!wanted.has(l.toolId)) wanted.set(l.toolId, new Map());
-      wanted.get(l.toolId).set(l.assemblyId, l.holderId);
-    }
-    if (!wanted.size) return 0;
-
-    let changed = 0;
-    const updatedTools = (toolsRef.current || []).map(t => {
-      const byAsm = wanted.get(t.id);
-      if (!byAsm) return t;
-      let touched = false;
-      const assemblies = (t.assemblies || []).map(a => {
-        const holderId = byAsm.get(a.assembly_id);
-        if (!holderId || a.holder_id === holderId) return a;
-        touched = true; changed++;
-        return { ...a, holder_id: holderId };
-      });
-      return touched ? { ...t, assemblies } : t;
-    });
-    dispatch({ type: 'SET_TOOLS', tools: updatedTools });
-
-    if (googleRef.current && changed) {
-      try {
-        // upsertMany MERGES by id, so only the touched tools are handed over —
-        // records this pass never looked at are untouched (the G1 invariant).
-        await toolStore.upsertMany(updatedTools
-          .filter(t => wanted.has(t.id))
-          .map(t => buildMetadataTool({ ...t, tracking_id: t.tracking_id || t.id })));
-      } catch (err) {
-        notify(`Linked in memory but the metadata write failed: ${err.message}`, 'error', 7000);
-        throw err;
-      }
-    }
-    return changed;
-  };
-
   const normalizeLocationSystem = async (systemId) => {
     const ss = shopSettingsRef.current || {};
     const systems = ss.location_config?.systems || [];
@@ -1209,7 +1161,7 @@ export function createToolActions(ctx) {
 
   return {
     writeLogicalTool,
-    saveTool, assignToolLocation, normalizeLocationSystem, linkToolsToHolders,
+    saveTool, assignToolLocation, normalizeLocationSystem,
     addTool, cloneTool, mergeTool, deleteTool, mergeTools,
     addAssembly, updateAssembly, deleteAssembly,
     reconcileTool, applyReconcile,

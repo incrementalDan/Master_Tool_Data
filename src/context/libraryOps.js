@@ -22,6 +22,7 @@ import { resolveLocationString } from '../utils/locationSystem.js';
 import { composePresetName, opTypeWord, parsePresetName, materialNameCode, materialCategory, findMaterialInLibrary, camPresetIdFromGrade, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import { toolsUsingHolder } from '../schema/holderResolve.js';
+import { segmentsMatch } from '../schema/holderIdentity.js';
 import { defaultToolLibraryId, machineNumberArgs } from './appState.js';
 
 export function createLibraryOps(ctx) {
@@ -929,6 +930,175 @@ export function createLibraryOps(ctx) {
     }
   };
 
+  // ─── Link cutting tools to holder records (the migration pass) ───────────
+  // Two things happen, and BOTH are the point:
+  //
+  //   1. The link is stored — assembly.holder_id, a metadata field.
+  //   2. Every tool whose baked holder copy DIFFERS from the record it was just
+  //      linked to is rewritten to Fusion, so the corrected geometry actually
+  //      lands there.
+  //
+  // ⚠️ Step 2 is not optional. Linking a tool that carries a 2mm-wrong holder
+  // and stopping at the pointer would leave Fusion holding the wrong geometry
+  // with nothing to show it — the library would look linked and still be wrong.
+  // After this runs, no tool in Fusion carries holder data that disagrees with
+  // its record.
+  //
+  // Tools whose baked copy ALREADY matches (the exact tier — most of them) are
+  // deliberately NOT rewritten: there is nothing to correct, and rewriting the
+  // whole library to change nothing is a slow way to risk a bad write.
+  //
+  // `links` = [{ toolId, assemblyId, holderId }] — the rows the user accepted.
+  // Nothing is inferred here; proposing is holderLink.js's job.
+  const linkToolsToHolders = async (links, { dryRun = false, toleranceIn = null } = {}) => {
+    const wanted = new Map();
+    for (const l of links || []) {
+      if (!l?.toolId || !l.assemblyId || !l.holderId) continue;
+      if (!wanted.has(l.toolId)) wanted.set(l.toolId, new Map());
+      wanted.get(l.toolId).set(l.assemblyId, l.holderId);
+    }
+    if (!wanted.size) return { linked: 0, rewritten: 0, checks: [], wrote: false };
+
+    const records = holderLibraryRef?.current?.holders || [];
+    const recById = new Map(records.map(r => [r.id, r]));
+
+    let linked = 0;
+    const needWrite = [];
+    const updatedTools = (toolsRef.current || []).map(t => {
+      const byAsm = wanted.get(t.id);
+      if (!byAsm) return t;
+      const bakedByGuid = new Map((t._instancesRaw || [])
+        .filter(r => r?.guid && r.holder).map(r => [r.guid, r.holder]));
+      let touched = false;
+      let stale = false;
+      const assemblies = (t.assemblies || []).map(a => {
+        const holderId = byAsm.get(a.assembly_id);
+        if (!holderId || a.holder_id === holderId) return a;
+        touched = true; linked++;
+        // Does what Fusion currently holds for this tool match the record?
+        const rec = recById.get(holderId);
+        const baked = bakedByGuid.get(a.instance_guid);
+        if (rec && (!baked || !segmentsMatch(baked.segments, baked.unit, rec.segments, rec.unit))) {
+          stale = true;
+        }
+        return { ...a, holder_id: holderId };
+      });
+      if (!touched) return t;
+      const next = { ...t, assemblies };
+      if (stale && t.no_fusion_link !== true) needWrite.push(next);
+      return next;
+    });
+
+    // The preview: what would be linked, and which tools Fusion would be
+    // corrected for — with the assembly-gauge change for each, same backstop as
+    // re-stamp. Pure computation, no IO.
+    const checks = [];
+    const holdersNow = holdersRef.current || [];
+    for (const t of needWrite) {
+      try {
+        const { gaugeChecks } = splitToFusionInstances(t, holdersNow, records,
+          { gaugeToleranceIn: toleranceIn });
+        for (const c of gaugeChecks || []) checks.push({ ...c, tool: t, toolId: t.id });
+      } catch {
+        checks.push({ level: 'error', tool: t, toolId: t.id, before: null, after: NaN,
+          reason: 'This tool could not be rebuilt — open it to see why.' });
+      }
+    }
+    const summary = { linked, rewritten: needWrite.length, checks, wrote: false };
+    if (dryRun) return summary;
+
+    dispatch({ type: 'SAVE_START' });
+    try {
+      // ⚠️ WRITE FIRST, then update memory. The optimistic order left the app
+      // claiming the tools were linked while the Fusion write had failed — in
+      // demo (read-only) that was every time.
+      if (needWrite.length) await writeToolsToFusion(needWrite, { toleranceIn });
+      // The Fusion write already persisted metadata for the tools it touched;
+      // the rest only need their new holder_id stored. upsertMany MERGES by id,
+      // so records this pass never looked at are untouched (the G1 invariant).
+      const rewritten = new Set(needWrite.map(t => t.id));
+      const metaOnly = updatedTools.filter(t => wanted.has(t.id) && !rewritten.has(t.id));
+      if (googleRef.current && metaOnly.length) {
+        await toolStore.upsertMany(metaOnly.map(t =>
+          buildMetadataTool({ ...t, tracking_id: t.tracking_id || t.id })));
+      }
+      dispatch({ type: 'SET_TOOLS', tools: updatedTools });
+      dispatch({ type: 'SAVE_SUCCESS' });
+      return { ...summary, wrote: true };
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Linking failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  };
+
+  // ─── Write a set of tools back to Fusion, targeted ────────────────────────
+  // THE shared "make these tools carry their current holder geometry" step.
+  // Fusion BAKES holder geometry into each tool, so a corrected holder only
+  // reaches an existing tool when that tool is written — this is that write.
+  //
+  // TARGETED, not a full-library replace: each library is downloaded once, only
+  // these tools' entries are dropped and re-appended, and everything else in the
+  // file is left byte-for-byte alone.
+  //
+  // Used by BOTH re-stamp (one holder's tools) and Link tools to holders (the
+  // tools whose baked copy is out of date). Factored out because otherwise
+  // linking would either duplicate this loop or — worse — skip it, and then
+  // "linked" would mean the pointer was fixed while Fusion still held the wrong
+  // geometry.
+  const writeToolsToFusion = async (tools, { toleranceIn = null } = {}) => {
+    if (!tools.length) return { wrote: false, count: 0 };
+    assertFusionReady();
+    const holders = holdersRef.current || [];
+    const holderRecords = holderLibraryRef?.current?.holders || null;
+
+    const byLibrary = new Map();
+    for (const t of tools) {
+      const lib = t.library_id || defaultToolLibraryId(shopSettingsRef.current);
+      if (!byLibrary.has(lib)) byLibrary.set(lib, []);
+      byLibrary.get(lib).push(t);
+    }
+
+    const updated = [];
+    const metaOut = [];
+    for (const [libId, toolsInLib] of byLibrary) {
+      const fusionList = await downloadFusionList(libId);   // one download per library
+      const dropGuids = new Set();
+      const dropTracking = new Set();
+      const appended = [];
+
+      for (const tool of toolsInLib) {
+        dropTracking.add(tool.tracking_id || tool.id);
+        for (const a of tool.assemblies || []) if (a.instance_guid) dropGuids.add(a.instance_guid);
+        for (const r of tool._instancesRaw || []) if (r?.guid) dropGuids.add(r.guid);
+
+        const { fusionInstances, metadataTool, gaugeChecks } =
+          splitToFusionInstances(tool, holders, holderRecords, { gaugeToleranceIn: toleranceIn });
+        // Backstop: refuse an assembly gauge length that didn't compute rather
+        // than pushing it to N tools.
+        if ((gaugeChecks || []).some(c => c.level === 'error')) {
+          throw new Error(
+            `Refusing to write — the assembly gauge length could not be computed for `
+            + `"${tool.description || tool.tool_id || tool.id}". Check the holder's geometry.`);
+        }
+        appended.push(...fusionInstances);
+        metaOut.push(metadataTool);
+        // The metadata assembly may have been migrated onto a merged holder's
+        // surviving guid — carry that into the in-memory tool too.
+        updated.push({ ...tool, assemblies: metadataTool.assemblies || tool.assemblies });
+      }
+
+      const next = fusionList
+        .filter(f => !dropTracking.has(readTrackingId(f)) && !dropGuids.has(f.guid))
+        .concat(appended);
+      await uploadFusionList(libId, next);
+    }
+
+    if (googleRef.current && metaOut.length) await toolStore.upsertMany(metaOut);
+    for (const t of updated) dispatch({ type: 'UPDATE_TOOL', tool: t });
+    return { wrote: true, count: tools.length };
+  };
+
   // ─── Re-stamp the tools that use a holder ─────────────────────────────────
   // Fusion BAKES holder geometry into every tool, so a corrected holder only
   // reaches an existing tool when that tool is written. Saving a tool does it
@@ -994,50 +1164,7 @@ export function createLibraryOps(ctx) {
 
     dispatch({ type: 'SAVE_START' });
     try {
-      assertFusionReady();
-      const holders = holdersRef.current || [];
-      const holderRecords = holderLibraryRef?.current?.holders || null;
-      const updated = [];
-      const metaOut = [];
-
-      for (const [libId, toolsInLib] of byLibrary) {
-        // One download per library, not per tool.
-        const fusionList = await downloadFusionList(libId);
-        const dropGuids = new Set();
-        const dropTracking = new Set();
-        const appended = [];
-
-        for (const tool of toolsInLib) {
-          const tracking_id = tool.tracking_id || tool.id;
-          dropTracking.add(tracking_id);
-          for (const a of tool.assemblies || []) if (a.instance_guid) dropGuids.add(a.instance_guid);
-          for (const r of tool._instancesRaw || []) if (r?.guid) dropGuids.add(r.guid);
-
-          const { fusionInstances, metadataTool, gaugeChecks } =
-            splitToFusionInstances(tool, holders, holderRecords, { gaugeToleranceIn: toleranceIn });
-          // Same backstop as the single-tool write: refuse an assembly gauge
-          // length that didn't compute rather than pushing it to N tools.
-          const bad = (gaugeChecks || []).filter(c => c.level === 'error');
-          if (bad.length) {
-            throw new Error(
-              `Refusing to re-stamp — the assembly gauge length could not be computed for `
-              + `"${tool.description || tool.tool_id || tool.id}". Check the holder's geometry.`);
-          }
-          appended.push(...fusionInstances);
-          metaOut.push(metadataTool);
-          // The metadata assembly may have been migrated onto a merged holder's
-          // surviving guid — carry that into the in-memory tool too.
-          updated.push({ ...tool, assemblies: metadataTool.assemblies || tool.assemblies });
-        }
-
-        const next = fusionList
-          .filter(f => !dropTracking.has(readTrackingId(f)) && !dropGuids.has(f.guid))
-          .concat(appended);
-        await uploadFusionList(libId, next);
-      }
-
-      if (googleRef.current && metaOut.length) await toolStore.upsertMany(metaOut);
-      for (const t of updated) dispatch({ type: 'UPDATE_TOOL', tool: t });
+      await writeToolsToFusion(affected, { toleranceIn });
       dispatch({ type: 'SAVE_SUCCESS' });
       notify(`Re-stamped ${affected.length} tool${affected.length === 1 ? '' : 's'} with the current holder geometry`, 'success');
       return { ...summary, wrote: true };
@@ -1048,5 +1175,5 @@ export function createLibraryOps(ctx) {
     }
   };
 
-  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary, restampHolderTools };
+  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary, restampHolderTools, linkToolsToHolders };
 }

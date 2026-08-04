@@ -5550,3 +5550,18 @@ input.sf-ref-num { text-align: right; }
 .link-tool-holder .mono { font-family: var(--font-mono); }
 .link-row-why { font-size: var(--fs-xs); color: var(--text-sub); margin-top: 4px; }
 @media (max-width: 768px) { .link-row { grid-template-columns: 1fr; } }
+
+/* What the link will do to Fusion — the half of the job that isn't the pointer. */
+.link-effect {
+  display: flex; gap: var(--sp-2); align-items: flex-start;
+  padding: var(--sp-2); margin: var(--sp-2) 0;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  font-size: var(--fs-sm); color: var(--text-sub);
+}
+.link-effect.active { border-color: var(--blue); color: var(--text); }
+.link-effect > svg { flex: none; margin-top: 2px; color: var(--blue); }
+.link-effect-gauges {
+  margin-top: 6px; font-size: var(--fs-xs); color: var(--text-sub);
+  display: grid; gap: 2px;
+}
+.link-effect-gauges .mono { font-family: var(--font-mono); }

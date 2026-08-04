@@ -13,16 +13,15 @@
 // the numbers alone — see holderLink.js for the case where a 0.15" difference
 // is a different stickout rather than a different drawing.
 
-import { useState, useMemo } from 'react';
-import { X, Link2, AlertTriangle, Check } from 'lucide-react';
-import HolderPill from './HolderPill.jsx';
+import { useState, useMemo, useEffect } from 'react';
+import { X, Link2, AlertTriangle, Check, RefreshCw } from 'lucide-react';
 import { NEAR_MAX_MM } from '../utils/holderLink.js';
 
 const toolName = (t) => t.description || t.tool_id || t.id;
 
-export default function LinkToolsModal({ plan, holders, onCommit, onClose }) {
+export default function LinkToolsModal({ plan, holders, onPreview, onCommit, onClose }) {
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(0);
+  const [done, setDone] = useState(null);
   // Near rows start ticked; manual picks start empty. Keyed by assembly.
   const [picks, setPicks] = useState(() => {
     const m = new Map();
@@ -48,6 +47,18 @@ export default function LinkToolsModal({ plan, holders, onCommit, onClose }) {
   }, [plan, picks]);
 
   const nearAllOn = (plan?.near || []).every(r => picks.has(r.assemblyId));
+
+  // What this selection would do to FUSION — the number that actually matters,
+  // since a link with stale geometry left behind is only half the job.
+  const [effect, setEffect] = useState(null);
+  useEffect(() => {
+    let live = true;
+    if (!onPreview || !links.length) { setEffect(null); return undefined; }
+    Promise.resolve(onPreview(links))
+      .then(r => { if (live) setEffect(r); })
+      .catch(() => { if (live) setEffect(null); });
+    return () => { live = false; };
+  }, [links, onPreview]);
 
   const Row = ({ r, tone }) => (
     <div className={`link-row ${tone}`}>
@@ -94,11 +105,14 @@ export default function LinkToolsModal({ plan, holders, onCommit, onClose }) {
         </div>
 
         <div className="modal-body">
-          {done > 0 ? (
+          {done ? (
             <div className="holder-note">
               <Check size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} />
-              Linked {done} assembl{done === 1 ? 'y' : 'ies'}. Their geometry updates the next time
-              each tool is saved — or use <b>Re-stamp</b> on a holder to push it now.
+              Linked {done.linked} assembl{done.linked === 1 ? 'y' : 'ies'}.
+              {done.rewritten
+                ? ` ${done.rewritten} tool${done.rewritten === 1 ? '' : 's'} had holder geometry that
+                   disagreed with its record — those are corrected in Fusion now.`
+                : ' Every one already carried the right holder geometry, so nothing needed rewriting in Fusion.'}
             </div>
           ) : (
             <>
@@ -110,6 +124,44 @@ export default function LinkToolsModal({ plan, holders, onCommit, onClose }) {
 
               {!plan?.rows?.length && (
                 <div className="holder-empty">Every tool is already linked to a holder record.</div>
+              )}
+
+              {/* THE PART THAT MATTERS. Storing the link fixes the pointer;
+                  this is what actually corrects Fusion. A tool whose baked copy
+                  already matches its record isn't rewritten — there is nothing
+                  to correct, and rewriting the library to change nothing is a
+                  slow way to risk a bad write. */}
+              {effect && (
+                <div className={`link-effect${effect.rewritten ? ' active' : ''}`}>
+                  <RefreshCw size={13} />
+                  {effect.rewritten ? (
+                    <div>
+                      <b>{effect.rewritten} tool{effect.rewritten === 1 ? '' : 's'} will be corrected in Fusion.</b>{' '}
+                      Their frozen holder copy disagrees with the record they’re being linked to, so
+                      the record’s geometry is written into them. After this, no tool in Fusion
+                      carries holder data that disagrees with its holder.
+                      {effect.checks?.some(c => c.level === 'warn') && (
+                        <div className="link-effect-gauges">
+                          {effect.checks.filter(c => c.level === 'warn').slice(0, 8).map((c, i) => (
+                            <div key={i}>
+                              <span className="mono">{toolName(c.tool)}</span>
+                              {' — assembly gauge moves '}
+                              <b>{c.deltaMm > 0 ? '+' : ''}{c.deltaMm?.toFixed(2)}mm</b>
+                            </div>
+                          ))}
+                          {effect.checks.filter(c => c.level === 'warn').length > 8 && (
+                            <div>…and {effect.checks.filter(c => c.level === 'warn').length - 8} more</div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      Every selected tool already carries the right holder geometry — nothing needs
+                      rewriting in Fusion.
+                    </div>
+                  )}
+                </div>
               )}
 
               {(plan?.auto?.length > 0) && (
@@ -163,7 +215,9 @@ export default function LinkToolsModal({ plan, holders, onCommit, onClose }) {
 
         <div className="modal-footer">
           <span className="modal-footer-note">
-            Stores the link only. No tool geometry changes here.
+            {effect?.rewritten
+              ? `Also corrects ${effect.rewritten} tool${effect.rewritten === 1 ? '' : 's'} in Fusion.`
+              : 'Stores the link. Tools already carrying the right geometry aren’t rewritten.'}
           </span>
           <button className="btn btn-secondary btn-sm" onClick={onClose}>
             {done > 0 ? 'Close' : 'Cancel'}
@@ -174,7 +228,10 @@ export default function LinkToolsModal({ plan, holders, onCommit, onClose }) {
               disabled={!links.length || busy}
               onClick={async () => {
                 setBusy(true);
-                try { setDone(await onCommit(links)); } finally { setBusy(false); }
+                try {
+                  const r = await onCommit(links);
+                  if (r) setDone(r);     // null = it failed and was already reported
+                } finally { setBusy(false); }
               }}
             >
               <Link2 size={13} /> Link {links.length} assembl{links.length === 1 ? 'y' : 'ies'}

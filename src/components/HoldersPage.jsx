@@ -731,10 +731,22 @@ export default function HoldersPage() {
     [tools, records, config]);
   const [linkOpen, setLinkOpen] = useState(false);
   const onLinkTools = () => setLinkOpen(true);
+  // Preview of what the CURRENT selection would do to Fusion — re-run as rows
+  // are ticked, because the interesting number is how many tools get their
+  // holder geometry corrected, not how many pointers get stored.
+  const previewLinks = useCallback(
+    (links) => linkToolsToHolders(links, { dryRun: true }),
+    [linkToolsToHolders]);
   const commitLinks = async (links) => {
-    const n = await linkToolsToHolders(links);
-    notify(`Linked ${n} assembl${n === 1 ? 'y' : 'ies'} to holder records`, 'success');
-    return n;
+    // Errors are already toasted by the action; swallow the rejection here so a
+    // failed write doesn't surface as an unhandled promise.
+    const r = await linkToolsToHolders(links).catch(() => null);
+    if (!r) return null;
+    notify(r.rewritten
+      ? `Linked ${r.linked} assembl${r.linked === 1 ? 'y' : 'ies'} · corrected ${r.rewritten} tool${r.rewritten === 1 ? '' : 's'} in Fusion`
+      : `Linked ${r.linked} assembl${r.linked === 1 ? 'y' : 'ies'} — Fusion already had the right geometry`,
+      'success');
+    return r;
   };
 
   // ─── Push to Fusion ──────────────────────────────────────────────────────
@@ -869,7 +881,7 @@ export default function HoldersPage() {
       {linkOpen && (
         <LinkToolsModal
           plan={linkPlan} holders={records}
-          onCommit={commitLinks}
+          onPreview={previewLinks} onCommit={commitLinks}
           onClose={() => setLinkOpen(false)}
         />
       )}
