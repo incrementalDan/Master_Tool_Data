@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { X, ArrowRight, Check } from 'lucide-react';
 import HolderPill from './HolderPill.jsx';
 import { mergeHolderRecords, toolsFollowingMerge, holderGuidsOf } from '../utils/holderDuplicates.js';
+import { assemblyUsesHolder } from '../schema/holderResolve.js';
 import { deriveGaugeLength, formatHolderLen, holderLenIn } from '../utils/holderGeometry.js';
 import { holderOptionLabel } from '../schema/holderOptions.js';
 
@@ -26,7 +27,7 @@ const FIELD_LABEL = {
 
 function Card({ holder, config, tools, selected, onSelect, role }) {
   const gauge = deriveGaugeLength(holder.segments);
-  const uses = toolsFollowingMerge(holder, tools);
+  const uses = toolsFollowingMerge(holder, tools, assemblyUsesHolder);
   return (
     <button className={`holder-merge-card${selected ? ' selected' : ''}`} onClick={onSelect}>
       <div className="holder-merge-card-head">
@@ -59,7 +60,7 @@ export default function HolderMergeModal({ a, b, config, tools = [], match, onCo
   const survivor = keepId === a.id ? a : b;
   const loser = keepId === a.id ? b : a;
   const { filled } = mergeHolderRecords(survivor, loser);
-  const following = toolsFollowingMerge(loser, tools);
+  const following = toolsFollowingMerge(loser, tools, assemblyUsesHolder);
   const adopting = holderGuidsOf(loser).length;
 
   return (

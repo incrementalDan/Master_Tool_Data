@@ -17,6 +17,7 @@ import { recordsWithBodyDivergence } from '../utils/holderBody.js';
 import { proposeHolderParts, applyPartProposals, holdersWithPartDrift, holderPartsOf } from '../utils/holderParts.js';
 import { findHolderDuplicates, holdersInDuplicates, applyHolderMerge, compareHolders, holderGuidsOf, toolsFollowingMerge } from '../utils/holderDuplicates.js';
 import { auditFusionHolders } from '../schema/holderIdentity.js';
+import { assemblyCountUsingHolder, assemblyUsesHolder } from '../schema/holderResolve.js';
 import HolderMergeModal from './HolderMergeModal.jsx';
 import RestampModal from './RestampModal.jsx';
 import PushHoldersModal from './PushHoldersModal.jsx';
@@ -627,21 +628,11 @@ export default function HoldersPage() {
     () => auditFusionHolders(fusionHolders || [], records).unknown.length,
     [records, fusionHolders]);
 
-  // "Used by N tools" — counted through the assemblies' holder_guid, which is
-  // the only link that exists today (a tool's absorbed Fusion snapshot). It is
-  // NOT the app FK: that comes with the linking phase, and until then a holder
-  // record with no Fusion guid always reads 0.
-  const usageOf = useMemo(() => {
-    const counts = new Map();
-    for (const t of tools || []) {
-      for (const a of t.assemblies || []) {
-        if (a.holder_guid) counts.set(a.holder_guid, (counts.get(a.holder_guid) || 0) + 1);
-      }
-    }
-    // Counts through EVERY guid the record owns, including any it absorbed in
-    // a merge — so a merged-away holder's tools show under the survivor.
-    return (h) => holderGuidsOf(h).reduce((a, g) => a + (counts.get(g) || 0), 0);
-  }, [tools]);
+  // "Used by N tools" — through assemblyUsesHolder, so a tool linked by the app
+  // FK counts even when Fusion has since re-issued the guid it carries.
+  const usageOf = useMemo(
+    () => (h) => assemblyCountUsingHolder(tools, h),
+    [tools]);
 
   const canEdit = googleAuthenticated || demoMode;
 
@@ -665,7 +656,7 @@ export default function HoldersPage() {
     // Say how many tools resolve through this record. Deleting it isn't
     // cosmetic for them: their next save falls back to the Fusion library's
     // version of the holder, quietly undoing any correction made here.
-    const inUse = toolsFollowingMerge(record, tools);
+    const inUse = toolsFollowingMerge(record, tools, assemblyUsesHolder);
     const warn = inUse
       ? `\n\n⚠ ${inUse} tool assembl${inUse === 1 ? 'y uses' : 'ies use'} this holder. They will fall back to the Fusion holder library the next time each tool is saved — any correction made here is lost for them.`
       : '';

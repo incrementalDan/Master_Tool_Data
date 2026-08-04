@@ -21,7 +21,7 @@ import { isExcludedFrom } from '../utils/idSystems.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
 import { composePresetName, opTypeWord, parsePresetName, materialNameCode, materialCategory, findMaterialInLibrary, camPresetIdFromGrade, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
-import { holderGuidsOf } from '../utils/holderDuplicates.js';
+import { toolsUsingHolder } from '../schema/holderResolve.js';
 import { defaultToolLibraryId, machineNumberArgs } from './appState.js';
 
 export function createLibraryOps(ctx) {
@@ -946,12 +946,12 @@ export function createLibraryOps(ctx) {
   //                 dragged. A one-off grading choice, never stored: see
   //                 ASSEMBLY_GAUGE_WARN_IN in holderResolve.js
   const restampHolderTools = async (holderRecord, { dryRun = false, toolIds = null, toleranceIn = null } = {}) => {
-    const guids = new Set(holderGuidsOf(holderRecord));
-    if (!guids.size) return { tools: [], byLibrary: [], wrote: false };
-
-    const allAffected = (toolsRef.current || []).filter(t =>
-      (t.assemblies || []).some(a => a.holder_guid && guids.has(a.holder_guid))
-      && t.no_fusion_link !== true);
+    // Selected through assemblyUsesHolder — the app FK first, the Fusion guid
+    // only as a fallback. Keying this on the guid alone skipped every tool whose
+    // baked guid had churned, so "push this correction to all its tools" quietly
+    // covered a fraction of them.
+    const allAffected = toolsUsingHolder(toolsRef.current, holderRecord)
+      .filter(t => t.no_fusion_link !== true);
     // The preview always describes EVERY affected tool; only the write is
     // narrowed to the selection, so deselecting a tool never hides it.
     const selected = toolIds ? new Set(toolIds) : null;
