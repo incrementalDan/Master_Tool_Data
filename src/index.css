@@ -5572,3 +5572,45 @@ input.sf-ref-num { text-align: right; }
   display: grid; gap: 2px;
 }
 .link-effect-gauges .mono { font-family: var(--font-mono); }
+
+/* ── The holder workflow card ────────────────────────────────────────────── */
+/* Shown by default, dismissed for good, brought back from the ⓘ button. */
+.holder-workflow {
+  border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--panel); padding: 12px 14px; margin-bottom: var(--sp-3);
+}
+.holder-workflow-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+.holder-workflow-head > svg { color: var(--blue); flex: none; }
+.holder-workflow-head > b { flex: 1; font-size: var(--text-sm); }
+
+/* The ordering rule — the one thing that costs you if you get it wrong. */
+.holder-workflow-rule {
+  border-left: 2px solid var(--blue); padding: 6px 0 6px 10px;
+  margin-bottom: 10px;
+  font-size: var(--text-xs); color: var(--text-sub); line-height: var(--lh-normal);
+}
+.holder-workflow-rule b { color: var(--text); }
+
+.holder-workflow-cols {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3);
+}
+.holder-workflow-label {
+  font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: .04em;
+  color: var(--text-sub); margin-bottom: 4px;
+}
+.holder-workflow-steps {
+  margin: 0; padding-left: 18px;
+  font-size: var(--text-xs); color: var(--text-sub); line-height: var(--lh-normal);
+}
+.holder-workflow-steps li { margin-bottom: 3px; }
+.holder-workflow-steps b { color: var(--text); }
+.holder-workflow-foot {
+  display: flex; gap: 6px; align-items: flex-start; margin-top: 6px;
+  font-size: var(--text-2xs); color: var(--text-sub); line-height: var(--lh-normal);
+}
+.holder-workflow-foot > svg { flex: none; margin-top: 2px; }
+@media (max-width: 768px) {
+  .holder-workflow-cols { grid-template-columns: 1fr; }
+}

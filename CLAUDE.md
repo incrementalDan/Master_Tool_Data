@@ -1034,6 +1034,10 @@ src/
                                   # classification, usage, re-stamp
     PushHoldersModal.jsx          # Push holder records to Fusion: preview → commit.
                                   # Names what it will NOT touch (half-matches)
+    LinkToolsModal.jsx            # Link tools to holders: auto/near/manual tiers +
+                                  # how many tools get corrected in Fusion
+    HolderWorkflowBanner.jsx      # The holder workflow card (setup order + the
+                                  # "edit here, not in Fusion" rule). Dismissible
     RestampModal.jsx              # Re-stamp a holder's tools: per-tool old→new assembly
                                   # gauge, a per-fix tolerance (never stored), pick rows
     HolderMergeModal.jsx          # Merge two holder records (survivor adopts the
@@ -1629,6 +1633,8 @@ The explicit, user-initiated batch flow — see the **Phase 2** section above. T
 - **Now** — **Re-stamp** on the holder page rewrites every tool using it, with a per-tool old→new assembly-gauge preview (see the gauge backstop in `holderResolve.js`).
 - **During linking** — **Link tools to holders** rewrites the tools whose baked copy is out of date as part of the same commit (below). Both routes share `writeToolsToFusion`.
 - **A merge needs no tool writes at all**: the survivor adopts the loser's guid into `legacy_fusion_guids`, so every tool that referenced the old holder resolves to the survivor. ⚠️ That fixes the **link**, not the **data** — those tools still carry the old geometry until they're written.
+
+**The workflow is stated on the page** (`HolderWorkflowBanner.jsx`) — a small card above the holder list: the one-time setup order (Import → Normalize names → Duplicates → Link tools to holders → Push to Fusion) and the ongoing one (edit here → Re-stamp → Push). It leads with the rule that actually costs something: **change a holder HERE, not in Fusion.** Redraw it in Fusion first and the segments move while our ID stays put, so identity reads `ref-only` and the app stops and asks instead of following the change everywhere; the recovery is Import + merge via Duplicates. Shown by default, dismissed for good (localStorage `holder_workflow_dismissed`), brought back by the ⓘ in the page header. Deliberately **not** a progress tracker — several steps are optional or repeatable, so a checklist that can't be completed would just nag.
 
 **The nominal-length check is collet-family scoped and user-confirmed.** The engraved nominal vs the modelled gauge length holds a known band **for SK collets only** (`NOMINAL_BANDS_MM`) — not for other collet families, and especially not for end-mill holders. So the app makes a best guess and the user does a **one-time confirmation per holder**, which **expires by itself** when any input it depended on changes (`nominal_check.signature`).
 
