@@ -537,6 +537,14 @@ export function AppProvider({ children }) {
         adopts: plan.updates.filter(u => u.kind === 'adopt').length,
         creates: plan.creates.length,
         flagged: plan.flagged,
+        // Every holder the write touches, with the fields that move — so the
+        // dialog can name them instead of showing a bare count.
+        rows: plan.updates.filter(u => u.stale)
+          .map(u => ({ entry: u.entry, record: u.record, kind: u.kind, diff: u.diff || [] })),
+        // How many are a pure ID stamp — the reassuring number, said once
+        // rather than repeated on every row.
+        idOnly: plan.updates.filter(u => u.stale
+          && (u.diff || []).length === 1 && u.diff[0].key === 'product-id').length,
       })),
       updated: byLibrary.reduce((a, b) => a + b.plan.updates.filter(u => u.stale).length, 0),
       created: byLibrary.reduce((a, b) => a + b.plan.creates.length, 0),

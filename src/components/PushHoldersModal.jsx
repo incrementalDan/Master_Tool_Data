@@ -14,10 +14,50 @@ import { useState, useEffect } from 'react';
 import { X, Upload, AlertTriangle } from 'lucide-react';
 
 const KIND_NOTE = {
-  update: 'Already linked, but Fusion is holding older values — refreshed.',
-  adopt: 'Same shape, no ID in Fusion yet — this stamps ours on. Nothing is overwritten.',
-  create: 'Not in the Fusion library — added as a new holder.',
+  update: 'already in Fusion',
+  adopt: 'in Fusion, but with no ID of ours on it yet',
+  create: 'not in Fusion at all — added',
 };
+
+// One row per holder, naming every field the write would change. "5 refreshed"
+// on its own asked you to take the app's word for it; this says which holders
+// and what moves.
+function PushRow({ entry, record, kind, diff }) {
+  const name = record?.description || entry?.description || '(no description)';
+  const idOnly = diff.length === 1 && diff[0].key === 'product-id';
+  return (
+    <div className="push-row">
+      <div className="push-row-head">
+        <span className="push-row-name">{name}</span>
+        <span className="push-row-kind">{KIND_NOTE[kind]}</span>
+      </div>
+      {idOnly ? (
+        <div className="push-row-field">
+          <b>App ID</b>
+          <span className="mono push-from">{diff[0].from}</span>
+          <span className="push-arrow">→</span>
+          <span className="mono push-to">{diff[0].to}</span>
+          <span className="push-only">nothing else changes</span>
+        </div>
+      ) : (
+        diff.map(d => (
+          <div key={d.key} className="push-row-field">
+            <b>{d.label}</b>
+            {d.note ? (
+              <span>— {d.note}</span>
+            ) : (
+              <>
+                <span className="mono push-from">{d.from}</span>
+                <span className="push-arrow">→</span>
+                <span className="mono push-to">{d.to}</span>
+              </>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
 
 export default function PushHoldersModal({ preview, onCommit, onClose }) {
   const [busy, setBusy] = useState(false);
@@ -50,16 +90,30 @@ export default function PushHoldersModal({ preview, onCommit, onClose }) {
             <div key={l.libId} className="holder-push-lib">
               <div className="holder-push-lib-head">
                 <b>{l.libName}</b>
-                {l.updates > 0 && <span className="holder-conf high">{l.updates} refreshed</span>}
-                {l.adopts > 0 && <span className="holder-conf high">{l.adopts} newly linked</span>}
-                {l.creates > 0 && <span className="holder-conf high">{l.creates} added</span>}
-                {l.flagged.length > 0 && <span className="holder-conf medium">{l.flagged.length} left alone</span>}
+                <span className="holder-conf high">
+                  {l.updates + l.adopts + l.creates} to write
+                </span>
+                {l.flagged.length > 0 && (
+                  <span className="holder-conf medium">{l.flagged.length} left alone</span>
+                )}
               </div>
-              <div className="holder-push-kinds">
-                {l.adopts > 0 && <div><b>{l.adopts} newly linked</b> — {KIND_NOTE.adopt}</div>}
-                {l.updates > 0 && <div><b>{l.updates} refreshed</b> — {KIND_NOTE.update}</div>}
-                {l.creates > 0 && <div><b>{l.creates} added</b> — {KIND_NOTE.create}</div>}
-              </div>
+              {/* Said once, not on all fifteen rows. */}
+              {l.idOnly > 0 && (
+                <p className="modal-sub" style={{ margin: '4px 0 0' }}>
+                  {l.idOnly} of these get nothing but their ID written — the geometry Fusion
+                  already holds for them is identical.
+                </p>
+              )}
+              {l.rows?.length > 0 && (
+                <div className="push-rows">
+                  {l.rows.map((r, i) => <PushRow key={i} {...r} />)}
+                </div>
+              )}
+              {l.creates > 0 && (
+                <div className="push-row-field" style={{ marginTop: 6 }}>
+                  <b>{l.creates}</b> holder{l.creates === 1 ? '' : 's'} {KIND_NOTE.create}.
+                </div>
+              )}
             </div>
           ))}
 

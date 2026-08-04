@@ -447,6 +447,29 @@ function HolderList({
 
       {showWorkflow && <HolderWorkflowBanner onDismiss={onDismissWorkflow} />}
 
+      {/* ⚠️ NOT dismissible, and not a mere badge on a button. Until this is
+          done the app is the ONLY place the holder work exists — which is the
+          one state this whole system is built to avoid (CLAUDE.md → "If Fusion
+          has a place for it, Fusion must have it"). It has to be legible
+          without opening anything. */}
+      {canPush && unlinked > 0 && (
+        <div className="holder-sync-banner">
+          <Upload size={15} />
+          <div>
+            <b>Fusion doesn’t have {unlinked} of your {holders.length} holder records yet.</b>
+            <div>
+              Until you push, those records live only in this app — if it went away, the work
+              would go with it. The first push mostly just writes each holder’s ID into Fusion’s
+              product-id field; the geometry Fusion already has stays as it is. Open it to see
+              exactly what changes, holder by holder, before anything is written.
+            </div>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={onPush}>
+            <Upload size={13} /> Review &amp; push
+          </button>
+        </div>
+      )}
+
       <div className="holder-filters">
         <input
           className="field-input" value={q} onChange={e => setQ(e.target.value)}

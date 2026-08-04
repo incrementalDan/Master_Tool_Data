@@ -5663,3 +5663,40 @@ input.sf-ref-num { text-align: right; }
 @media (max-width: 768px) {
   .holder-workflow-cols { grid-template-columns: 1fr; }
 }
+
+/* Per-holder rows in the push preview — what changes, named. */
+.push-rows { display: grid; gap: 6px; margin-top: 8px; }
+.push-row {
+  padding: 7px 10px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--input-bg);
+}
+.push-row-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.push-row-name { font-size: var(--text-xs); font-weight: var(--fw-bold); }
+.push-row-kind { font-size: var(--text-2xs); color: var(--text-faint); }
+.push-row-field {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  font-size: var(--text-2xs); color: var(--text-sub); margin-top: 3px;
+}
+.push-row-field b { color: var(--text); font-weight: var(--fw-semibold); }
+.push-row-field .mono { font-family: var(--font-mono); }
+.push-from { color: var(--text-faint); text-decoration: line-through; }
+.push-arrow { color: var(--text-faint); }
+.push-to { color: var(--green); }
+
+/* "Fusion doesn't have your holders yet" — the state that must not be missable. */
+.holder-sync-banner {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 10px 14px; margin-bottom: var(--sp-3);
+  border: 1px solid var(--blue); border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+  font-size: var(--text-xs); color: var(--text-sub); line-height: var(--lh-normal);
+}
+.holder-sync-banner > svg { color: var(--blue); flex: none; margin-top: 2px; }
+.holder-sync-banner > div { flex: 1; }
+.holder-sync-banner b { color: var(--text); display: block; margin-bottom: 3px; }
+.holder-sync-banner > button { flex: none; align-self: center; }
+@media (max-width: 768px) {
+  .holder-sync-banner { flex-wrap: wrap; }
+  .holder-sync-banner > button { width: 100%; }
+}
+.push-only { color: var(--text-faint); font-style: italic; }

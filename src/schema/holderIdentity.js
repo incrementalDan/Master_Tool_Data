@@ -164,20 +164,83 @@ export function auditFusionHolders(fusionEntries, records, tolIn = SEGMENT_MATCH
 // A record no entry matched at all is appended as a NEW Fusion holder.
 //
 // `records` should be scoped to one holder library before calling.
-// Would writing this record change the Fusion entry at all? Used to tell
-// "Fusion already agrees" from "Fusion is stale" — a description or vendor
-// edited in the app doesn't move the segments, so identity matching alone would
-// call it settled while Fusion still showed the old name.
-export function fusionEntryIsStale(entry, record, toFusion) {
-  if (!toFusion) return false;
-  const next = toFusion(record, entry);
-  return stableJson(next) !== stableJson(entry);
+// ─── What would a push actually change? ─────────────────────────────────────
+// Field-by-field, in the terms a person reads, so "N refreshed" can say WHICH
+// holders and WHY instead of asking you to trust it.
+//
+// ⚠️ NUMBERS ARE COMPARED WITH A TOLERANCE, not by string equality. A value
+// that survives a JSON round-trip comes back as 54.998999999999995 instead of
+// 54.999 — identical to twelve significant figures. Comparing text called
+// those holders stale, so the count was inflated and the words "Fusion is
+// holding older values" were simply untrue for them.
+const NUM_EPS = 1e-6;
+const sameNumber = (a, b) =>
+  Math.abs(a - b) <= NUM_EPS * Math.max(1, Math.abs(a), Math.abs(b));
+
+function sameValue(a, b) {
+  if (typeof a === 'number' && typeof b === 'number') return sameNumber(a, b);
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((v, i) => sameValue(v, b[i]));
+  }
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    for (const k of keys) if (!sameValue(a[k], b[k])) return false;
+    return true;
+  }
+  return a === b;
 }
 
-const stableJson = (v) => JSON.stringify(v, (_k, val) => (
-  val && typeof val === 'object' && !Array.isArray(val)
-    ? Object.fromEntries(Object.keys(val).sort().map(k => [k, val[k]]))
-    : val));
+// How each changed field is named and shown. Anything not listed is reported
+// under its raw key rather than silently dropped.
+const FIELD_LABEL = {
+  'product-id': 'App ID',
+  description: 'Name',
+  vendor: 'Vendor',
+  gaugeLength: 'Gauge length',
+  segments: 'Geometry',
+  'product-link': 'Link',
+};
+
+const show = (v) => {
+  if (v === undefined || v === null || v === '') return '(blank)';
+  if (Array.isArray(v)) return `${v.length} segments`;
+  if (typeof v === 'number') return String(+v.toFixed(4));
+  return String(v);
+};
+
+// → [{ key, label, from, to }]. `expressions.*` are deliberately excluded:
+// Fusion re-derives them from their native field, so listing both would report
+// every name change twice.
+export function holderPushDiff(entry, next) {
+  const out = [];
+  const keys = new Set([...Object.keys(entry || {}), ...Object.keys(next || {})]);
+  for (const k of keys) {
+    if (k === 'expressions') continue;
+    if (sameValue(entry?.[k], next?.[k])) continue;
+    // A trailing space is invisible in a diff, so a trim reads as "no change"
+    // and the row looks like a lie. Say what happened instead.
+    const a = entry?.[k]; const b = next?.[k];
+    const trimOnly = typeof a === 'string' && typeof b === 'string'
+      && a !== b && a.trim() === b.trim();
+    out.push({
+      key: k, label: FIELD_LABEL[k] || k,
+      from: show(a), to: show(b),
+      note: trimOnly ? 'extra spaces removed' : null,
+    });
+  }
+  // An expression that moved on its own (its native field didn't) is still a
+  // real difference — report it as one line rather than per key.
+  if (!sameValue(entry?.expressions, next?.expressions) && !out.length) {
+    out.push({ key: 'expressions', label: 'Derived expressions', from: 'older', to: 'rebuilt' });
+  }
+  return out;
+}
+
+// Would writing this record change the Fusion entry at all?
+export function fusionEntryIsStale(entry, record, toFusion) {
+  if (!toFusion) return false;
+  return holderPushDiff(entry, toFusion(record, entry)).length > 0;
+}
 
 export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL_IN, toFusion = null) {
   const updates = [];   // { index, entry, record, kind: 'update' | 'adopt', stale }
@@ -193,17 +256,19 @@ export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL
     if (m.status === 'exact') {
       // `stale` is what the badge counts: an identity match only proves Fusion
       // has the right HOLDER, not the right VALUES.
-      updates.push({
-        index, entry, record: m.record, kind: 'update',
-        stale: fusionEntryIsStale(entry, m.record, toFusion),
-      });
+      const diff = toFusion ? holderPushDiff(entry, toFusion(m.record, entry)) : [];
+      updates.push({ index, entry, record: m.record, kind: 'update', diff, stale: diff.length > 0 });
       spokenFor.add(m.record.id);
       continue;
     }
     // The bootstrap case: our shape, and Fusion has no id of its own on it.
     const blankRef = !String(entry['product-id'] ?? '').trim();
     if (m.status === 'geometry-only' && m.geoRecords.length === 1 && blankRef) {
-      updates.push({ index, entry, record: m.geoRecords[0], kind: 'adopt', stale: true });
+      const rec = m.geoRecords[0];
+      updates.push({
+        index, entry, record: rec, kind: 'adopt', stale: true,
+        diff: toFusion ? holderPushDiff(entry, toFusion(rec, entry)) : [],
+      });
       spokenFor.add(m.geoRecords[0].id);
       continue;
     }

@@ -7,6 +7,7 @@ import {
   segmentsMatch, recordForRef, recordsForGeometry, matchFusionHolder,
   isConfidentMatch, auditFusionHolders, SEGMENT_MATCH_TOL_IN,
   holderPushPlan, applyHolderPushPlan, holdersOutOfSync,
+  holderPushDiff, fusionEntryIsStale,
 } from './holderIdentity.js';
 import { fusionHolderToRecord, holderRecordToFusion } from './holderRecord.js';
 import { convertHolderUnits } from '../utils/holderGeometry.js';
@@ -287,5 +288,57 @@ describe('out-of-sync detection', () => {
     // flagging them would make the badge permanent noise.
     const noted = { ...rec, notes: 'lives in the top drawer', location: 'A-4', type_id: 'ht-collet' };
     expect(holdersOutOfSync([inFusion()], [noted], holderRecordToFusion)).toBe(0);
+  });
+});
+
+// "N refreshed" has to be true and has to be explainable. Both were broken:
+// float noise made it overcount, and a bare count couldn't say which or why.
+describe('what a push would change', () => {
+  const rec = settled();
+
+  it('float round-trip noise is NOT a change', () => {
+    // 54.999 comes back from JSON as 54.998999999999995. String comparison
+    // called that stale, so holders were listed as needing a push when nothing
+    // meaningful differed — and the words "Fusion is holding older values"
+    // were untrue for them.
+    const entry = pushed(rec);
+    const noisy = { ...entry, gaugeLength: entry.gaugeLength + 1e-12 };
+    expect(holderPushDiff(noisy, entry)).toEqual([]);
+    expect(fusionEntryIsStale(noisy, rec, holderRecordToFusion)).toBe(false);
+  });
+
+  it('a real change IS reported, in readable terms', () => {
+    const entry = { ...pushed(rec), 'product-id': '' };
+    const diff = holderPushDiff(entry, holderRecordToFusion(rec, entry));
+    expect(diff).toHaveLength(1);
+    expect(diff[0]).toMatchObject({ key: 'product-id', label: 'App ID', from: '(blank)' });
+    expect(diff[0].to).toBe(rec.holder_ref);
+  });
+
+  it('a trim says what happened — a trailing space is invisible in a diff', () => {
+    const entry = { ...pushed(rec), description: `${rec.description} ` };
+    const diff = holderPushDiff(entry, holderRecordToFusion(rec, entry));
+    const name = diff.find(d => d.key === 'description');
+    expect(name.note).toBe('extra spaces removed');
+  });
+
+  it('expressions are not double-reported alongside the field they mirror', () => {
+    // Fusion re-derives tool_description from description; listing both would
+    // report one rename twice.
+    const entry = { ...pushed(rec), description: 'Renamed in the app' };
+    const diff = holderPushDiff(entry, holderRecordToFusion(rec, entry));
+    expect(diff.filter(d => d.key.startsWith('expressions'))).toHaveLength(0);
+    expect(diff.some(d => d.key === 'description')).toBe(true);
+  });
+
+  it('on the REAL library, every flagged holder has a stated reason', () => {
+    const records = REAL.map(fusionHolderToRecord);
+    const plan = holderPushPlan(REAL, records, undefined, holderRecordToFusion);
+    const stale = plan.updates.filter(u => u.stale);
+    expect(stale.length).toBeGreaterThan(0);
+    for (const u of stale) expect(u.diff.length).toBeGreaterThan(0);
+    // And most of them are a pure ID stamp — the reassuring case.
+    const idOnly = stale.filter(u => u.diff.length === 1 && u.diff[0].key === 'product-id');
+    expect(idOnly.length).toBeGreaterThan(stale.length / 2);
   });
 });
