@@ -1864,7 +1864,7 @@ Machine tool number is shown inside the Identity section, in the same row as the
 |---|---|---|---|
 | Tool Description | `.description-badge` | Rounded rect (r=7px) | Violet — `rgba(124,58,237,…)` |
 | Tool ID | `.tool-id-pill` | Pill | Amber — `#f59e0b`, mono (`--font-mono`) |
-| Holder | `<HolderTag>` → `.holder-scoop-pill` | Pill with colored end caps | **The one holder treatment, everywhere.** Caps + border take the holder RECORD's color, falling back to the by-size list (`holderColor`, `src/utils/holderColors.js`) then teal. The collet substring (`SK13` in `NBT30-SK13C-60`) is tinted separately by its collet-size option — the background is never filled, so the two colors can't clash. The old flat `.holder-pill` is retired |
+| Holder | `<HolderTag>` → `.holder-scoop-pill` | Pill with colored end caps | **The one holder treatment, everywhere.** Caps + border take the holder RECORD's color, falling back to the by-size list then teal — the whole chain lives in `holderColor(description, chosen)` (`src/utils/holderColors.js`), called from ONE place in `HolderPill`, because splitting it is what made the Holders page and the tool pages show the same holder in two colors. The collet substring (`SK13` in `NBT30-SK13C-60`) is tinted separately by its collet-size option — the background is never filled, so the two colors can't clash. The old flat `.holder-pill` is retired |
 | Machine Tool # | `.machine-num-badge` | Slightly rounded rect (r=5px) | Green — `#4ade80`, mono |
 | Location/Cabinet | `.location-tag` | Rounded rect (r=7px) | Indigo — `#818cf8`, mono |
 | Preset Name | `.preset-tag` | Pill | Colored by **material's ISO group** via `--badge-color` (host sets it from `presetMaterialColor`); default `--iso-p` (steel) |
