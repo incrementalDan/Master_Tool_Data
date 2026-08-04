@@ -523,7 +523,7 @@ export function AppProvider({ children }) {
       // Records belong to the library they came from; one that has never been
       // pushed anywhere goes to the default.
       const scoped = allRecords.filter(r => (r.library_id || defaultLib) === lib.id);
-      const plan = holderPushPlan(list, scoped);
+      const plan = holderPushPlan(list, scoped, undefined, holderRecordToFusion);
       byLibrary.push({ lib, raw, list, plan });
     }
 
@@ -531,12 +531,14 @@ export function AppProvider({ children }) {
       byLibrary: byLibrary.map(({ lib, plan }) => ({
         libId: lib.id,
         libName: lib.fileName,
-        updates: plan.updates.filter(u => u.kind === 'update').length,
+        // Only entries Fusion doesn't already agree with — a settled holder
+        // isn't "refreshed", it's untouched.
+        updates: plan.updates.filter(u => u.kind === 'update' && u.stale).length,
         adopts: plan.updates.filter(u => u.kind === 'adopt').length,
         creates: plan.creates.length,
         flagged: plan.flagged,
       })),
-      updated: byLibrary.reduce((a, b) => a + b.plan.updates.length, 0),
+      updated: byLibrary.reduce((a, b) => a + b.plan.updates.filter(u => u.stale).length, 0),
       created: byLibrary.reduce((a, b) => a + b.plan.creates.length, 0),
       flagged: byLibrary.flatMap(b => b.plan.flagged),
       wrote: false,
@@ -551,7 +553,8 @@ export function AppProvider({ children }) {
       const guidByRecord = new Map();
       const demoNext = [];
       for (const { lib, raw, list, plan } of byLibrary) {
-        if (!plan.updates.length && !plan.creates.length) continue;
+        // Nothing to say to Fusion for this library — don't burn a write.
+        if (!plan.updates.some(u => u.stale) && !plan.creates.length) continue;
         const next = applyHolderPushPlan(list, plan, holderRecordToFusion);
         if (demoModeRef.current) {
           // Demo is a real sandbox: the write lands in memory so a second push

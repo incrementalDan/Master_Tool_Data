@@ -10,13 +10,13 @@ import HolderDetail from './HolderDetail.jsx';
 import {
   holderOptions, holderOption, holderOptionLabel, newHolderOption, holderConfigOf,
 } from '../schema/holderOptions.js';
-import { newHolderRecord } from '../schema/holderRecord.js';
+import { newHolderRecord, holderRecordToFusion } from '../schema/holderRecord.js';
 import { deriveGaugeLength, deriveExtensionOoh, formatHolderLen, holderLenIn, nominalLengthCheck } from '../utils/holderGeometry.js';
 import { healHolderDescription, applyHealToRecord } from '../utils/holderDescription.js';
 import { recordsWithBodyDivergence } from '../utils/holderBody.js';
 import { proposeHolderParts, applyPartProposals, holdersWithPartDrift, holderPartsOf } from '../utils/holderParts.js';
 import { findHolderDuplicates, holdersInDuplicates, applyHolderMerge, compareHolders, holderGuidsOf, toolsFollowingMerge } from '../utils/holderDuplicates.js';
-import { auditFusionHolders } from '../schema/holderIdentity.js';
+import { auditFusionHolders, holdersOutOfSync } from '../schema/holderIdentity.js';
 import { assemblyCountUsingHolder, assemblyUsesHolder } from '../schema/holderResolve.js';
 import HolderMergeModal from './HolderMergeModal.jsx';
 import RestampModal from './RestampModal.jsx';
@@ -406,7 +406,9 @@ function HolderList({
           <button className="btn btn-secondary btn-sm" onClick={onPush}
             disabled={!holders.length || !googleAuthenticated || !canPush}
             title={canPush
-              ? "Write each holder's ID and geometry into the Fusion holder library — the link that survives Fusion re-issuing its GUIDs"
+              ? (unlinked
+                ? `${unlinked} holder record${unlinked === 1 ? '' : 's'} Fusion doesn't have yet — until you push, that work only exists in this app`
+                : "Fusion already has every holder record's ID and geometry")
               : 'Link a Fusion holder library in Settings first — there is nowhere to push to'}>
             <Upload size={14} /> {unlinked ? `Push to Fusion (${unlinked})` : 'Push to Fusion'}
           </button>
@@ -768,8 +770,14 @@ export default function HoldersPage() {
 
   // How many records Fusion doesn't confidently know yet — the badge on the
   // button, and the reason to press it.
+  // ⚠️ Counts records Fusion doesn't agree with — never pushed OR pushed and
+  // since edited here. Not just "unmatched": editing a description doesn't move
+  // the segments, so an identity match alone would call it settled while Fusion
+  // still showed the old name. This number is how you can see, at a glance,
+  // what would be lost if this app went away (CLAUDE.md → "If Fusion has a
+  // place for it, Fusion must have it").
   const unlinked = useMemo(
-    () => auditFusionHolders(fusionHolders || [], records).unpushed.length,
+    () => holdersOutOfSync(fusionHolders || [], records, holderRecordToFusion),
     [fusionHolders, records]);
   // Nowhere to push to unless a Fusion holder library is actually linked (demo
   // has holders but no registry entry) — better a disabled button that says why

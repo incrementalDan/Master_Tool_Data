@@ -1647,12 +1647,41 @@ Neither field is managed by Fusion and either can be broken by an ordinary human
 
 **This is NOT the migration matcher.** Matching the shop's messy legacy library to the controlled one is a different job with different rules — description + gauge length, a generous tolerance, user-confirmed (`holderAudit.js`, `holderDuplicates.js`). That runs **once**, to get the data under control. Holder identity runs **forever after**, to keep it there, and is deliberately strict. Don't merge the two.
 
-**Pushing OUT is what settles a library** (`holderPushPlan` / `applyHolderPushPlan`, driven by `AppContext.pushHoldersToFusion` and the **Push to Fusion** preview on the Holders page). Until each record's `holder_ref` reaches Fusion's `product-id`, every holder reads `geometry-only` and the link is one signal short. The plan rewrites a Fusion entry ONLY when it can identify it: `exact` → update; `geometry-only` with exactly ONE matching record **and a blank `product-id`** → **adopt** (nothing is overwritten — this is the bootstrap that lets the very first push land). Everything else is left **byte-for-byte alone** and reported: a half-match is the shape of a human edit, and overwriting it destroys the only evidence of what changed. A record no entry matched is appended as a new holder. Non-holder entries in the file are never touched. The push writes the holder library file only — **no cutting tool changes** (a tool gets corrected geometry from its own next write, or from **Re-stamp**). Idempotent: a second push has nothing to create. ⚠️ The `product-id` field is the app's from then on — a vendor SKU that was there is preserved in the record's `legacy_ids`/`part_number`, and still resolves via `recordForRef`.
+**Pushing OUT is what settles a library** (`holderPushPlan` / `applyHolderPushPlan`, driven by `AppContext.pushHoldersToFusion` and the **Push to Fusion** preview on the Holders page). Until each record's `holder_ref` reaches Fusion's `product-id`, every holder reads `geometry-only` and the link is one signal short. The plan rewrites a Fusion entry ONLY when it can identify it: `exact` → update; `geometry-only` with exactly ONE matching record **and a blank `product-id`** → **adopt** (nothing is overwritten — this is the bootstrap that lets the very first push land). Everything else is left **byte-for-byte alone** and reported: a half-match is the shape of a human edit, and overwriting it destroys the only evidence of what changed. A record no entry matched is appended as a new holder. Non-holder entries in the file are never touched. The push writes the holder library file only — **no cutting tool changes** (a tool gets corrected geometry from its own next write, or from **Re-stamp**). Idempotent: a second push has nothing to create — and an entry Fusion already agrees with is **not** rewritten (`u.stale` on each planned update; `applyHolderPushPlan` is keyed by **index**, so the plan and the write must be handed the same list). **`holdersOutOfSync(fusionEntries, records, holderRecordToFusion)`** counts records Fusion doesn't yet agree with — never pushed **or pushed and since edited here** — and badges the **Push to Fusion** button. ⚠️ It cannot be "unmatched records": a renamed holder still matches on identity (the segments didn't move) while Fusion holds the old name, so counting matches alone let app-only edits sit unpushed forever. App-only fields (`notes`, `location`, classification ids) never count — Fusion has nowhere to put them. ⚠️ The `product-id` field is the app's from then on — a vendor SKU that was there is preserved in the record's `legacy_ids`/`part_number`, and still resolves via `recordForRef`.
 
 **Consequences elsewhere:**
 - `resolveHolderForWrite` (`holderResolve.js`) resolves **`holder_id` FIRST**. `holder_guid` is a hint — the fallback for an assembly that predates the FK, and for a holder not yet imported. A guid pointing somewhere else is noise, not an instruction.
 - `importHoldersFromFusion` decides "already known" with `matchFusionHolder`, **not** the guid. Skipping on the guid would re-import the same physical holder as a fresh duplicate every time Fusion re-issued it.
 - Matching on `holder_ref` also searches `legacy_ids`, which holds whatever was in Fusion's `product-id` at import (often a vendor SKU) — useful on the first pass, and still fail-safe because the segments must agree too.
+
+-----
+
+## If Fusion has a place for it, Fusion must have it (CRITICAL)
+
+**The test: if this app disappeared tomorrow, would the work survive?**
+
+Anything the shop does in this app that Fusion has a native field for **must be written to Fusion**. Not "eventually", not "when the user remembers to press a button" — kept in sync, as a property of the feature. If the answer to the test above is "no, it would be lost, even though Fusion has a field for it", that is a **bug**, not a design choice.
+
+This is not about Fusion being important. It's about not building a trap: the shop spends weeks refining data in a web app, and every bit of it is stranded in a JSON file on someone's Drive while the system that actually cuts metal still holds the old values.
+
+**The rule, in two halves:**
+
+| | |
+|---|---|
+| **Fusion HAS a field for it** | The app **must** write it there. Metadata may own the value and win on read, but Fusion must be **mirrored**, always. |
+| **Fusion has NO field for it** | Metadata-only, and that's correct. Never invent a Fusion field — Fusion validates strictly (see "No extra fields in Fusion JSON"). |
+
+**Mirrored today** (each of these has a Fusion home and is written on every save): `description`, `tool_id` → `product-id`, `machine_tool_number` → `post-process.number`, `location` → `expressions.tool_vendor`, all geometry, all presets, per-assembly OOH → `geometry.LB`, and the **holder object baked into each tool** (rebuilt from the app record on every tool write — see Holder Management System).
+
+**Metadata-only because Fusion has nowhere to put them** (correct, not a gap): `holder_id` and every other FK, `min_ooh`, `preferred_machine_id`, `tap_sub_type`, `point_type`, `tip_to_first_thread`, `notes`, `tags`, `purchasing`, the structured `tool_location`, `legacy_*` arrays, `preset_meta` (`operation_type`, `machine_id`, `job_ids`, `material_preset_id`, …), assemblies, and every `_runtime` flag.
+
+**⚠️ The failure mode is always the same shape, and it has happened more than once:** a feature is built as "metadata-only" because the *link* it stores is metadata-only — and the **geometry, name, or value that Fusion does hold** is quietly left behind. Storing a pointer is not the job; making Fusion right is. Two live examples, both fixed:
+- **Linking tools to holders** stored `holder_id` and stopped. The FK is genuinely metadata-only — but the *holder geometry each tool carries* is Fusion-native, and half the library was carrying wrong geometry. Linking now rewrites those tools to Fusion in the same commit.
+- **Holder records** (`holder_library.json`) own descriptions, segments, vendor and `product-id` — **all Fusion-native**. Refining them in the app and never pushing would strand the whole cleanup effort. Hence **Push to Fusion**, and hence the Holders page badges how many records Fusion does not yet agree with.
+
+**When adding any feature, answer this before writing code:** *which of the values I am touching does Fusion have a field for, and where does my code write them back?* If the answer is "it doesn't", either write them or say plainly that you are leaving Fusion stale and why.
+
+**Batching is fine; skipping is not.** A bulk action may write metadata in one pass and Fusion in one targeted pass (see `writeToolsToFusion`) rather than a round-trip per record — that's an efficiency choice, not an exemption. What is never acceptable is finishing an action with Fusion holding values the app knows are wrong and no visible sign of it.
 
 -----
 
@@ -2053,6 +2082,7 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 - **Tool IDs are permanent** — they are the Fusion `guid`, link the two JSON files, and are referenced in merge history. Never reassign them.
 - **APS token in memory only** — `window._apsToken`, never localStorage. The refresh token is stored in `sessionStorage` (`aps_refresh_token`) so the session survives page refreshes within the same browser tab.
 - **Always re-download before write** — call `downloadFusionList()` immediately before any `uploadFusionList()`.
+- **If Fusion has a place for it, Fusion must have it** — every value with a Fusion-native field is mirrored there, always. Metadata may own it and win on read, but the app must never be the only place a Fusion-storable value lives. See the section of that name.
 - **No extra fields in Fusion JSON** — Fusion validates strictly. Only Fusion-native fields go in the library file; everything else goes in `tool_metadata.json`. Exception: `geometry.assemblyGaugeLength` is a Fusion-native field (nested in `geometry`; = holder gauge length + OOH, not OOH alone), safe to write.
 - **`tool_id` is the primary match key** — it is **metadata-owned** (source of truth in `tool_metadata.json`), mirrored to Fusion's `product-id`; metadata wins on read, falling back to `product-id` for pre-TMS tools. There is no separate `product_id` field — manufacturer part numbers live per-manufacturer in `purchasing.manufacturers[].edp` (see Purchasing / Vendor Data Model).
 - **Every length is stored in its record's own unit** (tool lengths in the tool's unit, holder gauge in the holder's unit) — OOH/min_ooh included. Convert only at cross-unit boundaries via `src/utils/units.js` (`convertLength`); never to a hidden inches canonical.
