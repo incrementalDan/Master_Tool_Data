@@ -3783,7 +3783,12 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .assembly-picker-option:hover { border-color: var(--text-sub); }
 .assembly-picker-option.selected { border-color: var(--accent); background: rgba(99,102,241,0.08); }
 
-/* ─── Holder pill — teal by default; AssemblyCard overrides per-holder ─────── */
+/* ─── Holder pill (RETIRED look) ────────────────────────────────────────────
+   Superseded by .holder-scoop-pill, which is now the one holder treatment
+   everywhere (see components/HolderPill.jsx). No JSX renders this any more;
+   kept only because the token table in CLAUDE.md documents it and a stray
+   class name shouldn't silently render unstyled. Delete once nothing in the
+   docs refers to it. */
 .holder-pill {
   /* Color follows the HOLDER SIZE — host sets --badge-color per holder
      (holderColor). Defaults to the unknown-holder teal. Full holder names are

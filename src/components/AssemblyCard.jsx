@@ -3,35 +3,10 @@ import { Pencil, X } from 'lucide-react';
 import { presetsForAssembly, presetMaterialColor } from '../utils/presetNaming.js';
 import { unitAbbr } from '../utils/units.js';
 import { useApp } from '../context/AppContext.jsx';
-
-// ── Holder color system ───────────────────────────────────────────────────────
-// Every holder SIZE carries its own color (the --holder-* design tokens). The
-// .holder-pill class derives its fill/border/text from a single --badge-color,
-// so holderColor() returns just that base color. Unknown holders get a stable
-// hash-assigned color, falling back to the teal --holder-default.
-const NAMED_COLORS = {
-  'NBT30-SK13C-60':  '#06b6d4',  /* 30-SK13-60 · cyan */
-  'NBT30-SK13C-90':  '#ec4899',  /* 30-SK13-90 · pink */
-  'NBT30-SK13C-120': '#65a30d',  /* 30-SK13-120 · lime */
-  'NBT30-SK13C-150': '#8b5cf6',  /* 30-SK13-150 · violet */
-  'NBT30-SK20C-60':  '#eab308',  /* 30-SK20-60 · yellow */
-  'NBT30-SK20C-90':  '#ef4444',  /* 30-SK20-90 · red */
-  'DRILL CHUCK':     '#10b981',  /* drill chuck · green */
-};
-
-const HOLDER_DEFAULT = '#2dd4bf';  // teal — unknown / no holder
-const FALLBACK = ['#ec4899', '#a855f7', '#14b8a6', '#fbbf24', '#ef4444', '#10b981'];
-
-export function holderColor(description) {
-  if (!description) return HOLDER_DEFAULT;
-  const norm = description.trim().toUpperCase();
-  if (NAMED_COLORS[norm]) return NAMED_COLORS[norm];
-  let hash = 0;
-  for (let i = 0; i < norm.length; i++) {
-    hash = (hash * 31 + norm.charCodeAt(i)) | 0;
-  }
-  return FALLBACK[Math.abs(hash) % FALLBACK.length];
-}
+import { HolderTag } from './HolderPill.jsx';
+// Kept as a re-export: the color list moved to utils/holderColors.js, but
+// several call sites still import holderColor from here.
+export { holderColor } from '../utils/holderColors.js';
 
 function fmtMeasured(v) {
   try { return new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
@@ -48,7 +23,6 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
 
   const holder = holders.find(h => h.guid === assembly.holder_guid);
   const holderDescription = assembly.holder_description || holder?.description || '—';
-  const color = holderColor(holderDescription === '—' ? null : holderDescription);
 
   const linkedPresets = presetsForAssembly(assembly, tool.presets, tool.unit);
 
@@ -65,9 +39,12 @@ export default function AssemblyCard({ assembly, tool, holders, onEdit, onDelete
             borderRadius: 6, padding: '2px 8px',
           }}>{assembly.asm_number}</span>
         )}
-        <span className="holder-pill" style={{ '--badge-color': color }}>
-          {holderDescription}
-        </span>
+        {/* One holder treatment everywhere — resolves the app record when the
+            assembly is linked, falls back to the baked description otherwise. */}
+        <HolderTag
+          holderId={assembly.holder_id} holderGuid={assembly.holder_guid}
+          description={holderDescription}
+        />
         <span style={{ fontSize: 13, fontWeight: 700, flex: 'none', color: 'var(--text)' }}>
           {assembly.ooh != null ? `OOH: ${assembly.ooh.toFixed(3)} ${unitAbbr(tool.unit)}` : '—'}
         </span>

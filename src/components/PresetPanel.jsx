@@ -4,7 +4,7 @@ import { generateId, COOLANT_OPTS } from '../schema/toolSchema.js';
 import { copyPresetToClipboard } from '../utils/fusionExport.js';
 import { useApp } from '../context/AppContext.jsx';
 import { jobById, jobLabel } from '../utils/jobs.js';
-import { holderColor } from './AssemblyCard.jsx';
+import { HolderTag } from './HolderPill.jsx';
 import { machineColor } from '../utils/machineColors.js';
 import MachinePill from './MachinePill.jsx';
 import CamPresetPicker from './CamPresetPicker.jsx';
@@ -601,7 +601,6 @@ function CollapsedCard({
   const assemblyHolderDesc = singleAssembly
     ? (singleAssembly.holder_description || holders?.find(h => h.guid === singleAssembly.holder_guid)?.description || '')
     : null;
-  const assemblyHolderColor = assemblyHolderDesc ? holderColor(assemblyHolderDesc) : null;
   const linkedMachine = preset.machine_id && machines?.length
     ? machines.find(m => m.id === preset.machine_id)
     : null;
@@ -662,13 +661,10 @@ function CollapsedCard({
           <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
             {singleAssembly ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
-                {assemblyHolderDesc && (
-                  <span
-                    className="holder-pill"
-                    title={assemblyHolderDesc}
-                    style={assemblyHolderColor ? { '--badge-color': assemblyHolderColor } : {}}
-                  >{assemblyHolderDesc}</span>
-                )}
+                <HolderTag
+                  holderId={singleAssembly.holder_id} holderGuid={singleAssembly.holder_guid}
+                  description={assemblyHolderDesc}
+                />
                 <span className="text-xs text-sub">OOH: {singleAssembly.ooh != null ? `${singleAssembly.ooh.toFixed(3)} ${lenUnit}` : '—'}</span>
               </div>
             ) : (

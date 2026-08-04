@@ -6,7 +6,7 @@ import { autoAsmNumber, shouldRetireAsmNumber } from '../utils/assemblyIdSystem.
 import { unitAbbr } from '../utils/units.js';
 import { useApp } from '../context/AppContext.jsx';
 import HolderPicker from './HolderPicker.jsx';
-import { holderColor } from './AssemblyCard.jsx';
+import { HolderTag } from './HolderPill.jsx';
 
 export default function AssemblyForm({ tool, holders, assembly, onSave, onClose }) {
   const { materials, shopSettings } = useApp();
@@ -116,9 +116,10 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
           <label className="field-label">Holder</label>
           {selectedHolder ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="holder-pill" style={{ '--badge-color': holderColor(selectedHolder.description), flex: '0 1 auto' }}>
-                {selectedHolder.description}
-              </span>
+              <HolderTag
+                holderGuid={selectedHolder.guid} description={selectedHolder.description}
+                style={{ flex: '0 1 auto' }}
+              />
               <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setShowHolderPicker(true)}>
                 Change
               </button>
