@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy, Upload, Link2 } from 'lucide-react';
+import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy, Upload, Link2, Info } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import HolderPill from './HolderPill.jsx';
 import HolderDetail from './HolderDetail.jsx';
@@ -23,6 +23,7 @@ import RestampModal from './RestampModal.jsx';
 import PushHoldersModal from './PushHoldersModal.jsx';
 import LinkToolsModal from './LinkToolsModal.jsx';
 import { buildHolderLinkPlan } from '../utils/holderLink.js';
+import HolderWorkflowBanner, { holderWorkflowDismissed, dismissHolderWorkflow } from './HolderWorkflowBanner.jsx';
 import { unitAbbr } from '../utils/units.js';
 
 const CONF_ORDER = ['high', 'medium', 'low'];
@@ -255,7 +256,7 @@ function DuplicatesModal({ holders, config, tools, onMerge, onClose }) {
 
 function HolderList({
   holders, config, usageOf, onOpen, onNew, onHeal, onImport, onLinkParts, onDuplicates, onPush, unlinked, canPush,
-  onLinkTools, unlinkedTools,
+  onLinkTools, unlinkedTools, showWorkflow, onShowWorkflow, onDismissWorkflow,
   importable, googleAuthenticated, driftIds, partCount, duplicateIds,
 }) {
   const [q, setQ] = useState('');
@@ -395,6 +396,12 @@ function HolderList({
           </div>
         </div>
         <div className="holder-page-actions">
+          {!showWorkflow && (
+            <button className="icon-btn" onClick={onShowWorkflow}
+              title="Show how the holder library works">
+              <Info size={16} />
+            </button>
+          )}
           {importable > 0 && (
             <button className="btn btn-secondary btn-sm" onClick={onImport} title="Create app records from the linked Fusion holder library">
               <Download size={14} /> Import {importable} from Fusion
@@ -437,6 +444,8 @@ function HolderList({
           </button>
         </div>
       </div>
+
+      {showWorkflow && <HolderWorkflowBanner onDismiss={onDismissWorkflow} />}
 
       <div className="holder-filters">
         <input
@@ -755,6 +764,13 @@ export default function HoldersPage() {
   // Preview first, always: this is the one holder action that writes to
   // Autodesk, and the preview is also where the entries it REFUSES to touch
   // are named.
+  // Shown until dismissed for good; the ⓘ button in the header brings it back.
+  // No progress tracking on purpose — several steps are optional or repeatable,
+  // so a checklist that can't be completed would just nag.
+  const [showWorkflow, setShowWorkflow] = useState(() => !holderWorkflowDismissed());
+  const hideWorkflow = () => { dismissHolderWorkflow(true); setShowWorkflow(false); };
+  const revealWorkflow = () => { dismissHolderWorkflow(false); setShowWorkflow(true); };
+
   const [pushOpen, setPushOpen] = useState(false);
   const [pushPreview, setPushPreview] = useState(null);
   const onPush = async () => {
@@ -880,6 +896,7 @@ export default function HoldersPage() {
           onNew={onNew} onHeal={() => setHealing(true)} onImport={onImport}
           onPush={onPush} unlinked={unlinked} canPush={canPush}
           onLinkTools={onLinkTools} unlinkedTools={linkPlan.rows.length}
+          showWorkflow={showWorkflow} onShowWorkflow={revealWorkflow} onDismissWorkflow={hideWorkflow}
           onLinkParts={() => setLinkingParts(true)}
           onDuplicates={() => setDupesOpen(true)}
           driftIds={driftIds} partCount={parts.length} duplicateIds={duplicateIds}
