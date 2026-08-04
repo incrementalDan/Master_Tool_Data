@@ -1634,6 +1634,20 @@ The explicit, user-initiated batch flow — see the **Phase 2** section above. T
 
 -----
 
+### Holders and the rest of the app — decided, not overlooked
+
+Three questions came up while auditing the holder system against the app's own patterns. All three are **deliberate answers**, not gaps — don't "fix" them without asking.
+
+**Holders are NOT a ProShop item.** ProShop has no real home for them — they exist there as plain text in a few places, which is a gap in ProShop, not something to mirror. So there is **no ProShop CSV export or import for holders or holder parts**, and `holder_ref` is not a ProShop number. Holder purchasing (`manufacturer` / `part_number` / `vendor` / `purchasing`) lives in the app record and stops there.
+
+**Holder location is deliberately free text, for now.** A holder's `location` is a plain string, NOT the structured Location System that tools use. The shop's holders sit on a shelf and are easy to find, so the value isn't there yet. Doing it properly would need a **separate holder location system** — the existing `location_config.systems[]` is scoped to tools (bins, ProShop export rules, tool-bin collision checks), so it would need a per-system scope flag plus a structured `holder_location` on the record and read-time resolution. That's not a small change, so it is a **TODO**, not a shortcut taken. The accommodation: `holder_location` would sit alongside the free-text `location` exactly as `tool_location` does for tools, so adding it later is additive.
+
+**`holder_ref` is INTERNAL PLUMBING, not a fourth ID system.** The three configurable ID systems (Tool ID / Location / Assembly) are user-facing schemes an operator reads and quotes. `holder_ref` is not one of them and is not configurable: it exists to hold the Fusion link (stamped into `product-id` — see Holder identity). **What identifies a holder to a person is the manufacturer + their part number, on top of the specs already in the description** — often the manufacturer's number *is* the spec number. That is more reliable and one less thing to look up, so the description stays load-bearing and `HolderDetail` shows manufacturer + part number as the identity line with `holder_ref` muted below it. A configurable holder-ID system is **not** to be built speculatively; if it's ever wanted, it's an additive metadata field on a record that already has stable UUIDs.
+
+**Fusion's `product-id` on a holder belongs to the app.** The push overwrites whatever was there — often a vendor SKU. Confirmed acceptable: the old value is preserved in the record's `legacy_ids` (and `part_number` when it parsed as a SKU) and still resolves via `recordForRef`.
+
+-----
+
 ## Holder identity — Fusion's holder GUID is NOT stable (CRITICAL)
 
 **Fusion's holder `guid` does not match a holder to itself over time.** It serves some purpose inside Fusion, but it churns for reasons that aren't ours to model. So the app never treats it as identity. This is why the app owns its own holder library and its own IDs.
@@ -2101,7 +2115,9 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 
 ## TODO / Future Work
 
-- **✅ First-class holder library (built).** See **Holder Management System** + **Holder identity** above. The app owns `holder_library.json`; identity is `holder_ref` + a segment match (never Fusion's guid); assemblies carry a real `holder_id` FK. **Still deferred:** machine-taper filtering for assemblies, swapping `HolderPill` in at every existing call site, and fully deriving a holder's segments from its parts rather than storing both.
+- **✅ First-class holder library (built).** See **Holder Management System** + **Holder identity** above. The app owns `holder_library.json`; identity is `holder_ref` + a segment match (never Fusion's guid); assemblies carry a real `holder_id` FK; **Link tools to holders** matches every tool's baked copy and corrects Fusion in the same commit; **Push to Fusion** settles the holder library itself.
+
+- **Holder locations → the Location System (deferred, deliberately).** A holder's `location` is free text today; the shop's holders are on a shelf and easy to find, so this is a want-not-need (see **Holders and the rest of the app — decided, not overlooked**). Doing it properly means a **separate holder location system**: the existing `location_config.systems[]` is tool-scoped (bins, ProShop export rules, tool-bin collision checks), so it needs a per-system scope flag, a structured `holder_location` on the record (sitting alongside the free-text `location` exactly as `tool_location` does for tools), read-time resolution, and the picker taught to count holder bins. Additive when it happens — nothing today blocks it. **Also still deferred:** machine-taper filtering for assemblies, swapping `HolderPill` in at every existing call site, fully deriving a holder's segments from its parts rather than storing both, and a configurable holder-ID system (explicitly NOT to be built speculatively — see the same section).
 
 
 - **Self-healing audit (not yet done).** The **Self-healing** philosophy section above was written *after* most of the mechanisms it describes, so it documents the pattern rather than verifying it holds everywhere. Worth one deliberate pass: (1) **coverage** — every derived/linked value that could go stale actually has a repair or a flag (candidates not yet reviewed: `material_suitability` free text, `tags`, `coating`/`pitch` fill-gap fields, holder library links, `speed_feed_refs.preset_id` dangling ids, `jobs[].program_id` dangling after a program delete); (2) **no nag loops** — for each existing flag, confirm the fix action clears the detector (walk `ConflictBanner`, `DriftBanner`, `MergeSiblingBanner`, the duplicate-preset banner, `MaterialLinkBanner`, `_productIdConflict`); (3) **load cost** — the silent repairs are all in-memory, but they're now a stack of full-library passes (`combineToolsByToolId` → `derivePairings` → 4 × backfill…), so confirm they're still cheap at real library size and consider folding them into one walk; (4) **noise calibration** — how many tools actually surface a flag against the real library, and whether any flag fires so broadly it becomes wallpaper (`MaterialLinkBanner` on legacy `"AL FIN"` strings is the likely candidate).

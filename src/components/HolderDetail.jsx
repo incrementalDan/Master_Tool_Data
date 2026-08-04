@@ -414,7 +414,19 @@ export default function HolderDetail({
         <button className="btn btn-ghost btn-sm" onClick={onBack}><ArrowLeft size={14} /> Holders</button>
         <div className="holder-detail-title">
           <HolderPill holder={h} config={config} />
-          <div className="holder-detail-id">{h.holder_ref}</div>
+          {/* What actually IDENTIFIES a holder to a person: the manufacturer and
+              their part number, on top of the specs in the description. The
+              app's own holder_ref is plumbing — it exists to hold the Fusion
+              link — so it sits below, muted, rather than reading as the name. */}
+          {(h.manufacturer || h.part_number) && (
+            <div className="holder-detail-part">
+              {h.manufacturer && <span className="holder-detail-mfg">{h.manufacturer}</span>}
+              {h.part_number && <span className="holder-detail-pn">{h.part_number}</span>}
+            </div>
+          )}
+          <div className="holder-detail-id" title="This app's internal reference. It is stamped into Fusion's product-id to keep the two libraries linked — not something to look up or quote.">
+            {h.holder_ref}
+          </div>
         </div>
         <button
           className="btn btn-ghost btn-sm"
