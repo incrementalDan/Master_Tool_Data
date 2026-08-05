@@ -570,7 +570,11 @@ export function AppProvider({ children }) {
           await aps.saveHolderLibrary(lib.projectId, lib.folderId, lib.itemId, lib.fileName,
             { ...raw, data: next });
         }
-        for (const u of plan.updates) guidByRecord.set(u.record.id, u.entry.guid || null);
+        // Stamp the guid that was actually WRITTEN, read back out of `next` —
+        // not off the pre-write entry. Taking it from `u.entry` recorded the
+        // value we had just replaced, so the record and Fusion disagreed the
+        // moment the write landed and the next push tried to swap them back.
+        for (const u of plan.updates) guidByRecord.set(u.record.id, next[u.index]?.guid || null);
         for (const c of plan.creates) {
           const made = next.find(e => e?.['product-id'] === c.holder_ref);
           guidByRecord.set(c.id, made?.guid || null);

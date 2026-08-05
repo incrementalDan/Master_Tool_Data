@@ -220,11 +220,23 @@ export function holderRecordToFusion(record, existing = null) {
     ...(existing ? { expressions: { ...(existing.expressions || {}) } } : { expressions: {} }),
     description: record.description || '',
     gaugeLength,
-    // DETERMINISTIC — never generateId() here. This runs on every tool write
-    // (see holderResolve.js); a fresh guid each time would re-point the tool's
-    // holder link on every save. A record that has never been pushed to Fusion
-    // uses its own stable app id.
-    guid: record.fusion_guid || existing?.guid || record.id,
+    // ⚠️ THE EXISTING ENTRY'S GUID WINS, ALWAYS. Identity deliberately never
+    // reads the guid (holderIdentity.js), so a record can legitimately match an
+    // entry whose guid differs from the `fusion_guid` it happens to remember.
+    // Preferring the record's copy meant a push REWROTE that entry's guid —
+    // changing the holder's identity in Fusion for no reason, and orphaning the
+    // guid every tool had baked in.
+    //
+    // It also never settled: the push wrote the record's guid, then stamped the
+    // record's fusion_guid back from the PRE-write entry, so the next push
+    // wanted to swap them again. A holder ping-ponged between two guids forever
+    // and the page never showed zero to write.
+    //
+    // DETERMINISTIC either way — never generateId() here. This runs on every
+    // tool write (holderResolve.js); a fresh guid each time would re-point the
+    // tool's holder link on every save. A record never pushed to Fusion (no
+    // existing entry) falls back to its remembered guid, then its own app id.
+    guid: existing?.guid || record.fusion_guid || record.id,
     'product-id': record.holder_ref || '',
     'product-link': record.product_link || '',
     segments,

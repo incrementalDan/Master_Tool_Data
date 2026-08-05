@@ -374,3 +374,49 @@ describe('grouping a change by kind', () => {
     expect(groups.filter(x => x === 'geometry')).toHaveLength(0);
   });
 });
+
+// ─── The push must SETTLE ───────────────────────────────────────────────────
+// A holder ping-ponged between two GUIDs forever: the push wrote the record's
+// remembered guid over the entry's, then stamped the record's fusion_guid back
+// from the PRE-write entry, so the next push wanted to swap them again. The
+// page never reached zero to write.
+describe('a push settles', () => {
+  const rec = settled();
+
+  it('NEVER rewrites an existing entry’s Fusion GUID', () => {
+    // Identity deliberately ignores the guid, so a record can match an entry
+    // whose guid differs from the one it remembers. That is not a licence to
+    // change the entry's identity in Fusion — every tool has that guid baked in.
+    const stale = { ...rec, fusion_guid: 'a-guid-the-record-remembers' };
+    const entry = { ...pushed(rec), guid: 'the-guid-fusion-actually-has' };
+    const next = holderRecordToFusion(stale, entry);
+    expect(next.guid).toBe('the-guid-fusion-actually-has');
+    expect(holderPushDiff(entry, next).some(d => d.key === 'guid')).toBe(false);
+  });
+
+  it('a record with no entry yet still gets a deterministic guid', () => {
+    expect(holderRecordToFusion(rec, null).guid).toBe(rec.fusion_guid);
+    const noGuid = { ...rec, fusion_guid: null };
+    expect(holderRecordToFusion(noGuid, null).guid).toBe(noGuid.id);
+  });
+
+  it('the whole real library reaches zero and STAYS there', () => {
+    const records = REAL.map(fusionHolderToRecord);
+    let list = REAL;
+    for (let round = 0; round < 3; round++) {
+      const plan = holderPushPlan(list, records, undefined, holderRecordToFusion);
+      list = applyHolderPushPlan(list, plan, holderRecordToFusion);
+      if (round === 0) expect(plan.updates.filter(u => u.stale).length).toBeGreaterThan(0);
+      else expect(plan.updates.filter(u => u.stale)).toHaveLength(0);   // settled
+    }
+    expect(holdersOutOfSync(list, records, holderRecordToFusion)).toBe(0);
+  });
+
+  it('an unexpected field is never filed under "ID only"', () => {
+    // That group's header says "nothing but the app's ID" — putting anything
+    // else there makes the sentence a lie and hides exactly this class of bug.
+    expect(pushChangeGroup([{ key: 'guid' }])).toBe('other');
+    expect(pushChangeGroup([{ key: 'product-id' }, { key: 'guid' }])).toBe('other');
+    expect(pushChangeGroup([{ key: 'product-id' }])).toBe('id');
+  });
+});

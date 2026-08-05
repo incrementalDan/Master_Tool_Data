@@ -199,6 +199,8 @@ const FIELD_LABEL = {
   gaugeLength: 'Gauge length',
   segments: 'Geometry',
   'product-link': 'Link',
+  guid: 'Fusion GUID',
+  type: 'Entry type',
 };
 
 const show = (v) => {
@@ -252,6 +254,10 @@ export const PUSH_GROUPS = {
     key: 'text', label: 'Names & text',
     note: 'Description, vendor or link. The holder itself is unchanged.',
   },
+  other: {
+    key: 'other', label: 'Something else',
+    note: 'A field the app doesn’t normally touch. Worth reading before you write it.',
+  },
   id: {
     key: 'id', label: 'ID only',
     note: 'Nothing but the app’s ID written into Fusion’s product-id field. The geometry Fusion already holds is identical.',
@@ -265,7 +271,12 @@ export function pushChangeGroup(diff) {
   const keys = (diff || []).map(d => d.key);
   if (keys.some(k => GEOMETRY_KEYS.has(k))) return 'geometry';
   if (keys.some(k => TEXT_KEYS.has(k))) return 'text';
-  return 'id';
+  // Only a pure product-id stamp is the quiet group. Anything ELSE that turns
+  // up unrecognized is surfaced as "other" rather than filed under the group
+  // whose header says "nothing but the app's ID" — that sentence was flatly
+  // wrong for a holder whose Fusion GUID was being rewritten, and hid a bug.
+  if (keys.every(k => k === 'product-id')) return 'id';
+  return 'other';
 }
 
 // Would writing this record change the Fusion entry at all?

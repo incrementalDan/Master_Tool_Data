@@ -36,7 +36,7 @@ function PushRow({ entry, record, kind, diff, group }) {
           how a list stops being read. */}
       {diff.map(d => (
         <div key={d.key} className="push-row-field">
-          {group !== 'id' && <b>{d.label}</b>}
+          {(group !== 'id' || d.key !== 'product-id') && <b>{d.label}</b>}
           {d.note ? (
             <span>— {d.note}</span>
           ) : (
@@ -111,6 +111,7 @@ export default function PushHoldersModal({ preview, onCommit, onClose }) {
                   )}
                 </div>
                 <PushGroup group={PUSH_GROUPS.geometry} rows={byGroup('geometry')} defaultOpen />
+                <PushGroup group={PUSH_GROUPS.other} rows={byGroup('other')} defaultOpen />
                 <PushGroup group={PUSH_GROUPS.text} rows={byGroup('text')} defaultOpen />
                 <PushGroup group={PUSH_GROUPS.id} rows={byGroup('id')} defaultOpen={false} />
                 {l.creates > 0 && (
