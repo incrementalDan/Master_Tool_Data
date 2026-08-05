@@ -82,13 +82,40 @@ describe('detection', () => {
     expect(compareHolders(orig, v2, CFG).verdict).toBe('duplicate');
   });
 
-  it('downgrades to "possible" when the classification disagrees', () => {
+  // ⚠️ A DIFFERENT COLLET IS A DIFFERENT BORE — NOT A "POSSIBLE DUPLICATE".
+  // Reported from the real library: SK13 vs SK20 offered as a merge candidate
+  // because the gauge length, taper, type, length and extension all matched and
+  // the descriptions were 67% alike. They cannot be the same physical holder,
+  // and offering a merge is offering to destroy one of two real holders. This
+  // test previously asserted the opposite.
+  it('is NOT a duplicate when the collet differs', () => {
     const orig = find('NBT30-SK13C-60');
-    const other = corrected(orig, { collet_size_id: 'cs-sk20' });
-    const m = compareHolders(orig, other, CFG);
+    expect(compareHolders(orig, corrected(orig, { collet_size_id: 'cs-sk20' }), CFG)).toBeNull();
+  });
+
+  it('nor when the collet family, type, taper or extension collet differ', () => {
+    const orig = find('NBT30-SK13C-60');
+    for (const patch of [
+      { collet_family_id: 'cf-er' },
+      { type_id: 'ht-drillchuck' },
+      { taper_id: 'tp-bt40' },
+      { has_extension: true, extension: { collet_size_id: 'cs-er16' } },
+    ]) {
+      const other = corrected(orig, { has_extension: true, extension: { collet_size_id: 'cs-er8' }, ...patch });
+      const withExt = { ...orig, has_extension: true, extension: { collet_size_id: 'cs-er8' } };
+      expect(compareHolders(withExt, other, CFG)).toBeNull();
+    }
+  });
+
+  // What SHOULD still surface: a label that disagrees on what could genuinely
+  // be one object. The engraved nominal is a printed number, not the geometry —
+  // if the gauge matches and the nominals don't, one of them is wrong.
+  it('still flags a label discrepancy as "possible"', () => {
+    const orig = find('NBT30-SK13C-60');
+    const m = compareHolders(orig, corrected(orig, { length: 90 }), CFG);
     expect(m.verdict).toBe('possible');
-    expect(m.conflicts).toContain('Collet');
-    expect(m.reasons.join(' ')).toMatch(/Collet differs/);
+    expect(m.conflicts).toContain('Length');
+    expect(m.reasons.join(' ')).toMatch(/Length differs/);
   });
 
   it('treats an unclassified field as unknown, not a disagreement', () => {
