@@ -20,7 +20,7 @@
 
 import { holderRecordToFusion } from './holderRecord.js';
 import { holderForGuid, holderOwnsGuid } from '../utils/holderDuplicates.js';
-import { recordsForGeometry } from './holderIdentity.js';
+import { recordsForGeometry, segmentsMatch } from './holderIdentity.js';
 import { convertLength } from '../utils/units.js';
 
 // ⚠️ A record with NO SEGMENTS is not a geometry source. A holder created in
@@ -84,22 +84,31 @@ export function toolHolderIsStale(assembly, rawInstance, ctx) {
   const resolved = resolveHolderForWrite(assembly?.holder_guid,
     { ...ctx, holderId: assembly?.holder_id });
   if (!resolved) return false;
-  if (resolved.guidChanged) return true;             // points at a merged-away holder
+  // ⚠️ guidChanged is deliberately NOT staleness. This asks one question —
+  // "is the GEOMETRY this tool carries out of date?" — and a differing baked
+  // guid is not an answer to it. Fusion re-issues holder guids constantly (the
+  // premise of this whole module), so including it flagged 117 more tools on a
+  // clean import with no merges at all. A flag that fires on half the library
+  // says nothing. The dangling-guid case still gets corrected by the tool's
+  // next ordinary write; it just isn't reported as older geometry.
   const current = rawInstance?.holder;
   if (!current) return true;                          // no holder baked in yet
+
+  // ⚠️ THE SAME RULE IDENTITY USES — segmentsMatch, which is unit-aware and
+  // carries the 0.001" rounding tolerance.
+  //
+  // This compared toFixed(4) strings and compared units separately, i.e. exact
+  // equality with no tolerance and no conversion. Measured over the real
+  // library that flagged 190 of 212 linked tools as "carrying an older copy of
+  // their holder" — when the strict identity matcher said 187 of them were the
+  // SAME holder and only 3 had really moved. A banner that fires on 90% of the
+  // library is wallpaper, and the number it showed was simply untrue.
+  //
+  // Two comparison rules for one question is the defect; a value that survives
+  // a JSON round-trip comes back as 54.998999999999995, and a mm holder's
+  // numbers are 25.4× an inch holder's. One rule, in one place.
   const want = resolved.entry;
-  const sameLength = Array.isArray(current.segments) && Array.isArray(want.segments)
-    && current.segments.length === want.segments.length;
-  if (!sameLength) return true;
-  const round = (v) => Number(v ?? 0).toFixed(4);
-  for (let i = 0; i < want.segments.length; i++) {
-    const a = current.segments[i] || {};
-    const b = want.segments[i] || {};
-    if (round(a.height) !== round(b.height)
-      || round(a['upper-diameter']) !== round(b['upper-diameter'])
-      || round(a['lower-diameter']) !== round(b['lower-diameter'])) return true;
-  }
-  return current.unit !== want.unit;
+  return !segmentsMatch(current.segments, current.unit, want.segments, want.unit);
 }
 
 // ─── Which tools are carrying OUT-OF-DATE holder geometry? ──────────────────
