@@ -38,6 +38,55 @@ I'm not an experienced developer. When you do something non-trivial:
 
 -----
 
+## Before you say "done" — check the diff against these
+
+**Eight questions, run against your own changes before reporting them finished.** Every one is here because it has ALREADY caused a real bug in this repo — none are aspirational, and each names what it caught so it can't be waved off as theory. Keep this list short: a checklist that grows past ~8 stops being run, exactly like a flag that fires too often becomes wallpaper.
+
+The rest of this document explains **decisions**. This section is the only part meant to be run as a **test on your own diff**.
+
+**1. Does Fusion have a field for anything I touched?**
+If yes — does my code write it *there*, not just to metadata? (See "If Fusion has a place for it, Fusion must have it".)
+→ *Caught: linking tools to holders stored `holder_id` and left half the library carrying wrong holder geometry in Fusion.*
+
+**2. Every Fusion-native field I wrote — did I write its expression too?**
+Fusion re-derives the native value from the expression on load, so a stale expression silently undoes the write. **Delete** the expression when the value is empty; never write `''`. And no app-only field may leak into the Fusion JSON.
+→ *Caught: `product-id` reverting on 4 holders; the recurring stepdown/stepover flag; OOH silently reverting.*
+
+**3. What happens on the second run?**
+Same input twice — does the second report nothing to do? **This is the highest-value question in the list.** Nearly every bug the user has had to find was invisible on one pass and obvious on two.
+→ *Caught: the holder GUID ping-pong; "N refreshed" inflated by float round-trip noise.*
+
+**4. Is every link I store an ID?**
+Or am I recovering a relationship by parsing a formatted name, or by trusting a foreign system's GUID? (See "Relational integrity — every link is an ID".)
+→ *Caught: presets orphaned by an OOH rename; three holder queries keyed on Fusion's GUID, silently covering a fraction of the tools.*
+
+**5. Can this fail and still look like it worked?**
+Write first, then update memory. No silent no-ops. A bulk save must **merge**, not replace.
+→ *Caught: `applyHolderPushPlan` keyed on object identity doing nothing; linking claiming success after a failed Fusion write.*
+
+**6. Whose unit is each number in?**
+- Every length is in **its own record's** unit — a tool's in `tool.unit`, a holder's in `holder.unit`. There is **no hidden inches canonical**. Convert only at a genuine boundary (tool↔holder, ProShop file→tool), always via `convertLength`.
+- The **shop default** (`shop_settings.default_units` → `getDefaultUnit()`) is a default for **new** records and a fallback **display** unit. It is **never** the unit of an existing record — reading it to interpret a stored value is always wrong.
+- A field can carry its **own** unit, independent of the record's: `tap_thread_unit` (a **metric tap on an inch-unit tool** — the thread designation list is metric while the geometry stays in inches), and `input_was_mm` (an inch-stored tool deliberately **named** in mm). Never infer either from `tool.unit`.
+→ *Caught: a test subtracting 2 **inches** from a millimetre holder; ProShop `min_ooh` imported without converting from the file's unit.*
+
+**7. Would this be right in an mm-default shop?**
+The app must be correct for a metric shop, not just ours. Five places inches hide:
+- **Hardcoded unit suffixes** — `" in"` in a Fusion expression. Fusion parses the number *through* the suffix, so `"5 in"` on a mm tool loads as 127mm. Derive `lenUnit` from the record.
+- **Unit-dependent formulas** — `rpmToSFM`/`sfmToRPM` divide by **12** (in, ft/min) or **1000** (mm, m/min). Omit the flag and a metric tool's surface speed is off by ~83×. (Feed relations are unit-independent — only `v_c`↔`n` is not.)
+- **Tolerances and epsilons** — `lengthEps`, `snapTol`, `PRESET_SIGNIFICANCE`'s `len: true` floors, `readAboveGaugeFlags`. An inch-sized tolerance is 25× too loose in mm.
+- **Display precision and labels** — 4 decimals inch / 3 metric; `fieldLabel(field, unit)` for the `(in)`/`(mm)` suffix.
+- **Inch-only reference charts** — drill numbers and fractions. A metric tool must not snap to `1/16`.
+→ *Caught: a `.0571"` (1.45mm) tool falsely snapping to "1/16", which ALSO suppressed its metric label; `EditCard` having to pass `isMetricTool` into the speed cascade.*
+
+**8. If I added a flag or banner — can the user make it go away?**
+Does the action that fixes it actually stop the detector firing? A flag that re-fires after it's been dealt with is a nag loop.
+→ *Caught: Normalize permanently disabled by a gate that could never be satisfied; the "assembly numbers corrected" flag that couldn't be saved away.*
+
+**What this does NOT catch:** "I misunderstood what was actually wanted." No checklist reaches that — it's why an explicit adversarial pass ("what's broken about what you just built?") stays worth asking as its own turn.
+
+-----
+
 ## Project Overview
 
 A **Tool Management System (TMS)** — the single source of truth for the shop's CNC cutting tool library. It owns tool specifications (geometry, speeds/feeds, holders, assemblies, presets, notes, tags) and replaces a fragmented, manual workflow where tools were pulled from a master Fusion library, modified per-job, and rarely synced back — causing duplicates and data loss.
