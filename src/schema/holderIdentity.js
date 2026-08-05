@@ -235,9 +235,30 @@ const show = (v) => {
   return String(v);
 };
 
-// → [{ key, label, from, to }]. `expressions.*` are deliberately excluded:
-// Fusion re-derives them from their native field, so listing both would report
-// every name change twice.
+// Which native field each expression is the hidden copy OF. Fusion re-derives
+// the native from the expression on load, so when only the expression moved the
+// change is still ABOUT that field.
+const EXPR_NATIVE = {
+  tool_productId: 'product-id',
+  tool_productLink: 'product-link',
+  tool_vendor: 'vendor',
+  tool_description: 'description',
+  tool_unit: 'unit',
+  tool_holderGaugeLength: 'gaugeLength',
+};
+const unquote = (v) => String(v ?? '').replace(/^'|'$/g, '');
+
+// → [{ key, label, from, to, note }]. A native and its expression are ONE
+// change and are reported once — listing both would show every rename twice.
+//
+// ⚠️ BUT AN EXPRESSION-ONLY CHANGE IS NOT NOISE, AND CALLING IT "Derived
+// expressions: older → rebuilt" was useless. That is exactly the shape of the
+// repair that matters most: Fusion's visible product-id already says
+// HLD-CE3310 while its hidden copy still says 'min OOH', and Fusion re-reads
+// the hidden one on load — so without this write it throws the app's ID away
+// again. Twenty-two rows of "older → rebuilt" under a header reading "the
+// holder itself is unchanged" told the user nothing and was misleading.
+// Name the field, and show the stale value that would have won.
 export function holderPushDiff(entry, next) {
   const out = [];
   const keys = new Set([...Object.keys(entry || {}), ...Object.keys(next || {})]);
@@ -252,13 +273,27 @@ export function holderPushDiff(entry, next) {
     out.push({
       key: k, label: FIELD_LABEL[k] || k,
       from: show(a), to: show(b),
+      // noteOnly: the two values LOOK identical, so showing them reads as a
+      // lie. Everything else shows the values AND the explanation.
       note: trimOnly ? 'extra spaces removed' : null,
+      noteOnly: trimOnly,
     });
   }
-  // An expression that moved on its own (its native field didn't) is still a
-  // real difference — report it as one line rather than per key.
-  if (!sameValue(entry?.expressions, next?.expressions) && !out.length) {
-    out.push({ key: 'expressions', label: 'Derived expressions', from: 'older', to: 'rebuilt' });
+
+  const reported = new Set(out.map(d => d.key));
+  const ea = entry?.expressions || {};
+  const eb = next?.expressions || {};
+  for (const k of new Set([...Object.keys(ea), ...Object.keys(eb)])) {
+    if (sameValue(ea[k], eb[k])) continue;
+    const native = EXPR_NATIVE[k];
+    if (native && reported.has(native)) continue;   // already shown as one change
+    out.push({
+      key: k,
+      label: native ? (FIELD_LABEL[native] || native) : k,
+      from: show(unquote(ea[k])),
+      to: show(unquote(eb[k])),
+      note: 'Fusion’s hidden copy of this field — it re-reads this on load, so left alone it would overwrite the visible value',
+    });
   }
   return out;
 }
@@ -287,6 +322,10 @@ export const PUSH_GROUPS = {
     key: 'remove', label: 'Removed from Fusion',
     note: 'Merged away or retired here. The record and its geometry stay in this app’s archive — only Fusion’s copy is deleted, so nothing can be built on it again.',
   },
+  pairing: {
+    key: 'pairing', label: 'Fusion’s hidden copy is out of step',
+    note: 'Fusion keeps a second, hidden copy of some fields and re-reads THAT one when it loads — where the two disagree it overwrites the visible value. These holders show the right value in Fusion but the wrong one underneath, so without this write Fusion would undo it. Nothing about the holder itself changes.',
+  },
   create: {
     key: 'create', label: 'Added to Fusion',
     note: 'Not in Fusion at all — appended as a new holder. Check none of these is a holder Fusion already has: a record whose geometry was edited here BEFORE its first push no longer matches its own Fusion entry, and lands here as a duplicate.',
@@ -299,10 +338,15 @@ export const PUSH_GROUPS = {
 
 const GEOMETRY_KEYS = new Set(['segments', 'gaugeLength', 'unit']);
 const TEXT_KEYS = new Set(['description', 'vendor', 'product-link', 'expressions']);
+const EXPR_KEYS = new Set(Object.keys(EXPR_NATIVE));
 
 export function pushChangeGroup(diff) {
   const keys = (diff || []).map(d => d.key);
   if (keys.some(k => GEOMETRY_KEYS.has(k))) return 'geometry';
+  // Nothing visible in Fusion moved — only its hidden copies did. Its own
+  // group, because it needs explaining and because filing it under "Names &
+  // text · the holder itself is unchanged" was actively misleading.
+  if (keys.every(k => EXPR_KEYS.has(k))) return 'pairing';
   if (keys.some(k => TEXT_KEYS.has(k))) return 'text';
   // Only a pure product-id stamp is the quiet group. Anything ELSE that turns
   // up unrecognized is surfaced as "other" rather than filed under the group
