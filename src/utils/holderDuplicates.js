@@ -72,6 +72,12 @@ function cmp(a, b) {
   return String(a) === String(b) ? 'agree' : 'conflict';
 }
 
+// Fields that describe WHAT THE HOLDER PHYSICALLY IS. If two records disagree
+// on any of these, they are different holders and the pair is dropped outright
+// — never offered as a merge. The rest (nominal length, has-extension) are
+// labels that can be wrong on one record of the same object.
+const DISQUALIFYING = new Set(['Taper', 'Type', 'Collet family', 'Collet', 'Ext collet']);
+
 // Score a pair. Returns null when they clearly aren't the same holder.
 export function compareHolders(a, b, config, tol = HOLDER_GAUGE_TOL_IN) {
   if (!a || !b || a.id === b.id) return null;
@@ -84,6 +90,7 @@ export function compareHolders(a, b, config, tol = HOLDER_GAUGE_TOL_IN) {
     { name: 'Taper', v: cmp(taperBase(holderOptionLabel(config, 'tapers', a.taper_id)),
       taperBase(holderOptionLabel(config, 'tapers', b.taper_id))) },
     { name: 'Type', v: cmp(a.type_id, b.type_id) },
+    { name: 'Collet family', v: cmp(a.collet_family_id, b.collet_family_id) },
     { name: 'Collet', v: cmp(a.collet_size_id, b.collet_size_id) },
     { name: 'Length', v: cmp(a.length, b.length) },
     { name: 'Extension', v: cmp(!!a.has_extension, !!b.has_extension) },
@@ -98,9 +105,24 @@ export function compareHolders(a, b, config, tol = HOLDER_GAUGE_TOL_IN) {
   // duplicate; it's two different setups (a different stickout, usually).
   if (!gaugeAgrees) return null;
 
-  // A hard classification conflict means they say they're different holders
-  // that merely happen to be the same length. Report it, but as a weaker
-  // "possible" — worth a human look, not an obvious merge.
+  // ⚠️ SOME DIFFERENCES ARE NOT A "POSSIBLE DUPLICATE" — THEY ARE PROOF THESE
+  // ARE DIFFERENT HOLDERS, and offering a merge on them is offering to destroy
+  // one of two real holders.
+  //
+  // A collet size is a BORE: an SK13 and an SK20 cannot be the same physical
+  // holder however well the gauge length and the description line up. Same for
+  // the collet family (SK vs ER), the holder type (collet holder vs drill
+  // chuck), the extension's collet, and the taper AFTER normalization —
+  // taperBase already folds NBT30/BBT30 into BT30, so a surviving conflict is
+  // BT30 vs BT40, a different spindle interface.
+  //
+  // Everything treated these as a merely weaker "possible", so "⚠ Collet
+  // differs" was shown as a merge candidate. It isn't a near-miss, it's a
+  // different holder. What stays 'possible' is a genuine LABEL discrepancy on
+  // what could still be one object: an engraved nominal that disagrees while
+  // the gauge matches, or one record not yet marked as having an extension.
+  if (conflicts.some(c => DISQUALIFYING.has(c.name))) return null;
+
   const verdict = conflicts.length ? 'possible' : 'duplicate';
 
   const reasons = [];
