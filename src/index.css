@@ -5786,6 +5786,8 @@ input.sf-ref-num { text-align: right; }
 .holder-archived-note { display: flex; align-items: flex-start; gap: 8px; margin-bottom: var(--sp-3); }
 .holder-archived-note > svg { flex: none; margin-top: 2px; }
 
+.push-why { color: var(--text-faint); font-size: var(--text-2xs); flex-basis: 100%; }
+
 .push-only { color: var(--text-faint); font-style: italic; }
 
 /* Change groups in the push preview — collapsible, geometry first. */

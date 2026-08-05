@@ -37,13 +37,16 @@ function PushRow({ entry, record, kind, diff, group }) {
       {diff.map(d => (
         <div key={d.key} className="push-row-field">
           {(group !== 'id' || d.key !== 'product-id') && <b>{d.label}</b>}
-          {d.note ? (
+          {d.noteOnly ? (
             <span>— {d.note}</span>
           ) : (
             <>
               <span className="mono push-from">{d.from}</span>
               <span className="push-arrow">→</span>
               <span className="mono push-to">{d.to}</span>
+              {/* Values AND the reason: "min OOH → HLD-CE3310" alone doesn't
+                  explain why Fusion is holding a value nobody typed. */}
+              {d.note && <span className="push-why">{d.note}</span>}
             </>
           )}
         </div>
@@ -139,6 +142,7 @@ export default function PushHoldersModal({ preview, onCommit, onClose }) {
                   )}
                 />
                 <PushGroup group={PUSH_GROUPS.geometry} rows={byGroup('geometry')} defaultOpen />
+                <PushGroup group={PUSH_GROUPS.pairing} rows={byGroup('pairing')} defaultOpen />
                 <PushGroup group={PUSH_GROUPS.other} rows={byGroup('other')} defaultOpen />
                 <PushGroup group={PUSH_GROUPS.text} rows={byGroup('text')} defaultOpen />
                 <PushGroup group={PUSH_GROUPS.id} rows={byGroup('id')} defaultOpen={false} />

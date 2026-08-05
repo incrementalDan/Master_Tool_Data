@@ -711,3 +711,56 @@ describe('a push scoped to freshly imported records', () => {
     expect(wide.creates.length + wide.flagged.length).toBeGreaterThan(0);
   });
 });
+
+// ─── An expression-only change is the MOST important one to explain ─────────
+// Reported from a real library: 22 holders every one of which read "Derived
+// expressions · older → rebuilt", filed under "Names & text — the holder itself
+// is unchanged". Uninformative and misleading. What was actually happening is
+// the repair that matters most: Fusion's VISIBLE product-id already said
+// HLD-CE3310 while its hidden paired copy still said 'min OOH', and Fusion
+// re-reads the hidden one on load — so without the write it throws the app's ID
+// away again.
+describe('a change only Fusion’s hidden copy can see', () => {
+  const stale = () => {
+    const rec = fusionHolderToRecord(REAL[0]);
+    const entry = holderRecordToFusion(rec, REAL[0]);
+    // The state an older writer left: native stamped, expression not.
+    return { rec, entry: { ...entry, expressions: { ...entry.expressions, tool_productId: "'min OOH'" } } };
+  };
+
+  it('names the FIELD and shows the stale value, not "derived expressions"', () => {
+    const { rec, entry } = stale();
+    const diff = holderPushDiff(entry, holderRecordToFusion(rec, entry));
+    expect(diff).toHaveLength(1);
+    expect(diff[0].key).toBe('tool_productId');
+    expect(diff[0].label).toBe('App ID');
+    expect(diff[0].from).toBe('min OOH');            // unquoted, readable
+    expect(diff[0].to).toBe(rec.holder_ref);
+    expect(diff[0].note).toMatch(/re-reads this on load/);
+  });
+
+  it('gets its OWN group — not "the holder itself is unchanged"', () => {
+    const { rec, entry } = stale();
+    const diff = holderPushDiff(entry, holderRecordToFusion(rec, entry));
+    expect(pushChangeGroup(diff)).toBe('pairing');
+    expect(PUSH_GROUPS.pairing).toBeTruthy();
+  });
+
+  it('still reports a native+expression pair ONCE, not twice', () => {
+    const rec = fusionHolderToRecord(REAL[0]);
+    const entry = holderRecordToFusion(rec, REAL[0]);
+    const renamed = { ...rec, description: 'A totally different name' };
+    const diff = holderPushDiff(entry, holderRecordToFusion(renamed, entry));
+    expect(diff.filter(d => d.key === 'description')).toHaveLength(1);
+    expect(diff.filter(d => d.key === 'tool_description')).toHaveLength(0);
+  });
+
+  it('and the repair settles after one push', () => {
+    const { rec, entry } = stale();
+    const p1 = holderPushPlan([entry], [rec], undefined, holderRecordToFusion);
+    expect(p1.updates.filter(u => u.stale)).toHaveLength(1);
+    const next = applyHolderPushPlan([entry], p1, holderRecordToFusion);
+    const pushed = { ...rec, last_pushed: lastPushedFrom(rec) };
+    expect(holdersOutOfSync(next, [pushed], holderRecordToFusion)).toBe(0);
+  });
+});
