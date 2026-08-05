@@ -678,3 +678,45 @@ describe('staleHolderTools over the real reference library', () => {
     expect(after).toBeGreaterThan(before);
   });
 });
+
+// ─── The flag has to be CLEARABLE ───────────────────────────────────────────
+// ⚠️ REPORTED AS A LOOP. Re-stamp corrected Fusion, but the in-memory tool kept
+// its PRE-write `_instancesRaw`, so the sweep re-read the old baked holder and
+// reported the same tools as stale. Re-stamp again, same answer — no way out
+// short of reloading the page. CLAUDE.md's checklist asks exactly this: "if I
+// added a flag, can the user make it go away?"
+describe('re-stamping clears the stale flag', () => {
+  const ctx = (records) => ({ records, fusionHolders: [OLD] });
+
+  const toolOn = (holder) => ({
+    id: 'FTL-BBBBBB', tracking_id: 'FTL-BBBBBB', tool_type: 'flat end mill',
+    unit: 'inches', diameter: 0.5, description: 'test',
+    assemblies: [{ assembly_id: 'a1', instance_guid: 'i1', holder_guid: holder.guid, ooh: 1.5 }],
+    _instancesRaw: [{ guid: 'i1', type: 'flat end mill', holder: { ...holder } }],
+  });
+
+  it('is stale before the write and NOT stale after it', () => {
+    // The holder was redrawn here: the record moved, the tool still carries the
+    // shape Fusion baked in.
+    const corrected = { ...oldRecord(), segments: newRecord().segments };
+    const tool = toolOn(OLD);
+    expect(staleHolderTools([tool], ctx([corrected]))).toHaveLength(1);
+
+    // What the write produces: splitToFusionInstances rebuilds the tool's
+    // holder from the record, and writeToolsToFusion now stamps that back onto
+    // _instancesRaw. Simulate exactly that hand-off.
+    const { fusionInstances } = splitToFusionInstances(tool, [OLD], [corrected]);
+    const after = { ...tool, _instancesRaw: fusionInstances };
+
+    expect(after._instancesRaw[0].holder).toBeTruthy();
+    expect(staleHolderTools([after], ctx([corrected]))).toHaveLength(0);
+  });
+
+  it('keeping the pre-write copy is what made it loop', () => {
+    // The old behaviour, asserted so the regression is unmistakable.
+    const corrected = { ...oldRecord(), segments: newRecord().segments };
+    const tool = toolOn(OLD);
+    const staleAgain = { ...tool };            // _instancesRaw carried forward
+    expect(staleHolderTools([staleAgain], ctx([corrected]))).toHaveLength(1);
+  });
+});

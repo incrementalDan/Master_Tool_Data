@@ -1012,7 +1012,14 @@ export function createLibraryOps(ctx) {
       // ⚠️ WRITE FIRST, then update memory. The optimistic order left the app
       // claiming the tools were linked while the Fusion write had failed — in
       // demo (read-only) that was every time.
-      if (needWrite.length) await writeToolsToFusion(needWrite, { toleranceIn });
+      // ⚠️ Keep what the write produced. It refreshes each tool's _instancesRaw
+      // to the entry it just wrote; the SET_TOOLS below is built from the
+      // PRE-write copies, so without merging these back it would overwrite that
+      // and the stale-geometry flag would re-fire on tools we just corrected.
+      const wrote = needWrite.length
+        ? await writeToolsToFusion(needWrite, { toleranceIn })
+        : null;
+      const writtenById = new Map((wrote?.updated || []).map(t => [t.id, t]));
       // The Fusion write already persisted metadata for the tools it touched;
       // the rest only need their new holder_id stored. upsertMany MERGES by id,
       // so records this pass never looked at are untouched (the G1 invariant).
@@ -1022,7 +1029,7 @@ export function createLibraryOps(ctx) {
         await toolStore.upsertMany(metaOnly.map(t =>
           buildMetadataTool({ ...t, tracking_id: t.tracking_id || t.id })));
       }
-      dispatch({ type: 'SET_TOOLS', tools: updatedTools });
+      dispatch({ type: 'SET_TOOLS', tools: updatedTools.map(t => writtenById.get(t.id) || t) });
       dispatch({ type: 'SAVE_SUCCESS' });
       return { ...summary, wrote: true };
     } catch (err) {
@@ -1083,9 +1090,20 @@ export function createLibraryOps(ctx) {
         }
         appended.push(...fusionInstances);
         metaOut.push(metadataTool);
-        // The metadata assembly may have been migrated onto a merged holder's
-        // surviving guid — carry that into the in-memory tool too.
-        updated.push({ ...tool, assemblies: metadataTool.assemblies || tool.assemblies });
+        // ⚠️ _instancesRaw MUST be refreshed to what we just wrote, or the
+        // "N tools carry an older copy of their holder" flag can never clear.
+        // That flag reads the tool's BAKED holder out of _instancesRaw; keeping
+        // the pre-write copy meant Re-stamp corrected Fusion and then the app
+        // immediately re-read the old geometry and reported the same tools as
+        // stale. Re-stamp again, same answer — a loop with no way out short of
+        // reloading the page. `fusionInstances` IS the new raw entry set.
+        // (The metadata assembly may also have migrated onto a merged holder's
+        // surviving guid — carry that across too.)
+        updated.push({
+          ...tool,
+          assemblies: metadataTool.assemblies || tool.assemblies,
+          _instancesRaw: fusionInstances,
+        });
       }
 
       const next = fusionList
@@ -1096,7 +1114,9 @@ export function createLibraryOps(ctx) {
 
     if (googleRef.current && metaOut.length) await toolStore.upsertMany(metaOut);
     for (const t of updated) dispatch({ type: 'UPDATE_TOOL', tool: t });
-    return { wrote: true, count: tools.length };
+    // Handed back so a caller that dispatches its own SET_TOOLS afterwards can
+    // merge these in rather than overwrite them with its pre-write copies.
+    return { wrote: true, count: tools.length, updated };
   };
 
   // ─── Re-stamp the tools that use a holder ─────────────────────────────────

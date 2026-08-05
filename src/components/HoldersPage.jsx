@@ -491,6 +491,18 @@ function HolderList({
               Fusion freezes a holder into each tool, so a correction here only reaches a tool
               when that tool is written. Open a holder below and <b>Re-stamp</b> — you’ll see
               each tool’s gauge-length change before anything is written.
+              {/* ⚠️ Redrawing a holder makes TWO things go out of date — Fusion's
+                  holder library and every tool carrying a copy — and they are
+                  fixed by two different buttons. Showing them as two unrelated
+                  banners is what makes this feel like a loop: you do one, the
+                  other is still there, and nothing says they're the same event.
+                  Only said when both are actually outstanding. */}
+              {unlinked > 0 && (
+                <> These are the same change as the notice above: you edited a holder, so
+                Fusion’s holder library needs <b>Push</b> and its tools need <b>Re-stamp</b>.
+                They’re separate on purpose — one writes the holder library, the other
+                rewrites cutting tools — and doing both finishes it.</>
+              )}
             </div>
             <div className="holder-stale-list">
               {staleByHolder.map(({ holder, count }) => (
