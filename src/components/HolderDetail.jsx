@@ -351,6 +351,18 @@ export default function HolderDetail({
   const setExt = (k, v) => setH(p => ({ ...p, extension: { ...(p.extension || {}), [k]: v } }));
 
   const suggested = useMemo(() => composeHolderDescription(h, config), [h, config]);
+  // ⚠️ NEVER OFFER AN AUTO NAME THAT KNOWS LESS THAN THE ONE THERE. The
+  // composed name is built from the classification fields, so on a holder whose
+  // collet family / size / length aren't filled in yet it collapses to little
+  // more than the taper — "BBT30" offered as a replacement for
+  // "BBT30-CKB3-79 (For EWN Boring Heads)". One click and the real name is
+  // gone, and a holder description is load-bearing: holderShortName() parses it
+  // into preset names and asm_numbers. Offer it only when it isn't strictly
+  // less information than what's already written.
+  const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  const offerAuto = !!suggested
+    && norm(suggested) !== norm(h.description)
+    && !norm(h.description).startsWith(norm(suggested));
   const overLimit = (h.description || '').length > HOLDER_DESC_LIMIT;
   const taperOpt = holderOption(config, 'tapers', h.taper_id);
   const extOoh = deriveExtensionOoh(h.segments);
@@ -526,6 +538,17 @@ export default function HolderDetail({
             It is kept for reference only: nothing is ever matched to it, and Fusion’s copy is
             deleted on the next push. Use <b>Restore as new</b> in the archive to bring the
             geometry back as a brand-new holder.
+            {/* The one loose end retiring leaves: tools whose stored link still
+                points here. They need a LIVE holder — re-stamping from a
+                retired one is exactly what must not happen, so the button is
+                gone and this says where to go instead. */}
+            {usage > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <b>{usage} tool assembl{usage === 1 ? 'y' : 'ies'} still point{usage === 1 ? 's' : ''} at this holder.</b>{' '}
+                Use <b>Link tools to holders</b> on the Holders page to move {usage === 1 ? 'it' : 'them'} onto
+                a live one — re-stamping from a retired holder isn’t offered.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -572,8 +595,10 @@ export default function HolderDetail({
               </>
             ) : (
               <>
-                <strong>{restampPreview.tools.length} tool{restampPreview.tools.length === 1 ? '' : 's'} use this holder,
-                  and {restampPreview.tools.length === 1 ? 'it is' : 'they are all'} up to date.</strong>{' '}
+                <strong>
+                  {restampPreview.tools.length} tool{restampPreview.tools.length === 1 ? ' uses' : 's use'} this
+                  holder, and {restampPreview.tools.length === 1 ? 'it is' : 'they are all'} up to date.
+                </strong>{' '}
                 Each carries its own frozen copy of the geometry — Fusion bakes it in — so they
                 pick up any future change on their next save, or from Re-stamp.
               </>
@@ -587,8 +612,17 @@ export default function HolderDetail({
                 ⚠ gauge moves on {restampPreview.gaugeWarnings.length} assembl{restampPreview.gaugeWarnings.length === 1 ? 'y' : 'ies'}
               </span>
             )}
-            <button className="btn btn-secondary btn-sm" onClick={onRestamp}>
-              <RefreshCw size={13} /> Re-stamp {restampPreview.tools.length} tool{restampPreview.tools.length === 1 ? '' : 's'}
+            {/* "Re-stamp 1 tool" sitting next to "and it is up to date" reads
+                as a contradiction, and acting on it downloads and re-uploads
+                the whole tool library to change nothing. Say what it is. */}
+            <button className="btn btn-secondary btn-sm" onClick={onRestamp}
+              title={staleCount > 0
+                ? 'Write the current holder geometry into these tools now'
+                : 'These tools already match the holder — rewriting them changes nothing. Only useful to force a rewrite.'}>
+              <RefreshCw size={13} />
+              {staleCount > 0
+                ? ` Re-stamp ${staleCount} tool${staleCount === 1 ? '' : 's'}`
+                : ' Re-stamp anyway'}
             </button>
           </div>
         </div>
@@ -643,7 +677,7 @@ export default function HolderDetail({
                   rewritten automatically: holderShortName() parses it into
                   preset names and asm_number, so a silent rewrite can orphan
                   presets. */}
-              {suggested && suggested !== h.description && (
+              {offerAuto && (
                 <>
                   <span className="suggested">suggested: {suggested}</span>
                   <button

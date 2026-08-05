@@ -809,7 +809,12 @@ export default function HoldersPage() {
   const [restampPreview, setRestampPreview] = useState(null);
   useEffect(() => {
     let live = true;
-    if (!open || !restampHolderTools) { setRestampPreview(null); return undefined; }
+    // ⚠️ NEVER for an archived holder. Its tools keep pointing at it until they
+    // are re-linked, so the preview would happily offer to "Re-stamp N tools"
+    // with a holder the shop has retired — and since resolveHolderForWrite skips
+    // archived records, the write wouldn't even carry the geometry the button
+    // names. Those tools need a LIVE holder, which the Link flow offers.
+    if (!open || open.archived === true || !restampHolderTools) { setRestampPreview(null); return undefined; }
     Promise.resolve(restampHolderTools(open, { dryRun: true }))
       .then(r => { if (live) setRestampPreview(r); })
       .catch(() => { if (live) setRestampPreview(null); });
