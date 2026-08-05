@@ -46,6 +46,7 @@ export const HOLDER_REF_RE = /^HLD-[0-9A-F]{6}$/;
 // strips them. Add new app-only fields HERE, not ad hoc at the call site.
 export const HOLDER_APP_ONLY_FIELDS = [
   'id', 'holder_ref', 'fusion_guid', 'library_id', 'library_name',
+  'last_pushed', 'archived', 'archived_at', 'archived_reason', 'merged_into',
   // The record's own snake_case copies. Fusion's keys are hyphenated
   // (`product-id` / `product-link`), so these are app-only spellings and would
   // read as unrecognized fields if a caller ever spread a record.
@@ -71,6 +72,32 @@ export function newHolderRecord(overrides = {}) {
     id: generateId(),
     holder_ref: generateHolderRef(),
     fusion_guid: null,          // the Fusion holder entry this exports to (null until pushed)
+
+    // ── what we last handed to Fusion ──
+    // ⚠️ THE ONLY THING THAT CAN TELL THE TWO SIDES APART. Identity is our ref
+    // + the segments, so once a holder is redrawn HERE the shapes disagree and
+    // the entry reads `ref-only` — which is equally "we edited here" (the
+    // intended workflow) and "someone edited it in Fusion" (the thing the rule
+    // exists to catch). Without a record of what we last wrote, the app cannot
+    // distinguish them, and it chose wrong: it refused to write the user's own
+    // correction and blamed Fusion for it. Comparing Fusion's shape against
+    // this answers it exactly rather than guessing.
+    // { segments, unit } — a copy of the geometry as pushed. Stored as segments
+    // (not a hash) so it's compared with the same segmentsMatch tolerance the
+    // rest of identity uses, and stays readable in the JSON.
+    last_pushed: null,
+
+    // ── archive ──
+    // A holder is never hard-deleted: a merged-away or removed holder keeps its
+    // geometry here as a reference, out of the way. Archived records are
+    // invisible to EVERY matcher (a tool must never be linked to one) and are
+    // removed from Fusion on the next push. Restoring makes a COPY with a new
+    // id and ref — deliberately not a revival of the old identity, which would
+    // resurrect the very links the archive exists to retire.
+    archived: false,
+    archived_at: null,
+    archived_reason: null,      // 'merged' | 'removed'
+    merged_into: null,          // the surviving record's id, when archived by a merge
 
     // ── mirrored from Fusion (so the export round-trips) ──
     description: '',
@@ -131,6 +158,52 @@ export function newHolderRecord(overrides = {}) {
     created_at: now,
     updated_at: now,
     ...overrides,
+  };
+}
+
+// ─── The archive ────────────────────────────────────────────────────────────
+// Nothing is hard-deleted. A holder that was merged away or removed keeps its
+// geometry here so the reference survives — but it is out of the library, out
+// of every matcher, and gone from Fusion.
+export const isActiveHolder = (r) => !!r && r.archived !== true;
+export const activeHolders = (records) => (records || []).filter(isActiveHolder);
+
+export function archiveHolderRecord(record, reason = 'removed', mergedIntoId = null) {
+  if (!record) return null;
+  return {
+    ...record,
+    archived: true,
+    archived_at: new Date().toISOString(),
+    archived_reason: reason,
+    merged_into: mergedIntoId,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+// ⚠️ RESTORE IS A COPY, NOT A REVIVAL. A new id and a new holder_ref, with the
+// Fusion link and push history cleared, so it goes to Fusion as a brand-new
+// holder. Reviving the old identity would resurrect exactly the links the
+// archive exists to retire: tools still carrying the old guid would silently
+// re-attach to geometry the shop already decided was wrong. The retired ref and
+// guids are deliberately NOT inherited for the same reason.
+export function restoreArchivedHolder(record) {
+  if (!record) return null;
+  const now = new Date().toISOString();
+  return {
+    ...record,
+    id: generateId(),
+    holder_ref: generateHolderRef(),
+    fusion_guid: null,
+    last_pushed: null,
+    legacy_ids: [],
+    legacy_fusion_guids: [],
+    archived: false,
+    archived_at: null,
+    archived_reason: null,
+    merged_into: null,
+    nominal_check: null,      // the old confirmation described the old record
+    created_at: now,
+    updated_at: now,
   };
 }
 

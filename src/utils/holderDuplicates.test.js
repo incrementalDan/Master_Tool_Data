@@ -171,12 +171,26 @@ describe('merge', () => {
     expect(holderGuidsOf(second).sort()).toEqual(['g1', 'g2', 'g3']);
   });
 
-  it('removes the loser from the file and leaves everything else alone', () => {
+  // ⚠️ ARCHIVED, NOT DROPPED. The loser's geometry is the only surviving record
+  // of what the shop used to be running, and the user asked to keep that
+  // reference. Archived records are invisible to every matcher and are removed
+  // from Fusion on the next push, so retiring one is complete without
+  // destroying it.
+  it('archives the loser and leaves everything else alone', () => {
     const file = { version: 1, holders: [orig(), v2()], parts: [{ id: 'p1', role: 'body' }] };
     const next = applyHolderMerge(file, v2().id, orig().id);
-    expect(next.holders).toHaveLength(1);
-    expect(next.holders[0].id).toBe(v2().id);
-    expect(next.holders[0].legacy_fusion_guids).toContain('guid-old');
+
+    const survivor = next.holders.find(h => h.id === v2().id);
+    const retired = next.holders.find(h => h.id === orig().id);
+
+    expect(next.holders).toHaveLength(2);
+    expect(survivor.archived).not.toBe(true);
+    expect(survivor.legacy_fusion_guids).toContain('guid-old');
+
+    expect(retired.archived).toBe(true);
+    expect(retired.archived_reason).toBe('merged');
+    expect(retired.merged_into).toBe(v2().id);
+    expect(retired.segments).toEqual(orig().segments);   // the reference survives
     expect(next.parts).toEqual(file.parts);
   });
 

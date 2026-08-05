@@ -17,13 +17,13 @@ import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { backfillMaterialPresetIds, backfillPresetAssemblyLinks, autoLinkMaterialByGrade } from '../utils/presetNaming.js';
 import { backfillPreferredMachineIds } from '../utils/machines.js';
 import { backfillHolderIds } from '../schema/holderResolve.js';
-import { matchFusionHolder, holderPushPlan, applyHolderPushPlan, pushChangeGroup } from '../schema/holderIdentity.js';
+import { matchFusionHolder, holderPushPlan, applyHolderPushPlan, pushChangeGroup, lastPushedFrom } from '../schema/holderIdentity.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry, getActiveVendorRegistry, backfillPurchasingRegistryIds } from '../schema/vendorRegistry.js';
 import { findJob, newJob } from '../utils/jobs.js';
-import { fusionHolderToRecord, holderRecordToFusion } from '../schema/holderRecord.js';
+import { fusionHolderToRecord, holderRecordToFusion, archiveHolderRecord, restoreArchivedHolder } from '../schema/holderRecord.js';
 import { setDefaultUnit } from '../utils/units.js';
 import { getDemoData, isDemoRequested } from '../demo/index.js';
 import {
@@ -454,9 +454,31 @@ export function AppProvider({ children }) {
     });
   }, [saveHolderLibrary]);
 
+  // ⚠️ REMOVING A HOLDER ARCHIVES IT — it is never dropped from the file. Its
+  // geometry is the only surviving record of what the shop used to run, and
+  // "in case" is exactly why the archive exists. Archived records are invisible
+  // to every matcher and are removed from Fusion on the next push, so retiring
+  // one is complete without destroying it.
   const deleteHolderRecord = useCallback((id) => {
     const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
-    return saveHolderLibrary({ ...file, holders: (file.holders || []).filter(h => h.id !== id) });
+    return saveHolderLibrary({
+      ...file,
+      holders: (file.holders || []).map(h => (h.id === id
+        ? archiveHolderRecord(h, 'removed') : h)),
+    });
+  }, [saveHolderLibrary]);
+
+  // Restore is a COPY: a new id and ref, no Fusion link, no push history — so
+  // it goes out as a brand-new holder. Deliberately not a revival of the old
+  // identity, which would re-attach every tool still carrying the old guid to
+  // the geometry the archive was retiring.
+  const restoreHolderRecord = useCallback((id) => {
+    const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
+    const src = (file.holders || []).find(h => h.id === id);
+    if (!src) return Promise.reject(new Error('That holder is not in the archive'));
+    const copy = restoreArchivedHolder(src);
+    return saveHolderLibrary({ ...file, holders: [...(file.holders || []), copy] })
+      .then(() => copy);
   }, [saveHolderLibrary]);
 
   // Import app records from the linked read-only Fusion holder library. Import
@@ -546,6 +568,13 @@ export function AppProvider({ children }) {
           name: r.description || r.holder_ref,
           neverPushed: !r.fusion_guid,
         })),
+        // Removals are the destructive half, so they are ALWAYS named with the
+        // reason they're being removed — never a bare count.
+        deletes: plan.deletes.length,
+        deleteRows: plan.deletes.map(d => ({
+          name: d.entry?.description || d.entry?.['product-id'] || '(no description)',
+          why: d.why,
+        })),
         flagged: plan.flagged,
         // Every holder the write touches, with the fields that move — so the
         // dialog can name them instead of showing a bare count.
@@ -556,6 +585,7 @@ export function AppProvider({ children }) {
       })),
       updated: byLibrary.reduce((a, b) => a + b.plan.updates.filter(u => u.stale).length, 0),
       created: byLibrary.reduce((a, b) => a + b.plan.creates.length, 0),
+      deleted: byLibrary.reduce((a, b) => a + b.plan.deletes.length, 0),
       flagged: byLibrary.flatMap(b => b.plan.flagged),
       wrote: false,
     };
@@ -567,10 +597,15 @@ export function AppProvider({ children }) {
       // as identity (see holderIdentity.js). Stamped after each library's write
       // so a failure can't leave the app claiming a link that isn't there.
       const guidByRecord = new Map();
+      // What Fusion now holds for each record. Compared against the record on
+      // the NEXT push to tell "the user redrew this here" from "someone edited
+      // it in Fusion" — the two readings of `ref-only` the app previously could
+      // not separate, and got backwards.
+      const pushedByRecord = new Map();
       const demoNext = [];
       for (const { lib, raw, list, plan } of byLibrary) {
         // Nothing to say to Fusion for this library — don't burn a write.
-        if (!plan.updates.some(u => u.stale) && !plan.creates.length) continue;
+        if (!plan.updates.some(u => u.stale) && !plan.creates.length && !plan.deletes.length) continue;
         const next = applyHolderPushPlan(list, plan, holderRecordToFusion);
         if (demoModeRef.current) {
           // Demo is a real sandbox: the write lands in memory so a second push
@@ -580,14 +615,19 @@ export function AppProvider({ children }) {
           await aps.saveHolderLibrary(lib.projectId, lib.folderId, lib.itemId, lib.fileName,
             { ...raw, data: next });
         }
-        // Stamp the guid that was actually WRITTEN, read back out of `next` —
-        // not off the pre-write entry. Taking it from `u.entry` recorded the
-        // value we had just replaced, so the record and Fusion disagreed the
-        // moment the write landed and the next push tried to swap them back.
-        for (const u of plan.updates) guidByRecord.set(u.record.id, next[u.index]?.guid || null);
-        for (const c of plan.creates) {
-          const made = next.find(e => e?.['product-id'] === c.holder_ref);
-          guidByRecord.set(c.id, made?.guid || null);
+        // Read back what was actually WRITTEN — never off the pre-write entry,
+        // which recorded the value we had just replaced and made the next push
+        // want to swap it back.
+        // ⚠️ FOUND BY holder_ref, NOT BY INDEX. Deletes shift every later
+        // entry, so an index into the ORIGINAL list no longer addresses the
+        // same holder in `next`. The ref is on exactly one entry (the plan
+        // enforces one record → one entry), so it survives the shift.
+        const writtenByRef = new Map(next.filter(e => e?.['product-id'])
+          .map(e => [e['product-id'], e]));
+        for (const r of [...plan.updates.map(u => u.record), ...plan.creates]) {
+          if (!r) continue;
+          guidByRecord.set(r.id, writtenByRef.get(r.holder_ref)?.guid || null);
+          pushedByRecord.set(r.id, lastPushedFrom(r));
         }
       }
       if (guidByRecord.size) {
@@ -595,7 +635,12 @@ export function AppProvider({ children }) {
         await saveHolderLibrary({
           ...live,
           holders: (live.holders || []).map(h => (guidByRecord.has(h.id)
-            ? { ...h, fusion_guid: guidByRecord.get(h.id), library_id: h.library_id || defaultLib }
+            ? {
+              ...h,
+              fusion_guid: guidByRecord.get(h.id),
+              last_pushed: pushedByRecord.get(h.id) || h.last_pushed,
+              library_id: h.library_id || defaultLib,
+            }
             : h)),
         });
       }
@@ -1370,6 +1415,7 @@ export function AppProvider({ children }) {
       saveHolderPart,
       deleteHolderPart,
       deleteHolderRecord,
+      restoreHolderRecord,
       importHoldersFromFusion,
       pushHoldersToFusion,
       clearError,

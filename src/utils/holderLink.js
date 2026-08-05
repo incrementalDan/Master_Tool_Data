@@ -103,7 +103,9 @@ export function descriptionsAgree(a, b, config) {
 // `baked` is the holder object Fusion absorbed into the tool.
 // → { status: 'exact'|'near'|'candidate'|'none', record, alternatives[], delta, why }
 export function proposeHolderLink(baked, records, config) {
-  const list = records || [];
+  // Never offer an archived holder. It was merged away or retired, and putting
+  // a tool back on it would quietly undo that.
+  const list = (records || []).filter(r => r && r.archived !== true);
   if (!baked || !Array.isArray(baked.segments) || !baked.segments.length) {
     return { status: 'none', record: null, alternatives: [], delta: null,
       why: 'This tool’s holder has no geometry at all — there is nothing to match on.' };
@@ -192,7 +194,12 @@ export function buildHolderLinkPlan(tools, records, config) {
     const bakedByGuid = new Map((t._instancesRaw || [])
       .filter(r => r?.guid && r.holder).map(r => [r.guid, r.holder]));
     for (const a of t.assemblies || []) {
-      if (a.holder_id && (records || []).some(r => r.id === a.holder_id)) continue;
+      // Already linked and still resolvable → nothing to propose. An assembly
+      // pointing at an ARCHIVED record is deliberately NOT skipped: that holder
+      // is retired, so the tool needs a new one.
+      const linked = a.holder_id
+        && (records || []).find(r => r.id === a.holder_id && r.archived !== true);
+      if (linked) continue;
       const baked = bakedByGuid.get(a.instance_guid)
         || (a.holder_description ? { description: a.holder_description, segments: [], unit: t.unit } : null);
       const proposal = proposeHolderLink(baked, records, config);

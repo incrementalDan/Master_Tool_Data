@@ -341,7 +341,7 @@ const sig = (o) => JSON.stringify(o, (_k, v) => (
 
 export default function HolderDetail({
   holder, config, usage = 0, allLocations = [], readOnly, updatedBy = '', siblings = [],
-  holderFile, onSavePart, onMergeWith, onRestamp, restampPreview,
+  holderFile, onSavePart, onMergeWith, onRestamp, restampPreview, staleCount = 0,
   onBack, onSave, onDelete, onAddOption, onViewTools,
 }) {
   const [h, setH] = useState(holder);
@@ -512,6 +512,24 @@ export default function HolderDetail({
         )}
       </div>
 
+      {/* An archived holder is a reference, not part of the library. Say so
+          plainly at the top — otherwise it looks like an ordinary holder that
+          mysteriously matches nothing. */}
+      {h.archived && (
+        <div className="holder-warn holder-archived-note">
+          <AlertTriangle size={14} />
+          <div>
+            <b>Archived · not in Fusion.</b>{' '}
+            {h.archived_reason === 'merged'
+              ? 'This holder was merged into another one.'
+              : 'This holder was removed from the library.'}{' '}
+            It is kept for reference only: nothing is ever matched to it, and Fusion’s copy is
+            deleted on the next push. Use <b>Restore as new</b> in the archive to bring the
+            geometry back as a brand-new holder.
+          </div>
+        </div>
+      )}
+
       {/* Rare by design — autosave catches almost everything — but a click on
           Back a beat after typing must not throw the edit away. */}
       {leaveAsk && (
@@ -536,10 +554,30 @@ export default function HolderDetail({
           "make it land now" button. */}
       {restampPreview?.tools?.length > 0 ? (
         <div className="holder-restamp-banner">
+          {/* ⚠️ "Uses this holder" and "is carrying the CURRENT geometry" are
+              different questions, and only the second one is a call to act.
+              Leading with the usage count meant a holder whose tools were all
+              up to date looked identical to one where every tool was stale. */}
           <div className="holder-restamp-text">
-            <strong>{restampPreview.tools.length} tool{restampPreview.tools.length === 1 ? '' : 's'} use this holder.</strong>{' '}
-            They each carry their own frozen copy of its geometry — Fusion bakes it in. They pick up
-            the current geometry the next time each is saved, or you can push it now.
+            {staleCount > 0 ? (
+              <>
+                <strong>
+                  {staleCount} of {restampPreview.tools.length} tool
+                  {restampPreview.tools.length === 1 ? '' : 's'} using this holder
+                  {staleCount === 1 ? ' is' : ' are'} carrying an older copy of its geometry.
+                </strong>{' '}
+                Fusion bakes the holder into each tool, so a correction here only reaches a tool
+                when that tool is written. Re-stamp pushes it now — you’ll see each tool’s
+                gauge-length change first.
+              </>
+            ) : (
+              <>
+                <strong>{restampPreview.tools.length} tool{restampPreview.tools.length === 1 ? '' : 's'} use this holder,
+                  and {restampPreview.tools.length === 1 ? 'it is' : 'they are all'} up to date.</strong>{' '}
+                Each carries its own frozen copy of the geometry — Fusion bakes it in — so they
+                pick up any future change on their next save, or from Re-stamp.
+              </>
+            )}
           </div>
           <div className="holder-restamp-actions">
             {restampPreview.gaugeWarnings?.length > 0 && (
@@ -863,14 +901,23 @@ export default function HolderDetail({
                 .map(x => <option key={x.id} value={x.id}>{x.description || x.holder_ref}</option>)}
             </select>
           </Field>
-          <div style={{ marginTop: 14 }}>
-            <button className="btn btn-ghost btn-sm" onClick={() => onDelete?.(h)}>
-              <Trash2 size={13} /> Delete this holder record
-            </button>
-            <div className="holder-field-hint" style={{ marginTop: 6 }}>
-              Removes the app record only. The Fusion holder library is untouched.
+          {/* Retiring a holder ARCHIVES it — nothing here is ever destroyed.
+              Say what actually happens: it leaves the library and every
+              matcher, its geometry is kept as a reference, and Fusion's copy
+              goes on the next push. The old copy ("the Fusion holder library
+              is untouched") stopped being true when removal was added. */}
+          {!h.archived && (
+            <div style={{ marginTop: 14 }}>
+              <button className="btn btn-ghost btn-sm" onClick={() => onDelete?.(h)}>
+                <Trash2 size={13} /> Retire this holder
+              </button>
+              <div className="holder-field-hint" style={{ marginTop: 6 }}>
+                Moves it to the archive: it leaves the library, nothing is matched to it again,
+                and Fusion’s copy is deleted on the next push. Its geometry is kept — you can
+                restore it later as a new holder.
+              </div>
             </div>
-          </div>
+          )}
         </Section>
       </div>
     </div>

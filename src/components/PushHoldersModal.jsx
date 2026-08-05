@@ -79,9 +79,17 @@ export default function PushHoldersModal({ preview, onCommit, onClose }) {
   const [done, setDone] = useState(null);
   useEffect(() => { if (preview) setDone(null); }, [preview]);
 
+  const [okToRemove, setOkToRemove] = useState(false);
+  useEffect(() => { setOkToRemove(false); }, [preview]);
+
   const libs = preview?.byLibrary || [];
   const flagged = preview?.flagged || [];
-  const total = (preview?.updated || 0) + (preview?.created || 0);
+  const removing = preview?.deleted || 0;
+  const total = (preview?.updated || 0) + (preview?.created || 0) + removing;
+  // Deleting a holder out of a shared Fusion library is the one thing here that
+  // can't be undone from this app, so it is ticked deliberately, never implied
+  // by pressing the same button that writes everything else.
+  const blocked = removing > 0 && !okToRemove;
 
   return (
     <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
@@ -114,6 +122,22 @@ export default function PushHoldersModal({ preview, onCommit, onClose }) {
                     <span className="holder-conf medium">{l.flagged.length} left alone</span>
                   )}
                 </div>
+                {/* Removals first, and always open. It is the one destructive
+                    thing a push does, so it is never something you have to go
+                    looking for. */}
+                <PushGroup
+                  group={PUSH_GROUPS.remove}
+                  rows={l.deleteRows || []}
+                  defaultOpen
+                  render={(r, i) => (
+                    <div key={i} className="push-row push-row-remove">
+                      <div className="push-row-head">
+                        <span className="push-row-name">{r.name}</span>
+                        <span className="push-row-kind">{r.why}</span>
+                      </div>
+                    </div>
+                  )}
+                />
                 <PushGroup group={PUSH_GROUPS.geometry} rows={byGroup('geometry')} defaultOpen />
                 <PushGroup group={PUSH_GROUPS.other} rows={byGroup('other')} defaultOpen />
                 <PushGroup group={PUSH_GROUPS.text} rows={byGroup('text')} defaultOpen />
@@ -173,16 +197,27 @@ export default function PushHoldersModal({ preview, onCommit, onClose }) {
         </div>
 
         <div className="modal-footer">
-          <span className="modal-footer-note">
-            Only the holder library file is written. No cutting tool is touched.
-          </span>
+          {removing > 0 && !done ? (
+            <label className="push-remove-confirm">
+              <input type="checkbox" checked={okToRemove}
+                onChange={e => setOkToRemove(e.target.checked)} />
+              <span>
+                Delete {removing} holder{removing === 1 ? '' : 's'} from Fusion.
+                {' '}The record and its geometry stay in this app’s archive.
+              </span>
+            </label>
+          ) : (
+            <span className="modal-footer-note">
+              Only the holder library file is written. No cutting tool is touched.
+            </span>
+          )}
           <button className="btn btn-secondary btn-sm" onClick={onClose}>
             {done ? 'Close' : 'Cancel'}
           </button>
           {!done && (
             <button
               className="btn btn-primary btn-sm"
-              disabled={!total || busy}
+              disabled={!total || busy || blocked}
               onClick={async () => {
                 setBusy(true);
                 try { await onCommit(); setDone(true); } finally { setBusy(false); }

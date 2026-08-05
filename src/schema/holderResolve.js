@@ -50,9 +50,14 @@ const hasGeometry = (r) => Array.isArray(r?.segments) && r.segments.length > 0;
 // (holder_ref + a segment match, both required — holderIdentity.js) rather than
 // something the write path infers from a guid it happened to find.
 export function resolveHolderForWrite(guid, { records, fusionHolders, holderId } = {}) {
-  const byId = holderId ? (records || []).find(h => h?.id === holderId) : null;
+  // ⚠️ Archived records are not a geometry source. A tool must never be written
+  // with a holder the shop has retired — the archive exists so that decision
+  // sticks, and a stale holder_id pointing at one falls through to the Fusion
+  // entry (or to nothing) rather than resurrecting it.
+  const live = (records || []).filter(h => h && h.archived !== true);
+  const byId = holderId ? live.find(h => h?.id === holderId) : null;
 
-  const record = byId || (guid ? holderForGuid(records, guid) : null);
+  const record = byId || (guid ? holderForGuid(live, guid) : null);
   if (record && hasGeometry(record)) {
     const entry = holderRecordToFusion(record);
     return {
@@ -95,6 +100,37 @@ export function toolHolderIsStale(assembly, rawInstance, ctx) {
       || round(a['lower-diameter']) !== round(b['lower-diameter'])) return true;
   }
   return current.unit !== want.unit;
+}
+
+// ─── Which tools are carrying OUT-OF-DATE holder geometry? ──────────────────
+// Fusion absorbs a holder into every tool, so correcting a holder here leaves
+// every existing tool still carrying the old copy until it is written. That is
+// by design (the write is the only channel) — but it must not be SILENT.
+//
+// ⚠️ THIS IS THE LEAK THE LINK LIST CANNOT SEE. `buildHolderLinkPlan` skips any
+// assembly that is already linked, and a tool arriving from Fusion on a
+// merged-away holder's guid is linked automatically to the survivor. So it is
+// correctly pointed at the right record while still carrying the wrong shape,
+// and nothing anywhere said so. Re-stamp fixes it — you just had to already
+// know to go and look.
+//
+// Read-only. `record` is null for a library-wide sweep, or one holder to scope
+// it to that holder's tools.
+export function staleHolderTools(tools, { records, fusionHolders, record = null } = {}) {
+  const ctx = { records, fusionHolders };
+  const out = [];
+  for (const t of tools || []) {
+    if (t?.no_fusion_link === true) continue;      // nothing in Fusion to correct
+    const rawByGuid = new Map((t._instancesRaw || [])
+      .filter(r => r?.guid).map(r => [r.guid, r]));
+    for (const a of t.assemblies || []) {
+      if (record && !assemblyUsesHolder(a, record)) continue;
+      const raw = rawByGuid.get(a.instance_guid);
+      if (!raw) continue;                          // no Fusion entry to compare
+      if (toolHolderIsStale(a, raw, ctx)) { out.push(t); break; }
+    }
+  }
+  return out;
 }
 
 // ─── Assembly gauge-length sanity check ─────────────────────────────────────
@@ -236,7 +272,9 @@ export const assemblyCountUsingHolder = (tools, record) =>
 // A tool that matches neither is left alone: that's the loose, user-confirmed
 // migration matcher's job (holderAudit.js), not a silent guess.
 export function backfillHolderIds(tools, holderRecords) {
-  const records = holderRecords || [];
+  // Archived holders are excluded outright — a tool must never be linked to a
+  // holder that was merged away or retired.
+  const records = (holderRecords || []).filter(r => r && r.archived !== true);
   if (!records.length) return tools;
   return (tools || []).map(t => {
     if (!t?.assemblies?.length) return t;

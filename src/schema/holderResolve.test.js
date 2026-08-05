@@ -4,6 +4,7 @@ import {
   resolveHolderForWrite, toolHolderIsStale, assemblyGaugeCheck, gaugeToleranceIn,
   ASSEMBLY_GAUGE_WARN_IN, ASSEMBLY_GAUGE_IMPLAUSIBLE_MM, ASSEMBLY_GAUGE_IMPLAUSIBLE_IN,
   backfillHolderIds, assemblyUsesHolder, toolsUsingHolder, assemblyCountUsingHolder,
+  staleHolderTools,
 } from './holderResolve.js';
 import { fusionHolderToRecord } from './holderRecord.js';
 import { mergeHolderRecords } from '../utils/holderDuplicates.js';
@@ -534,5 +535,88 @@ describe('assemblyUsesHolder', () => {
     const tools = [{ assemblies: [{ holder_id: 'r1' }, { holder_id: 'r1' }, { holder_id: 'x' }] }];
     expect(assemblyCountUsingHolder(tools, rec)).toBe(2);
     expect(toolsUsingHolder(tools, rec)).toHaveLength(1);
+  });
+});
+
+// ─── Archived holders are invisible ─────────────────────────────────────────
+// A merged-away or removed holder is one the shop decided nothing should be
+// on. Every path that could put a tool back on it has to refuse, or the archive
+// is just a label.
+describe('an archived holder is never matched or written', () => {
+  const archived = () => ({ ...oldRecord(), archived: true });
+
+  it('is not a geometry source, even via a stored holder_id', () => {
+    const r = resolveHolderForWrite(OLD.guid,
+      { records: [archived()], fusionHolders: [], holderId: archived().id });
+    expect(r).toBeNull();
+  });
+
+  it('falls through to the Fusion entry rather than resurrecting the record', () => {
+    const r = resolveHolderForWrite(OLD.guid, { records: [archived()], fusionHolders: [OLD] });
+    expect(r.source).toBe('fusion');
+  });
+
+  // A merge moves the loser's guid onto the survivor. The archived loser still
+  // has that guid in its OWN fusion_guid and would match first if the archive
+  // were searched — re-attaching the tool to the geometry the merge retired.
+  it('a tool on a merged-away guid lands on the SURVIVOR, not the archived loser', () => {
+    const { record: survivor } = mergeHolderRecords(newRecord(), oldRecord());
+    const retired = { ...oldRecord(), archived: true, merged_into: survivor.id };
+    const r = resolveHolderForWrite(OLD.guid,
+      { records: [retired, survivor], fusionHolders: [OLD] });
+    expect(r.source).toBe('app');
+    expect(r.recordId).toBe(survivor.id);
+  });
+
+  it('is never picked up by the backfill', () => {
+    const tool = {
+      id: 't1',
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'i1', holder_guid: OLD.guid }],
+      _instancesRaw: [{ guid: 'i1', holder: { ...OLD } }],
+    };
+    expect(backfillHolderIds([tool], [archived()])[0].assemblies[0].holder_id).toBeUndefined();
+  });
+});
+
+// ─── Which tools are carrying an older copy? ────────────────────────────────
+// THE LEAK THE LINK LIST CANNOT SEE: an already-linked assembly is skipped
+// there, and a tool arriving on a merged-away guid is auto-linked to the
+// survivor — correctly pointed, wrongly shaped, and nothing said so.
+describe('staleHolderTools', () => {
+  const toolOn = (holder, id = 't1') => ({
+    id,
+    assemblies: [{ assembly_id: 'a1', instance_guid: 'i1', holder_guid: holder.guid }],
+    _instancesRaw: [{ guid: 'i1', holder: { ...holder } }],
+  });
+
+  it('is quiet when the baked copy already matches the record', () => {
+    const found = staleHolderTools([toolOn(OLD)],
+      { records: [oldRecord()], fusionHolders: [OLD] });
+    expect(found).toHaveLength(0);
+  });
+
+  it('finds a tool whose holder was corrected here after it was made', () => {
+    const corrected = { ...oldRecord(), segments: newRecord().segments };
+    const found = staleHolderTools([toolOn(OLD)],
+      { records: [corrected], fusionHolders: [OLD] });
+    expect(found.map(t => t.id)).toEqual(['t1']);
+  });
+
+  it('finds the AUTO-LINKED tool that arrives on a merged-away holder', () => {
+    const { record: survivor } = mergeHolderRecords(newRecord(), oldRecord());
+    // Auto-linked by the backfill, so the link list will never show it.
+    const [tool] = backfillHolderIds([toolOn(OLD)], [survivor]);
+    expect(tool.assemblies[0].holder_id).toBe(survivor.id);
+    expect(staleHolderTools([tool], { records: [survivor], fusionHolders: [OLD] }))
+      .toHaveLength(1);
+  });
+
+  it('scopes to one holder, and skips no-Fusion tools', () => {
+    const corrected = { ...oldRecord(), segments: newRecord().segments };
+    const other = { ...newRecord(), id: 'rec-other' };
+    expect(staleHolderTools([toolOn(OLD)],
+      { records: [corrected], fusionHolders: [OLD], record: other })).toHaveLength(0);
+    expect(staleHolderTools([{ ...toolOn(OLD), no_fusion_link: true }],
+      { records: [corrected], fusionHolders: [OLD] })).toHaveLength(0);
   });
 });

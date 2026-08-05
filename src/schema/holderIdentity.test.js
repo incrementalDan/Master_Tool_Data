@@ -8,6 +8,7 @@ import {
   isConfidentMatch, auditFusionHolders, SEGMENT_MATCH_TOL_IN,
   holderPushPlan, applyHolderPushPlan, holdersOutOfSync,
   holderPushDiff, fusionEntryIsStale, pushChangeGroup, PUSH_GROUPS,
+  lastPushedFrom, matchesLastPush,
 } from './holderIdentity.js';
 import { fusionHolderToRecord, holderRecordToFusion } from './holderRecord.js';
 import { convertHolderUnits } from '../utils/holderGeometry.js';
@@ -456,5 +457,180 @@ describe('a record is never written to two Fusion entries', () => {
     expect(plan.updates).toHaveLength(1);
     expect(plan.updates[0].kind).toBe('adopt');
     expect(plan.flagged.map(f => f.status)).toEqual(['duplicate-entry']);
+  });
+});
+
+// ─── Redrawing a holder HERE must reach Fusion ──────────────────────────────
+// THE PRIMARY ONGOING WORKFLOW, and it was blocked. Identity is our ref + the
+// segments, so redrawing a holder makes the shapes disagree and the entry reads
+// `ref-only` — which the plan treated as "someone edited this in Fusion",
+// refused to write, and left the badge at 0. The holder library silently went
+// stale and stayed stale, which is the exact thing the whole feature exists to
+// prevent. What we LAST PUSHED settles it without guessing.
+describe('an app-side redraw pushes out', () => {
+  const pushed = () => {
+    const r = fusionHolderToRecord(REAL[0]);
+    return { ...r, last_pushed: lastPushedFrom(r) };
+  };
+  const redraw = (r) => ({
+    ...r,
+    segments: r.segments.map((s, i) => (i === 0 ? { ...s, height: s.height + 2 } : s)),
+  });
+
+  it('writes the redraw instead of blaming Fusion for it', () => {
+    const rec = pushed();
+    const entry = holderRecordToFusion(rec, REAL[0]);      // what Fusion holds
+    const edited = redraw(rec);
+
+    expect(matchFusionHolder(entry, [edited]).status).toBe('ref-only');
+
+    const plan = holderPushPlan([entry], [edited], undefined, holderRecordToFusion);
+    expect(plan.updates).toHaveLength(1);
+    expect(plan.updates[0].stale).toBe(true);
+    expect(plan.flagged).toHaveLength(0);
+    expect(plan.creates).toHaveLength(0);                   // NOT a second copy
+    // and the badge says so, rather than 0
+    expect(holdersOutOfSync([entry], [edited], holderRecordToFusion)).toBe(1);
+
+    // The write lands, and a second push has nothing to do.
+    const next = applyHolderPushPlan([entry], plan, holderRecordToFusion);
+    const settledRec = { ...edited, last_pushed: lastPushedFrom(edited) };
+    expect(holdersOutOfSync(next, [settledRec], holderRecordToFusion)).toBe(0);
+  });
+
+  it('still FLAGS a genuine Fusion-side edit', () => {
+    const rec = pushed();
+    // Fusion's copy no longer matches what we last handed it → they moved it.
+    const entry = holderRecordToFusion(rec, REAL[0]);
+    const movedInFusion = {
+      ...entry,
+      segments: entry.segments.map((s, i) => (i === 0 ? { ...s, height: s.height + 3 } : s)),
+    };
+    const plan = holderPushPlan([movedInFusion], [rec], undefined, holderRecordToFusion);
+    expect(plan.updates).toHaveLength(0);
+    expect(plan.flagged.map(f => f.status)).toEqual(['ref-only']);
+  });
+
+  it('a record that has never been pushed is unchanged in behaviour', () => {
+    const rec = fusionHolderToRecord(REAL[0]);              // no last_pushed
+    const entry = holderRecordToFusion(rec, REAL[0]);
+    const plan = holderPushPlan([entry], [redraw(rec)], undefined, holderRecordToFusion);
+    expect(plan.updates).toHaveLength(0);
+    expect(plan.flagged.map(f => f.status)).toEqual(['ref-only']);
+  });
+});
+
+// ─── The archive ────────────────────────────────────────────────────────────
+describe('archived holders', () => {
+  it('are invisible to every matcher', () => {
+    const rec = { ...fusionHolderToRecord(REAL[0]), archived: true };
+    const entry = holderRecordToFusion(rec, REAL[0]);
+    // Neither its ref nor its shape may resolve it.
+    expect(recordForRef([rec], rec.holder_ref)).toBeNull();
+    expect(recordsForGeometry([rec], entry)).toHaveLength(0);
+    expect(matchFusionHolder(entry, [rec]).status).toBe('none');
+  });
+
+  it('are never appended to Fusion as a create', () => {
+    const rec = { ...fusionHolderToRecord(REAL[0]), archived: true };
+    expect(holderPushPlan([], [rec], undefined, holderRecordToFusion).creates).toHaveLength(0);
+  });
+});
+
+// ─── Removing a merged-away holder from Fusion ──────────────────────────────
+// A merge means the two holders are ONE holder. Retiring the loser here and
+// leaving its copy in Fusion is half the job: the bad geometry stays pickable,
+// so new tools keep arriving on it.
+describe('the push removes retired holders from Fusion', () => {
+  it('deletes the entry whose ref an active record retired in a merge', () => {
+    const survivor = fusionHolderToRecord(REAL[0]);
+    const loser = fusionHolderToRecord(REAL[1]);
+    const merged = { ...survivor, legacy_ids: [loser.holder_ref] };
+
+    const keep = holderRecordToFusion(merged, REAL[0]);
+    const drop = holderRecordToFusion(loser, REAL[1]);      // carries the retired ref
+
+    const plan = holderPushPlan([keep, drop], [merged], undefined, holderRecordToFusion);
+    expect(plan.deletes).toHaveLength(1);
+    expect(plan.deletes[0].index).toBe(1);
+    expect(applyHolderPushPlan([keep, drop], plan, holderRecordToFusion)).toHaveLength(1);
+  });
+
+  it('deletes an archived record’s own entry', () => {
+    const rec = fusionHolderToRecord(REAL[0]);
+    const entry = holderRecordToFusion(rec, REAL[0]);
+    const archived = { ...rec, archived: true, archived_reason: 'removed' };
+    const plan = holderPushPlan([entry], [archived], undefined, holderRecordToFusion);
+    expect(plan.deletes).toHaveLength(1);
+    expect(plan.creates).toHaveLength(0);
+  });
+
+  // ⚠️ THE ONE THAT WOULD DELETE A LIVE HOLDER. legacy_ids holds two different
+  // things: refs WE retired in a merge, and the raw product-id the entry came
+  // in with — a vendor SKU, or prose like "min OOH". The second belongs to the
+  // holder itself. Only the HLD- shape may ever trigger a removal.
+  it('NEVER deletes on an imported vendor SKU or note kept in legacy_ids', () => {
+    const withSku = REAL.find(f => /^BT30-/.test(String(f['product-id'] ?? '')));
+    expect(withSku).toBeTruthy();
+    const rec = fusionHolderToRecord(withSku);
+    expect(rec.legacy_ids).toContain(withSku['product-id']);   // it IS retained
+    const entry = { ...withSku };                              // still carrying the SKU
+    const plan = holderPushPlan([entry], [rec], undefined, holderRecordToFusion);
+    expect(plan.deletes).toHaveLength(0);
+  });
+
+  it('a delete does not misaddress the guid stamped on a later holder', () => {
+    // Deletes shift every later entry, so reading the written entry back by
+    // INDEX addresses the wrong holder. Keyed by ref instead.
+    const a = fusionHolderToRecord(REAL[0]);
+    const b = fusionHolderToRecord(REAL[1]);
+    const withRetired = { ...a, legacy_ids: ['HLD-DEAD01'] };
+    const dead = { ...holderRecordToFusion(a, REAL[0]), 'product-id': 'HLD-DEAD01', guid: 'dead' };
+    const keepA = holderRecordToFusion(withRetired, REAL[0]);
+    const keepB = holderRecordToFusion(b, REAL[1]);
+
+    const list = [dead, keepA, keepB];
+    const plan = holderPushPlan(list, [withRetired, b], undefined, holderRecordToFusion);
+    const next = applyHolderPushPlan(list, plan, holderRecordToFusion);
+    const byRef = new Map(next.filter(e => e['product-id']).map(e => [e['product-id'], e]));
+    expect(byRef.get(b.holder_ref).guid).toBe(REAL[1].guid);
+    expect(next).toHaveLength(2);
+  });
+});
+
+// ⚠️ Found in the browser, not by a test: retire a holder BEFORE its first
+// push and its Fusion entry carries no ref of ours, so the ref-based rule
+// couldn't see it. The entry sat orphaned in Fusion while the app showed the
+// holder as retired — the exact state the removal exists to prevent.
+describe('retiring a holder that was never pushed', () => {
+  it('still removes its Fusion entry, identified by shape', () => {
+    const rec = fusionHolderToRecord(REAL[0]);
+    const entry = { ...REAL[0], 'product-id': '' };        // never carried our ref
+    const retired = { ...rec, archived: true, archived_reason: 'removed' };
+
+    const plan = holderPushPlan([entry], [retired], undefined, holderRecordToFusion);
+    expect(plan.deletes).toHaveLength(1);
+    expect(plan.deletes[0].why).toMatch(/before it was pushed/);
+    expect(applyHolderPushPlan([entry], plan, holderRecordToFusion)).toHaveLength(0);
+  });
+
+  // A LIVE record always wins the entry first, so a merge survivor that shares
+  // the loser's shape can never be mistaken for the thing being deleted.
+  it('never deletes an entry a live record still claims', () => {
+    const live = fusionHolderToRecord(REAL[0]);
+    const entry = holderRecordToFusion(live, REAL[0]);
+    const sameShapeArchived = { ...fusionHolderToRecord(REAL[0]), id: 'other', archived: true };
+
+    const plan = holderPushPlan([entry], [live, sameShapeArchived], undefined, holderRecordToFusion);
+    expect(plan.deletes).toHaveLength(0);
+    expect(plan.updates).toHaveLength(1);
+  });
+
+  it('leaves it alone when two archived records share the shape', () => {
+    const a = { ...fusionHolderToRecord(REAL[0]), id: 'a', archived: true };
+    const b = { ...fusionHolderToRecord(REAL[0]), id: 'b', archived: true };
+    const entry = { ...REAL[0], 'product-id': '' };
+    expect(holderPushPlan([entry], [a, b], undefined, holderRecordToFusion).deletes)
+      .toHaveLength(0);
   });
 });
