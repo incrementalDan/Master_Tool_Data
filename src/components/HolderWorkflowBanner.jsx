@@ -38,6 +38,7 @@ const ONGOING = [
   ['Edit the holder here', 'Change geometry, name, vendor — anything.'],
   ['Re-stamp', 'Pushes the correction into every tool that uses it. Shows what moves before it writes.'],
   ['Push to Fusion', 'Updates the holder library itself.'],
+  ['Retire', 'Moves a holder to the archive and deletes Fusion’s copy on the next push. Its geometry is kept — restore it later as a new holder.'],
 ];
 
 export default function HolderWorkflowBanner({ onDismiss }) {

@@ -8,7 +8,7 @@ import {
   isConfidentMatch, auditFusionHolders, SEGMENT_MATCH_TOL_IN,
   holderPushPlan, applyHolderPushPlan, holdersOutOfSync,
   holderPushDiff, fusionEntryIsStale, pushChangeGroup, PUSH_GROUPS,
-  lastPushedFrom, matchesLastPush,
+  lastPushedFrom, matchesLastPush, retiredHolderFor,
 } from './holderIdentity.js';
 import { fusionHolderToRecord, holderRecordToFusion } from './holderRecord.js';
 import { convertHolderUnits } from '../utils/holderGeometry.js';
@@ -632,5 +632,34 @@ describe('retiring a holder that was never pushed', () => {
     const entry = { ...REAL[0], 'product-id': '' };
     expect(holderPushPlan([entry], [a, b], undefined, holderRecordToFusion).deletes)
       .toHaveLength(0);
+  });
+});
+
+// ⚠️ A REGRESSION THE ARCHIVE INTRODUCED. Archived records are invisible to
+// matching by design — so the IMPORTER read a retired holder's Fusion entry as
+// one it had never seen and re-created it, undoing the retirement the moment
+// you clicked Import before pushing. One shared rule now answers "does this
+// entry belong to a holder we retired" for both the push and the import.
+describe('retiredHolderFor', () => {
+  it('recognises a retired holder’s own entry (so import can’t resurrect it)', () => {
+    const rec = fusionHolderToRecord(REAL[0]);
+    const entry = holderRecordToFusion(rec, REAL[0]);
+    const retired = { ...rec, archived: true, archived_reason: 'removed' };
+    expect(matchFusionHolder(entry, [retired]).status).toBe('none');   // invisible, as designed
+    expect(retiredHolderFor(entry, [retired])?.record.id).toBe(rec.id);
+  });
+
+  it('recognises a ref retired by a merge', () => {
+    const survivor = fusionHolderToRecord(REAL[0]);
+    const loser = fusionHolderToRecord(REAL[1]);
+    const merged = { ...survivor, legacy_ids: [loser.holder_ref] };
+    const entry = holderRecordToFusion(loser, REAL[1]);
+    expect(retiredHolderFor(entry, [merged])?.record.id).toBe(merged.id);
+  });
+
+  it('says nothing about a live holder', () => {
+    const rec = fusionHolderToRecord(REAL[0]);
+    expect(retiredHolderFor(holderRecordToFusion(rec, REAL[0]), [rec])).toBeNull();
+    expect(retiredHolderFor(REAL[1], [rec])).toBeNull();          // simply unknown
   });
 });

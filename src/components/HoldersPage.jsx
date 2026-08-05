@@ -258,7 +258,7 @@ function HolderList({
   holders, config, usageOf, onOpen, onNew, onHeal, onImport, onLinkParts, onDuplicates, onPush, unlinked, canPush,
   onLinkTools, unlinkedTools, showWorkflow, onShowWorkflow, onDismissWorkflow,
   importable, googleAuthenticated, driftIds, partCount, duplicateIds,
-  archived, onRestore, staleTools,
+  archived, onRestore, staleTools, staleByHolder = [],
 }) {
   // Archived holders are hidden by default and live below the list — they are a
   // reference, not part of the library.
@@ -467,7 +467,7 @@ function HolderList({
             <div>
               Until you push, those records live only in this app — if it went away, the work
               would go with it. The first push mostly just writes each holder’s ID into Fusion’s
-              product-id field; the geometry Fusion already has stays as it is. Open it to see
+              product-id field; the geometry Fusion already holds stays as it is. Open it to see
               exactly what changes, holder by holder, before anything is written.
             </div>
           </div>
@@ -488,8 +488,16 @@ function HolderList({
             <b>{staleTools.length} tool{staleTools.length === 1 ? '' : 's'} still carry an older copy of their holder.</b>
             <div>
               Fusion freezes a holder into each tool, so a correction here only reaches a tool
-              when that tool is written. Open the holder and <b>Re-stamp</b> to push the current
-              geometry into its tools — you’ll see each tool’s gauge-length change first.
+              when that tool is written. Open a holder below and <b>Re-stamp</b> — you’ll see
+              each tool’s gauge-length change before anything is written.
+            </div>
+            <div className="holder-stale-list">
+              {staleByHolder.map(({ holder, count }) => (
+                <button key={holder.id} className="holder-stale-chip" onClick={() => onOpen(holder)}>
+                  {holder.description || holder.holder_ref}
+                  <span className="holder-stale-chip-n">{count}</span>
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -716,7 +724,7 @@ export default function HoldersPage() {
     holderLibrary, holders: fusionHolders, shopSettings, tools,
     saveHolderRecord, deleteHolderRecord, saveHolderLibrary, saveShopSettings, saveHolderPart,
     importHoldersFromFusion, pushHoldersToFusion, restampHolderTools, linkToolsToHolders,
-    restoreHolderRecord, googleAuthenticated, googleUser, demoMode, notify,
+    restoreHolderRecord, relinkHolders, googleAuthenticated, googleUser, demoMode, notify,
   } = useApp();
   const navigate = useNavigate();
   const [openId, setOpenId] = useState(null);
@@ -925,6 +933,19 @@ export default function HoldersPage() {
   const staleTools = useMemo(
     () => staleHolderTools(tools, { records, fusionHolders: fusionHolders || [] }),
     [tools, records, fusionHolders]);
+  // WHICH holders, not just how many tools. "4 tools are stale" with no way to
+  // reach them is a notification, not a fix — these are the buttons that take
+  // you to the Re-stamp for each one.
+  const staleByHolder = useMemo(() => {
+    if (!staleTools.length) return [];
+    return records
+      .map(h => ({
+        holder: h,
+        count: staleHolderTools(tools, { records, fusionHolders: fusionHolders || [], record: h }).length,
+      }))
+      .filter(x => x.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [tools, records, fusionHolders, staleTools]);
   // The same question scoped to the holder that's open, so its Re-stamp banner
   // can say how many of its tools actually need it rather than how many use it.
   const openStaleCount = useMemo(
@@ -948,6 +969,10 @@ export default function HoldersPage() {
       const parts = [];
       if (res.added) parts.push(`Imported ${res.added} holder${res.added === 1 ? '' : 's'}`);
       if (res.skipped) parts.push(`${res.skipped} already matched`);
+      // Retired holders Fusion still has. Said out loud rather than counted as
+      // "nothing to import" — the reason they're still there is that the push
+      // hasn't run yet, and that's actionable.
+      if (res.retired) parts.push(`${res.retired} retired here — push to remove from Fusion`);
       if (res.flagged?.length) parts.push(`${res.flagged.length} need a look`);
       notify(parts.length ? parts.join(' · ') : 'Nothing to import',
         res.flagged?.length ? 'warning' : 'success');
@@ -961,6 +986,10 @@ export default function HoldersPage() {
   const commitMerge = async (survivorId, loserId) => {
     try {
       await saveHolderLibrary(applyHolderMerge(holderLibrary, survivorId, loserId));
+      // Repoint every tool that still holds the loser's holder_id, now. Without
+      // this they point at an archived record until the next reload, and the
+      // "Link N tools" badge jumps as if merging had created work.
+      relinkHolders();
       notify('Holders merged — anything that used the old one now resolves to the kept record', 'success');
       setMerging(null);
       if (openId === loserId) setOpenId(survivorId);
@@ -999,7 +1028,10 @@ export default function HoldersPage() {
           restampPreview={restampPreview}
           staleCount={openStaleCount}
           onRestamp={onRestamp}
-          allLocations={allLocations} readOnly={!canEdit}
+          allLocations={allLocations}
+          // An archived holder is a reference: editing one would be writing to
+          // something nothing can use, and autosave would quietly persist it.
+          readOnly={!canEdit || open.archived === true}
           onBack={() => setOpenId(null)}
           updatedBy={googleUser?.email || ''}
           siblings={records}
@@ -1038,7 +1070,8 @@ export default function HoldersPage() {
           onLinkParts={() => setLinkingParts(true)}
           onDuplicates={() => setDupesOpen(true)}
           driftIds={driftIds} partCount={parts.length} duplicateIds={duplicateIds}
-          archived={archived} onRestore={onRestore} staleTools={staleTools}
+          archived={archived} onRestore={onRestore}
+          staleTools={staleTools} staleByHolder={staleByHolder}
         />
         </>
       )}

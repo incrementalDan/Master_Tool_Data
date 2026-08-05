@@ -360,6 +360,22 @@ function deletionReason(entry, records) {
 // ARCHIVED record has its shape. Order matters — live records are always tried
 // first, so a merge survivor sharing the loser's shape is never mistaken for
 // the thing being deleted.
+// ⚠️ THE ONE RULE FOR "this Fusion entry belongs to a holder we retired",
+// shared by the push (which removes it) and the import (which must NOT bring it
+// back). Splitting it produced exactly the bug it exists to prevent: archived
+// records are invisible to matching, so the importer read a retired holder's
+// entry as a holder it had never seen and re-created it the moment you clicked
+// Import before pushing.
+// → { record, why } or null.
+export function retiredHolderFor(entry, records, tolIn = SEGMENT_MATCH_TOL_IN) {
+  const byRef = deletionReason(entry, records);
+  if (byRef) return byRef;
+  // Shape is only consulted when no LIVE record claims the entry, so a merge
+  // survivor sharing the loser's shape is never mistaken for the retired one.
+  if (matchFusionHolder(entry, records, tolIn).status !== 'none') return null;
+  return archivedByShape(entry, records, tolIn);
+}
+
 function archivedByShape(entry, records, tolIn) {
   const hits = (records || []).filter(r =>
     r?.archived === true
@@ -395,7 +411,7 @@ export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL
     // surviving record (recordForRef searches legacy_ids), so leaving this
     // until after the match would file it as an update or a duplicate and the
     // merged-away holder would live on.
-    const del = deletionReason(entry, records);
+    const del = retiredHolderFor(entry, records, tolIn);
     if (del) { deletes.push({ index, entry, record: del.record, why: del.why }); continue; }
 
     const m = matchFusionHolder(entry, records, tolIn);
@@ -450,13 +466,9 @@ export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL
       written.add(rec.id);
       continue;
     }
-    if (m.status === 'none') {
-      // No LIVE record wants this entry. If exactly one archived record has its
-      // shape, it is a holder retired here before it was ever pushed.
-      const byShape = archivedByShape(entry, records, tolIn);
-      if (byShape) { deletes.push({ index, entry, record: byShape.record, why: byShape.why }); }
-      continue;
-    }
+    // Not a holder we know at all — nothing to write, nothing to flag. (A
+    // retired one was already caught above.)
+    if (m.status === 'none') continue;
     {
       flagged.push({ entry, ...m });
       // Every record this entry could plausibly be stays claimed, so it is

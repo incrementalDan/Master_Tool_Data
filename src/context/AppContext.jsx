@@ -17,7 +17,7 @@ import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { backfillMaterialPresetIds, backfillPresetAssemblyLinks, autoLinkMaterialByGrade } from '../utils/presetNaming.js';
 import { backfillPreferredMachineIds } from '../utils/machines.js';
 import { backfillHolderIds } from '../schema/holderResolve.js';
-import { matchFusionHolder, holderPushPlan, applyHolderPushPlan, pushChangeGroup, lastPushedFrom } from '../schema/holderIdentity.js';
+import { matchFusionHolder, holderPushPlan, applyHolderPushPlan, pushChangeGroup, lastPushedFrom, retiredHolderFor } from '../schema/holderIdentity.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
@@ -468,6 +468,19 @@ export function AppProvider({ children }) {
     });
   }, [saveHolderLibrary]);
 
+  // Re-run the holder_id backfill against the CURRENT records, in memory.
+  // ⚠️ Needed after a merge. The loser is archived, so every tool still holding
+  // its holder_id now points at a record nothing resolves — and the link list,
+  // which offers exactly those, would jump as though merging had CREATED work.
+  // The load-time backfill already repoints them (guid → survivor); this is the
+  // same pure pass run immediately so the page doesn't need a reload to agree.
+  // In memory only, persisted lazily on each tool's next save — same contract.
+  const relinkHolders = useCallback(() => {
+    const recs = (holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY).holders || [];
+    const next = backfillHolderIds(toolsRef.current || [], recs);
+    if (next !== toolsRef.current) dispatch({ type: 'SET_TOOLS', tools: next });
+  }, []);
+
   // Restore is a COPY: a new id and ref, no Fusion link, no push history — so
   // it goes out as a brand-new holder. Deliberately not a revival of the old
   // identity, which would re-attach every tool still carrying the old guid to
@@ -500,9 +513,17 @@ export function AppProvider({ children }) {
     const added = [];
     const flagged = [];
     let known = 0;
+    let retired = 0;
     const pool = [...existing];
     for (const f of source) {
       if (!f?.guid && !f?.segments) continue;
+      // ⚠️ NEVER RE-IMPORT A HOLDER WE RETIRED. Archived records are invisible
+      // to matching by design, so without this check the importer read a
+      // retired holder's Fusion entry as one it had never seen and re-created
+      // it — undoing the retirement the moment you clicked Import before
+      // pushing. It's still IN Fusion until the next push; that's what the push
+      // is for, not something to adopt back.
+      if (retiredHolderFor(f, pool)) { retired++; continue; }
       const m = matchFusionHolder(f, pool);
       if (m.status === 'exact') { known++; continue; }
       if (m.status !== 'none') { flagged.push({ entry: f, ...m }); continue; }
@@ -510,7 +531,7 @@ export function AppProvider({ children }) {
       added.push(rec);
       pool.push(rec);   // so two identical entries in one import don't both land
     }
-    const result = { added: added.length, skipped: known, flagged };
+    const result = { added: added.length, skipped: known, retired, flagged };
     if (!added.length) return Promise.resolve(result);
     return saveHolderLibrary({ ...file, holders: [...existing, ...added] }).then(() => result);
   }, [saveHolderLibrary]);
@@ -1416,6 +1437,7 @@ export function AppProvider({ children }) {
       deleteHolderPart,
       deleteHolderRecord,
       restoreHolderRecord,
+      relinkHolders,
       importHoldersFromFusion,
       pushHoldersToFusion,
       clearError,
