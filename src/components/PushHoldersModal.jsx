@@ -54,7 +54,7 @@ function PushRow({ entry, record, kind, diff, group }) {
 
 // Collapsible, and the DEFAULT state is the point: geometry open because it's
 // the one worth reading, ID-only shut because it's the one that isn't.
-function PushGroup({ group, rows, defaultOpen }) {
+function PushGroup({ group, rows, defaultOpen, render }) {
   const [open, setOpen] = useState(defaultOpen);
   if (!rows.length) return null;
   return (
@@ -65,7 +65,11 @@ function PushGroup({ group, rows, defaultOpen }) {
         <span className="push-group-count">{rows.length}</span>
         <span className="push-group-note">{group.note}</span>
       </button>
-      {open && <div className="push-rows">{rows.map((r, i) => <PushRow key={i} {...r} />)}</div>}
+      {open && (
+        <div className="push-rows">
+          {rows.map((r, i) => (render ? render(r, i) : <PushRow key={i} {...r} />))}
+        </div>
+      )}
     </div>
   );
 }
@@ -115,9 +119,21 @@ export default function PushHoldersModal({ preview, onCommit, onClose }) {
                 <PushGroup group={PUSH_GROUPS.text} rows={byGroup('text')} defaultOpen />
                 <PushGroup group={PUSH_GROUPS.id} rows={byGroup('id')} defaultOpen={false} />
                 {l.creates > 0 && (
-                  <div className="push-row-field" style={{ marginTop: 6 }}>
-                    <b>{l.creates}</b> holder{l.creates === 1 ? '' : 's'} {KIND_NOTE.create}.
-                  </div>
+                  <PushGroup
+                    group={PUSH_GROUPS.create}
+                    rows={l.createRows || []}
+                    defaultOpen
+                    render={(r, i) => (
+                      <div key={i} className="push-row">
+                        <div className="push-row-head">
+                          <span className="push-row-name">{r.name}</span>
+                          <span className="push-row-kind">
+                            {r.neverPushed ? 'never pushed' : 'no longer matches its Fusion entry'}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  />
                 )}
               </div>
             );

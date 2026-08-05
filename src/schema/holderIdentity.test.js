@@ -420,3 +420,41 @@ describe('a push settles', () => {
     expect(pushChangeGroup([{ key: 'product-id' }])).toBe('id');
   });
 });
+
+// ─── One record, one Fusion entry ───────────────────────────────────────────
+// Merging duplicates HERE retires the loser's ref into legacy_ids, so both of
+// Fusion's copies then resolve to the surviving record. Writing that record to
+// both would stamp one app ID onto two holders — a duplicate the library could
+// never tell apart again.
+describe('a record is never written to two Fusion entries', () => {
+  it('flags the second copy instead of stamping the same ID twice', () => {
+    const record = fusionHolderToRecord(REAL[0]);
+    // Two Fusion entries of the identical holder — the shape of a library
+    // straight after an in-app merge.
+    const a = { ...holderRecordToFusion(record, REAL[0]) };
+    const b = { ...a, guid: 'the-duplicate-fusion-entry' };
+
+    const plan = holderPushPlan([a, b], [record], undefined, holderRecordToFusion);
+    expect(plan.updates).toHaveLength(1);
+    expect(plan.updates[0].index).toBe(0);
+    expect(plan.creates).toHaveLength(0);          // never ALSO appended
+    expect(plan.flagged).toHaveLength(1);
+    expect(plan.flagged[0].status).toBe('duplicate-entry');
+
+    // And the untouched copy is returned byte-for-byte.
+    const next = applyHolderPushPlan([a, b], plan, holderRecordToFusion);
+    expect(next[1]).toBe(b);
+  });
+
+  it('covers the adopt path too, where the match has no record', () => {
+    const record = fusionHolderToRecord(REAL[0]);
+    // Both carry our shape and NEITHER carries our id — the bootstrap case.
+    const a = { ...REAL[0], 'product-id': '' };
+    const b = { ...a, guid: 'second-copy' };
+
+    const plan = holderPushPlan([a, b], [record], undefined, holderRecordToFusion);
+    expect(plan.updates).toHaveLength(1);
+    expect(plan.updates[0].kind).toBe('adopt');
+    expect(plan.flagged.map(f => f.status)).toEqual(['duplicate-entry']);
+  });
+});

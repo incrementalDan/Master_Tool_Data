@@ -46,6 +46,10 @@ export const HOLDER_REF_RE = /^HLD-[0-9A-F]{6}$/;
 // strips them. Add new app-only fields HERE, not ad hoc at the call site.
 export const HOLDER_APP_ONLY_FIELDS = [
   'id', 'holder_ref', 'fusion_guid', 'library_id', 'library_name',
+  // The record's own snake_case copies. Fusion's keys are hyphenated
+  // (`product-id` / `product-link`), so these are app-only spellings and would
+  // read as unrecognized fields if a caller ever spread a record.
+  'product_id', 'product_link',
   'type_id', 'taper_id', 'collet_family_id', 'collet_size_id',
   'is_tap_collet', 'length', 'has_extension', 'extension',
   'manufacturer', 'part_number', 'purchasing',
@@ -245,10 +249,39 @@ export function holderRecordToFusion(record, existing = null) {
     vendor: record.vendor || '',
   };
 
-  // Native + expression written together, always — Fusion re-derives both the
-  // displayed description and the gauge length from these strings on load, so a
-  // stale expression silently reverts the write.
+  // ─── Native + expression written together, ALWAYS ─────────────────────────
+  // Fusion re-derives every native field from its paired expression on load, so
+  // a stale expression silently reverts the write (the same rule the tool side
+  // follows — see CLAUDE.md "Fusion expression-numeric sync").
+  //
+  // ⚠️ product-id IS PAIRED, and getting this wrong broke the whole link.
+  // The push rewrites `product-id` to the app's holder_ref, but `expressions`
+  // was carried forward from the existing entry untouched — so on 4 of the
+  // shop's 20 real holders Fusion re-derived product-id from a stale
+  // `tool_productId` ("'min OOH'", a vendor SKU) and threw the app's ID away on
+  // the next load. Those holders read `geometry-only` forever and came back as
+  // "to write" on every single push. Same trap for vendor and product-link.
+  //
+  // The pairing rule is read straight off the real library, where it is 20/20
+  // consistent: description always has an expression; vendor / product-id /
+  // product-link have one EXACTLY when the value is non-empty (quoted). So:
+  // write it when there's a value, delete it when there isn't — never leave
+  // `''`, which is itself a mismatch.
   out.expressions.tool_description = `'${record.description || ''}'`;
+  const pairText = (exprKey, value) => {
+    const v = String(value ?? '').trim();
+    if (v) out.expressions[exprKey] = `'${v}'`;
+    else delete out.expressions[exprKey];
+  };
+  pairText('tool_productId', out['product-id']);
+  pairText('tool_productLink', out['product-link']);
+  pairText('tool_vendor', out.vendor);
+
+  // `tool_unit` is the exception: real holders carry it on only 2 of 20 (the
+  // inch ones), so its presence is Fusion's call, not ours. Never ADD it —
+  // but a present one must not disagree with the unit we just wrote.
+  if (out.expressions.tool_unit != null) out.expressions.tool_unit = `'${out.unit}'`;
+
   const gaugeExpr = buildGaugeExpressionFromFlags(record.segments);
   if (gaugeExpr) out.expressions.tool_holderGaugeLength = gaugeExpr;
   else delete out.expressions.tool_holderGaugeLength;

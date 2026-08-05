@@ -258,6 +258,10 @@ export const PUSH_GROUPS = {
     key: 'other', label: 'Something else',
     note: 'A field the app doesn’t normally touch. Worth reading before you write it.',
   },
+  create: {
+    key: 'create', label: 'Added to Fusion',
+    note: 'Not in Fusion at all — appended as a new holder. Check none of these is a holder Fusion already has: a record whose geometry was edited here BEFORE its first push no longer matches its own Fusion entry, and lands here as a duplicate.',
+  },
   id: {
     key: 'id', label: 'ID only',
     note: 'Nothing but the app’s ID written into Fusion’s product-id field. The geometry Fusion already holds is identical.',
@@ -289,6 +293,14 @@ export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL
   const updates = [];   // { index, entry, record, kind: 'update' | 'adopt', stale }
   const flagged = [];   // { entry, ...match } — untouched
   const spokenFor = new Set();
+  // ⚠️ ONE RECORD, ONE FUSION ENTRY. Two entries can legitimately resolve to
+  // the same record — most often right after merging duplicates HERE, since
+  // the merge retires the loser's ref into legacy_ids and both Fusion entries
+  // still have the merged shape. Writing the record to both would stamp one
+  // app ID onto two holders, which is a duplicate the library can never tell
+  // apart again. The first is written; the rest are flagged for a person,
+  // because deleting a holder out of Fusion is not ours to do silently.
+  const written = new Set();
 
   const list = fusionEntries || [];
   for (let index = 0; index < list.length; index++) {
@@ -296,12 +308,24 @@ export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL
     if (entry?.type !== 'holder') continue;
     const m = matchFusionHolder(entry, records, tolIn);
 
+    // The record this entry WOULD be written from — covers the adopt case too,
+    // where the match is `geometry-only` and `m.record` is deliberately null.
+    const target = m.record || (m.geoRecords.length === 1 ? m.geoRecords[0] : null);
+    if (target && written.has(target.id)) {
+      flagged.push({
+        ...m, entry, status: 'duplicate-entry', record: null,
+        reason: `Fusion has more than one holder matching "${target.description || target.holder_ref}". Only the first is written — delete the extra in Fusion, or merge the records here.`,
+      });
+      continue;
+    }
+
     if (m.status === 'exact') {
       // `stale` is what the badge counts: an identity match only proves Fusion
       // has the right HOLDER, not the right VALUES.
       const diff = toFusion ? holderPushDiff(entry, toFusion(m.record, entry)) : [];
       updates.push({ index, entry, record: m.record, kind: 'update', diff, stale: diff.length > 0 });
       spokenFor.add(m.record.id);
+      written.add(m.record.id);
       continue;
     }
     // The bootstrap case: our shape, and Fusion has no id of its own on it.
@@ -312,7 +336,8 @@ export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL
         index, entry, record: rec, kind: 'adopt', stale: true,
         diff: toFusion ? holderPushDiff(entry, toFusion(rec, entry)) : [],
       });
-      spokenFor.add(m.geoRecords[0].id);
+      spokenFor.add(rec.id);
+      written.add(rec.id);
       continue;
     }
     if (m.status !== 'none') {

@@ -536,6 +536,16 @@ export function AppProvider({ children }) {
         updates: plan.updates.filter(u => u.kind === 'update' && u.stale).length,
         adopts: plan.updates.filter(u => u.kind === 'adopt').length,
         creates: plan.creates.length,
+        // ⚠️ NAMED, not counted. A create appends a NEW holder to Fusion, and
+        // the one way to get an accidental duplicate is a record whose geometry
+        // was edited here before its first push: the Fusion entry it came from
+        // no longer matches on shape OR on our id, so it reads as a holder we've
+        // never seen and a second copy gets added. "20 holders not in Fusion at
+        // all" is exactly where that hides — so say which ones.
+        createRows: plan.creates.map(r => ({
+          name: r.description || r.holder_ref,
+          neverPushed: !r.fusion_guid,
+        })),
         flagged: plan.flagged,
         // Every holder the write touches, with the fields that move — so the
         // dialog can name them instead of showing a bare count.

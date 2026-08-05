@@ -119,6 +119,71 @@ describe('record → fusion (export)', () => {
     expect(holderRecordToFusion(r)['product-id']).toBe(r.holder_ref);
   });
 
+  // ⚠️ THE BUG THIS LOCKS. product-id is a PAIRED field: Fusion re-derives it
+  // from expressions.tool_productId on load. The push rewrote product-id to the
+  // app's holder_ref but carried `expressions` forward untouched, so on the 4
+  // real holders that carry tool_productId Fusion threw the app's ID away again
+  // on the next load — those holders could never finish linking, and came back
+  // as "to write" on every push.
+  it('rewrites the paired expression whenever it rewrites product-id', () => {
+    const withPid = REAL.filter(f => f.expressions?.tool_productId);
+    expect(withPid.length).toBeGreaterThan(0);   // guard: the fixture still covers it
+    for (const f of withPid) {
+      const r = fusionHolderToRecord(f);
+      const out = holderRecordToFusion(r, f);
+      expect(out['product-id']).toBe(r.holder_ref);
+      expect(out.expressions.tool_productId).toBe(`'${r.holder_ref}'`);
+      // and never the value Fusion would have reverted to
+      expect(out.expressions.tool_productId).not.toBe(f.expressions.tool_productId);
+    }
+  });
+
+  it('keeps vendor and product-link paired with their expressions', () => {
+    const r = fusionHolderToRecord(byDesc('NBT30-SK13C-60'));
+    r.vendor = 'Maritool';
+    r.product_link = 'https://example.com/x';
+    const out = holderRecordToFusion(r, byDesc('NBT30-SK13C-60'));
+    expect(out.expressions.tool_vendor).toBe("'Maritool'");
+    expect(out.expressions.tool_productLink).toBe("'https://example.com/x'");
+  });
+
+  // Absent, not empty — the real library is 20/20 on this: the expression
+  // exists exactly when the native value is non-empty. Writing "''" is itself
+  // a mismatch Fusion would re-derive from.
+  it('deletes a paired expression when the value is cleared', () => {
+    const src = REAL.find(f => f.expressions?.tool_vendor);
+    const r = fusionHolderToRecord(src);
+    r.vendor = '';
+    const out = holderRecordToFusion(r, src);
+    expect(out).not.toHaveProperty('expressions.tool_vendor');
+    expect(out.expressions.tool_vendor).toBeUndefined();
+  });
+
+  it('never ADDS tool_unit, but syncs one that is already there', () => {
+    const withUnit = REAL.find(f => f.expressions?.tool_unit);
+    const without = REAL.find(f => !f.expressions?.tool_unit);
+    expect(holderRecordToFusion(fusionHolderToRecord(without), without).expressions.tool_unit)
+      .toBeUndefined();
+    const r = fusionHolderToRecord(withUnit);
+    const out = holderRecordToFusion(r, withUnit);
+    expect(out.expressions.tool_unit).toBe(`'${out.unit}'`);
+  });
+
+  // The whole point of the pairing rule: what Fusion would re-derive on load
+  // has to be what we just wrote, or the push silently undoes itself.
+  it('leaves NO native/expression disagreement on any real holder', () => {
+    const PAIRS = [['product-id', 'tool_productId'], ['product-link', 'tool_productLink'],
+      ['vendor', 'tool_vendor'], ['description', 'tool_description'], ['unit', 'tool_unit']];
+    for (const f of REAL) {
+      const out = holderRecordToFusion(fusionHolderToRecord(f), f);
+      for (const [nat, exp] of PAIRS) {
+        const e = out.expressions[exp];
+        if (e === undefined) continue;
+        expect(e).toBe(`'${out[nat]}'`);
+      }
+    }
+  });
+
   it('clamps gauge length to the section total', () => {
     const r = newHolderRecord({
       segments: [{ height: 10, 'upper-diameter': 20, 'lower-diameter': 20 }],
