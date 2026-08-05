@@ -466,9 +466,10 @@ function HolderList({
             <b>Fusion is out of step on {unlinked} holder{unlinked === 1 ? '' : 's'}.</b>
             <div>
               Until you push, those records live only in this app — if it went away, the work
-              would go with it. The first push mostly just writes each holder’s ID into Fusion’s
-              product-id field; the geometry Fusion already holds stays as it is. Open it to see
-              exactly what changes, holder by holder, before anything is written.
+              would go with it. Importing stamps a new holder’s ID into Fusion for you; what’s
+              left here is anything <b>changed since</b> — a redrawn holder, a rename, or one
+              retired that Fusion still has. Open it to see exactly what changes, holder by
+              holder, before anything is written.
             </div>
           </div>
           <button className="btn btn-primary btn-sm" onClick={onPush}>
@@ -968,6 +969,34 @@ export default function HoldersPage() {
       setImportFlags(res.flagged || []);
       const parts = [];
       if (res.added) parts.push(`Imported ${res.added} holder${res.added === 1 ? '' : 's'}`);
+      // ─── The first push runs itself ──────────────────────────────────────
+      // Importing left every record one signal short of linked: the app knew
+      // the holder, Fusion didn't carry its ID, so the whole library sat in a
+      // limbo you had to know to press a button to leave.
+      //
+      // ⚠️ SAFE ONLY BECAUSE IT IS SCOPED to the records this import just
+      // created. Each of those came FROM a Fusion entry a moment ago, so the
+      // plan can only ADOPT — stamp our ID onto an entry whose exact shape we
+      // just read. Records already in the library are outside the scope and
+      // untouched, so an unrelated edit is never pushed on the user's behalf.
+      // Belt and braces: the dry run below must show nothing being created or
+      // removed, or this isn't the additive first push and it hands back to
+      // the button.
+      if (res.added && canPush && canEdit) {
+        try {
+          const ids = new Set(res.addedIds || []);
+          const dry = await pushHoldersToFusion({ dryRun: true, recordIds: ids });
+          if (dry.created || dry.deleted) {
+            parts.push('IDs not stamped — open Push to Fusion to review');
+          } else {
+            await pushHoldersToFusion({ recordIds: ids, silent: true });
+            parts.push('IDs stamped in Fusion');
+          }
+        } catch (e) {
+          // The import itself succeeded — say what didn't, don't fail the lot.
+          parts.push(`IDs not stamped in Fusion (${e.message}) — use Push to Fusion`);
+        }
+      }
       if (res.skipped) parts.push(`${res.skipped} already matched`);
       // Retired holders Fusion still has. Said out loud rather than counted as
       // "nothing to import" — the reason they're still there is that the push

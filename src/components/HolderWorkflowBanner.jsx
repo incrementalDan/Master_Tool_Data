@@ -27,11 +27,10 @@ export const dismissHolderWorkflow = (yes = true) => {
 };
 
 const SETUP = [
-  ['Import from Fusion', 'Brings the existing Fusion holders in as app records.'],
+  ['Import from Fusion', 'Brings the existing Fusion holders in as app records — and stamps each new record’s ID straight back into Fusion, so the link is live immediately. Nothing else about those holders changes.'],
   ['Normalize names', 'Reads taper, collet, length and extension out of each description.'],
   ['Duplicates', 'Merge holders that are the same physical thing entered twice.'],
   ['Link tools to holders', 'Works out which record each tool’s frozen holder copy is, and corrects the ones Fusion has wrong.'],
-  ['Push to Fusion', 'Stamps each record’s ID into Fusion so the link survives Fusion re-issuing its GUIDs.'],
 ];
 
 const ONGOING = [

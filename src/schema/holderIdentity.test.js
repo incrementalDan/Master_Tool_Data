@@ -663,3 +663,51 @@ describe('retiredHolderFor', () => {
     expect(retiredHolderFor(REAL[1], [rec])).toBeNull();          // simply unknown
   });
 });
+
+// ─── The scoped push (what makes the auto-push-on-import safe) ──────────────
+// Importing leaves every record one signal short of linked, so the first push
+// now runs itself. That is only defensible because it is SCOPED to the records
+// the import just created: each came FROM a Fusion entry a moment earlier, so
+// the plan can only ADOPT — stamp our ID onto an entry whose exact shape we
+// just read. Nothing is created, nothing is removed, no geometry moves.
+describe('a push scoped to freshly imported records', () => {
+  it('only adopts — it creates nothing and removes nothing', () => {
+    const records = REAL.map(f => fusionHolderToRecord(f));
+    const plan = holderPushPlan(REAL, records, undefined, holderRecordToFusion);
+
+    expect(plan.creates).toHaveLength(0);
+    expect(plan.deletes).toHaveLength(0);
+    expect(plan.updates.length).toBe(REAL.length);
+    // No geometry moves: every diff is the ID, the name, or the vendor.
+    for (const u of plan.updates) {
+      for (const d of u.diff) expect(['segments', 'gaugeLength', 'unit']).not.toContain(d.key);
+    }
+    // And the app's ID lands on every entry.
+    const next = applyHolderPushPlan(REAL, plan, holderRecordToFusion);
+    expect(next).toHaveLength(REAL.length);
+    expect(next.every(e => /^HLD-[0-9A-F]{6}$/.test(e['product-id']))).toBe(true);
+  });
+
+  it('leaves records OUTSIDE the scope completely alone', () => {
+    // The library already holds a record whose geometry was edited here and
+    // never pushed. An unscoped push would write it; the scoped one must not,
+    // because the user never asked for that edit to go out.
+    const fresh = fusionHolderToRecord(REAL[0]);
+    const edited = {
+      ...fusionHolderToRecord(REAL[1]),
+      segments: REAL[1].segments.map((s, i) => (i === 0 ? { ...s, height: s.height + 9 } : { ...s })),
+    };
+    const scopedPlan = holderPushPlan(REAL, [fresh], undefined, holderRecordToFusion);
+    expect(scopedPlan.updates.map(u => u.index)).toEqual([0]);
+    expect(scopedPlan.creates).toHaveLength(0);        // `edited` is not in scope
+    expect(scopedPlan.flagged).toHaveLength(0);        // nor flagged
+
+    const next = applyHolderPushPlan(REAL, scopedPlan, holderRecordToFusion);
+    expect(next[1]).toBe(REAL[1]);                     // byte-for-byte untouched
+
+    // Unscoped, that same edit WOULD go out — which is exactly why the
+    // auto-push is scoped.
+    const wide = holderPushPlan(REAL, [fresh, edited], undefined, holderRecordToFusion);
+    expect(wide.creates.length + wide.flagged.length).toBeGreaterThan(0);
+  });
+});

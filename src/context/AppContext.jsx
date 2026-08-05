@@ -401,8 +401,14 @@ export function AppProvider({ children }) {
   // import source and (later) an export target. Writes here are metadata-only —
   // nothing touches Fusion or any tool. Propagation to tools is deliberately a
   // separate, explicit step (see the re-stamp work).
+  // ⚠️ The onSaved hook keeps holderLibraryRef in step SYNCHRONOUSLY. Refs are
+  // assigned during render, so an action that saves and then immediately reads
+  // the ref — the auto-push straight after an import does exactly that — would
+  // otherwise read the PREVIOUS library and silently drop the records it just
+  // wrote. Same reason loadHolders takes an explicit list.
   const saveHolderLibrary = useCallback((holderLibrary) =>
-    saveSharedFile('holderLibrary', holderLibrary, 'SET_HOLDER_LIBRARY'), [saveSharedFile]);
+    saveSharedFile('holderLibrary', holderLibrary, 'SET_HOLDER_LIBRARY',
+      (data) => { holderLibraryRef.current = data; }), [saveSharedFile]);
 
   // Upsert one holder record by id. Reads the ref so concurrent edits in the
   // same tick compose instead of clobbering.
@@ -531,7 +537,10 @@ export function AppProvider({ children }) {
       added.push(rec);
       pool.push(rec);   // so two identical entries in one import don't both land
     }
-    const result = { added: added.length, skipped: known, retired, flagged };
+    // addedIds lets the caller push EXACTLY what was just imported (see the
+    // auto-push in HoldersPage) — scoping it to these records is what makes
+    // that push provably additive.
+    const result = { added: added.length, addedIds: added.map(r => r.id), skipped: known, retired, flagged };
     if (!added.length) return Promise.resolve(result);
     return saveHolderLibrary({ ...file, holders: [...existing, ...added] }).then(() => result);
   }, [saveHolderLibrary]);
@@ -546,7 +555,17 @@ export function AppProvider({ children }) {
   // holderPushPlan. Half-matches are left byte-for-byte alone and reported.
   // `dryRun` builds the same plan and writes nothing, which is what the preview
   // shows.
-  const pushHoldersToFusion = useCallback(async ({ dryRun = false } = {}) => {
+  // `recordIds` scopes the push to a specific set of records — used by the
+  // auto-push after an import, which must touch ONLY the records that import
+  // just created. Records outside the scope are ignored entirely: their Fusion
+  // entries match nothing in scope, so they're skipped rather than flagged,
+  // deleted, or re-created. Without the scope an auto-push would also write
+  // every unrelated edit sitting in the library, which is not the user's call
+  // to have made for them.
+  // `silent` suppresses this action's own toast so a caller that already
+  // reports the outcome (the auto-push folds into the import's summary) doesn't
+  // produce two toasts describing one thing.
+  const pushHoldersToFusion = useCallback(async ({ dryRun = false, recordIds = null, silent = false } = {}) => {
     const libs = shopSettingsRef.current?.holder_libraries || [];
     if (!libs.length) throw new Error('No Fusion holder library is linked');
     if (localModeRef.current) throw new Error('Local mode is read-only');
@@ -565,7 +584,8 @@ export function AppProvider({ children }) {
       const list = Array.isArray(raw?.data) ? raw.data : [];
       // Records belong to the library they came from; one that has never been
       // pushed anywhere goes to the default.
-      const scoped = allRecords.filter(r => (r.library_id || defaultLib) === lib.id);
+      const scoped = allRecords.filter(r => (r.library_id || defaultLib) === lib.id
+        && (!recordIds || recordIds.has(r.id)));
       const plan = holderPushPlan(list, scoped, undefined, holderRecordToFusion);
       byLibrary.push({ lib, raw, list, plan });
     }
@@ -670,9 +690,11 @@ export function AppProvider({ children }) {
       if (demoModeRef.current) dispatch({ type: 'SET_HOLDERS', holders: demoNext });
       else await loadHolders();
       dispatch({ type: 'SAVE_SUCCESS' });
-      notify(`Pushed ${summary.updated + summary.created} holder${summary.updated + summary.created === 1 ? '' : 's'} to Fusion`
-        + (summary.flagged.length ? ` · ${summary.flagged.length} left alone for review` : ''),
-        summary.flagged.length ? 'warning' : 'success');
+      if (!silent) {
+        notify(`Pushed ${summary.updated + summary.created} holder${summary.updated + summary.created === 1 ? '' : 's'} to Fusion`
+          + (summary.flagged.length ? ` · ${summary.flagged.length} left alone for review` : ''),
+          summary.flagged.length ? 'warning' : 'success');
+      }
       return { ...summary, wrote: true };
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
