@@ -575,34 +575,41 @@ export default function HolderDetail({
           corrected holder only reaches an existing tool when that tool is
           written. That happens by itself on each tool's next save; this is the
           "make it land now" button. */}
-      {restampPreview?.tools?.length > 0 ? (
+      {/* ⚠️ NOTHING STALE MEANS NOTHING TO DO — so it must not look like a job.
+          Rendering the same prominent banner + button for "all up to date" read
+          as an outstanding task that couldn't be completed: press Re-stamp, the
+          words don't change, because there was never anything to change. It is
+          now a quiet line, and it says WHY they're current — linking a tool
+          rewrites it, so re-stamp is usually already done for you. */}
+      {restampPreview?.tools?.length > 0 && staleCount === 0 ? (
+        <div className="holder-restamp-ok">
+          <Check size={13} />
+          <span>
+            <b>{restampPreview.tools.length} tool{restampPreview.tools.length === 1 ? '' : 's'}</b>
+            {restampPreview.tools.length === 1 ? ' uses' : ' use'} this holder, all carrying its
+            current geometry. Linking or saving a tool writes the holder into it, so this is
+            usually already done for you — nothing to re-stamp.
+          </span>
+          <button className="btn btn-ghost btn-xs" onClick={onRestamp}
+            title="Rewrite these tools even though they already match — normally unnecessary">
+            <RefreshCw size={12} /> Re-stamp anyway
+          </button>
+        </div>
+      ) : restampPreview?.tools?.length > 0 ? (
         <div className="holder-restamp-banner">
           {/* ⚠️ "Uses this holder" and "is carrying the CURRENT geometry" are
               different questions, and only the second one is a call to act.
               Leading with the usage count meant a holder whose tools were all
               up to date looked identical to one where every tool was stale. */}
           <div className="holder-restamp-text">
-            {staleCount > 0 ? (
-              <>
-                <strong>
-                  {staleCount} of {restampPreview.tools.length} tool
-                  {restampPreview.tools.length === 1 ? '' : 's'} using this holder
-                  {staleCount === 1 ? ' is' : ' are'} carrying an older copy of its geometry.
-                </strong>{' '}
-                Fusion bakes the holder into each tool, so a correction here only reaches a tool
-                when that tool is written. Re-stamp pushes it now — you’ll see each tool’s
-                gauge-length change first.
-              </>
-            ) : (
-              <>
-                <strong>
-                  {restampPreview.tools.length} tool{restampPreview.tools.length === 1 ? ' uses' : 's use'} this
-                  holder, and {restampPreview.tools.length === 1 ? 'it is' : 'they are all'} up to date.
-                </strong>{' '}
-                Each carries its own frozen copy of the geometry — Fusion bakes it in — so they
-                pick up any future change on their next save, or from Re-stamp.
-              </>
-            )}
+            <strong>
+              {staleCount} of {restampPreview.tools.length} tool
+              {restampPreview.tools.length === 1 ? '' : 's'} using this holder
+              {staleCount === 1 ? ' is' : ' are'} carrying an older copy of its geometry.
+            </strong>{' '}
+            Fusion bakes the holder into each tool, so a correction here only reaches a tool
+            when that tool is written. Re-stamp pushes it now — you’ll see each tool’s
+            gauge-length change first.
           </div>
           <div className="holder-restamp-actions">
             {restampPreview.gaugeWarnings?.length > 0 && (
@@ -616,13 +623,9 @@ export default function HolderDetail({
                 as a contradiction, and acting on it downloads and re-uploads
                 the whole tool library to change nothing. Say what it is. */}
             <button className="btn btn-secondary btn-sm" onClick={onRestamp}
-              title={staleCount > 0
-                ? 'Write the current holder geometry into these tools now'
-                : 'These tools already match the holder — rewriting them changes nothing. Only useful to force a rewrite.'}>
+              title="Write the current holder geometry into these tools now">
               <RefreshCw size={13} />
-              {staleCount > 0
-                ? ` Re-stamp ${staleCount} tool${staleCount === 1 ? '' : 's'}`
-                : ' Re-stamp anyway'}
+              {` Re-stamp ${staleCount} tool${staleCount === 1 ? '' : 's'}`}
             </button>
           </div>
         </div>
