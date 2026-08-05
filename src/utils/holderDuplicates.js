@@ -37,8 +37,13 @@ export const holderOwnsGuid = (record, guid) =>
   !!guid && holderGuidsOf(record).includes(guid);
 
 // The record a Fusion guid resolves to, following merges.
+// ⚠️ ARCHIVED RECORDS ARE SKIPPED. A merge moves the loser's guid onto the
+// survivor, so a tool carrying the old guid must land on the survivor — but the
+// archived loser still has that guid in its own `fusion_guid` and would match
+// first if it were searched, re-attaching the tool to the geometry the merge
+// just retired.
 export const holderForGuid = (records, guid) =>
-  (records || []).find(h => holderOwnsGuid(h, guid)) || null;
+  (records || []).find(h => h?.archived !== true && holderOwnsGuid(h, guid)) || null;
 
 // ─── Detection ──────────────────────────────────────────────────────────────
 
@@ -117,7 +122,9 @@ export function compareHolders(a, b, config, tol = HOLDER_GAUGE_TOL_IN) {
 // Every duplicate candidate in the library, best first. Pairs only — a
 // three-way pile-up shows as three pairs, and merging one re-runs the rest.
 export function findHolderDuplicates(records, config, tol = HOLDER_GAUGE_TOL_IN) {
-  const list = records || [];
+  // An archived holder is already retired — offering to merge it again would
+  // be offering to redo a decision that's been made.
+  const list = (records || []).filter(r => r && r.archived !== true);
   const out = [];
   for (let i = 0; i < list.length; i++) {
     for (let j = i + 1; j < list.length; j++) {
@@ -206,11 +213,22 @@ export function applyHolderMerge(file, survivorId, loserId) {
   const loser = holders.find(h => h.id === loserId);
   if (!survivor || !loser) return file;
   const { record } = mergeHolderRecords(survivor, loser);
+  // ⚠️ THE LOSER IS ARCHIVED, NOT DROPPED. Its geometry is the only surviving
+  // record of what the shop used to be running — worth keeping as a reference
+  // even though nothing should ever be matched to it again. Archived records
+  // are invisible to every matcher and are removed from Fusion on the next
+  // push, so retiring one is complete without destroying it.
   return {
     ...file,
-    holders: holders
-      .filter(h => h.id !== loserId)
-      .map(h => (h.id === survivorId ? record : h)),
+    holders: holders.map(h => {
+      if (h.id === survivorId) return record;
+      if (h.id !== loserId) return h;
+      const now = new Date().toISOString();
+      return {
+        ...h, archived: true, archived_at: now,
+        archived_reason: 'merged', merged_into: survivorId, updated_at: now,
+      };
+    }),
   };
 }
 

@@ -4,9 +4,11 @@ import {
   resolveHolderForWrite, toolHolderIsStale, assemblyGaugeCheck, gaugeToleranceIn,
   ASSEMBLY_GAUGE_WARN_IN, ASSEMBLY_GAUGE_IMPLAUSIBLE_MM, ASSEMBLY_GAUGE_IMPLAUSIBLE_IN,
   backfillHolderIds, assemblyUsesHolder, toolsUsingHolder, assemblyCountUsingHolder,
+  staleHolderTools,
 } from './holderResolve.js';
 import { fusionHolderToRecord } from './holderRecord.js';
 import { mergeHolderRecords } from '../utils/holderDuplicates.js';
+import { segmentsMatch } from './holderIdentity.js';
 import { splitToFusionInstances } from './logicalTools.js';
 
 const REAL = JSON.parse(
@@ -534,5 +536,145 @@ describe('assemblyUsesHolder', () => {
     const tools = [{ assemblies: [{ holder_id: 'r1' }, { holder_id: 'r1' }, { holder_id: 'x' }] }];
     expect(assemblyCountUsingHolder(tools, rec)).toBe(2);
     expect(toolsUsingHolder(tools, rec)).toHaveLength(1);
+  });
+});
+
+// ─── Archived holders are invisible ─────────────────────────────────────────
+// A merged-away or removed holder is one the shop decided nothing should be
+// on. Every path that could put a tool back on it has to refuse, or the archive
+// is just a label.
+describe('an archived holder is never matched or written', () => {
+  const archived = () => ({ ...oldRecord(), archived: true });
+
+  it('is not a geometry source, even via a stored holder_id', () => {
+    const r = resolveHolderForWrite(OLD.guid,
+      { records: [archived()], fusionHolders: [], holderId: archived().id });
+    expect(r).toBeNull();
+  });
+
+  it('falls through to the Fusion entry rather than resurrecting the record', () => {
+    const r = resolveHolderForWrite(OLD.guid, { records: [archived()], fusionHolders: [OLD] });
+    expect(r.source).toBe('fusion');
+  });
+
+  // A merge moves the loser's guid onto the survivor. The archived loser still
+  // has that guid in its OWN fusion_guid and would match first if the archive
+  // were searched — re-attaching the tool to the geometry the merge retired.
+  it('a tool on a merged-away guid lands on the SURVIVOR, not the archived loser', () => {
+    const { record: survivor } = mergeHolderRecords(newRecord(), oldRecord());
+    const retired = { ...oldRecord(), archived: true, merged_into: survivor.id };
+    const r = resolveHolderForWrite(OLD.guid,
+      { records: [retired, survivor], fusionHolders: [OLD] });
+    expect(r.source).toBe('app');
+    expect(r.recordId).toBe(survivor.id);
+  });
+
+  it('is never picked up by the backfill', () => {
+    const tool = {
+      id: 't1',
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'i1', holder_guid: OLD.guid }],
+      _instancesRaw: [{ guid: 'i1', holder: { ...OLD } }],
+    };
+    expect(backfillHolderIds([tool], [archived()])[0].assemblies[0].holder_id).toBeUndefined();
+  });
+});
+
+// ─── Which tools are carrying an older copy? ────────────────────────────────
+// THE LEAK THE LINK LIST CANNOT SEE: an already-linked assembly is skipped
+// there, and a tool arriving on a merged-away guid is auto-linked to the
+// survivor — correctly pointed, wrongly shaped, and nothing said so.
+describe('staleHolderTools', () => {
+  const toolOn = (holder, id = 't1') => ({
+    id,
+    assemblies: [{ assembly_id: 'a1', instance_guid: 'i1', holder_guid: holder.guid }],
+    _instancesRaw: [{ guid: 'i1', holder: { ...holder } }],
+  });
+
+  it('is quiet when the baked copy already matches the record', () => {
+    const found = staleHolderTools([toolOn(OLD)],
+      { records: [oldRecord()], fusionHolders: [OLD] });
+    expect(found).toHaveLength(0);
+  });
+
+  it('finds a tool whose holder was corrected here after it was made', () => {
+    const corrected = { ...oldRecord(), segments: newRecord().segments };
+    const found = staleHolderTools([toolOn(OLD)],
+      { records: [corrected], fusionHolders: [OLD] });
+    expect(found.map(t => t.id)).toEqual(['t1']);
+  });
+
+  it('finds the AUTO-LINKED tool that arrives on a merged-away holder', () => {
+    const { record: survivor } = mergeHolderRecords(newRecord(), oldRecord());
+    // Auto-linked by the backfill, so the link list will never show it.
+    const [tool] = backfillHolderIds([toolOn(OLD)], [survivor]);
+    expect(tool.assemblies[0].holder_id).toBe(survivor.id);
+    expect(staleHolderTools([tool], { records: [survivor], fusionHolders: [OLD] }))
+      .toHaveLength(1);
+  });
+
+  it('scopes to one holder, and skips no-Fusion tools', () => {
+    const corrected = { ...oldRecord(), segments: newRecord().segments };
+    const other = { ...newRecord(), id: 'rec-other' };
+    expect(staleHolderTools([toolOn(OLD)],
+      { records: [corrected], fusionHolders: [OLD], record: other })).toHaveLength(0);
+    expect(staleHolderTools([{ ...toolOn(OLD), no_fusion_link: true }],
+      { records: [corrected], fusionHolders: [OLD] })).toHaveLength(0);
+  });
+});
+
+// ─── The stale sweep, measured on the real library ──────────────────────────
+// ⚠️ THE BUG THIS LOCKS. toolHolderIsStale compared toFixed(4) strings with no
+// tolerance and no unit conversion, and treated a changed baked GUID as
+// staleness. Run over the shop's real data that reported 190 of 212 linked
+// tools as "carrying an older copy of their holder" — while the strict identity
+// matcher said 187 of them were the SAME holder and Fusion re-issues guids
+// constantly. A flag that fires on 90% of the library is wallpaper, and the
+// number it showed was untrue. One comparison rule, and it asks about GEOMETRY.
+describe('staleHolderTools over the real reference library', () => {
+  const REAL_TOOLS = JSON.parse(
+    readFileSync(new URL('../../FUSION TOOL Library REF/Full_Type_List Examples.json', import.meta.url), 'utf8')
+  ).data.filter(t => t.holder);
+
+  const setup = () => {
+    const records = REAL.map(f => fusionHolderToRecord(f));
+    const tools = REAL_TOOLS.map((t, i) => ({
+      id: `t${i}`,
+      assemblies: [{ assembly_id: `a${i}`, instance_guid: t.guid, holder_guid: t.holder.guid }],
+      _instancesRaw: [t],
+    }));
+    return { records, tools: backfillHolderIds(tools, records) };
+  };
+
+  it('never contradicts the identity matcher', () => {
+    const { records, tools } = setup();
+    const stale = staleHolderTools(tools, { records, fusionHolders: REAL });
+    for (const t of stale) {
+      const a = t.assemblies[0];
+      const rec = records.find(r => r.id === a.holder_id);
+      if (!rec) continue;                       // resolved through Fusion, not a record
+      const baked = t._instancesRaw[0].holder;
+      // If identity says these are the same holder, staleness must not disagree.
+      expect(segmentsMatch(baked.segments, baked.unit, rec.segments, rec.unit)).toBe(false);
+    }
+  });
+
+  it('flags a handful, not the whole library', () => {
+    const { records, tools } = setup();
+    const stale = staleHolderTools(tools, { records, fusionHolders: REAL });
+    const linked = tools.filter(t => t.assemblies[0].holder_id).length;
+    expect(linked).toBeGreaterThan(200);        // the data still looks how we think
+    // The real answer is a few genuinely-moved holders — nowhere near all of them.
+    expect(stale.length).toBeLessThan(linked * 0.1);
+  });
+
+  it('a genuinely corrected holder DOES flag its tools', () => {
+    const { records, tools } = setup();
+    const target = records.find(r => tools.some(t => t.assemblies[0].holder_id === r.id));
+    const corrected = records.map(r => (r.id === target.id
+      ? { ...r, segments: r.segments.map((s, i) => (i === 0 ? { ...s, height: s.height + 5 } : s)) }
+      : r));
+    const before = staleHolderTools(tools, { records, fusionHolders: REAL }).length;
+    const after = staleHolderTools(tools, { records: corrected, fusionHolders: REAL }).length;
+    expect(after).toBeGreaterThan(before);
   });
 });

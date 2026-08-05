@@ -17,13 +17,13 @@ import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { backfillMaterialPresetIds, backfillPresetAssemblyLinks, autoLinkMaterialByGrade } from '../utils/presetNaming.js';
 import { backfillPreferredMachineIds } from '../utils/machines.js';
 import { backfillHolderIds } from '../schema/holderResolve.js';
-import { matchFusionHolder, holderPushPlan, applyHolderPushPlan, pushChangeGroup } from '../schema/holderIdentity.js';
+import { matchFusionHolder, holderPushPlan, applyHolderPushPlan, pushChangeGroup, lastPushedFrom, retiredHolderFor } from '../schema/holderIdentity.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry, getActiveVendorRegistry, backfillPurchasingRegistryIds } from '../schema/vendorRegistry.js';
 import { findJob, newJob } from '../utils/jobs.js';
-import { fusionHolderToRecord, holderRecordToFusion } from '../schema/holderRecord.js';
+import { fusionHolderToRecord, holderRecordToFusion, archiveHolderRecord, restoreArchivedHolder } from '../schema/holderRecord.js';
 import { setDefaultUnit } from '../utils/units.js';
 import { getDemoData, isDemoRequested } from '../demo/index.js';
 import {
@@ -401,8 +401,14 @@ export function AppProvider({ children }) {
   // import source and (later) an export target. Writes here are metadata-only —
   // nothing touches Fusion or any tool. Propagation to tools is deliberately a
   // separate, explicit step (see the re-stamp work).
+  // ⚠️ The onSaved hook keeps holderLibraryRef in step SYNCHRONOUSLY. Refs are
+  // assigned during render, so an action that saves and then immediately reads
+  // the ref — the auto-push straight after an import does exactly that — would
+  // otherwise read the PREVIOUS library and silently drop the records it just
+  // wrote. Same reason loadHolders takes an explicit list.
   const saveHolderLibrary = useCallback((holderLibrary) =>
-    saveSharedFile('holderLibrary', holderLibrary, 'SET_HOLDER_LIBRARY'), [saveSharedFile]);
+    saveSharedFile('holderLibrary', holderLibrary, 'SET_HOLDER_LIBRARY',
+      (data) => { holderLibraryRef.current = data; }), [saveSharedFile]);
 
   // Upsert one holder record by id. Reads the ref so concurrent edits in the
   // same tick compose instead of clobbering.
@@ -454,9 +460,44 @@ export function AppProvider({ children }) {
     });
   }, [saveHolderLibrary]);
 
+  // ⚠️ REMOVING A HOLDER ARCHIVES IT — it is never dropped from the file. Its
+  // geometry is the only surviving record of what the shop used to run, and
+  // "in case" is exactly why the archive exists. Archived records are invisible
+  // to every matcher and are removed from Fusion on the next push, so retiring
+  // one is complete without destroying it.
   const deleteHolderRecord = useCallback((id) => {
     const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
-    return saveHolderLibrary({ ...file, holders: (file.holders || []).filter(h => h.id !== id) });
+    return saveHolderLibrary({
+      ...file,
+      holders: (file.holders || []).map(h => (h.id === id
+        ? archiveHolderRecord(h, 'removed') : h)),
+    });
+  }, [saveHolderLibrary]);
+
+  // Re-run the holder_id backfill against the CURRENT records, in memory.
+  // ⚠️ Needed after a merge. The loser is archived, so every tool still holding
+  // its holder_id now points at a record nothing resolves — and the link list,
+  // which offers exactly those, would jump as though merging had CREATED work.
+  // The load-time backfill already repoints them (guid → survivor); this is the
+  // same pure pass run immediately so the page doesn't need a reload to agree.
+  // In memory only, persisted lazily on each tool's next save — same contract.
+  const relinkHolders = useCallback(() => {
+    const recs = (holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY).holders || [];
+    const next = backfillHolderIds(toolsRef.current || [], recs);
+    if (next !== toolsRef.current) dispatch({ type: 'SET_TOOLS', tools: next });
+  }, []);
+
+  // Restore is a COPY: a new id and ref, no Fusion link, no push history — so
+  // it goes out as a brand-new holder. Deliberately not a revival of the old
+  // identity, which would re-attach every tool still carrying the old guid to
+  // the geometry the archive was retiring.
+  const restoreHolderRecord = useCallback((id) => {
+    const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
+    const src = (file.holders || []).find(h => h.id === id);
+    if (!src) return Promise.reject(new Error('That holder is not in the archive'));
+    const copy = restoreArchivedHolder(src);
+    return saveHolderLibrary({ ...file, holders: [...(file.holders || []), copy] })
+      .then(() => copy);
   }, [saveHolderLibrary]);
 
   // Import app records from the linked read-only Fusion holder library. Import
@@ -478,9 +519,17 @@ export function AppProvider({ children }) {
     const added = [];
     const flagged = [];
     let known = 0;
+    let retired = 0;
     const pool = [...existing];
     for (const f of source) {
       if (!f?.guid && !f?.segments) continue;
+      // ⚠️ NEVER RE-IMPORT A HOLDER WE RETIRED. Archived records are invisible
+      // to matching by design, so without this check the importer read a
+      // retired holder's Fusion entry as one it had never seen and re-created
+      // it — undoing the retirement the moment you clicked Import before
+      // pushing. It's still IN Fusion until the next push; that's what the push
+      // is for, not something to adopt back.
+      if (retiredHolderFor(f, pool)) { retired++; continue; }
       const m = matchFusionHolder(f, pool);
       if (m.status === 'exact') { known++; continue; }
       if (m.status !== 'none') { flagged.push({ entry: f, ...m }); continue; }
@@ -488,7 +537,10 @@ export function AppProvider({ children }) {
       added.push(rec);
       pool.push(rec);   // so two identical entries in one import don't both land
     }
-    const result = { added: added.length, skipped: known, flagged };
+    // addedIds lets the caller push EXACTLY what was just imported (see the
+    // auto-push in HoldersPage) — scoping it to these records is what makes
+    // that push provably additive.
+    const result = { added: added.length, addedIds: added.map(r => r.id), skipped: known, retired, flagged };
     if (!added.length) return Promise.resolve(result);
     return saveHolderLibrary({ ...file, holders: [...existing, ...added] }).then(() => result);
   }, [saveHolderLibrary]);
@@ -503,7 +555,17 @@ export function AppProvider({ children }) {
   // holderPushPlan. Half-matches are left byte-for-byte alone and reported.
   // `dryRun` builds the same plan and writes nothing, which is what the preview
   // shows.
-  const pushHoldersToFusion = useCallback(async ({ dryRun = false } = {}) => {
+  // `recordIds` scopes the push to a specific set of records — used by the
+  // auto-push after an import, which must touch ONLY the records that import
+  // just created. Records outside the scope are ignored entirely: their Fusion
+  // entries match nothing in scope, so they're skipped rather than flagged,
+  // deleted, or re-created. Without the scope an auto-push would also write
+  // every unrelated edit sitting in the library, which is not the user's call
+  // to have made for them.
+  // `silent` suppresses this action's own toast so a caller that already
+  // reports the outcome (the auto-push folds into the import's summary) doesn't
+  // produce two toasts describing one thing.
+  const pushHoldersToFusion = useCallback(async ({ dryRun = false, recordIds = null, silent = false } = {}) => {
     const libs = shopSettingsRef.current?.holder_libraries || [];
     if (!libs.length) throw new Error('No Fusion holder library is linked');
     if (localModeRef.current) throw new Error('Local mode is read-only');
@@ -522,7 +584,8 @@ export function AppProvider({ children }) {
       const list = Array.isArray(raw?.data) ? raw.data : [];
       // Records belong to the library they came from; one that has never been
       // pushed anywhere goes to the default.
-      const scoped = allRecords.filter(r => (r.library_id || defaultLib) === lib.id);
+      const scoped = allRecords.filter(r => (r.library_id || defaultLib) === lib.id
+        && (!recordIds || recordIds.has(r.id)));
       const plan = holderPushPlan(list, scoped, undefined, holderRecordToFusion);
       byLibrary.push({ lib, raw, list, plan });
     }
@@ -536,6 +599,23 @@ export function AppProvider({ children }) {
         updates: plan.updates.filter(u => u.kind === 'update' && u.stale).length,
         adopts: plan.updates.filter(u => u.kind === 'adopt').length,
         creates: plan.creates.length,
+        // ⚠️ NAMED, not counted. A create appends a NEW holder to Fusion, and
+        // the one way to get an accidental duplicate is a record whose geometry
+        // was edited here before its first push: the Fusion entry it came from
+        // no longer matches on shape OR on our id, so it reads as a holder we've
+        // never seen and a second copy gets added. "20 holders not in Fusion at
+        // all" is exactly where that hides — so say which ones.
+        createRows: plan.creates.map(r => ({
+          name: r.description || r.holder_ref,
+          neverPushed: !r.fusion_guid,
+        })),
+        // Removals are the destructive half, so they are ALWAYS named with the
+        // reason they're being removed — never a bare count.
+        deletes: plan.deletes.length,
+        deleteRows: plan.deletes.map(d => ({
+          name: d.entry?.description || d.entry?.['product-id'] || '(no description)',
+          why: d.why,
+        })),
         flagged: plan.flagged,
         // Every holder the write touches, with the fields that move — so the
         // dialog can name them instead of showing a bare count.
@@ -546,6 +626,7 @@ export function AppProvider({ children }) {
       })),
       updated: byLibrary.reduce((a, b) => a + b.plan.updates.filter(u => u.stale).length, 0),
       created: byLibrary.reduce((a, b) => a + b.plan.creates.length, 0),
+      deleted: byLibrary.reduce((a, b) => a + b.plan.deletes.length, 0),
       flagged: byLibrary.flatMap(b => b.plan.flagged),
       wrote: false,
     };
@@ -557,10 +638,15 @@ export function AppProvider({ children }) {
       // as identity (see holderIdentity.js). Stamped after each library's write
       // so a failure can't leave the app claiming a link that isn't there.
       const guidByRecord = new Map();
+      // What Fusion now holds for each record. Compared against the record on
+      // the NEXT push to tell "the user redrew this here" from "someone edited
+      // it in Fusion" — the two readings of `ref-only` the app previously could
+      // not separate, and got backwards.
+      const pushedByRecord = new Map();
       const demoNext = [];
       for (const { lib, raw, list, plan } of byLibrary) {
         // Nothing to say to Fusion for this library — don't burn a write.
-        if (!plan.updates.some(u => u.stale) && !plan.creates.length) continue;
+        if (!plan.updates.some(u => u.stale) && !plan.creates.length && !plan.deletes.length) continue;
         const next = applyHolderPushPlan(list, plan, holderRecordToFusion);
         if (demoModeRef.current) {
           // Demo is a real sandbox: the write lands in memory so a second push
@@ -570,10 +656,19 @@ export function AppProvider({ children }) {
           await aps.saveHolderLibrary(lib.projectId, lib.folderId, lib.itemId, lib.fileName,
             { ...raw, data: next });
         }
-        for (const u of plan.updates) guidByRecord.set(u.record.id, u.entry.guid || null);
-        for (const c of plan.creates) {
-          const made = next.find(e => e?.['product-id'] === c.holder_ref);
-          guidByRecord.set(c.id, made?.guid || null);
+        // Read back what was actually WRITTEN — never off the pre-write entry,
+        // which recorded the value we had just replaced and made the next push
+        // want to swap it back.
+        // ⚠️ FOUND BY holder_ref, NOT BY INDEX. Deletes shift every later
+        // entry, so an index into the ORIGINAL list no longer addresses the
+        // same holder in `next`. The ref is on exactly one entry (the plan
+        // enforces one record → one entry), so it survives the shift.
+        const writtenByRef = new Map(next.filter(e => e?.['product-id'])
+          .map(e => [e['product-id'], e]));
+        for (const r of [...plan.updates.map(u => u.record), ...plan.creates]) {
+          if (!r) continue;
+          guidByRecord.set(r.id, writtenByRef.get(r.holder_ref)?.guid || null);
+          pushedByRecord.set(r.id, lastPushedFrom(r));
         }
       }
       if (guidByRecord.size) {
@@ -581,7 +676,12 @@ export function AppProvider({ children }) {
         await saveHolderLibrary({
           ...live,
           holders: (live.holders || []).map(h => (guidByRecord.has(h.id)
-            ? { ...h, fusion_guid: guidByRecord.get(h.id), library_id: h.library_id || defaultLib }
+            ? {
+              ...h,
+              fusion_guid: guidByRecord.get(h.id),
+              last_pushed: pushedByRecord.get(h.id) || h.last_pushed,
+              library_id: h.library_id || defaultLib,
+            }
             : h)),
         });
       }
@@ -590,9 +690,11 @@ export function AppProvider({ children }) {
       if (demoModeRef.current) dispatch({ type: 'SET_HOLDERS', holders: demoNext });
       else await loadHolders();
       dispatch({ type: 'SAVE_SUCCESS' });
-      notify(`Pushed ${summary.updated + summary.created} holder${summary.updated + summary.created === 1 ? '' : 's'} to Fusion`
-        + (summary.flagged.length ? ` · ${summary.flagged.length} left alone for review` : ''),
-        summary.flagged.length ? 'warning' : 'success');
+      if (!silent) {
+        notify(`Pushed ${summary.updated + summary.created} holder${summary.updated + summary.created === 1 ? '' : 's'} to Fusion`
+          + (summary.flagged.length ? ` · ${summary.flagged.length} left alone for review` : ''),
+          summary.flagged.length ? 'warning' : 'success');
+      }
       return { ...summary, wrote: true };
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
@@ -1356,6 +1458,8 @@ export function AppProvider({ children }) {
       saveHolderPart,
       deleteHolderPart,
       deleteHolderRecord,
+      restoreHolderRecord,
+      relinkHolders,
       importHoldersFromFusion,
       pushHoldersToFusion,
       clearError,

@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy, Upload, Link2, Info } from 'lucide-react';
+import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy, Upload, Link2, Info, ChevronDown, ChevronRight } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import HolderPill from './HolderPill.jsx';
 import HolderDetail from './HolderDetail.jsx';
@@ -17,7 +17,7 @@ import { recordsWithBodyDivergence } from '../utils/holderBody.js';
 import { proposeHolderParts, applyPartProposals, holdersWithPartDrift, holderPartsOf } from '../utils/holderParts.js';
 import { findHolderDuplicates, holdersInDuplicates, applyHolderMerge, compareHolders, holderGuidsOf, toolsFollowingMerge } from '../utils/holderDuplicates.js';
 import { auditFusionHolders, holdersOutOfSync } from '../schema/holderIdentity.js';
-import { assemblyCountUsingHolder, assemblyUsesHolder } from '../schema/holderResolve.js';
+import { assemblyCountUsingHolder, assemblyUsesHolder, staleHolderTools } from '../schema/holderResolve.js';
 import HolderMergeModal from './HolderMergeModal.jsx';
 import RestampModal from './RestampModal.jsx';
 import PushHoldersModal from './PushHoldersModal.jsx';
@@ -258,7 +258,11 @@ function HolderList({
   holders, config, usageOf, onOpen, onNew, onHeal, onImport, onLinkParts, onDuplicates, onPush, unlinked, canPush,
   onLinkTools, unlinkedTools, showWorkflow, onShowWorkflow, onDismissWorkflow,
   importable, googleAuthenticated, driftIds, partCount, duplicateIds,
+  archived, onRestore, staleTools, staleByHolder = [],
 }) {
+  // Archived holders are hidden by default and live below the list — they are a
+  // reference, not part of the library.
+  const [showArchive, setShowArchive] = useState(false);
   const [q, setQ] = useState('');
   const [fType, setFType] = useState(null);
   const [fTaper, setFTaper] = useState(null);
@@ -456,17 +460,47 @@ function HolderList({
         <div className="holder-sync-banner">
           <Upload size={15} />
           <div>
-            <b>Fusion doesn’t have {unlinked} of your {holders.length} holder records yet.</b>
+            {/* ⚠️ NOT "N of your M records" — this count also includes holders
+                being REMOVED from Fusion, which aren't in the library count at
+                all, so the ratio read "20 of your 19". */}
+            <b>Fusion is out of step on {unlinked} holder{unlinked === 1 ? '' : 's'}.</b>
             <div>
               Until you push, those records live only in this app — if it went away, the work
-              would go with it. The first push mostly just writes each holder’s ID into Fusion’s
-              product-id field; the geometry Fusion already has stays as it is. Open it to see
-              exactly what changes, holder by holder, before anything is written.
+              would go with it. Importing stamps a new holder’s ID into Fusion for you; what’s
+              left here is anything <b>changed since</b> — a redrawn holder, a rename, or one
+              retired that Fusion still has. Open it to see exactly what changes, holder by
+              holder, before anything is written.
             </div>
           </div>
           <button className="btn btn-primary btn-sm" onClick={onPush}>
             <Upload size={13} /> Review &amp; push
           </button>
+        </div>
+      )}
+
+      {/* The other half of the same rule, pointed at the TOOLS. A corrected
+          holder doesn't reach an existing tool until that tool is written, so
+          without this the library quietly holds two versions of the same
+          holder and nothing says which tools are on the old one. */}
+      {staleTools.length > 0 && (
+        <div className="holder-sync-banner holder-stale-banner">
+          <Link2 size={15} />
+          <div>
+            <b>{staleTools.length} tool{staleTools.length === 1 ? '' : 's'} still carry an older copy of their holder.</b>
+            <div>
+              Fusion freezes a holder into each tool, so a correction here only reaches a tool
+              when that tool is written. Open a holder below and <b>Re-stamp</b> — you’ll see
+              each tool’s gauge-length change before anything is written.
+            </div>
+            <div className="holder-stale-list">
+              {staleByHolder.map(({ holder, count }) => (
+                <button key={holder.id} className="holder-stale-chip" onClick={() => onOpen(holder)}>
+                  {holder.description || holder.holder_ref}
+                  <span className="holder-stale-chip-n">{count}</span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -638,6 +672,50 @@ function HolderList({
           </div>
         )}
       </div>
+
+      {/* ─── The archive ───────────────────────────────────────────────────
+          Merged-away and removed holders. Kept because their geometry is the
+          only surviving record of what the shop used to be running — but they
+          are not part of the library: nothing matches to them, and Fusion's
+          copy is deleted on the next push. Off by default, out of the way. */}
+      {archived.length > 0 && (
+        <div className="holder-archive">
+          <button className="holder-archive-toggle" onClick={() => setShowArchive(s => !s)}>
+            {showArchive ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            <b>Archive</b>
+            <span className="holder-archive-count">{archived.length}</span>
+            <span className="holder-archive-note">
+              Merged away or removed. Kept for reference — never matched to a tool.
+            </span>
+          </button>
+          {showArchive && (
+            <div className="holder-archive-list">
+              {archived.map(h => (
+                <div key={h.id} className="holder-archive-row">
+                  <button className="holder-archive-name" onClick={() => onOpen(h)}>
+                    {h.description || h.holder_ref}
+                  </button>
+                  <span className="holder-conf medium">Not in Fusion</span>
+                  <span className="holder-archive-why">
+                    {h.archived_reason === 'merged'
+                      ? `Merged into ${holders.find(x => x.id === h.merged_into)?.description || 'another holder'}`
+                      : 'Removed from the library'}
+                    {h.archived_at ? ` · ${new Date(h.archived_at).toLocaleDateString()}` : ''}
+                  </span>
+                  {/* Restore makes a COPY — a new holder with a new ID. Bringing
+                      the old identity back would re-attach every tool still
+                      carrying its guid to the geometry this archive retired. */}
+                  <button className="btn btn-secondary btn-xs" onClick={() => onRestore(h)}
+                    disabled={!googleAuthenticated}
+                    title="Create a new holder from this one — a new record with a new ID, which pushes to Fusion as a new holder. The archived copy stays here.">
+                    <Copy size={12} /> Restore as new
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -646,7 +724,8 @@ export default function HoldersPage() {
   const {
     holderLibrary, holders: fusionHolders, shopSettings, tools,
     saveHolderRecord, deleteHolderRecord, saveHolderLibrary, saveShopSettings, saveHolderPart,
-    importHoldersFromFusion, pushHoldersToFusion, restampHolderTools, linkToolsToHolders, googleAuthenticated, googleUser, demoMode, notify,
+    importHoldersFromFusion, pushHoldersToFusion, restampHolderTools, linkToolsToHolders,
+    restoreHolderRecord, relinkHolders, googleAuthenticated, googleUser, demoMode, notify,
   } = useApp();
   const navigate = useNavigate();
   const [openId, setOpenId] = useState(null);
@@ -659,12 +738,20 @@ export default function HoldersPage() {
   // Falls back to the seeded lookups for a shop whose settings file predates
   // holder_config — see holderConfigOf.
   const config = holderConfigOf(shopSettings);
-  const records = holderLibrary?.holders || [];
+  // ⚠️ `records` is the LIVE library everywhere on this page. Archived holders
+  // are retired — merged away or removed — and are deliberately absent from the
+  // list, the counts, the duplicate scan and every matcher. They are reachable
+  // only through the archive toggle at the bottom.
+  const allRecords = holderLibrary?.holders || [];
+  const records = useMemo(() => allRecords.filter(h => h.archived !== true), [allRecords]);
+  const archived = useMemo(() => allRecords.filter(h => h.archived === true), [allRecords]);
   const parts = holderLibrary?.parts || [];
   // Holders whose geometry no longer matches the part record they point at.
   const driftIds = useMemo(() => holdersWithPartDrift(records, holderLibrary), [records, holderLibrary]);
   const duplicateIds = useMemo(() => holdersInDuplicates(records, config), [records, config]);
-  const open = records.find(h => h.id === openId) || null;
+  // Opened from the archive too — the point of keeping one is being able to
+  // look at its geometry.
+  const open = allRecords.find(h => h.id === openId) || null;
   const allLocations = [...new Set(records.map(h => h.location).filter(Boolean))];
 
   // How many linked Fusion holders have no app record yet. Counted with the
@@ -707,7 +794,11 @@ export default function HoldersPage() {
     const warn = inUse
       ? `\n\n⚠ ${inUse} tool assembl${inUse === 1 ? 'y uses' : 'ies use'} this holder. They will fall back to the Fusion holder library the next time each tool is saved — any correction made here is lost for them.`
       : '';
-    if (!window.confirm(`Delete the holder record "${record.description}"?\n\nThis removes the app record only — the Fusion holder library is untouched.${warn}`)) return;
+    if (!window.confirm(
+      `Retire the holder "${record.description}"?\n\n`
+      + 'It moves to the archive: it leaves the library, nothing is matched to it again, and '
+      + 'Fusion\'s copy is deleted on the next push. Its geometry is kept — you can restore it '
+      + `later as a new holder.${warn}`)) return;
     await deleteHolderRecord(record.id);
     setOpenId(null);
     notify('Holder record deleted', 'success');
@@ -718,7 +809,12 @@ export default function HoldersPage() {
   const [restampPreview, setRestampPreview] = useState(null);
   useEffect(() => {
     let live = true;
-    if (!open || !restampHolderTools) { setRestampPreview(null); return undefined; }
+    // ⚠️ NEVER for an archived holder. Its tools keep pointing at it until they
+    // are re-linked, so the preview would happily offer to "Re-stamp N tools"
+    // with a holder the shop has retired — and since resolveHolderForWrite skips
+    // archived records, the write wouldn't even carry the geometry the button
+    // names. Those tools need a LIVE holder, which the Link flow offers.
+    if (!open || open.archived === true || !restampHolderTools) { setRestampPreview(null); return undefined; }
     Promise.resolve(restampHolderTools(open, { dryRun: true }))
       .then(r => { if (live) setRestampPreview(r); })
       .catch(() => { if (live) setRestampPreview(null); });
@@ -795,6 +891,16 @@ export default function HoldersPage() {
   const hideWorkflow = () => { dismissHolderWorkflow(true); setShowWorkflow(false); };
   const revealWorkflow = () => { dismissHolderWorkflow(false); setShowWorkflow(true); };
 
+  // Restore opens the copy straight away — you restored it to work on it, and
+  // the first thing worth knowing is that it's a NEW holder, not the old one.
+  const onRestore = async (h) => {
+    try {
+      const copy = await restoreHolderRecord(h.id);
+      setOpenId(copy.id);
+      notify(`Restored as a new holder (${copy.holder_ref}) — push to add it to Fusion`, 'success');
+    } catch (e) { notify(e.message, 'error'); }
+  };
+
   const [pushOpen, setPushOpen] = useState(false);
   const [pushPreview, setPushPreview] = useState(null);
   const onPush = async () => {
@@ -816,9 +922,43 @@ export default function HoldersPage() {
   // still showed the old name. This number is how you can see, at a glance,
   // what would be lost if this app went away (CLAUDE.md → "If Fusion has a
   // place for it, Fusion must have it").
+  // ⚠️ allRecords, not records: a merged-away holder Fusion is still carrying
+  // is exactly a thing Fusion doesn't yet agree with, and the archived record
+  // is what identifies it for removal.
   const unlinked = useMemo(
-    () => holdersOutOfSync(fusionHolders || [], records, holderRecordToFusion),
-    [fusionHolders, records]);
+    () => holdersOutOfSync(fusionHolders || [], allRecords, holderRecordToFusion),
+    [fusionHolders, allRecords]);
+
+  // ─── Tools carrying older holder geometry ────────────────────────────────
+  // Fusion bakes a holder into every tool, so correcting one here leaves every
+  // existing tool on the old copy until it is written. That's by design — but
+  // it must not be silent, and it was: the link list skips already-linked
+  // assemblies, and a tool arriving on a merged-away guid is auto-linked to the
+  // survivor, so it sat there correctly pointed and wrongly shaped with nothing
+  // anywhere saying so.
+  const staleTools = useMemo(
+    () => staleHolderTools(tools, { records, fusionHolders: fusionHolders || [] }),
+    [tools, records, fusionHolders]);
+  // WHICH holders, not just how many tools. "4 tools are stale" with no way to
+  // reach them is a notification, not a fix — these are the buttons that take
+  // you to the Re-stamp for each one.
+  const staleByHolder = useMemo(() => {
+    if (!staleTools.length) return [];
+    return records
+      .map(h => ({
+        holder: h,
+        count: staleHolderTools(tools, { records, fusionHolders: fusionHolders || [], record: h }).length,
+      }))
+      .filter(x => x.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [tools, records, fusionHolders, staleTools]);
+  // The same question scoped to the holder that's open, so its Re-stamp banner
+  // can say how many of its tools actually need it rather than how many use it.
+  const openStaleCount = useMemo(
+    () => (open
+      ? staleHolderTools(tools, { records, fusionHolders: fusionHolders || [], record: open }).length
+      : 0),
+    [tools, records, fusionHolders, open]);
   // Nowhere to push to unless a Fusion holder library is actually linked (demo
   // has holders but no registry entry) — better a disabled button that says why
   // than one that opens and immediately errors.
@@ -834,7 +974,39 @@ export default function HoldersPage() {
       setImportFlags(res.flagged || []);
       const parts = [];
       if (res.added) parts.push(`Imported ${res.added} holder${res.added === 1 ? '' : 's'}`);
+      // ─── The first push runs itself ──────────────────────────────────────
+      // Importing left every record one signal short of linked: the app knew
+      // the holder, Fusion didn't carry its ID, so the whole library sat in a
+      // limbo you had to know to press a button to leave.
+      //
+      // ⚠️ SAFE ONLY BECAUSE IT IS SCOPED to the records this import just
+      // created. Each of those came FROM a Fusion entry a moment ago, so the
+      // plan can only ADOPT — stamp our ID onto an entry whose exact shape we
+      // just read. Records already in the library are outside the scope and
+      // untouched, so an unrelated edit is never pushed on the user's behalf.
+      // Belt and braces: the dry run below must show nothing being created or
+      // removed, or this isn't the additive first push and it hands back to
+      // the button.
+      if (res.added && canPush && canEdit) {
+        try {
+          const ids = new Set(res.addedIds || []);
+          const dry = await pushHoldersToFusion({ dryRun: true, recordIds: ids });
+          if (dry.created || dry.deleted) {
+            parts.push('IDs not stamped — open Push to Fusion to review');
+          } else {
+            await pushHoldersToFusion({ recordIds: ids, silent: true });
+            parts.push('IDs stamped in Fusion');
+          }
+        } catch (e) {
+          // The import itself succeeded — say what didn't, don't fail the lot.
+          parts.push(`IDs not stamped in Fusion (${e.message}) — use Push to Fusion`);
+        }
+      }
       if (res.skipped) parts.push(`${res.skipped} already matched`);
+      // Retired holders Fusion still has. Said out loud rather than counted as
+      // "nothing to import" — the reason they're still there is that the push
+      // hasn't run yet, and that's actionable.
+      if (res.retired) parts.push(`${res.retired} retired here — push to remove from Fusion`);
       if (res.flagged?.length) parts.push(`${res.flagged.length} need a look`);
       notify(parts.length ? parts.join(' · ') : 'Nothing to import',
         res.flagged?.length ? 'warning' : 'success');
@@ -848,6 +1020,10 @@ export default function HoldersPage() {
   const commitMerge = async (survivorId, loserId) => {
     try {
       await saveHolderLibrary(applyHolderMerge(holderLibrary, survivorId, loserId));
+      // Repoint every tool that still holds the loser's holder_id, now. Without
+      // this they point at an archived record until the next reload, and the
+      // "Link N tools" badge jumps as if merging had created work.
+      relinkHolders();
       notify('Holders merged — anything that used the old one now resolves to the kept record', 'success');
       setMerging(null);
       if (openId === loserId) setOpenId(survivorId);
@@ -884,8 +1060,12 @@ export default function HoldersPage() {
           holderFile={holderLibrary} onSavePart={saveHolderPart}
           onMergeWith={(other) => setMerging({ a: open, b: other, match: compareHolders(open, other, config) })}
           restampPreview={restampPreview}
+          staleCount={openStaleCount}
           onRestamp={onRestamp}
-          allLocations={allLocations} readOnly={!canEdit}
+          allLocations={allLocations}
+          // An archived holder is a reference: editing one would be writing to
+          // something nothing can use, and autosave would quietly persist it.
+          readOnly={!canEdit || open.archived === true}
           onBack={() => setOpenId(null)}
           updatedBy={googleUser?.email || ''}
           siblings={records}
@@ -924,6 +1104,8 @@ export default function HoldersPage() {
           onLinkParts={() => setLinkingParts(true)}
           onDuplicates={() => setDupesOpen(true)}
           driftIds={driftIds} partCount={parts.length} duplicateIds={duplicateIds}
+          archived={archived} onRestore={onRestore}
+          staleTools={staleTools} staleByHolder={staleByHolder}
         />
         </>
       )}

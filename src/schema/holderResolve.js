@@ -20,7 +20,7 @@
 
 import { holderRecordToFusion } from './holderRecord.js';
 import { holderForGuid, holderOwnsGuid } from '../utils/holderDuplicates.js';
-import { recordsForGeometry } from './holderIdentity.js';
+import { recordsForGeometry, segmentsMatch } from './holderIdentity.js';
 import { convertLength } from '../utils/units.js';
 
 // ⚠️ A record with NO SEGMENTS is not a geometry source. A holder created in
@@ -50,9 +50,14 @@ const hasGeometry = (r) => Array.isArray(r?.segments) && r.segments.length > 0;
 // (holder_ref + a segment match, both required — holderIdentity.js) rather than
 // something the write path infers from a guid it happened to find.
 export function resolveHolderForWrite(guid, { records, fusionHolders, holderId } = {}) {
-  const byId = holderId ? (records || []).find(h => h?.id === holderId) : null;
+  // ⚠️ Archived records are not a geometry source. A tool must never be written
+  // with a holder the shop has retired — the archive exists so that decision
+  // sticks, and a stale holder_id pointing at one falls through to the Fusion
+  // entry (or to nothing) rather than resurrecting it.
+  const live = (records || []).filter(h => h && h.archived !== true);
+  const byId = holderId ? live.find(h => h?.id === holderId) : null;
 
-  const record = byId || (guid ? holderForGuid(records, guid) : null);
+  const record = byId || (guid ? holderForGuid(live, guid) : null);
   if (record && hasGeometry(record)) {
     const entry = holderRecordToFusion(record);
     return {
@@ -79,22 +84,62 @@ export function toolHolderIsStale(assembly, rawInstance, ctx) {
   const resolved = resolveHolderForWrite(assembly?.holder_guid,
     { ...ctx, holderId: assembly?.holder_id });
   if (!resolved) return false;
-  if (resolved.guidChanged) return true;             // points at a merged-away holder
+  // ⚠️ guidChanged is deliberately NOT staleness. This asks one question —
+  // "is the GEOMETRY this tool carries out of date?" — and a differing baked
+  // guid is not an answer to it. Fusion re-issues holder guids constantly (the
+  // premise of this whole module), so including it flagged 117 more tools on a
+  // clean import with no merges at all. A flag that fires on half the library
+  // says nothing. The dangling-guid case still gets corrected by the tool's
+  // next ordinary write; it just isn't reported as older geometry.
   const current = rawInstance?.holder;
   if (!current) return true;                          // no holder baked in yet
+
+  // ⚠️ THE SAME RULE IDENTITY USES — segmentsMatch, which is unit-aware and
+  // carries the 0.001" rounding tolerance.
+  //
+  // This compared toFixed(4) strings and compared units separately, i.e. exact
+  // equality with no tolerance and no conversion. Measured over the real
+  // library that flagged 190 of 212 linked tools as "carrying an older copy of
+  // their holder" — when the strict identity matcher said 187 of them were the
+  // SAME holder and only 3 had really moved. A banner that fires on 90% of the
+  // library is wallpaper, and the number it showed was simply untrue.
+  //
+  // Two comparison rules for one question is the defect; a value that survives
+  // a JSON round-trip comes back as 54.998999999999995, and a mm holder's
+  // numbers are 25.4× an inch holder's. One rule, in one place.
   const want = resolved.entry;
-  const sameLength = Array.isArray(current.segments) && Array.isArray(want.segments)
-    && current.segments.length === want.segments.length;
-  if (!sameLength) return true;
-  const round = (v) => Number(v ?? 0).toFixed(4);
-  for (let i = 0; i < want.segments.length; i++) {
-    const a = current.segments[i] || {};
-    const b = want.segments[i] || {};
-    if (round(a.height) !== round(b.height)
-      || round(a['upper-diameter']) !== round(b['upper-diameter'])
-      || round(a['lower-diameter']) !== round(b['lower-diameter'])) return true;
+  return !segmentsMatch(current.segments, current.unit, want.segments, want.unit);
+}
+
+// ─── Which tools are carrying OUT-OF-DATE holder geometry? ──────────────────
+// Fusion absorbs a holder into every tool, so correcting a holder here leaves
+// every existing tool still carrying the old copy until it is written. That is
+// by design (the write is the only channel) — but it must not be SILENT.
+//
+// ⚠️ THIS IS THE LEAK THE LINK LIST CANNOT SEE. `buildHolderLinkPlan` skips any
+// assembly that is already linked, and a tool arriving from Fusion on a
+// merged-away holder's guid is linked automatically to the survivor. So it is
+// correctly pointed at the right record while still carrying the wrong shape,
+// and nothing anywhere said so. Re-stamp fixes it — you just had to already
+// know to go and look.
+//
+// Read-only. `record` is null for a library-wide sweep, or one holder to scope
+// it to that holder's tools.
+export function staleHolderTools(tools, { records, fusionHolders, record = null } = {}) {
+  const ctx = { records, fusionHolders };
+  const out = [];
+  for (const t of tools || []) {
+    if (t?.no_fusion_link === true) continue;      // nothing in Fusion to correct
+    const rawByGuid = new Map((t._instancesRaw || [])
+      .filter(r => r?.guid).map(r => [r.guid, r]));
+    for (const a of t.assemblies || []) {
+      if (record && !assemblyUsesHolder(a, record)) continue;
+      const raw = rawByGuid.get(a.instance_guid);
+      if (!raw) continue;                          // no Fusion entry to compare
+      if (toolHolderIsStale(a, raw, ctx)) { out.push(t); break; }
+    }
   }
-  return current.unit !== want.unit;
+  return out;
 }
 
 // ─── Assembly gauge-length sanity check ─────────────────────────────────────
@@ -236,7 +281,9 @@ export const assemblyCountUsingHolder = (tools, record) =>
 // A tool that matches neither is left alone: that's the loose, user-confirmed
 // migration matcher's job (holderAudit.js), not a silent guess.
 export function backfillHolderIds(tools, holderRecords) {
-  const records = holderRecords || [];
+  // Archived holders are excluded outright — a tool must never be linked to a
+  // holder that was merged away or retired.
+  const records = (holderRecords || []).filter(r => r && r.archived !== true);
   if (!records.length) return tools;
   return (tools || []).map(t => {
     if (!t?.assemblies?.length) return t;

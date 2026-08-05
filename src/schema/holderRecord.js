@@ -46,6 +46,11 @@ export const HOLDER_REF_RE = /^HLD-[0-9A-F]{6}$/;
 // strips them. Add new app-only fields HERE, not ad hoc at the call site.
 export const HOLDER_APP_ONLY_FIELDS = [
   'id', 'holder_ref', 'fusion_guid', 'library_id', 'library_name',
+  'last_pushed', 'archived', 'archived_at', 'archived_reason', 'merged_into',
+  // The record's own snake_case copies. Fusion's keys are hyphenated
+  // (`product-id` / `product-link`), so these are app-only spellings and would
+  // read as unrecognized fields if a caller ever spread a record.
+  'product_id', 'product_link',
   'type_id', 'taper_id', 'collet_family_id', 'collet_size_id',
   'is_tap_collet', 'length', 'has_extension', 'extension',
   'manufacturer', 'part_number', 'purchasing',
@@ -67,6 +72,32 @@ export function newHolderRecord(overrides = {}) {
     id: generateId(),
     holder_ref: generateHolderRef(),
     fusion_guid: null,          // the Fusion holder entry this exports to (null until pushed)
+
+    // ── what we last handed to Fusion ──
+    // ⚠️ THE ONLY THING THAT CAN TELL THE TWO SIDES APART. Identity is our ref
+    // + the segments, so once a holder is redrawn HERE the shapes disagree and
+    // the entry reads `ref-only` — which is equally "we edited here" (the
+    // intended workflow) and "someone edited it in Fusion" (the thing the rule
+    // exists to catch). Without a record of what we last wrote, the app cannot
+    // distinguish them, and it chose wrong: it refused to write the user's own
+    // correction and blamed Fusion for it. Comparing Fusion's shape against
+    // this answers it exactly rather than guessing.
+    // { segments, unit } — a copy of the geometry as pushed. Stored as segments
+    // (not a hash) so it's compared with the same segmentsMatch tolerance the
+    // rest of identity uses, and stays readable in the JSON.
+    last_pushed: null,
+
+    // ── archive ──
+    // A holder is never hard-deleted: a merged-away or removed holder keeps its
+    // geometry here as a reference, out of the way. Archived records are
+    // invisible to EVERY matcher (a tool must never be linked to one) and are
+    // removed from Fusion on the next push. Restoring makes a COPY with a new
+    // id and ref — deliberately not a revival of the old identity, which would
+    // resurrect the very links the archive exists to retire.
+    archived: false,
+    archived_at: null,
+    archived_reason: null,      // 'merged' | 'removed'
+    merged_into: null,          // the surviving record's id, when archived by a merge
 
     // ── mirrored from Fusion (so the export round-trips) ──
     description: '',
@@ -127,6 +158,52 @@ export function newHolderRecord(overrides = {}) {
     created_at: now,
     updated_at: now,
     ...overrides,
+  };
+}
+
+// ─── The archive ────────────────────────────────────────────────────────────
+// Nothing is hard-deleted. A holder that was merged away or removed keeps its
+// geometry here so the reference survives — but it is out of the library, out
+// of every matcher, and gone from Fusion.
+export const isActiveHolder = (r) => !!r && r.archived !== true;
+export const activeHolders = (records) => (records || []).filter(isActiveHolder);
+
+export function archiveHolderRecord(record, reason = 'removed', mergedIntoId = null) {
+  if (!record) return null;
+  return {
+    ...record,
+    archived: true,
+    archived_at: new Date().toISOString(),
+    archived_reason: reason,
+    merged_into: mergedIntoId,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+// ⚠️ RESTORE IS A COPY, NOT A REVIVAL. A new id and a new holder_ref, with the
+// Fusion link and push history cleared, so it goes to Fusion as a brand-new
+// holder. Reviving the old identity would resurrect exactly the links the
+// archive exists to retire: tools still carrying the old guid would silently
+// re-attach to geometry the shop already decided was wrong. The retired ref and
+// guids are deliberately NOT inherited for the same reason.
+export function restoreArchivedHolder(record) {
+  if (!record) return null;
+  const now = new Date().toISOString();
+  return {
+    ...record,
+    id: generateId(),
+    holder_ref: generateHolderRef(),
+    fusion_guid: null,
+    last_pushed: null,
+    legacy_ids: [],
+    legacy_fusion_guids: [],
+    archived: false,
+    archived_at: null,
+    archived_reason: null,
+    merged_into: null,
+    nominal_check: null,      // the old confirmation described the old record
+    created_at: now,
+    updated_at: now,
   };
 }
 
@@ -220,11 +297,23 @@ export function holderRecordToFusion(record, existing = null) {
     ...(existing ? { expressions: { ...(existing.expressions || {}) } } : { expressions: {} }),
     description: record.description || '',
     gaugeLength,
-    // DETERMINISTIC — never generateId() here. This runs on every tool write
-    // (see holderResolve.js); a fresh guid each time would re-point the tool's
-    // holder link on every save. A record that has never been pushed to Fusion
-    // uses its own stable app id.
-    guid: record.fusion_guid || existing?.guid || record.id,
+    // ⚠️ THE EXISTING ENTRY'S GUID WINS, ALWAYS. Identity deliberately never
+    // reads the guid (holderIdentity.js), so a record can legitimately match an
+    // entry whose guid differs from the `fusion_guid` it happens to remember.
+    // Preferring the record's copy meant a push REWROTE that entry's guid —
+    // changing the holder's identity in Fusion for no reason, and orphaning the
+    // guid every tool had baked in.
+    //
+    // It also never settled: the push wrote the record's guid, then stamped the
+    // record's fusion_guid back from the PRE-write entry, so the next push
+    // wanted to swap them again. A holder ping-ponged between two guids forever
+    // and the page never showed zero to write.
+    //
+    // DETERMINISTIC either way — never generateId() here. This runs on every
+    // tool write (holderResolve.js); a fresh guid each time would re-point the
+    // tool's holder link on every save. A record never pushed to Fusion (no
+    // existing entry) falls back to its remembered guid, then its own app id.
+    guid: existing?.guid || record.fusion_guid || record.id,
     'product-id': record.holder_ref || '',
     'product-link': record.product_link || '',
     segments,
@@ -233,10 +322,39 @@ export function holderRecordToFusion(record, existing = null) {
     vendor: record.vendor || '',
   };
 
-  // Native + expression written together, always — Fusion re-derives both the
-  // displayed description and the gauge length from these strings on load, so a
-  // stale expression silently reverts the write.
+  // ─── Native + expression written together, ALWAYS ─────────────────────────
+  // Fusion re-derives every native field from its paired expression on load, so
+  // a stale expression silently reverts the write (the same rule the tool side
+  // follows — see CLAUDE.md "Fusion expression-numeric sync").
+  //
+  // ⚠️ product-id IS PAIRED, and getting this wrong broke the whole link.
+  // The push rewrites `product-id` to the app's holder_ref, but `expressions`
+  // was carried forward from the existing entry untouched — so on 4 of the
+  // shop's 20 real holders Fusion re-derived product-id from a stale
+  // `tool_productId` ("'min OOH'", a vendor SKU) and threw the app's ID away on
+  // the next load. Those holders read `geometry-only` forever and came back as
+  // "to write" on every single push. Same trap for vendor and product-link.
+  //
+  // The pairing rule is read straight off the real library, where it is 20/20
+  // consistent: description always has an expression; vendor / product-id /
+  // product-link have one EXACTLY when the value is non-empty (quoted). So:
+  // write it when there's a value, delete it when there isn't — never leave
+  // `''`, which is itself a mismatch.
   out.expressions.tool_description = `'${record.description || ''}'`;
+  const pairText = (exprKey, value) => {
+    const v = String(value ?? '').trim();
+    if (v) out.expressions[exprKey] = `'${v}'`;
+    else delete out.expressions[exprKey];
+  };
+  pairText('tool_productId', out['product-id']);
+  pairText('tool_productLink', out['product-link']);
+  pairText('tool_vendor', out.vendor);
+
+  // `tool_unit` is the exception: real holders carry it on only 2 of 20 (the
+  // inch ones), so its presence is Fusion's call, not ours. Never ADD it —
+  // but a present one must not disagree with the unit we just wrote.
+  if (out.expressions.tool_unit != null) out.expressions.tool_unit = `'${out.unit}'`;
+
   const gaugeExpr = buildGaugeExpressionFromFlags(record.segments);
   if (gaugeExpr) out.expressions.tool_holderGaugeLength = gaugeExpr;
   else delete out.expressions.tool_holderGaugeLength;
