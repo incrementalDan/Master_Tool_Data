@@ -57,15 +57,16 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # ⚠️ Do NOT try to raise `timeout` here — 600000ms (10 min) is the action's
+      # hard maximum and a larger value is silently clamped back to it ("timeout
+      # value is greater than the allowed maximum"). Tried on 2026-08-06; it is a
+      # no-op. When GitHub's Pages queue stalls, the deployment sits in
+      # `deployment_queued` until that ceiling and the action then CANCELS its own
+      # deployment. The Pages deployment ID is the commit SHA, so that commit is
+      # then permanently cancelled: re-running it fails in seconds with a bare
+      # "Deployment cancelled." and only a NEW commit can deploy. Nothing in this
+      # workflow can prevent that — wait for the queue to recover, then push a new
+      # commit (or re-run from the Actions tab once main has moved on).
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        with:
-          # How long to wait for GitHub's Pages queue to pick the deployment up,
-          # in ms. The default is 10 minutes, and on 2026-08-06 the queue sat in
-          # `deployment_queued` for longer than that — the action then CANCELS
-          # its own deployment, which is worse than waiting: the deployment ID is
-          # the commit SHA, so that SHA is now permanently cancelled and every
-          # re-run of the same commit fails instantly with "Deployment cancelled."
-          # (only a NEW commit can deploy). 20 minutes rides out a slow queue.
-          timeout: 1200000
