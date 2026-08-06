@@ -45,6 +45,11 @@ jobs:
           VITE_EXTRACTOR_API_URL: ${{ secrets.VITE_EXTRACTOR_API_URL }}
         run: npm run build
 
+      # ⚠️ "Re-run all jobs" on a run that already built will upload a SECOND
+      # artifact named github-pages, and deploy then fails for good with
+      # "Multiple artifacts named github-pages were unexpectedly found …
+      # Artifact count is 2." Use "Re-run FAILED jobs" (deploy only, reusing the
+      # one artifact) — or better, push a new commit. Seen on run #253.
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
