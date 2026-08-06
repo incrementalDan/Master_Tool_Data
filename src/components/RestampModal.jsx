@@ -51,6 +51,7 @@ export default function RestampModal({ preview, onPreview, onCommit, onClose }) 
   }, [preview]);
 
   const errorRows = rows.filter(r => r.worst === 'error');
+  const unconfirmedRows = rows.filter(r => (preview?.unconfirmed || []).includes(r.tool.id));
   const oddRows = rows.filter(r => r.checks.some(c => c.implausible));
   const warnRows = rows.filter(r => r.worst === 'warn' && !r.checks.some(c => c.implausible));
   // A tool whose gauge couldn't be computed is never writable — excluded
@@ -60,12 +61,18 @@ export default function RestampModal({ preview, onPreview, onCommit, onClose }) 
   // genuinely have been that wrong — but only by someone deliberately choosing
   // that one tool, never by dragging a tolerance up until the warnings stop.
   const isOdd = (r) => r.checks.some(c => c.implausible);
-  const off = (r) => r.worst === 'error' || (isOdd(r) ? !excluded.has(`on:${r.tool.id}`) : excluded.has(r.tool.id));
+  // ⚠️ AND a tool whose link to this holder is an unconfirmed GUESS. Re-stamp
+  // writes this holder's geometry INTO the tool, which would make the guess
+  // permanent in Fusion — so it opts in per tool, exactly like an implausible
+  // move. Confirm it in "Link tools to holders" and it ticks normally.
+  const unconfirmed = new Set(preview?.unconfirmed || []);
+  const startsOff = (r) => isOdd(r) || unconfirmed.has(r.tool.id);
+  const off = (r) => r.worst === 'error' || (startsOff(r) ? !excluded.has(`on:${r.tool.id}`) : excluded.has(r.tool.id));
   const selectedIds = selectable.filter(r => !off(r)).map(r => r.tool.id);
 
   const toggleRow = (r) => setExcluded(prev => {
     const next = new Set(prev);
-    const key = isOdd(r) ? `on:${r.tool.id}` : r.tool.id;
+    const key = startsOff(r) ? `on:${r.tool.id}` : r.tool.id;
     if (next.has(key)) next.delete(key); else next.add(key);
     return next;
   });
@@ -146,6 +153,16 @@ export default function RestampModal({ preview, onPreview, onCommit, onClose }) 
               <AlertTriangle size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />
               {errorRows.length} tool{errorRows.length === 1 ? '' : 's'} can’t be re-stamped — the
               assembly gauge length doesn’t compute. They’re excluded and can’t be selected.
+            </div>
+          )}
+
+          {unconfirmedRows.length > 0 && (
+            <div className="holder-warn" style={{ marginBottom: 10 }}>
+              <AlertTriangle size={13} style={{ verticalAlign: '-2px', marginRight: 6 }} />
+              {unconfirmedRows.length} tool{unconfirmedRows.length === 1 ? ' was' : 's were'} matched
+              to this holder on one signal only, not confirmed. Re-stamping writes this holder’s
+              geometry into them, which would make that guess permanent — so they start unticked.
+              Confirm them in <b>Link tools to holders</b>, or tick one here to write it anyway.
             </div>
           )}
 

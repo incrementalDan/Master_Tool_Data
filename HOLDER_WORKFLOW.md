@@ -173,7 +173,10 @@ baked holder carries the same two signals the Fusion library does — our
 
 A guessed link is marked `_linkGuess` at load — runtime only, never persisted —
 so once the user confirms it, the stored `holder_id` arrives clean on the next
-load and the row stops appearing. As holder refs get baked into new tools, the
+load and the row stops appearing. ⚠️ Confirming counts as a **real change even
+when the holder doesn't move** (**I8**): the guess was never persisted, so a
+"same id → nothing to do" shortcut made accepting it a no-op that re-flagged on
+every load. As holder refs get baked into new tools, the
 check strengthens by itself.
 
 ⚠️ The description check is not optional: a length family (`-60/-90/-120/-150`)
@@ -191,6 +194,7 @@ holder is retired, so the tool needs a new one.
 | State | Action |
 |---|---|
 | tools carrying older geometry | Preview each tool's **old → new assembly gauge**, then write |
+| a tool whose link is an **unconfirmed guess** | Listed, but **starts unticked** — re-stamping would bake the guess into Fusion permanently. Confirm it in *Link tools*, or tick that one tool by hand |
 | all tools current | A quiet line, **no call to action** |
 | holder is **archived** | **Not offered.** The banner names the tools still pointing there and sends them to *Link tools* |
 

@@ -150,6 +150,26 @@ describe('a tool arrives carrying older holder data', () => {
     expect(guessed.every(t => t.assemblies[0]._linkVia !== 'shape')).toBe(true);
   });
 
+  // ⚠️ CHECKLIST Q8 — can the user make the flag go away? Accepting a guess
+  // KEEPS the same holder_id, so a "nothing changed, skip it" test in the link
+  // commit made accepting it a total no-op: nothing written, the flag still
+  // set, and the next load re-guessed and re-flagged it. This mirrors what
+  // linkToolsToHolders does to the assembly, which is what clears the row.
+  it('confirming a guess is a real change, even when the holder does not move', () => {
+    const a = backfillHolderIds([arriving()], RECORDS)[0].assemblies[0];
+    expect(a._linkGuess).toBe(true);
+
+    const holderId = a.holder_id;                       // accept the guess as-is
+    const confirming = !!a._linkGuess;
+    expect(a.holder_id === holderId && !confirming).toBe(false);   // NOT skippable
+
+    const { _linkGuess, _linkVia, ...rest } = a;
+    const confirmed = { ...rest, holder_id: holderId };
+    expect(confirmed._linkGuess).toBeUndefined();
+    expect(buildHolderLinkPlan([{ ...arriving(), assemblies: [confirmed] }], RECORDS, CFG).rows)
+      .toHaveLength(0);                                 // the row is gone for good
+  });
+
   it('a holder retired before the tool arrived: worklist, and the write falls back to Fusion', () => {
     const retired = RECORDS.map(r => (r.id === CORRECTED.id ? { ...r, archived: true } : r));
     const after = backfillHolderIds([arriving()], retired);
