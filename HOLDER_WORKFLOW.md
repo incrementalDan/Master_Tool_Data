@@ -156,6 +156,7 @@ Resolution order for one assembly — **shape before GUID** (**I3**):
 | **exact** | Segments match one record | Already linked silently; appears only if a stored `holder_id` points at a deleted record |
 | **near** | ONE dimension out, < 5mm, **and the descriptions agree** | Pre-ticked, still confirmed |
 | **candidate / none** | Plausible by name or gauge, or nothing to match on | Manual pick |
+| **skipped** | A **turning tool** — carries no holder in Fusion at all | Out of scope; named in the dialog. See the TODO in `CLAUDE.md` |
 
 ⚠️ The description check is not optional: a length family (`-60/-90/-120/-150`)
 puts every sibling one dimension from the others, and a different stickout of
@@ -195,6 +196,24 @@ push.
 `deleteHolderRecord` archives (the action is **Retire**, not Delete).
 Its Fusion entry is deleted on the next push — identified by its retired ref,
 or by shape if it was retired before it was ever pushed.
+
+**Retiring a holder that is IN USE asks where its tools go** (`RetireHolderModal`).
+A retired record is invisible to `resolveHolderForWrite`, so any tool left on one
+silently reverts to Fusion's geometry on its next ordinary save — one tool at a
+time, with nothing on screen. So:
+
+| Situation | What the modal does |
+|---|---|
+| Library **not normalized** | **Blocked.** "Which tools use this" is read off assemblies, which don't exist yet — the count reads 0 and would say "nothing uses this" about a holder half the shop runs |
+| **0 tools** use it | Straight confirm |
+| **N tools** use it | **Requires a replacement.** Move those assemblies to another live holder, previewing how many get corrected in Fusion, then retire — one commit, tools moved **first** so a failed re-link can never leave them stranded |
+
+**Move ≠ Merge, and both are offered.** *Move* = these tools now run a
+**different** holder; the retired record keeps its own identity, so a future
+Fusion entry carrying its old ref does **not** resolve to the replacement.
+*Merge* = the two records were the **same** holder all along; the survivor
+absorbs the ref and GUIDs and **no tool is rewritten**. The modal links to
+Duplicates rather than duplicating that flow.
 
 **Restore is a COPY**: new `id`, new `holder_ref`, no Fusion link, no push
 history. Reviving the old identity would re-attach every tool still carrying its

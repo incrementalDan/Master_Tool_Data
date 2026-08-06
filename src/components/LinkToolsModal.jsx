@@ -126,6 +126,16 @@ export default function LinkToolsModal({ plan, holders, onPreview, onCommit, onC
                 <div className="holder-empty">Every tool is already linked to a holder record.</div>
               )}
 
+              {/* Said out loud rather than silently dropped — otherwise the
+                  counts don't add up to the library and it looks like a bug. */}
+              {plan?.skipped?.length > 0 && (
+                <div className="text-sub" style={{ fontSize: 12, marginTop: 8 }}>
+                  {plan.skipped.length} turning tool{plan.skipped.length === 1 ? '' : 's'} left out —
+                  they hold differently and carry no holder geometry in Fusion, so there is nothing
+                  to match on.
+                </div>
+              )}
+
               {/* THE PART THAT MATTERS. Storing the link fixes the pointer;
                   this is what actually corrects Fusion. A tool whose baked copy
                   already matches its record isn't rewritten — there is nothing

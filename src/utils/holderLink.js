@@ -185,12 +185,26 @@ export function proposeHolderLink(baked, records, config) {
   };
 }
 
+// ⚠️ TURNING TOOLS ARE OUT OF SCOPE HERE — they hold differently.
+// A `turning general` entry carries NO holder object at all in Fusion (checked
+// across the reference library: zero segments, no description), so there is
+// nothing to match on and every one of them lands in "need a look" forever —
+// a worklist row the user can never clear, which is exactly the nag loop the
+// checklist warns about. `boring head` is deliberately NOT in this set: despite
+// being grouped with turning for PRESET purposes, it mounts in an ordinary
+// taper holder and its Fusion entry carries a full 11-segment holder.
+// TODO: turning gets its own holder story — see CLAUDE.md.
+export const HOLDER_LINK_SKIP_TYPES = new Set(['turning general']);
+
 // One row per ASSEMBLY that isn't linked yet, since that's what carries the
 // link. Already-linked assemblies are skipped: this is a migration pass, not a
-// re-audit of settled data.
+// re-audit of settled data. Returns `skipped` so the caller can SAY they were
+// left out rather than quietly showing a smaller number.
 export function buildHolderLinkPlan(tools, records, config) {
   const rows = [];
+  const skipped = [];
   for (const t of tools || []) {
+    if (HOLDER_LINK_SKIP_TYPES.has(t?.tool_type)) { skipped.push(t); continue; }
     const bakedByGuid = new Map((t._instancesRaw || [])
       .filter(r => r?.guid && r.holder).map(r => [r.guid, r.holder]));
     for (const a of t.assemblies || []) {
@@ -212,5 +226,5 @@ export function buildHolderLinkPlan(tools, records, config) {
   const auto = rows.filter(r => r.status === 'exact');
   const near = rows.filter(r => r.status === 'near');
   const review = rows.filter(r => r.status === 'candidate' || r.status === 'none');
-  return { rows, auto, near, review };
+  return { rows, auto, near, review, skipped };
 }

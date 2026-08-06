@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
   shapeDelta, statedOohIn, descriptionsAgree, proposeHolderLink,
-  buildHolderLinkPlan, NEAR_MAX_MM,
+  buildHolderLinkPlan, NEAR_MAX_MM, HOLDER_LINK_SKIP_TYPES,
 } from './holderLink.js';
 import { fusionHolderToRecord } from '../schema/holderRecord.js';
 import { DEFAULT_HOLDER_CONFIG as CFG } from '../schema/holderOptions.js';
@@ -177,5 +177,28 @@ describe('the plan', () => {
     expect(plan.auto[0]).toMatchObject({ toolId: 't1', assemblyId: 'a1' });
     expect(plan.auto[0].record.id).toBe(rec.id);
     expect(plan.rows.length).toBe(plan.auto.length + plan.near.length + plan.review.length);
+  });
+
+  // A turning tool carries NO holder in Fusion, so it can only ever land in
+  // "need a look" with "nothing to match on" — a row that cannot be cleared.
+  // Verified against the real export, so this can't drift into an assumption.
+  it('leaves turning tools out, and says so', () => {
+    const turning = load('Full_Type_List Examples.json').find(t => t.type === 'turning general');
+    expect((turning.holder?.segments || []).length).toBe(0);   // the reason
+
+    const t = { id: 'lathe1', unit: 'inches', tool_type: 'turning general',
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'i1' }],
+      _instancesRaw: [{ guid: 'i1', holder: turning.holder }] };
+    const plan = buildHolderLinkPlan([t, tool()], RECORDS, CFG);
+    expect(plan.rows.map(r => r.toolId)).toEqual(['t1']);
+    expect(plan.skipped).toHaveLength(1);
+  });
+
+  // Grouped with turning for PRESET purposes, but it mounts in an ordinary
+  // taper holder — excluding it would strand a holder that links fine.
+  it('still links a boring head, which does carry a holder', () => {
+    const bar = load('Full_Type_List Examples.json').find(t => t.type === 'boring bar');
+    expect(bar.holder.segments.length).toBeGreaterThan(0);
+    expect(HOLDER_LINK_SKIP_TYPES.has('boring head')).toBe(false);
   });
 });

@@ -19,6 +19,7 @@ import ImportPhotosModal from './ImportPhotosModal.jsx';
 import ProgramsImportModal from './ProgramsImportModal.jsx';
 import IdSystemMembership, { ExclusionNotice } from './IdSystemMembership.jsx';
 import { exportFullLibrary } from '../utils/proShopExport.js';
+import { HOLDER_LINK_SKIP_TYPES } from '../utils/holderLink.js';
 
 const ID_MODES = [
   { id: 'proshop', label: 'ProShop', desc: 'ID comes from ProShop (today’s behavior). Shows a working link to the ProShop tool page.' },
@@ -539,7 +540,11 @@ export default function Settings() {
       case 'proshopMerged': return !tools.some(t => t.min_ooh != null && t.min_ooh > 0) ? 'No tools have MIN OOH data — ProShop CSV may not have merged.' : null;
       case 'holdersLinked': {
         if (!(holderLibrary?.holders || []).some(h => h.archived !== true)) return 'No holders in the library — import them from Fusion.';
-        const unlinked = tools.filter(t => (t.assemblies || []).some(a => !a.holder_id)).length;
+        // Turning tools are out of scope for holder linking (see
+        // HOLDER_LINK_SKIP_TYPES) — counting them here would leave a warning
+        // that no amount of linking can clear.
+        const unlinked = tools.filter(t => !HOLDER_LINK_SKIP_TYPES.has(t.tool_type)
+          && (t.assemblies || []).some(a => !a.holder_id)).length;
         return unlinked ? `${unlinked} tool${unlinked === 1 ? '' : 's'} not linked to a holder yet.` : null;
       }
       default: return null;
