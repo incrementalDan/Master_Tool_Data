@@ -206,7 +206,14 @@ time, with nothing on screen. So:
 |---|---|
 | Library **not normalized** | **Blocked.** "Which tools use this" is read off assemblies, which don't exist yet — the count reads 0 and would say "nothing uses this" about a holder half the shop runs |
 | **0 tools** use it | Straight confirm |
-| **N tools** use it | **Requires a replacement.** Move those assemblies to another live holder, previewing how many get corrected in Fusion, then retire — one commit, tools moved **first** so a failed re-link can never leave them stranded |
+| **N tools** use it | **Requires a replacement.** Pick the better-drawn record; every tool moves onto it and gets its geometry corrected in Fusion, then the old one retires — one commit, tools moved **first** so a failed re-link can never leave them stranded |
+
+The replacement needs **no relation** to the record being retired — different
+segments, a gauge several mm apart, unrelated Fusion GUIDs. Nothing in this
+flow reads a GUID. Each tool's **assembly gauge before → after** is previewed
+(the same `gaugeChecks` backstop re-stamp uses), because swapping to a holder
+drawn 8mm differently moves every one of those tools by 8mm — and a change over
+10mm is called out as implausible.
 
 **Move ≠ Merge, and both are offered.** *Move* = these tools now run a
 **different** holder; the retired record keeps its own identity, so a future
