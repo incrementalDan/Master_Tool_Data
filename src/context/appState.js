@@ -32,6 +32,10 @@ export const SETUP_STEPS = [
   { key: 'locationConfigured', label: 'Configure your Location System' },
   { key: 'assemblyIdConfigured', label: 'Configure your Assembly ID format' },
   { key: 'normalized', label: 'Normalize the library' },
+  // Sits here deliberately: the holder work is the other half of getting the
+  // FUSION data under control, so it belongs with the tool library and its
+  // normalize — before ProShop, which is a different system entirely.
+  { key: 'holdersLinked', label: 'Set up the holder library' },
   { key: 'proshopMerged', label: 'Merge ProShop data' },
   { key: 'machineNumbers', label: 'Configure machine numbers' },
   { key: 'proshopExported', label: 'Export to ProShop' },

@@ -23,7 +23,7 @@ import { resolveLocationString, findSystem, proShopLocationValue } from '../util
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry, getActiveVendorRegistry, backfillPurchasingRegistryIds } from '../schema/vendorRegistry.js';
 import { findJob, newJob } from '../utils/jobs.js';
-import { fusionHolderToRecord, holderRecordToFusion, archiveHolderRecord, restoreArchivedHolder } from '../schema/holderRecord.js';
+import { fusionHolderToRecord, holderRecordToFusion, archiveHolderRecord, restoreArchivedHolder, isActiveHolder } from '../schema/holderRecord.js';
 import { setDefaultUnit } from '../utils/units.js';
 import { getDemoData, isDemoRequested } from '../demo/index.js';
 import {
@@ -821,6 +821,20 @@ export function AppProvider({ children }) {
     }
   }, [state.localMode, state.fusionReady, state.tools.length, state.needsNormalize, state.shopSettings?.setup_steps?.normalized, markSetupStepInSettings]);
 
+  // The holdersLinked setup step completes once the holder library is real AND
+  // reaches the tools: at least one live holder record exists and at least one
+  // assembly carries a holder_id. Declarative, like the three effects above, so
+  // a shop that did the holder work BEFORE this step existed checks off on load
+  // rather than being told to redo it — the step reflects the data, not a click.
+  useEffect(() => {
+    if (state.localMode) return;
+    if (state.shopSettings?.setup_steps?.holdersLinked) return;
+    if (!state.fusionReady || !(state.holderLibrary?.holders || []).some(isActiveHolder)) return;
+    const linked = state.tools.some(t => (t.assemblies || []).some(a => a.holder_id));
+    if (linked) markSetupStepInSettings('holdersLinked');
+  }, [state.localMode, state.fusionReady, state.tools, state.holderLibrary,
+    state.shopSettings?.setup_steps?.holdersLinked, markSetupStepInSettings]);
+
   // Proactively surface an expired Google token — flip on the reconnect banner the
   // moment the token lapses, WITHOUT waiting for a save to fail. The OAuth flow has
   // no silent refresh, so the token just dies after ~1hr; before this the app looked
@@ -1278,7 +1292,7 @@ export function AppProvider({ children }) {
         // never-seeded shop whose auto-facts got set would be denied the full
         // historical seed (the three ID systems + proshopExported). Only a manual
         // step being recorded means "leave the real progress alone."
-        const AUTO_DERIVED = new Set(['fusionConnected', 'metadataConnected', 'normalized']);
+        const AUTO_DERIVED = new Set(['fusionConnected', 'metadataConnected', 'normalized', 'holdersLinked']);
         const alreadyRecorded = Object.entries(recordedSteps).some(([k, v]) => v && !AUTO_DERIVED.has(k));
         const normalized = !needsNormalize && tools.length > 0;
         const proshopMerged = tools.some(t => t.min_ooh != null && t.min_ooh > 0);

@@ -69,8 +69,8 @@ export function SetupGuideBanner() {
       <div className="setup-guide-banner-text">
         <strong>Initial setup checklist</strong>
         <span className="text-sub text-xs">
-          Connect the Fusion library, normalize it, merge in ProShop data, then export back —
-          each step checks off automatically as you do it. Click to open Settings.
+          Connect the Fusion library, normalize it, set up the holders, merge in ProShop data,
+          then export back — each step checks off automatically as you do it. Click to open Settings.
         </span>
       </div>
       <SetupStepCircles progress={setupProgress} />
@@ -122,7 +122,8 @@ export function SetupCompleteModal() {
         </div>
         <h3 className="modal-title setup-complete-title">SETUP COMPLETE</h3>
         <div className="modal-body">
-          The Fusion library is connected, normalized, merged with ProShop data, and exported —
+          The Fusion library is connected, normalized, its holders are set up, and it&apos;s
+          merged with ProShop data and exported —
           the initial setup workflow is done. Settings keeps this checklist as a standing reference.
         </div>
         <div className="modal-actions">

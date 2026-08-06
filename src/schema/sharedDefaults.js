@@ -289,6 +289,11 @@ export const DEFAULT_SHOP_SETTINGS = {
     fusionConnected: null,
     metadataConnected: null,
     normalized: null,
+    // The holder library: import → normalize names → merge duplicates → link
+    // tools → push. Derived from the data (see the holdersLinked effect), and
+    // deliberately NOT part of the established-shop seed — a library set up
+    // before the holder feature existed genuinely still has this to do.
+    holdersLinked: null,
     proshopMerged: null,
     proshopPhotos: null,
     machineNumbers: null,

@@ -63,6 +63,12 @@ export default function HolderWorkflowBanner({ onDismiss }) {
       <div className="holder-workflow-cols">
         <div>
           <div className="holder-workflow-label">Setting up (once)</div>
+          {/* Says where this sits in the shop's overall onboarding, so it isn't
+              a separate workflow you have to know to come and find. */}
+          <div className="text-sub" style={{ fontSize: 11, marginBottom: 6 }}>
+            This is the <b>Set up the holder library</b> step of Settings → Setup &amp; Import.
+            Do it after the tool library is normalized; before or after ProShop is fine.
+          </div>
           <ol className="holder-workflow-steps">
             {SETUP.map(([name, why]) => (
               <li key={name}><b>{name}</b> — {why}</li>
