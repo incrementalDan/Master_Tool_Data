@@ -176,7 +176,9 @@ so once the user confirms it, the stored `holder_id` arrives clean on the next
 load and the row stops appearing. ⚠️ Confirming counts as a **real change even
 when the holder doesn't move** (**I8**): the guess was never persisted, so a
 "same id → nothing to do" shortcut made accepting it a no-op that re-flagged on
-every load. As holder refs get baked into new tools, the
+every load. And it is **not persisted by an ordinary save** either — otherwise
+renaming the tool or editing a preset would promote the guess to a stored FK and
+the question would vanish having never been answered. As holder refs get baked into new tools, the
 check strengthens by itself.
 
 ⚠️ The description check is not optional: a length family (`-60/-90/-120/-150`)

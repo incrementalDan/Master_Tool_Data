@@ -19,6 +19,7 @@ import { backfillHolderIds, staleHolderTools, resolveHolderForWrite } from './ho
 import { splitToFusionInstances } from './logicalTools.js';
 import { buildHolderLinkPlan } from '../utils/holderLink.js';
 import { holderConfigOf } from './holderOptions.js';
+import { buildMetadataTool } from './metadataModel.js';
 
 const load = (f) => JSON.parse(
   readFileSync(new URL(`../../FUSION TOOL Library REF/${f}`, import.meta.url), 'utf8')).data;
@@ -168,6 +169,22 @@ describe('a tool arrives carrying older holder data', () => {
     expect(confirmed._linkGuess).toBeUndefined();
     expect(buildHolderLinkPlan([{ ...arriving(), assemblies: [confirmed] }], RECORDS, CFG).rows)
       .toHaveLength(0);                                 // the row is gone for good
+  });
+
+  // ⚠️ THE OPPOSITE FAILURE TO A NAG LOOP: the question disappearing unanswered.
+  // buildMetadataTool persists holder_id, so ANY ordinary save — renaming the
+  // tool, editing a preset — would have promoted a guess to a settled FK. The
+  // flag is never recomputed once an id is stored, so the confirmation row would
+  // vanish having never been answered by anyone.
+  it('an ordinary save does not quietly settle a guess', () => {
+    const guessed = backfillHolderIds([arriving()], RECORDS)[0];
+    expect(guessed.assemblies[0]._linkGuess).toBe(true);
+    expect(buildMetadataTool(guessed).assemblies[0].holder_id).toBeNull();
+
+    // A confirmed link persists exactly as before.
+    const { _linkGuess, _linkVia, ...a } = guessed.assemblies[0];
+    expect(buildMetadataTool({ ...guessed, assemblies: [a] }).assemblies[0].holder_id)
+      .toBe(CORRECTED.id);
   });
 
   it('a holder retired before the tool arrived: worklist, and the write falls back to Fusion', () => {

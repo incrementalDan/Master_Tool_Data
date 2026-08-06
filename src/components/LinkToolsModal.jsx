@@ -77,7 +77,12 @@ export default function LinkToolsModal({ plan, holders, onPreview, onCommit, onC
           value={picks.get(r.assemblyId) || ''}
           onChange={e => setPick(r.assemblyId, e.target.value)}
         >
-          <option value="">— leave unlinked —</option>
+          {/* A confirm row IS already linked (the app guessed), so "leave
+              unlinked" would be untrue — clearing it just leaves the guess
+              unanswered, to be asked again next load. */}
+          <option value="">
+            {r.status === 'confirm' ? '— ask me again later —' : '— leave unlinked —'}
+          </option>
           {/* Suggestions first, then everything, so a wrong guess is one click
               from the right answer rather than a hunt. */}
           {(r.alternatives?.length ? r.alternatives : []).map(h => (
