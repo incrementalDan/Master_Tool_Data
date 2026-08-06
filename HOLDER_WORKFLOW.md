@@ -156,6 +156,7 @@ Resolution order for one assembly — **shape before GUID** (**I3**):
 | **exact** | Segments match one record | Already linked silently; appears only if a stored `holder_id` points at a deleted record |
 | **near** | ONE dimension out, < 5mm, **and the descriptions agree** | Pre-ticked, still confirmed |
 | **candidate / none** | Plausible by name or gauge, or nothing to match on | Manual pick |
+| **skipped** | A **turning tool** — carries no holder in Fusion at all | Out of scope; named in the dialog. See the TODO in `CLAUDE.md` |
 
 ⚠️ The description check is not optional: a length family (`-60/-90/-120/-150`)
 puts every sibling one dimension from the others, and a different stickout of
