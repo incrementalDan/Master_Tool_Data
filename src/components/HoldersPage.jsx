@@ -19,6 +19,7 @@ import { findHolderDuplicates, holdersInDuplicates, applyHolderMerge, compareHol
 import { auditFusionHolders, holdersOutOfSync } from '../schema/holderIdentity.js';
 import { assemblyCountUsingHolder, assemblyUsesHolder, staleHolderTools } from '../schema/holderResolve.js';
 import HolderMergeModal from './HolderMergeModal.jsx';
+import RetireHolderModal from './RetireHolderModal.jsx';
 import RestampModal from './RestampModal.jsx';
 import PushHoldersModal from './PushHoldersModal.jsx';
 import LinkToolsModal from './LinkToolsModal.jsx';
@@ -738,6 +739,7 @@ export default function HoldersPage() {
     saveHolderRecord, deleteHolderRecord, saveHolderLibrary, saveShopSettings, saveHolderPart,
     importHoldersFromFusion, pushHoldersToFusion, restampHolderTools, linkToolsToHolders,
     restoreHolderRecord, relinkHolders, googleAuthenticated, googleUser, demoMode, notify,
+    needsNormalize,
   } = useApp();
   const navigate = useNavigate();
   const [openId, setOpenId] = useState(null);
@@ -798,22 +800,31 @@ export default function HoldersPage() {
   // there too.
   const onSave = (record) => saveHolderRecord(record);
 
-  const onDelete = async (record) => {
-    // Say how many tools resolve through this record. Deleting it isn't
-    // cosmetic for them: their next save falls back to the Fusion library's
-    // version of the holder, quietly undoing any correction made here.
-    const inUse = toolsFollowingMerge(record, tools, assemblyUsesHolder);
-    const warn = inUse
-      ? `\n\n⚠ ${inUse} tool assembl${inUse === 1 ? 'y uses' : 'ies use'} this holder. They will fall back to the Fusion holder library the next time each tool is saved — any correction made here is lost for them.`
-      : '';
-    if (!window.confirm(
-      `Retire the holder "${record.description}"?\n\n`
-      + 'It moves to the archive: it leaves the library, nothing is matched to it again, and '
-      + 'Fusion\'s copy is deleted on the next push. Its geometry is kept — you can restore it '
-      + `later as a new holder.${warn}`)) return;
+  // ─── Retire (archive) ────────────────────────────────────────────────────
+  // Opens RetireHolderModal rather than confirming inline: when a holder is in
+  // use the question isn't "are you sure", it's "where do these tools go" — a
+  // retired record is invisible to resolveHolderForWrite, so every tool left on
+  // it silently reverts to Fusion's geometry on its next save.
+  const [retiring, setRetiring] = useState(null);
+  const onDelete = (record) => setRetiring(record);
+
+  const commitRetire = async ({ links }) => {
+    const record = retiring;
+    if (!record) return;
+    // Move the tools FIRST. If the re-link fails we must not archive — that
+    // would strand exactly the tools this flow exists to protect.
+    if (links?.length) {
+      const r = await linkToolsToHolders(links).catch(() => null);
+      if (!r) return;                                   // already toasted
+      notify(r.rewritten
+        ? `Moved ${r.linked} assembl${r.linked === 1 ? 'y' : 'ies'} · corrected ${r.rewritten} tool${r.rewritten === 1 ? '' : 's'} in Fusion`
+        : `Moved ${r.linked} assembl${r.linked === 1 ? 'y' : 'ies'} — Fusion already had the right geometry`,
+      'success');
+    }
     await deleteHolderRecord(record.id);
+    setRetiring(null);
     setOpenId(null);
-    notify('Holder record deleted', 'success');
+    notify('Holder retired to the archive', 'success');
   };
 
   // Which tools would be re-stamped — a read-only count, refreshed as the open
@@ -1148,6 +1159,16 @@ export default function HoldersPage() {
           holders={records} config={config} tools={tools}
           onMerge={(m) => { setDupesOpen(false); setMerging({ a: m.a, b: m.b, match: m }); }}
           onClose={() => setDupesOpen(false)}
+        />
+      )}
+      {retiring && (
+        <RetireHolderModal
+          record={retiring} holders={records} tools={tools} config={config}
+          needsNormalize={needsNormalize}
+          onPreview={previewLinks}
+          onCommit={commitRetire}
+          onMergeInstead={() => { setRetiring(null); setDupesOpen(true); }}
+          onClose={() => setRetiring(null)}
         />
       )}
       {merging && (
