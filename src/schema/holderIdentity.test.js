@@ -8,7 +8,7 @@ import {
   isConfidentMatch, auditFusionHolders, SEGMENT_MATCH_TOL_IN,
   holderPushPlan, applyHolderPushPlan, holdersOutOfSync,
   holderPushDiff, fusionEntryIsStale, pushChangeGroup, PUSH_GROUPS,
-  lastPushedFrom, matchesLastPush, retiredHolderFor,
+  lastPushedFrom, matchesLastPush, retiredHolderFor, isFusionSideCopy,
 } from './holderIdentity.js';
 import { fusionHolderToRecord, holderRecordToFusion } from './holderRecord.js';
 import { convertHolderUnits } from '../utils/holderGeometry.js';
@@ -762,5 +762,57 @@ describe('a change only Fusion’s hidden copy can see', () => {
     const next = applyHolderPushPlan([entry], p1, holderRecordToFusion);
     const pushed = { ...rec, last_pushed: lastPushedFrom(rec) };
     expect(holdersOutOfSync(next, [pushed], holderRecordToFusion)).toBe(0);
+  });
+});
+
+// ─── A holder DUPLICATED inside Fusion ──────────────────────────────────────
+// Fusion's duplicate copies everything the user can see, including the
+// product-id we stamp our ID into. So a copy carries the SAME holder_ref, and
+// once the user edits it (the usual reason to duplicate) its shape differs too.
+// That reads as `ref-only` — "it was edited in Fusion" — which is true of the
+// entry but badly misleading: it's a NEW holder wearing the old one's ID.
+describe('a holder duplicated in Fusion', () => {
+  const setup = () => {
+    const rec = fusionHolderToRecord(REAL[0]);
+    const original = holderRecordToFusion(rec, REAL[0]);
+    const copy = {
+      ...original,
+      guid: 'whatever-fusion-does-with-the-guid',
+      description: `${original.description} (copy)`,
+      segments: original.segments.map((s, i) => (i === 0 ? { ...s, height: s.height + 40 } : s)),
+    };
+    return { rec, original, copy };
+  };
+
+  it('is recognised as a COPY, not as the known holder having moved', () => {
+    const { rec, original, copy } = setup();
+    expect(matchFusionHolder(copy, [rec]).status).toBe('ref-only');   // on its own, ambiguous
+    expect(isFusionSideCopy(copy, [original, copy], [rec])).toBe(true);
+    expect(isFusionSideCopy(original, [original, copy], [rec])).toBe(false);
+  });
+
+  it('is order-independent — the copy may sit before the original', () => {
+    const { rec, original, copy } = setup();
+    expect(isFusionSideCopy(copy, [copy, original], [rec])).toBe(true);
+  });
+
+  it('the plan flags it with an accurate reason and writes NOTHING to it', () => {
+    const { rec, original, copy } = setup();
+    const plan = holderPushPlan([original, copy], [rec], undefined, holderRecordToFusion);
+    expect(plan.updates.map(u => u.index)).toEqual([0]);        // only the original
+    expect(plan.flagged).toHaveLength(1);
+    expect(plan.flagged[0].status).toBe('fusion-copy');
+    expect(plan.flagged[0].reason).toMatch(/COPY/);
+    expect(applyHolderPushPlan([original, copy], plan, holderRecordToFusion)[1]).toBe(copy);
+  });
+
+  // ⚠️ A genuine Fusion-side EDIT of the only entry must still read as
+  // `ref-only` — there is no other entry accounting for the record, so it is
+  // that holder, moved.
+  it('a real Fusion-side edit is still ref-only, not a copy', () => {
+    const { rec, copy } = setup();
+    expect(isFusionSideCopy(copy, [copy], [rec])).toBe(false);
+    expect(holderPushPlan([copy], [rec], undefined, holderRecordToFusion).flagged[0].status)
+      .toBe('ref-only');
   });
 });

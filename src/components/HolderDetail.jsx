@@ -4,7 +4,7 @@
 // the comments call out the ones that were deliberate.
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, Check, Plus, X, RotateCcw, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Check, Plus, X, RotateCcw, Trash2, AlertTriangle, RefreshCw, Undo2, History } from 'lucide-react';
 import HolderPill from './HolderPill.jsx';
 import ProfileView from './ProfileView.jsx';
 import {
@@ -331,6 +331,9 @@ function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setAc
 // you stop, and leaving with anything unsaved asks first rather than dropping
 // it. The Save button stays as "do it now".
 const AUTOSAVE_MS = 900;
+// How many steps back Undo can go. Session-only, so this is just a memory
+// bound, not a policy — deep enough to walk out of any realistic slip.
+const UNDO_LIMIT = 50;
 
 // A stable fingerprint of the record, so "has this changed?" doesn't depend on
 // key order (a spread reorders keys and would otherwise read as an edit).
@@ -347,8 +350,51 @@ export default function HolderDetail({
   const [h, setH] = useState(holder);
   const [activeSeg, setActiveSeg] = useState(null);
   const [saving, setSaving] = useState('');
-  const set = (k, v) => setH(p => ({ ...p, [k]: v }));
-  const setExt = (k, v) => setH(p => ({ ...p, extension: { ...(p.extension || {}), [k]: v } }));
+  // ─── Undo ─────────────────────────────────────────────────────────────────
+  // ⚠️ AUTOSAVE MAKES EVERY EDIT IMMEDIATELY REAL. A segment deleted by a stray
+  // click is written to the holder library within a second, and the only way
+  // back was to go and read the numbers out of Fusion. Segment edits are the
+  // ones that matter — the geometry is what every tool takes its holder from.
+  //
+  // Session-only and deliberately not persisted: this is protection against a
+  // slip in the last few minutes, not an edit history.
+  //
+  // Every mutation goes through `apply`, so nothing can bypass the stack. The
+  // previous value is read from a REF that `apply` updates synchronously —
+  // reading it from render scope would give a stale snapshot when two changes
+  // land in one tick, and doing the push inside a setState updater would
+  // double-record under StrictMode's double-invoke.
+  const hRef = useRef(h);
+  hRef.current = h;
+  const baseRef = useRef(holder);          // the holder as it was on open
+  const [past, setPast] = useState([]);
+
+  const apply = useCallback((updater) => {
+    const prev = hRef.current;
+    const next = typeof updater === 'function' ? updater(prev) : updater;
+    if (next === prev) return;
+    hRef.current = next;
+    setPast(p => [...p.slice(-(UNDO_LIMIT - 1)), prev]);
+    setH(next);
+  }, []);
+
+  const undo = useCallback(() => {
+    setPast(p => {
+      if (!p.length) return p;
+      const prev = p[p.length - 1];
+      hRef.current = prev;
+      setH(prev);
+      return p.slice(0, -1);
+    });
+  }, []);
+
+  // Back to the state this holder was in when the page opened. Pushed onto the
+  // stack itself, so reverting is as undoable as anything else.
+  const revertAll = useCallback(() => apply(baseRef.current), [apply]);
+  const changedSinceOpen = sig(h) !== sig(baseRef.current);
+
+  const set = (k, v) => apply(p => ({ ...p, [k]: v }));
+  const setExt = (k, v) => apply(p => ({ ...p, extension: { ...(p.extension || {}), [k]: v } }));
 
   const suggested = useMemo(() => composeHolderDescription(h, config), [h, config]);
   // ⚠️ NEVER OFFER AN AUTO NAME THAT KNOWS LESS THAN THE ONE THERE. The
@@ -417,7 +463,7 @@ export default function HolderDetail({
     // the array in its stored bottom-up order (extension segments are at the tip).
     const others = (h.segments || []).filter(s => (role === 'extension' ? !s.ext : !!s.ext));
     const incoming = (part.segments || []).map(s => ({ ...s, ext: role === 'extension' }));
-    setH(p => ({
+    apply(p => ({
       ...p,
       unit: part.unit,
       segments: role === 'extension' ? [...incoming, ...others] : [...others, ...incoming],
@@ -455,6 +501,24 @@ export default function HolderDetail({
     const t = setTimeout(() => { save(h); }, AUTOSAVE_MS);
     return () => clearTimeout(t);
   }, [h, dirty, readOnly, save]);
+
+  // Ctrl/Cmd+Z. Deliberately NOT while a text field has focus — there the
+  // browser's own undo is what anyone expects, and stealing it would make
+  // typing feel broken. The case this exists for (a deleted segment row) is a
+  // button click, so focus is never in a field when it matters.
+  useEffect(() => {
+    if (readOnly) return undefined;
+    const onKey = (e) => {
+      if (!(e.key === 'z' || e.key === 'Z') || !(e.ctrlKey || e.metaKey) || e.shiftKey) return;
+      const t = e.target;
+      const tag = t?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable) return;
+      e.preventDefault();
+      undo();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [readOnly, undo]);
 
   // Closing the tab or refreshing mid-edit: the browser's own guard, because
   // nothing of ours runs after that.
@@ -510,6 +574,21 @@ export default function HolderDetail({
         >
           used by {usage} tool{usage === 1 ? '' : 's'}{usage > 0 ? ' →' : ''}
         </button>
+        {/* ⚠️ Autosave means every edit is already written, so Undo is the only
+            way back from a slip — a deleted segment row above all, since the
+            geometry is what every tool takes its holder from. Session-only. */}
+        {!readOnly && past.length > 0 && (
+          <button className="btn btn-ghost btn-sm" onClick={undo}
+            title="Undo the last change (Ctrl+Z). Edits save as you go, so this is how you take one back.">
+            <Undo2 size={14} /> Undo
+          </button>
+        )}
+        {!readOnly && changedSinceOpen && (
+          <button className="btn btn-ghost btn-sm" onClick={revertAll}
+            title="Put every field back to what it was when you opened this holder. Undoable too.">
+            <History size={14} /> Revert all
+          </button>
+        )}
         {/* One status, three states: saving, saved, or "there's an edit the
             timer hasn't picked up yet". */}
         {!readOnly && (
@@ -575,34 +654,41 @@ export default function HolderDetail({
           corrected holder only reaches an existing tool when that tool is
           written. That happens by itself on each tool's next save; this is the
           "make it land now" button. */}
-      {restampPreview?.tools?.length > 0 ? (
+      {/* ⚠️ NOTHING STALE MEANS NOTHING TO DO — so it must not look like a job.
+          Rendering the same prominent banner + button for "all up to date" read
+          as an outstanding task that couldn't be completed: press Re-stamp, the
+          words don't change, because there was never anything to change. It is
+          now a quiet line, and it says WHY they're current — linking a tool
+          rewrites it, so re-stamp is usually already done for you. */}
+      {restampPreview?.tools?.length > 0 && staleCount === 0 ? (
+        <div className="holder-restamp-ok">
+          <Check size={13} />
+          <span>
+            <b>{restampPreview.tools.length} tool{restampPreview.tools.length === 1 ? '' : 's'}</b>
+            {restampPreview.tools.length === 1 ? ' uses' : ' use'} this holder, all carrying its
+            current geometry. Linking or saving a tool writes the holder into it, so this is
+            usually already done for you — nothing to re-stamp.
+          </span>
+          <button className="btn btn-ghost btn-xs" onClick={onRestamp}
+            title="Rewrite these tools even though they already match — normally unnecessary">
+            <RefreshCw size={12} /> Re-stamp anyway
+          </button>
+        </div>
+      ) : restampPreview?.tools?.length > 0 ? (
         <div className="holder-restamp-banner">
           {/* ⚠️ "Uses this holder" and "is carrying the CURRENT geometry" are
               different questions, and only the second one is a call to act.
               Leading with the usage count meant a holder whose tools were all
               up to date looked identical to one where every tool was stale. */}
           <div className="holder-restamp-text">
-            {staleCount > 0 ? (
-              <>
-                <strong>
-                  {staleCount} of {restampPreview.tools.length} tool
-                  {restampPreview.tools.length === 1 ? '' : 's'} using this holder
-                  {staleCount === 1 ? ' is' : ' are'} carrying an older copy of its geometry.
-                </strong>{' '}
-                Fusion bakes the holder into each tool, so a correction here only reaches a tool
-                when that tool is written. Re-stamp pushes it now — you’ll see each tool’s
-                gauge-length change first.
-              </>
-            ) : (
-              <>
-                <strong>
-                  {restampPreview.tools.length} tool{restampPreview.tools.length === 1 ? ' uses' : 's use'} this
-                  holder, and {restampPreview.tools.length === 1 ? 'it is' : 'they are all'} up to date.
-                </strong>{' '}
-                Each carries its own frozen copy of the geometry — Fusion bakes it in — so they
-                pick up any future change on their next save, or from Re-stamp.
-              </>
-            )}
+            <strong>
+              {staleCount} of {restampPreview.tools.length} tool
+              {restampPreview.tools.length === 1 ? '' : 's'} using this holder
+              {staleCount === 1 ? ' is' : ' are'} carrying an older copy of its geometry.
+            </strong>{' '}
+            Fusion bakes the holder into each tool, so a correction here only reaches a tool
+            when that tool is written. Re-stamp pushes it now — you’ll see each tool’s
+            gauge-length change first.
           </div>
           <div className="holder-restamp-actions">
             {restampPreview.gaugeWarnings?.length > 0 && (
@@ -616,13 +702,9 @@ export default function HolderDetail({
                 as a contradiction, and acting on it downloads and re-uploads
                 the whole tool library to change nothing. Say what it is. */}
             <button className="btn btn-secondary btn-sm" onClick={onRestamp}
-              title={staleCount > 0
-                ? 'Write the current holder geometry into these tools now'
-                : 'These tools already match the holder — rewriting them changes nothing. Only useful to force a rewrite.'}>
+              title="Write the current holder geometry into these tools now">
               <RefreshCw size={13} />
-              {staleCount > 0
-                ? ` Re-stamp ${staleCount} tool${staleCount === 1 ? '' : 's'}`
-                : ' Re-stamp anyway'}
+              {` Re-stamp ${staleCount} tool${staleCount === 1 ? '' : 's'}`}
             </button>
           </div>
         </div>
@@ -796,7 +878,7 @@ export default function HolderDetail({
                 <div className="holder-nominal-actions">
                   <button
                     className="btn btn-secondary btn-sm"
-                    onClick={() => setH(p => confirmHolderNominal(p, nominal.familyLabel, updatedBy))}
+                    onClick={() => apply(p => confirmHolderNominal(p, nominal.familyLabel, updatedBy))}
                   >Confirm this length</button>
                 </div>
               )}
@@ -895,7 +977,7 @@ export default function HolderDetail({
             {['millimeters', 'inches'].map(u => (
               <button
                 key={u} className={normalizeUnit(h.unit) === u ? 'active' : ''}
-                onClick={() => normalizeUnit(h.unit) !== u && setH(p => convertHolderUnits(p, u))}
+                onClick={() => normalizeUnit(h.unit) !== u && apply(p => convertHolderUnits(p, u))}
               >{u === 'millimeters' ? 'Millimeters' : 'Inches'}</button>
             ))}
           </div>

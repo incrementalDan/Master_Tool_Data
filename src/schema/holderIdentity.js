@@ -432,6 +432,33 @@ function archivedByShape(entry, records, tolIn) {
   };
 }
 
+// ─── A holder DUPLICATED inside Fusion ──────────────────────────────────────
+// Fusion's duplicate copies everything the user can see — including the
+// `product-id` we stamp our ID into. So a copy arrives carrying the SAME
+// holder_ref as the original, and if the user then edits it (the usual reason
+// to duplicate one) its shape no longer matches the record either.
+//
+// That reads as `ref-only`, whose message says "it was edited in Fusion" —
+// true of the ENTRY, but badly misleading here: this isn't the holder we know
+// having moved, it's a NEW holder wearing the old one's ID.
+//
+// ⚠️ Provable, not guessed: if some OTHER entry in the same library matches
+// that record on BOTH signals, then the record is already accounted for and
+// this entry cannot be it. Order-independent — the copy may sit before or
+// after the original in the file.
+//
+// DETECTION ONLY for now. What should then happen (import it as a new holder?
+// re-stamp its product-id? leave it?) depends on what Fusion actually does to
+// the guid and product-id on duplicate, which is unverified — see the TODO in
+// CLAUDE.md.
+export function isFusionSideCopy(entry, allEntries, records, tolIn = SEGMENT_MATCH_TOL_IN) {
+  const m = matchFusionHolder(entry, records, tolIn);
+  if (m.status !== 'ref-only' || !m.refRecord) return false;
+  return (allEntries || []).some(e => e !== entry
+    && e?.type === 'holder'
+    && matchFusionHolder(e, records, tolIn).record?.id === m.refRecord.id);
+}
+
 export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL_IN, toFusion = null) {
   const updates = [];   // { index, entry, record, kind: 'update' | 'adopt', stale }
   const deletes = [];   // { index, entry, record, why } — removed from Fusion
@@ -514,7 +541,15 @@ export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL
     // retired one was already caught above.)
     if (m.status === 'none') continue;
     {
-      flagged.push({ entry, ...m });
+      // Name it accurately when it's a copy made in Fusion rather than the
+      // holder we know having moved.
+      const copy = m.status === 'ref-only' && isFusionSideCopy(entry, list, records, tolIn);
+      flagged.push(copy
+        ? {
+          ...m, entry, status: 'fusion-copy',
+          reason: `This looks like a COPY of "${m.refRecord.description || m.refRecord.holder_ref}" made in Fusion: it carries that holder's ID, but a different Fusion holder already matches that record exactly and this one's shape is different. It is a new holder — give it its own record, or delete it in Fusion.`,
+        }
+        : { entry, ...m });
       // Every record this entry could plausibly be stays claimed, so it is
       // never ALSO appended as a new holder while the flag is unresolved.
       if (m.refRecord) spokenFor.add(m.refRecord.id);

@@ -720,3 +720,46 @@ describe('re-stamping clears the stale flag', () => {
     expect(staleHolderTools([staleAgain], ctx([corrected]))).toHaveLength(1);
   });
 });
+
+// ─── A stale remembered guid must not mislink ───────────────────────────────
+// ⚠️ OBSERVED LIVE. A record keeps a `fusion_guid` as a hint, and Fusion can
+// hand that guid to a DIFFERENT holder — in the shop's own library a -120
+// record still remembered a guid that now belongs to a 145mm test holder.
+// Measured over the real 304-tool library the SHAPE resolves every case the
+// guid does plus 163 more, with zero disagreements and zero cases only the
+// guid could answer — so the guid contributes nothing and can only be wrong.
+describe('backfillHolderIds prefers the shape over the guid', () => {
+  it('links by the baked SHAPE even when a record remembers that guid', () => {
+    // `wrong` remembers the tool's baked guid but is a different holder;
+    // `right` has the shape the tool actually carries.
+    const right = { ...oldRecord(), id: 'rec-right', fusion_guid: 'some-other-guid' };
+    const wrong = { ...newRecord(), id: 'rec-wrong', fusion_guid: OLD.guid };
+    const tool = {
+      id: 't1',
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'i1', holder_guid: OLD.guid }],
+      _instancesRaw: [{ guid: 'i1', holder: { ...OLD } }],
+    };
+    expect(backfillHolderIds([tool], [wrong, right])[0].assemblies[0].holder_id).toBe('rec-right');
+  });
+
+  it('still falls back to the guid when there is no usable geometry', () => {
+    const rec = { ...oldRecord(), id: 'rec-1', fusion_guid: OLD.guid };
+    const tool = {
+      id: 't1',
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'i1', holder_guid: OLD.guid }],
+      _instancesRaw: [{ guid: 'i1', holder: { guid: OLD.guid, segments: [] } }],
+    };
+    expect(backfillHolderIds([tool], [rec])[0].assemblies[0].holder_id).toBe('rec-1');
+  });
+
+  it('leaves an AMBIGUOUS shape to the guid rather than guessing', () => {
+    const a = { ...oldRecord(), id: 'rec-a', fusion_guid: 'x' };
+    const b = { ...oldRecord(), id: 'rec-b', fusion_guid: OLD.guid };
+    const tool = {
+      id: 't1',
+      assemblies: [{ assembly_id: 'a1', instance_guid: 'i1', holder_guid: OLD.guid }],
+      _instancesRaw: [{ guid: 'i1', holder: { ...OLD } }],
+    };
+    expect(backfillHolderIds([tool], [a, b])[0].assemblies[0].holder_id).toBe('rec-b');
+  });
+});

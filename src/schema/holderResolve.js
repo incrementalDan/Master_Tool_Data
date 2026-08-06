@@ -294,13 +294,19 @@ export function backfillHolderIds(tools, holderRecords) {
     const assemblies = t.assemblies.map(a => {
       const byId = a.holder_id ? records.find(h => h.id === a.holder_id) : null;
       if (byId) return a;                       // already linked and resolvable
-      const byGuid = a.holder_guid ? holderForGuid(records, a.holder_guid) : null;
-      let rec = byGuid;
-      if (!rec) {
-        const baked = bakedByGuid.get(a.instance_guid);
-        const shapes = baked ? recordsForGeometry(records, baked) : [];
-        if (shapes.length === 1) rec = shapes[0];
-      }
+      // ⚠️ SHAPE BEFORE GUID. Measured over the shop's real 304-tool library:
+      // the shape resolves every case the guid does (133) PLUS 163 more, with
+      // ZERO disagreements and ZERO cases the guid alone could answer. So the
+      // guid contributes nothing here and can only ever be wrong — and it does
+      // go wrong: a record keeps remembering a `fusion_guid` that Fusion has
+      // since handed to a DIFFERENT holder (observed live, a -120 record whose
+      // guid now belongs to a 145mm test holder). Trying the shape first means
+      // a stale guid can't mislink a tool; it stays as the last resort for a
+      // baked holder with no usable geometry.
+      const baked = bakedByGuid.get(a.instance_guid);
+      const shapes = baked ? recordsForGeometry(records, baked) : [];
+      let rec = shapes.length === 1 ? shapes[0] : null;
+      if (!rec && a.holder_guid) rec = holderForGuid(records, a.holder_guid);
       if (!rec || rec.id === a.holder_id) return a;
       changed = true;
       return { ...a, holder_id: rec.id };

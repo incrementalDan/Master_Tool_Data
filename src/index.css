@@ -5786,6 +5786,16 @@ input.sf-ref-num { text-align: right; }
 .holder-archived-note { display: flex; align-items: flex-start; gap: 8px; margin-bottom: var(--sp-3); }
 .holder-archived-note > svg { flex: none; margin-top: 2px; }
 
+/* Nothing to do — a quiet line, deliberately NOT the call-to-action banner. */
+.holder-restamp-ok {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 2px; margin-bottom: var(--sp-3);
+  font-size: var(--text-xs); color: var(--text-faint); line-height: var(--lh-normal);
+}
+.holder-restamp-ok > svg { color: var(--green, #4ade80); flex: none; }
+.holder-restamp-ok b { color: var(--text-sub); }
+.holder-restamp-ok > span { flex: 1; min-width: 260px; }
+
 .push-why { color: var(--text-faint); font-size: var(--text-2xs); flex-basis: 100%; }
 
 .push-only { color: var(--text-faint); font-style: italic; }
