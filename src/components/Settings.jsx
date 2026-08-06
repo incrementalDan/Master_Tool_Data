@@ -72,7 +72,7 @@ export default function Settings() {
     addHolderLibrary, removeHolderLibrary, notify,
     googleAuthenticated, metadataSkipped, user: googleUser,
     fetchMetadataLocation, reconnectMetadata, disconnectMetadata,
-    shopSettings, saveShopSettings, signOutAll, fusionEnabled,
+    shopSettings, saveShopSettings, signOutAll, fusionEnabled, holderLibrary,
     setupProgress, demoMode, resetSetupProgress,
     registerNavGuard, maybeBlockNav,
   } = useApp();
@@ -537,6 +537,11 @@ export default function Settings() {
       case 'fusionConnected': return tools.length === 0 ? 'Library appears empty — re-check the connected file.' : null;
       case 'normalized': return needsNormalize ? 'Some tools are not yet normalized.' : null;
       case 'proshopMerged': return !tools.some(t => t.min_ooh != null && t.min_ooh > 0) ? 'No tools have MIN OOH data — ProShop CSV may not have merged.' : null;
+      case 'holdersLinked': {
+        if (!(holderLibrary?.holders || []).some(h => h.archived !== true)) return 'No holders in the library — import them from Fusion.';
+        const unlinked = tools.filter(t => (t.assemblies || []).some(a => !a.holder_id)).length;
+        return unlinked ? `${unlinked} tool${unlinked === 1 ? '' : 's'} not linked to a holder yet.` : null;
+      }
       default: return null;
     }
   };
@@ -884,7 +889,7 @@ export default function Settings() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <CheckCircle2 size={16} style={{ color: 'var(--blue)' }} />
           <h3 style={{ margin: 0 }}>Setup &amp; Import</h3>
-          <InfoTip text="The one-time initial workflow: connect the Fusion library, normalize it, merge in ProShop data, configure machine numbers, then export back. Each step checks off automatically when you complete it. Warnings appear here if the stored flag says 'done' but the live library suggests otherwise — you can re-run a step or ignore the warning." />
+          <InfoTip text="The one-time initial workflow: connect the Fusion library, normalize it, set up the holder library, merge in ProShop data, configure machine numbers, then export back. The holder step sits with the tool library because both are Fusion data — it can be done after ProShop instead, but not before the library is normalized. Each step checks off automatically when you complete it. Warnings appear here if the stored flag says 'done' but the live library suggests otherwise — you can re-run a step or ignore the warning." />
         </div>
         <p className="text-sub text-sm" style={{ marginBottom: 16 }}>
           One-time setup checklist. Use the action buttons to run or re-run each step.
@@ -923,6 +928,27 @@ export default function Settings() {
                 {/* Google Drive metadata connection, embedded under its step */}
                 {step.key === 'metadataConnected' && renderToolMetadataPanel()}
 
+                {/* The holder workflow, in order, under its step. Text only —
+                    each part is an action on the Holders page, and tracking five
+                    separate flags would be more bookkeeping than it's worth. */}
+                {step.key === 'holdersLinked' && (
+                  <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border)' }}>
+                    <div className="text-sub" style={{ fontSize: 12, marginBottom: 4 }}>
+                      On the Holders page, in this order:
+                    </div>
+                    <ol className="text-sub" style={{ fontSize: 12, margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
+                      <li><strong>Import from Fusion</strong> — reads the holder library and gives each holder an ID</li>
+                      <li><strong>Normalize names</strong> — one consistent description per holder</li>
+                      <li><strong>Duplicates</strong> — merge holders that are the same physical thing</li>
+                      <li><strong>Link tools to holders</strong> — matches every tool&apos;s holder and corrects Fusion</li>
+                      <li><strong>Push to Fusion</strong> — settles the holder library itself</li>
+                    </ol>
+                    <div className="text-sub" style={{ fontSize: 11, marginTop: 6 }}>
+                      From then on: edit a holder <em>here</em>, not in Fusion, and Re-stamp its tools.
+                    </div>
+                  </div>
+                )}
+
                 {/* ProShop photos sub-step under proshopMerged */}
                 {step.key === 'proshopMerged' && (
                   <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: '2px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -948,6 +974,7 @@ export default function Settings() {
                     onExport={handleExportProShop}
                     onImport={() => guardedNavigate('/import', { state: { startStep: 2 } })}
                     onGoToLanding={() => guardedNavigate('/')}
+                    onGoToHolders={() => guardedNavigate('/holders')}
                     tools={tools}
                   />
                 </div>
@@ -1956,8 +1983,14 @@ function AddMachineForm({ machineTypes, taperTypes, suggestedColor, onSave, onCa
 // Action button for each setup step — shows the right CTA depending on step state.
 // fusionConnected and metadataConnected render their own embedded config panels
 // (see renderFusionLibrariesPanel / renderToolMetadataPanel) instead of a button.
-function StepAction({ stepKey, done, warn, onExport, onImport, onGoToLanding, tools }) {
+function StepAction({ stepKey, done, warn, onExport, onImport, onGoToLanding, onGoToHolders, tools }) {
   switch (stepKey) {
+    case 'holdersLinked':
+      return (
+        <button className="btn btn-secondary btn-sm" onClick={onGoToHolders}>
+          {done && !warn ? 'View Holders' : 'Open Holders'}
+        </button>
+      );
     case 'normalized':
       return (
         <button className="btn btn-secondary btn-sm" onClick={onGoToLanding}>

@@ -50,6 +50,32 @@ Numbered so the test can name what it is protecting.
 
 -----
 
+## Where this sits in first-time setup
+
+The holder work is a **setup step of its own** — `holdersLinked`, *"Set up the
+holder library"* — placed in `SETUP_STEPS` immediately after **Normalize the
+library** and before **Merge ProShop data**.
+
+That position is deliberate: connecting the library, normalizing it, and getting
+the holders under control are all one job — **getting the Fusion data right**.
+ProShop is a different system and can come before or after; the holder step
+cannot come *before* the tool library is normalized, because linking matches
+against tools that must already exist and carry tracking IDs.
+
+Step 1 (**Connect Fusion library**) links the holder library *file*. This step is
+the work: import → normalize names → merge duplicates → link tools → push.
+Settings lists those five in order underneath it, with a button to the Holders
+page; the same order, plus the "edit here, not in Fusion" rule, is on the
+Holders page itself in `HolderWorkflowBanner`.
+
+**It checks itself off from the data, not from a click** — a live holder record
+exists AND at least one assembly carries a `holder_id`. A shop that did the
+holder work before this step existed checks off on load. Correspondingly it is
+**not** part of the established-shop seed: a library set up before the holder
+feature genuinely still has this to do, and saying otherwise would hide it.
+
+-----
+
 ## Holder states
 
 What the app can conclude about one Fusion entry, and what put it there.
