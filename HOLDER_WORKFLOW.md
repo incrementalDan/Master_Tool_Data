@@ -228,6 +228,28 @@ GUID to the geometry the archive was retiring.
 
 -----
 
+## A tool arrives carrying OLDER holder data
+
+The everyday case: a holder is corrected here, then a tool built in Fusion — or
+synced back from a job — arrives with the **old** frozen copy. Four routes in,
+one answer. Asserted by `src/schema/arrivingHolder.test.js`.
+
+| Route | What happens |
+|---|---|
+| **Built in Fusion, dumped into the library** | Load-time `backfillHolderIds` links it — its **shape no longer matches**, so the baked **GUID** carries it. `staleHolderTools` flags it. Fixed by Re-stamp or any ordinary save |
+| **Sync Job** (one tool or a whole job) | The assembly `DiffStep` creates has `holder_guid` and **no** `holder_id`, and the commit runs before any backfill — so `resolveHolderForWrite` resolves on the guid and **writes the corrected geometry at commit time**. It arrives already fixed |
+| **New assembly added in the app** | Picked from the holder library, so it carries the record from the start |
+| **Reconcile on open** | An adopted stray is registered, then follows the first row |
+
+Two ways it can fail to resolve, neither silent and neither destructive:
+
+| | |
+|---|---|
+| The GUID **also churned** | Nothing resolves → it appears in **Link tools to holders** for a person to pick |
+| The holder was **retired** first | Archived is invisible (**I6**) → link worklist, and the write **falls back to the Fusion entry** so the tool keeps the holder it has rather than being written with none |
+
+-----
+
 ## Tool link states
 
 Independent of the holder's state.
