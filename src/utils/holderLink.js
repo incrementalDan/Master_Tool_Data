@@ -196,6 +196,17 @@ export function proposeHolderLink(baked, records, config) {
 // TODO: turning gets its own holder story — see CLAUDE.md.
 export const HOLDER_LINK_SKIP_TYPES = new Set(['turning general']);
 
+// Why a guessed link isn't certain — one line per signal that carried it.
+// Keyed by `matchBakedHolder`'s `via`.
+export const LINK_GUESS_WHY = {
+  shape: 'The geometry matches this holder, but the ID baked into the tool points at a '
+    + 'different one. One of the two is wrong — check which holder this really is.',
+  ref: 'The ID baked into the tool says this holder, but the geometry it carries doesn’t '
+    + 'match — the holder was redrawn, or the tool was built from a different one.',
+  guid: 'Matched only on Fusion’s holder GUID: the geometry doesn’t match any record, and '
+    + 'the tool carries no ID of ours. Fusion re-issues these, so confirm it.',
+};
+
 // One row per ASSEMBLY that isn't linked yet, since that's what carries the
 // link. Already-linked assemblies are skipped: this is a migration pass, not a
 // re-audit of settled data. Returns `skipped` so the caller can SAY they were
@@ -211,20 +222,38 @@ export function buildHolderLinkPlan(tools, records, config) {
       // Already linked and still resolvable → nothing to propose. An assembly
       // pointing at an ARCHIVED record is deliberately NOT skipped: that holder
       // is retired, so the tool needs a new one.
+      //
+      // ⚠️ EXCEPT A LINK THE APP GUESSED THIS LOAD (`_linkGuess`, set by
+      // backfillHolderIds when the two identity signals didn't both agree). It
+      // IS linked — nothing dangles — but the user hasn't seen it, so it is
+      // listed pre-filled with the guess and can be changed. A stored holder_id
+      // arriving from metadata has no flag, so a settled library stays quiet:
+      // this is still a migration pass, not a re-audit.
       const linked = a.holder_id
         && (records || []).find(r => r.id === a.holder_id && r.archived !== true);
-      if (linked) continue;
+      if (linked && !a._linkGuess) continue;
       const baked = bakedByGuid.get(a.instance_guid)
         || (a.holder_description ? { description: a.holder_description, segments: [], unit: t.unit } : null);
       const proposal = proposeHolderLink(baked, records, config);
+      // A guessed link keeps its own status so the UI can say WHAT it matched
+      // on and offer the guess as the pre-filled answer, rather than presenting
+      // it as an unlinked tool the app knows nothing about.
+      const guessed = a._linkGuess
+        ? {
+          status: 'confirm', via: a._linkVia,
+          record: (records || []).find(r => r.id === a.holder_id) || proposal.record,
+          why: LINK_GUESS_WHY[a._linkVia] || 'Matched on one signal only — confirm this is right.',
+        }
+        : null;
       rows.push({
         toolId: t.id, tool: t, assemblyId: a.assembly_id, assembly: a,
-        baked, ...proposal,
+        baked, ...proposal, ...guessed,
       });
     }
   }
   const auto = rows.filter(r => r.status === 'exact');
   const near = rows.filter(r => r.status === 'near');
+  const confirm = rows.filter(r => r.status === 'confirm');
   const review = rows.filter(r => r.status === 'candidate' || r.status === 'none');
-  return { rows, auto, near, review, skipped };
+  return { rows, auto, near, confirm, review, skipped };
 }

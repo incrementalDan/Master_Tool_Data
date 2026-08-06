@@ -26,6 +26,9 @@ export default function LinkToolsModal({ plan, holders, onPreview, onCommit, onC
   const [picks, setPicks] = useState(() => {
     const m = new Map();
     for (const r of plan?.near || []) m.set(r.assemblyId, r.record.id);
+    // A guessed link is pre-filled with the guess — it is already stored, so
+    // leaving it blank would read as "unlink this", the opposite of the intent.
+    for (const r of plan?.confirm || []) if (r.record) m.set(r.assemblyId, r.record.id);
     return m;
   });
 
@@ -39,7 +42,7 @@ export default function LinkToolsModal({ plan, holders, onPreview, onCommit, onC
     const out = (plan?.auto || []).map(r => ({
       toolId: r.toolId, assemblyId: r.assemblyId, holderId: r.record.id,
     }));
-    for (const r of [...(plan?.near || []), ...(plan?.review || [])]) {
+    for (const r of [...(plan?.near || []), ...(plan?.confirm || []), ...(plan?.review || [])]) {
       const holderId = picks.get(r.assemblyId);
       if (holderId) out.push({ toolId: r.toolId, assemblyId: r.assemblyId, holderId });
     }
@@ -119,6 +122,9 @@ export default function LinkToolsModal({ plan, holders, onPreview, onCommit, onC
               <div className="link-summary">
                 <div className="restamp-stat ok"><b>{plan?.auto?.length || 0}</b><span>exact match</span></div>
                 <div className="restamp-stat warn"><b>{plan?.near?.length || 0}</b><span>near match</span></div>
+                {(plan?.confirm?.length > 0) && (
+                  <div className="restamp-stat warn"><b>{plan.confirm.length}</b><span>confirm</span></div>
+                )}
                 <div className="restamp-stat err"><b>{plan?.review?.length || 0}</b><span>need a look</span></div>
               </div>
 
@@ -203,6 +209,22 @@ export default function LinkToolsModal({ plan, holders, onPreview, onCommit, onC
                     >{nearAllOn ? 'Untick all' : 'Tick all'}</button>
                   </div>
                   {plan.near.map(r => <Row key={r.assemblyId} r={r} tone="near" />)}
+                </div>
+              )}
+
+              {/* Already linked — but on ONE signal, so the user gets to see
+                  what the tool was carrying and change it. Pre-filled with the
+                  guess; clearing it unlinks. */}
+              {(plan?.confirm?.length > 0) && (
+                <div className="link-group">
+                  <div className="link-group-head">
+                    <b>Confirm these</b>
+                    <span className="modal-sub">
+                      Matched, but not on both signals — the ID we stamped into the holder AND its
+                      geometry. Linked so nothing dangles; check each one is the right holder.
+                    </span>
+                  </div>
+                  {plan.confirm.map(r => <Row key={r.assemblyId} r={r} tone="near" />)}
                 </div>
               )}
 

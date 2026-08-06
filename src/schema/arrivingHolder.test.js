@@ -94,6 +94,62 @@ describe('a tool arrives carrying older holder data', () => {
     expect(buildHolderLinkPlan(after, RECORDS, CFG).rows).toHaveLength(1);
   });
 
+  // ─── Auto-match, but never silently when it isn't certain ─────────────────
+  // Certain = BOTH signals agree: our holder_ref (baked into the holder's
+  // product-id) and the segments. Anything less is still linked — nothing is
+  // left dangling — but marked, listed, and changeable.
+
+  it('both signals agreeing links silently', () => {
+    const ref = CORRECTED.holder_ref;
+    // The tool carries the corrected shape AND our ref → certain.
+    const t = arriving({}, { ...base, 'product-id': ref, segments: CORRECTED.segments });
+    const a = backfillHolderIds([t], RECORDS)[0].assemblies[0];
+    expect(a.holder_id).toBe(CORRECTED.id);
+    expect(a._linkGuess).toBeUndefined();
+    expect(buildHolderLinkPlan([{ ...t, assemblies: [a] }], RECORDS, CFG).rows).toHaveLength(0);
+  });
+
+  it('the ID says one holder and the geometry says another → linked, but flagged', () => {
+    const other = RECORDS.find(r => r.id !== CORRECTED.id && r.segments?.length);
+    // Carries the corrected SHAPE but a different holder's ref.
+    const t = arriving({}, { ...base, 'product-id': other.holder_ref, segments: CORRECTED.segments });
+    const a = backfillHolderIds([t], RECORDS)[0].assemblies[0];
+    expect(a.holder_id).toBe(CORRECTED.id);        // geometry wins — it's what the tool carries
+    expect(a._linkGuess).toBe(true);               // …but one of the two is wrong
+    const plan = buildHolderLinkPlan([{ ...t, assemblies: [a] }], RECORDS, CFG);
+    expect(plan.confirm).toHaveLength(1);
+    expect(plan.confirm[0].via).toBe('shape');
+    expect(plan.confirm[0].record.id).toBe(CORRECTED.id);   // pre-filled with the guess
+  });
+
+  it('a guid-only match is a guess, and lands on the confirm list', () => {
+    const a = backfillHolderIds([arriving()], RECORDS)[0].assemblies[0];
+    expect(a.holder_id).toBe(CORRECTED.id);
+    expect(a._linkGuess).toBe(true);
+    expect(buildHolderLinkPlan([{ ...arriving(), assemblies: [a] }], RECORDS, CFG).confirm)
+      .toHaveLength(1);
+  });
+
+  // ⚠️ THE NAG-WALL GUARD. Every tool copied before the first push carries no
+  // ref, so if shape-alone counted as uncertain the ENTIRE pre-existing library
+  // would land on a confirmation list. Measured against the real export.
+  it('shape alone, with no ID baked in, stays silent — no confirmation wall', () => {
+    const withoutRef = TOOLS.map((raw, i) => ({
+      id: `T${i}`, tool_type: 'flat end mill', unit: raw.unit || 'inches', description: `t${i}`,
+      assemblies: [{ assembly_id: `a${i}`, instance_guid: raw.guid, holder_guid: raw.holder.guid }],
+      _instancesRaw: [raw],
+    }));
+    const after = backfillHolderIds(withoutRef, ALL);      // uncorrected library
+    const linked = after.filter(t => t.assemblies[0].holder_id);
+    const guessed = linked.filter(t => t.assemblies[0]._linkGuess);
+    // Measured: 212 of 221 linked, and only 3 asked about (two whose baked
+    // product-id resolves to a record whose shape disagrees, one guid-only).
+    // A handful is a worklist; a hundred would be wallpaper.
+    expect(linked.length).toBeGreaterThan(200);
+    expect(guessed.length).toBeLessThan(10);
+    expect(guessed.every(t => t.assemblies[0]._linkVia !== 'shape')).toBe(true);
+  });
+
   it('a holder retired before the tool arrived: worklist, and the write falls back to Fusion', () => {
     const retired = RECORDS.map(r => (r.id === CORRECTED.id ? { ...r, archived: true } : r));
     const after = backfillHolderIds([arriving()], retired);

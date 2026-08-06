@@ -155,8 +155,26 @@ Resolution order for one assembly — **shape before GUID** (**I3**):
 |---|---|---|
 | **exact** | Segments match one record | Already linked silently; appears only if a stored `holder_id` points at a deleted record |
 | **near** | ONE dimension out, < 5mm, **and the descriptions agree** | Pre-ticked, still confirmed |
+| **confirm** | Auto-linked on **one** signal only — see below | Pre-filled with the guess, changeable |
 | **candidate / none** | Plausible by name or gauge, or nothing to match on | Manual pick |
 | **skipped** | A **turning tool** — carries no holder in Fusion at all | Out of scope; named in the dialog. See the TODO in `CLAUDE.md` |
+
+**Auto-match always, silent only when certain** (`matchBakedHolder`). A tool's
+baked holder carries the same two signals the Fusion library does — our
+`holder_ref` in its `product-id`, and the segments:
+
+| Signals | Result |
+|---|---|
+| **ref + shape agree** | Certain → linked silently |
+| **shape only, no ref baked in** | Certain → linked silently. ⚠️ Every tool copied *before* the first push is in this state, so treating it as uncertain would put the whole library on a confirmation list. Measured on the real export: **212 of 221 linked, 3 asked about** |
+| **ref and shape disagree** | Linked to the **shape** (what the tool actually carries) → **confirm** |
+| **ref only** / **guid only** | Linked → **confirm** |
+| nothing resolves | Not linked → **candidate / none** |
+
+A guessed link is marked `_linkGuess` at load — runtime only, never persisted —
+so once the user confirms it, the stored `holder_id` arrives clean on the next
+load and the row stops appearing. As holder refs get baked into new tools, the
+check strengthens by itself.
 
 ⚠️ The description check is not optional: a length family (`-60/-90/-120/-150`)
 puts every sibling one dimension from the others, and a different stickout of
