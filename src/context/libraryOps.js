@@ -21,7 +21,7 @@ import { isExcludedFrom } from '../utils/idSystems.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
 import { composePresetName, opTypeWord, parsePresetName, materialNameCode, materialCategory, findMaterialInLibrary, camPresetIdFromGrade, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
-import { toolsUsingHolder } from '../schema/holderResolve.js';
+import { toolsUsingHolder, assemblyUsesHolder } from '../schema/holderResolve.js';
 import { segmentsMatch } from '../schema/holderIdentity.js';
 import { defaultToolLibraryId, machineNumberArgs } from './appState.js';
 
@@ -973,7 +973,15 @@ export function createLibraryOps(ctx) {
       let stale = false;
       const assemblies = (t.assemblies || []).map(a => {
         const holderId = byAsm.get(a.assembly_id);
-        if (!holderId || a.holder_id === holderId) return a;
+        if (!holderId) return a;
+        // ⚠️ CONFIRMING A GUESS IS A REAL CHANGE, even when the holder doesn't
+        // move. A link the app guessed (`_linkGuess`, from matchBakedHolder) is
+        // in memory only and was never persisted, so "same holder_id → nothing
+        // to do" made ACCEPTING the guess a total no-op: nothing written, the
+        // flag still set, and the next load re-guessed and re-flagged it. A
+        // flag that its own fix cannot clear is the nag loop.
+        const confirming = !!a._linkGuess;
+        if (a.holder_id === holderId && !confirming) return a;
         touched = true; linked++;
         // Does what Fusion currently holds for this tool match the record?
         const rec = recById.get(holderId);
@@ -981,7 +989,9 @@ export function createLibraryOps(ctx) {
         if (rec && (!baked || !segmentsMatch(baked.segments, baked.unit, rec.segments, rec.unit))) {
           stale = true;
         }
-        return { ...a, holder_id: holderId };
+        // Drop the runtime guess markers — the link is the user's answer now.
+        const { _linkGuess, _linkVia, ...rest } = a;
+        return { ...rest, holder_id: holderId };
       });
       if (!touched) return t;
       const next = { ...t, assemblies };
@@ -1142,6 +1152,16 @@ export function createLibraryOps(ctx) {
     // covered a fraction of them.
     const allAffected = toolsUsingHolder(toolsRef.current, holderRecord)
       .filter(t => t.no_fusion_link !== true);
+    // ⚠️ A tool whose link to this holder is an unconfirmed GUESS must not be
+    // re-stamped by default. Re-stamp writes this holder's geometry INTO the
+    // tool, which would make the guess permanent in Fusion — the opposite of
+    // "auto-match, but let the user pick when it isn't certain". They are still
+    // listed (hiding them would leave a tool nobody ever corrects); they are
+    // reported so the dialog can leave them unticked and say why.
+    const guessed = new Set(allAffected
+      .filter(t => (t.assemblies || []).some(a =>
+        a._linkGuess && assemblyUsesHolder(a, holderRecord)))
+      .map(t => t.id));
     // The preview always describes EVERY affected tool; only the write is
     // narrowed to the selection, so deselecting a tool never hides it.
     const selected = toolIds ? new Set(toolIds) : null;
@@ -1172,6 +1192,7 @@ export function createLibraryOps(ctx) {
     }
     const summary = {
       tools: allAffected,
+      unconfirmed: [...guessed],
       selectedCount: affected.length,
       byLibrary: [...byLibrary.entries()].map(([libId, ts]) => ({ libId, count: ts.length })),
       checks,

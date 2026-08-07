@@ -372,7 +372,16 @@ export function buildMetadataTool(tool) {
       //                 into the tool. Kept because it is what the tool
       //                 physically carries and how a Fusion-side re-point is
       //                 detected — the same role instance_guid plays.
-      holder_id: a.holder_id || null,
+      // ⚠️ A GUESSED LINK IS NOT PERSISTED. `_linkGuess` (set at load by
+      // matchBakedHolder when the two identity signals didn't both agree) means
+      // the app picked a holder and is WAITING to be told whether it's right.
+      // Persisting it would settle that question on the user's behalf: any
+      // ordinary save — renaming the tool, editing a preset — would promote the
+      // guess to a stored FK, the flag would never be recomputed, and the
+      // confirmation row would vanish having never been answered. Left unstored,
+      // the guess is simply re-derived (identically) on the next load and stays
+      // on the confirm list until someone accepts or changes it.
+      holder_id: (a._linkGuess ? null : a.holder_id) || null,
       holder_guid: a.holder_guid || null,
       holder_description: a.holder_description || '',
       ooh: a.ooh ?? null,

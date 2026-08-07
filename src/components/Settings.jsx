@@ -545,7 +545,11 @@ export default function Settings() {
         // that no amount of linking can clear.
         const unlinked = tools.filter(t => !HOLDER_LINK_SKIP_TYPES.has(t.tool_type)
           && (t.assemblies || []).some(a => !a.holder_id)).length;
-        return unlinked ? `${unlinked} tool${unlinked === 1 ? '' : 's'} not linked to a holder yet.` : null;
+        if (unlinked) return `${unlinked} tool${unlinked === 1 ? '' : 's'} not linked to a holder yet.`;
+        // A guessed link counts as linked, so it would otherwise read "done"
+        // while the app is still waiting to be told whether it picked right.
+        const unsure = tools.filter(t => (t.assemblies || []).some(a => a._linkGuess)).length;
+        return unsure ? `${unsure} holder link${unsure === 1 ? '' : 's'} still to confirm.` : null;
       }
       default: return null;
     }

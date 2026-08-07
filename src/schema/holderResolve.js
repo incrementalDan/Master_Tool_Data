@@ -20,7 +20,7 @@
 
 import { holderRecordToFusion } from './holderRecord.js';
 import { holderForGuid, holderOwnsGuid } from '../utils/holderDuplicates.js';
-import { recordsForGeometry, segmentsMatch } from './holderIdentity.js';
+import { recordsForGeometry, recordForRef, segmentsMatch } from './holderIdentity.js';
 import { convertLength } from '../utils/units.js';
 
 // ⚠️ A record with NO SEGMENTS is not a geometry source. A holder created in
@@ -280,6 +280,54 @@ export const assemblyCountUsingHolder = (tools, record) =>
 //
 // A tool that matches neither is left alone: that's the loose, user-confirmed
 // migration matcher's job (holderAudit.js), not a silent guess.
+// ─── Which record is the holder a tool is CARRYING? ─────────────────────────
+//
+// The same two signals the Fusion holder library uses (holderIdentity.js), read
+// off the frozen copy Fusion baked into the tool:
+//
+//   REF    our `holder_ref`, in the baked holder's `product-id`. Present on
+//          every tool copied from a holder AFTER that holder was pushed — the
+//          field is on all 232 baked holders in the reference export, and
+//          carries a value wherever Fusion had one.
+//   SHAPE  the segments, matched within the 0.001" rounding tolerance.
+//
+// ⚠️ ONLY BOTH SIGNALS AGREEING IS CERTAIN. Everything else is a best guess and
+// is MARKED as one — auto-linked so nothing is left dangling, but surfaced so
+// the user sees what the tool carried and can pick a different holder.
+//
+// The one deliberate exception: SHAPE ALONE, when the baked copy carries no ref
+// at all, counts as certain. Every tool copied before the first push is in that
+// state, so treating it as uncertain would put the entire pre-existing library
+// on a confirmation list — the nag wall that makes a flag worthless. Nothing
+// contradicts the match, and shape uniqueness within 0.001" is the same rule
+// the Fusion boundary calls a match. As refs start getting baked in, the check
+// strengthens by itself.
+//
+// → { record, via: 'exact'|'shape'|'ref'|'guid'|null, confident }
+export function matchBakedHolder(baked, holderGuid, records) {
+  const live = (records || []).filter(r => r && r.archived !== true);
+  const ref = String(baked?.['product-id'] || '').trim();
+  const byRef = ref ? recordForRef(live, ref) : null;
+  const shapes = baked ? recordsForGeometry(live, baked) : [];
+  const byShape = shapes.length === 1 ? shapes[0] : null;
+
+  // Both signals, one record — the only certain answer.
+  if (byRef && byShape && byRef.id === byShape.id) {
+    return { record: byRef, via: 'exact', confident: true };
+  }
+  // ⚠️ SHAPE BEFORE REF when they disagree, and before the guid always.
+  // Measured over the shop's real 304-tool library: the shape resolves every
+  // case the guid does (133) PLUS 163 more, with zero disagreements. A guid is
+  // re-issued by Fusion constantly and a ref survives a duplicate-in-Fusion, so
+  // the geometry the tool is actually carrying is the better answer — but a
+  // disagreement means one of them is wrong, so it is never certain.
+  if (byShape) return { record: byShape, via: 'shape', confident: !byRef };
+  if (byRef) return { record: byRef, via: 'ref', confident: false };
+  const byGuid = holderGuid ? holderForGuid(live, holderGuid) : null;
+  if (byGuid) return { record: byGuid, via: 'guid', confident: false };
+  return { record: null, via: null, confident: false };
+}
+
 export function backfillHolderIds(tools, holderRecords) {
   // Archived holders are excluded outright — a tool must never be linked to a
   // holder that was merged away or retired.
@@ -304,12 +352,17 @@ export function backfillHolderIds(tools, holderRecords) {
       // a stale guid can't mislink a tool; it stays as the last resort for a
       // baked holder with no usable geometry.
       const baked = bakedByGuid.get(a.instance_guid);
-      const shapes = baked ? recordsForGeometry(records, baked) : [];
-      let rec = shapes.length === 1 ? shapes[0] : null;
-      if (!rec && a.holder_guid) rec = holderForGuid(records, a.holder_guid);
+      const { record: rec, via, confident } = matchBakedHolder(baked, a.holder_guid, records);
       if (!rec || rec.id === a.holder_id) return a;
       changed = true;
-      return { ...a, holder_id: rec.id };
+      // ⚠️ A LESS-THAN-CERTAIN LINK IS STILL MADE — but it is MARKED, so the
+      // user is shown what the tool was carrying and can change it. Runtime
+      // only (buildMetadataTool copies named fields, so it never persists);
+      // once the user confirms, the stored holder_id arrives without the flag
+      // on the next load and the row stops appearing.
+      return confident
+        ? { ...a, holder_id: rec.id }
+        : { ...a, holder_id: rec.id, _linkVia: via, _linkGuess: true };
     });
     return changed ? { ...t, assemblies } : t;
   });

@@ -155,8 +155,31 @@ Resolution order for one assembly — **shape before GUID** (**I3**):
 |---|---|---|
 | **exact** | Segments match one record | Already linked silently; appears only if a stored `holder_id` points at a deleted record |
 | **near** | ONE dimension out, < 5mm, **and the descriptions agree** | Pre-ticked, still confirmed |
+| **confirm** | Auto-linked on **one** signal only — see below | Pre-filled with the guess, changeable |
 | **candidate / none** | Plausible by name or gauge, or nothing to match on | Manual pick |
 | **skipped** | A **turning tool** — carries no holder in Fusion at all | Out of scope; named in the dialog. See the TODO in `CLAUDE.md` |
+
+**Auto-match always, silent only when certain** (`matchBakedHolder`). A tool's
+baked holder carries the same two signals the Fusion library does — our
+`holder_ref` in its `product-id`, and the segments:
+
+| Signals | Result |
+|---|---|
+| **ref + shape agree** | Certain → linked silently |
+| **shape only, no ref baked in** | Certain → linked silently. ⚠️ Every tool copied *before* the first push is in this state, so treating it as uncertain would put the whole library on a confirmation list. Measured on the real export: **212 of 221 linked, 3 asked about** |
+| **ref and shape disagree** | Linked to the **shape** (what the tool actually carries) → **confirm** |
+| **ref only** / **guid only** | Linked → **confirm** |
+| nothing resolves | Not linked → **candidate / none** |
+
+A guessed link is marked `_linkGuess` at load — runtime only, never persisted —
+so once the user confirms it, the stored `holder_id` arrives clean on the next
+load and the row stops appearing. ⚠️ Confirming counts as a **real change even
+when the holder doesn't move** (**I8**): the guess was never persisted, so a
+"same id → nothing to do" shortcut made accepting it a no-op that re-flagged on
+every load. And it is **not persisted by an ordinary save** either — otherwise
+renaming the tool or editing a preset would promote the guess to a stored FK and
+the question would vanish having never been answered. As holder refs get baked into new tools, the
+check strengthens by itself.
 
 ⚠️ The description check is not optional: a length family (`-60/-90/-120/-150`)
 puts every sibling one dimension from the others, and a different stickout of
@@ -173,6 +196,7 @@ holder is retired, so the tool needs a new one.
 | State | Action |
 |---|---|
 | tools carrying older geometry | Preview each tool's **old → new assembly gauge**, then write |
+| a tool whose link is an **unconfirmed guess** | Listed, but **starts unticked** — re-stamping would bake the guess into Fusion permanently. Confirm it in *Link tools*, or tick that one tool by hand |
 | all tools current | A quiet line, **no call to action** |
 | holder is **archived** | **Not offered.** The banner names the tools still pointing there and sends them to *Link tools* |
 
@@ -206,7 +230,14 @@ time, with nothing on screen. So:
 |---|---|
 | Library **not normalized** | **Blocked.** "Which tools use this" is read off assemblies, which don't exist yet — the count reads 0 and would say "nothing uses this" about a holder half the shop runs |
 | **0 tools** use it | Straight confirm |
-| **N tools** use it | **Requires a replacement.** Move those assemblies to another live holder, previewing how many get corrected in Fusion, then retire — one commit, tools moved **first** so a failed re-link can never leave them stranded |
+| **N tools** use it | **Requires a replacement.** Pick the better-drawn record; every tool moves onto it and gets its geometry corrected in Fusion, then the old one retires — one commit, tools moved **first** so a failed re-link can never leave them stranded |
+
+The replacement needs **no relation** to the record being retired — different
+segments, a gauge several mm apart, unrelated Fusion GUIDs. Nothing in this
+flow reads a GUID. Each tool's **assembly gauge before → after** is previewed
+(the same `gaugeChecks` backstop re-stamp uses), because swapping to a holder
+drawn 8mm differently moves every one of those tools by 8mm — and a change over
+10mm is called out as implausible.
 
 **Move ≠ Merge, and both are offered.** *Move* = these tools now run a
 **different** holder; the retired record keeps its own identity, so a future
@@ -218,6 +249,28 @@ Duplicates rather than duplicating that flow.
 **Restore is a COPY**: new `id`, new `holder_ref`, no Fusion link, no push
 history. Reviving the old identity would re-attach every tool still carrying its
 GUID to the geometry the archive was retiring.
+
+-----
+
+## A tool arrives carrying OLDER holder data
+
+The everyday case: a holder is corrected here, then a tool built in Fusion — or
+synced back from a job — arrives with the **old** frozen copy. Four routes in,
+one answer. Asserted by `src/schema/arrivingHolder.test.js`.
+
+| Route | What happens |
+|---|---|
+| **Built in Fusion, dumped into the library** | Load-time `backfillHolderIds` links it — its **shape no longer matches**, so the baked **GUID** carries it. `staleHolderTools` flags it. Fixed by Re-stamp or any ordinary save |
+| **Sync Job** (one tool or a whole job) | The assembly `DiffStep` creates has `holder_guid` and **no** `holder_id`, and the commit runs before any backfill — so `resolveHolderForWrite` resolves on the guid and **writes the corrected geometry at commit time**. It arrives already fixed |
+| **New assembly added in the app** | Picked from the holder library, so it carries the record from the start |
+| **Reconcile on open** | An adopted stray is registered, then follows the first row |
+
+Two ways it can fail to resolve, neither silent and neither destructive:
+
+| | |
+|---|---|
+| The GUID **also churned** | Nothing resolves → it appears in **Link tools to holders** for a person to pick |
+| The holder was **retired** first | Archived is invisible (**I6**) → link worklist, and the write **falls back to the Fusion entry** so the tool keeps the holder it has rather than being written with none |
 
 -----
 

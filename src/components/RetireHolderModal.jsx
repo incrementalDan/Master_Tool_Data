@@ -11,17 +11,20 @@
 // about that and retiring anyway is how the library gets messy.
 //
 // So when a holder is in use, this asks for somewhere for those tools to GO.
-// Two different answers, and the difference is real:
+// THE MAIN JOB IS "REPLACE THIS HOLDER WITH A BETTER-DRAWN ONE": pick the more
+// correct record, every tool moves onto it, Fusion is corrected in the same
+// commit, and the old record retires. The two holders need no relation to each
+// other — different segments, a gauge several mm apart, Fusion guids that mean
+// nothing. Nothing here reads a guid.
 //
-//   MOVE   These tools now run a DIFFERENT holder. Their assemblies are
-//          repointed and Fusion is corrected in the same commit. The retired
-//          record keeps its own identity — a future Fusion entry carrying its
-//          old ref does NOT resolve to the replacement.
+// ⚠️ WHICH IS WHY THE GAUGE CHANGE IS SHOWN PER TOOL, not just a count. Swapping
+// to a holder drawn 8mm differently moves every one of those tools' assembly
+// gauge by 8mm — a real machining consequence, and the number worth checking
+// before committing. It comes from the same gaugeChecks backstop re-stamp uses.
 //
-//   MERGE  The two records were the SAME physical holder all along. That is the
-//          Duplicates flow, not this one: the survivor absorbs the loser's ref
-//          and Fusion guids, so everything that referenced it follows with no
-//          tool writes at all. Offered here as a pointer, not duplicated.
+// (Merge, in Duplicates, is the OTHER case: two records that were the same
+// physical holder, where the survivor absorbs the loser's identity and no tool
+// is rewritten. Linked from the hint, not reimplemented here.)
 //
 // ⚠️ AND IT IS BLOCKED BEFORE NORMALIZE. "Which tools use this holder" is read
 // off tool assemblies, which don't exist until the library has been normalized.
@@ -32,6 +35,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { X, AlertTriangle, ArrowRight, Trash2 } from 'lucide-react';
 import HolderPill from './HolderPill.jsx';
 import { assemblyUsesHolder } from '../schema/holderResolve.js';
+import { formatHolderLen } from '../utils/holderGeometry.js';
+import { unitAbbr } from '../utils/units.js';
 
 // Every assembly pointing at this record, with its tool — the rows that need
 // somewhere to go. Uses the same predicate as every other "who uses this
@@ -73,6 +78,12 @@ export default function RetireHolderModal({
       .catch(() => { if (live) setEffect(null); });
     return () => { live = false; };
   }, [links, onPreview]);
+
+  // The per-tool gauge change, from the dry run's gaugeChecks. A tool with no
+  // check needs no rewrite — it already carries the replacement's geometry.
+  const checkFor = (toolId) => (effect?.checks || []).find(c => c.toolId === toolId) || null;
+  const gauge = (v, unit) => (v == null || Number.isNaN(v)
+    ? '—' : `${formatHolderLen(v, unit)} ${unitAbbr(unit)}`);
 
   const blocked = needsNormalize;
   const needsReplacement = users.length > 0;
@@ -128,7 +139,7 @@ export default function RetireHolderModal({
               </div>
 
               <label className="holder-field-label" style={{ marginTop: 14, display: 'block' }}>
-                Move {users.length === 1 ? 'it' : 'them'} to
+                Replace it with
               </label>
               <select
                 className="field-input"
@@ -142,22 +153,35 @@ export default function RetireHolderModal({
               </select>
 
               <div className="holder-field-hint" style={{ marginTop: 6 }}>
-                Use this when these tools now run a <b>different</b> holder. If this record and
-                another are the <b>same</b> physical holder, {' '}
+                Every tool above moves onto it and gets its geometry corrected in Fusion. The two
+                holders don’t have to be related — pick whichever record is drawn correctly.
+                {' '}(If they’re actually the <b>same</b> holder recorded twice, {' '}
                 <button className="inline-link" onClick={onMergeInstead}>merge them instead</button>
-                {' '} — a merge carries the identity across, so nothing has to be rewritten.
+                {' '}— that needs no tool writes at all.)
               </div>
 
               <div style={{ marginTop: 14 }}>
-                {users.slice(0, 12).map(u => (
-                  <div className="link-row" key={`${u.tool.id}:${u.assembly.assembly_id}`}>
-                    <div className="link-tool-name">{u.tool.description || u.tool.id}</div>
-                    <div className="link-tool-holder">
-                      <ArrowRight size={11} />{' '}
-                      {options.find(h => h.id === replacementId)?.description || 'pick a holder above'}
+                {users.slice(0, 12).map(u => {
+                  // ⚠️ The assembly gauge is what actually changes on the shop
+                  // floor. Show old → new per tool, not just "N corrected".
+                  const c = checkFor(u.tool.id);
+                  return (
+                    <div className="link-row" key={`${u.tool.id}:${u.assembly.assembly_id}`}>
+                      <div className="link-tool-name">{u.tool.description || u.tool.id}</div>
+                      <div className="link-tool-holder">
+                        {c ? (
+                          <span style={c.level === 'error' ? { color: 'var(--red)' } : undefined}>
+                            gauge <span className="mono">{gauge(c.before, u.tool.unit)}</span>
+                            {' '}<ArrowRight size={10} />{' '}
+                            <span className="mono">{gauge(c.after, u.tool.unit)}</span>
+                            {c.reason ? <> — {c.reason}</> : null}
+                          </span>
+                        ) : replacementId ? 'already carries this geometry'
+                          : 'pick a holder above'}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {users.length > 12 && (
                   <div className="text-sub" style={{ fontSize: 12 }}>
                     …and {users.length - 12} more
@@ -188,7 +212,7 @@ export default function RetireHolderModal({
             <Trash2 size={14} />
             {busy ? 'Retiring…'
               : needsReplacement && replacementId
-                ? `Move ${users.length} and retire`
+                ? `Move ${users.length} tool${users.length === 1 ? '' : 's'} & retire`
                 : 'Retire holder'}
           </button>
         </div>
