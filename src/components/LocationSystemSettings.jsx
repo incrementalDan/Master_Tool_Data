@@ -109,23 +109,48 @@ function EditableName({ value, onChange }) {
   );
 }
 
+// One line describing what an inactive level is configured as, so switching it
+// off hides the controls without hiding the fact that something is set up in
+// there ("Building · Number · 3 added").
+function levelSummary(level) {
+  if (!level) return '';
+  const parts = [levelTypeName(level)];
+  if (level.identFormat === 'custom') parts.push(level.customIdent ? `"${level.customIdent}"` : 'custom label');
+  else parts.push(level.identFormat === 'letter' ? 'Letter' : 'Number');
+  const n = (level.options || []).length;
+  if (n) parts.push(`${n} added`);
+  return parts.filter(Boolean).join(' · ');
+}
+
 // ── Level block (optional levels toggle on/off) ─────────────────────────────
-function LevelBlock({ title, optional, active, onToggle, children }) {
+// An inactive level COLLAPSES to its header + summary rather than rendering the
+// whole form greyed out. Dimmed-but-present controls cost as much vertical space
+// as live ones, which is what made it hard to see where one thing ended and the
+// next began — while the summary keeps "there is more in here" visible.
+function LevelBlock({ title, optional, active, onToggle, summary, children }) {
   return (
     <div style={{
       border: `1px solid ${active ? 'color-mix(in srgb, var(--blue) 40%, transparent)' : 'var(--border)'}`,
-      borderRadius: 8, padding: 12,
+      borderRadius: 8, padding: active ? 12 : '9px 12px',
       background: active ? 'color-mix(in srgb, var(--blue) 7%, transparent)' : 'var(--surface-2)',
-      transition: 'border-color 0.15s',
+      transition: 'border-color 0.15s, padding 0.15s',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: active ? 12 : 0, flexWrap: 'wrap' }}>
         {optional
           ? <Toggle on={active} set={onToggle} />
           : <span style={{ width: 32, display: 'inline-flex', alignItems: 'center' }}><span style={{ width: 8, height: 8, borderRadius: 2, background: 'var(--blue)' }} /></span>}
         <span style={{ fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.1em', textTransform: 'uppercase', color: active ? 'var(--blue)' : 'var(--text-sub)' }}>{title}</span>
         {optional && <span style={{ fontSize: '0.62rem', color: 'var(--text-sub)' }}>optional</span>}
+        {!active && (
+          <>
+            <div style={{ flex: 1, minWidth: 6 }} />
+            <span className="text-xs" style={{ color: 'var(--text-sub)', opacity: 0.75, textAlign: 'right' }}>
+              {summary || 'not used'}
+            </span>
+          </>
+        )}
       </div>
-      <div style={{ opacity: active ? 1 : 0.3, pointerEvents: active ? 'auto' : 'none' }}>{children}</div>
+      {active && children}
     </div>
   );
 }
@@ -458,9 +483,19 @@ function SystemCard({ sys, tools, conflicts = [], dirty = false, onUpdate, onDel
   const updD = (key, val) => onUpdate({ ...sys, delimiters: { ...sys.delimiters, [key]: val } });
   const preview = buildPreview(sys);
 
+  // Each system is one physical place, so its card needs a hard edge — a 2px
+  // border (always 2px, only the COLOR changes, so opening one doesn't shift the
+  // layout), a wider gap between cards, and an accent + lift while open so "the
+  // one I'm editing" reads at a glance.
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, marginBottom: 8, overflow: 'hidden' }}>
-      <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', cursor: 'pointer', background: open ? 'var(--surface-2)' : 'transparent' }} onClick={() => setOpen(o => !o)}>
+    <div style={{
+      background: 'var(--surface)',
+      border: `2px solid ${open ? 'color-mix(in srgb, var(--blue) 55%, transparent)' : 'var(--border)'}`,
+      borderRadius: 10, marginBottom: 14, overflow: 'hidden',
+      boxShadow: open ? '0 4px 18px rgba(0,0,0,0.28)' : 'none',
+      transition: 'border-color 0.15s, box-shadow 0.15s',
+    }}>
+      <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', cursor: 'pointer', background: open ? 'color-mix(in srgb, var(--blue) 12%, transparent)' : 'transparent' }} onClick={() => setOpen(o => !o)}>
         <EditableName value={sys.name} onChange={name => onUpdate({ ...sys, name })} />
         {sys.normalized && <Badge color="g">Normalized</Badge>}
         {sys.allowDuplicates && <Badge color="b">Dupes OK</Badge>}
@@ -503,17 +538,17 @@ function SystemCard({ sys, tools, conflicts = [], dirty = false, onUpdate, onDel
             Configure levels from zone (broadest) down to bin. Delimiter controls appear between each level, grayed out when the adjacent level is inactive.
           </div>
 
-          <LevelBlock title="Zone" optional active={L.zone.on} onToggle={v => upd('zone', { on: v })}>
+          <LevelBlock title="Zone" optional active={L.zone.on} onToggle={v => upd('zone', { on: v })} summary={levelSummary(L.zone)}>
             <LevelFields level={L.zone} types={ZONE_TYPES} updateLevel={p => upd('zone', p)} />
           </LevelBlock>
           <DelimRow label="zone → station" value={D.zs} onChange={v => updD('zs', v)} active={L.zone.on && L.station.on} />
 
-          <LevelBlock title="Station" optional active={L.station.on} onToggle={v => upd('station', { on: v })}>
+          <LevelBlock title="Station" optional active={L.station.on} onToggle={v => upd('station', { on: v })} summary={levelSummary(L.station)}>
             <LevelFields level={L.station} types={STATION_TYPES} updateLevel={p => upd('station', p)} />
           </LevelBlock>
           <DelimRow label="station → drawer" value={D.sd} onChange={v => updD('sd', v)} active={L.station.on && L.drawer.on} />
 
-          <LevelBlock title="Drawer" optional active={L.drawer.on} onToggle={v => upd('drawer', { on: v })}>
+          <LevelBlock title="Drawer" optional active={L.drawer.on} onToggle={v => upd('drawer', { on: v })} summary={levelSummary(L.drawer)}>
             <LevelFields level={L.drawer} types={DRAWER_TYPES} updateLevel={p => upd('drawer', p)} />
           </LevelBlock>
           <DelimRow label="drawer → bin" value={D.db} onChange={v => updD('db', v)} active={L.drawer.on} />
