@@ -565,6 +565,7 @@ function LocationIssuesPanel({ tools, systems, onUpdateSystem, dirty }) {
   const issues = libraryLocationIssues(tools, systems);
   const dupes = issues.filter(i => i.type === 'duplicate');
   const gaps = issues.filter(i => i.type === 'gap');
+  const push = useFusionLocationPush(tools);
 
   // Acknowledging a gap silences the row WITHOUT reserving the number — it never
   // touches bin.skip[], so the bin stays freely assignable, and the whole
@@ -649,7 +650,120 @@ function LocationIssuesPanel({ tools, systems, onUpdateSystem, dirty }) {
         </>
       )}
 
+      <FusionLocationPush push={push} dirty={dirty} />
+
       {showImport && <LocationImportModal onClose={() => setShowImport(false)} />}
+    </div>
+  );
+}
+
+// ── Settle Fusion after a bulk location write ───────────────────────────────
+// Location IS a Fusion-native field (its "Vendor" box), but normalization and
+// the ProShop re-import are both metadata-only batch writes, so Fusion keeps the
+// OLD location until each tool happens to be saved individually — which can take
+// months. This is the explicit "make Fusion agree now" pass.
+//
+// It uses pushFieldToFusion (a FIELD-scoped patch: only the vendor native +
+// its paired expression are touched, every other byte of each entry is left
+// alone) rather than the tool-scoped writeToolsToFusion, which would rebuild
+// each entry's geometry, holder and presets from the app's model to correct one
+// string.
+function useFusionLocationPush(tools) {
+  const { pushFieldToFusion, fusionReady, notify } = useApp();
+  const [state, setState] = useState({ phase: 'idle', changes: [], error: '' });
+
+  // Only tools the app actually owns a location for — a legacy free-text
+  // location IS Fusion's own value, so there is nothing to correct there.
+  const owned = (tools || []).filter(t => t.tool_location?.system_id && !t.no_fusion_link);
+
+  const preview = async () => {
+    setState({ phase: 'checking', changes: [], error: '' });
+    try {
+      const res = await pushFieldToFusion(owned, 'location', { dryRun: true });
+      setState({ phase: 'preview', changes: res.changes, error: '' });
+    } catch (err) {
+      setState({ phase: 'idle', changes: [], error: err.message });
+    }
+  };
+
+  const commit = async () => {
+    setState(s => ({ ...s, phase: 'writing' }));
+    try {
+      const res = await pushFieldToFusion(owned, 'location');
+      setState({ phase: 'done', changes: [], error: '' });
+      notify(`Fusion updated — ${res.count} location${res.count === 1 ? '' : 's'}`, 'success');
+    } catch (err) {
+      setState(s => ({ ...s, phase: 'preview', error: err.message }));
+    }
+  };
+
+  return { ...state, owned: owned.length, fusionReady, preview, commit };
+}
+
+function FusionLocationPush({ push, dirty }) {
+  const { phase, changes, error, owned, fusionReady, preview, commit } = push;
+  if (!owned) return null;
+
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>Fusion sync</span>
+        <InfoTip text="Normalizing locations and re-importing them from ProShop are metadata-only writes, so Fusion's Vendor field (where the location lives) keeps the old value until each tool is next saved on its own. This pushes them now. Only that one field is touched — geometry, holders and presets are left exactly as they are." />
+        <div style={{ flex: 1, minWidth: 8 }} />
+        {phase === 'idle' && (
+          <button className="btn btn-secondary btn-sm" disabled={dirty || !fusionReady}
+            title={dirty ? 'Save or cancel your settings changes first'
+              : !fusionReady ? 'Still syncing with Fusion' : 'Check what Fusion is holding'}
+            onClick={preview}>
+            Check Fusion
+          </button>
+        )}
+        {phase === 'checking' && <span className="text-sub text-xs">Checking…</span>}
+      </div>
+
+      {error && <div className="error-banner" style={{ marginTop: 8 }}>{error}</div>}
+
+      {phase === 'preview' && (
+        changes.length === 0 ? (
+          <div className="text-sm" style={{ marginTop: 8, color: 'var(--green)' }}>
+            Fusion already matches — nothing to push.
+          </div>
+        ) : (
+          <div style={{ marginTop: 8 }}>
+            <div className="text-sm" style={{ marginBottom: 6 }}>
+              <strong>{changes.length}</strong> Fusion {changes.length === 1 ? 'entry is' : 'entries are'} holding an
+              older location.
+            </div>
+            <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 7 }}>
+              <table className="match-table">
+                <thead><tr><th>Tool #</th><th>Fusion has</th><th>Will become</th></tr></thead>
+                <tbody>
+                  {changes.slice(0, 100).map(c => (
+                    <tr key={c.guid}>
+                      <td className="text-sm font-mono">{c.tool_id || '—'}</td>
+                      <td className="text-sm font-mono text-sub">{c.from || '—'}</td>
+                      <td className="text-sm font-mono" style={{ color: 'var(--blue)' }}>{c.to || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {changes.length > 100 && (
+              <div className="text-sub text-xs" style={{ marginTop: 6 }}>…and {changes.length - 100} more.</div>
+            )}
+            <button className="btn btn-primary btn-sm" style={{ marginTop: 8 }} onClick={commit}>
+              Push {changes.length} to Fusion
+            </button>
+          </div>
+        )
+      )}
+
+      {phase === 'writing' && <div className="text-sub text-sm" style={{ marginTop: 8 }}>Writing to Fusion…</div>}
+      {phase === 'done' && (
+        <div className="text-sm" style={{ marginTop: 8, color: 'var(--green)' }}>
+          Fusion now matches the app for these tools.
+        </div>
+      )}
     </div>
   );
 }
