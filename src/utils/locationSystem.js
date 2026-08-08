@@ -225,13 +225,26 @@ export function proShopLocationValue(system, composed) {
 }
 
 // ─── Bin numbering ───────────────────────────────────────────────────────────
-// Next available bin for an auto-increment system: ≥ start, not skipped, not used.
+// Next available bin for an auto-increment system: continues ABOVE the highest
+// bin in use (≥ start, not skipped, not used).
+//
+// ⚠️ It deliberately does NOT fill the lowest hole. A gap in the sequence means
+// a bin whose tool hasn't been accounted for yet — very often something IS
+// physically sitting in it — so handing that number to the next new tool would
+// quietly double-book a drawer. Auto-assignment always moves forward; a hole is
+// filled only when a person decides to, by typing the number into the location
+// picker (which allows any bin that isn't already taken). That's the whole
+// reason a reported gap is not a reservation: skipping it here is what makes it
+// safe to leave it assignable there.
 export function nextBin(system, usedBins = new Set()) {
   const bin = system?.levels?.bin;
   if (!bin || bin.fixed) return bin?.fixedVal || '';
   const skip = new Set((bin.skip || []).map(Number));
   const used = usedBins instanceof Set ? usedBins : new Set(usedBins);
-  let n = Number(bin.start) || 1;
+  const start = Number(bin.start) || 1;
+  let maxUsed = null;
+  for (const n of used) if (maxUsed == null || n > maxUsed) maxUsed = n;
+  let n = (maxUsed != null && maxUsed >= start) ? maxUsed + 1 : start;
   while (skip.has(n) || used.has(n)) n++;
   return n;
 }

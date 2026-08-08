@@ -228,8 +228,10 @@ describe('bin gaps are informational, never a reservation', () => {
     s.acknowledged_gaps = [3];
     const r = routeProShopLocations(rows([['A', '1'], ['B', '2'], ['C', '5']]), [s]);
     expect(r.perSystem[0].gaps).toEqual([4]);
-    // Crucially NOT added to skip[] — nextBin can still hand out 3.
-    expect(nextBin(s, new Set([1, 2, 5]))).toBe(3);
+    // Crucially NOT reserved: acknowledging never writes to skip[], so bin 3 can
+    // still be assigned by hand in the location picker. Auto-assignment is a
+    // separate question — nextBin always moves forward past a hole.
+    expect(s.levels.bin.skip).toEqual([]);
   });
 
   it('acknowledging a gap is undone the moment a tool fills it', () => {
@@ -289,5 +291,41 @@ describe('libraryLocationIssues — the durable, derived worklist', () => {
   it('is a no-op for a clean system (the list empties as things are fixed)', () => {
     const s = lc();
     expect(libraryLocationIssues([at('A', s.id, 1), at('B', s.id, 2)], [s])).toEqual([]);
+  });
+});
+
+describe('nextBin skips holes but never blocks them', () => {
+  const sys = (over = {}) => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    s.levels.bin = { fixed: false, start: 1, fixedVal: '', skip: [], ...over };
+    return s;
+  };
+
+  it('continues ABOVE the highest bin, it does not fill the lowest hole', () => {
+    // 25 is missing. Handing it to the next new tool would double-book a drawer
+    // that very likely still has something in it.
+    const used = new Set();
+    for (let i = 1; i <= 233; i++) if (i !== 25) used.add(i);
+    expect(nextBin(sys(), used)).toBe(234);
+  });
+
+  it('a gap stays freely assignable — it is never added to skip[]', () => {
+    const s = sys();
+    const used = new Set([1, 2, 5]);
+    s.acknowledged_gaps = [3, 4];        // both reported and dismissed
+    expect(s.levels.bin.skip).toEqual([]); // acknowledging never reserves
+    expect(nextBin(s, used)).toBe(6);      // auto-assignment still moves forward
+  });
+
+  it('still honours reserved numbers at the top of the range', () => {
+    expect(nextBin(sys({ skip: [6, 7] }), new Set([1, 2, 5]))).toBe(8);
+  });
+
+  it('starts at the configured start when nothing is used', () => {
+    expect(nextBin(sys({ start: 1000 }), new Set())).toBe(1000);
+  });
+
+  it('ignores bins below the configured start', () => {
+    expect(nextBin(sys({ start: 1000 }), new Set([3, 9]))).toBe(1000);
   });
 });
