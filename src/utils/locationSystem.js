@@ -371,6 +371,51 @@ export function libraryLocationStatus(tools, systems) {
   };
 }
 
+// ─── Library-side location issues (derived, never stored) ────────────────────
+// The durable worklist: everything about the CURRENT library that isn't a clean
+// 100% match. Recomputed on every read like analyzeSystem, so it's always
+// reachable, always current, and each row disappears by itself as the tool
+// behind it is fixed — there is no report to save or go stale.
+//
+// Distinct from the import-time exception list (which is about rows in a CSV);
+// this is about tools in the library.
+export function libraryLocationIssues(tools, systems) {
+  const list = tools || [];
+  const out = [];
+  for (const sys of systems || []) {
+    const rule = systemImportRule(sys);
+    const inSystem = list.filter(t => t.tool_location?.system_id === sys.id);
+
+    // Two tools on one bin, in a system that doesn't expect it.
+    if (!sys.allowDuplicates && !sys.levels?.bin?.fixed) {
+      const byBin = new Map();
+      for (const t of inSystem) {
+        const n = t.tool_location?.bin;
+        if (n == null || n === '') continue;
+        const k = Number(n);
+        if (Number.isNaN(k)) continue;
+        if (!byBin.has(k)) byBin.set(k, []);
+        byBin.get(k).push(t);
+      }
+      for (const [bin, dupes] of byBin) {
+        if (dupes.length < 2) continue;
+        out.push({
+          type: 'duplicate', systemId: sys.id, systemName: sys.name, bin,
+          tools: dupes.map(t => ({ id: t.id, tool_id: t.tool_id, description: t.description })),
+        });
+      }
+    }
+
+    // Holes in the occupied range — informational only.
+    if (rule.flagGaps) {
+      for (const bin of findBinGaps(sys, usedBinsForSystem(list, sys.id))) {
+        out.push({ type: 'gap', systemId: sys.id, systemName: sys.name, bin });
+      }
+    }
+  }
+  return out;
+}
+
 // An empty structured location for a given system (nothing picked yet).
 export function emptyLocation(systemId) {
   return { system_id: systemId, zone_id: null, station_id: null, drawer_id: null, bin: null };

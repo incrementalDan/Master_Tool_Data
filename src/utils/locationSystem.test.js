@@ -4,6 +4,7 @@ import {
   systemOutputSignature, systemStructureSignature, findSystemConflicts,
   parseLocationString, analyzeSystem, nextBin,
   newImportRule, routeProShopLocations, parseTriggerList, pruneAcknowledgedGaps,
+  libraryLocationIssues,
 } from './locationSystem.js';
 
 // Helper: a system with a custom-prefix drawer + auto bin (the default shape).
@@ -248,5 +249,45 @@ describe('bin gaps are informational, never a reservation', () => {
 describe('parseTriggerList', () => {
   it('parses a comma-separated box, ignoring blanks and junk', () => {
     expect(parseTriggerList('10000, 20000 ,, abc, 30')).toEqual([10000, 20000, 30]);
+  });
+});
+
+describe('libraryLocationIssues — the durable, derived worklist', () => {
+  const lc = () => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    s.allowDuplicates = false;
+    s.proShopImport = { ...newImportRule(), match: 'any_unique', flagGaps: true };
+    return s;
+  };
+  const at = (id, sysId, bin) => ({ id, tool_id: id, tool_location: { system_id: sysId, bin } });
+
+  it('finds two tools sharing a bin', () => {
+    const s = lc();
+    const issues = libraryLocationIssues([at('A', s.id, 5), at('B', s.id, 5), at('C', s.id, 6)], [s]);
+    const dup = issues.find(i => i.type === 'duplicate');
+    expect(dup.bin).toBe(5);
+    expect(dup.tools.map(t => t.id).sort()).toEqual(['A', 'B']);
+  });
+
+  it('does not flag a shared bin in a system that allows duplicates', () => {
+    const s = lc();
+    s.allowDuplicates = true;
+    const issues = libraryLocationIssues([at('A', s.id, 5), at('B', s.id, 5)], [s]);
+    expect(issues.filter(i => i.type === 'duplicate')).toEqual([]);
+  });
+
+  it('reports gaps and clears them once the hole is filled', () => {
+    const s = lc();
+    const before = libraryLocationIssues([at('A', s.id, 1), at('B', s.id, 4)], [s]);
+    expect(before.filter(i => i.type === 'gap').map(i => i.bin)).toEqual([2, 3]);
+    const after = libraryLocationIssues(
+      [at('A', s.id, 1), at('X', s.id, 2), at('Y', s.id, 3), at('B', s.id, 4)], [s],
+    );
+    expect(after.filter(i => i.type === 'gap')).toEqual([]);
+  });
+
+  it('is a no-op for a clean system (the list empties as things are fixed)', () => {
+    const s = lc();
+    expect(libraryLocationIssues([at('A', s.id, 1), at('B', s.id, 2)], [s])).toEqual([]);
   });
 });
