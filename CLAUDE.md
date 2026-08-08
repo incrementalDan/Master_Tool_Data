@@ -49,7 +49,7 @@ If yes — does my code write it *there*, not just to metadata? (See "If Fusion 
 → *Caught: linking tools to holders stored `holder_id` and left half the library carrying wrong holder geometry in Fusion.*
 
 **2. Every Fusion-native field I wrote — did I write its expression too?**
-Fusion re-derives the native value from the expression on load, so a stale expression silently undoes the write. **Delete** the expression when the value is empty; never write `''`. And no app-only field may leak into the Fusion JSON.
+Fusion re-derives the native value from the expression on load, so a stale expression silently undoes the write. **Delete** the expression when the value is empty; never write `''`. And no app-only field may leak into the Fusion JSON. (For a field pushed on its own, the pair belongs in `FUSION_FIELD_PATCHERS` — see **Pushing ONE field to Fusion**.)
 → *Caught: `product-id` reverting on 4 holders; the recurring stepdown/stepover flag; OOH silently reverting.*
 
 **3. What happens on the second run?**
@@ -308,6 +308,10 @@ A configurable, **database-ready** model for how tools are physically stored, in
     "normalized": false, "allowDuplicates": false,
     "proShopExport": "number_only",   // number_only | full | fixed
     "fixedExport": "",
+    // How this system CLAIMS a bare number on ProShop import (mirror of
+    // proShopExport) — see "Per-system import matching".
+    "proShopImport": { "match": "any_unique", "triggers": [], "range": { "min": null, "max": null }, "flagGaps": true },
+    "acknowledged_gaps": [],          // gaps ruled on — informational, NOT reserved
     "delimiters": { "zs": "-", "sd": "-", "db": "-" },
     "levels": {
       "zone":    { "on": false, "levelType": "Building", "customTypeName": "", "identFormat": "number", "customIdent": "", "options": [] },
@@ -929,7 +933,12 @@ src/
                                   # reconcileTool, applyReconcile
     libraryOps.js                  # createLibraryOps(ctx): saveFullLibrary, renumberLibrary,
                                   # assignToolIds, renumberAllToolIds, normalizeLibrary
-                                  # (shop-global bulk ops across all linked libraries)
+                                  # (shop-global bulk ops across all linked libraries),
+                                  # writeToolsToFusion (TOOL-scoped: rebuilds each
+                                  # entry) and pushFieldToFusion + FUSION_FIELD_PATCHERS
+                                  # (FIELD-scoped: patches one native+expression pair
+                                  # in place, everything else byte-for-byte). Reach for
+                                  # the right one — see "Pushing ONE field to Fusion".
     attachmentActions.js           # createAttachmentActions(ctx): uploadToolPhoto,
                                   # uploadToolAttachment, deleteToolAttachment,
                                   # importProShopPhotos
@@ -1071,9 +1080,17 @@ src/
                                   # Right sidebar: Identity, Photo, Purchasing, Notes & Tags, Files
     ToolForm.jsx                  # Edit form with sticky action bar + dirty guard
     LocationSystemSettings.jsx    # Settings section: configure Location Systems
-                                  # (levels/delimiters/ProShop export), normalize
-                                  # (analyze→preview→commit), library unmatched panel.
+                                  # (levels/delimiters/ProShop export + the collapsible
+                                  # per-system ProShop IMPORT rule), normalize
+                                  # (analyze→preview→commit), library unmatched panel,
+                                  # and LocationIssuesPanel (derived duplicate/gap
+                                  # worklist + Fusion sync via pushFieldToFusion).
                                   # Ported from docs/LocationSystemUI.tsx. Exports LivePreview.
+    LocationImportModal.jsx       # Location-ONLY ProShop re-import: upload a full
+                                  # export, match on Tool #, preview old→new + the
+                                  # exception list, commit. ProShop wins outright here
+                                  # (the one exception to the flag-never-overwrite
+                                  # location rule) and the dialog says so.
     LocationPicker.jsx            # ToolDetail "Assign Location" picker — pick system +
                                   # level options + bin (auto-suggested), writes via
                                   # AppContext.assignToolLocation; `record`/`onAssign`
@@ -1844,7 +1861,16 @@ This is not about Fusion being important. It's about not building a trap: the sh
 
 **When adding any feature, answer this before writing code:** *which of the values I am touching does Fusion have a field for, and where does my code write them back?* If the answer is "it doesn't", either write them or say plainly that you are leaving Fusion stale and why.
 
-**Batching is fine; skipping is not.** A bulk action may write metadata in one pass and Fusion in one targeted pass (see `writeToolsToFusion`) rather than a round-trip per record — that's an efficiency choice, not an exemption. What is never acceptable is finishing an action with Fusion holding values the app knows are wrong and no visible sign of it.
+**Batching is fine; skipping is not.** A bulk action may write metadata in one pass and Fusion in one targeted pass rather than a round-trip per record — that's an efficiency choice, not an exemption. What is never acceptable is finishing an action with Fusion holding values the app knows are wrong and no visible sign of it.
+
+**Two targeted writers — pick by SCOPE, not by convenience:**
+
+| Writer | Scope | Use when |
+|---|---|---|
+| `writeToolsToFusion` | **TOOL** — rebuilds each entry from the app's model (`splitToFusionInstances`) | the whole entry is the point (re-stamping baked holder geometry) |
+| `pushFieldToFusion` | **FIELD** — patches one native+expression pair in place, every other byte untouched | "Fusion's copy of this one value is stale" |
+
+⚠️ Reaching for the tool-scoped writer to correct a single field rewrites geometry, presets and every expression across every tool it touches, silently applying any other app↔Fusion drift on the way. When a bulk metadata write leaves one Fusion field behind, the fix is a **`FUSION_FIELD_PATCHERS` entry + a preview→commit action**, not a bespoke push and not a full rebuild. See **Pushing ONE field to Fusion** under the Location System for the contract.
 
 -----
 
