@@ -329,3 +329,24 @@ describe('nextBin skips holes but never blocks them', () => {
     expect(nextBin(sys({ start: 1000 }), new Set([3, 9]))).toBe(1000);
   });
 });
+
+describe('a duplicates-allowed system gets no bin suggestion', () => {
+  it('returns null rather than inventing sentinel+1', () => {
+    const s = lcSystem('Index', { ident: 'DI', binStart: 1 });
+    s.allowDuplicates = true;
+    // Every tool parked on one sentinel — "next" is meaningless here.
+    expect(nextBin(s, new Set([10000]))).toBe(null);
+  });
+
+  it('a normal system is unaffected', () => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    expect(nextBin(s, new Set([1, 2, 3]))).toBe(4);
+  });
+
+  it('a fixed bin still returns its fixed value', () => {
+    const s = lcSystem('Index', { ident: 'DI' });
+    s.allowDuplicates = true;
+    s.levels.bin = { fixed: true, start: 1, fixedVal: '10000', skip: [] };
+    expect(nextBin(s, new Set())).toBe('10000');
+  });
+});

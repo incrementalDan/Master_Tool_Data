@@ -236,9 +236,16 @@ export function proShopLocationValue(system, composed) {
 // picker (which allows any bin that isn't already taken). That's the whole
 // reason a reported gap is not a reservation: skipping it here is what makes it
 // safe to leave it assignable there.
+// Returns null when there is no meaningful "next" — a system that ALLOWS
+// duplicates isn't a sequence, so continuing past the highest value would
+// invent a number nobody asked for (a shop parking every tool on one sentinel
+// bin would be offered sentinel+1, and a suggestion that's silently wrong is
+// worse than none: the picker falls back to the suggestion when the field is
+// left blank). Callers must treat null as "no suggestion, make the user pick".
 export function nextBin(system, usedBins = new Set()) {
   const bin = system?.levels?.bin;
   if (!bin || bin.fixed) return bin?.fixedVal || '';
+  if (system?.allowDuplicates) return null;
   const skip = new Set((bin.skip || []).map(Number));
   const used = usedBins instanceof Set ? usedBins : new Set(usedBins);
   const start = Number(bin.start) || 1;
