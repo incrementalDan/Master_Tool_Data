@@ -42,12 +42,22 @@ export default function LocationPicker({ tool, record, onAssign }) {
 
   const system = findSystem(systems, sysId);
 
-  // Suggested next bin for an auto-increment system (excludes this record's own bin).
+  // Suggested next bin for an auto-increment system (excludes this record's own
+  // bin). '' when there is nothing sensible to suggest — a system that allows
+  // duplicates isn't a sequence, so it gets no suggestion and the bin must be
+  // typed in. That matters because a blank field falls back to the suggestion:
+  // a wrong pre-filled number would save itself unless the user remembered to
+  // overwrite it.
   const suggestedBin = useMemo(() => {
     if (!system || system.levels.bin.fixed) return '';
     const used = usedBinsForSystem(locRecords.filter(t => t.id !== rec.id), sysId);
-    return String(nextBin(system, used));
+    const next = nextBin(system, used);
+    return next == null ? '' : String(next);
   }, [system, locRecords, rec.id, sysId]);
+
+  // With no suggestion to fall back on, an empty bin would compose a location
+  // with a missing segment — require one instead.
+  const binMissing = !!system && !system.levels.bin.fixed && !bin.trim() && !suggestedBin;
 
   function selectSystem(id) {
     setSysId(id);
@@ -150,7 +160,9 @@ export default function LocationPicker({ tool, record, onAssign }) {
               ) : (
                 <>
                   <input className="field-input font-mono" style={{ width: 150, fontSize: '1rem', fontWeight: 700 }} value={bin} onChange={e => setBin(e.target.value)} placeholder={suggestedBin} />
-                  <div className="text-sub text-xs" style={{ marginTop: 4 }}>Suggested next: <span className="font-mono">{suggestedBin}</span></div>
+                  {suggestedBin
+                    ? <div className="text-sub text-xs" style={{ marginTop: 4 }}>Suggested next: <span className="font-mono">{suggestedBin}</span></div>
+                    : <div className="text-sub text-xs" style={{ marginTop: 4 }}>This system allows duplicates, so there's no next number to suggest — enter the bin.</div>}
                 </>
               )}
             </div>
@@ -169,7 +181,7 @@ export default function LocationPicker({ tool, record, onAssign }) {
           )}
 
           <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-            <button className="btn btn-primary btn-sm" onClick={setLocation} disabled={isSaving || binCollision}>
+            <button className="btn btn-primary btn-sm" onClick={setLocation} disabled={isSaving || binCollision || binMissing}>
               <MapPin size={13} /> {isSaving ? 'Saving…' : 'Set location'}
             </button>
             {current && (

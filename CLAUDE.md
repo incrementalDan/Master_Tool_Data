@@ -49,7 +49,7 @@ If yes — does my code write it *there*, not just to metadata? (See "If Fusion 
 → *Caught: linking tools to holders stored `holder_id` and left half the library carrying wrong holder geometry in Fusion.*
 
 **2. Every Fusion-native field I wrote — did I write its expression too?**
-Fusion re-derives the native value from the expression on load, so a stale expression silently undoes the write. **Delete** the expression when the value is empty; never write `''`. And no app-only field may leak into the Fusion JSON.
+Fusion re-derives the native value from the expression on load, so a stale expression silently undoes the write. **Delete** the expression when the value is empty; never write `''`. And no app-only field may leak into the Fusion JSON. (For a field pushed on its own, the pair belongs in `FUSION_FIELD_PATCHERS` — see **Pushing ONE field to Fusion**.)
 → *Caught: `product-id` reverting on 4 holders; the recurring stepdown/stepover flag; OOH silently reverting.*
 
 **3. What happens on the second run?**
@@ -308,6 +308,10 @@ A configurable, **database-ready** model for how tools are physically stored, in
     "normalized": false, "allowDuplicates": false,
     "proShopExport": "number_only",   // number_only | full | fixed
     "fixedExport": "",
+    // How this system CLAIMS a bare number on ProShop import (mirror of
+    // proShopExport) — see "Per-system import matching".
+    "proShopImport": { "match": "any_unique", "triggers": [], "range": { "min": null, "max": null }, "flagGaps": true },
+    "acknowledged_gaps": [],          // gaps ruled on — informational, NOT reserved
     "delimiters": { "zs": "-", "sd": "-", "db": "-" },
     "levels": {
       "zone":    { "on": false, "levelType": "Building", "customTypeName": "", "identFormat": "number", "customIdent": "", "options": [] },
@@ -347,7 +351,7 @@ The internal `tool.location` string (written to Fusion's "Vendor" field, `expres
 
 ### Pure helpers — `src/utils/locationSystem.js`
 
-Framework-free. Key exports: `newLocationSystem(name)` / `newLevelOption(label, order)` (factories with UUIDs), `findSystem` / `levelOptions` / `findOption` / `levelTypeName`, `composeLocationString(loc, system)` and `buildPreview(system)` (the live-preview composer — order zone→station→drawer→bin, per-junction delimiters), `resolveLocationString(loc, systems)`, `proShopLocationValue(system, composed)` (number_only strips non-digits / full / fixed), `nextBin(system, usedBins)` + `usedBinsForSystem`, `parseLocationString(str, system)` (lenient regex parse for normalization — a **custom prefix like `LC` is OPTIONAL**, so a bare ProShop bin number `140` parses to the same bin as `LC-140`; without this, tools whose location is stored as just the number were missed by Analyze, landing in "unmatched" so their bins weren't counted and the next-available bin came out wildly low), `analyzeSystem(tools, system)` (matched/unmatched/noLocation/nextBin), `libraryLocationStatus(tools, systems)` (library-wide assigned vs unassigned), `emptyLocation(systemId)`, `LEVEL_KEYS`.
+Framework-free. Key exports: `newLocationSystem(name)` / `newLevelOption(label, order)` (factories with UUIDs), `findSystem` / `levelOptions` / `findOption` / `levelTypeName`, `composeLocationString(loc, system)` and `buildPreview(system)` (the live-preview composer — order zone→station→drawer→bin, per-junction delimiters), `resolveLocationString(loc, systems)`, `proShopLocationValue(system, composed)` (number_only strips non-digits / full / fixed), `nextBin(system, usedBins)` (next number **above the highest in use** — never backfills a hole; **`null`** for a duplicates-allowed system, which has no meaningful "next") + `usedBinsForSystem`, `parseLocationString(str, system)` (lenient regex parse for normalization — a **custom prefix like `LC` is OPTIONAL**, so a bare ProShop bin number `140` parses to the same bin as `LC-140`; without this, tools whose location is stored as just the number were missed by Analyze, landing in "unmatched" so their bins weren't counted and the next-available bin came out wildly low), `analyzeSystem(tools, system)` (matched/unmatched/noLocation/nextBin), `libraryLocationStatus(tools, systems)` (library-wide assigned vs unassigned), `emptyLocation(systemId)`, `LEVEL_KEYS`.
 
 **Duplicate-output detection** (`systemOutputSignature` / `systemStructureSignature` / `findSystemConflicts`): two systems "clash" when they could produce the same **user-visible ID**. The check runs on the composed **output recipe**, not the settings labels — a level's *type name* (Drawer/Cabinet/custom type) never appears in the string, so two systems that label their steps differently but emit the same segments still clash. Each segment reduces to what actually shows (custom prefix string / sorted set of option labels / fixed-bin value or `auto#`), compared **with** the junction delimiters (`output` clash = identical visible IDs possible) and **without** them (`delimiter` clash = same recipe, only the separator differs — a near-duplicate). `findSystemConflicts(systems)` → `Map(id → {type:'output'|'delimiter'|'name', otherId, otherName}[])`; duplicate (case-insensitive) **names** also flag. `LocationSystemSettings` renders these as **non-blocking** warnings (header badges + a `ConflictWarning` box in the open card) — it warns, it doesn't prevent saving (a half-edited new system briefly matching another shouldn't trap the user). Known limitation: detects fully-identical output recipes, not *partial* option-set overlap (two systems sharing only some labels).
 
@@ -358,11 +362,58 @@ Per system: **Analyze** (read-only `analyzeSystem` parse pass — no writes) →
 ### ProShop import/export
 
 - **Export**: composed string → ProShop `Location` column, transformed by the tool's system `proShopExport` rule (`number_only` strips to just the bin digits / `full` / `fixed`).
-- **Import** (`ImportFlow.matchProShopToTools`): compared on the **bin number only** (ProShop's `Location` is a bare number, no `LC-` prefix; `locationNumber()` strips the app's prefix). When the tool has **no** structured `tool_location` and there's a single bin-only system, the app **takes over** — it assigns a **structured `tool_location`** (`bin` = ProShop #) so the location composes `LC-…` and persists in metadata even for no-Fusion tools (a free-text location can't persist for those). Once the tool owns a structured `tool_location`, a number **mismatch is flagged** for review (not overwritten, not ignored) — resolving with "Use ProShop #" updates `tool_location.bin`. See ProShop Field Priority Rules → the location rule.
+- **Import** (`ImportFlow.matchProShopToTools`): compared on the **bin number only** (ProShop's `Location` is a bare number, no `LC-` prefix; `locationNumber()` strips the app's prefix). **Which system a number belongs to is decided by the per-system import cascade** — see "Per-system import matching" below. When the tool has **no** structured `tool_location` and a system claims the number, the app **takes over** — it assigns a **structured `tool_location`** (`bin` = ProShop #) so the location composes `LC-…` and persists in metadata even for no-Fusion tools (a free-text location can't persist for those). Once the tool owns a structured `tool_location`, a number **mismatch is flagged** for review (not overwritten, not ignored) — resolving with "Use ProShop #" updates `tool_location.bin`. See ProShop Field Priority Rules → the location rule.
+
+### Per-system import matching — which system owns a bare number
+
+**ProShop stores a location as a bare number with no system prefix**, so a number alone cannot say which location system it belongs to. The old rule required **exactly one** bin-only system and silently gave up otherwise — a shop with two systems got no structured locations at all. Rather than hardcode any shop's conventions, **each system carries its own `proShopImport` rule** and the systems are evaluated as a **cascade** — the config equivalent of the long IF statement a shop would otherwise write in a spreadsheet. It is the mirror image of the per-system `proShopExport` rule, lives in the same place, and drives **both** the initial bulk import and the location-only re-import.
+
+```json
+"proShopImport": { "match": "any_unique", "triggers": [], "range": { "min": null, "max": null }, "flagGaps": true },
+"acknowledged_gaps": []
+```
+
+`match`: `off` (never claims) | `any_unique` (a number appearing exactly once file-wide) | `range` (`[min,max]`; **both bounds empty claims NOTHING** — a half-finished setting is not "every number") | `triggers` (specific values the user typed — a sentinel like `10000` meaning "in the drill index", paired with `allowDuplicates`). Helpers in `src/utils/locationSystem.js`: `newImportRule`, `systemImportRule` (read-with-default), `parseTriggerList`, `claimSystemForNumber`, `countLocationNumbers`, `routeProShopLocations`, `isBinOnlySystem` (moved here from `ImportFlow` — one source of truth), `findBinGaps`, `pruneAcknowledgedGaps`, `libraryLocationIssues`. UI: the collapsible **ProShop location import** block in `LocationSystemSettings` (collapsed by default — setup once, then forget).
+
+**Three rules that are easy to get wrong, all regression-tested** (`locationSystem.test.js`):
+
+- **Uniqueness is judged across the WHOLE file, never row by row.** Streaming would call the FIRST occurrence of a repeated number unique and hand it to the wrong system. Hence `countLocationNumbers` as a pre-pass, threaded into both import entry points as `locCounts`.
+- **An explicit trigger wins over a generic rule, regardless of system order.** A sentinel is recognizable as one because the user *typed it in*, not because of how often it happens to appear — if it showed up just once in an export, an `any_unique` system earlier in the order would swallow it.
+- **An established shop with no rules configured keeps the previous behaviour exactly** (`hasConfiguredImportRules` → `legacyClaimSystem`: single bin-only system claims everything). Without the fallback, shipping this would silently stop an existing shop's import from assigning locations. The config is purely additive — nothing to re-enter.
+
+⚠️ **Configuring ANY system switches the legacy fallback off for ALL of them**, so a system still on `off` silently claims nothing — `LocationImportModal` warns by name when some systems are configured and others aren't.
+
+A system that isn't bin-only (a selectable drawer/station level) is **flagged, never half-assigned** — a bare number can't supply the level choice.
+
+**A gap is informational, NEVER a reservation.** `acknowledged_gaps[]` is deliberately separate from `levels.bin.skip[]` (the reserved-numbers list `nextBin` avoids): dismissing a gap silences the report row without making the number unassignable, and `pruneAcknowledgedGaps` **drops the acknowledgement the moment a tool lands in that bin**. Filling a gap must always stay possible.
+
+**Auto-assignment moves FORWARD; holes are filled only by a person.** `nextBin` continues **above the highest bin in use** — it deliberately does **not** return the lowest free number. A gap means a bin whose tool hasn't been accounted for yet, and very often something IS physically sitting in it, so handing that number to the next new tool would quietly double-book a drawer. The two halves are one rule: `nextBin` skips a hole, which is exactly what makes it safe for `LocationPicker` to still accept that number when typed in by hand (it blocks only an **already-occupied** bin, never a gap). Locked by `locationSystem.test.js`.
+
+**A duplicates-allowed system gets NO suggestion at all** — `nextBin` returns `null`. Such a system isn't a sequence (a shop may park every tool on one sentinel bin), so continuing past the highest value would invent a number nobody asked for. That matters more than it looks: `LocationPicker` falls back to the suggestion when the bin field is left **blank**, so a silently-wrong pre-filled number saves itself unless the user remembers to overwrite it. With no suggestion the picker instead **requires** a bin (`binMissing` disables Set location) and says why.
+
+### Location Issues panel — derived, never stored
+
+The durable worklist (`libraryLocationIssues(tools, systems)` → `LocationIssuesPanel`): duplicate bins in a system that doesn't allow them, plus reported gaps. **Recomputed on every render like `analyzeSystem`** — there is no saved report, so it's always reachable, always current, and each row disappears by itself as the tool behind it is fixed. Distinct from the import-time exception list (which is about rows in a CSV; this is about tools in the library).
+
+### Location-only ProShop re-import (`LocationImportModal`)
+
+Reads a full ProShop export and touches **nothing except each tool's location** — matching on `Tool #` only (tolerant of dash/space/case, and `legacy_ids`). ⚠️ **This is a DELIBERATE EXCEPTION to the ProShop location rule**: everywhere else a ProShop location that disagrees with a structured location the app already owns is **flagged, never overwritten**. Here **ProShop wins outright** — the action exists precisely to correct locations the app got wrong, and every tool being corrected is in exactly the state that rule would flag, so flagging would turn the cleanup into hundreds of one-at-a-time decisions. **The dialog states this plainly before committing**, and previews every old → new change. Prior locations are retired into `legacy_locations[]` (still searchable). Idempotent — a second run reports nothing to update.
+
+`AppContext.importLocationsFromProShop(assignments)` is a **metadata-only batch write** (one `upsertMany`), same reasoning as `normalizeLocationSystem`: a Fusion round-trip per tool would re-upload the whole library hundreds of times. ⚠️ So **Fusion still holds the old location** until each tool's next individual save — the result panel **says so explicitly** rather than leaving it to be discovered, and the **Fusion sync** action below settles it in one pass.
+
+### Pushing ONE field to Fusion (`pushFieldToFusion`)
+
+Location **is** a Fusion-native field (its repurposed "Vendor" box), but `normalizeLocationSystem` and `importLocationsFromProShop` are metadata-only batch writes — so Fusion keeps the OLD location until each tool is next saved individually, which can take months. The **Fusion sync** block in `LocationIssuesPanel` is the explicit "make Fusion agree now" pass: preview (`dryRun`) → commit.
+
+⚠️ **`pushFieldToFusion` is FIELD-scoped; `writeToolsToFusion` is TOOL-scoped. Do not reach for the wrong one.** `writeToolsToFusion` rebuilds each entry from the app's model via `splitToFusionInstances` — correct when the whole entry is the point (re-stamping baked holder geometry), but the wrong instrument for "Fusion's copy of this one value is stale": it would rewrite geometry, presets and every expression across hundreds of tools to correct a single string, silently applying any other app↔Fusion drift on the way. `pushFieldToFusion` instead downloads each library once, finds each tool's own entries by guid, sets **only** the named field, and leaves every other byte alone. An entry that already agrees is not rewritten, so a second push has nothing to do.
+
+**Fields go in `FUSION_FIELD_PATCHERS`** (module scope, `libraryOps.js`), one entry per pushable field: `read(entry)` (what Fusion holds — **the expression wins**, since Fusion re-derives the native from it), `value(tool)`, `apply(entry, val)` (a NEW entry with only that field changed). ⚠️ Each patcher owns the **whole native+expression pair**, so a caller can never write half of one and have Fusion revert it on the next load — and it **deletes** the expression when the value is empty, never writes `''`. Add a patcher rather than a bespoke push; the pairing rule and the delete-don't-blank rule are easy to get wrong once per field. Locked by `src/context/fusionFieldPush.test.js` (incl. "exactly two keys differ" and non-mutation of the input entry).
+
+Scoped to tools the app actually owns a location for (`tool_location.system_id` set, Fusion-linked) — a legacy free-text location IS Fusion's own value, so there is nothing to correct there.
 
 ### Context actions (AppContext)
 
-`saveLocationConfig(locationConfig)` (persists the `location_config` sub-object), `assignToolLocation(tool, toolLocation, binSizeId)` (single-tool assign/clear via `writeLogicalTool` — composes into Fusion vendor + metadata), `normalizeLocationSystem(systemId)` (the commit above). All exposed in the context value.
+`saveLocationConfig(locationConfig)` (persists the `location_config` sub-object), `assignToolLocation(tool, toolLocation, binSizeId)` (single-tool assign/clear via `writeLogicalTool` — composes into Fusion vendor + metadata), `normalizeLocationSystem(systemId)` (the commit above), `importLocationsFromProShop(assignments)` (the location-only re-import above). All exposed in the context value.
 
 -----
 
@@ -882,7 +933,12 @@ src/
                                   # reconcileTool, applyReconcile
     libraryOps.js                  # createLibraryOps(ctx): saveFullLibrary, renumberLibrary,
                                   # assignToolIds, renumberAllToolIds, normalizeLibrary
-                                  # (shop-global bulk ops across all linked libraries)
+                                  # (shop-global bulk ops across all linked libraries),
+                                  # writeToolsToFusion (TOOL-scoped: rebuilds each
+                                  # entry) and pushFieldToFusion + FUSION_FIELD_PATCHERS
+                                  # (FIELD-scoped: patches one native+expression pair
+                                  # in place, everything else byte-for-byte). Reach for
+                                  # the right one — see "Pushing ONE field to Fusion".
     attachmentActions.js           # createAttachmentActions(ctx): uploadToolPhoto,
                                   # uploadToolAttachment, deleteToolAttachment,
                                   # importProShopPhotos
@@ -1024,9 +1080,17 @@ src/
                                   # Right sidebar: Identity, Photo, Purchasing, Notes & Tags, Files
     ToolForm.jsx                  # Edit form with sticky action bar + dirty guard
     LocationSystemSettings.jsx    # Settings section: configure Location Systems
-                                  # (levels/delimiters/ProShop export), normalize
-                                  # (analyze→preview→commit), library unmatched panel.
+                                  # (levels/delimiters/ProShop export + the collapsible
+                                  # per-system ProShop IMPORT rule), normalize
+                                  # (analyze→preview→commit), library unmatched panel,
+                                  # and LocationIssuesPanel (derived duplicate/gap
+                                  # worklist + Fusion sync via pushFieldToFusion).
                                   # Ported from docs/LocationSystemUI.tsx. Exports LivePreview.
+    LocationImportModal.jsx       # Location-ONLY ProShop re-import: upload a full
+                                  # export, match on Tool #, preview old→new + the
+                                  # exception list, commit. ProShop wins outright here
+                                  # (the one exception to the flag-never-overwrite
+                                  # location rule) and the dialog says so.
     LocationPicker.jsx            # ToolDetail "Assign Location" picker — pick system +
                                   # level options + bin (auto-suggested), writes via
                                   # AppContext.assignToolLocation; `record`/`onAssign`
@@ -1797,7 +1861,16 @@ This is not about Fusion being important. It's about not building a trap: the sh
 
 **When adding any feature, answer this before writing code:** *which of the values I am touching does Fusion have a field for, and where does my code write them back?* If the answer is "it doesn't", either write them or say plainly that you are leaving Fusion stale and why.
 
-**Batching is fine; skipping is not.** A bulk action may write metadata in one pass and Fusion in one targeted pass (see `writeToolsToFusion`) rather than a round-trip per record — that's an efficiency choice, not an exemption. What is never acceptable is finishing an action with Fusion holding values the app knows are wrong and no visible sign of it.
+**Batching is fine; skipping is not.** A bulk action may write metadata in one pass and Fusion in one targeted pass rather than a round-trip per record — that's an efficiency choice, not an exemption. What is never acceptable is finishing an action with Fusion holding values the app knows are wrong and no visible sign of it.
+
+**Two targeted writers — pick by SCOPE, not by convenience:**
+
+| Writer | Scope | Use when |
+|---|---|---|
+| `writeToolsToFusion` | **TOOL** — rebuilds each entry from the app's model (`splitToFusionInstances`) | the whole entry is the point (re-stamping baked holder geometry) |
+| `pushFieldToFusion` | **FIELD** — patches one native+expression pair in place, every other byte untouched | "Fusion's copy of this one value is stale" |
+
+⚠️ Reaching for the tool-scoped writer to correct a single field rewrites geometry, presets and every expression across every tool it touches, silently applying any other app↔Fusion drift on the way. When a bulk metadata write leaves one Fusion field behind, the fix is a **`FUSION_FIELD_PATCHERS` entry + a preview→commit action**, not a bespoke push and not a full rebuild. See **Pushing ONE field to Fusion** under the Location System for the contract.
 
 -----
 
@@ -2237,7 +2310,9 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 
 - **Slot/key cutter (slitting saw) — verify corner-radius output to Fusion + terminology.** Two related open items from the key-cutter work: **(1)** `corner_radius` (`geometry.RE`) now *applies* to `slot/key cutter` (field registry `appliesToTypes`, extractor `FIELD_VISIBILITY` cornerRadius row, and the search facet), but we have **not confirmed how Fusion actually wants a slitting-saw/key-cutter corner radius written** — real Fusion exports for this type carry a distinct `tool_kerfWidth` field (see the FUSION_HDR reference list), and it's unclear whether the radius belongs in `RE`, in a kerf-specific field, or both. **The user will provide a real Fusion export example later** — audit `internalToFusionTool` for this type against it before trusting the `RE` write (mirror the chamfer-mill / tapered-mill per-type geometry-field audits). **(2)** "Slitting saw" is the shop's other word for this tool class — today it's folded into the single `slot/key cutter` type (UI labels flute length as "Flute Length (Kerf)" and shoulder length derives from flute length in `normalizeLibrary`). Revisit whether **slitting saw should be its own distinct `tool_type`** (own icon/filing/kerf semantics) rather than an alias — a bigger change to `TOOL_TYPES`, icons, `AUTO_GROUP`/ProShop mapping, and `FIELD_VISIBILITY`. Both deferred until the example arrives.
 
-- **Location System ↔ Tool ID — refine the seam (working, but rough).** The current split is: the Location System *finds + assigns location data only* (never writes `tool_id`), and the Tool ID System's explicit **Assign IDs / Re-number** actions are the only thing that generates IDs (deriving from the structured `tool_location` when in `location` mode). This is wired and documented (see "Location ≠ ID" under Tool ID System) and the separation is surfaced via banners/tooltips — but it's **confusing and lacks refinement**, and the Location System is **unfinished**. Known rough edges to revisit: (1) a location-system **bin-renumber** action (the system's own future "renumber" ability — assign/reassign bin numbers in bulk, distinct from Tool ID renumber); (2) in `location` mode, after assigning/normalizing a location the tool's `tool_id` is **stale until the user manually re-numbers** — there's no prompt or "IDs out of date" indicator nudging them to do it, so the two-step flow is easy to miss; (3) the metadata-only normalization write leaves the Fusion `product-id`/vendor briefly out of sync until each tool's next individual save (lazy re-sync — acceptable but undocumented to the user); (4) the whole flow (configure system → assign/normalize locations → go elsewhere to generate IDs) could likely be made a single guided path. Not yet tested end-to-end against real data. Revisit holistically rather than patching piecemeal — the goal is one clear, refined Location→ID workflow, not more notes bolted on.
+- **✅ Field-scoped Fusion push (built).** See **Pushing ONE field to Fusion** under the Location System. `pushFieldToFusion` + `FUSION_FIELD_PATCHERS` (`libraryOps.js`) patch a single native+expression pair in place; location is the first caller. Add a patcher entry rather than a bespoke push for the next field.
+
+- **Location System ↔ Tool ID — refine the seam (working, but rough).** The current split is: the Location System *finds + assigns location data only* (never writes `tool_id`), and the Tool ID System's explicit **Assign IDs / Re-number** actions are the only thing that generates IDs (deriving from the structured `tool_location` when in `location` mode). This is wired and documented (see "Location ≠ ID" under Tool ID System) and the separation is surfaced via banners/tooltips — but it's **confusing and lacks refinement**, and the Location System is **unfinished**. Known rough edges to revisit: (1) a location-system **bin-renumber** action (the system's own future "renumber" ability — assign/reassign bin numbers in bulk, distinct from Tool ID renumber); (2) in `location` mode, after assigning/normalizing a location the tool's `tool_id` is **stale until the user manually re-numbers** — there's no prompt or "IDs out of date" indicator nudging them to do it, so the two-step flow is easy to miss; (3) the metadata-only normalization write leaves Fusion out of sync until each tool's next individual save — the **vendor/location** half is now handled (`pushFieldToFusion` + the **Fusion sync** block in `LocationIssuesPanel`, and the writes say so explicitly), but **`product-id` is still lazy and still unmentioned to the user**; closing it should be a second `FUSION_FIELD_PATCHERS` entry (`product-id` ↔ `expressions.tool_productId` is the same native+expression pair shape as location), not a bespoke push; (4) the whole flow (configure system → assign/normalize locations → go elsewhere to generate IDs) could likely be made a single guided path. Not yet tested end-to-end against real data. Revisit holistically rather than patching piecemeal — the goal is one clear, refined Location→ID workflow, not more notes bolted on.
 
 - **Speeds & Feeds Reference — link to stepdown/stepover as a %.** Each tool carries `speed_feed_refs[]` (metadata-only: `{ preset_id → materials.presets, operation_type (rough/finish/… or null), sfm, chip_load }`) — a per-CAM-preset + per-operation SFM + chip-load starting-point table, edited in `SpeedFeedSection.jsx` (a panel in ToolDetail's left column, same save pattern as `PurchasingSection`). The material cell opens the shared **`CamPresetPicker`** modal (search "6061"/"1018" → its CAM preset), the operation is an `OP_TYPES` dropdown, and the Save button shows a `.spinner` while the `writeLogicalTool` round-trip is in flight (it's a local `saving` state, not the global `isSaving`). The section shows derived RPM + feed per row using the tool's own diameter + flute count (`deriveRPM`, generic over the tool's unit; feed via chip_load × rpm × flutes). **Next step (deferred):** express stepdown/stepover as a % (e.g. of diameter) and connect them so the reference drives full proven preset values rather than just SFM/chip-load — the user explicitly scoped this for later. These values are a manual starting point today; a future path could also pull from existing Fusion presets.
 

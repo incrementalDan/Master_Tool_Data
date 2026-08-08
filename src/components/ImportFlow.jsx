@@ -10,7 +10,10 @@ import { vendorHasOwnCatalogNumber, resolveVendorName, registryIdForName } from 
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
 import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel } from '../utils/proShopHeaders.js';
-import { locationNumber, composeLocationString } from '../utils/locationSystem.js';
+import {
+  locationNumber, composeLocationString, claimSystemForNumber,
+  isBinOnlySystem, countLocationNumbers,
+} from '../utils/locationSystem.js';
 import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
 import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
 
@@ -171,7 +174,7 @@ export default function ImportFlow() {
 
     proShopMatches.unmatched.forEach(({ psGroup, action }) => {
       if (action === 'add') {
-        merged.push(psRowToTool(psGroup, psUnit, shopSettings?.location_config?.systems || []));
+        merged.push(psRowToTool(psGroup, psUnit, shopSettings?.location_config?.systems || [], proShopMatches.locCounts));
       }
     });
 
@@ -797,34 +800,36 @@ function psNum(v) {
 const psStrEq = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
 const psNumEq = (a, b) => Math.abs(Number(a) - Number(b)) <= 1e-4;
 
-// A system whose only per-tool variable is the BIN — zone/station/drawer are off
-// or a fixed custom prefix (e.g. "LC"). Only then can a bare ProShop bin number
-// fully determine a structured location (a system with selectable level options
-// can't be derived from a number alone).
-function isBinOnlySystem(sys) {
-  const L = sys?.levels || {};
-  const ok = (lv) => !lv || !lv.on || lv.identFormat === 'custom';
-  return ok(L.zone) && ok(L.station) && ok(L.drawer);
-}
-
 // Map a bare ProShop bin number to a STRUCTURED tool_location so the app owns the
 // location: it composes to "LC-140" via the Location System AND persists in
 // metadata (the only place a no-Fusion tool can keep a location — a free-text
-// string has nowhere to live for it). Requires exactly one bin-only Location
-// System; otherwise returns null and the caller falls back to free-text.
-function proShopStructuredLocation(psLoc, systems) {
+// string has nowhere to live for it).
+//
+// WHICH system a bare number belongs to is decided by the per-system import
+// rules (claimSystemForNumber) — ProShop stores no prefix, so a number alone
+// can't say. `counts` is the file-wide occurrence map the 'any_unique' rule
+// needs; uniqueness must be judged across the whole file, never per row.
+// Returns null when no system claims it, or when the claiming system needs a
+// per-tool level choice a number can't supply — the caller then leaves the
+// tool's location alone rather than half-assigning it.
+function proShopStructuredLocation(psLoc, systems, counts) {
   const num = locationNumber(psLoc);
   if (num == null) return null;
-  const usable = (systems || []).filter(isBinOnlySystem);
-  if (usable.length !== 1) return null;
-  const sys = usable[0];
-  const loc = { system_id: sys.id, zone_id: null, station_id: null, drawer_id: null, bin: num };
+  const sys = claimSystemForNumber(num, systems, counts || new Map());
+  if (!sys || !isBinOnlySystem(sys)) return null;
+  const binVal = sys.levels?.bin?.fixed ? sys.levels.bin.fixedVal : num;
+  const loc = { system_id: sys.id, zone_id: null, station_id: null, drawer_id: null, bin: binVal };
   return { tool_location: loc, location: composeLocationString(loc, sys) };
 }
 
-function psRowToTool(group, psUnit = 'inches', locationSystems = []) {
+// File-wide location-number counts for a set of ProShop row groups.
+function locationCountsForGroups(groups) {
+  return countLocationNumbers((groups || []).map(g => ({ value: g?.[0]?.['Location'] })));
+}
+
+function psRowToTool(group, psUnit = 'inches', locationSystems = [], locCounts = null) {
   const r = group[0];
-  const structuredLoc = proShopStructuredLocation(r['Location'], locationSystems);
+  const structuredLoc = proShopStructuredLocation(r['Location'], locationSystems, locCounts);
   const grouping = r['Tool Group'] || '';
   const cornerRadius = psNum(r['CornerRad']);
   const toolType = typeFromProShopGroup(grouping, { description: r['Description'], cornerRadius }) || 'flat end mill';
@@ -963,6 +968,9 @@ function buildPurchasingFromGroup(group) {
 export function matchProShopToTools(groups, tools, psUnit = 'inches', existingComponents = [], locationSystems = [], forceSingleMatch = false) {
   const matched = [];
   const usedToolIdxs = new Set();
+  // Location routing needs FILE-WIDE occurrence counts (the 'any_unique' rule),
+  // so they are computed once here rather than per row.
+  const locCounts = locationCountsForGroups(groups);
 
   // Insert tools carry a combined "holder/insert" tool_id; each side's ProShop
   // number identifies a COMPONENT record, not a tool. Index them so a component
@@ -1114,7 +1122,7 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
         } else {
           const retired = (tool.legacy_locations || []).some(l => locationNumber(l) === psLocNum);
           if (!retired) {
-            const structured = proShopStructuredLocation(psLoc, locationSystems);
+            const structured = proShopStructuredLocation(psLoc, locationSystems, locCounts);
             if (structured) {
               // Take over: store the ProShop number as a structured location so it
               // composes "LC-140" and persists in metadata (incl. no-Fusion tools).
@@ -1159,5 +1167,5 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
     .filter(g => !routedGroups.has(g))
     .map(g => ({ psGroup: g, action: 'skip' }));
 
-  return { matched, unmatched, components };
+  return { matched, unmatched, components, locCounts };
 }

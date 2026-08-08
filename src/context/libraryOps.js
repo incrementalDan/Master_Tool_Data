@@ -12,7 +12,7 @@ import {
   DEFAULT_MACHINE_START, RESERVED_MACHINE_NUMBERS,
   fusionToolToInternal, mergeFusionAndMetadata, readOohFromFusion,
   combineToolsByToolId, buildMetadataTool, materializeUnlinkedTools,
-  buildUnlinkedTool, mergeNoFusionIntoFusion,
+  buildUnlinkedTool, mergeNoFusionIntoFusion, stripQuotes,
 } from '../schema/toolSchema.js';
 import { normProShopId } from '../schema/insertFamilies.js';
 import { mergeToolConflicts } from '../utils/toolConflicts.js';
@@ -24,6 +24,40 @@ import { holderShortName } from '../utils/holderNaming.js';
 import { toolsUsingHolder, assemblyUsesHolder } from '../schema/holderResolve.js';
 import { segmentsMatch } from '../schema/holderIdentity.js';
 import { defaultToolLibraryId, machineNumberArgs } from './appState.js';
+
+// ─── Fusion field patchers ───────────────────────────────────────────────────
+// One entry per field that can be pushed to Fusion on its own, used by
+// pushFieldToFusion. Each patcher owns the whole native+expression pair for its
+// field, so a caller can never write half of one.
+//
+//   read(entry)        → what Fusion currently holds, normalized for comparison
+//   value(tool)        → what the app says it should be
+//   apply(entry, val)  → a NEW entry with only that field changed
+//
+// Add a field here rather than writing a bespoke push — the pairing rule and the
+// "delete, never write ''" rule are easy to get wrong once per field.
+export const FUSION_FIELD_PATCHERS = {
+  // Fusion's "Vendor" box is repurposed as the cabinet location (see the
+  // Vendor/Location mapping in CLAUDE.md). Native `vendor` + expressions
+  // .tool_vendor mirror each other; Fusion re-derives the native from the
+  // expression, so both move together or the push reverts on next load.
+  location: {
+    label: 'Location',
+    read: (entry) => (entry?.expressions?.tool_vendor != null
+      ? stripQuotes(entry.expressions.tool_vendor)
+      : (entry?.vendor || '')) || '',
+    value: (tool) => tool.location || '',
+    apply: (entry, val) => {
+      const next = { ...entry, vendor: val || '' };
+      const expressions = { ...(entry.expressions || {}) };
+      // Absent, not empty: Fusion omits the expression when there's no value.
+      if (val) expressions.tool_vendor = `'${val}'`;
+      else delete expressions.tool_vendor;
+      next.expressions = expressions;
+      return next;
+    },
+  },
+};
 
 export function createLibraryOps(ctx) {
   const {
@@ -1049,7 +1083,74 @@ export function createLibraryOps(ctx) {
     }
   };
 
-  // ─── Write a set of tools back to Fusion, targeted ────────────────────────
+  // ─── Push ONE field to Fusion, in place ───────────────────────────────────
+  // A FIELD-scoped patch, deliberately distinct from writeToolsToFusion below.
+  //
+  // writeToolsToFusion is targeted at the TOOL level: it rebuilds each entry
+  // from the app's model via splitToFusionInstances. That's right when the whole
+  // entry is the point (re-stamping baked holder geometry), but it's the wrong
+  // instrument for "Fusion's copy of this one value is stale": it would rewrite
+  // geometry, presets and every expression for hundreds of tools to correct a
+  // single string, silently applying any other drift between the two along the
+  // way.
+  //
+  // So this one downloads each library once, finds each tool's own entries, sets
+  // ONLY the named field, and leaves every other byte of the entry alone.
+  //
+  // ⚠️ Fields are written through FUSION_FIELD_PATCHERS so the native+expression
+  // PAIR is always written together — Fusion re-derives the native value from
+  // its expression on load, so patching one without the other silently reverts
+  // on the next read (the recurring bug this codebase keeps re-learning).
+  //
+  // `dryRun` reports what would change without writing, so the count can be
+  // previewed before anything is committed.
+  const pushFieldToFusion = async (tools, fieldKey, { dryRun = false } = {}) => {
+    const patcher = FUSION_FIELD_PATCHERS[fieldKey];
+    if (!patcher) throw new Error(`No Fusion field patcher for "${fieldKey}"`);
+    if (!tools.length) return { wrote: false, count: 0, changes: [] };
+    assertFusionReady();
+
+    const byLibrary = new Map();
+    for (const t of tools) {
+      const lib = t.library_id || defaultToolLibraryId(shopSettingsRef.current);
+      if (!byLibrary.has(lib)) byLibrary.set(lib, []);
+      byLibrary.get(lib).push(t);
+    }
+
+    const changes = [];
+    for (const [libId, toolsInLib] of byLibrary) {
+      const fusionList = await downloadFusionList(libId);
+      // Index by guid — an entry is identified the same way writeToolsToFusion
+      // identifies one to drop (registered instance guids + whatever raw entries
+      // the tool was built from).
+      const byGuid = new Map();
+      fusionList.forEach((entry, i) => { if (entry?.guid) byGuid.set(entry.guid, i); });
+
+      let touched = 0;
+      for (const tool of toolsInLib) {
+        const guids = new Set();
+        for (const a of tool.assemblies || []) if (a.instance_guid) guids.add(a.instance_guid);
+        for (const r of tool._instancesRaw || []) if (r?.guid) guids.add(r.guid);
+        const want = patcher.value(tool);
+        for (const guid of guids) {
+          const idx = byGuid.get(guid);
+          if (idx == null) continue;
+          const entry = fusionList[idx];
+          const have = patcher.read(entry);
+          if (have === want) continue;              // already agrees — leave it alone
+          changes.push({
+            toolId: tool.id, tool_id: tool.tool_id, description: tool.description,
+            guid, from: have, to: want,
+          });
+          if (!dryRun) { fusionList[idx] = patcher.apply(entry, want); touched++; }
+        }
+      }
+      if (!dryRun && touched) await uploadFusionList(libId, fusionList);
+    }
+    return { wrote: !dryRun && changes.length > 0, count: changes.length, changes };
+  };
+
+// ─── Write a set of tools back to Fusion, targeted ────────────────────────
   // THE shared "make these tools carry their current holder geometry" step.
   // Fusion BAKES holder geometry into each tool, so a corrected holder only
   // reaches an existing tool when that tool is written — this is that write.
@@ -1216,5 +1317,5 @@ export function createLibraryOps(ctx) {
     }
   };
 
-  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary, restampHolderTools, linkToolsToHolders };
+  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary, restampHolderTools, linkToolsToHolders, pushFieldToFusion };
 }

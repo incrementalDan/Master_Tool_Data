@@ -1,11 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
-import { Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, MapPin, Info, AlertTriangle } from 'lucide-react';
+import { Pencil, Plus, Trash2, ChevronDown, ChevronUp, X, MapPin, Info, AlertTriangle, UploadCloud } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
+import LocationImportModal from './LocationImportModal.jsx';
 import InfoTip from './InfoTip.jsx';
 import { ExclusionNotice } from './IdSystemMembership.jsx';
 import {
   newLocationSystem, newLevelOption, levelTypeName, buildPreview,
   analyzeSystem, libraryLocationStatus, findSystemConflicts,
+  systemImportRule, parseTriggerList, libraryLocationIssues, findSystem,
 } from '../utils/locationSystem.js';
 
 // Level-type and identifier option lists (from the approved prototype).
@@ -203,6 +206,112 @@ function LevelFields({ level, types, updateLevel }) {
   );
 }
 
+// ── ProShop import matching (collapsible — setup once, then forget) ─────────
+// ProShop stores a location as a bare number with no prefix, so a number alone
+// can't say which system it belongs to. Each system states how it claims one;
+// the systems are evaluated as a cascade. Collapsed by default because once
+// it's configured there's no reason to keep looking at it.
+function importRuleSummary(rule) {
+  switch (rule.match) {
+    case 'any_unique': return 'Any unique number';
+    case 'triggers':   return rule.triggers.length ? rule.triggers.join(', ') : 'No values set';
+    case 'range':      return `${rule.range.min ?? '…'} – ${rule.range.max ?? '…'}`;
+    default:           return 'Not imported';
+  }
+}
+
+function ImportRuleBlock({ sys, onUpdate }) {
+  const [open, setOpen] = useState(false);
+  const rule = systemImportRule(sys);
+  const set = (patch) => onUpdate({ ...sys, proShopImport: { ...rule, ...patch } });
+  // The trigger box is free text while typing (so a trailing comma isn't eaten)
+  // and only parsed to numbers on the way into config.
+  const [triggerText, setTriggerText] = useState(rule.triggers.join(', '));
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 8, marginBottom: 16, overflow: 'hidden' }}>
+      <div
+        onClick={() => setOpen(o => !o)}
+        style={{ padding: '9px 12px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', background: 'var(--surface-2)' }}
+      >
+        <span style={{ fontSize: '0.85rem' }}>ProShop location import</span>
+        <InfoTip text="ProShop stores a location as a bare number with no system prefix, so a number on its own can't say which system it belongs to. This rule is how THIS system claims one. Systems are checked in the order they appear on this page, except that values you type into 'Specific values' always win over a general rule." />
+        <div style={{ flex: 1, minWidth: 8 }} />
+        <span className="text-sub text-xs font-mono">{importRuleSummary(rule)}</span>
+        {open ? <ChevronUp size={14} style={{ color: 'var(--text-sub)' }} /> : <ChevronDown size={14} style={{ color: 'var(--text-sub)' }} />}
+      </div>
+
+      {open && (
+        <div style={{ padding: 12, borderTop: '1px solid var(--border)' }}>
+          <Lbl>Claim an imported number when…</Lbl>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+            <select
+              className="field-input" style={{ width: 260 }} value={rule.match}
+              onChange={e => set({ match: e.target.value })}
+            >
+              <option value="off">Never — skip this system on import</option>
+              <option value="any_unique">It appears only once in the file</option>
+              <option value="triggers">It is one of these specific values</option>
+              <option value="range">It falls inside a number range</option>
+            </select>
+
+            {rule.match === 'triggers' && (
+              <input
+                className="field-input font-mono" style={{ width: 190 }}
+                value={triggerText}
+                onChange={e => setTriggerText(e.target.value)}
+                onBlur={() => {
+                  const parsed = parseTriggerList(triggerText);
+                  set({ triggers: parsed });
+                  setTriggerText(parsed.join(', '));
+                }}
+                placeholder="e.g. 10000, 20000"
+              />
+            )}
+
+            {rule.match === 'range' && (
+              <>
+                <input
+                  className="field-input font-mono" style={{ width: 90 }} type="number"
+                  value={rule.range.min ?? ''} placeholder="min"
+                  onChange={e => set({ range: { ...rule.range, min: e.target.value === '' ? null : Number(e.target.value) } })}
+                />
+                <span className="text-sub text-xs">to</span>
+                <input
+                  className="field-input font-mono" style={{ width: 90 }} type="number"
+                  value={rule.range.max ?? ''} placeholder="max"
+                  onChange={e => set({ range: { ...rule.range, max: e.target.value === '' ? null : Number(e.target.value) } })}
+                />
+              </>
+            )}
+          </div>
+
+          {rule.match === 'triggers' && (
+            <div className="text-sub text-xs" style={{ marginBottom: 10 }}>
+              Separate multiple values with commas. These win over any general rule, whatever
+              order the systems are in — so a value you list here lands here even if it happens
+              to appear only once. Pair with “Allow duplicate locations” above if many tools
+              share the value.
+            </div>
+          )}
+          {rule.match === 'any_unique' && (
+            <div className="text-sub text-xs" style={{ marginBottom: 10 }}>
+              Counted across the whole file, so a number appearing more than once is never
+              treated as unique — it falls through to the next system, or is reported.
+            </div>
+          )}
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: '0.85rem' }}>
+            <Toggle on={rule.flagGaps} set={v => set({ flagGaps: v })} />
+            Report skipped numbers in this system
+            <InfoTip alignRight text="Lists missing numbers between the lowest and highest bin in use. Reporting a gap does NOT reserve it — the number stays freely assignable, and you can dismiss a gap you've already looked at without locking it away." />
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function proShopHint(mode, fixedVal) {
   if (mode === 'number_only') return '"LC-140" → "140"';
   if (mode === 'fixed') return `Always → "${fixedVal || '?'}"`;
@@ -271,9 +380,13 @@ function NormalizationStep({ sys, tools, dirty = false, onCommit, onUpdate }) {
         <div>
           <div style={{ background: 'color-mix(in srgb, var(--green) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--green) 40%, transparent)', borderRadius: 7, padding: '10px 12px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--green)' }}>{matched} tool{matched === 1 ? '' : 's'} matched this system</span>
+            {/* null means "no counter" — but for two different reasons now, and
+                calling a duplicates-allowed system "fixed" would be untrue. */}
             {analysis.nextBin !== null
               ? <span style={{ fontSize: '0.75rem', color: 'var(--green)' }}>Next available bin: <span className="font-mono" style={{ fontWeight: 700 }}>{analysis.nextBin}</span></span>
-              : <span style={{ fontSize: '0.75rem', color: 'var(--green)' }}>Fixed value — no counter needed</span>}
+              : sys.levels.bin.fixed
+                ? <span style={{ fontSize: '0.75rem', color: 'var(--green)' }}>Fixed value — no counter needed</span>
+                : <span style={{ fontSize: '0.75rem', color: 'var(--green)' }}>Duplicates allowed — no next bin suggested</span>}
           </div>
           <div className="text-sub text-xs" style={{ marginBottom: 10 }}>
             {analysis.unmatched.length} location-text tool{analysis.unmatched.length === 1 ? '' : 's'} and {analysis.noLocation} with no location won't match — they stay in the unmatched list below all systems.
@@ -383,6 +496,8 @@ function SystemCard({ sys, tools, conflicts = [], dirty = false, onUpdate, onDel
             </div>
           </div>
 
+          <ImportRuleBlock sys={sys} onUpdate={onUpdate} />
+
           <div style={{ borderTop: '1px solid var(--border)', margin: '14px 0' }} />
           <div className="text-sub text-xs" style={{ marginBottom: 12 }}>
             Configure levels from zone (broadest) down to bin. Delimiter controls appear between each level, grayed out when the adjacent level is inactive.
@@ -436,6 +551,221 @@ function SystemCard({ sys, tools, conflicts = [], dirty = false, onUpdate, onDel
               </button>
             )}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Location issues (derived from the library, never stored) ────────────────
+// The durable worklist: everything about the CURRENT library that isn't a clean
+// match. Recomputed on every render, so it's always reachable and each row
+// disappears by itself as the tool behind it is fixed — there is no saved report
+// to go stale. Also hosts the location-only ProShop re-import.
+function LocationIssuesPanel({ tools, systems, onUpdateSystem, dirty }) {
+  const [open, setOpen] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const navigate = useNavigate();
+  const issues = libraryLocationIssues(tools, systems);
+  const dupes = issues.filter(i => i.type === 'duplicate');
+  const gaps = issues.filter(i => i.type === 'gap');
+  const push = useFusionLocationPush(tools);
+
+  // Acknowledging a gap silences the row WITHOUT reserving the number — it never
+  // touches bin.skip[], so the bin stays freely assignable, and the whole
+  // acknowledgement is dropped again the moment a tool lands there.
+  const ackGap = (systemId, bin) => {
+    const sys = findSystem(systems, systemId);
+    if (!sys) return;
+    onUpdateSystem({ ...sys, acknowledged_gaps: [...(sys.acknowledged_gaps || []), bin] });
+  };
+
+  return (
+    <div style={{ marginTop: 8, background: 'var(--surface)', border: `1px solid color-mix(in srgb, ${issues.length ? 'var(--orange)' : 'var(--green)'} 45%, transparent)`, borderRadius: 10, padding: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+        <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>Location Issues</span>
+        <InfoTip text="Worked out from the library every time this page loads — nothing is saved, so the list is always current and a row disappears as soon as you fix the tool behind it." />
+        <div style={{ flex: 1, minWidth: 8 }} />
+        <button
+          className="btn btn-secondary btn-sm"
+          disabled={dirty}
+          title={dirty ? 'Save or cancel your settings changes first' : 'Re-import locations from a ProShop export'}
+          onClick={() => setShowImport(true)}
+        >
+          <UploadCloud size={13} /> Import from ProShop
+        </button>
+      </div>
+
+      {issues.length === 0 ? (
+        <div style={{ fontSize: '0.8rem', color: 'var(--green)' }}>
+          No duplicate bins or reported gaps.
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+            {dupes.length > 0 && <Counter n={dupes.length} label="DUPLICATE BINS" color="var(--orange)" />}
+            {gaps.length > 0 && <Counter n={gaps.length} label="SKIPPED NUMBERS" color="var(--text-sub)" />}
+          </div>
+          <button className="btn btn-ghost btn-sm" style={{ color: 'var(--blue)' }} onClick={() => setOpen(v => !v)}>
+            {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />} {open ? 'Hide' : 'View'} details
+          </button>
+
+          {open && (
+            <div style={{ marginTop: 10 }}>
+              {dupes.map(d => (
+                <div key={`${d.systemId}-${d.bin}`} style={{ border: '1px solid var(--border)', borderRadius: 7, padding: '8px 10px', marginBottom: 6 }}>
+                  <div style={{ fontSize: '0.78rem', marginBottom: 4 }}>
+                    <span className="font-mono" style={{ color: 'var(--orange)', fontWeight: 700 }}>{d.bin}</span>
+                    <span className="text-sub"> · {d.systemName} · {d.tools.length} tools share this bin</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {d.tools.map(t => (
+                      <button key={t.id} className="chip" style={{ cursor: 'pointer' }} onClick={() => navigate(`/tool/${t.id}`)}>
+                        <span className="font-mono">{t.tool_id || '—'}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              {gaps.length > 0 && (
+                <div style={{ marginTop: dupes.length ? 12 : 0 }}>
+                  <div className="text-sub text-xs" style={{ marginBottom: 6 }}>
+                    Skipped numbers — usually nothing is there. Dismissing one hides it without
+                    reserving it; the bin stays assignable and the dismissal is undone if a tool
+                    later lands there.
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {gaps.slice(0, 120).map(g => (
+                      <span key={`${g.systemId}-${g.bin}`} className="chip font-mono" style={{ gap: 5 }}>
+                        {g.bin}
+                        <button className="icon-btn" title="Dismiss this gap" style={{ width: 16, height: 16 }}
+                          onClick={() => ackGap(g.systemId, g.bin)}>
+                          <X size={11} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  {gaps.length > 120 && <div className="text-sub text-xs" style={{ marginTop: 6 }}>…and {gaps.length - 120} more.</div>}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      <FusionLocationPush push={push} dirty={dirty} />
+
+      {showImport && <LocationImportModal onClose={() => setShowImport(false)} />}
+    </div>
+  );
+}
+
+// ── Settle Fusion after a bulk location write ───────────────────────────────
+// Location IS a Fusion-native field (its "Vendor" box), but normalization and
+// the ProShop re-import are both metadata-only batch writes, so Fusion keeps the
+// OLD location until each tool happens to be saved individually — which can take
+// months. This is the explicit "make Fusion agree now" pass.
+//
+// It uses pushFieldToFusion (a FIELD-scoped patch: only the vendor native +
+// its paired expression are touched, every other byte of each entry is left
+// alone) rather than the tool-scoped writeToolsToFusion, which would rebuild
+// each entry's geometry, holder and presets from the app's model to correct one
+// string.
+function useFusionLocationPush(tools) {
+  const { pushFieldToFusion, fusionReady, notify } = useApp();
+  const [state, setState] = useState({ phase: 'idle', changes: [], error: '' });
+
+  // Only tools the app actually owns a location for — a legacy free-text
+  // location IS Fusion's own value, so there is nothing to correct there.
+  const owned = (tools || []).filter(t => t.tool_location?.system_id && !t.no_fusion_link);
+
+  const preview = async () => {
+    setState({ phase: 'checking', changes: [], error: '' });
+    try {
+      const res = await pushFieldToFusion(owned, 'location', { dryRun: true });
+      setState({ phase: 'preview', changes: res.changes, error: '' });
+    } catch (err) {
+      setState({ phase: 'idle', changes: [], error: err.message });
+    }
+  };
+
+  const commit = async () => {
+    setState(s => ({ ...s, phase: 'writing' }));
+    try {
+      const res = await pushFieldToFusion(owned, 'location');
+      setState({ phase: 'done', changes: [], error: '' });
+      notify(`Fusion updated — ${res.count} location${res.count === 1 ? '' : 's'}`, 'success');
+    } catch (err) {
+      setState(s => ({ ...s, phase: 'preview', error: err.message }));
+    }
+  };
+
+  return { ...state, owned: owned.length, fusionReady, preview, commit };
+}
+
+function FusionLocationPush({ push, dirty }) {
+  const { phase, changes, error, owned, fusionReady, preview, commit } = push;
+  if (!owned) return null;
+
+  return (
+    <div style={{ marginTop: 12, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>Fusion sync</span>
+        <InfoTip text="Normalizing locations and re-importing them from ProShop are metadata-only writes, so Fusion's Vendor field (where the location lives) keeps the old value until each tool is next saved on its own. This pushes them now. Only that one field is touched — geometry, holders and presets are left exactly as they are." />
+        <div style={{ flex: 1, minWidth: 8 }} />
+        {phase === 'idle' && (
+          <button className="btn btn-secondary btn-sm" disabled={dirty || !fusionReady}
+            title={dirty ? 'Save or cancel your settings changes first'
+              : !fusionReady ? 'Still syncing with Fusion' : 'Check what Fusion is holding'}
+            onClick={preview}>
+            Check Fusion
+          </button>
+        )}
+        {phase === 'checking' && <span className="text-sub text-xs">Checking…</span>}
+      </div>
+
+      {error && <div className="error-banner" style={{ marginTop: 8 }}>{error}</div>}
+
+      {phase === 'preview' && (
+        changes.length === 0 ? (
+          <div className="text-sm" style={{ marginTop: 8, color: 'var(--green)' }}>
+            Fusion already matches — nothing to push.
+          </div>
+        ) : (
+          <div style={{ marginTop: 8 }}>
+            <div className="text-sm" style={{ marginBottom: 6 }}>
+              <strong>{changes.length}</strong> Fusion {changes.length === 1 ? 'entry is' : 'entries are'} holding an
+              older location.
+            </div>
+            <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 7 }}>
+              <table className="match-table">
+                <thead><tr><th>Tool #</th><th>Fusion has</th><th>Will become</th></tr></thead>
+                <tbody>
+                  {changes.slice(0, 100).map(c => (
+                    <tr key={c.guid}>
+                      <td className="text-sm font-mono">{c.tool_id || '—'}</td>
+                      <td className="text-sm font-mono text-sub">{c.from || '—'}</td>
+                      <td className="text-sm font-mono" style={{ color: 'var(--blue)' }}>{c.to || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {changes.length > 100 && (
+              <div className="text-sub text-xs" style={{ marginTop: 6 }}>…and {changes.length - 100} more.</div>
+            )}
+            <button className="btn btn-primary btn-sm" style={{ marginTop: 8 }} onClick={commit}>
+              Push {changes.length} to Fusion
+            </button>
+          </div>
+        )
+      )}
+
+      {phase === 'writing' && <div className="text-sub text-sm" style={{ marginTop: 8 }}>Writing to Fusion…</div>}
+      {phase === 'done' && (
+        <div className="text-sm" style={{ marginTop: 8, color: 'var(--green)' }}>
+          Fusion now matches the app for these tools.
         </div>
       )}
     </div>
@@ -593,6 +923,13 @@ export default function LocationSystemSettings({ configOverride = null, onConfig
         <Toggle on={cfg.show_legacy ?? false} set={setShowLegacy} />
         Show former (retired) location strings on each tool
       </label>
+
+      <LocationIssuesPanel
+        tools={tools}
+        systems={systems}
+        dirty={dirty}
+        onUpdateSystem={sys => updateSystem(sys.id, sys)}
+      />
 
       <LibraryUnmatchedPanel tools={tools} systems={systems} />
 

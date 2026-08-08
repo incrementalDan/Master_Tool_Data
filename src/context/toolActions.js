@@ -19,7 +19,10 @@ import {
 import { ALL_STRATEGY_LABELS } from '../schema/camStrategies.js';
 import { lengthEps } from '../utils/units.js';
 import { INSERT_FAMILY_BY_ID, pairedAsmIdPart } from '../schema/insertFamilies.js';
-import { resolveLocationString, analyzeSystem, findSystem, proShopLocationValue, locationNumber } from '../utils/locationSystem.js';
+import {
+  resolveLocationString, analyzeSystem, findSystem, proShopLocationValue, locationNumber,
+  pruneAcknowledgedGaps, usedBinsForSystem,
+} from '../utils/locationSystem.js';
 import { isExcludedFrom, setToolExclusion } from '../utils/idSystems.js';
 import { classifyStrays } from '../services/reconcile.js';
 import { displayConflicts, clearToolConflict } from '../utils/toolConflicts.js';
@@ -462,6 +465,85 @@ export function createToolActions(ctx) {
       }
     }
     return matched.length;
+  };
+
+  // Location-only ProShop re-import.
+  //
+  // DELIBERATE EXCEPTION to the usual ProShop merge rule: everywhere else, a
+  // ProShop location that disagrees with a structured location the app already
+  // owns is FLAGGED and never overwritten (ImportFlow's location rule). Here
+  // ProShop wins outright — this action exists precisely to correct locations
+  // the app got wrong, and every tool being corrected is in exactly the state
+  // that rule would flag, so flagging would turn the cleanup into hundreds of
+  // one-at-a-time decisions. The UI states this plainly before committing.
+  //
+  // `assignments` = [{ toolId, location }] — already routed through the
+  // per-system import cascade and matched to tools by the caller.
+  //
+  // Metadata-only batch write (one upsertMany), same as normalizeLocationSystem:
+  // a Fusion round-trip per tool would re-upload the whole library hundreds of
+  // times. The composed string re-syncs to Fusion's vendor field on each tool's
+  // next individual save.
+  const importLocationsFromProShop = async (assignments) => {
+    const ss = shopSettingsRef.current || {};
+    const systems = ss.location_config?.systems || [];
+    const byId = new Map((assignments || []).map(a => [a.toolId, a.location]));
+    if (!byId.size) return { updated: 0 };
+
+    const uniqPush = (arr, v) => (arr.includes(v) ? arr : [...arr, v]);
+    const changed = [];
+
+    const updatedTools = (toolsRef.current || []).map(t => {
+      const loc = byId.get(t.id);
+      if (!loc) return t;
+      const sys = findSystem(systems, loc.system_id);
+      const composed = resolveLocationString(loc, systems);
+      const prior = (t.location || '').trim();
+      // Retire the previous free-text/composed value so it stays searchable —
+      // mirrors normalizeLocationSystem and renumberAllToolIds.
+      const legacy_locations = (prior && prior !== composed)
+        ? uniqPush((t.legacy_locations || []).filter(l => l !== composed), prior)
+        : (t.legacy_locations || []);
+      changed.push({ id: t.id, from: prior, to: composed });
+      return {
+        ...t,
+        tool_location: loc,
+        location: composed,
+        proshop_location: proShopLocationValue(sys, composed),
+        legacy_locations,
+      };
+    });
+    dispatch({ type: 'SET_TOOLS', tools: updatedTools });
+
+    // An acknowledged gap is a note about an EMPTY bin — filling it makes the
+    // note meaningless, so drop it. Keeps a dismissed gap from lingering after
+    // the hole is closed (and never reserves the number).
+    const prunedSystems = systems.map(s => pruneAcknowledgedGaps(s, usedBinsForSystem(updatedTools, s.id)));
+    if (prunedSystems.some((s, i) => s !== systems[i])) {
+      await saveLocationConfig({ ...(ss.location_config || {}), systems: prunedSystems });
+    }
+
+    if (googleRef.current) {
+      try {
+        const metaList = await toolStore.loadAll();
+        const metaById = new Map(metaList.map(m => [m.id, m]));
+        for (const t of updatedTools) {
+          if (!byId.has(t.id)) continue;
+          const key = t.tracking_id || t.id;
+          const existing = metaById.get(key) || { id: key };
+          metaById.set(key, {
+            ...existing,
+            location: t.tool_location,
+            legacy_locations: t.legacy_locations || [],
+          });
+        }
+        await toolStore.upsertMany([...metaById.values()]);
+      } catch (err) {
+        notify(`Location write failed: ${err.message}`, 'error', 7000);
+        throw err;
+      }
+    }
+    return { updated: changed.length, changed };
   };
 
   const addTool = async (tool) => {
@@ -1161,7 +1243,7 @@ export function createToolActions(ctx) {
 
   return {
     writeLogicalTool,
-    saveTool, assignToolLocation, normalizeLocationSystem,
+    saveTool, assignToolLocation, normalizeLocationSystem, importLocationsFromProShop,
     addTool, cloneTool, mergeTool, deleteTool, mergeTools,
     addAssembly, updateAssembly, deleteAssembly,
     reconcileTool, applyReconcile,
