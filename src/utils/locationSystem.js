@@ -37,6 +37,10 @@ export function newLocationSystem(name = 'New System') {
     allowDuplicates: false,
     proShopExport: 'number_only',  // number_only | full | fixed
     fixedExport: '',
+    // How this system claims a bare number on ProShop IMPORT (see the
+    // "ProShop import matching" section). Mirror of proShopExport.
+    proShopImport: newImportRule(),
+    acknowledged_gaps: [],         // skipped bins the user has ruled on (NOT reserved)
     delimiters: { zs: '-', sd: '-', db: '-' },
     levels: {
       zone:    blankLevel('Building', 'number'),
@@ -382,4 +386,237 @@ export function locationNumber(value) {
   if (!digits) return null;
   const n = parseInt(digits, 10);
   return isNaN(n) ? null : n;
+}
+
+// ─── ProShop import matching (per-system, configurable) ──────────────────────
+// ProShop stores a location as a BARE NUMBER with no system prefix, so a number
+// alone cannot say which location system it belongs to. Rather than hardcode a
+// shop's conventions, each system carries its own `proShopImport` rule and the
+// systems are evaluated as a cascade — the config equivalent of the long IF
+// statement a shop would otherwise write in Excel.
+//
+// This is the mirror image of the existing per-system `proShopExport` rule, and
+// it drives BOTH the initial bulk import and the location-only re-import.
+//
+// Modes:
+//   'off'        — this system never claims an imported value
+//   'any_unique' — claims any number appearing exactly ONCE across the file
+//   'triggers'   — claims the specific values listed (e.g. a sentinel number a
+//                  shop uses to mean "in the drill index"); pairs with
+//                  allowDuplicates, since a sentinel repeats by design
+//   'range'      — claims any number within [min, max]
+export const IMPORT_MATCH_MODES = ['off', 'any_unique', 'triggers', 'range'];
+
+export function newImportRule() {
+  return {
+    match: 'off',
+    triggers: [],                  // literal numbers this system claims
+    range: { min: null, max: null },
+    flagGaps: false,               // report skipped numbers in the used range
+  };
+}
+
+// Read a system's import rule, defaulting for configs saved before this existed
+// (additive/optional — nothing to migrate).
+export function systemImportRule(system) {
+  const r = system?.proShopImport;
+  if (!r) return newImportRule();
+  return {
+    ...newImportRule(),
+    ...r,
+    triggers: Array.isArray(r.triggers) ? r.triggers.map(Number).filter(n => !Number.isNaN(n)) : [],
+    range: { min: r.range?.min ?? null, max: r.range?.max ?? null },
+  };
+}
+
+// Parse the comma-separated trigger box into numbers (UI helper).
+export function parseTriggerList(text) {
+  return String(text ?? '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(Number)
+    .filter(n => !Number.isNaN(n));
+}
+
+// Has the shop configured import matching at all? (Any system with a rule other
+// than 'off'.) Drives the legacy fallback in claimSystemForNumber.
+export function hasConfiguredImportRules(systems) {
+  return (systems || []).some(s => systemImportRule(s).match !== 'off');
+}
+
+// Pre-config behaviour: exactly one bin-only system claims everything; anything
+// more ambiguous claims nothing (the old proShopStructuredLocation rule).
+function legacyClaimSystem(systems) {
+  const usable = (systems || []).filter(isBinOnlySystem);
+  return usable.length === 1 ? usable[0] : null;
+}
+
+// A system whose only per-tool variable is the BIN — every upper level is off or
+// a fixed custom prefix. Only then can a bare number fully determine a structured
+// location; a system with selectable level options needs a per-tool choice.
+export function isBinOnlySystem(system) {
+  const L = system?.levels || {};
+  const ok = (lv) => !lv || !lv.on || lv.identFormat === 'custom';
+  return ok(L.zone) && ok(L.station) && ok(L.drawer);
+}
+
+// Which system claims a given imported number.
+//
+// EXPLICIT TRIGGERS WIN over generic rules, regardless of system order. Pure
+// ordered evaluation isn't enough: a sentinel value is only recognizable as one
+// because the user TYPED it in, not because of how often it happens to appear.
+// If a shop's sentinel showed up just once in a given export, an 'any_unique'
+// system earlier in the order would swallow it — so a literal the user entered
+// is treated as the stronger statement of intent.
+//
+// `counts` is a file-wide Map(number -> occurrences); uniqueness must be judged
+// across the WHOLE file, never streamed, or the first occurrence of a repeated
+// value looks unique and lands in the wrong system.
+export function claimSystemForNumber(num, systems, counts) {
+  const list = systems || [];
+  // No rules configured anywhere → keep the pre-config behaviour: a single
+  // bin-only system claims every number. Without this an established shop's
+  // import would silently stop assigning locations the moment this feature
+  // shipped (the rules default to 'off'), so the config stays purely additive.
+  if (!hasConfiguredImportRules(list)) return legacyClaimSystem(list);
+  for (const sys of list) {
+    const rule = systemImportRule(sys);
+    if (rule.match === 'triggers' && rule.triggers.includes(num)) return sys;
+  }
+  for (const sys of list) {
+    const rule = systemImportRule(sys);
+    if (rule.match === 'range') {
+      const { min, max } = rule.range;
+      const okMin = min == null || num >= Number(min);
+      const okMax = max == null || num <= Number(max);
+      if (okMin && okMax) return sys;
+    } else if (rule.match === 'any_unique') {
+      if ((counts.get(num) || 0) === 1) return sys;
+    }
+  }
+  return null;
+}
+
+// Count each location number across the whole set of incoming rows.
+export function countLocationNumbers(rows) {
+  const counts = new Map();
+  for (const row of rows || []) {
+    const n = locationNumber(row?.value);
+    if (n == null) continue;
+    counts.set(n, (counts.get(n) || 0) + 1);
+  }
+  return counts;
+}
+
+// Gaps in a system's occupied bin range: numbers with no tool, between the first
+// and last occupied bin. Excludes reserved (`skip`) and acknowledged gaps.
+//
+// A gap is INFORMATIONAL, never a reservation — acknowledging one silences the
+// report row without making the number unassignable, and the acknowledgement
+// clears itself as soon as a tool lands there (see pruneAcknowledgedGaps).
+export function findBinGaps(system, usedBins) {
+  const bin = system?.levels?.bin;
+  if (!bin || bin.fixed) return [];
+  const used = usedBins instanceof Set ? usedBins : new Set(usedBins || []);
+  if (used.size === 0) return [];
+  const skip = new Set((bin.skip || []).map(Number));
+  const ack = new Set((system.acknowledged_gaps || []).map(Number));
+  const nums = [...used].sort((a, b) => a - b);
+  const out = [];
+  for (let n = nums[0]; n < nums[nums.length - 1]; n++) {
+    if (!used.has(n) && !skip.has(n) && !ack.has(n)) out.push(n);
+  }
+  return out;
+}
+
+// Drop acknowledgements for bins that are now occupied — an acknowledged gap is
+// a note about an EMPTY number, so filling it makes the note meaningless. Keeps
+// a re-acknowledged gap from lingering after the hole is filled.
+export function pruneAcknowledgedGaps(system, usedBins) {
+  const ack = (system?.acknowledged_gaps || []).map(Number).filter(n => !Number.isNaN(n));
+  if (!ack.length) return system;
+  const used = usedBins instanceof Set ? usedBins : new Set(usedBins || []);
+  const next = ack.filter(n => !used.has(n));
+  if (next.length === ack.length) return system;
+  return { ...system, acknowledged_gaps: next };
+}
+
+// Route every incoming ProShop location through the cascade.
+//
+// `rows` = [{ key, value }] — key identifies the row (a ProShop Tool #), value is
+// the raw Location cell. Returns the structured assignment for each claimed row
+// plus an exception list of everything that wasn't a 100% clean match.
+//
+// Exception types:
+//   'no_value'     — the row has no usable number (blank / non-numeric cell)
+//   'unmatched'    — a number no system's rule claimed
+//   'duplicate'    — repeated number in a system that does NOT allow duplicates
+//   'needs_levels' — claimed by a system a bare number can't fully determine
+export function routeProShopLocations(rows, systems) {
+  const list = rows || [];
+  const counts = countLocationNumbers(list);
+  const assignments = [];
+  const exceptions = [];
+  const bySystem = new Map();
+  // Which rows share each number, per system — a duplicate is only a problem
+  // within the system that claimed it.
+  const claimedByNum = new Map();
+
+  for (const row of list) {
+    const num = locationNumber(row?.value);
+    if (num == null) {
+      exceptions.push({ type: 'no_value', key: row?.key, value: row?.value ?? '' });
+      continue;
+    }
+    const sys = claimSystemForNumber(num, systems, counts);
+    if (!sys) {
+      exceptions.push({ type: 'unmatched', key: row?.key, value: row?.value, bin: num });
+      continue;
+    }
+    if (!isBinOnlySystem(sys)) {
+      exceptions.push({
+        type: 'needs_levels', key: row?.key, value: row?.value, bin: num,
+        systemId: sys.id, systemName: sys.name,
+      });
+      continue;
+    }
+    const binVal = sys.levels?.bin?.fixed ? sys.levels.bin.fixedVal : num;
+    const location = { system_id: sys.id, zone_id: null, station_id: null, drawer_id: null, bin: binVal };
+    const entry = { key: row?.key, bin: num, systemId: sys.id, systemName: sys.name, location };
+    assignments.push(entry);
+    if (!bySystem.has(sys.id)) bySystem.set(sys.id, { system: sys, rows: [] });
+    bySystem.get(sys.id).rows.push(entry);
+    const dupKey = `${sys.id}:${num}`;
+    if (!claimedByNum.has(dupKey)) claimedByNum.set(dupKey, []);
+    claimedByNum.get(dupKey).push(entry);
+  }
+
+  // Duplicates — only where the system says they aren't expected.
+  for (const [dupKey, entries] of claimedByNum) {
+    if (entries.length < 2) continue;
+    const sysId = dupKey.slice(0, dupKey.lastIndexOf(':'));
+    const sys = findSystem(systems, sysId);
+    if (sys?.allowDuplicates) continue;
+    exceptions.push({
+      type: 'duplicate', bin: entries[0].bin, systemId: sysId, systemName: sys?.name || '',
+      keys: entries.map(e => e.key),
+    });
+  }
+
+  // Per-system summary + gaps.
+  const perSystem = [];
+  for (const sys of systems || []) {
+    const claimed = bySystem.get(sys.id)?.rows || [];
+    const rule = systemImportRule(sys);
+    const used = new Set(claimed.map(e => e.bin));
+    perSystem.push({
+      systemId: sys.id,
+      systemName: sys.name,
+      matched: claimed.length,
+      gaps: rule.flagGaps ? findBinGaps(sys, used) : [],
+    });
+  }
+
+  return { assignments, exceptions, perSystem };
 }
