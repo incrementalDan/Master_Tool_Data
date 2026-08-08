@@ -4,7 +4,9 @@ import { useApp } from '../context/AppContext.jsx';
 import { parseCSV } from './ImportFlow.jsx';
 import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel } from '../utils/proShopHeaders.js';
 import { normProShopId } from '../schema/insertFamilies.js';
-import { routeProShopLocations, resolveLocationString, hasConfiguredImportRules } from '../utils/locationSystem.js';
+import {
+  routeProShopLocations, resolveLocationString, hasConfiguredImportRules, systemImportRule,
+} from '../utils/locationSystem.js';
 
 // Location-only ProShop re-import.
 //
@@ -89,8 +91,15 @@ export default function LocationImportModal({ onClose }) {
       if (!tool) { extra.push({ type: 'no_tool', key: a.key, bin: a.bin }); continue; }
       const to = resolveLocationString(a.location, systems);
       const from = (tool.location || '').trim();
+      // A tool whose legacy free text already READS right (Fusion vendor "LC-140")
+      // still has no structured tool_location, so the app doesn't own it and it
+      // can't persist for a no-Fusion tool. Comparing strings alone would skip it
+      // forever — take it over as well, and only call it unchanged when the app
+      // already owns the same bin in the same system.
+      const owned = tool.tool_location?.system_id === a.location.system_id
+        && String(tool.tool_location?.bin ?? '') === String(a.location.bin ?? '');
       const row = { toolId: tool.id, key: a.key, description: tool.description, from, to, location: a.location };
-      (from === to ? unchanged : changes).push(row);
+      (owned && from === to ? unchanged : changes).push(row);
     }
     return { changes, unchanged, exceptions: [...exceptions, ...extra] };
   }, [rows, systems, toolByNum]);
@@ -110,7 +119,15 @@ export default function LocationImportModal({ onClose }) {
     }
   };
 
-  const noRules = systems.length > 1 && !hasConfiguredImportRules(systems);
+  // Two setup traps, both of which silently produce no assignments:
+  //  • nothing configured at all with >1 system (no legacy fallback applies)
+  //  • SOME systems configured — which switches the legacy fallback off for
+  //    ALL of them, so the ones still on "Never" quietly stop claiming anything.
+  //    That second case is the likelier one and used to go unmentioned.
+  const configured = hasConfiguredImportRules(systems);
+  const idleSystems = systems.filter(s => systemImportRule(s).match === 'off');
+  const noRules = systems.length > 1 && !configured;
+  const partialRules = configured && idleSystems.length > 0;
 
   return (
     <div className="modal-backdrop" onClick={busy ? undefined : onClose}>
@@ -144,6 +161,21 @@ export default function LocationImportModal({ onClose }) {
                 You have more than one location system but no import rules configured. Set
                 <strong> ProShop location import</strong> on each system first — a bare number
                 can't be routed to the right system without it.
+              </span>
+            </div>
+          </div>
+        )}
+
+        {partialRules && (
+          <div className="warn-banner mb-12">
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+              <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+              <span>
+                {idleSystems.map(s => s.name).join(', ')}{' '}
+                {idleSystems.length === 1 ? 'has' : 'have'} no import rule set, so{' '}
+                {idleSystems.length === 1 ? 'it claims' : 'they claim'} nothing. Once any system
+                has a rule, every other system needs one too — set{' '}
+                <strong>ProShop location import</strong> on {idleSystems.length === 1 ? 'it' : 'them'} as well.
               </span>
             </div>
           </div>

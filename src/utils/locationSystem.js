@@ -553,6 +553,11 @@ export function claimSystemForNumber(num, systems, counts) {
     const rule = systemImportRule(sys);
     if (rule.match === 'range') {
       const { min, max } = rule.range;
+      // An UNBOUNDED range claims nothing. Both boxes empty is a half-finished
+      // setting, not "every number" — treating it as a match would silently make
+      // this system swallow the whole file (and, being a generic rule, quietly
+      // outrank every later system) the moment the mode was selected.
+      if (min == null && max == null) continue;
       const okMin = min == null || num >= Number(min);
       const okMax = max == null || num <= Number(max);
       if (okMin && okMax) return sys;

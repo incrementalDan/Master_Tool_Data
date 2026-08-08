@@ -350,3 +350,32 @@ describe('a duplicates-allowed system gets no bin suggestion', () => {
     expect(nextBin(s, new Set())).toBe('10000');
   });
 });
+
+describe('setup mistakes must not silently swallow the file', () => {
+  const sys = (name, patch) => {
+    const s = lcSystem(name, { ident: name, binStart: 1 });
+    s.proShopImport = { ...newImportRule(), ...patch };
+    return s;
+  };
+
+  it('a range with BOTH bounds empty claims nothing', () => {
+    // Half-finished setting, not "every number" — as a generic rule it would
+    // otherwise outrank every later system and swallow the whole file.
+    const r = routeProShopLocations(rows([['T1', '5'], ['T2', '99999']]), [sys('A', { match: 'range' })]);
+    expect(r.assignments).toEqual([]);
+    expect(r.exceptions.every(e => e.type === 'unmatched')).toBe(true);
+  });
+
+  it('a one-sided range still works', () => {
+    const r = routeProShopLocations(
+      rows([['T1', '5'], ['T2', '99999']]),
+      [sys('A', { match: 'range', range: { min: null, max: 100 } })],
+    );
+    expect(r.assignments.map(a => a.bin)).toEqual([5]);
+  });
+
+  it('triggers mode with an empty list claims nothing (inert, not greedy)', () => {
+    const r = routeProShopLocations(rows([['T1', '5']]), [sys('A', { match: 'triggers', triggers: [] })]);
+    expect(r.assignments).toEqual([]);
+  });
+});

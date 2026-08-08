@@ -369,13 +369,15 @@ Per system: **Analyze** (read-only `analyzeSystem` parse pass — no writes) →
 "acknowledged_gaps": []
 ```
 
-`match`: `off` (never claims) | `any_unique` (a number appearing exactly once file-wide) | `triggers` (specific values the user typed — a sentinel like `10000` meaning "in the drill index", paired with `allowDuplicates`) | `range` (`[min,max]`). Helpers in `src/utils/locationSystem.js`: `newImportRule`, `systemImportRule` (read-with-default), `parseTriggerList`, `claimSystemForNumber`, `countLocationNumbers`, `routeProShopLocations`, `isBinOnlySystem` (moved here from `ImportFlow` — one source of truth), `findBinGaps`, `pruneAcknowledgedGaps`, `libraryLocationIssues`. UI: the collapsible **ProShop location import** block in `LocationSystemSettings` (collapsed by default — setup once, then forget).
+`match`: `off` (never claims) | `any_unique` (a number appearing exactly once file-wide) | `range` (`[min,max]`; **both bounds empty claims NOTHING** — a half-finished setting is not "every number") | `triggers` (specific values the user typed — a sentinel like `10000` meaning "in the drill index", paired with `allowDuplicates`). Helpers in `src/utils/locationSystem.js`: `newImportRule`, `systemImportRule` (read-with-default), `parseTriggerList`, `claimSystemForNumber`, `countLocationNumbers`, `routeProShopLocations`, `isBinOnlySystem` (moved here from `ImportFlow` — one source of truth), `findBinGaps`, `pruneAcknowledgedGaps`, `libraryLocationIssues`. UI: the collapsible **ProShop location import** block in `LocationSystemSettings` (collapsed by default — setup once, then forget).
 
 **Three rules that are easy to get wrong, all regression-tested** (`locationSystem.test.js`):
 
 - **Uniqueness is judged across the WHOLE file, never row by row.** Streaming would call the FIRST occurrence of a repeated number unique and hand it to the wrong system. Hence `countLocationNumbers` as a pre-pass, threaded into both import entry points as `locCounts`.
 - **An explicit trigger wins over a generic rule, regardless of system order.** A sentinel is recognizable as one because the user *typed it in*, not because of how often it happens to appear — if it showed up just once in an export, an `any_unique` system earlier in the order would swallow it.
 - **An established shop with no rules configured keeps the previous behaviour exactly** (`hasConfiguredImportRules` → `legacyClaimSystem`: single bin-only system claims everything). Without the fallback, shipping this would silently stop an existing shop's import from assigning locations. The config is purely additive — nothing to re-enter.
+
+⚠️ **Configuring ANY system switches the legacy fallback off for ALL of them**, so a system still on `off` silently claims nothing — `LocationImportModal` warns by name when some systems are configured and others aren't.
 
 A system that isn't bin-only (a selectable drawer/station level) is **flagged, never half-assigned** — a bare number can't supply the level choice.
 

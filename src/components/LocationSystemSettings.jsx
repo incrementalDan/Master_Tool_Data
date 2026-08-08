@@ -380,9 +380,13 @@ function NormalizationStep({ sys, tools, dirty = false, onCommit, onUpdate }) {
         <div>
           <div style={{ background: 'color-mix(in srgb, var(--green) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--green) 40%, transparent)', borderRadius: 7, padding: '10px 12px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
             <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--green)' }}>{matched} tool{matched === 1 ? '' : 's'} matched this system</span>
+            {/* null means "no counter" — but for two different reasons now, and
+                calling a duplicates-allowed system "fixed" would be untrue. */}
             {analysis.nextBin !== null
               ? <span style={{ fontSize: '0.75rem', color: 'var(--green)' }}>Next available bin: <span className="font-mono" style={{ fontWeight: 700 }}>{analysis.nextBin}</span></span>
-              : <span style={{ fontSize: '0.75rem', color: 'var(--green)' }}>Fixed value — no counter needed</span>}
+              : sys.levels.bin.fixed
+                ? <span style={{ fontSize: '0.75rem', color: 'var(--green)' }}>Fixed value — no counter needed</span>
+                : <span style={{ fontSize: '0.75rem', color: 'var(--green)' }}>Duplicates allowed — no next bin suggested</span>}
           </div>
           <div className="text-sub text-xs" style={{ marginBottom: 10 }}>
             {analysis.unmatched.length} location-text tool{analysis.unmatched.length === 1 ? '' : 's'} and {analysis.noLocation} with no location won't match — they stay in the unmatched list below all systems.
