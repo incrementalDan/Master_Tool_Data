@@ -1883,9 +1883,13 @@ function MaterialLinkCard({ dirty }) {
   const [pushResult, setPushResult] = useState(null);
   const [pushBusy, setPushBusy] = useState(false);
 
-  const blocked = (!googleAuthenticated && !demoMode) || dirty;
+  // Both halves write to a real store (Drive metadata / the Fusion library), so
+  // unlike most Settings actions there is no meaningful demo path — demo tools
+  // live in memory only. Disabled with a reason rather than left to throw.
+  const blocked = !googleAuthenticated || demoMode || dirty;
   const blockedWhy = dirty ? 'Save or cancel your changes first'
-    : (!googleAuthenticated && !demoMode) ? 'Connect Google Drive first' : undefined;
+    : demoMode ? 'Not available in demo mode'
+      : !googleAuthenticated ? 'Connect Google Drive first' : undefined;
 
   const run = async (dryRun) => {
     setBusy(true);

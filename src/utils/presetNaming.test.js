@@ -589,9 +589,26 @@ describe('unresolvedMaterialPresets — broken material links', () => {
       [{ guid: 'p', material_preset_id: 'pre_al', material: { query: 'anything' } }], MATS)).toEqual([]);
   });
 
-  it('ignores materials that still resolve by name (alloy alias, group label)', () => {
-    expect(unresolvedMaterialPresets([{ guid: 'p', material: { query: 'SS316' } }], MATS)).toEqual([]);
-    expect(unresolvedMaterialPresets([{ guid: 'p', material: { query: 'Non-Ferrous' } }], MATS)).toEqual([]);
+  // SHOP RULE (supersedes the earlier "resolves by name → fine" behaviour): the
+  // only thing Fusion can resolve as a material is a CAM preset NAME, so a group
+  // label or an alloy name is still an unlinked preset — and one that LOOKS fine
+  // on screen, which is exactly why it has to be flagged rather than trusted.
+  it('flags a group label — it displays fine but is not a CAM preset', () => {
+    const out = unresolvedMaterialPresets([{ guid: 'p', material: { query: 'Non-Ferrous' } }], MATS);
+    expect(out).toHaveLength(1);
+    expect(out[0].reason).toBe('group');
+  });
+
+  it('flags an alloy name, and offers its CAM preset as the fix', () => {
+    const out = unresolvedMaterialPresets([{ guid: 'p', material: { query: 'SS316' } }], MATS);
+    expect(out).toHaveLength(1);
+    expect(out[0].reason).toBe('alloy');
+    expect(out[0].suggestion).toBe('SS Austenitic 316');   // confident one-click re-link
+  });
+
+  it('marks a string that resolves to nothing as unknown', () => {
+    expect(unresolvedMaterialPresets([{ guid: 'p', material: { query: 'Al Wrought' } }], MATS)[0].reason)
+      .toBe('unknown');
   });
 
   it('ignores presets with no material set', () => {

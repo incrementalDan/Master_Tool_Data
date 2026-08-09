@@ -479,9 +479,21 @@ export function unresolvedMaterialPresets(presets, materials) {
   return (presets || []).reduce((out, p) => {
     const query = String(p?.material?.query || '').trim();
     if (!query || p?.material_preset_id) return out;
+    // ⚠️ A preset with a material but NO CAM-preset link is flagged, full stop —
+    // including one whose string resolves to a GROUP ("Steel") or an ALLOY
+    // ("316L"). Those display and colour correctly, which is precisely why they
+    // would otherwise stay invisible forever: they are still unlinked (not
+    // rename-proof), and per the shop rule the only thing Fusion can resolve as a
+    // material is a CAM preset NAME, so a group/alloy string reaches Fusion as a
+    // dangling reference. `reason` lets the banner say which case it is.
     const hit = findMaterialInLibrary(query, materials);
-    if (hit.group || hit.preset || hit.alloy) return out;   // resolves by name — fine
-    out.push({ guid: p.guid, name: p.name || 'Unnamed preset', query, suggestion: suggestCamPresetName(query, materials) });
+    out.push({
+      guid: p.guid,
+      name: p.name || 'Unnamed preset',
+      query,
+      reason: hit.alloy ? 'alloy' : hit.group ? 'group' : 'unknown',
+      suggestion: suggestCamPresetName(query, materials),
+    });
     return out;
   }, []);
 }

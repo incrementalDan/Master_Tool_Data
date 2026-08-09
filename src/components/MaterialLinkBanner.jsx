@@ -62,9 +62,11 @@ export default function MaterialLinkBanner({ tool, onSave, isSaving }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <FlaskConical size={16} style={{ color: 'var(--orange, #f59e0b)', flexShrink: 0 }} />
           <span style={{ flex: 1, minWidth: 220, lineHeight: 1.5 }}>
-            <strong>{broken.length} preset{broken.length > 1 ? 's have' : ' has'} an out-of-date material.</strong>{' '}
-            The stored material isn&apos;t in the Materials library — usually because the CAM preset was
-            renamed before the app started tracking it by ID. Re-link {broken.length > 1 ? 'them' : 'it'} and
+            <strong>
+              {broken.length} preset{broken.length > 1 ? 's are' : ' is'} not linked to a CAM preset.
+            </strong>{' '}
+            Fusion resolves a material by its CAM preset name, so {broken.length > 1 ? 'these' : 'this'} won&apos;t
+            match anything there. Link {broken.length > 1 ? 'them' : 'it'} and
             {broken.length > 1 ? ' they' : ' it'}&apos;ll follow future renames automatically.
           </span>
           <button className="btn btn-secondary" onClick={() => setOpen(o => !o)}>
@@ -127,6 +129,13 @@ export default function MaterialLinkBanner({ tool, onSave, isSaving }) {
               <span className="text-sm" style={{ flex: 1, minWidth: 180 }}>{b.name}</span>
               <span className="text-xs text-sub" style={{ fontFamily: 'var(--font-mono)' }}>
                 stored: {b.query}
+              </span>
+              {/* Say WHY it's unlinked — a group/alloy string looks perfectly
+                  fine on screen, so "stored: Steel" alone reads like a non-problem. */}
+              <span className="text-xs text-sub">
+                {b.reason === 'group' ? '(a material group, not a CAM preset)'
+                  : b.reason === 'alloy' ? '(an alloy, not a CAM preset)'
+                    : '(not in the Materials library)'}
               </span>
               {b.suggestion ? (
                 <button
