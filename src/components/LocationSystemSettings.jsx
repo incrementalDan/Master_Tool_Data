@@ -598,10 +598,25 @@ function SystemCard({ sys, tools, conflicts = [], dirty = false, onUpdate, onDel
 // disappears by itself as the tool behind it is fixed — there is no saved report
 // to go stale. Also hosts the location-only ProShop re-import.
 function LocationIssuesPanel({ tools, systems, onUpdateSystem, dirty }) {
+  const { components } = useApp();
   const [open, setOpen] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const navigate = useNavigate();
-  const issues = libraryLocationIssues(tools, systems);
+  // Bins are occupied by tools AND component records — both are real objects in
+  // real drawers (same rule as LocationPicker's locRecords). Counting only tools
+  // reported every component's bin as a skipped number.
+  const occupants = [...(tools || []), ...(components?.components || [])];
+  const issues = libraryLocationIssues(occupants, systems);
+
+  // A component has no page of its own — it's edited on the insert tool that
+  // pairs it. So a component chip navigates to that parent tool, which is where
+  // its location actually lives. Keeps it one kind of thing to the user.
+  const parentOf = (id) => (tools || []).find(t =>
+    t.pairing && (t.pairing.holder_component_id === id || t.pairing.insert_component_id === id));
+  const goToRecord = (id) => {
+    const parent = (tools || []).some(t => t.id === id) ? { id } : parentOf(id);
+    if (parent) navigate(`/tool/${parent.id}`);
+  };
   const dupes = issues.filter(i => i.type === 'duplicate');
   const gaps = issues.filter(i => i.type === 'gap');
   const outliers = issues.filter(i => i.type === 'outlier');
@@ -659,7 +674,7 @@ function LocationIssuesPanel({ tools, systems, onUpdateSystem, dirty }) {
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {d.tools.map(t => (
-                      <button key={t.id} className="chip" style={{ cursor: 'pointer' }} onClick={() => navigate(`/tool/${t.id}`)}>
+                      <button key={t.id} className="chip" style={{ cursor: 'pointer' }} onClick={() => goToRecord(t.id)}>
                         <span className="font-mono">{t.tool_id || '—'}</span>
                       </button>
                     ))}
@@ -682,7 +697,7 @@ function LocationIssuesPanel({ tools, systems, onUpdateSystem, dirty }) {
                       </div>
                       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {o.tools.map(t => (
-                          <button key={t.id} className="chip" style={{ cursor: 'pointer' }} onClick={() => navigate(`/tool/${t.id}`)}>
+                          <button key={t.id} className="chip" style={{ cursor: 'pointer' }} onClick={() => goToRecord(t.id)}>
                             <span className="font-mono">{t.tool_id || '—'}</span>
                           </button>
                         ))}

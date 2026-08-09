@@ -25,11 +25,7 @@ const EXCEPTION_LABEL = {
   unmatched: 'No system claimed this number',
   duplicate: 'Same number on more than one tool',
   needs_levels: 'System needs a level picked by hand',
-  no_tool: 'No tool in the library with this Tool #',
-  // An insert tool's holder body / insert are each their OWN ProShop row, but
-  // they are component records (tool_components.json), not tools — so a Tool #
-  // that hits one is not "missing from the library" and must not say so.
-  component: 'Insert component — its location is set on the component',
+  no_tool: 'Nothing in the library with this Tool #',
 };
 
 export default function LocationImportModal({ onClose }) {
@@ -108,12 +104,12 @@ export default function LocationImportModal({ onClose }) {
     const extra = [];
     for (const a of assignments) {
       const num = normProShopId(a.key);
-      const tool = toolByNum.get(num);
-      if (!tool) {
-        const isComponent = componentByNum.has(num);
-        extra.push({ type: isComponent ? 'component' : 'no_tool', key: a.key, bin: a.bin });
-        continue;
-      }
+      // A component (an insert tool's holder body / insert) is a real physical
+      // object in a real drawer, so it gets a location exactly like a tool. It
+      // only lives in a different file — never a user-facing distinction.
+      const tool = toolByNum.get(num) || componentByNum.get(num);
+      if (!tool) { extra.push({ type: 'no_tool', key: a.key, bin: a.bin }); continue; }
+      const isComponent = !toolByNum.has(num);
       const to = resolveLocationString(a.location, systems);
       const from = (tool.location || '').trim();
       // A tool whose legacy free text already READS right (Fusion vendor "LC-140")
@@ -123,7 +119,7 @@ export default function LocationImportModal({ onClose }) {
       // already owns the same bin in the same system.
       const owned = tool.tool_location?.system_id === a.location.system_id
         && String(tool.tool_location?.bin ?? '') === String(a.location.bin ?? '');
-      const row = { toolId: tool.id, key: a.key, description: tool.description, from, to, location: a.location };
+      const row = { id: tool.id, isComponent, key: a.key, description: tool.description, from, to, location: a.location };
       (owned && from === to ? unchanged : changes).push(row);
     }
     return { changes, unchanged, exceptions: [...exceptions, ...extra] };
@@ -134,7 +130,7 @@ export default function LocationImportModal({ onClose }) {
     setBusy(true);
     try {
       const res = await importLocationsFromProShop(
-        plan.changes.map(c => ({ toolId: c.toolId, location: c.location })),
+        plan.changes.map(c => ({ id: c.id, isComponent: c.isComponent, location: c.location })),
       );
       setDone(res);
     } catch {
@@ -268,8 +264,13 @@ export default function LocationImportModal({ onClose }) {
                     <thead><tr><th>Tool #</th><th>Description</th><th>Now</th><th>ProShop</th></tr></thead>
                     <tbody>
                       {plan.changes.slice(0, 200).map(c => (
-                        <tr key={c.toolId}>
-                          <td className="text-sm font-mono">{c.key}</td>
+                        <tr key={c.id}>
+                          <td className="text-sm font-mono">
+                            {c.key}
+                            {/* Marked, not separated — a component is the same
+                                kind of thing here, just stored elsewhere. */}
+                            {c.isComponent && <span className="text-sub" style={{ fontSize: '0.65rem' }}> · part</span>}
+                          </td>
                           <td className="text-sm" style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.description}</td>
                           <td className="text-sm font-mono text-sub">{c.from || '—'}</td>
                           <td className="text-sm font-mono" style={{ color: 'var(--blue)' }}>{c.to}</td>

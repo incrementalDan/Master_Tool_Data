@@ -1380,10 +1380,10 @@ export function AppProvider({ children }) {
   const toolActions = useMemo(() => createToolActions({
     dispatch, notify,
     downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary,
-    saveLocationConfig,
+    saveLocationConfig, saveComponents,
     toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef, fusionReadyRef, materialsRef,
     holderLibraryRef,
-  }), [notify, downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary, saveLocationConfig]);
+  }), [notify, downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary, saveLocationConfig, saveComponents]);
 
   const libraryOps = useMemo(() => createLibraryOps({
     dispatch, notify, holderLibraryRef, downloadFusionList,
