@@ -426,10 +426,22 @@ export function libraryLocationIssues(tools, systems) {
       }
     }
 
-    // Holes in the occupied range — informational only.
+    // Holes in the occupied range — informational only, and reported as RUNS so
+    // a stretch of consecutive empties is one row instead of hundreds.
     if (rule.flagGaps) {
-      for (const bin of findBinGaps(sys, usedBinsForSystem(list, sys.id))) {
-        out.push({ type: 'gap', systemId: sys.id, systemName: sys.name, bin });
+      const usedHere = usedBinsForSystem(list, sys.id);
+      const { gaps, outliers } = analyzeBinSequence(sys, usedHere);
+      for (const g of gaps) {
+        out.push({ type: 'gap', systemId: sys.id, systemName: sys.name, from: g.from, to: g.to, count: g.count });
+      }
+      // A bin far above the rest is almost always a tool that belongs to another
+      // system — the actually-actionable finding hiding behind the phantom gaps.
+      for (const bin of outliers) {
+        const tools = inSystem.filter(t => Number(t.tool_location?.bin) === bin);
+        out.push({
+          type: 'outlier', systemId: sys.id, systemName: sys.name, bin,
+          tools: tools.map(t => ({ id: t.id, tool_id: t.tool_id, description: t.description })),
+        });
       }
     }
   }
@@ -585,18 +597,64 @@ export function countLocationNumbers(rows) {
 // A gap is INFORMATIONAL, never a reservation — acknowledging one silences the
 // report row without making the number unassignable, and the acknowledgement
 // clears itself as soon as a tool lands there (see pruneAcknowledgedGaps).
-export function findBinGaps(system, usedBins) {
+// A run of consecutive empties longer than this means the numbers above it are
+// not part of this system's sequence — see analyzeBinSequence.
+export const GAP_RUN_LIMIT = 25;
+
+// Split a system's occupied bins into real gaps vs out-of-range outliers.
+//
+// ⚠️ Naively reporting "every empty number between the lowest and highest bin"
+// collapses the moment ONE bin is far above the rest: a single tool sitting on
+// 1000 in a cabinet that really ends at 253 invents ~750 phantom gaps, and a
+// worklist with 750 rows is wallpaper — the exact failure the checklist warns
+// about. It is also untrue: nothing is "skipped" up there, the sequence simply
+// stopped.
+//
+// So a run of more than `maxRun` consecutive empties is read as the END of the
+// sequence, not as gaps. Bins at or above it are reported as OUTLIERS instead —
+// which is the actually-useful finding, because an outlier is nearly always a
+// tool that belongs to a different system (a drill-index sentinel left in the
+// cabinet system, say). Gaps below that point are returned grouped into runs,
+// so a handful of consecutive holes reads as one row rather than several.
+export function analyzeBinSequence(system, usedBins, { maxRun = GAP_RUN_LIMIT } = {}) {
+  const empty = { gaps: [], outliers: [] };
   const bin = system?.levels?.bin;
-  if (!bin || bin.fixed) return [];
+  if (!bin || bin.fixed) return empty;
   const used = usedBins instanceof Set ? usedBins : new Set(usedBins || []);
-  if (used.size === 0) return [];
+  if (used.size === 0) return empty;
   const skip = new Set((bin.skip || []).map(Number));
   const ack = new Set((system.acknowledged_gaps || []).map(Number));
   const nums = [...used].sort((a, b) => a - b);
-  const out = [];
-  for (let n = nums[0]; n < nums[nums.length - 1]; n++) {
-    if (!used.has(n) && !skip.has(n) && !ack.has(n)) out.push(n);
+
+  // Walk the occupied bins; the first oversized hole ends the sequence.
+  let cutoff = null;
+  for (let i = 1; i < nums.length; i++) {
+    if (nums[i] - nums[i - 1] - 1 > maxRun) { cutoff = nums[i]; break; }
   }
+  const outliers = cutoff == null ? [] : nums.filter(n => n >= cutoff);
+  const top = cutoff == null ? nums[nums.length - 1] : nums[nums.indexOf(cutoff) - 1];
+
+  // Gaps below the cutoff, grouped into consecutive runs.
+  const gaps = [];
+  let run = null;
+  for (let n = nums[0]; n < top; n++) {
+    const missing = !used.has(n) && !skip.has(n) && !ack.has(n);
+    if (missing) {
+      if (run && run.to === n - 1) run.to = n;
+      else { run = { from: n, to: n }; gaps.push(run); }
+    } else if (!missing) {
+      run = null;
+    }
+  }
+  return { gaps: gaps.map(g => ({ ...g, count: g.to - g.from + 1 })), outliers };
+}
+
+// Flat list of gap numbers (outliers excluded). Kept for callers that just want
+// the numbers; analyzeBinSequence is the richer form.
+export function findBinGaps(system, usedBins) {
+  const { gaps } = analyzeBinSequence(system, usedBins);
+  const out = [];
+  for (const g of gaps) for (let n = g.from; n <= g.to; n++) out.push(n);
   return out;
 }
 

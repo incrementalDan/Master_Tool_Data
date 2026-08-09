@@ -604,15 +604,18 @@ function LocationIssuesPanel({ tools, systems, onUpdateSystem, dirty }) {
   const issues = libraryLocationIssues(tools, systems);
   const dupes = issues.filter(i => i.type === 'duplicate');
   const gaps = issues.filter(i => i.type === 'gap');
+  const outliers = issues.filter(i => i.type === 'outlier');
   const push = useFusionLocationPush(tools);
 
   // Acknowledging a gap silences the row WITHOUT reserving the number — it never
   // touches bin.skip[], so the bin stays freely assignable, and the whole
   // acknowledgement is dropped again the moment a tool lands there.
-  const ackGap = (systemId, bin) => {
+  const ackGap = (systemId, from, to) => {
     const sys = findSystem(systems, systemId);
     if (!sys) return;
-    onUpdateSystem({ ...sys, acknowledged_gaps: [...(sys.acknowledged_gaps || []), bin] });
+    const add = [];
+    for (let n = from; n <= to; n++) add.push(n);
+    onUpdateSystem({ ...sys, acknowledged_gaps: [...(sys.acknowledged_gaps || []), ...add] });
   };
 
   return (
@@ -639,7 +642,8 @@ function LocationIssuesPanel({ tools, systems, onUpdateSystem, dirty }) {
         <>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
             {dupes.length > 0 && <Counter n={dupes.length} label="DUPLICATE BINS" color="var(--orange)" />}
-            {gaps.length > 0 && <Counter n={gaps.length} label="SKIPPED NUMBERS" color="var(--text-sub)" />}
+            {outliers.length > 0 && <Counter n={outliers.length} label="OUT OF RANGE" color="var(--orange)" />}
+            {gaps.length > 0 && <Counter n={gaps.length} label="SKIPPED RUNS" color="var(--text-sub)" />}
           </div>
           <button className="btn btn-ghost btn-sm" style={{ color: 'var(--blue)' }} onClick={() => setOpen(v => !v)}>
             {open ? <ChevronUp size={13} /> : <ChevronDown size={13} />} {open ? 'Hide' : 'View'} details
@@ -663,19 +667,45 @@ function LocationIssuesPanel({ tools, systems, onUpdateSystem, dirty }) {
                 </div>
               ))}
 
-              {gaps.length > 0 && (
+              {outliers.length > 0 && (
                 <div style={{ marginTop: dupes.length ? 12 : 0 }}>
                   <div className="text-sub text-xs" style={{ marginBottom: 6 }}>
-                    Skipped numbers — usually nothing is there. Dismissing one hides it without
-                    reserving it; the bin stays assignable and the dismissal is undone if a tool
-                    later lands there.
+                    Bins far above the rest of their system — almost always a tool that belongs to
+                    a different location system. These are what create long stretches of
+                    &quot;skipped&quot; numbers below them.
+                  </div>
+                  {outliers.map(o => (
+                    <div key={`${o.systemId}-${o.bin}`} style={{ border: '1px solid var(--border)', borderRadius: 7, padding: '8px 10px', marginBottom: 6 }}>
+                      <div style={{ fontSize: '0.78rem', marginBottom: 4 }}>
+                        <span className="font-mono" style={{ color: 'var(--orange)', fontWeight: 700 }}>{o.bin}</span>
+                        <span className="text-sub"> · {o.systemName} · out of range</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {o.tools.map(t => (
+                          <button key={t.id} className="chip" style={{ cursor: 'pointer' }} onClick={() => navigate(`/tool/${t.id}`)}>
+                            <span className="font-mono">{t.tool_id || '—'}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {gaps.length > 0 && (
+                <div style={{ marginTop: (dupes.length || outliers.length) ? 12 : 0 }}>
+                  <div className="text-sub text-xs" style={{ marginBottom: 6 }}>
+                    Skipped numbers — usually nothing is there. Consecutive ones are shown as a
+                    single range. Dismissing one hides it without reserving it; the bins stay
+                    assignable and the dismissal is undone if a tool later lands there.
                   </div>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {gaps.slice(0, 120).map(g => (
-                      <span key={`${g.systemId}-${g.bin}`} className="chip font-mono" style={{ gap: 5 }}>
-                        {g.bin}
-                        <button className="icon-btn" title="Dismiss this gap" style={{ width: 16, height: 16 }}
-                          onClick={() => ackGap(g.systemId, g.bin)}>
+                      <span key={`${g.systemId}-${g.from}`} className="chip font-mono" style={{ gap: 5 }}>
+                        {g.from === g.to ? g.from : `${g.from}–${g.to}`}
+                        {g.count > 1 && <span className="text-sub" style={{ fontSize: '0.65rem' }}>({g.count})</span>}
+                        <button className="icon-btn" title="Dismiss" style={{ width: 16, height: 16 }}
+                          onClick={() => ackGap(g.systemId, g.from, g.to)}>
                           <X size={11} />
                         </button>
                       </span>
