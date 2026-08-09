@@ -1,5 +1,5 @@
 // Pure search/filter functions — no React imports
-import { conflictCount } from '../utils/toolConflicts.js';
+import { toolNeedsAttention } from '../utils/toolConflicts.js';
 
 const TEXT_FIELDS = ['description', 'vendor', 'material', 'coating', 'notes', 'location', 'tool_id', 'preferred_machine'];
 
@@ -120,11 +120,19 @@ export function applyFilters(tools, activeFilters, machineFilter = null, toleran
     result = result.filter(t => t.library_id === libraryFilter.libraryId);
   }
 
-  // "Needs fixing" — the tools counted by the library-wide conflict banner.
+  // "Needs fixing" — the tools counted by the library-wide banner: unresolved
+  // import differences, plus preset materials that aren't linked to a CAM preset.
   // Uses the SAME predicate the banner counts with, so clicking through can
   // never land on a different number than the one advertised.
   if (activeFilters.flaggedOnly) {
-    result = result.filter(t => conflictCount(t) > 0);
+    result = result.filter(t => toolNeedsAttention(t, activeFilters.materials));
+  }
+
+  // Tools the app owns outright, with no entry in any Fusion library. A distinct
+  // STATE, not an error — hence its own filter rather than a share of the one
+  // above (see toolAttentionCount).
+  if (activeFilters.noFusionOnly) {
+    result = result.filter(t => t.no_fusion_link === true);
   }
 
   if (activeFilters.textQuery) {

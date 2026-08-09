@@ -1,3 +1,5 @@
+import { unresolvedMaterialPresets, stockMaterialIssues } from './presetNaming.js';
+
 // "Informed, not blocked" conflict tracking. When a logical tool's Fusion
 // instances / same-product-id entries disagree on a shared value (e.g. flute
 // length 0.7 vs 0.75) or carry different product IDs under one tracking ID, the
@@ -80,4 +82,28 @@ export function displayConflicts(tool) {
 // Count of unresolved conflicts on a tool (for the library-card badge).
 export function conflictCount(tool) {
   return displayConflicts(tool).length;
+}
+
+// ─── "Needs fixing" — THE one predicate ──────────────────────────────────────
+// What makes a tool need a person: an unresolved import difference, or a preset
+// material that isn't linked to a CAM preset / points at a Fusion material we
+// don't have. Shared by the library-wide banner AND the landing page's filter,
+// so the advertised count and the filtered list can never disagree.
+//
+// `no_fusion_link` is deliberately NOT included: a tool the app owns outright is
+// a different state, not an error, and it gets its own filter.
+//
+// `materials` is optional — without the Materials library loaded the material
+// helpers return nothing, so this degrades to conflicts only rather than
+// flagging the whole library while the shared files are still in flight.
+export function toolAttentionCount(tool, materials) {
+  if (!tool) return 0;
+  const presets = tool.presets || [];
+  return conflictCount(tool)
+    + unresolvedMaterialPresets(presets, materials).length
+    + stockMaterialIssues(presets, materials).length;
+}
+
+export function toolNeedsAttention(tool, materials) {
+  return toolAttentionCount(tool, materials) > 0;
 }
