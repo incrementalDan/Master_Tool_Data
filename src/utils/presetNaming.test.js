@@ -17,6 +17,9 @@ import {
   suggestCamPresetName,
   findCamPresetById,
   camPresetIdForQuery,
+  camPresetIdForRenamedQuery,
+  resolveCamPresetId,
+  stockMaterialIssues,
   syncPresetMaterialName,
   backfillMaterialPresetIds,
   isAutoPresetName,
@@ -192,6 +195,138 @@ describe('CAM-preset foreign key (store the id, render the name)', () => {
   it('tolerates a dangling id — keeps the stored name, does not blank it', () => {
     const preset = { guid: 'p1', material_preset_id: 'deleted', material: { query: 'Old Name' } };
     expect(syncPresetMaterialName(preset, MATS)).toBe(preset);
+  });
+
+  // A CAM preset renamed by APPENDING detail is the commonest way a name-only
+  // link goes stale ("Al Wrought" → "Al Wrought - 6061+"). Unambiguous cases heal
+  // silently; ambiguous ones must stay the user's call.
+  describe('camPresetIdForRenamedQuery', () => {
+    const LIB = { groups: [], materials: [], presets: [
+      { id: 'p_al', name: 'Al Wrought - 6061+' },
+      { id: 'p_low', name: 'Steel Low Carbon - 1018' },
+      { id: 'p_304', name: 'SS Austenitic - 304' },
+      { id: 'p_316', name: 'SS Austenitic - 310, 316' },
+      { id: 'p_cu', name: 'Pure Copper' },
+    ] };
+
+    it('resolves an old name that was renamed by appending detail', () => {
+      expect(camPresetIdForRenamedQuery('Al Wrought', LIB)).toBe('p_al');
+      expect(camPresetIdForRenamedQuery('steel low carbon', LIB)).toBe('p_low'); // case-insensitive
+    });
+
+    it('refuses when two CAM presets share the prefix', () => {
+      expect(camPresetIdForRenamedQuery('SS Austenitic', LIB)).toBe(null);
+    });
+
+    it('refuses a match that lands mid-word — "P" is not "Pure Copper"', () => {
+      expect(camPresetIdForRenamedQuery('P', LIB)).toBe(null);
+      expect(camPresetIdForRenamedQuery('Pure Cop', LIB)).toBe(null);
+    });
+
+    it('refuses a single-token bare shop code — that is the user\'s decision', () => {
+      expect(camPresetIdForRenamedQuery('AL', LIB)).toBe(null);
+      expect(camPresetIdForRenamedQuery('SS', LIB)).toBe(null);
+      expect(camPresetIdForRenamedQuery('STEEL', LIB)).toBe(null);
+    });
+  });
+
+  describe('resolveCamPresetId (the shared cascade)', () => {
+    const LIB = {
+      groups: [{ id: 'M', label: 'Stainless Steel', code: 'SS' }],
+      presets: [{ id: 'p_316', group_id: 'M', name: 'SS Austenitic - 310, 316' }],
+      materials: [{ id: 'm316', group_id: 'M', preset_id: 'p_316', label: '316 / 316L', aliases: ['SS316'] }],
+    };
+
+    it('an existing FK always wins', () => {
+      expect(resolveCamPresetId({ material_preset_id: 'kept', material: { query: 'SS Austenitic 316' } }, LIB)).toBe('kept');
+    });
+
+    it('falls through exact name → grade → rename', () => {
+      expect(resolveCamPresetId({ material: { query: 'SS Austenitic - 310, 316' } }, LIB)).toBe('p_316'); // exact
+      expect(resolveCamPresetId({ material: { query: 'SS316 FIN' } }, LIB)).toBe('p_316');               // grade
+    });
+
+    it('never overrides a query that still resolves in the library by name', () => {
+      // "Stainless Steel" is a GROUP label — it displays fine, so it is left for
+      // the user rather than guessed down to one of the group's CAM presets.
+      expect(resolveCamPresetId({ material: { query: 'Stainless Steel' } }, LIB)).toBe(null);
+    });
+
+    it('returns null rather than guessing at a bare code', () => {
+      expect(resolveCamPresetId({ material: { query: 'SS' } }, LIB)).toBe(null);
+      expect(resolveCamPresetId({ material: {} }, LIB)).toBe(null);
+    });
+  });
+
+  it('syncPresetMaterialName corrects a stale name AND is identity-stable once correct', () => {
+    const LIB = { groups: [], materials: [], presets: [{ id: 'p_al', name: 'Al Wrought - 6061+' }] };
+    const stale = { guid: 'p1', material: { query: 'Al Wrought' } };
+    const fixed = syncPresetMaterialName(stale, LIB);
+    expect(fixed.material_preset_id).toBe('p_al');
+    expect(fixed.material.query).toBe('Al Wrought - 6061+');   // the name Fusion gets
+    expect(fixed['stock-materials']).toEqual(['Al Wrought - 6061+']);
+    // Second pass returns the SAME object — otherwise every load would look dirty
+    // and a bulk fix could never report "nothing to do".
+    expect(syncPresetMaterialName(fixed, LIB)).toBe(fixed);
+  });
+
+  it('never overwrites a stock material that is not ours — it must stay flaggable', () => {
+    const LIB = { groups: [], materials: [], presets: [{ id: 'pre_316', name: 'SS Austenitic - 310, 316' }] };
+    // A dangling reference to the replaced Fusion material library. Clobbering it
+    // here would destroy the only evidence and stockMaterialIssues could never
+    // report it — and it would disagree with what the Fusion push does.
+    const p = {
+      guid: 'p1', material_preset_id: 'pre_316',
+      material: { query: 'SS Austenitic 316' }, 'stock-materials': ['SS Harder'],
+    };
+    const out = syncPresetMaterialName(p, LIB);
+    expect(out.material.query).toBe('SS Austenitic - 310, 316');   // name still corrected
+    expect(out['stock-materials']).toEqual(['SS Harder']);         // reference preserved
+    expect(stockMaterialIssues([out], LIB)).toHaveLength(1);       // and still flagged
+    expect(syncPresetMaterialName(out, LIB)).toBe(out);            // settles — no churn
+  });
+
+  // SHOP RULE: Fusion's material library is generated FROM ours, so a preset's
+  // stock-material must be one of our CAM presets. Anything else is a leftover
+  // pointing at the replaced Fusion library and resolves to nothing.
+  describe('stockMaterialIssues', () => {
+    const LIB = { groups: [], materials: [], presets: [
+      { id: 'pre_al', name: 'Al Wrought - 6061+' },
+      { id: 'pre_316', name: 'SS Austenitic - 310, 316' },
+    ] };
+
+    it('flags a stock material that is not a CAM preset in our library', () => {
+      const out = stockMaterialIssues([
+        { guid: 'p1', name: 'SS Rough', material_preset_id: 'pre_316', 'stock-materials': ['SS Harder'] },
+      ], LIB);
+      expect(out).toHaveLength(1);
+      expect(out[0].unknown).toEqual(['SS Harder']);
+      expect(out[0].expected).toBe('SS Austenitic - 310, 316');   // what its own link implies
+    });
+
+    it('passes a stock material that IS one of ours', () => {
+      expect(stockMaterialIssues([
+        { guid: 'p1', 'stock-materials': ['Al Wrought - 6061+'] },
+      ], LIB)).toEqual([]);
+    });
+
+    it('says nothing about a preset with no stock material at all', () => {
+      // Absent is the normal case (307 of the shop's 359) — never inject one,
+      // so it must never be flagged either or the banner becomes wallpaper.
+      expect(stockMaterialIssues([{ guid: 'p1', material: { query: 'AL' } }], LIB)).toEqual([]);
+      expect(stockMaterialIssues([{ guid: 'p2', 'stock-materials': [] }], LIB)).toEqual([]);
+    });
+
+    it('reports only the unknown entries of a multi-value assignment', () => {
+      const out = stockMaterialIssues([
+        { guid: 'p1', 'stock-materials': ['Al Wrought - 6061+', 'Steel, High-Carbon'] },
+      ], LIB);
+      expect(out[0].unknown).toEqual(['Steel, High-Carbon']);
+    });
+
+    it('is silent when the Materials library has not loaded yet', () => {
+      expect(stockMaterialIssues([{ guid: 'p1', 'stock-materials': ['x'] }], { presets: [] })).toEqual([]);
+    });
   });
 
   it('backfillMaterialPresetIds walks every tool preset', () => {
@@ -454,9 +589,26 @@ describe('unresolvedMaterialPresets — broken material links', () => {
       [{ guid: 'p', material_preset_id: 'pre_al', material: { query: 'anything' } }], MATS)).toEqual([]);
   });
 
-  it('ignores materials that still resolve by name (alloy alias, group label)', () => {
-    expect(unresolvedMaterialPresets([{ guid: 'p', material: { query: 'SS316' } }], MATS)).toEqual([]);
-    expect(unresolvedMaterialPresets([{ guid: 'p', material: { query: 'Non-Ferrous' } }], MATS)).toEqual([]);
+  // SHOP RULE (supersedes the earlier "resolves by name → fine" behaviour): the
+  // only thing Fusion can resolve as a material is a CAM preset NAME, so a group
+  // label or an alloy name is still an unlinked preset — and one that LOOKS fine
+  // on screen, which is exactly why it has to be flagged rather than trusted.
+  it('flags a group label — it displays fine but is not a CAM preset', () => {
+    const out = unresolvedMaterialPresets([{ guid: 'p', material: { query: 'Non-Ferrous' } }], MATS);
+    expect(out).toHaveLength(1);
+    expect(out[0].reason).toBe('group');
+  });
+
+  it('flags an alloy name, and offers its CAM preset as the fix', () => {
+    const out = unresolvedMaterialPresets([{ guid: 'p', material: { query: 'SS316' } }], MATS);
+    expect(out).toHaveLength(1);
+    expect(out[0].reason).toBe('alloy');
+    expect(out[0].suggestion).toBe('SS Austenitic 316');   // confident one-click re-link
+  });
+
+  it('marks a string that resolves to nothing as unknown', () => {
+    expect(unresolvedMaterialPresets([{ guid: 'p', material: { query: 'Al Wrought' } }], MATS)[0].reason)
+      .toBe('unknown');
   });
 
   it('ignores presets with no material set', () => {

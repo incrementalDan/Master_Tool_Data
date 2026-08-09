@@ -1,10 +1,12 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, X, Plus, LayoutGrid, List, PackageOpen, FolderOpen, GitMerge } from 'lucide-react';
+import { Search, X, Plus, LayoutGrid, List, PackageOpen, FolderOpen, GitMerge, AlertTriangle, CloudOff } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { applyFilters, matchedLegacyId } from '../services/searchEngine.js';
+import { toolNeedsAttention } from '../utils/toolConflicts.js';
 import { getDefaultUnit } from '../utils/units.js';
 import { machineColor } from '../utils/machineColors.js';
+import { toolIdSequence } from '../utils/toolIdSystem.js';
 import { HolderRailIcon } from './icons/ToolTypeIcon.jsx';
 import ToolTypeGrid from './ToolTypeGrid.jsx';
 import FacetFilters from './FacetFilters.jsx';
@@ -12,9 +14,24 @@ import ToolCard from './ToolCard.jsx';
 
 const DEBOUNCE_MS = 150;
 const VIEW_KEY = 'tool_view_mode';
-const SORT_KEY = 'tool_sort_mode';
+// v2: the default moved from 'updated' to 'added'. The old key is written on
+// every mount, so every existing session already holds 'updated' — a new key is
+// what actually delivers the new default, while still remembering a later choice.
+const SORT_KEY = 'tool_sort_mode_v2';
 
 const SORTS = {
+  // Default. What you just added, at the top — the thing you most often want to
+  // get back to. `created_at` alone isn't enough: a bulk import stamps one
+  // timestamp across hundreds of tools (58 share a single updated_at in the real
+  // library), and tied tools would fall back to library order, which reads as
+  // random. So ties break on the Tool ID's shop-wide sequence number — see
+  // toolIdSequence.
+  added: {
+    label: 'Recently added',
+    fn: (a, b) => (new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      || (toolIdSequence(b.tool_id) - toolIdSequence(a.tool_id)),
+  },
+  tool_id_desc: { label: 'Tool ID ↓ (newest)', fn: (a, b) => toolIdSequence(b.tool_id) - toolIdSequence(a.tool_id) },
   updated: { label: 'Recently updated', fn: (a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0) },
   diameter_asc: { label: 'Diameter ↑', fn: (a, b) => (a.diameter || 0) - (b.diameter || 0) },
   diameter_desc: { label: 'Diameter ↓', fn: (a, b) => (b.diameter || 0) - (a.diameter || 0) },
@@ -23,7 +40,7 @@ const SORTS = {
 };
 
 export default function LandingPage() {
-  const { tools, isLoading, error, clearLibraryLocation, shopSettings, demoMode } = useApp();
+  const { tools, isLoading, error, clearLibraryLocation, shopSettings, demoMode, materials } = useApp();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchRef = useRef(null);
@@ -38,9 +55,15 @@ export default function LandingPage() {
   const [textQuery, setTextQuery] = useState(initQuery);
   const [selectedTypes, setSelectedTypes] = useState(initTypes);
   const [facets, setFacets] = useState(initFacets);
+  // "Needs fixing" — arrives as ?flagged=1 from the library-wide conflict banner.
+  // Read straight off the URL rather than mirrored into state: the banner sits
+  // ABOVE the routes, so clicking it while already on this page changes the
+  // params without remounting, and a useState seeded once would ignore it.
+  const flaggedOnly = searchParams.get('flagged') === '1';
+  const noFusionOnly = searchParams.get('nofusion') === '1';
   const [displayQuery, setDisplayQuery] = useState(initQuery);
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'grid');
-  const [sort, setSort] = useState(() => localStorage.getItem(SORT_KEY) || 'updated');
+  const [sort, setSort] = useState(() => localStorage.getItem(SORT_KEY) || 'added');
   const [exactMode, setExactMode] = useState(false);
   const debounceRef = useRef(null);
 
@@ -74,15 +97,64 @@ export default function LandingPage() {
     machineInitialised.current = true;
   }, [defaultMachineId, machines]);
 
+  // Status filters live in the URL so the view is shareable and back-able.
+  const setStatusParam = useCallback((key, on) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (on) next.set(key, '1'); else next.delete(key);
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+  const clearStatusFilters = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('flagged');
+      next.delete('nofusion');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  // ?reset=1 — "clear everything, then apply". The library-wide banner promises
+  // an exact count, so it asks for a clean slate: this page stays mounted when
+  // the banner navigates, and any filter still set would narrow the list below
+  // the number the user just clicked. The machine filter matters most — it is
+  // PRE-SELECTED from the shop's default machine, so it would silently hide
+  // flagged tools that don't run on it.
+  //
+  // The status CHIPS below deliberately do NOT send this: a filter chip should
+  // compose with whatever else is selected, like every other filter here.
+  const resetRequested = searchParams.get('reset') === '1';
+  useEffect(() => {
+    if (!resetRequested) return;
+    setSelectedTypes([]);
+    setFacets({});
+    setTextQuery('');
+    setDisplayQuery('');
+    setMachineFilter({ machineId: null, strict: false });
+    setLibraryFilter({ libraryId: null });
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('reset');
+      return next;
+    }, { replace: true });
+  }, [resetRequested, setSearchParams]);
+
   // Persist filters to URL
   useEffect(() => {
+    // A reset is pending: this effect still sees the pre-clear state, so writing
+    // now would put the filters it is about to drop straight back into the URL.
+    if (resetRequested) return;
     const params = {};
     if (selectedTypes.length > 0) params.type = selectedTypes.join(',');
     if (textQuery) params.q = textQuery;
     const facetsStr = JSON.stringify(facets);
     if (facetsStr !== '{}') params.f = facetsStr;
+    // Carry the status filters through — this effect rebuilds the params from
+    // scratch, so omitting them would drop the filter on the next keystroke.
+    if (flaggedOnly) params.flagged = '1';
+    if (noFusionOnly) params.nofusion = '1';
     setSearchParams(params, { replace: true });
-  }, [selectedTypes, textQuery, facets, setSearchParams]);
+  }, [selectedTypes, textQuery, facets, flaggedOnly, noFusionOnly, resetRequested, setSearchParams]);
 
   useEffect(() => { localStorage.setItem(VIEW_KEY, view); }, [view]);
   useEffect(() => { localStorage.setItem(SORT_KEY, sort); }, [sort]);
@@ -99,7 +171,14 @@ export default function LandingPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const activeFilters = { toolTypes: selectedTypes, textQuery, facets };
+  // Counts for the status chips — over the WHOLE library, not the filtered set,
+  // so a chip's number doesn't shift as other filters are applied.
+  const attentionCount = useMemo(
+    () => tools.filter(t => toolNeedsAttention(t, materials)).length, [tools, materials]);
+  const noFusionCount = useMemo(
+    () => tools.filter(t => t.no_fusion_link === true).length, [tools]);
+
+  const activeFilters = { toolTypes: selectedTypes, textQuery, facets, flaggedOnly, noFusionOnly, materials };
   const filtered = useMemo(() => {
     const unit = getDefaultUnit();
     const tols = exactMode ? null : {
@@ -111,8 +190,8 @@ export default function LandingPage() {
       machines.length > 0 ? machineFilter : null, tols,
       toolLibraries.length > 1 ? libraryFilter : null,
     );
-    return [...result].sort(SORTS[sort]?.fn || SORTS.updated.fn);
-  }, [tools, selectedTypes, textQuery, facets, sort, machineFilter, machines.length, exactMode, libraryFilter, toolLibraries.length]); // eslint-disable-line react-hooks/exhaustive-deps
+    return [...result].sort(SORTS[sort]?.fn || SORTS.added.fn);
+  }, [tools, selectedTypes, textQuery, facets, flaggedOnly, noFusionOnly, materials, sort, machineFilter, machines.length, exactMode, libraryFilter, toolLibraries.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleQueryChange = useCallback((val) => {
     setDisplayQuery(val);
@@ -143,7 +222,7 @@ export default function LandingPage() {
     setFacets(newFilters.facets || {});
   };
 
-  const hasFilters = selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0 || !!machineFilter.machineId || !!libraryFilter.libraryId;
+  const hasFilters = selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0 || !!machineFilter.machineId || !!libraryFilter.libraryId || flaggedOnly || noFusionOnly;
 
   // When hide_unused_tool_types is on (default) and not in demo mode, only show
   // tool type tiles for types that have at least one tool in the library.
@@ -225,6 +304,39 @@ export default function LandingPage() {
           <Plus size={20} /> Add Tool
         </button>
       </div>
+
+      {/* Status filters — always visible when there is something to show, so
+          both states are DISCOVERABLE rather than only reachable from a banner
+          that can be dismissed. Counts are over the whole library, so they stay
+          a stable label rather than shifting with the other filters.
+
+          Toggling a chip composes with everything else selected; only the
+          banner's "Show them" clears first (see ?reset=1 above). */}
+      {(attentionCount > 0 || noFusionCount > 0) && (
+        <div className="mb-16">
+          <div className="section-header">Status</div>
+          <div className="flex items-center gap-8 flex-wrap">
+            {attentionCount > 0 && (
+              <button
+                className={`chip ${flaggedOnly ? 'active' : ''}`}
+                onClick={() => setStatusParam('flagged', !flaggedOnly)}
+                title="Unresolved import differences, or preset materials not linked to a CAM preset"
+              >
+                <AlertTriangle size={13} /> Needs fixing ({attentionCount})
+              </button>
+            )}
+            {noFusionCount > 0 && (
+              <button
+                className={`chip ${noFusionOnly ? 'active' : ''}`}
+                onClick={() => setStatusParam('nofusion', !noFusionOnly)}
+                title="Tools the app owns outright — no entry in any Fusion library"
+              >
+                <CloudOff size={13} /> Not in Fusion ({noFusionCount})
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Library filter — only when more than one tool library is linked */}
       {toolLibraries.length > 1 && (
@@ -331,7 +443,7 @@ export default function LandingPage() {
         {hasFilters && (
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); setMachineFilter({ machineId: null, strict: false }); setLibraryFilter({ libraryId: null }); }}
+            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); setMachineFilter({ machineId: null, strict: false }); setLibraryFilter({ libraryId: null }); clearStatusFilters(); }}
           >
             Reset
           </button>

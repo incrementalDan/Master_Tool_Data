@@ -172,25 +172,95 @@ export function camPresetIdForQuery(query, materials) {
   return p ? p.id : null;
 }
 
+// The CAM-preset id for a query that is an OLD name of a CAM preset that has
+// since been RENAMED BY APPENDING detail — "Al Wrought" → "Al Wrought - 6061+",
+// "Steel Low Carbon" → "Steel Low Carbon - 1018". This is the single most common
+// way a name-only link goes stale, and unlike a bare code it is not a judgement
+// call, so it self-heals rather than being surfaced.
+//
+// Three guards, each of which a looser rule gets wrong:
+//   • EXACTLY ONE candidate — "SS Austenitic" prefixes both the 304 and the
+//     310/316 preset, so it is ambiguous and must never be guessed at.
+//   • The match must end on a WORD BOUNDARY in the target — otherwise "P" would
+//     "uniquely" resolve to "Pure Copper".
+//   • At least TWO tokens — a CAM preset name is a phrase; a bare shop code
+//     ("AL", "SS", "STEEL") is one token and is deliberately the user's call
+//     (see bareMaterialCode). Without this, "AL" would swallow "Al Wrought …".
+export function camPresetIdForRenamedQuery(query, materials) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q || q.split(/\s+/).length < 2) return null;
+  const hits = (materials?.presets || []).filter(p => {
+    const name = String(p.name || '').trim().toLowerCase();
+    if (!name.startsWith(q) || name === q) return false;
+    return /[\s\-,/(]/.test(name.charAt(q.length));   // appended detail, not a longer word
+  });
+  return hits.length === 1 ? hits[0].id : null;
+}
+
+// THE resolver: which CAM preset a tool preset points at, most-authoritative
+// first. Shared by the load-time backfill and normalizeLibrary so the two can
+// never disagree about what a preset links to (the "checker must compose exactly
+// like the stamper" rule). Returns null when nothing is confident enough — those
+// stay surfaced for the user rather than guessed at.
+export function resolveCamPresetId(preset, materials) {
+  if (preset?.material_preset_id) return preset.material_preset_id;
+  const query = preset?.material?.query;
+  const exact = camPresetIdForQuery(query, materials);
+  if (exact) return exact;
+  // A query that still resolves to something in the library by NAME (a group
+  // label like "Stainless Steel", an alloy like "316L") displays correctly today
+  // — never override it on a guess. Only genuinely dangling names heal below.
+  const hit = findMaterialInLibrary(query, materials);
+  if (hit.group || hit.preset || hit.alloy) return null;
+  return camPresetIdFromGrade(query, materials)
+    ?? camPresetIdForRenamedQuery(query, materials)
+    ?? null;
+}
+
 // Refresh a preset's Fusion-facing material NAME fields (material.query +
 // stock-materials) from its `material_preset_id` — the id is the source of truth,
-// the name is derived live. Also opportunistically adopts the id from a
-// name-matched query (so existing name-only links become rename-proof). Returns
-// the preset unchanged when it has no id AND no name match, or when the id is
-// dangling (tolerated — the stored name is left as-is, same as any dangling-id
-// reference elsewhere in the app).
+// the name is derived live. Also adopts the id via `resolveCamPresetId` (so
+// existing name-only links, including ones left stale by a CAM-preset rename,
+// become rename-proof). Returns the preset unchanged when nothing resolves, or
+// when the id is dangling (tolerated — the stored name is left as-is, same as any
+// dangling-id reference elsewhere in the app).
 export function syncPresetMaterialName(preset, materials) {
   if (!preset) return preset;
-  const id = preset.material_preset_id || camPresetIdForQuery(preset.material?.query, materials);
+  const id = resolveCamPresetId(preset, materials);
   if (!id) return preset;
   const cam = findCamPresetById(id, materials);
   if (!cam) return preset;
   const query = cam.name;
+  const category = materialCategory(query);
+  const prevQuery = preset.material?.query;
+
+  // ⚠️ `stock-materials` is only rewritten when it plainly belongs to us — the
+  // SAME rule the Fusion push applies (FUSION_PRESET_PATCHERS.material), or the
+  // two drift on the one field they both touch. A value that is neither the new
+  // name nor the old one is a dangling reference to the replaced Fusion material
+  // library: overwriting it would destroy the only evidence of it, and
+  // stockMaterialIssues could never flag it.
+  const stock = Array.isArray(preset['stock-materials']) ? preset['stock-materials'] : null;
+  const stockIsOurs = !stock || stock.length === 0
+    || (stock.length === 1 && (stock[0] === query || stock[0] === prevQuery));
+  const nextStock = stockIsOurs ? [query] : stock;
+
+  // Return the SAME reference when everything already agrees. Callers use
+  // identity to decide whether there is anything to persist, so a new object per
+  // load would make every tool look dirty forever and a "fix" pass could never
+  // report nothing to do on its second run.
+  const stockAgrees = stock && stock.length === nextStock.length
+    && stock.every((s, i) => s === nextStock[i]);
+  if (preset.material_preset_id === id
+    && prevQuery === query
+    && preset.material?.category === category
+    && stockAgrees) return preset;
+
   return {
     ...preset,
     material_preset_id: id,
-    material: { ...(preset.material || {}), query, category: materialCategory(query) },
-    'stock-materials': [query],
+    material: { ...(preset.material || {}), query, category },
+    'stock-materials': nextStock,
   };
 }
 
@@ -409,9 +479,57 @@ export function unresolvedMaterialPresets(presets, materials) {
   return (presets || []).reduce((out, p) => {
     const query = String(p?.material?.query || '').trim();
     if (!query || p?.material_preset_id) return out;
+    // ⚠️ A preset with a material but NO CAM-preset link is flagged, full stop —
+    // including one whose string resolves to a GROUP ("Steel") or an ALLOY
+    // ("316L"). Those display and colour correctly, which is precisely why they
+    // would otherwise stay invisible forever: they are still unlinked (not
+    // rename-proof), and per the shop rule the only thing Fusion can resolve as a
+    // material is a CAM preset NAME, so a group/alloy string reaches Fusion as a
+    // dangling reference. `reason` lets the banner say which case it is.
     const hit = findMaterialInLibrary(query, materials);
-    if (hit.group || hit.preset || hit.alloy) return out;   // resolves by name — fine
-    out.push({ guid: p.guid, name: p.name || 'Unnamed preset', query, suggestion: suggestCamPresetName(query, materials) });
+    out.push({
+      guid: p.guid,
+      name: p.name || 'Unnamed preset',
+      query,
+      reason: hit.alloy ? 'alloy' : hit.group ? 'group' : 'unknown',
+      suggestion: suggestCamPresetName(query, materials),
+    });
+    return out;
+  }, []);
+}
+
+// ─── Fusion stock-material references that don't match our library ──────────
+// SHOP RULE: the app's Materials library is the single source of material, and
+// Fusion's material library is generated FROM it — one stock-material file per
+// CAM preset, whose name is the CAM preset's name (see materialExport.js). The
+// shop's original Fusion material library was replaced wholesale with that
+// generated set, so the two are meant to match name-for-name.
+//
+// Fusion resolves a preset's material through `stock-materials`, BY NAME. A name
+// that isn't a current CAM preset name is therefore a DANGLING reference to the
+// old, deleted Fusion library — Fusion resolves it to nothing. ("SS Harder",
+// "AL 6061" are the real examples.)
+//
+// FLAGGED, never auto-corrected — a stale assignment is a real editorial
+// decision about what that preset should now cut, and the same "informed, not
+// blocked" rule applies as to the material link itself. Automating a fix is
+// deliberately deferred; the flag is the feature.
+export function stockMaterialIssues(presets, materials) {
+  const names = new Set((materials?.presets || []).map(p => String(p.name || '').trim().toLowerCase()));
+  if (!names.size) return [];
+  return (presets || []).reduce((out, p) => {
+    const stock = Array.isArray(p?.['stock-materials']) ? p['stock-materials'] : null;
+    if (!stock?.length) return out;
+    const unknown = stock.filter(s => !names.has(String(s || '').trim().toLowerCase()));
+    if (!unknown.length) return out;
+    const cam = findCamPresetById(p.material_preset_id, materials);
+    out.push({
+      guid: p.guid,
+      name: p.name || 'Unnamed preset',
+      stock,
+      unknown,
+      expected: cam ? cam.name : null,   // what the preset's own CAM-preset link implies
+    });
     return out;
   }, []);
 }

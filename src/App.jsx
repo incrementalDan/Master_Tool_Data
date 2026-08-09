@@ -7,7 +7,7 @@ import { AppProvider, useApp } from './context/AppContext.jsx';
 import BrandLogo from './components/BrandLogo.jsx';
 import { setAccessToken, fetchUserInfo, tokenSecondsRemaining } from './services/driveService.js';
 import { exportFullLibrary } from './utils/proShopExport.js';
-import { displayConflicts } from './utils/toolConflicts.js';
+import { toolNeedsAttention } from './utils/toolConflicts.js';
 import ToastStack from './components/Toast.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
 import LibrarySetup from './components/LibrarySetup.jsx';
@@ -236,9 +236,12 @@ function NormalizeBanner() {
 // nudge. Dismissible for the session so the user can power through setup and
 // resolve each conflict on its tool page when they go to use that tool.
 function CombineConflictBanner() {
-  const { tools } = useApp();
+  const { tools, materials } = useApp();
+  const navigate = useNavigate();
   const [dismissed, setDismissed] = useState(false);
-  const conflictTools = tools.filter(t => displayConflicts(t).length > 0);
+  // Same predicate the landing page's filter uses, so "Show them" can never
+  // land on a different number than this banner advertises.
+  const conflictTools = tools.filter(t => toolNeedsAttention(t, materials));
   if (dismissed || conflictTools.length === 0) return null;
   const n = conflictTools.length;
   return (
@@ -249,10 +252,19 @@ function CombineConflictBanner() {
     }}>
       <AlertTriangle size={16} />
       <span style={{ flex: 1, minWidth: 220 }}>
-        <strong>{n} tool{n === 1 ? '' : 's'}</strong> {n === 1 ? 'has' : 'have'} unresolved
-        differences flagged during import — open {n === 1 ? 'it' : 'them'} to review and pick the
-        correct value. You can keep working; nothing is blocked.
+        <strong>{n} tool{n === 1 ? '' : 's'}</strong> need{n === 1 ? 's' : ''} a look — an unresolved
+        import difference, or a preset material that isn&apos;t linked to a CAM preset. Open
+        {n === 1 ? ' it' : ' them'} to pick the correct value. You can keep working; nothing is blocked.
       </span>
+      {/* Straight to the list of exactly these tools. Same predicate the count
+          above uses, so the filtered result can never disagree with the number. */}
+      <button
+        className="btn btn-secondary btn-sm"
+        onClick={() => navigate('/?flagged=1&reset=1')}
+        title={`Show the ${n} flagged tool${n === 1 ? '' : 's'}`}
+      >
+        Show {n === 1 ? 'it' : 'them'}
+      </button>
       <button className="icon-btn" onClick={() => setDismissed(true)} title="Dismiss"><X size={15} /></button>
     </div>
   );
