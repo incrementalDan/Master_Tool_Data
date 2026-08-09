@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, X, Plus, LayoutGrid, List, PackageOpen, FolderOpen, GitMerge, AlertTriangle, CloudOff } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { applyFilters, matchedLegacyId } from '../services/searchEngine.js';
+import { applyFilters, matchedLegacyId, matchedComponent } from '../services/searchEngine.js';
 import { toolNeedsAttention } from '../utils/toolConflicts.js';
 import { getDefaultUnit } from '../utils/units.js';
 import { machineColor } from '../utils/machineColors.js';
@@ -40,7 +40,7 @@ const SORTS = {
 };
 
 export default function LandingPage() {
-  const { tools, isLoading, error, clearLibraryLocation, shopSettings, demoMode, materials } = useApp();
+  const { tools, isLoading, error, clearLibraryLocation, shopSettings, demoMode, materials, components } = useApp();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const searchRef = useRef(null);
@@ -178,7 +178,10 @@ export default function LandingPage() {
   const noFusionCount = useMemo(
     () => tools.filter(t => t.no_fusion_link === true).length, [tools]);
 
-  const activeFilters = { toolTypes: selectedTypes, textQuery, facets, flaggedOnly, noFusionOnly, materials };
+  // `components` rides along so a search can match an insert tool by its parts —
+  // see componentTextIndex. Reference data, not a filter (same as `materials`).
+  const componentList = components?.components || [];
+  const activeFilters = { toolTypes: selectedTypes, textQuery, facets, flaggedOnly, noFusionOnly, materials, components: componentList };
   const filtered = useMemo(() => {
     const unit = getDefaultUnit();
     const tols = exactMode ? null : {
@@ -191,7 +194,7 @@ export default function LandingPage() {
       toolLibraries.length > 1 ? libraryFilter : null,
     );
     return [...result].sort(SORTS[sort]?.fn || SORTS.added.fn);
-  }, [tools, selectedTypes, textQuery, facets, flaggedOnly, noFusionOnly, materials, sort, machineFilter, machines.length, exactMode, libraryFilter, toolLibraries.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tools, selectedTypes, textQuery, facets, flaggedOnly, noFusionOnly, materials, components, sort, machineFilter, machines.length, exactMode, libraryFilter, toolLibraries.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleQueryChange = useCallback((val) => {
     setDisplayQuery(val);
@@ -473,11 +476,11 @@ export default function LandingPage() {
         </div>
       ) : view === 'list' ? (
         <div className="tool-list">
-          {filtered.map(tool => <ToolCard key={tool.id} tool={tool} variant="list" matchedLegacyId={matchedLegacyId(tool, textQuery)} />)}
+          {filtered.map(tool => <ToolCard key={tool.id} tool={tool} variant="list" matchedLegacyId={matchedLegacyId(tool, textQuery)} matchedComponent={matchedComponent(tool, textQuery, componentList)} />)}
         </div>
       ) : (
         <div className="tool-grid">
-          {filtered.map(tool => <ToolCard key={tool.id} tool={tool} matchedLegacyId={matchedLegacyId(tool, textQuery)} />)}
+          {filtered.map(tool => <ToolCard key={tool.id} tool={tool} matchedLegacyId={matchedLegacyId(tool, textQuery)} matchedComponent={matchedComponent(tool, textQuery, componentList)} />)}
         </div>
       )}
       </div>

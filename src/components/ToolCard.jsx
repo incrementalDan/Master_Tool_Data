@@ -21,7 +21,7 @@ function proshotUrl(id) {
   return `https://americanprecisionworks.adionsystems.com/procnc/tools/${prefix}/${id}$`;
 }
 
-export default function ToolCard({ tool, variant = 'grid', matchedLegacyId = null }) {
+export default function ToolCard({ tool, variant = 'grid', matchedLegacyId = null, matchedComponent = null }) {
   const navigate = useNavigate();
   const { cloneTool, notify, shopSettings } = useApp();
   const label = TOOL_TYPE_LABELS[tool.tool_type] || tool.tool_type;
@@ -92,6 +92,14 @@ export default function ToolCard({ tool, variant = 'grid', matchedLegacyId = nul
           }}
         >
           <AlertTriangle size={10} /> {nConflicts}
+        </span>
+      )}
+      {/* Why this matched, when the hit was on one of its PARTS rather than the
+          tool itself. A component has no page of its own, so without this the
+          result looks unrelated to what was typed. */}
+      {matchedComponent && (
+        <span className="text-sub font-mono" style={{ fontSize: 9, opacity: 0.7, whiteSpace: 'nowrap' }} title="Matched a part of this tool">
+          part {matchedComponent.tool_id || matchedComponent.description || ''}
         </span>
       )}
       {/* Only shown when the search matched a former (retired) ID. */}
