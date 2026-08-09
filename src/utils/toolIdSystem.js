@@ -49,6 +49,23 @@ export function typeCode(toolType) {
   return TYPE_CODES[toolType] || 'TL';
 }
 
+// The sequence number inside a shop Tool ID, for "newest first" ordering.
+//
+// The PREFIX is the tool-group letter (A = end mills, D = drills, R = taps …)
+// but the NUMBER is a single shop-wide counter, so a higher number means a more
+// recently added tool regardless of group — verified against the real library,
+// where the newest tools run A-265, R-266, L-267, J-268, D-269, A-270.
+//
+// Takes the FIRST digit run, which is what makes the messy real cases land
+// right: a combined insert-tool id ("I-167/ G-168") resolves to its holder
+// component, and a parenthetical suffix ("R-70 (CG)", "TC52 (142174)") is
+// ignored rather than swallowing the vendor number. Returns -1 when there is no
+// number at all, so unnumbered tools sort last instead of jumping to the top.
+export function toolIdSequence(toolId) {
+  const m = String(toolId ?? '').match(/\d+/);
+  return m ? Number(m[0]) : -1;
+}
+
 // Zero-pad a number to `digits` wide. Non-numeric input passes through as-is.
 export function padNumber(n, digits = 4) {
   const num = parseInt(n, 10);

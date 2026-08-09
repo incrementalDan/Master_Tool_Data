@@ -6,6 +6,7 @@ import { applyFilters, matchedLegacyId } from '../services/searchEngine.js';
 import { toolNeedsAttention } from '../utils/toolConflicts.js';
 import { getDefaultUnit } from '../utils/units.js';
 import { machineColor } from '../utils/machineColors.js';
+import { toolIdSequence } from '../utils/toolIdSystem.js';
 import { HolderRailIcon } from './icons/ToolTypeIcon.jsx';
 import ToolTypeGrid from './ToolTypeGrid.jsx';
 import FacetFilters from './FacetFilters.jsx';
@@ -13,9 +14,24 @@ import ToolCard from './ToolCard.jsx';
 
 const DEBOUNCE_MS = 150;
 const VIEW_KEY = 'tool_view_mode';
-const SORT_KEY = 'tool_sort_mode';
+// v2: the default moved from 'updated' to 'added'. The old key is written on
+// every mount, so every existing session already holds 'updated' — a new key is
+// what actually delivers the new default, while still remembering a later choice.
+const SORT_KEY = 'tool_sort_mode_v2';
 
 const SORTS = {
+  // Default. What you just added, at the top — the thing you most often want to
+  // get back to. `created_at` alone isn't enough: a bulk import stamps one
+  // timestamp across hundreds of tools (58 share a single updated_at in the real
+  // library), and tied tools would fall back to library order, which reads as
+  // random. So ties break on the Tool ID's shop-wide sequence number — see
+  // toolIdSequence.
+  added: {
+    label: 'Recently added',
+    fn: (a, b) => (new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      || (toolIdSequence(b.tool_id) - toolIdSequence(a.tool_id)),
+  },
+  tool_id_desc: { label: 'Tool ID ↓ (newest)', fn: (a, b) => toolIdSequence(b.tool_id) - toolIdSequence(a.tool_id) },
   updated: { label: 'Recently updated', fn: (a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0) },
   diameter_asc: { label: 'Diameter ↑', fn: (a, b) => (a.diameter || 0) - (b.diameter || 0) },
   diameter_desc: { label: 'Diameter ↓', fn: (a, b) => (b.diameter || 0) - (a.diameter || 0) },
@@ -47,7 +63,7 @@ export default function LandingPage() {
   const noFusionOnly = searchParams.get('nofusion') === '1';
   const [displayQuery, setDisplayQuery] = useState(initQuery);
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'grid');
-  const [sort, setSort] = useState(() => localStorage.getItem(SORT_KEY) || 'updated');
+  const [sort, setSort] = useState(() => localStorage.getItem(SORT_KEY) || 'added');
   const [exactMode, setExactMode] = useState(false);
   const debounceRef = useRef(null);
 
@@ -174,7 +190,7 @@ export default function LandingPage() {
       machines.length > 0 ? machineFilter : null, tols,
       toolLibraries.length > 1 ? libraryFilter : null,
     );
-    return [...result].sort(SORTS[sort]?.fn || SORTS.updated.fn);
+    return [...result].sort(SORTS[sort]?.fn || SORTS.added.fn);
   }, [tools, selectedTypes, textQuery, facets, flaggedOnly, noFusionOnly, materials, sort, machineFilter, machines.length, exactMode, libraryFilter, toolLibraries.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleQueryChange = useCallback((val) => {
