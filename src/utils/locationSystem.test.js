@@ -4,7 +4,7 @@ import {
   systemOutputSignature, systemStructureSignature, findSystemConflicts,
   parseLocationString, analyzeSystem, nextBin,
   newImportRule, routeProShopLocations, parseTriggerList, pruneAcknowledgedGaps,
-  libraryLocationIssues,
+  libraryLocationIssues, analyzeBinSequence, findBinGaps,
 } from './locationSystem.js';
 
 // Helper: a system with a custom-prefix drawer + auto bin (the default shape).
@@ -281,7 +281,8 @@ describe('libraryLocationIssues — the durable, derived worklist', () => {
   it('reports gaps and clears them once the hole is filled', () => {
     const s = lc();
     const before = libraryLocationIssues([at('A', s.id, 1), at('B', s.id, 4)], [s]);
-    expect(before.filter(i => i.type === 'gap').map(i => i.bin)).toEqual([2, 3]);
+    // Reported as ONE run (2–3), not one row per empty number.
+    expect(before.filter(i => i.type === 'gap').map(i => [i.from, i.to])).toEqual([[2, 3]]);
     const after = libraryLocationIssues(
       [at('A', s.id, 1), at('X', s.id, 2), at('Y', s.id, 3), at('B', s.id, 4)], [s],
     );
@@ -377,5 +378,59 @@ describe('setup mistakes must not silently swallow the file', () => {
   it('triggers mode with an empty list claims nothing (inert, not greedy)', () => {
     const r = routeProShopLocations(rows([['T1', '5']]), [sys('A', { match: 'triggers', triggers: [] })]);
     expect(r.assignments).toEqual([]);
+  });
+});
+
+describe('one out-of-range bin must not invent hundreds of gaps', () => {
+  // Straight from a real ProShop run: an LC cabinet whose bins really stop at
+  // 253, plus one tool left on 1000. Reporting every empty number between them
+  // produced 768 "skipped number" rows — wallpaper, and untrue: nothing is
+  // skipped up there, the sequence simply ended.
+  const sys = () => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    s.proShopImport = { ...newImportRule(), match: 'any_unique', flagGaps: true };
+    return s;
+  };
+  const used = () => {
+    const u = new Set();
+    for (let i = 1; i <= 253; i++) if (i !== 40) u.add(i);  // one genuine hole
+    u.add(1000);                                            // the outlier
+    return u;
+  };
+
+  it('reports the far bin as an outlier, not as a wall of gaps', () => {
+    const { gaps, outliers } = analyzeBinSequence(sys(), used());
+    expect(outliers).toEqual([1000]);
+    expect(gaps).toEqual([{ from: 40, to: 40, count: 1 }]);
+  });
+
+  it('the flat gap list stays small too', () => {
+    expect(findBinGaps(sys(), used())).toEqual([40]);
+  });
+
+  it('groups consecutive holes into ONE run', () => {
+    const u = new Set([1, 2, 10, 11, 12]);
+    const { gaps } = analyzeBinSequence(sys(), u);
+    expect(gaps).toEqual([{ from: 3, to: 9, count: 7 }]);
+  });
+
+  it('a dense sequence with no outlier behaves exactly as before', () => {
+    const u = new Set([1, 2, 3, 5, 6]);
+    const { gaps, outliers } = analyzeBinSequence(sys(), u);
+    expect(outliers).toEqual([]);
+    expect(gaps).toEqual([{ from: 4, to: 4, count: 1 }]);
+  });
+
+  it('the worklist counts facts, not empty numbers', () => {
+    const s = sys();
+    const tools = [];
+    for (let i = 1; i <= 253; i++) if (i !== 40) tools.push({ id: 't' + i, tool_id: 'A-' + i, tool_location: { system_id: s.id, bin: i } });
+    tools.push({ id: 'far', tool_id: 'D-235', tool_location: { system_id: s.id, bin: 1000 } });
+    const issues = libraryLocationIssues(tools, [s]);
+    expect(issues.filter(i => i.type === 'gap').length).toBe(1);
+    const out = issues.filter(i => i.type === 'outlier');
+    expect(out.length).toBe(1);
+    expect(out[0].bin).toBe(1000);
+    expect(out[0].tools[0].tool_id).toBe('D-235');   // names the tool to go fix
   });
 });

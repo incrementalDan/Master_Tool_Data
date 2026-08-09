@@ -26,10 +26,14 @@ const EXCEPTION_LABEL = {
   duplicate: 'Same number on more than one tool',
   needs_levels: 'System needs a level picked by hand',
   no_tool: 'No tool in the library with this Tool #',
+  // An insert tool's holder body / insert are each their OWN ProShop row, but
+  // they are component records (tool_components.json), not tools — so a Tool #
+  // that hits one is not "missing from the library" and must not say so.
+  component: 'Insert component — its location is set on the component',
 };
 
 export default function LocationImportModal({ onClose }) {
-  const { tools, shopSettings, importLocationsFromProShop } = useApp();
+  const { tools, shopSettings, components, importLocationsFromProShop } = useApp();
   const systems = shopSettings?.location_config?.systems || [];
   const [rows, setRows] = useState(null);
   const [format, setFormat] = useState(null);
@@ -53,6 +57,18 @@ export default function LocationImportModal({ onClose }) {
     return m;
   }, [tools]);
 
+  // Component records (holder bodies / inserts) carry their own ProShop numbers.
+  // Indexed so a row that hits one is reported accurately instead of as a tool
+  // the library is missing.
+  const componentByNum = useMemo(() => {
+    const m = new Map();
+    for (const c of components?.components || []) {
+      const k = normProShopId(c.tool_id || '');
+      if (k && !m.has(k)) m.set(k, c);
+    }
+    return m;
+  }, [components]);
+
   const handleFile = (file) => {
     if (!file) return;
     setError(''); setDone(null);
@@ -69,6 +85,10 @@ export default function LocationImportModal({ onClose }) {
         for (const r of data) {
           const key = (r['Tool #'] || '').trim();
           if (!key || seen.has(key)) continue;
+          // ProShop exports end with a TOTALS summary row — no description, no
+          // group, not a tool. Left in, it shows up in the worklist as a tool
+          // the library is missing.
+          if (!(r['Description'] || '').trim() && !(r['Tool Group'] || '').trim()) continue;
           seen.set(key, { key, value: (r['Location'] || '').trim() });
         }
         setRows([...seen.values()]);
@@ -87,8 +107,13 @@ export default function LocationImportModal({ onClose }) {
     const unchanged = [];
     const extra = [];
     for (const a of assignments) {
-      const tool = toolByNum.get(normProShopId(a.key));
-      if (!tool) { extra.push({ type: 'no_tool', key: a.key, bin: a.bin }); continue; }
+      const num = normProShopId(a.key);
+      const tool = toolByNum.get(num);
+      if (!tool) {
+        const isComponent = componentByNum.has(num);
+        extra.push({ type: isComponent ? 'component' : 'no_tool', key: a.key, bin: a.bin });
+        continue;
+      }
       const to = resolveLocationString(a.location, systems);
       const from = (tool.location || '').trim();
       // A tool whose legacy free text already READS right (Fusion vendor "LC-140")
@@ -102,7 +127,7 @@ export default function LocationImportModal({ onClose }) {
       (owned && from === to ? unchanged : changes).push(row);
     }
     return { changes, unchanged, exceptions: [...exceptions, ...extra] };
-  }, [rows, systems, toolByNum]);
+  }, [rows, systems, toolByNum, componentByNum]);
 
   const commit = async () => {
     if (!plan?.changes.length) return;
