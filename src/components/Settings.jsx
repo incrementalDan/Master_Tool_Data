@@ -2015,14 +2015,16 @@ function MaterialLinkCard({ dirty }) {
           </div>
         )}
 
-        {/* A stock material somebody assigned in Fusion is never overwritten —
-            say so, rather than quietly doing less than the button claims. */}
-        {pushPreview && pushPreview.kept.length > 0 && (
-          <div className="text-xs text-sub mt-8">
-            {pushPreview.kept.length} preset{pushPreview.kept.length === 1 ? ' has a' : 's have a'} stock material
-            assigned in Fusion (
-            {[...new Set(pushPreview.kept.map(k => (k.stock || []).join(', ')))].slice(0, 3).join('; ')}
-            ) — left untouched; only the material name is corrected.
+        {/* A Fusion material assignment that doesn't match our library is a
+            leftover from the replaced Fusion material library. Flagged, not
+            overwritten — which material it should be is an editorial call. */}
+        {pushPreview && pushPreview.flagged.length > 0 && (
+          <div className="text-xs mt-8" style={{ color: 'var(--orange)' }}>
+            ⚠ {pushPreview.flagged.length} preset{pushPreview.flagged.length === 1 ? '' : 's'} still point
+            at a Fusion material that isn&apos;t in the Materials library (
+            {[...new Set(pushPreview.flagged.map(k => (k.stock || []).join(', ')))].slice(0, 3).join('; ')}
+            ) — a leftover from the old Fusion material library. Only the material name is corrected here;
+            these are flagged on each tool&apos;s page to be re-picked by hand.
           </div>
         )}
 

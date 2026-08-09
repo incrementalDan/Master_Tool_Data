@@ -19,6 +19,7 @@ import {
   camPresetIdForQuery,
   camPresetIdForRenamedQuery,
   resolveCamPresetId,
+  stockMaterialIssues,
   syncPresetMaterialName,
   backfillMaterialPresetIds,
   isAutoPresetName,
@@ -267,6 +268,65 @@ describe('CAM-preset foreign key (store the id, render the name)', () => {
     // Second pass returns the SAME object — otherwise every load would look dirty
     // and a bulk fix could never report "nothing to do".
     expect(syncPresetMaterialName(fixed, LIB)).toBe(fixed);
+  });
+
+  it('never overwrites a stock material that is not ours — it must stay flaggable', () => {
+    const LIB = { groups: [], materials: [], presets: [{ id: 'pre_316', name: 'SS Austenitic - 310, 316' }] };
+    // A dangling reference to the replaced Fusion material library. Clobbering it
+    // here would destroy the only evidence and stockMaterialIssues could never
+    // report it — and it would disagree with what the Fusion push does.
+    const p = {
+      guid: 'p1', material_preset_id: 'pre_316',
+      material: { query: 'SS Austenitic 316' }, 'stock-materials': ['SS Harder'],
+    };
+    const out = syncPresetMaterialName(p, LIB);
+    expect(out.material.query).toBe('SS Austenitic - 310, 316');   // name still corrected
+    expect(out['stock-materials']).toEqual(['SS Harder']);         // reference preserved
+    expect(stockMaterialIssues([out], LIB)).toHaveLength(1);       // and still flagged
+    expect(syncPresetMaterialName(out, LIB)).toBe(out);            // settles — no churn
+  });
+
+  // SHOP RULE: Fusion's material library is generated FROM ours, so a preset's
+  // stock-material must be one of our CAM presets. Anything else is a leftover
+  // pointing at the replaced Fusion library and resolves to nothing.
+  describe('stockMaterialIssues', () => {
+    const LIB = { groups: [], materials: [], presets: [
+      { id: 'pre_al', name: 'Al Wrought - 6061+' },
+      { id: 'pre_316', name: 'SS Austenitic - 310, 316' },
+    ] };
+
+    it('flags a stock material that is not a CAM preset in our library', () => {
+      const out = stockMaterialIssues([
+        { guid: 'p1', name: 'SS Rough', material_preset_id: 'pre_316', 'stock-materials': ['SS Harder'] },
+      ], LIB);
+      expect(out).toHaveLength(1);
+      expect(out[0].unknown).toEqual(['SS Harder']);
+      expect(out[0].expected).toBe('SS Austenitic - 310, 316');   // what its own link implies
+    });
+
+    it('passes a stock material that IS one of ours', () => {
+      expect(stockMaterialIssues([
+        { guid: 'p1', 'stock-materials': ['Al Wrought - 6061+'] },
+      ], LIB)).toEqual([]);
+    });
+
+    it('says nothing about a preset with no stock material at all', () => {
+      // Absent is the normal case (307 of the shop's 359) — never inject one,
+      // so it must never be flagged either or the banner becomes wallpaper.
+      expect(stockMaterialIssues([{ guid: 'p1', material: { query: 'AL' } }], LIB)).toEqual([]);
+      expect(stockMaterialIssues([{ guid: 'p2', 'stock-materials': [] }], LIB)).toEqual([]);
+    });
+
+    it('reports only the unknown entries of a multi-value assignment', () => {
+      const out = stockMaterialIssues([
+        { guid: 'p1', 'stock-materials': ['Al Wrought - 6061+', 'Steel, High-Carbon'] },
+      ], LIB);
+      expect(out[0].unknown).toEqual(['Steel, High-Carbon']);
+    });
+
+    it('is silent when the Materials library has not loaded yet', () => {
+      expect(stockMaterialIssues([{ guid: 'p1', 'stock-materials': ['x'] }], { presets: [] })).toEqual([]);
+    });
   });
 
   it('backfillMaterialPresetIds walks every tool preset', () => {

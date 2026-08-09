@@ -78,9 +78,9 @@ export const FUSION_PRESET_PATCHERS = {
       const cam = findCamPresetById(preset?.material_preset_id, materials);
       return cam ? cam.name : null;
     },
-    // Returns { preset, changed, stockKept }. `stockKept` flags a stock-materials
-    // value this refused to touch, so the dialog can name it instead of the push
-    // silently doing less than it claims.
+    // Returns { preset, changed, stockFlag }. `stockFlag` marks a stock-materials
+    // value this deliberately did NOT touch, so the dialog names it instead of
+    // the push silently doing less than it claims.
     apply: (fp, want) => {
       const query = String(fp?.material?.query ?? '');
       const stock = Array.isArray(fp?.['stock-materials']) ? fp['stock-materials'] : null;
@@ -91,23 +91,26 @@ export const FUSION_PRESET_PATCHERS = {
       //    to inject one, because a name Fusion can't resolve is worse than none.
       //  • equals the OLD query → it was derived from the name we're fixing, so
       //    fix it too or Fusion keeps resolving the material by the stale name.
-      //  • anything else (a different single name like ["SS Harder"], or a
-      //    multi-value assignment) → someone set that in Fusion. Leave it.
+      //  • anything else → NOT this push's call. Per the shop rule (see
+      //    stockMaterialIssues), a name that isn't a current CAM preset name is a
+      //    dangling reference to the replaced Fusion material library, and which
+      //    material that preset should now cut is an editorial decision. Left
+      //    alone and FLAGGED — the material name is still corrected.
       let nextStock = stock;
-      let stockKept = false;
+      let stockFlag = false;
       if (stock && stock.length === 1) {
         if (stock[0] === want) { /* already correct */ }
         else if (stock[0] === query) nextStock = [want];
-        else stockKept = true;
+        else stockFlag = true;
       } else if (stock && stock.length > 1) {
-        stockKept = true;
+        stockFlag = true;
       }
 
       const changed = query !== want || nextStock !== stock;
-      if (!changed) return { preset: fp, changed: false, stockKept };
+      if (!changed) return { preset: fp, changed: false, stockFlag };
       const next = { ...fp, material: { ...(fp.material || {}), query: want } };
       if (nextStock !== stock) next['stock-materials'] = nextStock;
-      return { preset: next, changed: true, stockKept };
+      return { preset: next, changed: true, stockFlag };
     },
   },
 };
@@ -1297,11 +1300,11 @@ export function createLibraryOps(ctx) {
       if (!byLibrary.has(lib)) byLibrary.set(lib, []);
       byLibrary.get(lib).push(t);
     }
-    if (!byLibrary.size) return { wrote: false, count: 0, presetCount: 0, toolCount: 0, changes: [], kept: [] };
+    if (!byLibrary.size) return { wrote: false, count: 0, presetCount: 0, toolCount: 0, changes: [], flagged: [] };
 
     const materials = materialsRef.current;
     const changes = [];                 // one row per (Fusion entry × preset)
-    const kept = [];                    // stock-materials deliberately not touched
+    const flagged = [];                 // stock-materials left alone + surfaced
     const touchedPresets = new Set();   // distinct preset guids — the honest headline
     const touchedTools = new Set();
 
@@ -1338,8 +1341,8 @@ export function createLibraryOps(ctx) {
             if (target == null) return fp;
             const from = String(fp.material?.query ?? '');
             const res = patcher.apply(fp, target);
-            if (res.stockKept) {
-              kept.push({
+            if (res.stockFlag) {
+              flagged.push({
                 toolId: tool.id, tool_id: tool.tool_id, preset: fp.name || fp.guid,
                 stock: fp['stock-materials'], to: target,
               });
@@ -1370,7 +1373,7 @@ export function createLibraryOps(ctx) {
       presetCount: touchedPresets.size,      // distinct presets corrected
       toolCount: touchedTools.size,
       changes,
-      kept,
+      flagged,
     };
   };
 

@@ -4,8 +4,10 @@ import { createLibraryOps, FUSION_PRESET_PATCHERS } from './libraryOps.js';
 // pushPresetFieldToFusion is the per-PRESET sibling of pushFieldToFusion: it
 // patches one field inside start-values.presets[] and leaves every other byte of
 // the library alone. The two rules worth locking are (1) it only pushes a value
-// DERIVED from a CAM-preset id, and (2) it never clobbers a stock-materials
-// assignment somebody made in Fusion.
+// DERIVED from a CAM-preset id, and (2) it leaves a stock-materials value that
+// doesn't match our Materials library alone and FLAGS it — those are leftovers
+// from the replaced Fusion material library, and re-picking one is the user's
+// editorial call (see stockMaterialIssues).
 
 const MATERIALS = {
   groups: [{ id: 'N', label: 'Non-Ferrous', code: 'AL' }],
@@ -25,7 +27,7 @@ describe('the preset material patcher', () => {
     expect(r.changed).toBe(true);
     expect(r.preset.material.query).toBe('Al Wrought - 6061+');
     expect(r.preset['stock-materials']).toEqual(['Al Wrought - 6061+']);
-    expect(r.stockKept).toBe(false);
+    expect(r.stockFlag).toBe(false);
   });
 
   it('NEVER injects stock-materials where Fusion has none', () => {
@@ -35,21 +37,22 @@ describe('the preset material patcher', () => {
     expect('stock-materials' in r.preset).toBe(false);            // but none invented
   });
 
-  it('never clobbers a DIFFERENT stock material somebody assigned in Fusion', () => {
+  it('flags a stock material that is not in our library, rather than guessing', () => {
     // Real shape from the shop's library: query "SS Austenitic 316" alongside
-    // stock-materials ["SS Harder"] — an independent Fusion-side assignment.
+    // stock-materials ["SS Harder"] — a dangling reference to the old Fusion
+    // material library. Flagged for a human, not silently rewritten.
     const fp = { guid: 'p1', material: { query: 'SS Austenitic 316' }, 'stock-materials': ['SS Harder'] };
     const r = pat.apply(fp, 'SS Austenitic - 310, 316');
     expect(r.preset.material.query).toBe('SS Austenitic - 310, 316');  // query fixed
-    expect(r.preset['stock-materials']).toEqual(['SS Harder']);        // assignment untouched
-    expect(r.stockKept).toBe(true);                                    // and reported
+    expect(r.preset['stock-materials']).toEqual(['SS Harder']);        // left for the user
+    expect(r.stockFlag).toBe(true);                                    // and surfaced
   });
 
   it('never collapses a MULTI-value stock-materials assignment', () => {
     const fp = { guid: 'p1', material: { query: 'SS' }, 'stock-materials': ['SS Harder', 'Steel, High-Carbon'] };
     const r = pat.apply(fp, 'SS Austenitic - 310, 316');
     expect(r.preset['stock-materials']).toEqual(['SS Harder', 'Steel, High-Carbon']);
-    expect(r.stockKept).toBe(true);
+    expect(r.stockFlag).toBe(true);
   });
 
   it('reports no change when Fusion already agrees', () => {

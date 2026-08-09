@@ -232,20 +232,35 @@ export function syncPresetMaterialName(preset, materials) {
   if (!cam) return preset;
   const query = cam.name;
   const category = materialCategory(query);
+  const prevQuery = preset.material?.query;
+
+  // ⚠️ `stock-materials` is only rewritten when it plainly belongs to us — the
+  // SAME rule the Fusion push applies (FUSION_PRESET_PATCHERS.material), or the
+  // two drift on the one field they both touch. A value that is neither the new
+  // name nor the old one is a dangling reference to the replaced Fusion material
+  // library: overwriting it would destroy the only evidence of it, and
+  // stockMaterialIssues could never flag it.
+  const stock = Array.isArray(preset['stock-materials']) ? preset['stock-materials'] : null;
+  const stockIsOurs = !stock || stock.length === 0
+    || (stock.length === 1 && (stock[0] === query || stock[0] === prevQuery));
+  const nextStock = stockIsOurs ? [query] : stock;
+
   // Return the SAME reference when everything already agrees. Callers use
   // identity to decide whether there is anything to persist, so a new object per
   // load would make every tool look dirty forever and a "fix" pass could never
   // report nothing to do on its second run.
-  const stock = preset['stock-materials'];
+  const stockAgrees = stock && stock.length === nextStock.length
+    && stock.every((s, i) => s === nextStock[i]);
   if (preset.material_preset_id === id
-    && preset.material?.query === query
+    && prevQuery === query
     && preset.material?.category === category
-    && Array.isArray(stock) && stock.length === 1 && stock[0] === query) return preset;
+    && stockAgrees) return preset;
+
   return {
     ...preset,
     material_preset_id: id,
     material: { ...(preset.material || {}), query, category },
-    'stock-materials': [query],
+    'stock-materials': nextStock,
   };
 }
 
@@ -467,6 +482,42 @@ export function unresolvedMaterialPresets(presets, materials) {
     const hit = findMaterialInLibrary(query, materials);
     if (hit.group || hit.preset || hit.alloy) return out;   // resolves by name — fine
     out.push({ guid: p.guid, name: p.name || 'Unnamed preset', query, suggestion: suggestCamPresetName(query, materials) });
+    return out;
+  }, []);
+}
+
+// ─── Fusion stock-material references that don't match our library ──────────
+// SHOP RULE: the app's Materials library is the single source of material, and
+// Fusion's material library is generated FROM it — one stock-material file per
+// CAM preset, whose name is the CAM preset's name (see materialExport.js). The
+// shop's original Fusion material library was replaced wholesale with that
+// generated set, so the two are meant to match name-for-name.
+//
+// Fusion resolves a preset's material through `stock-materials`, BY NAME. A name
+// that isn't a current CAM preset name is therefore a DANGLING reference to the
+// old, deleted Fusion library — Fusion resolves it to nothing. ("SS Harder",
+// "AL 6061" are the real examples.)
+//
+// FLAGGED, never auto-corrected — a stale assignment is a real editorial
+// decision about what that preset should now cut, and the same "informed, not
+// blocked" rule applies as to the material link itself. Automating a fix is
+// deliberately deferred; the flag is the feature.
+export function stockMaterialIssues(presets, materials) {
+  const names = new Set((materials?.presets || []).map(p => String(p.name || '').trim().toLowerCase()));
+  if (!names.size) return [];
+  return (presets || []).reduce((out, p) => {
+    const stock = Array.isArray(p?.['stock-materials']) ? p['stock-materials'] : null;
+    if (!stock?.length) return out;
+    const unknown = stock.filter(s => !names.has(String(s || '').trim().toLowerCase()));
+    if (!unknown.length) return out;
+    const cam = findCamPresetById(p.material_preset_id, materials);
+    out.push({
+      guid: p.guid,
+      name: p.name || 'Unnamed preset',
+      stock,
+      unknown,
+      expected: cam ? cam.name : null,   // what the preset's own CAM-preset link implies
+    });
     return out;
   }, []);
 }
