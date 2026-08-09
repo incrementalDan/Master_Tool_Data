@@ -1,4 +1,5 @@
 // Pure search/filter functions — no React imports
+import { conflictCount } from '../utils/toolConflicts.js';
 
 const TEXT_FIELDS = ['description', 'vendor', 'material', 'coating', 'notes', 'location', 'tool_id', 'preferred_machine'];
 
@@ -117,6 +118,13 @@ export function applyFilters(tools, activeFilters, machineFilter = null, toleran
 
   if (libraryFilter?.libraryId) {
     result = result.filter(t => t.library_id === libraryFilter.libraryId);
+  }
+
+  // "Needs fixing" — the tools counted by the library-wide conflict banner.
+  // Uses the SAME predicate the banner counts with, so clicking through can
+  // never land on a different number than the one advertised.
+  if (activeFilters.flaggedOnly) {
+    result = result.filter(t => conflictCount(t) > 0);
   }
 
   if (activeFilters.textQuery) {

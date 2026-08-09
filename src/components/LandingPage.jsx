@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Search, X, Plus, LayoutGrid, List, PackageOpen, FolderOpen, GitMerge } from 'lucide-react';
+import { Search, X, Plus, LayoutGrid, List, PackageOpen, FolderOpen, GitMerge, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { applyFilters, matchedLegacyId } from '../services/searchEngine.js';
 import { getDefaultUnit } from '../utils/units.js';
@@ -38,6 +38,11 @@ export default function LandingPage() {
   const [textQuery, setTextQuery] = useState(initQuery);
   const [selectedTypes, setSelectedTypes] = useState(initTypes);
   const [facets, setFacets] = useState(initFacets);
+  // "Needs fixing" — arrives as ?flagged=1 from the library-wide conflict banner.
+  // Read straight off the URL rather than mirrored into state: the banner sits
+  // ABOVE the routes, so clicking it while already on this page changes the
+  // params without remounting, and a useState seeded once would ignore it.
+  const flaggedOnly = searchParams.get('flagged') === '1';
   const [displayQuery, setDisplayQuery] = useState(initQuery);
   const [view, setView] = useState(() => localStorage.getItem(VIEW_KEY) || 'grid');
   const [sort, setSort] = useState(() => localStorage.getItem(SORT_KEY) || 'updated');
@@ -74,6 +79,33 @@ export default function LandingPage() {
     machineInitialised.current = true;
   }, [defaultMachineId, machines]);
 
+  const clearFlagged = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('flagged');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  // Arriving from the banner must show EXACTLY the tools it counted. This page
+  // stays mounted when the banner navigates, so every other filter still set has
+  // to drop — including the machine filter, which is PRE-SELECTED from the shop's
+  // default machine and would otherwise silently hide flagged tools that don't
+  // run on it. Only fires on the off→on transition, so a shared link like
+  // ?flagged=1&type=drill is still honoured as a deliberate combined filter.
+  const wasFlagged = useRef(flaggedOnly);
+  useEffect(() => {
+    if (flaggedOnly && !wasFlagged.current) {
+      setSelectedTypes([]);
+      setFacets({});
+      setTextQuery('');
+      setDisplayQuery('');
+      setMachineFilter({ machineId: null, strict: false });
+      setLibraryFilter({ libraryId: null });
+    }
+    wasFlagged.current = flaggedOnly;
+  }, [flaggedOnly]);
+
   // Persist filters to URL
   useEffect(() => {
     const params = {};
@@ -81,8 +113,11 @@ export default function LandingPage() {
     if (textQuery) params.q = textQuery;
     const facetsStr = JSON.stringify(facets);
     if (facetsStr !== '{}') params.f = facetsStr;
+    // Carry the flag through — this effect rebuilds the params from scratch, so
+    // omitting it would silently drop the filter on the next keystroke.
+    if (flaggedOnly) params.flagged = '1';
     setSearchParams(params, { replace: true });
-  }, [selectedTypes, textQuery, facets, setSearchParams]);
+  }, [selectedTypes, textQuery, facets, flaggedOnly, setSearchParams]);
 
   useEffect(() => { localStorage.setItem(VIEW_KEY, view); }, [view]);
   useEffect(() => { localStorage.setItem(SORT_KEY, sort); }, [sort]);
@@ -99,7 +134,7 @@ export default function LandingPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  const activeFilters = { toolTypes: selectedTypes, textQuery, facets };
+  const activeFilters = { toolTypes: selectedTypes, textQuery, facets, flaggedOnly };
   const filtered = useMemo(() => {
     const unit = getDefaultUnit();
     const tols = exactMode ? null : {
@@ -112,7 +147,7 @@ export default function LandingPage() {
       toolLibraries.length > 1 ? libraryFilter : null,
     );
     return [...result].sort(SORTS[sort]?.fn || SORTS.updated.fn);
-  }, [tools, selectedTypes, textQuery, facets, sort, machineFilter, machines.length, exactMode, libraryFilter, toolLibraries.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tools, selectedTypes, textQuery, facets, flaggedOnly, sort, machineFilter, machines.length, exactMode, libraryFilter, toolLibraries.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleQueryChange = useCallback((val) => {
     setDisplayQuery(val);
@@ -143,7 +178,7 @@ export default function LandingPage() {
     setFacets(newFilters.facets || {});
   };
 
-  const hasFilters = selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0 || !!machineFilter.machineId || !!libraryFilter.libraryId;
+  const hasFilters = selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0 || !!machineFilter.machineId || !!libraryFilter.libraryId || flaggedOnly;
 
   // When hide_unused_tool_types is on (default) and not in demo mode, only show
   // tool type tiles for types that have at least one tool in the library.
@@ -225,6 +260,30 @@ export default function LandingPage() {
           <Plus size={20} /> Add Tool
         </button>
       </div>
+
+      {/* "Needs fixing" filter — arrived here from the library-wide banner.
+          Shown as a clearable chip so the narrowed list is never mistaken for
+          the whole library (an invisible filter reads as missing tools). */}
+      {flaggedOnly && (
+        <div className="mb-16 flex items-center gap-8 flex-wrap">
+          <span className="chip active" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <AlertTriangle size={13} />
+            Needs fixing
+            <button
+              className="icon-btn"
+              style={{ marginLeft: 2 }}
+              title="Show all tools"
+              aria-label="Clear the needs-fixing filter"
+              onClick={clearFlagged}
+            >
+              <X size={13} />
+            </button>
+          </span>
+          <span className="text-sub text-sm">
+            Tools with differences flagged during import — open one to pick the correct value.
+          </span>
+        </div>
+      )}
 
       {/* Library filter — only when more than one tool library is linked */}
       {toolLibraries.length > 1 && (
@@ -331,7 +390,7 @@ export default function LandingPage() {
         {hasFilters && (
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); setMachineFilter({ machineId: null, strict: false }); setLibraryFilter({ libraryId: null }); }}
+            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); setMachineFilter({ machineId: null, strict: false }); setLibraryFilter({ libraryId: null }); clearFlagged(); }}
           >
             Reset
           </button>

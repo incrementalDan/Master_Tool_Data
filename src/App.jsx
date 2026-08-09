@@ -237,6 +237,7 @@ function NormalizeBanner() {
 // resolve each conflict on its tool page when they go to use that tool.
 function CombineConflictBanner() {
   const { tools } = useApp();
+  const navigate = useNavigate();
   const [dismissed, setDismissed] = useState(false);
   const conflictTools = tools.filter(t => displayConflicts(t).length > 0);
   if (dismissed || conflictTools.length === 0) return null;
@@ -253,6 +254,15 @@ function CombineConflictBanner() {
         differences flagged during import — open {n === 1 ? 'it' : 'them'} to review and pick the
         correct value. You can keep working; nothing is blocked.
       </span>
+      {/* Straight to the list of exactly these tools. Same predicate the count
+          above uses, so the filtered result can never disagree with the number. */}
+      <button
+        className="btn btn-secondary btn-sm"
+        onClick={() => navigate('/?flagged=1')}
+        title={`Show the ${n} flagged tool${n === 1 ? '' : 's'}`}
+      >
+        Show {n === 1 ? 'it' : 'them'}
+      </button>
       <button className="icon-btn" onClick={() => setDismissed(true)} title="Dismiss"><X size={15} /></button>
     </div>
   );
