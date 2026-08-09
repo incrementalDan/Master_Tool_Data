@@ -466,6 +466,11 @@ export function buildMetadataTool(tool) {
           family: tool.pairing.family || null,
           holder_component_id: tool.pairing.holder_component_id || null,
           insert_component_id: tool.pairing.insert_component_id || null,
+          // Which ProShop number is the body — the confirmed answer, stored
+          // rather than re-derived from the combined id's order.
+          holder_proshop_id: tool.pairing.holder_proshop_id || null,
+          insert_proshop_id: tool.pairing.insert_proshop_id || null,
+          order_unconfirmed: !!tool.pairing.order_unconfirmed,
           rta_number: tool.pairing.rta_number || '',
         }
       : null,

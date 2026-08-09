@@ -7,7 +7,7 @@
 import { useState } from 'react';
 import {
   Box, Diamond, Ruler, Camera, MapPin, Pencil, Repeat, Link2, ChevronDown,
-  ChevronRight, Unlink,
+  ChevronRight, Unlink, AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import ComponentPicker from './ComponentPicker.jsx';
@@ -82,8 +82,66 @@ export default function PairingSections({ tool, pairing: incomingPairing, stored
   // The combined ProShop / Fusion product-id both components resolve to.
   const combinedId = composeCombinedProShopId(pairing.family, holderComp, insertComp);
 
+  // ── Which half is the body? (asked once, then stored) ──────────────────
+  // Fusion's combined id ("A-123/I-124") has no order convention — both orders
+  // occur — and for a tool whose letters carry no meaning (an insert end mill
+  // filed under the end-mill letter so ProShop search finds it) the app cannot
+  // tell which number is the body. It seeds a guess so the view works, says so,
+  // and asks once. The answer is stored on the pairing, because ProShop import
+  // turns these roles into real component records.
+  const halves = String(tool.tool_id || '').includes('/')
+    ? String(tool.tool_id).split('/').map(h => h.trim()).filter(Boolean)
+    : [];
+  const askOrder = !!pairing.order_unconfirmed && halves.length === 2;
+
+  const confirmOrder = async (bodyId) => {
+    const insertId = halves.find(h => h !== bodyId) || '';
+    const swap = bodyId !== (pairing.holder_proshop_id || halves[0]);
+    const next = {
+      ...pairing,
+      holder_proshop_id: bodyId,
+      insert_proshop_id: insertId,
+      order_unconfirmed: false,
+    };
+    // If components were already created from the guess, their links (and their
+    // stored role) are swapped too — otherwise the answer would disagree with
+    // the records it was meant to correct.
+    if (swap) {
+      next.holder_component_id = pairing.insert_component_id || null;
+      next.insert_component_id = pairing.holder_component_id || null;
+    }
+    try {
+      if (swap && (holderComp || insertComp)) {
+        if (holderComp) await saveComponent({ ...holderComp, role: 'insert' });
+        if (insertComp) await saveComponent({ ...insertComp, role: 'holder_body' });
+      }
+      await onSaveTool({ ...tool, pairing: next });
+    } catch { /* toast handled in context */ }
+  };
+
   return (
     <div>
+      {askOrder && (
+        <div className="warn-banner mb-12">
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, flexWrap: 'wrap' }}>
+            <AlertTriangle size={13} style={{ flexShrink: 0, marginTop: 2 }} />
+            <span>
+              <strong>Which of these is the holder body?</strong> ProShop&apos;s letters don&apos;t say,
+              and the order in <span className="font-mono">{tool.tool_id}</span> isn&apos;t a
+              convention — so this is a guess until you confirm it. Asked once.
+              <span style={{ display: 'inline-flex', gap: 6, marginLeft: 8 }}>
+                {halves.map(h => (
+                  <button key={h} className="btn btn-secondary btn-sm" disabled={isSaving}
+                    onClick={() => confirmOrder(h)}>
+                    <span className="font-mono">{h}</span> is the body
+                  </button>
+                ))}
+              </span>
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* ── Pairing bar: family, assembly / RTA number, combined ProShop ID ── */}
       <div className="pairing-bar">
         <Link2 size={14} style={{ color: 'var(--blue)', flexShrink: 0 }} />

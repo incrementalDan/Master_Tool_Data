@@ -172,9 +172,13 @@ export function composeCombinedProShopId(familyId, holderComp, insertComp) {
   // arbitrary insert-tipped tools) don't compose a combined id — each component
   // still carries its own ProShop number.
   const map = PROSHOP_FAMILY_MAP[familyId];
-  if (!map) return '';
-  const h = ensureProShopPrefix(holderComp?.tool_id, map.holder_prefix);
-  const i = ensureProShopPrefix(insertComp?.tool_id, map.insert_prefix);
+  // A family with no letter convention (the generic insert-tipped catch-all —
+  // an insert end mill whose body is filed under an arbitrary ProShop letter)
+  // still composes: each component keeps its own number verbatim. OUTPUT IS
+  // ALWAYS HOLDER BODY FIRST, so what the app writes is consistent even though
+  // what it reads may be in either order.
+  const h = map ? ensureProShopPrefix(holderComp?.tool_id, map.holder_prefix) : String(holderComp?.tool_id || '').trim();
+  const i = map ? ensureProShopPrefix(insertComp?.tool_id, map.insert_prefix) : String(insertComp?.tool_id || '').trim();
   if (!h || !i) return '';
   return `${h}/${i}`;
 }
@@ -305,7 +309,15 @@ export function pairingFromCombinedId(toolId, toolType) {
   if (classified) return classified;
   const halves = String(toolId).split('/').map(h => h.trim()).filter(Boolean);
   if (halves.length !== 2) return null;
-  return { family: defaultActivationFamily(toolType), holder_id: halves[0], insert_id: halves[1] };
+  // No usable letters, and order is NOT a convention — so this is a guess, and
+  // it must be marked as one. It seeds the paired view (better than nothing) but
+  // the user confirms it once; until then roles must not be treated as known,
+  // because insertComponentIndex turns them into real component records.
+  return {
+    family: defaultActivationFamily(toolType),
+    holder_id: halves[0], insert_id: halves[1],
+    order_unconfirmed: true,
+  };
 }
 
 // Load-time derive (read-only, no writes — like backfillAsmNumbers): for each
@@ -363,6 +375,9 @@ export function derivePairings(tools, components = []) {
         family: p.family,
         holder_component_id: holder?.id || null,
         insert_component_id: insert?.id || null,
+        holder_proshop_id: p.holder_id || null,
+        insert_proshop_id: p.insert_id || null,
+        order_unconfirmed: !!p.order_unconfirmed,
         rta_number: '',
       },
     };
@@ -378,6 +393,14 @@ export function derivePairings(tools, components = []) {
 export function insertComponentIndex(tools) {
   const index = new Map();
   for (const t of (tools || [])) {
+    // The pairing's stored numbers win when present — they are the confirmed
+    // answer; parsing the combined id is only the seed (see newPairing).
+    const stored = t?.pairing;
+    if (stored?.holder_proshop_id && stored?.insert_proshop_id) {
+      index.set(normProShopId(stored.holder_proshop_id), { role: 'holder_body', family: stored.family, tool_id: t.tool_id });
+      index.set(normProShopId(stored.insert_proshop_id), { role: 'insert', family: stored.family, tool_id: t.tool_id });
+      continue;
+    }
     if (!isCombinedProShopId(t?.tool_id)) continue;
     const p = pairingFromCombinedId(t.tool_id, t.tool_type);
     if (!p) continue;
@@ -393,6 +416,15 @@ export function newPairing(family) {
     family,
     holder_component_id: null,
     insert_component_id: null,
+    // Which ProShop number is the body and which is the insert, STORED rather
+    // than re-derived by parsing the combined id. Fusion has nowhere to keep our
+    // link, so "A-123/I-124" is a transport format — and its ORDER is not a
+    // convention in the wild (both orders occur). For the families whose letters
+    // carry meaning the prefixes settle it; for anything else the user is asked
+    // once and the answer lives here.
+    holder_proshop_id: null,
+    insert_proshop_id: null,
+    order_unconfirmed: false,
     // ProShop RTA# — the manual pairing-level number when the Assembly ID
     // system is in proshop_rta mode. RTA is structurally the 2-tier pairing
     // ("these two IDs used together as one thing") and lives here, not on
