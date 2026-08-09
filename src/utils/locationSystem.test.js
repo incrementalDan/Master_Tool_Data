@@ -4,7 +4,7 @@ import {
   systemOutputSignature, systemStructureSignature, findSystemConflicts,
   parseLocationString, analyzeSystem, nextBin,
   newImportRule, routeProShopLocations, parseTriggerList, pruneAcknowledgedGaps,
-  libraryLocationIssues, analyzeBinSequence, findBinGaps,
+  libraryLocationIssues, analyzeBinSequence, findBinGaps, usedBinsForSystem,
 } from './locationSystem.js';
 
 // Helper: a system with a custom-prefix drawer + auto bin (the default shape).
@@ -432,5 +432,39 @@ describe('one out-of-range bin must not invent hundreds of gaps', () => {
     expect(out.length).toBe(1);
     expect(out[0].bin).toBe(1000);
     expect(out[0].tools[0].tool_id).toBe('D-235');   // names the tool to go fix
+  });
+});
+
+describe('components occupy bins exactly like tools', () => {
+  // A holder body / insert is a real object in a real drawer. It only lives in
+  // a different FILE (tool_components.json, so it can never reach Fusion) —
+  // never a different kind of thing for locations. Counting only tools reported
+  // every component's bin as a skipped number, and hid tool↔component clashes.
+  const sys = () => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    s.proShopImport = { ...newImportRule(), match: 'any_unique', flagGaps: true };
+    return s;
+  };
+  const rec = (id, sysId, bin) => ({ id, tool_id: id, tool_location: { system_id: sysId, bin } });
+
+  it('a component bin is NOT reported as a skipped number', () => {
+    const s = sys();
+    const tools = [rec('A-1', s.id, 1), rec('A-3', s.id, 3)];
+    const comps = [rec('G-223', s.id, 2)];
+    expect(libraryLocationIssues(tools, [s]).filter(i => i.type === 'gap').length).toBe(1);
+    expect(libraryLocationIssues([...tools, ...comps], [s]).filter(i => i.type === 'gap')).toEqual([]);
+  });
+
+  it('a tool and a component on the same bin is a duplicate', () => {
+    const s = sys();
+    const issues = libraryLocationIssues([rec('A-1', s.id, 5), rec('G-223', s.id, 5)], [s]);
+    const dup = issues.find(i => i.type === 'duplicate');
+    expect(dup.bin).toBe(5);
+    expect(dup.tools.map(t => t.tool_id).sort()).toEqual(['A-1', 'G-223']);
+  });
+
+  it('a component counts toward the next free bin', () => {
+    const s = sys();
+    expect(nextBin(s, usedBinsForSystem([rec('A-1', s.id, 1), rec('G-223', s.id, 2)], s.id))).toBe(3);
   });
 });

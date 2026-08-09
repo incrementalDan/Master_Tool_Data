@@ -33,7 +33,7 @@ export function createToolActions(ctx) {
   const {
     dispatch, notify,
     downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary,
-    saveLocationConfig,
+    saveLocationConfig, saveComponents,
     toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef, fusionReadyRef, materialsRef,
     holderLibraryRef,
   } = ctx;
@@ -477,18 +477,27 @@ export function createToolActions(ctx) {
   // that rule would flag, so flagging would turn the cleanup into hundreds of
   // one-at-a-time decisions. The UI states this plainly before committing.
   //
-  // `assignments` = [{ toolId, location }] — already routed through the
-  // per-system import cascade and matched to tools by the caller.
+  // `assignments` = [{ id, location, isComponent }] — already routed through the
+  // per-system import cascade and matched by the caller.
   //
-  // Metadata-only batch write (one upsertMany), same as normalizeLocationSystem:
-  // a Fusion round-trip per tool would re-upload the whole library hundreds of
-  // times. The composed string re-syncs to Fusion's vendor field on each tool's
-  // next individual save.
+  // ⚠️ A component (an insert tool's holder body / insert) is a REAL PHYSICAL
+  // OBJECT in a real drawer, so for locations it is treated exactly like a tool.
+  // It just lives in a different file — tool_components.json rather than
+  // tool_metadata.json — because a component must never reach Fusion. That's an
+  // internal storage split, never a user-facing distinction, so this action
+  // writes both stores in one pass.
+  //
+  // Metadata-only batch write (one upsertMany + one components save), same as
+  // normalizeLocationSystem: a Fusion round-trip per tool would re-upload the
+  // whole library hundreds of times. The composed string re-syncs to Fusion's
+  // vendor field on each tool's next individual save.
   const importLocationsFromProShop = async (assignments) => {
     const ss = shopSettingsRef.current || {};
     const systems = ss.location_config?.systems || [];
-    const byId = new Map((assignments || []).map(a => [a.toolId, a.location]));
-    if (!byId.size) return { updated: 0 };
+    const list = assignments || [];
+    const byId = new Map(list.filter(a => !a.isComponent).map(a => [a.id, a.location]));
+    const compById = new Map(list.filter(a => a.isComponent).map(a => [a.id, a.location]));
+    if (!byId.size && !compById.size) return { updated: 0 };
 
     const uniqPush = (arr, v) => (arr.includes(v) ? arr : [...arr, v]);
     const changed = [];
@@ -515,10 +524,36 @@ export function createToolActions(ctx) {
     });
     dispatch({ type: 'SET_TOOLS', tools: updatedTools });
 
+    // Components: same structured location, different file. One batched save.
+    let updatedComponents = componentsRef.current?.components || [];
+    if (compById.size) {
+      updatedComponents = updatedComponents.map(c => {
+        const loc = compById.get(c.id);
+        if (!loc) return c;
+        const sys = findSystem(systems, loc.system_id);
+        const composed = resolveLocationString(loc, systems);
+        const prior = (c.location || '').trim();
+        const legacy_locations = (prior && prior !== composed)
+          ? uniqPush((c.legacy_locations || []).filter(l => l !== composed), prior)
+          : (c.legacy_locations || []);
+        changed.push({ id: c.id, from: prior, to: composed });
+        return {
+          ...c,
+          tool_location: loc,
+          location: composed,
+          proshop_location: proShopLocationValue(sys, composed),
+          legacy_locations,
+        };
+      });
+      await saveComponents({ ...(componentsRef.current || { version: 1 }), components: updatedComponents });
+    }
+
     // An acknowledged gap is a note about an EMPTY bin — filling it makes the
     // note meaningless, so drop it. Keeps a dismissed gap from lingering after
-    // the hole is closed (and never reserves the number).
-    const prunedSystems = systems.map(s => pruneAcknowledgedGaps(s, usedBinsForSystem(updatedTools, s.id)));
+    // the hole is closed (and never reserves the number). Bins are occupied by
+    // tools AND components, so both are counted (same rule as LocationPicker).
+    const occupants = [...updatedTools, ...updatedComponents];
+    const prunedSystems = systems.map(s => pruneAcknowledgedGaps(s, usedBinsForSystem(occupants, s.id)));
     if (prunedSystems.some((s, i) => s !== systems[i])) {
       await saveLocationConfig({ ...(ss.location_config || {}), systems: prunedSystems });
     }
