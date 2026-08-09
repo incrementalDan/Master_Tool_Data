@@ -19,7 +19,7 @@ import { mergeToolConflicts } from '../utils/toolConflicts.js';
 import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSystem.js';
 import { isExcludedFrom } from '../utils/idSystems.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
-import { composePresetName, opTypeWord, parsePresetName, materialNameCode, materialCategory, findMaterialInLibrary, syncPresetMaterialName, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
+import { composePresetName, opTypeWord, parsePresetName, materialNameCode, materialCategory, findMaterialInLibrary, syncPresetMaterialName, findCamPresetById, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import { toolsUsingHolder, assemblyUsesHolder } from '../schema/holderResolve.js';
 import { segmentsMatch } from '../schema/holderIdentity.js';
@@ -55,6 +55,59 @@ export const FUSION_FIELD_PATCHERS = {
       else delete expressions.tool_vendor;
       next.expressions = expressions;
       return next;
+    },
+  },
+};
+
+// ─── Per-PRESET Fusion field patchers ────────────────────────────────────────
+// FUSION_FIELD_PATCHERS above is tool-scalar shaped: one value per entry. A
+// preset field lives per-preset inside `start-values.presets[]`, keyed by preset
+// guid, so it needs its own registry + writer (pushPresetFieldToFusion).
+//
+// Simpler than the tool-level ones in one respect that matters: preset material
+// has NO paired `expressions.*` entry (confirmed in normalizePreset), so there is
+// no native+expression pair to keep in step here.
+export const FUSION_PRESET_PATCHERS = {
+  material: {
+    label: 'Preset material',
+    // ⚠️ Only a preset whose name is DERIVED from a CAM-preset id has an
+    // authoritative value to push. A legacy/bare-code string ("AL FIN", "SS") is
+    // the user's own text and a judgement call — this push has no business
+    // overwriting Fusion with it. Returning null skips the preset entirely.
+    value: (preset, materials) => {
+      const cam = findCamPresetById(preset?.material_preset_id, materials);
+      return cam ? cam.name : null;
+    },
+    // Returns { preset, changed, stockKept }. `stockKept` flags a stock-materials
+    // value this refused to touch, so the dialog can name it instead of the push
+    // silently doing less than it claims.
+    apply: (fp, want) => {
+      const query = String(fp?.material?.query ?? '');
+      const stock = Array.isArray(fp?.['stock-materials']) ? fp['stock-materials'] : null;
+
+      // `stock-materials` is the link Fusion actually READS (matched by name).
+      // Correct it only when it plainly came from the same, now-old, name:
+      //  • absent/empty  → leave absent. normalizePreset's standing rule is never
+      //    to inject one, because a name Fusion can't resolve is worse than none.
+      //  • equals the OLD query → it was derived from the name we're fixing, so
+      //    fix it too or Fusion keeps resolving the material by the stale name.
+      //  • anything else (a different single name like ["SS Harder"], or a
+      //    multi-value assignment) → someone set that in Fusion. Leave it.
+      let nextStock = stock;
+      let stockKept = false;
+      if (stock && stock.length === 1) {
+        if (stock[0] === want) { /* already correct */ }
+        else if (stock[0] === query) nextStock = [want];
+        else stockKept = true;
+      } else if (stock && stock.length > 1) {
+        stockKept = true;
+      }
+
+      const changed = query !== want || nextStock !== stock;
+      if (!changed) return { preset: fp, changed: false, stockKept };
+      const next = { ...fp, material: { ...(fp.material || {}), query: want } };
+      if (nextStock !== stock) next['stock-materials'] = nextStock;
+      return { preset: next, changed: true, stockKept };
     },
   },
 };
@@ -1219,6 +1272,108 @@ export function createLibraryOps(ctx) {
     };
   };
 
+  // ─── Push ONE preset field to Fusion ──────────────────────────────────────
+  // The per-preset sibling of pushFieldToFusion. Same contract, same reasons:
+  // each library is downloaded once, only the named field on the matched presets
+  // is changed, and every other byte is left alone. A preset Fusion already
+  // agrees with is not rewritten, so a second push has nothing to do.
+  //
+  // ⚠️ Reach for this, NOT writeToolsToFusion, when Fusion's copy of one preset
+  // value is stale: rebuilding 70 tools' entries to correct a material name would
+  // rewrite geometry, holders and every expression along the way, silently
+  // applying any other app↔Fusion drift it found.
+  //
+  // Scope is decided by the patcher's `value()` — a preset with no CAM-preset FK
+  // yields null and is skipped, so a bare code is never pushed over Fusion.
+  const pushPresetFieldToFusion = async (tools, fieldKey, { dryRun = false } = {}) => {
+    const patcher = FUSION_PRESET_PATCHERS[fieldKey];
+    if (!patcher) throw new Error(`No Fusion preset patcher for "${fieldKey}"`);
+    assertFusionReady();
+
+    const byLibrary = new Map();
+    for (const t of tools || []) {
+      if (t.no_fusion_link || !t.presets?.length) continue;   // nothing in Fusion to correct
+      const lib = t.library_id || defaultToolLibraryId(shopSettingsRef.current);
+      if (!byLibrary.has(lib)) byLibrary.set(lib, []);
+      byLibrary.get(lib).push(t);
+    }
+    if (!byLibrary.size) return { wrote: false, count: 0, presetCount: 0, toolCount: 0, changes: [], kept: [] };
+
+    const materials = materialsRef.current;
+    const changes = [];                 // one row per (Fusion entry × preset)
+    const kept = [];                    // stock-materials deliberately not touched
+    const touchedPresets = new Set();   // distinct preset guids — the honest headline
+    const touchedTools = new Set();
+
+    for (const [libId, toolsInLib] of byLibrary) {
+      const fusionList = await downloadFusionList(libId);
+      const byGuid = new Map();
+      fusionList.forEach((entry, i) => { if (entry?.guid) byGuid.set(entry.guid, i); });
+
+      let touched = 0;
+      for (const tool of toolsInLib) {
+        // What each preset SHOULD say, keyed by preset guid. The preset set is
+        // replicated identically onto every instance, so one map serves them all.
+        const want = new Map();
+        for (const p of tool.presets) {
+          const v = patcher.value(p, materials);
+          if (v != null && p.guid) want.set(p.guid, v);
+        }
+        if (!want.size) continue;
+
+        const guids = new Set();
+        for (const a of tool.assemblies || []) if (a.instance_guid) guids.add(a.instance_guid);
+        for (const r of tool._instancesRaw || []) if (r?.guid) guids.add(r.guid);
+
+        for (const guid of guids) {
+          const idx = byGuid.get(guid);
+          if (idx == null) continue;
+          const entry = fusionList[idx];
+          const presets = entry?.['start-values']?.presets;
+          if (!Array.isArray(presets)) continue;
+
+          let entryTouched = false;
+          const nextPresets = presets.map((fp) => {
+            const target = fp?.guid ? want.get(fp.guid) : null;
+            if (target == null) return fp;
+            const from = String(fp.material?.query ?? '');
+            const res = patcher.apply(fp, target);
+            if (res.stockKept) {
+              kept.push({
+                toolId: tool.id, tool_id: tool.tool_id, preset: fp.name || fp.guid,
+                stock: fp['stock-materials'], to: target,
+              });
+            }
+            if (!res.changed) return fp;
+            entryTouched = true;
+            touchedPresets.add(fp.guid);
+            touchedTools.add(tool.id);
+            changes.push({
+              toolId: tool.id, tool_id: tool.tool_id, description: tool.description,
+              guid, preset: fp.name || fp.guid, from, to: target,
+            });
+            return res.preset;
+          });
+
+          if (entryTouched && !dryRun) {
+            fusionList[idx] = { ...entry, 'start-values': { ...entry['start-values'], presets: nextPresets } };
+            touched++;
+          }
+        }
+      }
+      if (!dryRun && touched) await uploadFusionList(libId, fusionList);
+    }
+
+    return {
+      wrote: !dryRun && changes.length > 0,
+      count: changes.length,                 // entry×preset rewrites
+      presetCount: touchedPresets.size,      // distinct presets corrected
+      toolCount: touchedTools.size,
+      changes,
+      kept,
+    };
+  };
+
 // ─── Write a set of tools back to Fusion, targeted ────────────────────────
   // THE shared "make these tools carry their current holder geometry" step.
   // Fusion BAKES holder geometry into each tool, so a corrected holder only
@@ -1386,5 +1541,5 @@ export function createLibraryOps(ctx) {
     }
   };
 
-  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary, restampHolderTools, linkToolsToHolders, pushFieldToFusion, relinkPresetMaterials };
+  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary, restampHolderTools, linkToolsToHolders, pushFieldToFusion, relinkPresetMaterials, pushPresetFieldToFusion };
 }

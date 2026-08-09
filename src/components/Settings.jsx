@@ -1873,10 +1873,15 @@ export default function Settings() {
 // Metadata-only. Fusion still holds the OLD material name until each tool's next
 // save — the result says so plainly rather than leaving it to be discovered.
 function MaterialLinkCard({ dirty }) {
-  const { relinkPresetMaterials, googleAuthenticated, demoMode, notify } = useApp();
+  const { relinkPresetMaterials, pushPresetFieldToFusion, tools, googleAuthenticated, demoMode, notify } = useApp();
   const [preview, setPreview] = useState(null);
   const [result, setResult] = useState(null);
   const [busy, setBusy] = useState(false);
+  // Fusion is a SEPARATE step: the pass above writes the app's own records, and
+  // Fusion keeps the old material name until this push (or each tool's next save).
+  const [pushPreview, setPushPreview] = useState(null);
+  const [pushResult, setPushResult] = useState(null);
+  const [pushBusy, setPushBusy] = useState(false);
 
   const blocked = (!googleAuthenticated && !demoMode) || dirty;
   const blockedWhy = dirty ? 'Save or cancel your changes first'
@@ -1891,6 +1896,17 @@ function MaterialLinkCard({ dirty }) {
     } catch (err) {
       notify(err.message, 'error', 7000);
     } finally { setBusy(false); }
+  };
+
+  const runPush = async (dryRun) => {
+    setPushBusy(true);
+    try {
+      const res = await pushPresetFieldToFusion(tools, 'material', { dryRun });
+      if (dryRun) { setPushPreview(res); setPushResult(null); }
+      else { setPushResult(res); setPushPreview(null); }
+    } catch (err) {
+      notify(err.message, 'error', 7000);
+    } finally { setPushBusy(false); }
   };
 
   return (
@@ -1955,12 +1971,68 @@ function MaterialLinkCard({ dirty }) {
           {result.toolCount === 1 ? '' : 's'}.
           {result.renames.length > 0 && (
             <div className="text-xs text-sub mt-4" style={{ color: 'var(--text-sub)' }}>
-              This updated the app&apos;s own records. Fusion still holds the old material name on those
-              presets until each tool is next saved.
+              This updated the app&apos;s own records — Fusion still holds the old material name.
+              Push it below.
             </div>
           )}
         </div>
       )}
+
+      {/* ── Fusion sync ──────────────────────────────────────────────────────
+          Only the material NAME is stored in Fusion (the ID is app-only), so a
+          preset whose name is already right needs no push at all. */}
+      <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 14 }}>
+        <div className="text-sm" style={{ fontWeight: 600, marginBottom: 4 }}>Fusion</div>
+        <p className="text-sub text-sm mb-16">
+          Fusion stores the material <em>name</em>, not the link — so only presets whose name actually
+          changed need pushing. This patches just that field, leaving every other byte of each tool&apos;s
+          entry alone.
+        </p>
+        <div className="flex gap-8">
+          <button className="btn btn-secondary btn-sm" onClick={() => runPush(true)} disabled={blocked || pushBusy} title={blockedWhy}>
+            {pushBusy && !pushPreview ? 'Checking…' : 'Check what Fusion is missing'}
+          </button>
+          {pushPreview && pushPreview.presetCount > 0 && (
+            <button className="btn btn-primary btn-sm" onClick={() => runPush(false)} disabled={pushBusy}>
+              {pushBusy ? 'Pushing…' : `Push ${pushPreview.presetCount} preset${pushPreview.presetCount === 1 ? '' : 's'}`}
+            </button>
+          )}
+        </div>
+
+        {pushPreview && pushPreview.presetCount === 0 && (
+          <div className="text-sm mt-12" style={{ color: 'var(--green)' }}>
+            ✓ Fusion already has the right material name on every linked preset.
+          </div>
+        )}
+
+        {pushPreview && pushPreview.presetCount > 0 && (
+          <div className="text-sm mt-12">
+            <strong>{pushPreview.presetCount}</strong> preset{pushPreview.presetCount === 1 ? '' : 's'} on{' '}
+            <strong>{pushPreview.toolCount}</strong> tool{pushPreview.toolCount === 1 ? '' : 's'} to correct
+            {pushPreview.count !== pushPreview.presetCount && (
+              <span className="text-sub"> ({pushPreview.count} library entries — a preset is copied onto each assembly)</span>
+            )}.
+          </div>
+        )}
+
+        {/* A stock material somebody assigned in Fusion is never overwritten —
+            say so, rather than quietly doing less than the button claims. */}
+        {pushPreview && pushPreview.kept.length > 0 && (
+          <div className="text-xs text-sub mt-8">
+            {pushPreview.kept.length} preset{pushPreview.kept.length === 1 ? ' has a' : 's have a'} stock material
+            assigned in Fusion (
+            {[...new Set(pushPreview.kept.map(k => (k.stock || []).join(', ')))].slice(0, 3).join('; ')}
+            ) — left untouched; only the material name is corrected.
+          </div>
+        )}
+
+        {pushResult && (
+          <div className="text-sm mt-12" style={{ color: 'var(--green)' }}>
+            ✓ Corrected {pushResult.presetCount} preset{pushResult.presetCount === 1 ? '' : 's'} in Fusion
+            across {pushResult.toolCount} tool{pushResult.toolCount === 1 ? '' : 's'}.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
