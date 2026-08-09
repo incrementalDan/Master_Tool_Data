@@ -17,6 +17,8 @@ import {
   suggestCamPresetName,
   findCamPresetById,
   camPresetIdForQuery,
+  camPresetIdForRenamedQuery,
+  resolveCamPresetId,
   syncPresetMaterialName,
   backfillMaterialPresetIds,
   isAutoPresetName,
@@ -192,6 +194,79 @@ describe('CAM-preset foreign key (store the id, render the name)', () => {
   it('tolerates a dangling id — keeps the stored name, does not blank it', () => {
     const preset = { guid: 'p1', material_preset_id: 'deleted', material: { query: 'Old Name' } };
     expect(syncPresetMaterialName(preset, MATS)).toBe(preset);
+  });
+
+  // A CAM preset renamed by APPENDING detail is the commonest way a name-only
+  // link goes stale ("Al Wrought" → "Al Wrought - 6061+"). Unambiguous cases heal
+  // silently; ambiguous ones must stay the user's call.
+  describe('camPresetIdForRenamedQuery', () => {
+    const LIB = { groups: [], materials: [], presets: [
+      { id: 'p_al', name: 'Al Wrought - 6061+' },
+      { id: 'p_low', name: 'Steel Low Carbon - 1018' },
+      { id: 'p_304', name: 'SS Austenitic - 304' },
+      { id: 'p_316', name: 'SS Austenitic - 310, 316' },
+      { id: 'p_cu', name: 'Pure Copper' },
+    ] };
+
+    it('resolves an old name that was renamed by appending detail', () => {
+      expect(camPresetIdForRenamedQuery('Al Wrought', LIB)).toBe('p_al');
+      expect(camPresetIdForRenamedQuery('steel low carbon', LIB)).toBe('p_low'); // case-insensitive
+    });
+
+    it('refuses when two CAM presets share the prefix', () => {
+      expect(camPresetIdForRenamedQuery('SS Austenitic', LIB)).toBe(null);
+    });
+
+    it('refuses a match that lands mid-word — "P" is not "Pure Copper"', () => {
+      expect(camPresetIdForRenamedQuery('P', LIB)).toBe(null);
+      expect(camPresetIdForRenamedQuery('Pure Cop', LIB)).toBe(null);
+    });
+
+    it('refuses a single-token bare shop code — that is the user\'s decision', () => {
+      expect(camPresetIdForRenamedQuery('AL', LIB)).toBe(null);
+      expect(camPresetIdForRenamedQuery('SS', LIB)).toBe(null);
+      expect(camPresetIdForRenamedQuery('STEEL', LIB)).toBe(null);
+    });
+  });
+
+  describe('resolveCamPresetId (the shared cascade)', () => {
+    const LIB = {
+      groups: [{ id: 'M', label: 'Stainless Steel', code: 'SS' }],
+      presets: [{ id: 'p_316', group_id: 'M', name: 'SS Austenitic - 310, 316' }],
+      materials: [{ id: 'm316', group_id: 'M', preset_id: 'p_316', label: '316 / 316L', aliases: ['SS316'] }],
+    };
+
+    it('an existing FK always wins', () => {
+      expect(resolveCamPresetId({ material_preset_id: 'kept', material: { query: 'SS Austenitic 316' } }, LIB)).toBe('kept');
+    });
+
+    it('falls through exact name → grade → rename', () => {
+      expect(resolveCamPresetId({ material: { query: 'SS Austenitic - 310, 316' } }, LIB)).toBe('p_316'); // exact
+      expect(resolveCamPresetId({ material: { query: 'SS316 FIN' } }, LIB)).toBe('p_316');               // grade
+    });
+
+    it('never overrides a query that still resolves in the library by name', () => {
+      // "Stainless Steel" is a GROUP label — it displays fine, so it is left for
+      // the user rather than guessed down to one of the group's CAM presets.
+      expect(resolveCamPresetId({ material: { query: 'Stainless Steel' } }, LIB)).toBe(null);
+    });
+
+    it('returns null rather than guessing at a bare code', () => {
+      expect(resolveCamPresetId({ material: { query: 'SS' } }, LIB)).toBe(null);
+      expect(resolveCamPresetId({ material: {} }, LIB)).toBe(null);
+    });
+  });
+
+  it('syncPresetMaterialName corrects a stale name AND is identity-stable once correct', () => {
+    const LIB = { groups: [], materials: [], presets: [{ id: 'p_al', name: 'Al Wrought - 6061+' }] };
+    const stale = { guid: 'p1', material: { query: 'Al Wrought' } };
+    const fixed = syncPresetMaterialName(stale, LIB);
+    expect(fixed.material_preset_id).toBe('p_al');
+    expect(fixed.material.query).toBe('Al Wrought - 6061+');   // the name Fusion gets
+    expect(fixed['stock-materials']).toEqual(['Al Wrought - 6061+']);
+    // Second pass returns the SAME object — otherwise every load would look dirty
+    // and a bulk fix could never report "nothing to do".
+    expect(syncPresetMaterialName(fixed, LIB)).toBe(fixed);
   });
 
   it('backfillMaterialPresetIds walks every tool preset', () => {

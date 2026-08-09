@@ -19,7 +19,7 @@ import { mergeToolConflicts } from '../utils/toolConflicts.js';
 import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSystem.js';
 import { isExcludedFrom } from '../utils/idSystems.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
-import { composePresetName, opTypeWord, parsePresetName, materialNameCode, materialCategory, findMaterialInLibrary, camPresetIdFromGrade, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
+import { composePresetName, opTypeWord, parsePresetName, materialNameCode, materialCategory, findMaterialInLibrary, syncPresetMaterialName, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
 import { holderShortName } from '../utils/holderNaming.js';
 import { toolsUsingHolder, assemblyUsesHolder } from '../schema/holderResolve.js';
 import { segmentsMatch } from '../schema/holderIdentity.js';
@@ -858,20 +858,26 @@ export function createLibraryOps(ctx) {
           // CamPresetPicker), so also stamp Fusion's real material link
           // (stock-materials, matched by name — see fusionConvert.js / PresetPanel).
           const overrideQuery = matOverrides[p.guid];
-          const material = overrideQuery
-            ? { ...(p.material || {}), query: overrideQuery, category: materialCategory(overrideQuery) }
-            : p.material;
-          // Stamp the CAM-preset FOREIGN KEY, not just the name — otherwise a
-          // normalized preset stays name-only and is orphaned the moment that
-          // CAM preset is renamed (and shows up in MaterialLinkBanner forever).
-          // Falls back to a grade found in the existing string so a preset the
-          // user didn't override still gets linked ("SS316 FIN" → SS Austenitic).
-          const matPresetId = (overrideQuery
-            ? findMaterialInLibrary(overrideQuery, materialsRef.current).preset?.id
-            : null)
-            ?? p.material_preset_id
-            ?? camPresetIdFromGrade(p.material?.query, materialsRef.current)
-            ?? null;
+          const overrideId = overrideQuery
+            ? (findMaterialInLibrary(overrideQuery, materialsRef.current).preset?.id ?? null)
+            : null;
+          // Seed the user's pick, then let the SHARED resolver settle the link —
+          // the same cascade the load-time backfill uses, so normalize and load
+          // can never disagree about what a preset points at.
+          const seeded = overrideId
+            ? { ...p, material_preset_id: overrideId }
+            : (overrideQuery
+                ? { ...p,
+                    material: { ...(p.material || {}), query: overrideQuery, category: materialCategory(overrideQuery) },
+                    'stock-materials': [overrideQuery] }
+                : p);
+          // ⚠️ DERIVE the name from the resolved id — don't just stamp the key.
+          // material.query / stock-materials are what Fusion actually receives, so
+          // a preset linked by grade or by a rename would otherwise keep its STALE
+          // name and normalize would write that stale name straight into Fusion.
+          const linked = syncPresetMaterialName(seeded, materialsRef.current);
+          const material = linked.material;
+          const matPresetId = linked.material_preset_id ?? null;
           const opType = isHoleMakingTool
             ? null
             : (parsePresetName(p.name)?.opType ?? opOverrides[p.guid] ?? p.operation_type ?? null);
@@ -883,11 +889,7 @@ export function createLibraryOps(ctx) {
                 opType,
               })
             : p.name;
-          return {
-            ...p, material, name, operation_type: opType,
-            ...(matPresetId ? { material_preset_id: matPresetId } : {}),
-            ...(overrideQuery ? { 'stock-materials': [overrideQuery] } : {}),
-          };
+          return { ...linked, name, operation_type: opType };
         });
 
         const fusionLogical = {
@@ -1150,6 +1152,73 @@ export function createLibraryOps(ctx) {
     return { wrote: !dryRun && changes.length > 0, count: changes.length, changes };
   };
 
+  // ─── Persist the CAM-preset material links (metadata-only) ────────────────
+  // The load-time backfill (backfillMaterialPresetIds → syncPresetMaterialName)
+  // already resolves every preset's CAM-preset FK and derives its name IN MEMORY
+  // on each load — but it only reaches the file when that tool happens to be
+  // saved. On a library that pre-dates the FK, or after a CAM preset is renamed,
+  // that means the app shows the right thing while the stored records stay stale
+  // indefinitely and Fusion is never corrected at all. This is the explicit
+  // "write it down now" pass.
+  //
+  // ⚠️ It diffs the STORED RECORDS, not `toolsRef` — in-memory tools have already
+  // been healed by the load backfill, so comparing against them would always
+  // report nothing to do while the file stayed wrong.
+  //
+  // Metadata-only + surgical: it patches each record's `presets[]` material
+  // fields and its `preset_meta[guid].material_preset_id`, leaving every other
+  // key byte-for-byte (upsertMany MERGES by id — it never replaces the file).
+  // A Fusion round-trip per tool would re-upload the whole library ~75 times;
+  // Fusion's copy of the NAME is settled separately (see the push below).
+  //
+  // `dryRun` reports what would change without writing. Idempotent — a second
+  // run reports nothing, because syncPresetMaterialName returns the same
+  // reference once a preset already agrees.
+  const relinkPresetMaterials = async ({ dryRun = false } = {}) => {
+    if (!googleRef.current) throw new Error('Connect Google Drive to save material links');
+    const materials = materialsRef.current;
+    if (!materials?.presets?.length) throw new Error('Materials library not loaded');
+
+    const metaList = await toolStore.loadAll();
+    const changed = [];
+    const renames = new Map();   // "old → new" → count
+    let presetCount = 0;
+    let linkCount = 0;
+
+    for (const rec of metaList) {
+      const stored = rec.presets || [];
+      if (!stored.length) continue;
+      let dirty = false;
+      const nextMeta = { ...(rec.preset_meta || {}) };
+
+      const presets = stored.map((p) => {
+        const np = syncPresetMaterialName(p, materials);
+        if (np === p) return p;
+        dirty = true;
+        presetCount++;
+        const from = String(p.material?.query || '').trim();
+        const to = np.material.query;
+        if (!p.material_preset_id) linkCount++;
+        if (from && from !== to) renames.set(`${from} → ${to}`, (renames.get(`${from} → ${to}`) || 0) + 1);
+        // preset_meta is the FK's own home (buildMetadataTool writes it there
+        // too) — keep the two in step or the next load reads the old link back.
+        if (np.guid) nextMeta[np.guid] = { ...(nextMeta[np.guid] || {}), material_preset_id: np.material_preset_id };
+        return np;
+      });
+
+      if (dirty) changed.push({ ...rec, presets, preset_meta: nextMeta });
+    }
+
+    if (!dryRun && changed.length) await toolStore.upsertMany(changed);
+    return {
+      wrote: !dryRun && changed.length > 0,
+      toolCount: changed.length,
+      presetCount,
+      linkCount,
+      renames: [...renames.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count),
+    };
+  };
+
 // ─── Write a set of tools back to Fusion, targeted ────────────────────────
   // THE shared "make these tools carry their current holder geometry" step.
   // Fusion BAKES holder geometry into each tool, so a corrected holder only
@@ -1317,5 +1386,5 @@ export function createLibraryOps(ctx) {
     }
   };
 
-  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary, restampHolderTools, linkToolsToHolders, pushFieldToFusion };
+  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary, restampHolderTools, linkToolsToHolders, pushFieldToFusion, relinkPresetMaterials };
 }

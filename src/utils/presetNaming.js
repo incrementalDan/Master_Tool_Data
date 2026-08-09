@@ -172,24 +172,79 @@ export function camPresetIdForQuery(query, materials) {
   return p ? p.id : null;
 }
 
+// The CAM-preset id for a query that is an OLD name of a CAM preset that has
+// since been RENAMED BY APPENDING detail — "Al Wrought" → "Al Wrought - 6061+",
+// "Steel Low Carbon" → "Steel Low Carbon - 1018". This is the single most common
+// way a name-only link goes stale, and unlike a bare code it is not a judgement
+// call, so it self-heals rather than being surfaced.
+//
+// Three guards, each of which a looser rule gets wrong:
+//   • EXACTLY ONE candidate — "SS Austenitic" prefixes both the 304 and the
+//     310/316 preset, so it is ambiguous and must never be guessed at.
+//   • The match must end on a WORD BOUNDARY in the target — otherwise "P" would
+//     "uniquely" resolve to "Pure Copper".
+//   • At least TWO tokens — a CAM preset name is a phrase; a bare shop code
+//     ("AL", "SS", "STEEL") is one token and is deliberately the user's call
+//     (see bareMaterialCode). Without this, "AL" would swallow "Al Wrought …".
+export function camPresetIdForRenamedQuery(query, materials) {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q || q.split(/\s+/).length < 2) return null;
+  const hits = (materials?.presets || []).filter(p => {
+    const name = String(p.name || '').trim().toLowerCase();
+    if (!name.startsWith(q) || name === q) return false;
+    return /[\s\-,/(]/.test(name.charAt(q.length));   // appended detail, not a longer word
+  });
+  return hits.length === 1 ? hits[0].id : null;
+}
+
+// THE resolver: which CAM preset a tool preset points at, most-authoritative
+// first. Shared by the load-time backfill and normalizeLibrary so the two can
+// never disagree about what a preset links to (the "checker must compose exactly
+// like the stamper" rule). Returns null when nothing is confident enough — those
+// stay surfaced for the user rather than guessed at.
+export function resolveCamPresetId(preset, materials) {
+  if (preset?.material_preset_id) return preset.material_preset_id;
+  const query = preset?.material?.query;
+  const exact = camPresetIdForQuery(query, materials);
+  if (exact) return exact;
+  // A query that still resolves to something in the library by NAME (a group
+  // label like "Stainless Steel", an alloy like "316L") displays correctly today
+  // — never override it on a guess. Only genuinely dangling names heal below.
+  const hit = findMaterialInLibrary(query, materials);
+  if (hit.group || hit.preset || hit.alloy) return null;
+  return camPresetIdFromGrade(query, materials)
+    ?? camPresetIdForRenamedQuery(query, materials)
+    ?? null;
+}
+
 // Refresh a preset's Fusion-facing material NAME fields (material.query +
 // stock-materials) from its `material_preset_id` — the id is the source of truth,
-// the name is derived live. Also opportunistically adopts the id from a
-// name-matched query (so existing name-only links become rename-proof). Returns
-// the preset unchanged when it has no id AND no name match, or when the id is
-// dangling (tolerated — the stored name is left as-is, same as any dangling-id
-// reference elsewhere in the app).
+// the name is derived live. Also adopts the id via `resolveCamPresetId` (so
+// existing name-only links, including ones left stale by a CAM-preset rename,
+// become rename-proof). Returns the preset unchanged when nothing resolves, or
+// when the id is dangling (tolerated — the stored name is left as-is, same as any
+// dangling-id reference elsewhere in the app).
 export function syncPresetMaterialName(preset, materials) {
   if (!preset) return preset;
-  const id = preset.material_preset_id || camPresetIdForQuery(preset.material?.query, materials);
+  const id = resolveCamPresetId(preset, materials);
   if (!id) return preset;
   const cam = findCamPresetById(id, materials);
   if (!cam) return preset;
   const query = cam.name;
+  const category = materialCategory(query);
+  // Return the SAME reference when everything already agrees. Callers use
+  // identity to decide whether there is anything to persist, so a new object per
+  // load would make every tool look dirty forever and a "fix" pass could never
+  // report nothing to do on its second run.
+  const stock = preset['stock-materials'];
+  if (preset.material_preset_id === id
+    && preset.material?.query === query
+    && preset.material?.category === category
+    && Array.isArray(stock) && stock.length === 1 && stock[0] === query) return preset;
   return {
     ...preset,
     material_preset_id: id,
-    material: { ...(preset.material || {}), query, category: materialCategory(query) },
+    material: { ...(preset.material || {}), query, category },
     'stock-materials': [query],
   };
 }
