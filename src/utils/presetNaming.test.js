@@ -327,6 +327,40 @@ describe('CAM-preset foreign key (store the id, render the name)', () => {
     it('is silent when the Materials library has not loaded yet', () => {
       expect(stockMaterialIssues([{ guid: 'p1', 'stock-materials': ['x'] }], { presets: [] })).toEqual([]);
     });
+
+    // Checklist rule: a flag the user cannot clear is a nag loop. This one is
+    // especially exposed to it — stock-materials has no field in the preset
+    // editor, and the material shown there is already CORRECT, so nothing on
+    // screen looks wrong. The banner's one-click fix applies `expected`; that
+    // has to actually silence the detector.
+    it('stops firing once the row\'s own `expected` is applied', () => {
+      const stale = {
+        guid: 'p1', name: 'SS Rough', material_preset_id: 'pre_316',
+        material: { query: 'SS Austenitic - 310, 316' },
+        'stock-materials': ['SS Harder'],
+      };
+      const [row] = stockMaterialIssues([stale], LIB);
+      expect(row.expected).toBe('SS Austenitic - 310, 316');
+
+      // Exactly what MaterialLinkBanner.applyStockFixes writes.
+      const fixed = { ...stale, 'stock-materials': [row.expected] };
+      expect(stockMaterialIssues([fixed], LIB)).toEqual([]);
+      // and it doesn't push the preset into the OTHER flag either
+      expect(unresolvedMaterialPresets([fixed], LIB)).toEqual([]);
+    });
+
+    it('survives the load backfill — the fix is not undone on the next load', () => {
+      // syncPresetMaterialName runs on every load; it must leave a corrected
+      // stock-material alone, or the flag would come back by itself.
+      const fixed = {
+        guid: 'p1', material_preset_id: 'pre_316',
+        material: { query: 'SS Austenitic - 310, 316', category: 'metal' },
+        'stock-materials': ['SS Austenitic - 310, 316'],
+      };
+      const reloaded = syncPresetMaterialName(fixed, LIB);
+      expect(reloaded['stock-materials']).toEqual(['SS Austenitic - 310, 316']);
+      expect(stockMaterialIssues([reloaded], LIB)).toEqual([]);
+    });
   });
 
   it('backfillMaterialPresetIds walks every tool preset', () => {
