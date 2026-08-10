@@ -257,9 +257,9 @@ export function nextBin(system, usedBins = new Set()) {
 }
 
 // Bins already taken within a system across the library (numbers only).
-export function usedBinsForSystem(tools, systemId) {
+export function usedBinsForSystem(records, systemId) {
   const used = new Set();
-  for (const t of tools || []) {
+  for (const t of records || []) {
     const loc = t.tool_location;
     if (loc?.system_id === systemId && loc.bin != null && loc.bin !== '') {
       const n = Number(loc.bin);
@@ -268,6 +268,15 @@ export function usedBinsForSystem(tools, systemId) {
   }
   return used;
 }
+
+// ─── Records: tools AND components ───────────────────────────────────────────
+// ⚠️ Everything below operates on RECORDS, not tools. A component (an insert
+// tool's holder body / insert) is a real physical object in a real drawer, so it
+// carries the same structured `tool_location`, sits in the same systems, and
+// occupies a bin exactly like a tool. It only lives in a different FILE
+// (tool_components.json) so it can never reach Fusion — a storage detail, never
+// a difference in how locations work. Callers must pass the POOLED list;
+// counting only tools reports every component's bin as empty.
 
 // ─── Normalization parsing ───────────────────────────────────────────────────
 // Build a lenient regex that matches a free-text location against a system's
@@ -341,13 +350,13 @@ export function parseLocationString(str, system) {
 // candidate when it is not already assigned to this system. Returns matched
 // (with the parsed structured location), unmatched (had location text but no
 // parse), a noLocation count, and the next available bin after the matches.
-export function analyzeSystem(tools, system) {
+export function analyzeSystem(records, system) {
   const matched = [];
   const unmatched = [];
   let noLocation = 0;
-  const used = usedBinsForSystem(tools, system.id);
+  const used = usedBinsForSystem(records, system.id);
 
-  for (const tool of tools || []) {
+  for (const tool of records || []) {
     if (tool.tool_location?.system_id === system.id) continue; // already in this system
     const text = (tool.location || '').trim();
     if (!text) { noLocation++; continue; }
@@ -368,10 +377,10 @@ export function analyzeSystem(tools, system) {
 // Derives the union of tools not assigned to any system, split into "has
 // unmatched location text" vs "no location at all". Only meaningful once at
 // least one system is normalized.
-export function libraryLocationStatus(tools, systems) {
+export function libraryLocationStatus(records, systems) {
   const normalized = (systems || []).filter(s => s.normalized);
   if (normalized.length === 0) return null;
-  const list = tools || [];
+  const list = records || [];
   const assignedTools = [];
   const unassigned = [];
   for (const tool of list) {
@@ -399,8 +408,8 @@ export function libraryLocationStatus(tools, systems) {
 //
 // Distinct from the import-time exception list (which is about rows in a CSV);
 // this is about tools in the library.
-export function libraryLocationIssues(tools, systems) {
-  const list = tools || [];
+export function libraryLocationIssues(records, systems) {
+  const list = records || [];
   const out = [];
   for (const sys of systems || []) {
     const rule = systemImportRule(sys);

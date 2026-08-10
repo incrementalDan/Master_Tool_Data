@@ -56,10 +56,57 @@ export function matchedLegacyAsmNumber(tool, query) {
   return null;
 }
 
-export function textSearch(tools, query) {
+// ─── Components are searchable through the tool that pairs them ─────────────
+// A component (an insert tool's holder body / insert) is a real object the shop
+// buys and looks up by its own ProShop number, so it MUST be findable. It has no
+// page of its own by design — its location, photo and purchasing are edited on
+// the insert tool that pairs it — so its text is folded into that tool's
+// searchable text rather than becoming a separate result that leads nowhere.
+//
+// Returns Map(toolId -> lowercased blob of its components' searchable text).
+export function componentTextIndex(tools, components) {
+  const byId = new Map();
+  for (const c of components || []) if (c?.id) byId.set(c.id, c);
+  const out = new Map();
+  for (const t of tools || []) {
+    const p = t.pairing;
+    if (!p) continue;
+    const parts = [];
+    for (const cid of [p.holder_component_id, p.insert_component_id]) {
+      const c = cid ? byId.get(cid) : null;
+      if (!c) continue;
+      parts.push(c.tool_id, c.description, c.designation, c.location, c.notes);
+    }
+    const blob = parts.filter(Boolean).join(' ').toLowerCase();
+    if (blob) out.set(t.id, blob);
+  }
+  return out;
+}
+
+// The component of `tool` whose text the query matched, or null — mirrors
+// matchedLegacyId, so a result card can say WHY it matched when the hit was on a
+// part rather than the tool itself.
+export function matchedComponent(tool, query, components) {
+  const q = query?.toLowerCase().trim();
+  const p = tool?.pairing;
+  if (!q || !p) return null;
+  const byId = new Map((components || []).filter(c => c?.id).map(c => [c.id, c]));
+  for (const cid of [p.holder_component_id, p.insert_component_id]) {
+    const c = cid ? byId.get(cid) : null;
+    if (!c) continue;
+    const blob = [c.tool_id, c.description, c.designation, c.location, c.notes]
+      .filter(Boolean).join(' ').toLowerCase();
+    if (blob.includes(q)) return c;
+  }
+  return null;
+}
+
+export function textSearch(tools, query, componentText = null) {
   if (!query?.trim()) return tools;
   const q = query.toLowerCase().trim();
   return tools.filter(tool => {
+    // A hit on one of this tool's components counts as a hit on the tool.
+    if (componentText?.get(tool.id)?.includes(q)) return true;
     for (const field of TEXT_FIELDS) {
       if (field === 'material') {
         if (materialMatchesQuery(tool.material, q)) return true;
@@ -136,7 +183,7 @@ export function applyFilters(tools, activeFilters, machineFilter = null, toleran
   }
 
   if (activeFilters.textQuery) {
-    result = textSearch(result, activeFilters.textQuery);
+    result = textSearch(result, activeFilters.textQuery, componentTextIndex(tools, activeFilters.components));
   }
 
   if (activeFilters.toolTypes?.length) {

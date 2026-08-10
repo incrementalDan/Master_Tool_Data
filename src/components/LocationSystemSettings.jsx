@@ -345,7 +345,7 @@ function proShopHint(mode, fixedVal) {
 }
 
 // ── Normalization step (real analysis against the live library) ─────────────
-function NormalizationStep({ sys, tools, dirty = false, onCommit, onUpdate }) {
+function NormalizationStep({ sys, records, dirty = false, onCommit, onUpdate }) {
   const [phase, setPhase] = useState(sys.normalized ? 'done' : 'idle'); // idle | preview | committing | done
   const [analysis, setAnalysis] = useState(null);
 
@@ -370,7 +370,7 @@ function NormalizationStep({ sys, tools, dirty = false, onCommit, onUpdate }) {
   }
 
   function runAnalysis() {
-    setAnalysis(analyzeSystem(tools, sys));
+    setAnalysis(analyzeSystem(records, sys));
     setPhase('preview');
   }
   async function commit() {
@@ -472,7 +472,7 @@ function joinNames(arr) {
 }
 
 // ── System card ─────────────────────────────────────────────────────────────
-function SystemCard({ sys, tools, conflicts = [], dirty = false, onUpdate, onDelete, onCommit, defaultOpen }) {
+function SystemCard({ sys, records, conflicts = [], dirty = false, onUpdate, onDelete, onCommit, defaultOpen }) {
   const [open, setOpen] = useState(defaultOpen);
   const [confirmDel, setConfirmDel] = useState(false);
   const L = sys.levels; const D = sys.delimiters;
@@ -571,7 +571,7 @@ function SystemCard({ sys, tools, conflicts = [], dirty = false, onUpdate, onDel
             </div>
           </LevelBlock>
 
-          <NormalizationStep sys={sys} tools={tools} dirty={dirty} onCommit={onCommit} onUpdate={onUpdate} />
+          <NormalizationStep sys={sys} records={records} dirty={dirty} onCommit={onCommit} onUpdate={onUpdate} />
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
             {confirmDel ? (
@@ -597,16 +597,12 @@ function SystemCard({ sys, tools, conflicts = [], dirty = false, onUpdate, onDel
 // match. Recomputed on every render, so it's always reachable and each row
 // disappears by itself as the tool behind it is fixed — there is no saved report
 // to go stale. Also hosts the location-only ProShop re-import.
-function LocationIssuesPanel({ tools, systems, onUpdateSystem, dirty }) {
-  const { components } = useApp();
+function LocationIssuesPanel({ records, systems, onUpdateSystem, dirty }) {
+  const { tools } = useApp();
   const [open, setOpen] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const navigate = useNavigate();
-  // Bins are occupied by tools AND component records — both are real objects in
-  // real drawers (same rule as LocationPicker's locRecords). Counting only tools
-  // reported every component's bin as a skipped number.
-  const occupants = [...(tools || []), ...(components?.components || [])];
-  const issues = libraryLocationIssues(occupants, systems);
+  const issues = libraryLocationIssues(records, systems);
 
   // A component has no page of its own — it's edited on the insert tool that
   // pairs it. So a component chip navigates to that parent tool, which is where
@@ -853,9 +849,9 @@ function FusionLocationPush({ push, dirty }) {
 }
 
 // ── Library-wide unmatched panel ────────────────────────────────────────────
-function LibraryUnmatchedPanel({ tools, systems }) {
+function LibraryUnmatchedPanel({ records, systems }) {
   const [showTable, setShowTable] = useState(false);
-  const status = libraryLocationStatus(tools, systems);
+  const status = libraryLocationStatus(records, systems);
   if (!status) return null;
   const allClear = status.unassigned === 0;
 
@@ -931,7 +927,7 @@ function Counter({ n, label, color }) {
 // never persists to Drive itself (the Settings page's Save commits the whole
 // draft). Normalize is disabled while buffered, since it needs the saved config.
 export default function LocationSystemSettings({ configOverride = null, onConfigChange = null, dirty = false, footer = null }) {
-  const { tools, shopSettings, saveLocationConfig, normalizeLocationSystem, markSetupStepInSettings, setupProgress } = useApp();
+  const { tools, components, shopSettings, saveLocationConfig, normalizeLocationSystem, markSetupStepInSettings, setupProgress } = useApp();
   const buffered = typeof onConfigChange === 'function';
   const cfg = (buffered ? configOverride : shopSettings?.location_config) || { systems: [], bin_sizes: [] };
   const systems = cfg.systems || [];
@@ -948,6 +944,12 @@ export default function LocationSystemSettings({ configOverride = null, onConfig
   const updateSystem = (id, updated) => persist(systems.map(s => s.id === id ? updated : s));
   const deleteSystem = (id) => persist(systems.filter(s => s.id !== id));
   const addSystem = () => persist([...systems, newLocationSystem()]);
+
+  // ⚠️ Locations are held by RECORDS, not just tools: a component (an insert
+  // tool's holder body / insert) is a real object in a real drawer and occupies
+  // a bin the same way. Pool them once here so no panel can quietly count only
+  // tools — that is exactly how every component's bin got reported as empty.
+  const records = [...(tools || []), ...(components?.components || [])];
 
   // Live duplicate-output / duplicate-name detection across all systems.
   const systemConflicts = findSystemConflicts(systems);
@@ -982,7 +984,7 @@ export default function LocationSystemSettings({ configOverride = null, onConfig
         <SystemCard
           key={sys.id}
           sys={sys}
-          tools={tools}
+          records={records}
           conflicts={systemConflicts.get(sys.id) || []}
           defaultOpen={i === 0}
           dirty={dirty}
@@ -1005,13 +1007,13 @@ export default function LocationSystemSettings({ configOverride = null, onConfig
       </label>
 
       <LocationIssuesPanel
-        tools={tools}
+        records={records}
         systems={systems}
         dirty={dirty}
         onUpdateSystem={sys => updateSystem(sys.id, sys)}
       />
 
-      <LibraryUnmatchedPanel tools={tools} systems={systems} />
+      <LibraryUnmatchedPanel records={records} systems={systems} />
 
       {/* Optional setup-step confirm, rendered INSIDE this card (like the other
           ID-system cards) rather than a separate floating box. */}

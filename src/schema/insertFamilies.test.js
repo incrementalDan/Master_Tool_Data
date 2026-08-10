@@ -1,12 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  INSERT_FAMILIES, INSERT_FAMILY_BY_ID, PROSHOP_FAMILY_MAP,
-  splitCombinedProShopId, composeCombinedProShopId, ensureProShopPrefix,
-  pairedAsmIdPart, pairingAsmNumber, newComponent, newPairing,
-  componentById, defaultFamilyForType,
-  ALWAYS_INSERT_TYPES, autoInsertFamily, defaultActivationFamily,
-  isCombinedProShopId, pairingFromCombinedId, derivePairings, normProShopId,
-  insertComponentIndex,
+  INSERT_FAMILIES, INSERT_FAMILY_BY_ID, PROSHOP_FAMILY_MAP, splitCombinedProShopId, composeCombinedProShopId, ensureProShopPrefix, pairedAsmIdPart, pairingAsmNumber, newComponent, newPairing, componentById, defaultFamilyForType, ALWAYS_INSERT_TYPES, autoInsertFamily, defaultActivationFamily, isCombinedProShopId, pairingFromCombinedId, derivePairings, normProShopId, insertComponentIndex,
 } from './insertFamilies.js';
 
 describe('family list ↔ ProShop map', () => {
@@ -63,8 +57,19 @@ describe('manual activation on any tool type', () => {
     expect(PROSHOP_FAMILY_MAP['generic_insert']).toBeUndefined();
   });
 
-  it('composeCombinedProShopId returns "" for the generic family (no prefixes)', () => {
-    expect(composeCombinedProShopId('generic_insert', { tool_id: '10' }, { tool_id: '20' })).toBe('');
+  // CHANGED DELIBERATELY: this used to return '' for a family with no letter
+  // convention. But the shop DOES put a combined id in Fusion for exactly that
+  // case — an insert end mill filed in ProShop as a normal end mill ("A-123")
+  // plus a body under an arbitrary letter — so refusing to compose it left the
+  // one case that most needs generating to be typed by hand.
+  it('composeCombinedProShopId composes a no-convention family, holder body FIRST', () => {
+    expect(composeCombinedProShopId('generic_insert', { tool_id: 'I-124' }, { tool_id: 'A-123' }))
+      .toBe('I-124/A-123');
+  });
+
+  it('still applies the letter prefixes for families that have a convention', () => {
+    expect(composeCombinedProShopId('milling_insert', { tool_id: '167' }, { tool_id: '168' }))
+      .toBe('I-167/G-168');
   });
 
   it('defaultActivationFamily picks the natural family, else the generic catch-all', () => {
@@ -192,12 +197,25 @@ describe('Fusion-side auto-detection (combined product-id)', () => {
       .toEqual({ family: 'milling_insert', holder_id: 'I-126', insert_id: 'G-125' });
     expect(pairingFromCombinedId('TT-79 / TC-82', 'drill'))
       .toEqual({ family: 'indexable_drill', holder_id: 'TC-82', insert_id: 'TT-79' });
-    // Unknown prefix pairs fall back to the tool type's family (generic here),
-    // holder = first token, insert = second.
+    // A pair whose letters ARE a convention is classified by them, so the order
+    // in the string is irrelevant — note TT/TC arrives insert-first above and
+    // still comes back with the holder correctly identified.
+  });
+
+  it('marks an unknown-prefix pair as a GUESS rather than claiming the order', () => {
+    // Order is not a convention in the wild, and these letters carry no meaning
+    // (an insert end mill is filed under the end-mill letter so ProShop search
+    // finds it; its body gets whatever letter). Positional is only a seed — and
+    // it must say so, because insertComponentIndex turns these roles into real
+    // component records on the next ProShop import.
     expect(pairingFromCombinedId('N-31 / Q-134', 'slot mill'))
-      .toEqual({ family: 'generic_insert', holder_id: 'N-31', insert_id: 'Q-134' });
+      .toEqual({ family: 'generic_insert', holder_id: 'N-31', insert_id: 'Q-134', order_unconfirmed: true });
     expect(pairingFromCombinedId('A-103/ I-98', 'flat end mill'))
-      .toEqual({ family: 'generic_insert', holder_id: 'A-103', insert_id: 'I-98' });
+      .toEqual({ family: 'generic_insert', holder_id: 'A-103', insert_id: 'I-98', order_unconfirmed: true });
+  });
+
+  it('does NOT mark a prefix-classified pair as unconfirmed', () => {
+    expect(pairingFromCombinedId('I-224/ G-223', 'face mill').order_unconfirmed).toBeUndefined();
   });
 
   it('returns null for a non-combined id', () => {
@@ -215,7 +233,11 @@ describe('Fusion-side auto-detection (combined product-id)', () => {
     ];
     const [paired, plain] = derivePairings(tools, components);
     expect(paired.pairing).toEqual({
-      family: 'od_turning', holder_component_id: 'h', insert_component_id: 'i', rta_number: '',
+      family: 'od_turning', holder_component_id: 'h', insert_component_id: 'i',
+      // The resolved numbers are STORED, not left to be re-parsed later.
+      holder_proshop_id: 'TF-194', insert_proshop_id: 'TO-195',
+      order_unconfirmed: false,
+      rta_number: '',
     });
     expect(plain.pairing).toBeUndefined();
   });
@@ -303,8 +325,48 @@ describe('record factories', () => {
       family: 'boring_bar',
       holder_component_id: null,
       insert_component_id: null,
+      // Which number is the body is STORED, not re-derived from the combined
+      // id's order (which is not a convention in the wild).
+      holder_proshop_id: null,
+      insert_proshop_id: null,
+      order_unconfirmed: false,
       rta_number: '',
     });
     expect(INSERT_FAMILY_BY_ID[p.family].hasTier3Assembly).toBe(false);
+  });
+});
+
+describe('which half is the body is stored, never re-derived', () => {
+  // Fusion has nowhere to keep our link, so "A-123/I-124" is a transport format
+  // — and its ORDER is not a convention (both orders occur in the real library).
+  // For families whose letters carry meaning the prefixes settle it; for
+  // anything else the user is asked once and the answer is stored.
+  it('an unknown-prefix pairing is flagged for confirmation', () => {
+    const [t] = derivePairings([{ id: 't', tool_id: 'A-123/I-124', tool_type: 'flat end mill' }], []);
+    expect(t.pairing.order_unconfirmed).toBe(true);
+    expect(t.pairing.holder_proshop_id).toBe('A-123');   // provisional seed
+    expect(t.pairing.insert_proshop_id).toBe('I-124');
+  });
+
+  it('insertComponentIndex trusts the STORED answer over the string order', () => {
+    // The user confirmed that I-124 is the body — the opposite of the order in
+    // the id. Without this, a ProShop import would create both components with
+    // their roles swapped.
+    const tool = {
+      id: 't', tool_id: 'A-123/I-124', tool_type: 'flat end mill',
+      pairing: {
+        family: 'generic_insert', holder_component_id: null, insert_component_id: null,
+        holder_proshop_id: 'I-124', insert_proshop_id: 'A-123', order_unconfirmed: false,
+      },
+    };
+    const idx = insertComponentIndex([tool]);
+    expect(idx.get(normProShopId('I-124')).role).toBe('holder_body');
+    expect(idx.get(normProShopId('A-123')).role).toBe('insert');
+  });
+
+  it('falls back to parsing when nothing is stored yet', () => {
+    const idx = insertComponentIndex([{ id: 't', tool_id: 'I-224/G-223', tool_type: 'face mill' }]);
+    expect(idx.get(normProShopId('I-224')).role).toBe('holder_body');
+    expect(idx.get(normProShopId('G-223')).role).toBe('insert');
   });
 });

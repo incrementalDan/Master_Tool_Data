@@ -468,3 +468,21 @@ describe('components occupy bins exactly like tools', () => {
     expect(nextBin(s, usedBinsForSystem([rec('A-1', s.id, 1), rec('G-223', s.id, 2)], s.id))).toBe(3);
   });
 });
+
+describe('analyzeSystem sees components too', () => {
+  it('a component bin counts toward the next free bin in the normalize preview', () => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    const tools = [{ id: 't1', location: 'LC-1' }, { id: 't2', location: 'LC-2' }];
+    const comps = [{ id: 'c1', tool_location: { system_id: s.id, bin: 3 } }];
+    // Tools alone: bin 3 looks free and the component would be double-booked.
+    expect(analyzeSystem(tools, s).nextBin).toBe(3);
+    expect(analyzeSystem([...tools, ...comps], s).nextBin).toBe(4);
+  });
+
+  it('a component with free-text location is matched for normalization', () => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    const matched = analyzeSystem([{ id: 'c1', location: 'LC-212' }], s).matched;
+    expect(matched.length).toBe(1);
+    expect(matched[0].location.bin).toBe(212);
+  });
+});

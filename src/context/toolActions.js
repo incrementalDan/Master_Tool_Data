@@ -407,11 +407,18 @@ export function createToolActions(ctx) {
     const system = systems.find(s => s.id === systemId);
     if (!system) throw new Error('Location system not found');
 
-    const { matched: matchedAll } = analyzeSystem(toolsRef.current || [], system);
-    // Skip tools explicitly excluded from the Location system — they keep their
+    // ⚠️ RECORDS, not just tools: a component (an insert tool's holder body /
+    // insert) sits in a real drawer and normalizes exactly like a tool. Analyzing
+    // tools alone both skipped them and mis-computed the next free bin, since
+    // their bins looked empty.
+    const toolList = toolsRef.current || [];
+    const compList = componentsRef.current?.components || [];
+    const { matched: matchedAll } = analyzeSystem([...toolList, ...compList], system);
+    // Skip records explicitly excluded from the Location system — they keep their
     // current location and aren't assigned/normalized into this system.
     const matched = matchedAll.filter(m => !isExcludedFrom(m.tool, 'location'));
     const uniqPush = (arr, v) => (arr.includes(v) ? arr : [...arr, v]);
+    const compIds = new Set(compList.map(c => c.id));
 
     // Normalization assigns LOCATION data only — it never writes tool_id. In
     // location-based Tool ID mode the user generates IDs separately via the Tool
@@ -439,6 +446,28 @@ export function createToolActions(ctx) {
     });
     dispatch({ type: 'SET_TOOLS', tools: updatedTools });
 
+    // Components: same structured location, different file (they must never
+    // reach Fusion). One batched save, mirroring the tool write above.
+    if (compList.some(c => byId.has(c.id))) {
+      const updatedComponents = compList.map(c => {
+        const loc = byId.get(c.id);
+        if (!loc) return c;
+        const composed = resolveLocationString(loc, systems);
+        const prior = (c.location || '').trim();
+        const legacy_locations = (prior && prior !== composed)
+          ? uniqPush((c.legacy_locations || []).filter(l => l !== composed), prior)
+          : (c.legacy_locations || []);
+        return {
+          ...c,
+          tool_location: loc,
+          location: composed,
+          proshop_location: proShopLocationValue(system, composed),
+          legacy_locations,
+        };
+      });
+      await saveComponents({ ...(componentsRef.current || { version: 1 }), components: updatedComponents });
+    }
+
     // Mark the system normalized + persist shop settings.
     const nextSystems = systems.map(s => s.id === systemId ? { ...s, normalized: true } : s);
     await saveLocationConfig({ ...(ss.location_config || {}), systems: nextSystems });
@@ -449,6 +478,7 @@ export function createToolActions(ctx) {
         const metaList = await toolStore.loadAll();
         const metaById = new Map(metaList.map(m => [m.id, m]));
         for (const { tool, location } of matched) {
+          if (compIds.has(tool.id)) continue;   // written to tool_components.json above
           const key = tool.tracking_id || tool.id;
           const existing = metaById.get(key) || { id: key };
           const composed = resolveLocationString(location, systems);
