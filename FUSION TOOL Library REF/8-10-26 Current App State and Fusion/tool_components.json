@@ -1,0 +1,737 @@
+{
+  "version": 1,
+  "components": [
+    {
+      "id": "d79c39a7-51a3-44c0-9e61-53cf5d7fb023",
+      "role": "insert",
+      "family": "milling_insert",
+      "tool_id": "G-125",
+      "description": "Steel Insert for Kennametal Face Mill",
+      "designation": "",
+      "size": "",
+      "corner_radius": null,
+      "overall_length": null,
+      "shank_size": "",
+      "grade": "",
+      "coating": "",
+      "unit": "inches",
+      "notes": "",
+      "location": "LC-132",
+      "tool_location": {
+        "system_id": "911bca7a-9903-4a5c-92e7-0ffda1b5773d",
+        "zone_id": null,
+        "station_id": null,
+        "drawer_id": null,
+        "bin": 132
+      },
+      "bin_size_id": null,
+      "legacy_locations": [
+        "132"
+      ],
+      "purchasing": {
+        "manufacturers": [
+          {
+            "id": "1cdfd588-a034-4595-b3b3-77b1c0a1c233",
+            "name": "Kennametal",
+            "edp": "2983331",
+            "edp_url": "",
+            "mfg_num": "",
+            "mfg_num_url": "",
+            "order": 0
+          }
+        ],
+        "vendors": [
+          {
+            "id": "89b6333d-a98f-4320-8780-c2ba12644500",
+            "manufacturer_id": "1cdfd588-a034-4595-b3b3-77b1c0a1c233",
+            "name": "Jones Kinden",
+            "vendor_num": "",
+            "vendor_num_url": "",
+            "price": null,
+            "order": 0
+          },
+          {
+            "id": "f2dd78f0-85a4-4b60-83eb-01d194ae897e",
+            "manufacturer_id": "1cdfd588-a034-4595-b3b3-77b1c0a1c233",
+            "name": "MSC Industrial",
+            "vendor_num": "01655281",
+            "vendor_num_url": "https://www.mscdirect.com/product/details/01655281",
+            "price": 32.74,
+            "order": 1
+          }
+        ]
+      },
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "created_at": "2026-07-17T15:46:15.054Z",
+      "updated_at": "2026-07-17T15:46:15.054Z",
+      "proshop_location": "132"
+    },
+    {
+      "id": "fd102916-a716-4c37-9cb6-76afa12eac04",
+      "role": "holder_body",
+      "family": "milling_insert",
+      "tool_id": "I-126",
+      "description": "2\" Kennametal Face Mill",
+      "designation": "",
+      "size": "",
+      "corner_radius": null,
+      "overall_length": null,
+      "shank_size": "",
+      "grade": "",
+      "coating": "",
+      "unit": "inches",
+      "notes": "",
+      "location": "",
+      "tool_location": null,
+      "bin_size_id": null,
+      "legacy_locations": [],
+      "purchasing": {
+        "manufacturers": [
+          {
+            "id": "8477eeaf-3ce3-4b03-85b1-1dce6362a172",
+            "name": "Kennametal",
+            "edp": "2479510",
+            "edp_url": "",
+            "mfg_num": "",
+            "mfg_num_url": "",
+            "order": 0
+          }
+        ],
+        "vendors": [
+          {
+            "id": "9ed336a2-baf5-45af-9412-2572b0689cff",
+            "manufacturer_id": "8477eeaf-3ce3-4b03-85b1-1dce6362a172",
+            "name": "Jones Kinden",
+            "vendor_num": "",
+            "vendor_num_url": "",
+            "price": null,
+            "order": 0
+          }
+        ]
+      },
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "created_at": "2026-07-17T15:46:15.054Z",
+      "updated_at": "2026-07-17T15:46:15.054Z"
+    },
+    {
+      "id": "d06386c5-6e03-43ea-8941-8f754eea7816",
+      "role": "holder_body",
+      "family": "milling_insert",
+      "tool_id": "I-167",
+      "description": "2.5\" HAAS Face Mill Insert Body",
+      "designation": "",
+      "size": "",
+      "corner_radius": null,
+      "overall_length": null,
+      "shank_size": "",
+      "grade": "",
+      "coating": "",
+      "unit": "inches",
+      "notes": "",
+      "location": "",
+      "tool_location": null,
+      "bin_size_id": null,
+      "legacy_locations": [],
+      "purchasing": {
+        "manufacturers": [
+          {
+            "id": "bda28866-5c40-43f6-9f10-9572300195ba",
+            "name": "",
+            "edp": "01-0644",
+            "edp_url": "",
+            "mfg_num": "",
+            "mfg_num_url": "",
+            "order": 0
+          }
+        ],
+        "vendors": [
+          {
+            "id": "8cd35977-e1a8-4e06-a930-5e2d90c083d1",
+            "manufacturer_id": "bda28866-5c40-43f6-9f10-9572300195ba",
+            "name": "Haas Automation",
+            "vendor_num": "",
+            "vendor_num_url": "",
+            "price": 119.65,
+            "order": 0
+          }
+        ]
+      },
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "created_at": "2026-07-17T15:46:15.054Z",
+      "updated_at": "2026-07-17T15:46:15.054Z"
+    },
+    {
+      "id": "823949ec-b6f8-4ad6-890a-151d969334d8",
+      "role": "insert",
+      "family": "milling_insert",
+      "tool_id": "G-168",
+      "description": "2.5\" Shell Mill Haas HN25 AL",
+      "designation": "",
+      "size": "",
+      "corner_radius": null,
+      "overall_length": null,
+      "shank_size": "",
+      "grade": "",
+      "coating": "",
+      "unit": "inches",
+      "notes": "",
+      "location": "LC-24",
+      "tool_location": {
+        "system_id": "911bca7a-9903-4a5c-92e7-0ffda1b5773d",
+        "zone_id": null,
+        "station_id": null,
+        "drawer_id": null,
+        "bin": 24
+      },
+      "bin_size_id": null,
+      "legacy_locations": [
+        "24"
+      ],
+      "purchasing": {
+        "manufacturers": [
+          {
+            "id": "bfeb31a5-2e3c-4987-9248-b9fb805c187a",
+            "name": "",
+            "edp": "02-0994",
+            "edp_url": "",
+            "mfg_num": "",
+            "mfg_num_url": "",
+            "order": 0
+          }
+        ],
+        "vendors": [
+          {
+            "id": "7b79a3cd-4788-40e4-b2a1-8da8cd72a272",
+            "manufacturer_id": "bfeb31a5-2e3c-4987-9248-b9fb805c187a",
+            "name": "Haas Automation",
+            "vendor_num": "",
+            "vendor_num_url": "",
+            "price": 6.172,
+            "order": 0
+          }
+        ]
+      },
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "created_at": "2026-07-17T15:46:15.054Z",
+      "updated_at": "2026-07-17T15:46:15.054Z",
+      "proshop_location": "24"
+    },
+    {
+      "id": "a97fdd8b-4a23-43d9-b062-5206f8741de7",
+      "role": "insert",
+      "family": "milling_insert",
+      "tool_id": "G-169",
+      "description": "2.5\" Shell Mill Haas HP30 ST",
+      "designation": "",
+      "size": "",
+      "corner_radius": null,
+      "overall_length": null,
+      "shank_size": "",
+      "grade": "",
+      "coating": "",
+      "unit": "inches",
+      "notes": "",
+      "location": "",
+      "tool_location": null,
+      "bin_size_id": null,
+      "legacy_locations": [],
+      "purchasing": {
+        "manufacturers": [
+          {
+            "id": "e57b8f94-efe8-4fbb-871f-2cf9a338151f",
+            "name": "",
+            "edp": "02-0995",
+            "edp_url": "",
+            "mfg_num": "",
+            "mfg_num_url": "",
+            "order": 0
+          }
+        ],
+        "vendors": [
+          {
+            "id": "0078a9ae-1746-491f-8831-6fbe283622ac",
+            "manufacturer_id": "e57b8f94-efe8-4fbb-871f-2cf9a338151f",
+            "name": "Haas Automation",
+            "vendor_num": "",
+            "vendor_num_url": "",
+            "price": 5.412,
+            "order": 0
+          }
+        ]
+      },
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "created_at": "2026-07-17T15:46:15.054Z",
+      "updated_at": "2026-07-17T15:46:15.054Z"
+    },
+    {
+      "id": "6d42d2d7-b43e-455b-82de-6d7991f3c42b",
+      "role": "holder_body",
+      "family": "od_turning",
+      "tool_id": "TF-194",
+      "description": "55° Turning Tool MDJNR12-4B",
+      "designation": "",
+      "size": "",
+      "corner_radius": null,
+      "overall_length": null,
+      "shank_size": "",
+      "grade": "",
+      "coating": "",
+      "unit": "inches",
+      "notes": "",
+      "location": "10000",
+      "tool_location": {
+        "system_id": "97000f6a-62b7-4be8-8b72-bd6be031a136",
+        "zone_id": null,
+        "station_id": null,
+        "drawer_id": null,
+        "bin": "10000"
+      },
+      "bin_size_id": null,
+      "legacy_locations": [
+        "2000"
+      ],
+      "purchasing": {
+        "manufacturers": [
+          {
+            "id": "eaba63e5-2d43-4b30-9a01-e4c711221022",
+            "name": "",
+            "edp": "01-0054",
+            "edp_url": "",
+            "mfg_num": "",
+            "mfg_num_url": "",
+            "order": 0
+          }
+        ],
+        "vendors": [
+          {
+            "id": "84e21202-ae54-4315-87cf-2099185dc114",
+            "manufacturer_id": "eaba63e5-2d43-4b30-9a01-e4c711221022",
+            "name": "Haas Automation",
+            "vendor_num": "",
+            "vendor_num_url": "",
+            "price": 72.17,
+            "order": 0
+          }
+        ]
+      },
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "created_at": "2026-07-17T15:46:15.054Z",
+      "updated_at": "2026-07-17T15:46:15.054Z",
+      "proshop_location": "10000"
+    },
+    {
+      "id": "86160867-18fd-4e90-9a93-7e228a293955",
+      "role": "insert",
+      "family": "od_turning",
+      "tool_id": "TO-195",
+      "description": "55° Turning Tool - ST - DNMG431-HUF",
+      "designation": "",
+      "size": "",
+      "corner_radius": null,
+      "overall_length": null,
+      "shank_size": "",
+      "grade": "",
+      "coating": "",
+      "unit": "inches",
+      "notes": "",
+      "location": "LC-186",
+      "tool_location": {
+        "system_id": "911bca7a-9903-4a5c-92e7-0ffda1b5773d",
+        "zone_id": null,
+        "station_id": null,
+        "drawer_id": null,
+        "bin": 186
+      },
+      "bin_size_id": null,
+      "legacy_locations": [
+        "186"
+      ],
+      "purchasing": {
+        "manufacturers": [
+          {
+            "id": "d4b7c527-4a73-4a86-b51d-25e0700a7872",
+            "name": "",
+            "edp": "02-0097",
+            "edp_url": "",
+            "mfg_num": "",
+            "mfg_num_url": "",
+            "order": 0
+          }
+        ],
+        "vendors": [
+          {
+            "id": "27478457-1d40-4584-a080-b4b7986ac655",
+            "manufacturer_id": "d4b7c527-4a73-4a86-b51d-25e0700a7872",
+            "name": "Haas Automation",
+            "vendor_num": "",
+            "vendor_num_url": "",
+            "price": null,
+            "order": 0
+          }
+        ]
+      },
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "created_at": "2026-07-17T15:46:15.054Z",
+      "updated_at": "2026-07-17T15:46:15.054Z",
+      "proshop_location": "186"
+    },
+    {
+      "id": "162ba250-79e9-4087-b5dd-90aa99ba1490",
+      "role": "insert",
+      "family": "milling_insert",
+      "tool_id": "G-223",
+      "description": "Kenn. 45 ST Mill Insert",
+      "designation": "",
+      "size": "",
+      "corner_radius": null,
+      "overall_length": null,
+      "shank_size": "",
+      "grade": "",
+      "coating": "",
+      "unit": "inches",
+      "notes": "",
+      "location": "LC-212",
+      "tool_location": {
+        "system_id": "911bca7a-9903-4a5c-92e7-0ffda1b5773d",
+        "zone_id": null,
+        "station_id": null,
+        "drawer_id": null,
+        "bin": 212
+      },
+      "bin_size_id": null,
+      "legacy_locations": [
+        "212"
+      ],
+      "purchasing": {
+        "manufacturers": [
+          {
+            "id": "f5daa80e-47ca-4aa0-9d8c-0fc7a7c01449",
+            "name": "Kennametal",
+            "edp": "7033336",
+            "edp_url": "",
+            "mfg_num": "",
+            "mfg_num_url": "",
+            "order": 0
+          }
+        ],
+        "vendors": [
+          {
+            "id": "446d50cf-ddc9-4189-8b32-06ebdb48c3e9",
+            "manufacturer_id": "f5daa80e-47ca-4aa0-9d8c-0fc7a7c01449",
+            "name": "Jones Kinden",
+            "vendor_num": "",
+            "vendor_num_url": "",
+            "price": null,
+            "order": 0
+          }
+        ]
+      },
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "created_at": "2026-07-17T15:46:15.055Z",
+      "updated_at": "2026-07-17T15:46:15.055Z",
+      "proshop_location": "212"
+    },
+    {
+      "id": "b2f39bc1-1d7f-406c-b9c7-e9e5ea931782",
+      "role": "holder_body",
+      "family": "milling_insert",
+      "tool_id": "I-224",
+      "description": "2.5\" Dodeka Kenn Face Mill",
+      "designation": "",
+      "size": "",
+      "corner_radius": null,
+      "overall_length": null,
+      "shank_size": "",
+      "grade": "",
+      "coating": "",
+      "unit": "inches",
+      "notes": "",
+      "location": "LC-213",
+      "tool_location": {
+        "system_id": "911bca7a-9903-4a5c-92e7-0ffda1b5773d",
+        "zone_id": null,
+        "station_id": null,
+        "drawer_id": null,
+        "bin": 213
+      },
+      "bin_size_id": null,
+      "legacy_locations": [
+        "213"
+      ],
+      "purchasing": {
+        "manufacturers": [
+          {
+            "id": "412276e5-8af8-4b08-b862-c9a49650a353",
+            "name": "Kennametal",
+            "edp": "4130432",
+            "edp_url": "",
+            "mfg_num": "",
+            "mfg_num_url": "",
+            "order": 0
+          }
+        ],
+        "vendors": [
+          {
+            "id": "9d509f03-d614-4f5f-9409-316080a87f8c",
+            "manufacturer_id": "412276e5-8af8-4b08-b862-c9a49650a353",
+            "name": "Jones Kinden",
+            "vendor_num": "",
+            "vendor_num_url": "",
+            "price": null,
+            "order": 0
+          }
+        ]
+      },
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "created_at": "2026-07-17T15:46:15.055Z",
+      "updated_at": "2026-07-17T15:46:15.055Z",
+      "proshop_location": "213"
+    },
+    {
+      "id": "3b734eae-b07e-45f1-b2ae-511c2f845d8b",
+      "role": "holder_body",
+      "family": "milling_insert",
+      "tool_id": "I-232",
+      "description": "3.346 reach PH horn Milling arbor for saws",
+      "designation": "",
+      "size": "",
+      "corner_radius": null,
+      "overall_length": null,
+      "shank_size": "",
+      "grade": "",
+      "coating": "",
+      "unit": "inches",
+      "notes": "",
+      "location": "LC-219",
+      "tool_location": {
+        "system_id": "911bca7a-9903-4a5c-92e7-0ffda1b5773d",
+        "zone_id": null,
+        "station_id": null,
+        "drawer_id": null,
+        "bin": 219
+      },
+      "bin_size_id": null,
+      "legacy_locations": [
+        "219"
+      ],
+      "purchasing": {
+        "manufacturers": [
+          {
+            "id": "d0d0d954-89f0-45d0-92f0-ede06fc7f0d6",
+            "name": "PH Horn",
+            "edp": "M332.0016.03A",
+            "edp_url": "",
+            "mfg_num": "",
+            "mfg_num_url": "",
+            "order": 0
+          }
+        ],
+        "vendors": [
+          {
+            "id": "298c6921-db5e-4260-8f05-5c513920f048",
+            "manufacturer_id": "d0d0d954-89f0-45d0-92f0-ede06fc7f0d6",
+            "name": "Jones Kinden",
+            "vendor_num": "",
+            "vendor_num_url": "",
+            "price": 454,
+            "order": 0
+          }
+        ]
+      },
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "created_at": "2026-07-17T15:46:15.055Z",
+      "updated_at": "2026-07-17T15:46:15.055Z",
+      "proshop_location": "219"
+    },
+    {
+      "id": "02b047ff-4233-4232-80b7-e38a55a5502b",
+      "role": "insert",
+      "family": "milling_insert",
+      "tool_id": "G-233",
+      "description": "1.406Ø Mill Grooving insert 3mm thick(.1181)",
+      "designation": "",
+      "size": "",
+      "corner_radius": null,
+      "overall_length": null,
+      "shank_size": "",
+      "grade": "",
+      "coating": "",
+      "unit": "inches",
+      "notes": "",
+      "location": "LC-220",
+      "tool_location": {
+        "system_id": "911bca7a-9903-4a5c-92e7-0ffda1b5773d",
+        "zone_id": null,
+        "station_id": null,
+        "drawer_id": null,
+        "bin": 220
+      },
+      "bin_size_id": null,
+      "legacy_locations": [
+        "220"
+      ],
+      "purchasing": {
+        "manufacturers": [
+          {
+            "id": "76e2bfe5-1dfd-420f-971f-955e155a98f2",
+            "name": "Ph Horn",
+            "edp": "636.0300.00",
+            "edp_url": "",
+            "mfg_num": "",
+            "mfg_num_url": "",
+            "order": 0
+          }
+        ],
+        "vendors": [
+          {
+            "id": "e79634b7-005b-4e44-a9ae-f620fac6ee7f",
+            "manufacturer_id": "76e2bfe5-1dfd-420f-971f-955e155a98f2",
+            "name": "Jones Kinden",
+            "vendor_num": "",
+            "vendor_num_url": "",
+            "price": 96.3,
+            "order": 0
+          }
+        ]
+      },
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "created_at": "2026-07-17T15:46:15.055Z",
+      "updated_at": "2026-07-17T15:46:15.055Z",
+      "proshop_location": "220"
+    },
+    {
+      "id": "e58791eb-b73a-4872-b82f-155c3ba91cc8",
+      "role": "holder_body",
+      "family": "milling_insert",
+      "tool_id": "I-246",
+      "description": "3/4Ø High feed indexable body 2.0 LOC",
+      "designation": "",
+      "size": "",
+      "corner_radius": null,
+      "overall_length": null,
+      "shank_size": "",
+      "grade": "",
+      "coating": "",
+      "unit": "inches",
+      "notes": "",
+      "location": "LC-230",
+      "tool_location": {
+        "system_id": "911bca7a-9903-4a5c-92e7-0ffda1b5773d",
+        "zone_id": null,
+        "station_id": null,
+        "drawer_id": null,
+        "bin": 230
+      },
+      "bin_size_id": null,
+      "legacy_locations": [
+        "230"
+      ],
+      "purchasing": {
+        "manufacturers": [
+          {
+            "id": "f6ac322d-0988-4830-b08f-92b2afa32141",
+            "name": "Kyocera",
+            "edp": "MFH 0750W750033T4",
+            "edp_url": "",
+            "mfg_num": "",
+            "mfg_num_url": "",
+            "order": 0
+          }
+        ],
+        "vendors": [
+          {
+            "id": "5cce4d86-7f82-4848-86d1-a3967dfef634",
+            "manufacturer_id": "f6ac322d-0988-4830-b08f-92b2afa32141",
+            "name": "Jones Kinden",
+            "vendor_num": "",
+            "vendor_num_url": "",
+            "price": null,
+            "order": 0
+          }
+        ]
+      },
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "created_at": "2026-07-17T15:46:15.055Z",
+      "updated_at": "2026-07-17T15:46:15.055Z",
+      "proshop_location": "230"
+    },
+    {
+      "id": "98a426a3-780e-496b-86e6-aece4f842ca5",
+      "role": "insert",
+      "family": "milling_insert",
+      "tool_id": "G-247",
+      "description": "HIgh feed inserts M and P",
+      "designation": "",
+      "size": "",
+      "corner_radius": null,
+      "overall_length": null,
+      "shank_size": "",
+      "grade": "",
+      "coating": "",
+      "unit": "inches",
+      "notes": "",
+      "location": "LC-231",
+      "tool_location": {
+        "system_id": "911bca7a-9903-4a5c-92e7-0ffda1b5773d",
+        "zone_id": null,
+        "station_id": null,
+        "drawer_id": null,
+        "bin": 231
+      },
+      "bin_size_id": null,
+      "legacy_locations": [
+        "231"
+      ],
+      "purchasing": {
+        "manufacturers": [
+          {
+            "id": "35e49bd2-6e7a-430f-ac9e-85bac8182b42",
+            "name": "kyocera",
+            "edp": "LOGU030310ER-GM PR1835",
+            "edp_url": "",
+            "mfg_num": "",
+            "mfg_num_url": "",
+            "order": 0
+          }
+        ],
+        "vendors": [
+          {
+            "id": "ed5be052-d831-45f1-938a-ffe7c7a20c34",
+            "manufacturer_id": "35e49bd2-6e7a-430f-ac9e-85bac8182b42",
+            "name": "Jones Kinden",
+            "vendor_num": "",
+            "vendor_num_url": "",
+            "price": null,
+            "order": 0
+          },
+          {
+            "id": "df5be449-cee6-4a9d-9cf3-b9931c9c9d7f",
+            "manufacturer_id": "35e49bd2-6e7a-430f-ac9e-85bac8182b42",
+            "name": "MSC Industrial",
+            "vendor_num": "06538789",
+            "vendor_num_url": "https://www.mscdirect.com/product/details/06538789",
+            "price": null,
+            "order": 1
+          }
+        ]
+      },
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "created_at": "2026-07-17T15:46:15.055Z",
+      "updated_at": "2026-07-17T15:46:15.055Z",
+      "proshop_location": "231"
+    }
+  ]
+}

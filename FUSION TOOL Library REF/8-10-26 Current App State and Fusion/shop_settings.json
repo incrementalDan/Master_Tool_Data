@@ -1,0 +1,244 @@
+{
+  "version": 1,
+  "shop_name": "APW",
+  "default_units": "inches",
+  "machine_number": {
+    "start": 30,
+    "skip": [
+      98,
+      99,
+      100
+    ]
+  },
+  "tool_id_system": {
+    "mode": "proshop",
+    "separator": "-",
+    "start": 1000,
+    "skip": [],
+    "digits": 4,
+    "show_legacy": true
+  },
+  "location_config": {
+    "systems": [
+      {
+        "id": "911bca7a-9903-4a5c-92e7-0ffda1b5773d",
+        "name": "ProShop LC",
+        "normalized": true,
+        "allowDuplicates": false,
+        "proShopExport": "number_only",
+        "fixedExport": "",
+        "delimiters": {
+          "zs": "-",
+          "sd": "-",
+          "db": "-"
+        },
+        "levels": {
+          "zone": {
+            "on": false,
+            "levelType": "Building",
+            "customTypeName": "",
+            "identFormat": "number",
+            "customIdent": "",
+            "options": []
+          },
+          "station": {
+            "on": false,
+            "levelType": "Cabinet",
+            "customTypeName": "",
+            "identFormat": "number",
+            "customIdent": "",
+            "options": []
+          },
+          "drawer": {
+            "on": true,
+            "levelType": "Drawer",
+            "customTypeName": "",
+            "identFormat": "custom",
+            "customIdent": "LC",
+            "options": []
+          },
+          "bin": {
+            "fixed": false,
+            "start": 1,
+            "fixedVal": "",
+            "skip": []
+          }
+        },
+        "proShopImport": {
+          "match": "any_unique",
+          "triggers": [],
+          "range": {
+            "min": null,
+            "max": null
+          },
+          "flagGaps": true
+        }
+      },
+      {
+        "id": "97000f6a-62b7-4be8-8b72-bd6be031a136",
+        "name": "Drill Index 10000",
+        "normalized": true,
+        "allowDuplicates": true,
+        "proShopExport": "number_only",
+        "fixedExport": "",
+        "delimiters": {
+          "zs": "-",
+          "sd": "-",
+          "db": "-"
+        },
+        "levels": {
+          "zone": {
+            "on": false,
+            "levelType": "Building",
+            "customTypeName": "",
+            "identFormat": "number",
+            "customIdent": "",
+            "options": []
+          },
+          "station": {
+            "on": false,
+            "levelType": "Cabinet",
+            "customTypeName": "",
+            "identFormat": "number",
+            "customIdent": "",
+            "options": []
+          },
+          "drawer": {
+            "on": false,
+            "levelType": "Drawer",
+            "customTypeName": "",
+            "identFormat": "letter",
+            "customIdent": "",
+            "options": []
+          },
+          "bin": {
+            "fixed": true,
+            "start": 1000,
+            "fixedVal": "10000",
+            "skip": []
+          }
+        },
+        "proShopImport": {
+          "match": "triggers",
+          "triggers": [
+            10000
+          ],
+          "range": {
+            "min": null,
+            "max": null
+          },
+          "flagGaps": false
+        }
+      }
+    ],
+    "show_legacy": false,
+    "bin_sizes": [
+      {
+        "id": "98cdf110-da26-4cbe-b8c8-bfb02ae64382",
+        "label": "Standard",
+        "slots": 1,
+        "isDefault": true
+      }
+    ]
+  },
+  "assembly_id_system": {
+    "mode": "auto",
+    "separator": null,
+    "serial_start": 10000,
+    "show_legacy": false
+  },
+  "presetter": {
+    "serial_format": null,
+    "serial_start": null
+  },
+  "integrations": {
+    "fusion": {
+      "enabled": true,
+      "authority": "fusion"
+    }
+  },
+  "machines": [
+    {
+      "model": "M300X3",
+      "machine_type": "5-Axis",
+      "taper": "NBT30",
+      "max_rpm": null,
+      "horsepower": null,
+      "through_coolant": false,
+      "through_coolant_psi": null,
+      "color": "#4a8fff",
+      "id": "f92e82d8-c46d-45dc-bf3c-df59e9b3faf6",
+      "order": 0
+    },
+    {
+      "model": "M300Xd1",
+      "machine_type": "5-Axis",
+      "taper": "NBT30",
+      "max_rpm": 16000,
+      "horsepower": null,
+      "through_coolant": true,
+      "through_coolant_psi": 1000,
+      "color": "#f59e0b",
+      "id": "61147922-52e5-46a4-9aa9-de45804cd200",
+      "order": 1
+    },
+    {
+      "model": "R650",
+      "machine_type": "Machining Center",
+      "taper": "NBT30",
+      "max_rpm": 16000,
+      "horsepower": null,
+      "through_coolant": true,
+      "through_coolant_psi": 1000,
+      "color": "#4ade80",
+      "id": "789e7a80-37da-4cd7-a6df-217e3ba99c51",
+      "order": 2
+    }
+  ],
+  "default_machine_id": null,
+  "tool_libraries": [
+    {
+      "id": "urn:adsk.wipprod:dm.lineage:vWNWZj7ISyGgs8cxcQAR7w",
+      "hubId": "a.YnVzaW5lc3M6YW1lcmljYW5wcmVjaXNpb253b3Jrcw",
+      "projectId": "a.YnVzaW5lc3M6YW1lcmljYW5wcmVjaXNpb253b3JrcyNEMjAyNTAxMDI4NTI2Mjc2MzE",
+      "folderId": "urn:adsk.wipprod:fs.folder:co.4YAwEatUSWqIzPr5RXGoug",
+      "itemId": "urn:adsk.wipprod:dm.lineage:vWNWZj7ISyGgs8cxcQAR7w",
+      "fileName": "ToolDEX - MASTER.json",
+      "order": 0
+    }
+  ],
+  "holder_libraries": [
+    {
+      "id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "hubId": "a.YnVzaW5lc3M6YW1lcmljYW5wcmVjaXNpb253b3Jrcw",
+      "projectId": "a.YnVzaW5lc3M6YW1lcmljYW5wcmVjaXNpb253b3JrcyNEMjAyNTAxMDI4NTI2Mjc2MzE",
+      "folderId": "urn:adsk.wipprod:fs.folder:co.4YAwEatUSWqIzPr5RXGoug",
+      "itemId": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "fileName": "ToolDEX-Holder.json",
+      "order": 0
+    }
+  ],
+  "default_tool_library_id": "urn:adsk.wipprod:dm.lineage:vWNWZj7ISyGgs8cxcQAR7w",
+  "hide_unused_tool_types": true,
+  "import": {
+    "last_proshop_import": null,
+    "last_photo_import_folder_id": null
+  },
+  "aps": {
+    "last_used_hub_id": null,
+    "last_used_project_id": null
+  },
+  "setup_steps": {
+    "fusionConnected": "2026-07-14T16:45:54.075Z",
+    "metadataConnected": "2026-07-14T16:45:56.084Z",
+    "normalized": "2026-07-14T16:46:33.367Z",
+    "proshopMerged": "2026-07-17T15:47:24.043Z",
+    "proshopPhotos": "2026-07-17T16:02:23.124Z",
+    "machineNumbers": "2026-07-15T20:46:14.085Z",
+    "proshopExported": "2026-07-21T20:02:26.731Z",
+    "toolIdConfigured": "2026-07-15T20:46:14.085Z",
+    "locationConfigured": "2026-07-15T20:52:23.341Z",
+    "assemblyIdConfigured": "2026-07-15T20:46:14.085Z",
+    "holdersLinked": "2026-08-06T14:40:13.298Z"
+  }
+}

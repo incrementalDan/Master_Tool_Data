@@ -1,0 +1,4091 @@
+{
+  "version": 1,
+  "holders": [
+    {
+      "id": "11e2fe06-8b4a-4971-8f67-779607d54937",
+      "holder_ref": "HLD-CE3310",
+      "fusion_guid": "60fba7a1-b240-48da-ae8c-ceced7b6fc7d",
+      "description": "NBT30-SK13C-120 ER16 12mm Shank-EX OOH2.25",
+      "unit": "millimeters",
+      "vendor": "",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 18,
+          "upper-diameter": 22,
+          "lower-diameter": 22,
+          "above_gauge": false
+        },
+        {
+          "height": 19,
+          "upper-diameter": 19,
+          "lower-diameter": 19,
+          "above_gauge": false
+        },
+        {
+          "height": 20.16,
+          "upper-diameter": 12,
+          "lower-diameter": 12,
+          "above_gauge": false
+        },
+        {
+          "height": 95,
+          "upper-diameter": 33,
+          "lower-diameter": 33,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 6.6,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75,
+          "lower-diameter": 31.75,
+          "above_gauge": true
+        }
+      ],
+      "type_id": null,
+      "taper_id": null,
+      "collet_family_id": null,
+      "collet_size_id": null,
+      "is_tap_collet": false,
+      "length": null,
+      "has_extension": false,
+      "extension": {
+        "collet_size_id": null,
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "min OOH",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [
+        "min OOH"
+      ],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.493Z",
+      "updated_at": "2026-08-04T15:39:14.493Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 18,
+            "upper-diameter": 22,
+            "lower-diameter": 22,
+            "above_gauge": false
+          },
+          {
+            "height": 19,
+            "upper-diameter": 19,
+            "lower-diameter": 19,
+            "above_gauge": false
+          },
+          {
+            "height": 20.16,
+            "upper-diameter": 12,
+            "lower-diameter": 12,
+            "above_gauge": false
+          },
+          {
+            "height": 95,
+            "upper-diameter": 33,
+            "lower-diameter": 33,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.6,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75,
+            "lower-diameter": 31.75,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "132a0da8-cac2-4338-a56a-9d95e2c8e732",
+      "holder_ref": "HLD-5DB565",
+      "fusion_guid": "183882d2-3a6d-4f0d-a3c3-14e4d8c3e69f",
+      "description": "NBT30-SK13C-120 W/er 8 extension  OOH1.22",
+      "unit": "millimeters",
+      "vendor": "",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 31.75,
+          "upper-diameter": 12,
+          "lower-diameter": 12,
+          "above_gauge": false,
+          "ext": true,
+          "shank_seg": true
+        },
+        {
+          "height": 95,
+          "upper-diameter": 33,
+          "lower-diameter": 33,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 6.6,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75,
+          "lower-diameter": 31.75,
+          "above_gauge": true,
+          "shank_seg": false
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk13",
+      "is_tap_collet": false,
+      "length": 120,
+      "has_extension": true,
+      "extension": {
+        "collet_size_id": "cs-er8",
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.493Z",
+      "updated_at": "2026-08-05T20:35:08.499Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 31.75,
+            "upper-diameter": 12,
+            "lower-diameter": 12,
+            "above_gauge": false
+          },
+          {
+            "height": 95,
+            "upper-diameter": 33,
+            "lower-diameter": 33,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.6,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75,
+            "lower-diameter": 31.75,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "05a509d7-b59e-4f48-817f-db42d3516d3a",
+      "holder_ref": "HLD-6AF522",
+      "fusion_guid": "f592547e-92be-4175-b8e1-602004f95fe3",
+      "description": "NBT30 Holder for hass 2.5\" shell mill",
+      "unit": "inches",
+      "vendor": "",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 0.41174,
+          "upper-diameter": 1.7322834645669,
+          "lower-diameter": 1.7322834645669,
+          "above_gauge": false
+        },
+        {
+          "height": 0.039370078740157,
+          "upper-diameter": 1.8110236220472,
+          "lower-diameter": 1.7322834645669,
+          "above_gauge": false
+        },
+        {
+          "height": 0.13385826771654,
+          "upper-diameter": 1.8110236220472,
+          "lower-diameter": 1.8110236220472,
+          "above_gauge": false
+        },
+        {
+          "height": 0.090905511811024,
+          "upper-diameter": 1.496062992126,
+          "lower-diameter": 1.8110236220472,
+          "above_gauge": false
+        },
+        {
+          "height": 0.13311023622047,
+          "upper-diameter": 1.496062992126,
+          "lower-diameter": 1.496062992126,
+          "above_gauge": false
+        },
+        {
+          "height": 0.090905511811024,
+          "upper-diameter": 1.8110236220472,
+          "lower-diameter": 1.496062992126,
+          "above_gauge": false
+        },
+        {
+          "height": 0.25984251968504,
+          "upper-diameter": 1.8110236220472,
+          "lower-diameter": 1.8110236220472,
+          "above_gauge": false
+        },
+        {
+          "height": 0.039370078740157,
+          "upper-diameter": 1.7322834645669,
+          "lower-diameter": 1.8110236220472,
+          "above_gauge": false
+        },
+        {
+          "height": 0.078740157480315,
+          "upper-diameter": 1.25,
+          "lower-diameter": 1.25,
+          "above_gauge": true
+        }
+      ],
+      "type_id": null,
+      "taper_id": null,
+      "collet_family_id": null,
+      "collet_size_id": null,
+      "is_tap_collet": false,
+      "length": null,
+      "has_extension": false,
+      "extension": {
+        "collet_size_id": null,
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.493Z",
+      "updated_at": "2026-08-04T15:39:14.493Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 0.41174,
+            "upper-diameter": 1.7322834645669,
+            "lower-diameter": 1.7322834645669,
+            "above_gauge": false
+          },
+          {
+            "height": 0.039370078740157,
+            "upper-diameter": 1.8110236220472,
+            "lower-diameter": 1.7322834645669,
+            "above_gauge": false
+          },
+          {
+            "height": 0.13385826771654,
+            "upper-diameter": 1.8110236220472,
+            "lower-diameter": 1.8110236220472,
+            "above_gauge": false
+          },
+          {
+            "height": 0.090905511811024,
+            "upper-diameter": 1.496062992126,
+            "lower-diameter": 1.8110236220472,
+            "above_gauge": false
+          },
+          {
+            "height": 0.13311023622047,
+            "upper-diameter": 1.496062992126,
+            "lower-diameter": 1.496062992126,
+            "above_gauge": false
+          },
+          {
+            "height": 0.090905511811024,
+            "upper-diameter": 1.8110236220472,
+            "lower-diameter": 1.496062992126,
+            "above_gauge": false
+          },
+          {
+            "height": 0.25984251968504,
+            "upper-diameter": 1.8110236220472,
+            "lower-diameter": 1.8110236220472,
+            "above_gauge": false
+          },
+          {
+            "height": 0.039370078740157,
+            "upper-diameter": 1.7322834645669,
+            "lower-diameter": 1.8110236220472,
+            "above_gauge": false
+          },
+          {
+            "height": 0.078740157480315,
+            "upper-diameter": 1.25,
+            "lower-diameter": 1.25,
+            "above_gauge": true
+          }
+        ],
+        "unit": "inches",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "8f887952-c1f3-45e8-a8bf-1a315efbf591",
+      "holder_ref": "HLD-CCB999",
+      "fusion_guid": "24da06d7-c791-49df-950a-248024f33e7e",
+      "description": "NBT30-SK20C-60 w/ER16 EXT 2.385OOH",
+      "unit": "millimeters",
+      "vendor": "Nikken",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 17.78,
+          "upper-diameter": 22.225,
+          "lower-diameter": 22.225,
+          "above_gauge": false,
+          "ext": true,
+          "shank_seg": false
+        },
+        {
+          "height": 42.799,
+          "upper-diameter": 19.05,
+          "lower-diameter": 19.05,
+          "above_gauge": false,
+          "ext": true,
+          "shank_seg": true
+        },
+        {
+          "height": 9.846,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 6.600000000000001,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75000000000002,
+          "lower-diameter": 31.75000000000002,
+          "above_gauge": true,
+          "shank_seg": false
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk20",
+      "is_tap_collet": false,
+      "length": 60,
+      "has_extension": true,
+      "extension": {
+        "collet_size_id": "cs-er16",
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "Nikken",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.493Z",
+      "updated_at": "2026-08-05T20:35:33.228Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 17.78,
+            "upper-diameter": 22.225,
+            "lower-diameter": 22.225,
+            "above_gauge": false
+          },
+          {
+            "height": 42.799,
+            "upper-diameter": 19.05,
+            "lower-diameter": 19.05,
+            "above_gauge": false
+          },
+          {
+            "height": 9.846,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.600000000000001,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75000000000002,
+            "lower-diameter": 31.75000000000002,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "bf6fc4a9-f16d-45ae-a5f7-5f3abf8e4145",
+      "holder_ref": "HLD-CC0F37",
+      "fusion_guid": "30ef0ee1-afb2-4461-80e5-d625361b180c",
+      "description": "BT30 SK13-120 ER16 12mmEXOOH1.75",
+      "unit": "millimeters",
+      "vendor": "",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 18,
+          "upper-diameter": 22,
+          "lower-diameter": 22,
+          "above_gauge": false
+        },
+        {
+          "height": 19,
+          "upper-diameter": 19,
+          "lower-diameter": 19,
+          "above_gauge": false
+        },
+        {
+          "height": 7.46,
+          "upper-diameter": 12,
+          "lower-diameter": 12,
+          "above_gauge": false
+        },
+        {
+          "height": 95,
+          "upper-diameter": 33,
+          "lower-diameter": 33,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 6.6,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75,
+          "lower-diameter": 31.75,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-bt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk13",
+      "is_tap_collet": false,
+      "length": 120,
+      "has_extension": true,
+      "extension": {
+        "collet_size_id": "cs-er16",
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "NBT30-SK13C-120 ER16 12mm -EX OOH1.75",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [
+        "NBT30-SK13C-120 ER16 12mm -EX OOH1.75"
+      ],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.493Z",
+      "updated_at": "2026-08-05T18:45:22.640Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 18,
+            "upper-diameter": 22,
+            "lower-diameter": 22,
+            "above_gauge": false
+          },
+          {
+            "height": 19,
+            "upper-diameter": 19,
+            "lower-diameter": 19,
+            "above_gauge": false
+          },
+          {
+            "height": 7.46,
+            "upper-diameter": 12,
+            "lower-diameter": 12,
+            "above_gauge": false
+          },
+          {
+            "height": 95,
+            "upper-diameter": 33,
+            "lower-diameter": 33,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.6,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75,
+            "lower-diameter": 31.75,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "ae4ac7a0-f42f-45ec-9e07-0285fcad1efb",
+      "holder_ref": "HLD-C8EB24",
+      "fusion_guid": "c8a9aa5f-8a66-4024-8467-5b68a20ae718",
+      "description": "NBT30-SK13C-90 (85mm)",
+      "unit": "millimeters",
+      "vendor": "",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 65,
+          "upper-diameter": 33,
+          "lower-diameter": 33
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 6.6,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75,
+          "lower-diameter": 31.75,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk13",
+      "is_tap_collet": false,
+      "length": 90,
+      "has_extension": false,
+      "extension": {
+        "collet_size_id": null,
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.493Z",
+      "updated_at": "2026-08-05T20:46:47.710Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 65,
+            "upper-diameter": 33,
+            "lower-diameter": 33,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.6,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75,
+            "lower-diameter": 31.75,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "9c638eaf-33dc-4a83-9623-be41eec2f5dc",
+      "holder_ref": "HLD-60874A",
+      "fusion_guid": "5e1b4822-b93c-4e37-8071-ac924aa28ff7",
+      "description": "NBT30-SK20C-90",
+      "unit": "millimeters",
+      "vendor": "",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 63,
+          "upper-diameter": 49,
+          "lower-diameter": 49,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 6.6,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75,
+          "lower-diameter": 31.75,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk20",
+      "is_tap_collet": false,
+      "length": 90,
+      "has_extension": false,
+      "extension": {
+        "collet_size_id": null,
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.493Z",
+      "updated_at": "2026-08-05T18:45:22.640Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 63,
+            "upper-diameter": 49,
+            "lower-diameter": 49,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.6,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75,
+            "lower-diameter": 31.75,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "67994753-ef2f-45c9-8dd3-ddf41e6dcf68",
+      "holder_ref": "HLD-7E7DDD",
+      "fusion_guid": "b282c5f6-397f-4f77-906a-7878c080b580",
+      "description": "DRILL CHUCK - NBT30",
+      "unit": "inches",
+      "vendor": "Maritool",
+      "product_id": "",
+      "product_link": "https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Drill-Chucks/c23_33_444_533/p17945/BT30-DUAL-CONTACT-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html",
+      "segments": [
+        {
+          "height": 0.23,
+          "upper-diameter": 0.9,
+          "lower-diameter": 0.685,
+          "above_gauge": false
+        },
+        {
+          "height": 0.8,
+          "upper-diameter": 1.943,
+          "lower-diameter": 1.5,
+          "above_gauge": false
+        },
+        {
+          "height": 0.1,
+          "upper-diameter": 1.95,
+          "lower-diameter": 1.95,
+          "above_gauge": false
+        },
+        {
+          "height": 1.82087,
+          "upper-diameter": 1.99,
+          "lower-diameter": 1.99,
+          "above_gauge": false
+        },
+        {
+          "height": 0.7,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.09090551181102365,
+          "upper-diameter": 1.4960629921259845,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.13311023622047244,
+          "upper-diameter": 1.4960629921259845,
+          "lower-diameter": 1.4960629921259845,
+          "above_gauge": false
+        },
+        {
+          "height": 0.09090551181102365,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.4960629921259845,
+          "above_gauge": false
+        },
+        {
+          "height": 0.25984251968503935,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.03937007874015748,
+          "upper-diameter": 1.7322834645669292,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.07874015748031496,
+          "upper-diameter": 1.25,
+          "lower-diameter": 1.25,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-drillchuck",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": null,
+      "collet_size_id": null,
+      "is_tap_collet": false,
+      "length": null,
+      "has_extension": false,
+      "extension": {
+        "collet_size_id": null,
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "Maritool",
+      "part_number": "BT30-APU13D",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [
+        "BT30-APU13D"
+      ],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.494Z",
+      "updated_at": "2026-08-05T19:09:39.450Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 0.23,
+            "upper-diameter": 0.9,
+            "lower-diameter": 0.685,
+            "above_gauge": false
+          },
+          {
+            "height": 0.8,
+            "upper-diameter": 1.943,
+            "lower-diameter": 1.5,
+            "above_gauge": false
+          },
+          {
+            "height": 0.1,
+            "upper-diameter": 1.95,
+            "lower-diameter": 1.95,
+            "above_gauge": false
+          },
+          {
+            "height": 1.82087,
+            "upper-diameter": 1.99,
+            "lower-diameter": 1.99,
+            "above_gauge": false
+          },
+          {
+            "height": 0.7,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.09090551181102365,
+            "upper-diameter": 1.4960629921259845,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.13311023622047244,
+            "upper-diameter": 1.4960629921259845,
+            "lower-diameter": 1.4960629921259845,
+            "above_gauge": false
+          },
+          {
+            "height": 0.09090551181102365,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.4960629921259845,
+            "above_gauge": false
+          },
+          {
+            "height": 0.25984251968503935,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.03937007874015748,
+            "upper-diameter": 1.7322834645669292,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.07874015748031496,
+            "upper-diameter": 1.25,
+            "lower-diameter": 1.25,
+            "above_gauge": true
+          }
+        ],
+        "unit": "inches",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "b482ffd4-431c-416e-9625-71d05568b0a5",
+      "holder_ref": "HLD-E9FADF",
+      "fusion_guid": "ebb9af4b-b34b-42e0-a230-d9a1aaeb6bb4",
+      "description": "NBT30-SK13C-150",
+      "unit": "millimeters",
+      "vendor": "Lindex nikken",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 123,
+          "upper-diameter": 33,
+          "lower-diameter": 33,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 6.6,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75,
+          "lower-diameter": 31.75,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk13",
+      "is_tap_collet": false,
+      "length": 150,
+      "has_extension": false,
+      "extension": {
+        "collet_size_id": null,
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "Lindex nikken",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.494Z",
+      "updated_at": "2026-08-05T18:45:22.640Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 123,
+            "upper-diameter": 33,
+            "lower-diameter": 33,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.6,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75,
+            "lower-diameter": 31.75,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "51b168ac-3d91-48f7-899d-cf8d1e1c8193",
+      "holder_ref": "HLD-B94907",
+      "fusion_guid": "fb236ece-ff52-4458-804f-e0b54838e33b",
+      "description": "NBT30-SK13C-120 er16 12mm shank ext OOH2.5",
+      "unit": "millimeters",
+      "vendor": "",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 18,
+          "upper-diameter": 22,
+          "lower-diameter": 22,
+          "above_gauge": false
+        },
+        {
+          "height": 19,
+          "upper-diameter": 19,
+          "lower-diameter": 19,
+          "above_gauge": false
+        },
+        {
+          "height": 26.8,
+          "upper-diameter": 12,
+          "lower-diameter": 12,
+          "above_gauge": false
+        },
+        {
+          "height": 95,
+          "upper-diameter": 33,
+          "lower-diameter": 33,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 6.6,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75,
+          "lower-diameter": 31.75,
+          "above_gauge": true
+        }
+      ],
+      "type_id": null,
+      "taper_id": null,
+      "collet_family_id": null,
+      "collet_size_id": null,
+      "is_tap_collet": false,
+      "length": null,
+      "has_extension": false,
+      "extension": {
+        "collet_size_id": null,
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.494Z",
+      "updated_at": "2026-08-04T15:39:14.494Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 18,
+            "upper-diameter": 22,
+            "lower-diameter": 22,
+            "above_gauge": false
+          },
+          {
+            "height": 19,
+            "upper-diameter": 19,
+            "lower-diameter": 19,
+            "above_gauge": false
+          },
+          {
+            "height": 26.8,
+            "upper-diameter": 12,
+            "lower-diameter": 12,
+            "above_gauge": false
+          },
+          {
+            "height": 95,
+            "upper-diameter": 33,
+            "lower-diameter": 33,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.6,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75,
+            "lower-diameter": 31.75,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "8348d5ea-ddf6-48f9-b9b2-8bb31a26a822",
+      "holder_ref": "HLD-685D33",
+      "fusion_guid": "31014ded-f74e-4e7b-a82b-7ecc5a94476e",
+      "description": "NBT30-SK13C-120",
+      "unit": "millimeters",
+      "vendor": "",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 95,
+          "upper-diameter": 33,
+          "lower-diameter": 33,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 6.6,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75,
+          "lower-diameter": 31.75,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk13",
+      "is_tap_collet": false,
+      "length": 120,
+      "has_extension": false,
+      "extension": {
+        "collet_size_id": null,
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.494Z",
+      "updated_at": "2026-08-05T18:45:22.640Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 95,
+            "upper-diameter": 33,
+            "lower-diameter": 33,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.6,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75,
+            "lower-diameter": 31.75,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "1b49c026-a12b-4a30-baee-a7847943fc63",
+      "holder_ref": "HLD-408CD7",
+      "fusion_guid": "2919928f-95c8-45fd-a552-82a1f9185a7b",
+      "description": "NBT30-SK13C-60 w/ ER8 EXT 1.2OOH",
+      "unit": "millimeters",
+      "vendor": "",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 30.48,
+          "upper-diameter": 12,
+          "lower-diameter": 12,
+          "above_gauge": false
+        },
+        {
+          "height": 35,
+          "upper-diameter": 33,
+          "lower-diameter": 33,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 6.6,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75,
+          "lower-diameter": 31.75,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk13",
+      "is_tap_collet": false,
+      "length": 60,
+      "has_extension": true,
+      "extension": {
+        "collet_size_id": "cs-er8",
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.494Z",
+      "updated_at": "2026-08-05T18:45:22.640Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 30.48,
+            "upper-diameter": 12,
+            "lower-diameter": 12,
+            "above_gauge": false
+          },
+          {
+            "height": 35,
+            "upper-diameter": 33,
+            "lower-diameter": 33,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.6,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75,
+            "lower-diameter": 31.75,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "d8fa96da-3e91-422d-8ef2-ee577b42a5d8",
+      "holder_ref": "HLD-24FDA9",
+      "fusion_guid": "47ac39f4-c14a-46d7-9b17-216cdfd2170e",
+      "description": "NBT30-SK20C-60",
+      "unit": "millimeters",
+      "vendor": "Nikken",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 35,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 6.600000000000001,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75000000000002,
+          "lower-diameter": 31.75000000000002,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk20",
+      "is_tap_collet": false,
+      "length": 60,
+      "has_extension": false,
+      "extension": {
+        "collet_size_id": null,
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "Nikken",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": {
+        "signature": "60|54.999|millimeters|SK",
+        "confirmed_at": "2026-08-05T18:46:07.872Z",
+        "confirmed_by": ""
+      },
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.494Z",
+      "updated_at": "2026-08-05T18:46:08.776Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 35,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.600000000000001,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75000000000002,
+            "lower-diameter": 31.75000000000002,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "0500ea4d-329a-48bf-a6e1-6e68036865f8",
+      "holder_ref": "HLD-67E0B7",
+      "fusion_guid": "9d79d987-7d3b-4465-b9ba-c06fa7fd1ca7",
+      "description": "NBT30-SK13C-120 W/er 8 extension  OOH2.0",
+      "unit": "millimeters",
+      "vendor": "",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 50.8,
+          "upper-diameter": 12,
+          "lower-diameter": 12,
+          "above_gauge": false
+        },
+        {
+          "height": 95,
+          "upper-diameter": 33,
+          "lower-diameter": 33,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 6.6,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75,
+          "lower-diameter": 31.75,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk13",
+      "is_tap_collet": false,
+      "length": 120,
+      "has_extension": true,
+      "extension": {
+        "collet_size_id": "cs-er8",
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.494Z",
+      "updated_at": "2026-08-05T18:45:22.640Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 50.8,
+            "upper-diameter": 12,
+            "lower-diameter": 12,
+            "above_gauge": false
+          },
+          {
+            "height": 95,
+            "upper-diameter": 33,
+            "lower-diameter": 33,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.6,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75,
+            "lower-diameter": 31.75,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "4471a255-61c0-403f-be6b-d798d772257f",
+      "holder_ref": "HLD-3AF99E",
+      "fusion_guid": "cb748048-9529-4d11-a4c1-ba45261925d6",
+      "description": "NBT30-SK20C-90 w/ER16 EXT 2.2OOH",
+      "unit": "millimeters",
+      "vendor": "Nikken",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 17.78,
+          "upper-diameter": 22.225,
+          "lower-diameter": 22.225,
+          "above_gauge": false,
+          "ext": true,
+          "shank_seg": false
+        },
+        {
+          "height": 38.1,
+          "upper-diameter": 19.05,
+          "lower-diameter": 19.05,
+          "above_gauge": false,
+          "ext": true,
+          "shank_seg": true
+        },
+        {
+          "height": 64,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 6.600000000000001,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75000000000002,
+          "lower-diameter": 31.75000000000002,
+          "above_gauge": true,
+          "shank_seg": false
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk20",
+      "is_tap_collet": false,
+      "length": 90,
+      "has_extension": true,
+      "extension": {
+        "collet_size_id": "cs-er16",
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": "d38ff483-ab47-4ab5-ac62-c40a300e872e",
+      "extension_part_id": "91aaa771-4450-4482-b138-872b953d7801",
+      "manufacturer": "Nikken",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.494Z",
+      "updated_at": "2026-08-06T14:43:26.618Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 17.78,
+            "upper-diameter": 22.225,
+            "lower-diameter": 22.225,
+            "above_gauge": false,
+            "ext": true,
+            "shank_seg": false
+          },
+          {
+            "height": 38.1,
+            "upper-diameter": 19.05,
+            "lower-diameter": 19.05,
+            "above_gauge": false,
+            "ext": true,
+            "shank_seg": true
+          },
+          {
+            "height": 64,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 6.600000000000001,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75000000000002,
+            "lower-diameter": 31.75000000000002,
+            "above_gauge": true,
+            "shank_seg": false
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "ce87fee6-1da2-4768-9d69-b220db7d4623",
+      "holder_ref": "HLD-5B71E2",
+      "fusion_guid": "0d54da70-3f69-4b1b-9a3b-aab989933e15",
+      "description": "NBT30-SK13C-60 w/ ER8 EXT 1.65OOH",
+      "unit": "millimeters",
+      "vendor": "",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 41.91,
+          "upper-diameter": 12,
+          "lower-diameter": 12,
+          "above_gauge": false
+        },
+        {
+          "height": 35,
+          "upper-diameter": 33,
+          "lower-diameter": 33,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 6.6,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75,
+          "lower-diameter": 31.75,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk13",
+      "is_tap_collet": false,
+      "length": 60,
+      "has_extension": true,
+      "extension": {
+        "collet_size_id": "cs-er8",
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.494Z",
+      "updated_at": "2026-08-05T18:45:22.640Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 41.91,
+            "upper-diameter": 12,
+            "lower-diameter": 12,
+            "above_gauge": false
+          },
+          {
+            "height": 35,
+            "upper-diameter": 33,
+            "lower-diameter": 33,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.6,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75,
+            "lower-diameter": 31.75,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "ef60eef5-8b04-4775-aa66-a7fa7f313b7b",
+      "holder_ref": "HLD-D5FFE8",
+      "fusion_guid": "5727ced8-62f0-4baf-a828-423993f66be4",
+      "description": "FACE MILL BT30 DC",
+      "unit": "inches",
+      "vendor": "Maritool",
+      "product_id": "",
+      "product_link": "https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Shell-Mill-Holders/c23_33_444_506/p25604/BT30-.750-DUAL-CONTACT-FACE-MILL-TOOL-HOLDER-.750-2.5/product_info.html",
+      "segments": [
+        {
+          "height": 1.67327,
+          "upper-diameter": 1.73,
+          "lower-diameter": 1.73,
+          "above_gauge": false
+        },
+        {
+          "height": 0.03937007874015748,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.7322834645669292,
+          "above_gauge": false
+        },
+        {
+          "height": 0.13385826771653542,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.09090551181102365,
+          "upper-diameter": 1.4960629921259845,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.13311023622047244,
+          "upper-diameter": 1.4960629921259845,
+          "lower-diameter": 1.4960629921259845,
+          "above_gauge": false
+        },
+        {
+          "height": 0.09090551181102365,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.4960629921259845,
+          "above_gauge": false
+        },
+        {
+          "height": 0.25984251968503946,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.03937007874015748,
+          "upper-diameter": 1.7322834645669292,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.07874015748031496,
+          "upper-diameter": 1.2500000000000009,
+          "lower-diameter": 1.2500000000000009,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-shellmill",
+      "taper_id": "tp-bt30dc",
+      "collet_family_id": null,
+      "collet_size_id": null,
+      "is_tap_collet": false,
+      "length": null,
+      "has_extension": false,
+      "extension": {
+        "collet_size_id": null,
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "Maritool",
+      "part_number": "BT30-FMA.750-2.5D",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [
+        "BT30-FMA.750-2.5D"
+      ],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.494Z",
+      "updated_at": "2026-08-05T18:45:22.640Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 1.67327,
+            "upper-diameter": 1.73,
+            "lower-diameter": 1.73,
+            "above_gauge": false
+          },
+          {
+            "height": 0.03937007874015748,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.7322834645669292,
+            "above_gauge": false
+          },
+          {
+            "height": 0.13385826771653542,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.09090551181102365,
+            "upper-diameter": 1.4960629921259845,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.13311023622047244,
+            "upper-diameter": 1.4960629921259845,
+            "lower-diameter": 1.4960629921259845,
+            "above_gauge": false
+          },
+          {
+            "height": 0.09090551181102365,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.4960629921259845,
+            "above_gauge": false
+          },
+          {
+            "height": 0.25984251968503946,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.03937007874015748,
+            "upper-diameter": 1.7322834645669292,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.07874015748031496,
+            "upper-diameter": 1.2500000000000009,
+            "lower-diameter": 1.2500000000000009,
+            "above_gauge": true
+          }
+        ],
+        "unit": "inches",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "76bdb5b5-52ca-4f5c-9068-bb51e648b0ae",
+      "holder_ref": "HLD-7E2F62",
+      "fusion_guid": "c8305bcc-bbe0-4291-86f9-b9e234271baa",
+      "description": "NBT30-SK13C-60",
+      "unit": "millimeters",
+      "vendor": "",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 35,
+          "upper-diameter": 33,
+          "lower-diameter": 33,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 6.6,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75,
+          "lower-diameter": 31.75,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk13",
+      "is_tap_collet": false,
+      "length": 60,
+      "has_extension": false,
+      "extension": {
+        "collet_size_id": null,
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "NIKKEN",
+      "part_number": "NBT30-SK13C-60",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": "#f3ff4d",
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": {
+        "signature": "60|54.999|millimeters|SK",
+        "confirmed_at": "2026-08-04T15:43:50.461Z",
+        "confirmed_by": ""
+      },
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.494Z",
+      "updated_at": "2026-08-05T18:45:22.640Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 35,
+            "upper-diameter": 33,
+            "lower-diameter": 33,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.6,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75,
+            "lower-diameter": 31.75,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "aabedce3-d5a8-4546-9036-9ddca2309dcd",
+      "holder_ref": "HLD-0CC866",
+      "fusion_guid": "51072afe-449d-4ab4-a50f-f498ff32464b",
+      "description": "NBT30-SK20C-90 w/ER16 EXT 2.5OOH",
+      "unit": "millimeters",
+      "vendor": "Nikken",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 17.78,
+          "upper-diameter": 22.225,
+          "lower-diameter": 22.225,
+          "above_gauge": false,
+          "ext": true,
+          "shank_seg": false
+        },
+        {
+          "height": 45.7,
+          "upper-diameter": 19.05,
+          "lower-diameter": 19.05,
+          "above_gauge": false,
+          "ext": true,
+          "shank_seg": true
+        },
+        {
+          "height": 64,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 6.600000000000001,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75000000000002,
+          "lower-diameter": 31.75000000000002,
+          "above_gauge": true,
+          "shank_seg": false
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk20",
+      "is_tap_collet": false,
+      "length": 90,
+      "has_extension": true,
+      "extension": {
+        "collet_size_id": "cs-er16",
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "Nikken",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.494Z",
+      "updated_at": "2026-08-05T19:10:21.687Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 17.78,
+            "upper-diameter": 22.225,
+            "lower-diameter": 22.225,
+            "above_gauge": false,
+            "ext": true,
+            "shank_seg": false
+          },
+          {
+            "height": 45.7,
+            "upper-diameter": 19.05,
+            "lower-diameter": 19.05,
+            "above_gauge": false,
+            "ext": true,
+            "shank_seg": true
+          },
+          {
+            "height": 64,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 6.600000000000001,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false,
+            "shank_seg": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75000000000002,
+            "lower-diameter": 31.75000000000002,
+            "above_gauge": true,
+            "shank_seg": false
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "498b7e2b-5f84-4224-88b0-e4c6d9becd0c",
+      "holder_ref": "HLD-5BBE03",
+      "fusion_guid": "66184b29-180b-41a6-afee-08c17307a989",
+      "description": "BBT30-CKB3-79 (For  EWN Boring Heads)",
+      "unit": "inches",
+      "vendor": "",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 1.99,
+          "upper-diameter": 1.22,
+          "lower-diameter": 1.22,
+          "above_gauge": false
+        },
+        {
+          "height": 0.25,
+          "upper-diameter": 1.6,
+          "lower-diameter": 1.22,
+          "above_gauge": false
+        },
+        {
+          "height": 0.03937007874015748,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.7322834645669292,
+          "above_gauge": false
+        },
+        {
+          "height": 0.13385826771653542,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.09090551181102365,
+          "upper-diameter": 1.4960629921259845,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.13311023622047244,
+          "upper-diameter": 1.4960629921259845,
+          "lower-diameter": 1.4960629921259845,
+          "above_gauge": false
+        },
+        {
+          "height": 0.09090551181102365,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.4960629921259845,
+          "above_gauge": false
+        },
+        {
+          "height": 0.2598425196850394,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.03937007874015748,
+          "upper-diameter": 1.7322834645669292,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.078740157480315,
+          "upper-diameter": 1.25,
+          "lower-diameter": 1.25,
+          "above_gauge": true
+        },
+        {
+          "height": 0.07874015748031496,
+          "upper-diameter": 1.2500000000000004,
+          "lower-diameter": 1.2500000000000004,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-boring",
+      "taper_id": "tp-bbt30",
+      "collet_family_id": null,
+      "collet_size_id": null,
+      "is_tap_collet": false,
+      "length": null,
+      "has_extension": false,
+      "extension": {
+        "collet_size_id": null,
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.494Z",
+      "updated_at": "2026-08-05T18:45:22.640Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 1.99,
+            "upper-diameter": 1.22,
+            "lower-diameter": 1.22,
+            "above_gauge": false
+          },
+          {
+            "height": 0.25,
+            "upper-diameter": 1.6,
+            "lower-diameter": 1.22,
+            "above_gauge": false
+          },
+          {
+            "height": 0.03937007874015748,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.7322834645669292,
+            "above_gauge": false
+          },
+          {
+            "height": 0.13385826771653542,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.09090551181102365,
+            "upper-diameter": 1.4960629921259845,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.13311023622047244,
+            "upper-diameter": 1.4960629921259845,
+            "lower-diameter": 1.4960629921259845,
+            "above_gauge": false
+          },
+          {
+            "height": 0.09090551181102365,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.4960629921259845,
+            "above_gauge": false
+          },
+          {
+            "height": 0.2598425196850394,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.03937007874015748,
+            "upper-diameter": 1.7322834645669292,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.078740157480315,
+            "upper-diameter": 1.25,
+            "lower-diameter": 1.25,
+            "above_gauge": true
+          },
+          {
+            "height": 0.07874015748031496,
+            "upper-diameter": 1.2500000000000004,
+            "lower-diameter": 1.2500000000000004,
+            "above_gauge": true
+          }
+        ],
+        "unit": "inches",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "f908f8c4-655c-48ff-ba40-592e229dde90",
+      "holder_ref": "HLD-7B0B72",
+      "fusion_guid": "7a26a569-9e6a-4427-b712-f3025f9ae5dd",
+      "description": "NBT30SK13-90 -ER16 TAP C EX2.0OOH",
+      "unit": "inches",
+      "vendor": "Nikken",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 0.7,
+          "upper-diameter": 0.875,
+          "lower-diameter": 0.875,
+          "above_gauge": false
+        },
+        {
+          "height": 1.3,
+          "upper-diameter": 0.75,
+          "lower-diameter": 0.75,
+          "above_gauge": false
+        },
+        {
+          "height": 2.559055118110237,
+          "upper-diameter": 1.299212598425197,
+          "lower-diameter": 1.299212598425197,
+          "above_gauge": false
+        },
+        {
+          "height": 0.03937007874015748,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.13385826771653542,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.09090551181102365,
+          "upper-diameter": 1.4960629921259845,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.13311023622047244,
+          "upper-diameter": 1.4960629921259845,
+          "lower-diameter": 1.4960629921259845,
+          "above_gauge": false
+        },
+        {
+          "height": 0.09090551181102365,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.4960629921259845,
+          "above_gauge": false
+        },
+        {
+          "height": 0.25984251968503946,
+          "upper-diameter": 1.811023622047244,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.03937007874015748,
+          "upper-diameter": 1.7322834645669292,
+          "lower-diameter": 1.811023622047244,
+          "above_gauge": false
+        },
+        {
+          "height": 0.07874015748031496,
+          "upper-diameter": 1.2500000000000009,
+          "lower-diameter": 1.2500000000000009,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-er",
+      "collet_size_id": "cs-er16",
+      "is_tap_collet": true,
+      "length": 90,
+      "has_extension": true,
+      "extension": {
+        "collet_size_id": "cs-er16",
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "Nikken",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "",
+      "notes": "TAP COLLET - 2.0OOH",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [
+        "TAP COLLET - 2.0OOH"
+      ],
+      "legacy_fusion_guids": [],
+      "nominal_check": null,
+      "description_manual": true,
+      "created_at": "2026-08-04T15:39:14.494Z",
+      "updated_at": "2026-08-05T18:45:22.640Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 0.7,
+            "upper-diameter": 0.875,
+            "lower-diameter": 0.875,
+            "above_gauge": false
+          },
+          {
+            "height": 1.3,
+            "upper-diameter": 0.75,
+            "lower-diameter": 0.75,
+            "above_gauge": false
+          },
+          {
+            "height": 2.559055118110237,
+            "upper-diameter": 1.299212598425197,
+            "lower-diameter": 1.299212598425197,
+            "above_gauge": false
+          },
+          {
+            "height": 0.03937007874015748,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.13385826771653542,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.09090551181102365,
+            "upper-diameter": 1.4960629921259845,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.13311023622047244,
+            "upper-diameter": 1.4960629921259845,
+            "lower-diameter": 1.4960629921259845,
+            "above_gauge": false
+          },
+          {
+            "height": 0.09090551181102365,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.4960629921259845,
+            "above_gauge": false
+          },
+          {
+            "height": 0.25984251968503946,
+            "upper-diameter": 1.811023622047244,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.03937007874015748,
+            "upper-diameter": 1.7322834645669292,
+            "lower-diameter": 1.811023622047244,
+            "above_gauge": false
+          },
+          {
+            "height": 0.07874015748031496,
+            "upper-diameter": 1.2500000000000009,
+            "lower-diameter": 1.2500000000000009,
+            "above_gauge": true
+          }
+        ],
+        "unit": "inches",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    },
+    {
+      "id": "fae752bf-3b4b-4cd3-b442-9b29a2b0b70b",
+      "holder_ref": "HLD-AC5E04",
+      "fusion_guid": "31014ded-f74e-4e7b-a82b-7ecc5a94476e",
+      "description": "TEST NBT30-SK13C-fake",
+      "unit": "millimeters",
+      "vendor": "",
+      "product_id": "",
+      "product_link": "",
+      "segments": [
+        {
+          "height": 145,
+          "upper-diameter": 33,
+          "lower-diameter": 33,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false
+        },
+        {
+          "height": 6.6,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75,
+          "lower-diameter": 31.75,
+          "above_gauge": true
+        }
+      ],
+      "type_id": "ht-collet",
+      "taper_id": "tp-nbt30",
+      "collet_family_id": "cf-sk",
+      "collet_size_id": "cs-sk13",
+      "is_tap_collet": false,
+      "length": 165,
+      "has_extension": false,
+      "extension": {
+        "collet_size_id": null,
+        "manufacturer": "",
+        "part_number": "",
+        "vendor": ""
+      },
+      "body_part_id": null,
+      "extension_part_id": null,
+      "manufacturer": "test",
+      "part_number": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "color": null,
+      "location": "test",
+      "notes": "",
+      "tags": [],
+      "primary_photo_id": null,
+      "primary_photo_name": null,
+      "attachments": [],
+      "legacy_ids": [],
+      "legacy_fusion_guids": [],
+      "nominal_check": {
+        "signature": "165|164.999|millimeters|SK",
+        "confirmed_at": "2026-08-05T20:34:08.281Z",
+        "confirmed_by": ""
+      },
+      "description_manual": true,
+      "created_at": "2026-08-04T19:10:41.145Z",
+      "updated_at": "2026-08-05T20:34:09.185Z",
+      "library_id": "urn:adsk.wipprod:dm.lineage:bVMt4eTrSQ6D9fyi4ub2HA",
+      "library_name": "ToolDEX-Holder.json",
+      "last_pushed": {
+        "segments": [
+          {
+            "height": 145,
+            "upper-diameter": 33,
+            "lower-diameter": 33,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 46,
+            "lower-diameter": 44,
+            "above_gauge": false
+          },
+          {
+            "height": 3.4,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 38,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 3.381,
+            "upper-diameter": 38,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 2.309,
+            "upper-diameter": 46,
+            "lower-diameter": 38,
+            "above_gauge": false
+          },
+          {
+            "height": 6.6,
+            "upper-diameter": 46,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 1,
+            "upper-diameter": 44,
+            "lower-diameter": 46,
+            "above_gauge": false
+          },
+          {
+            "height": 2,
+            "upper-diameter": 31.75,
+            "lower-diameter": 31.75,
+            "above_gauge": true
+          }
+        ],
+        "unit": "millimeters",
+        "at": "2026-08-05T19:12:22.434Z"
+      }
+    }
+  ],
+  "parts": [
+    {
+      "id": "d38ff483-ab47-4ab5-ac62-c40a300e872e",
+      "role": "body",
+      "description": "NBT30-SK20C-90 w/ER16 EXT 2.2OOH",
+      "unit": "millimeters",
+      "segments": [
+        {
+          "height": 64,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 46,
+          "lower-diameter": 44,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 3.4,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 38,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 3.381,
+          "upper-diameter": 38,
+          "lower-diameter": 38,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2.309,
+          "upper-diameter": 46,
+          "lower-diameter": 38,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 6.600000000000001,
+          "upper-diameter": 46,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 1,
+          "upper-diameter": 44,
+          "lower-diameter": 46,
+          "above_gauge": false,
+          "shank_seg": false
+        },
+        {
+          "height": 2,
+          "upper-diameter": 31.75000000000002,
+          "lower-diameter": 31.75000000000002,
+          "above_gauge": true,
+          "shank_seg": false
+        }
+      ],
+      "taper_id": "tp-nbt30",
+      "collet_size_id": "cs-sk20",
+      "length": 90,
+      "manufacturer": "Nikken",
+      "part_number": "",
+      "vendor": "Nikken",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "location": "",
+      "notes": "",
+      "created_at": "2026-08-06T14:43:11.811Z",
+      "updated_at": "2026-08-06T14:43:11.811Z"
+    },
+    {
+      "id": "91aaa771-4450-4482-b138-872b953d7801",
+      "role": "extension",
+      "description": "ER16 from NBT30-SK20C-90 w/ER16 EXT 2.2OOH",
+      "unit": "millimeters",
+      "segments": [
+        {
+          "height": 17.78,
+          "upper-diameter": 22.225,
+          "lower-diameter": 22.225,
+          "above_gauge": false,
+          "ext": true,
+          "shank_seg": false
+        },
+        {
+          "height": 38.1,
+          "upper-diameter": 19.05,
+          "lower-diameter": 19.05,
+          "above_gauge": false,
+          "ext": true,
+          "shank_seg": true
+        }
+      ],
+      "taper_id": null,
+      "collet_size_id": "cs-er16",
+      "length": null,
+      "manufacturer": "",
+      "part_number": "",
+      "vendor": "",
+      "purchasing": {
+        "manufacturers": [],
+        "vendors": []
+      },
+      "location": "",
+      "notes": "",
+      "created_at": "2026-08-06T14:43:25.713Z",
+      "updated_at": "2026-08-06T14:43:25.713Z"
+    }
+  ]
+}
