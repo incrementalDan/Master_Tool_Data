@@ -342,11 +342,16 @@ export function parseLocationString(str, system) {
   if (!built) return null;
   const m = text.match(built.regex);
   if (!m) return null;
-  const loc = { system_id: system.id, zone_id: null, station_id: null, drawer_id: null, bin: null };
+  const loc = {
+    system_id: system.id, zone_id: null, station_id: null, drawer_id: null,
+    // A fixed-bin system captures nothing — its bin IS the configured value, and
+    // normalize must record the same shape the import and picker write.
+    bin: system.levels?.bin?.fixed ? normalizeBin(system.levels.bin.fixedVal) : null,
+  };
   built.capturedLevels.forEach((key, i) => {
     const captured = m[i + 1];
     if (key === 'bin') {
-      loc.bin = Number(captured);
+      loc.bin = normalizeBin(captured);
     } else {
       const opt = levelOptions(system, key).find(o => o.label.toLowerCase() === captured.toLowerCase());
       loc[`${key}_id`] = opt ? opt.id : null;
@@ -488,6 +493,22 @@ export function libraryLocationIssues(records, systems) {
     }
   }
   return out;
+}
+
+// ⚠️ ONE canonical shape for a stored bin. A fixed-bin system's `fixedVal` is a
+// config STRING, so writing it straight through stored "10000" while every
+// auto-increment system stored the number 10000 — the same bin in two types,
+// from three different write paths (ProShop import, the picker, and normalize,
+// which stored null for a fixed bin because the parser never captures one).
+// Numeric values are stored as numbers; a non-numeric fixed label (e.g. "SHELF")
+// stays a string. Existing string bins compare equal via String(), so adopting
+// this changes nothing that is already stored — it just stops the drift.
+export function normalizeBin(value) {
+  if (value == null || value === '') return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : text;
 }
 
 // An empty structured location for a given system (nothing picked yet).
@@ -751,7 +772,7 @@ export function routeProShopLocations(rows, systems) {
       });
       continue;
     }
-    const binVal = sys.levels?.bin?.fixed ? sys.levels.bin.fixedVal : num;
+    const binVal = sys.levels?.bin?.fixed ? normalizeBin(sys.levels.bin.fixedVal) : num;
     const location = { system_id: sys.id, zone_id: null, station_id: null, drawer_id: null, bin: binVal };
     const entry = { key: row?.key, bin: num, systemId: sys.id, systemName: sys.name, location };
     assignments.push(entry);

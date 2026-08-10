@@ -4,7 +4,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { LivePreview } from './LocationSystemSettings.jsx';
 import {
   findSystem, levelOptions, levelTypeName, composeLocationString,
-  nextBin, usedBinsForSystem, LEVEL_KEYS,
+  nextBin, usedBinsForSystem, LEVEL_KEYS, normalizeBin,
 } from '../utils/locationSystem.js';
 
 // The "Assign Location" picker (prototype tab) bound to a specific tool. Lives
@@ -75,7 +75,8 @@ export default function LocationPicker({ tool, record, onAssign }) {
       zone_id: system.levels.zone.on ? picks.zone_id : null,
       station_id: system.levels.station.on ? picks.station_id : null,
       drawer_id: system.levels.drawer.on ? picks.drawer_id : null,
-      bin: system.levels.bin.fixed ? binVal : (binVal === '' ? null : Number(binVal)),
+      // One canonical shape for a stored bin — see normalizeBin.
+      bin: normalizeBin(binVal),
     };
   }
 

@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  newLocationSystem, newLevelOption,
-  systemOutputSignature, systemStructureSignature, findSystemConflicts,
-  parseLocationString, analyzeSystem, nextBin,
-  newImportRule, routeProShopLocations, parseTriggerList, pruneAcknowledgedGaps,
-  libraryLocationIssues, analyzeBinSequence, findBinGaps, usedBinsForSystem,
+  newLocationSystem, newLevelOption, systemOutputSignature, systemStructureSignature, findSystemConflicts, parseLocationString, analyzeSystem, nextBin, newImportRule, routeProShopLocations, parseTriggerList, pruneAcknowledgedGaps, libraryLocationIssues, analyzeBinSequence, findBinGaps, usedBinsForSystem, normalizeBin, composeLocationString,
 } from './locationSystem.js';
 
 // Helper: a system with a custom-prefix drawer + auto bin (the default shape).
@@ -553,5 +549,39 @@ describe('normalize must not steal records from another system', () => {
     const lc = lcSystem('LC', { ident: 'LC', binStart: 1 });
     const records = [{ id: 'x', location: 'LC-7' }, { id: 'y', location: '8' }];
     expect(analyzeSystem(records, lc, [lc]).matched.length).toBe(2);
+  });
+});
+
+describe('one canonical shape for a stored bin', () => {
+  it('numbers stay numbers; a non-numeric fixed label stays a string', () => {
+    expect(normalizeBin(140)).toBe(140);
+    expect(normalizeBin('140')).toBe(140);
+    expect(normalizeBin(' 10000 ')).toBe(10000);
+    expect(normalizeBin('SHELF')).toBe('SHELF');
+    expect(normalizeBin('')).toBe(null);
+    expect(normalizeBin(null)).toBe(null);
+  });
+
+  it('a fixed-bin system writes the SAME shape from import and from normalize', () => {
+    // These disagreed: the import wrote the config string "10000", the picker
+    // wrote the string too, and normalize wrote null (the parser never captures
+    // a fixed bin) — the same drawer in three shapes.
+    const [lc, di] = twoSystemShop();
+    di.levels.bin = { fixed: true, start: 1000, fixedVal: '10000', skip: [] };
+    di.levels.drawer = { on: false, levelType: 'Drawer', customTypeName: '', identFormat: 'letter', customIdent: '', options: [] };
+
+    const fromImport = routeProShopLocations(rows([['D-1', '10000']]), [lc, di]).assignments[0].location;
+    const fromNormalize = parseLocationString('10000', di);
+    expect(fromImport.bin).toBe(10000);
+    expect(fromNormalize.bin).toBe(10000);
+    expect(fromImport.bin).toBe(fromNormalize.bin);
+  });
+
+  it('the composed string is unchanged either way', () => {
+    const [, di] = twoSystemShop();
+    di.levels.bin = { fixed: true, start: 1000, fixedVal: '10000', skip: [] };
+    di.levels.drawer = { on: false, levelType: 'Drawer', customTypeName: '', identFormat: 'letter', customIdent: '', options: [] };
+    expect(composeLocationString({ system_id: di.id, bin: 10000 }, di)).toBe('10000');
+    expect(composeLocationString({ system_id: di.id, bin: '10000' }, di)).toBe('10000');
   });
 });

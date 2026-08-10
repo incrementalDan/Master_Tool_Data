@@ -352,6 +352,8 @@ Metadata stores **only IDs**, never the display string:
 "legacy_locations": []
 ```
 
+⚠️ **`bin` has ONE canonical shape — `normalizeBin`.** A fixed-bin system's `fixedVal` is a config **string**, so writing it straight through stored `"10000"` while every auto-increment system stored the number `10000`; and normalize stored **`null`** for a fixed bin, because the parser never captures one. Three write paths, three shapes for the same drawer. `normalizeBin(value)` is now applied at all of them (`routeProShopLocations`, `parseLocationString`, `LocationPicker`, and `buildMetadataTool` so a legacy string self-corrects on the record's next save): numeric → **number**, a non-numeric fixed label (`"SHELF"`) → string, blank → null. Adopting it changes nothing already stored — every comparison goes through `String()` — it just stops the drift.
+
 The metadata key `location` (object) maps to the internal field **`tool_location`** (to avoid clashing with the internal `location` **string**). `legacy_locations[]` holds prior free-text strings retired by normalization.
 
 ### `tool.location` (string) — derived, not stored
