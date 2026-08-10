@@ -66,10 +66,16 @@ export function levelOptions(system, levelKey) {
 export function findOption(system, levelKey, optionId) {
   return levelOptions(system, levelKey).find(o => o.id === optionId) || null;
 }
-// The display name for a level (its custom type name or the chosen levelType).
-export function levelTypeName(level) {
+// The display name for a level — what the shop CALLS it ("Drawer", "Cabinet",
+// "Shelf"). Purely a label: it never appears in the composed location string,
+// which is built from each level's IDENTIFIER instead.
+//
+// `fallback` is the level's own slot name (Zone / Station / Drawer), used when
+// the type is 'custom' but no name was typed. Falling back to the literal
+// "Custom" produced a heading in the Assign Location dialog that said nothing.
+export function levelTypeName(level, fallback = 'Custom') {
   if (!level) return '';
-  return level.levelType === 'custom' ? (level.customTypeName || 'Custom') : level.levelType;
+  return level.levelType === 'custom' ? (level.customTypeName || fallback) : level.levelType;
 }
 
 // ─── Composition ─────────────────────────────────────────────────────────────
