@@ -617,3 +617,27 @@ describe('an insert pairing has no location of its own', () => {
     expect(libraryLocationStatus([orphan], [s]).unassigned).toBe(1);
   });
 });
+
+describe('the status panel reflects reality, not whether normalize was run', () => {
+  // `normalized` marks the one-time migration. A shop whose locations all
+  // arrived via the ProShop import never sets it — and gating on it hid the one
+  // panel that says how many records are placed, so a library with 235 tools
+  // correctly filed looked completely unconnected.
+  it('reports placed records even when no system is marked normalized', () => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    expect(s.normalized).toBe(false);
+    const st = libraryLocationStatus(
+      [{ id: 'a', tool_location: { system_id: s.id, bin: 1 } }, { id: 'b' }],
+      [s],
+    );
+    expect(st).not.toBe(null);
+    expect(st.assigned).toBe(1);
+    expect(st.unassigned).toBe(1);
+    expect(st.total).toBe(2);       // assigned + unassigned always add up
+  });
+
+  it('still returns null for a shop with nothing placed and nothing normalized', () => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    expect(libraryLocationStatus([{ id: 'a' }], [s])).toBe(null);
+  });
+});

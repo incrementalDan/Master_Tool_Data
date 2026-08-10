@@ -409,7 +409,11 @@ function NormalizationStep({ sys, records, systems = null, dirty = false, onComm
       {phase === 'preview' && analysis && (
         <div>
           <div style={{ background: 'color-mix(in srgb, var(--green) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--green) 40%, transparent)', borderRadius: 7, padding: '10px 12px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--green)' }}>{matched} tool{matched === 1 ? '' : 's'} matched this system</span>
+            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--green)' }}>
+              {matched === 0
+                ? 'Nothing more to add — everything already has a location'
+                : `${matched} more record${matched === 1 ? '' : 's'} can be added to this system`}
+            </span>
             {/* null means "no counter" — but for two different reasons now, and
                 calling a duplicates-allowed system "fixed" would be untrue. */}
             {analysis.nextBin !== null
@@ -487,6 +491,10 @@ function SystemCard({ sys, records, systems = null, conflicts = [], dirty = fals
   const upd = (level, patch) => onUpdate({ ...sys, levels: { ...sys.levels, [level]: { ...sys.levels[level], ...patch } } });
   const updD = (key, val) => onUpdate({ ...sys, delimiters: { ...sys.delimiters, [key]: val } });
   const preview = buildPreview(sys);
+  // How many records live here RIGHT NOW. Without this the card said nothing
+  // about its own population, so a system holding 235 tools looked empty and the
+  // normalize box's "1 tool matched" read as the system's total.
+  const inSystem = (records || []).filter(r => r.tool_location?.system_id === sys.id).length;
 
   // Each system is one physical place, so its card needs a hard edge — a 2px
   // border (always 2px, only the COLOR changes, so opening one doesn't shift the
@@ -502,6 +510,7 @@ function SystemCard({ sys, records, systems = null, conflicts = [], dirty = fals
     }}>
       <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', cursor: 'pointer', background: open ? 'color-mix(in srgb, var(--blue) 12%, transparent)' : 'transparent' }} onClick={() => setOpen(o => !o)}>
         <EditableName value={sys.name} onChange={name => onUpdate({ ...sys, name })} />
+        {inSystem > 0 && <Badge color="g">{inSystem} in this system</Badge>}
         {sys.normalized && <Badge color="g">Normalized</Badge>}
         {sys.allowDuplicates && <Badge color="b">Dupes OK</Badge>}
         {hasOutputClash && <Badge color="o">⚠ Duplicate output</Badge>}

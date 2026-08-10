@@ -437,9 +437,14 @@ export function analyzeSystem(records, system, systems = null) {
 // unmatched location text" vs "no location at all". Only meaningful once at
 // least one system is normalized.
 export function libraryLocationStatus(records, systems) {
-  const normalized = (systems || []).filter(s => s.normalized);
-  if (normalized.length === 0) return null;
   const list = records || [];
+  // `normalized` marks that the user ran the one-time migration — it does NOT
+  // mean "this system has records". A shop whose locations all arrived via the
+  // ProShop import never sets it, and gating on it hid the ONE panel that says
+  // how many records are actually placed: the library looked unconnected while
+  // 235 tools sat correctly in a system.
+  const anyPlaced = list.some(r => r.tool_location?.system_id && findSystem(systems, r.tool_location.system_id));
+  if (!anyPlaced && !(systems || []).some(s => s.normalized)) return null;
   const assignedTools = [];
   const unassigned = [];
   for (const tool of list) {
