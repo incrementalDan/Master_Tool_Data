@@ -249,8 +249,18 @@ export function nextBin(system, usedBins = new Set()) {
   const skip = new Set((bin.skip || []).map(Number));
   const used = usedBins instanceof Set ? usedBins : new Set(usedBins);
   const start = Number(bin.start) || 1;
+  // ⚠️ Continue above the highest IN-RANGE bin, not the highest bin outright.
+  // An out-of-range outlier (a tool left on a sentinel like 10000 in a cabinet
+  // that ends at 253) would otherwise push every new tool to 10001 — worse than
+  // the hole-filling this replaced. analyzeBinSequence already knows which bins
+  // are outliers; nextBin has to ask it rather than trusting the raw maximum.
+  const { outliers } = analyzeBinSequence(system, used);
+  const outlierSet = new Set(outliers);
   let maxUsed = null;
-  for (const n of used) if (maxUsed == null || n > maxUsed) maxUsed = n;
+  for (const n of used) {
+    if (outlierSet.has(n)) continue;
+    if (maxUsed == null || n > maxUsed) maxUsed = n;
+  }
   let n = (maxUsed != null && maxUsed >= start) ? maxUsed + 1 : start;
   while (skip.has(n) || used.has(n)) n++;
   return n;

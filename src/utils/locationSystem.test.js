@@ -486,3 +486,27 @@ describe('analyzeSystem sees components too', () => {
     expect(matched[0].location.bin).toBe(212);
   });
 });
+
+describe('nextBin ignores out-of-range outliers', () => {
+  // Straight from a real run: the LC cabinet ends at 253, one tool sits on the
+  // drill-index sentinel 10000, and "Next available bin" read 10001 — so every
+  // new tool would have been filed above the sentinel.
+  it('continues above the highest IN-RANGE bin, not the outlier', () => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    const used = new Set();
+    for (let i = 1; i <= 253; i++) used.add(i);
+    used.add(10000);
+    expect(nextBin(s, used)).toBe(254);
+  });
+
+  it('a bin just past the end is still the next bin, not an outlier', () => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    expect(nextBin(s, new Set([1, 2, 3]))).toBe(4);
+  });
+
+  it('still skips a reserved number at the top of the in-range run', () => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    s.levels.bin.skip = [4];
+    expect(nextBin(s, new Set([1, 2, 3, 9999]))).toBe(5);
+  });
+});
