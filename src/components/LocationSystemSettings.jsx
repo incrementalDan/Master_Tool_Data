@@ -345,7 +345,7 @@ function proShopHint(mode, fixedVal) {
 }
 
 // ── Normalization step (real analysis against the live library) ─────────────
-function NormalizationStep({ sys, records, dirty = false, onCommit, onUpdate }) {
+function NormalizationStep({ sys, records, systems = null, dirty = false, onCommit, onUpdate }) {
   const [phase, setPhase] = useState(sys.normalized ? 'done' : 'idle'); // idle | preview | committing | done
   const [analysis, setAnalysis] = useState(null);
 
@@ -370,7 +370,7 @@ function NormalizationStep({ sys, records, dirty = false, onCommit, onUpdate }) 
   }
 
   function runAnalysis() {
-    setAnalysis(analyzeSystem(records, sys));
+    setAnalysis(analyzeSystem(records, sys, systems));
     setPhase('preview');
   }
   async function commit() {
@@ -472,7 +472,7 @@ function joinNames(arr) {
 }
 
 // ── System card ─────────────────────────────────────────────────────────────
-function SystemCard({ sys, records, conflicts = [], dirty = false, onUpdate, onDelete, onCommit, defaultOpen }) {
+function SystemCard({ sys, records, systems = null, conflicts = [], dirty = false, onUpdate, onDelete, onCommit, defaultOpen }) {
   const [open, setOpen] = useState(defaultOpen);
   const [confirmDel, setConfirmDel] = useState(false);
   const L = sys.levels; const D = sys.delimiters;
@@ -571,7 +571,7 @@ function SystemCard({ sys, records, conflicts = [], dirty = false, onUpdate, onD
             </div>
           </LevelBlock>
 
-          <NormalizationStep sys={sys} records={records} dirty={dirty} onCommit={onCommit} onUpdate={onUpdate} />
+          <NormalizationStep sys={sys} records={records} systems={systems} dirty={dirty} onCommit={onCommit} onUpdate={onUpdate} />
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
             {confirmDel ? (
@@ -985,6 +985,7 @@ export default function LocationSystemSettings({ configOverride = null, onConfig
           key={sys.id}
           sys={sys}
           records={records}
+          systems={systems}
           conflicts={systemConflicts.get(sys.id) || []}
           defaultOpen={i === 0}
           dirty={dirty}

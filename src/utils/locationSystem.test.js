@@ -510,3 +510,48 @@ describe('nextBin ignores out-of-range outliers', () => {
     expect(nextBin(s, new Set([1, 2, 3, 9999]))).toBe(5);
   });
 });
+
+describe('normalize must not steal records from another system', () => {
+  // Straight from the real library: 236 tools in an "LC" cabinet whose custom
+  // prefix is OPTIONAL when parsing, and 19 in a fixed-bin drill index that
+  // composes its location as the bare "10000". LC's lenient pattern parsed that
+  // as LC bin 10000, so Analyze offered to move all 19 out of the system they
+  // correctly belong to — and its "next available bin" read 10001.
+  const shop = () => {
+    const [lc, di] = twoSystemShop();
+    di.levels.bin = { fixed: true, start: 1000, fixedVal: '10000', skip: [] };
+    di.levels.drawer = { on: false, levelType: 'Drawer', customTypeName: '', identFormat: 'letter', customIdent: '', options: [] };
+    return [lc, di];
+  };
+  it('leaves records that already belong to another system alone', () => {
+    const [lc, di] = shop();
+    const records = [
+      { id: 'a1', tool_location: { system_id: lc.id, bin: 1 }, location: 'LC-1' },
+      // 19 drill-index records, composed as the bare sentinel
+      ...Array.from({ length: 19 }, (_, i) => ({
+        id: 'd' + i, tool_location: { system_id: di.id, bin: '10000' }, location: '10000',
+      })),
+    ];
+    const a = analyzeSystem(records, lc, [lc, di]);
+    expect(a.matched).toEqual([]);              // was 19 — every drill tool
+    expect(a.nextBin).toBe(2);                  // was 10001
+  });
+
+  it('an UNASSIGNED bare sentinel goes to the system whose rule claims it', () => {
+    const [lc, di] = shop();
+    const records = [
+      { id: 'a1', tool_location: { system_id: lc.id, bin: 1 }, location: 'LC-1' },
+      { id: 'new', location: '10000' },         // no structured location yet
+      { id: 'new2', location: '42' },
+    ];
+    // LC's any_unique rule must not swallow the sentinel — DI's trigger owns it.
+    expect(analyzeSystem(records, lc, [lc, di]).matched.map(m => m.tool.id)).toEqual(['new2']);
+    expect(analyzeSystem(records, di, [lc, di]).matched.map(m => m.tool.id)).toEqual(['new']);
+  });
+
+  it('with no rules configured it still assigns unassigned records', () => {
+    const lc = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    const records = [{ id: 'x', location: 'LC-7' }, { id: 'y', location: '8' }];
+    expect(analyzeSystem(records, lc, [lc]).matched.length).toBe(2);
+  });
+});
