@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   orphanMetadataRecords, orphanImpact,
   assemblyOohIssues, floorAssemblyOoh, oohIssuesByTool, isNotableOohDelta,
+  descriptionLocMismatches, geometryChainIssues,
 } from './libraryHealth.js';
 
 const rec = (id, over = {}) => ({
@@ -168,6 +169,62 @@ describe('isNotableOohDelta', () => {
   it('scales the threshold for a millimetre tool', () => {
     expect(isNotableOohDelta(0.05, 'millimeters')).toBe(false);
     expect(isNotableOohDelta(2.0, 'millimeters')).toBe(true);   // 0.079in
+  });
+});
+
+describe('descriptionLocMismatches', () => {
+  const t = (over) => tool('FTL-A', { tool_id: 'A-1', ...over });
+
+  // The whole reason this check exists: a length written into the wrong field.
+  it('catches a flute length that cannot belong to the tool', () => {
+    const out = descriptionLocMismatches([t({
+      description: '3/64 (.047) 5FL EM .071LOC P C6', flute_length: 1.9,
+    })]);
+    expect(out).toHaveLength(1);
+    expect(out[0].stated).toBeCloseTo(0.071, 6);
+    expect(out[0].stored).toBe(1.9);
+  });
+
+  // A naive \d+ pattern reads "3/16 LOC" as 16 and reports every fractional
+  // description in the library as a wild mismatch.
+  it('reads a fraction as a fraction, not as its denominator', () => {
+    expect(descriptionLocMismatches([t({ description: '1/16Ø Ball 3/16 LOC', flute_length: 0.1875 })])).toEqual([]);
+    expect(descriptionLocMismatches([t({ description: '3/8 EM 4FL 7/8 LOC', flute_length: 0.875 })])).toEqual([]);
+  });
+
+  it('accepts a decimal LOC written with no space', () => {
+    expect(descriptionLocMismatches([t({ description: '1/32 Ball 1/8LOC 4 fl', flute_length: 0.125 })])).toEqual([]);
+  });
+
+  it('stays quiet when the description states no LOC', () => {
+    expect(descriptionLocMismatches([t({ description: '3/8 Endmill', flute_length: 1.9 })])).toEqual([]);
+  });
+
+  // A pairing's description names the assembled unit; flute_length is the
+  // insert's. They differ by design, so reporting them is a row nobody can clear.
+  it('skips an insert-style pairing', () => {
+    const out = descriptionLocMismatches([t({
+      description: '3/4Ø High feed indexable body 2.0 LOC', flute_length: 0.03,
+      pairing: { family: 'generic_insert' },
+    })]);
+    expect(out).toEqual([]);
+  });
+
+  it('tolerates rounding', () => {
+    expect(descriptionLocMismatches([t({ description: '.75 LOC EM', flute_length: 0.752 })])).toEqual([]);
+  });
+});
+
+describe('geometryChainIssues', () => {
+  it('collects the tools a validator reports on', () => {
+    const validate = (x) => (x.tool_id === 'BAD' ? [{ message: 'shoulder > MIN OOH' }] : []);
+    const out = geometryChainIssues([tool('FTL-A', { tool_id: 'BAD' }), tool('FTL-B', { tool_id: 'OK' })], validate);
+    expect(out).toHaveLength(1);
+    expect(out[0].messages).toEqual(['shoulder > MIN OOH']);
+  });
+
+  it('is empty on a clean library', () => {
+    expect(geometryChainIssues([tool('FTL-A')], () => [])).toEqual([]);
   });
 });
 

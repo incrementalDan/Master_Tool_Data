@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
-import { generateMachineNumbers, generateId, duplicateIdClusters, findMachineNumbersToFix } from '../schema/toolSchema.js';
+import { generateMachineNumbers, generateId, duplicateIdClusters, findMachineNumbersToFix, validateGeometry } from '../schema/toolSchema.js';
 import { isExcludedFrom } from '../utils/idSystems.js';
 import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../utils/toolIdSystem.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
-import { isNotableOohDelta } from '../utils/libraryHealth.js';
+import { isNotableOohDelta, geometryChainIssues, descriptionLocMismatches } from '../utils/libraryHealth.js';
 import { ASM_MODES, previewAsmNumber } from '../utils/assemblyIdSystem.js';
 import { useDragReorder } from './useDragReorder.js';
 import { MACHINE_COLOR_PALETTE, machineColor, nextMachineColor } from '../utils/machineColors.js';
@@ -1959,6 +1959,12 @@ function LibraryHealthCard({ dirty }) {
     finally { setOohBusy(false); }
   };
 
+  const [geom, setGeom] = useState(null);
+  const runGeom = () => setGeom({
+    chain: geometryChainIssues(tools, validateGeometry),
+    loc: descriptionLocMismatches(tools),
+  });
+
   const fmt = (n, unit) => Number(n).toFixed(unit === 'millimeters' ? 3 : 4).replace(/\.?0+$/, '');
   // Unit-derived, not a bare inch number — see isNotableOohDelta.
   const notable = (d, unit) => isNotableOohDelta(d, unit);
@@ -2144,6 +2150,66 @@ function LibraryHealthCard({ dirty }) {
             ✓ Raised {oohDone.assemblyCount} assembl{oohDone.assemblyCount === 1 ? 'y' : 'ies'} across {oohDone.toolCount} tool
             {oohDone.toolCount === 1 ? '' : 's'}
             {oohDone.metadataOnlyCount > 0 && <> ({oohDone.metadataOnlyCount} metadata-only)</>}.
+          </div>
+        )}
+      </div>
+
+      {/* ── Geometry review ───────────────────────────────────────────────────
+          These warnings already existed — but only inside ONE tool's Geometry
+          section, so finding the few tools that have them meant opening all of
+          them. Read-only on purpose: "shoulder 0.95 > MIN OOH 0.75" doesn't say
+          which number is wrong, and guessing writes a real dimension to Fusion. */}
+      <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 14 }}>
+        <div className="text-sm" style={{ fontWeight: 600, marginBottom: 4 }}>Geometry review</div>
+        <p className="text-sub text-sm mb-16">
+          Every tool whose dimensions contradict each other, in one list instead of
+          one tool at a time. Nothing is changed here — which number is wrong is a
+          judgement call, so each row links to the tool.
+        </p>
+
+        <button className="btn btn-secondary btn-sm" onClick={runGeom} disabled={tools.length === 0}>
+          Review geometry across the library
+        </button>
+
+        {geom && geom.chain.length === 0 && geom.loc.length === 0 && (
+          <div className="text-sm mt-12" style={{ color: 'var(--green, #4ade80)' }}>
+            ✓ No contradictory dimensions found.
+          </div>
+        )}
+
+        {geom && (geom.chain.length > 0 || geom.loc.length > 0) && (
+          <div className="mt-12" style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflowY: 'auto' }}>
+            {geom.chain.map(g => (
+              <div key={`c-${g.toolKey}`} style={{
+                padding: '8px 10px', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)', borderLeft: '3px solid var(--orange)',
+                background: 'var(--surface-2)',
+              }}>
+                <div className="text-sm" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                  <a href={`#/tool/${g.toolKey}`} className="font-mono" style={{ color: 'var(--blue)' }}>{g.tool_id || g.toolKey}</a>
+                  <span>{g.description}</span>
+                </div>
+                {g.messages.map((m, n) => (
+                  <div key={n} className="text-xs mt-4" style={{ color: 'var(--orange)' }}>{m}</div>
+                ))}
+              </div>
+            ))}
+            {geom.loc.map(g => (
+              <div key={`l-${g.toolKey}`} style={{
+                padding: '8px 10px', border: '1px solid var(--border)',
+                borderRadius: 'var(--radius-sm)', borderLeft: '3px solid var(--text-sub)',
+                background: 'var(--surface-2)',
+              }}>
+                <div className="text-sm" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                  <a href={`#/tool/${g.toolKey}`} className="font-mono" style={{ color: 'var(--blue)' }}>{g.tool_id || g.toolKey}</a>
+                  <span>{g.description}</span>
+                </div>
+                <div className="text-xs text-sub mt-4">
+                  The description says <strong>{fmt(g.stated, g.unit)}</strong> LOC but the flute
+                  length is <strong>{fmt(g.stored, g.unit)}</strong> — one of the two is wrong.
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

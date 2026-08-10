@@ -191,6 +191,69 @@ export function isNotableOohDelta(delta, unit) {
   return Math.abs(delta) >= convertLength(OOH_DELTA_NOTABLE_IN, 'inches', unit);
 }
 
+// ─── 3. Geometry review, library-wide ───────────────────────────────────────
+//
+// `validateGeometry` has always produced these warnings, but the only place they
+// render is inside ONE tool's Geometry section — so finding the handful of tools
+// that have them means opening all of them. Same shape of gap as the two above:
+// the check existed, the surface didn't.
+//
+// No fix button, deliberately. "Shoulder 0.95 > MIN OOH 0.75" does not say which
+// of the two numbers is wrong, and guessing would write a real dimension into
+// Fusion. This lists them and links out; the correction is a human call.
+export function geometryChainIssues(tools, validate) {
+  const out = [];
+  for (const t of (tools || [])) {
+    const warnings = validate(t) || [];
+    if (warnings.length) {
+      out.push({
+        toolKey: t.tracking_id || t.id,
+        tool_id: t.tool_id || '',
+        description: t.description || '',
+        messages: warnings.map(w => w.message),
+      });
+    }
+  }
+  return out;
+}
+
+// A LOC stated in the description that disagrees with the stored flute length.
+// A weak signal on its own, but it is the ONLY check that catches a length
+// written into the wrong field — on the real library it found a 3/64" end mill
+// carrying a 1.9" flute length (a 40:1 ratio, physically impossible) whose own
+// description says .071 LOC. Nothing else in the app looks at that.
+//
+// ⚠️ Fractions are the whole difficulty: "3/16 LOC" must not parse as 16, and a
+// naive \d+ pattern reads every fraction as a wild mismatch. Handles both forms
+// and stays quiet unless the gap is real (>12%, floored so tiny tools don't spam).
+const LOC_RE = /(?:(\d+)\s*\/\s*(\d+)|(\d*\.?\d+))\s*"?\s*LOC/i;
+export function descriptionLocMismatches(tools) {
+  const out = [];
+  for (const t of (tools || [])) {
+    const fl = t?.flute_length;
+    if (fl == null || !(fl > 0)) continue;
+    // A pairing's description names the assembled unit while flute_length is the
+    // insert's — they legitimately differ, so don't report them.
+    if (t.pairing) continue;
+    const m = LOC_RE.exec(t.description || '');
+    if (!m) continue;
+    const said = m[1] ? Number(m[1]) / Number(m[2]) : Number(m[3]);
+    if (!(said > 0)) continue;
+    const delta = Math.abs(said - fl);
+    if (delta <= Math.max(0.015, 0.12 * said)) continue;
+    out.push({
+      toolKey: t.tracking_id || t.id,
+      tool_id: t.tool_id || '',
+      description: t.description || '',
+      unit: t.unit,
+      stated: said,
+      stored: fl,
+      delta: Math.round(delta * 1e6) / 1e6,
+    });
+  }
+  return out.sort((a, b) => b.delta - a.delta);
+}
+
 // One-line summary for the preview, in the tool's own unit.
 export function describeOohIssue(i) {
   const u = unitAbbr(i.unit);
