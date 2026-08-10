@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  newLocationSystem, newLevelOption, systemOutputSignature, systemStructureSignature, findSystemConflicts, parseLocationString, analyzeSystem, nextBin, newImportRule, routeProShopLocations, parseTriggerList, pruneAcknowledgedGaps, libraryLocationIssues, analyzeBinSequence, findBinGaps, usedBinsForSystem, normalizeBin, composeLocationString,
+  newLocationSystem, newLevelOption, systemOutputSignature, systemStructureSignature, findSystemConflicts, parseLocationString, analyzeSystem, nextBin, newImportRule, routeProShopLocations, parseTriggerList, pruneAcknowledgedGaps, libraryLocationIssues, analyzeBinSequence, findBinGaps, usedBinsForSystem, normalizeBin, composeLocationString, libraryLocationStatus,
 } from './locationSystem.js';
 
 // Helper: a system with a custom-prefix drawer + auto bin (the default shape).
@@ -583,5 +583,37 @@ describe('one canonical shape for a stored bin', () => {
     di.levels.drawer = { on: false, levelType: 'Drawer', customTypeName: '', identFormat: 'letter', customIdent: '', options: [] };
     expect(composeLocationString({ system_id: di.id, bin: 10000 }, di)).toBe('10000');
     expect(composeLocationString({ system_id: di.id, bin: '10000' }, di)).toBe('10000');
+  });
+});
+
+describe('an insert pairing has no location of its own', () => {
+  // Real library: 8 of the 21 "unassigned" tools were face mills / turning tools
+  // whose two halves ARE located (LC-212, LC-213, …). The pairing itself is not
+  // a thing in a drawer, so demanding a location for it is a row that can never
+  // be cleared — and it made every count on the screen look wrong.
+  const sys = () => lcSystem('LC', { ident: 'LC', binStart: 1 });
+  const paired = { id: 'p1', tool_id: 'I-224/ G-223', pairing: { family: 'milling_insert', holder_component_id: 'c1', insert_component_id: 'c2' } };
+  const plain = { id: 't1', tool_id: 'A-9' };
+
+  it('is not counted as unassigned', () => {
+    const s = sys();
+    s.normalized = true;
+    const st = libraryLocationStatus([paired, plain], [s]);
+    expect(st.total).toBe(1);          // the pairing isn't in the population at all
+    expect(st.unassigned).toBe(1);     // only the real tool
+    expect(st.unassignedTools.map(t => t.id)).toEqual(['t1']);
+  });
+
+  it('is not offered for normalization', () => {
+    const withText = { ...paired, location: 'LC-77' };
+    const a = analyzeSystem([withText], sys(), [sys()]);
+    expect(a.matched).toEqual([]);
+    expect(a.noLocation).toBe(0);
+  });
+
+  it('a pairing with NO components linked still counts — nothing holds its location', () => {
+    const orphan = { id: 'p2', tool_id: 'A-1/B-2', pairing: { family: 'generic_insert', holder_component_id: null, insert_component_id: null } };
+    const s = sys(); s.normalized = true;
+    expect(libraryLocationStatus([orphan], [s]).unassigned).toBe(1);
   });
 });

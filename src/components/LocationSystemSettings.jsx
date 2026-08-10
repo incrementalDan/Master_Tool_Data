@@ -112,9 +112,9 @@ function EditableName({ value, onChange }) {
 // One line describing what an inactive level is configured as, so switching it
 // off hides the controls without hiding the fact that something is set up in
 // there ("Building · Number · 3 added").
-function levelSummary(level) {
+function levelSummary(level, slotName = 'Custom') {
   if (!level) return '';
-  const parts = [levelTypeName(level)];
+  const parts = [levelTypeName(level, slotName)];
   if (level.identFormat === 'custom') parts.push(level.customIdent ? `"${level.customIdent}"` : 'custom label');
   else parts.push(level.identFormat === 'letter' ? 'Letter' : 'Number');
   const n = (level.options || []).length;
@@ -194,17 +194,22 @@ function OptionPills({ items, onAdd, onRemove, placeholder }) {
 }
 
 // ── Level type + identifier fields ──────────────────────────────────────────
-function LevelFields({ level, types, updateLevel }) {
-  const typeName = levelTypeName(level);
+function LevelFields({ level, types, updateLevel, slotName = 'Custom' }) {
+  const typeName = levelTypeName(level, slotName);
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
       <div>
-        <Lbl>Level type</Lbl>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Lbl>Level type</Lbl>
+          <div style={{ marginBottom: 5 }}>
+            <InfoTip text="What you CALL this level — Drawer, Cabinet, Shelf. It's only a label: it names the level in the Assign Location dialog and never appears in the location itself. The Identifier next to it is what actually shows up in the ID (e.g. LC → LC-140)." />
+          </div>
+        </div>
         <select className="field-input" value={level.levelType} onChange={e => updateLevel({ levelType: e.target.value })}>
           {types.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
         {level.levelType === 'custom' && (
-          <input className="field-input" style={{ marginTop: 6 }} value={level.customTypeName} onChange={e => updateLevel({ customTypeName: e.target.value })} placeholder="Type name" />
+          <input className="field-input" style={{ marginTop: 6 }} value={level.customTypeName} onChange={e => updateLevel({ customTypeName: e.target.value })} placeholder={`e.g. ${slotName}`} />
         )}
       </div>
       <div>
@@ -538,18 +543,18 @@ function SystemCard({ sys, records, systems = null, conflicts = [], dirty = fals
             Configure levels from zone (broadest) down to bin. Delimiter controls appear between each level, grayed out when the adjacent level is inactive.
           </div>
 
-          <LevelBlock title="Zone" optional active={L.zone.on} onToggle={v => upd('zone', { on: v })} summary={levelSummary(L.zone)}>
-            <LevelFields level={L.zone} types={ZONE_TYPES} updateLevel={p => upd('zone', p)} />
+          <LevelBlock title="Zone" optional active={L.zone.on} onToggle={v => upd('zone', { on: v })} summary={levelSummary(L.zone, 'Zone')}>
+            <LevelFields level={L.zone} types={ZONE_TYPES} updateLevel={p => upd('zone', p)} slotName="Zone" />
           </LevelBlock>
           <DelimRow label="zone → station" value={D.zs} onChange={v => updD('zs', v)} active={L.zone.on && L.station.on} />
 
-          <LevelBlock title="Station" optional active={L.station.on} onToggle={v => upd('station', { on: v })} summary={levelSummary(L.station)}>
-            <LevelFields level={L.station} types={STATION_TYPES} updateLevel={p => upd('station', p)} />
+          <LevelBlock title="Station" optional active={L.station.on} onToggle={v => upd('station', { on: v })} summary={levelSummary(L.station, 'Station')}>
+            <LevelFields level={L.station} types={STATION_TYPES} updateLevel={p => upd('station', p)} slotName="Station" />
           </LevelBlock>
           <DelimRow label="station → drawer" value={D.sd} onChange={v => updD('sd', v)} active={L.station.on && L.drawer.on} />
 
-          <LevelBlock title="Drawer" optional active={L.drawer.on} onToggle={v => upd('drawer', { on: v })} summary={levelSummary(L.drawer)}>
-            <LevelFields level={L.drawer} types={DRAWER_TYPES} updateLevel={p => upd('drawer', p)} />
+          <LevelBlock title="Drawer" optional active={L.drawer.on} onToggle={v => upd('drawer', { on: v })} summary={levelSummary(L.drawer, 'Drawer')}>
+            <LevelFields level={L.drawer} types={DRAWER_TYPES} updateLevel={p => upd('drawer', p)} slotName="Drawer" />
           </LevelBlock>
           <DelimRow label="drawer → bin" value={D.db} onChange={v => updD('db', v)} active={L.drawer.on} />
 

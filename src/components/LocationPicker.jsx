@@ -119,7 +119,9 @@ export default function LocationPicker({ tool, record, onAssign }) {
   function levelRow(levelKey) {
     const level = system.levels[levelKey];
     if (!level.on) return null;
-    const typeName = levelTypeName(level);
+    // Fall back to the slot's own name so an unnamed custom level reads
+    // "DRAWER" here rather than a meaningless "CUSTOM".
+    const typeName = levelTypeName(level, levelKey.charAt(0).toUpperCase() + levelKey.slice(1));
     const opts = levelOptions(system, levelKey);
     return (
       <div key={levelKey} style={{ background: 'color-mix(in srgb, var(--blue) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--blue) 35%, transparent)', borderRadius: 6, padding: '10px 12px' }}>

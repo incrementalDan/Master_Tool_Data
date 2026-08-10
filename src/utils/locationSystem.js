@@ -66,10 +66,16 @@ export function levelOptions(system, levelKey) {
 export function findOption(system, levelKey, optionId) {
   return levelOptions(system, levelKey).find(o => o.id === optionId) || null;
 }
-// The display name for a level (its custom type name or the chosen levelType).
-export function levelTypeName(level) {
+// The display name for a level — what the shop CALLS it ("Drawer", "Cabinet",
+// "Shelf"). Purely a label: it never appears in the composed location string,
+// which is built from each level's IDENTIFIER instead.
+//
+// `fallback` is the level's own slot name (Zone / Station / Drawer), used when
+// the type is 'custom' but no name was typed. Falling back to the literal
+// "Custom" produced a heading in the Assign Location dialog that said nothing.
+export function levelTypeName(level, fallback = 'Custom') {
   if (!level) return '';
-  return level.levelType === 'custom' ? (level.customTypeName || 'Custom') : level.levelType;
+  return level.levelType === 'custom' ? (level.customTypeName || fallback) : level.levelType;
 }
 
 // ─── Composition ─────────────────────────────────────────────────────────────
@@ -279,6 +285,19 @@ export function usedBinsForSystem(records, systemId) {
   return used;
 }
 
+// ⚠️ An insert tool's location lives on its COMPONENTS, not on the tool.
+// A pairing (a face mill = body + inserts) is not a thing in a drawer — its two
+// halves are, each with its own ProShop number and its own bin. So a paired tool
+// with its components linked must NOT be counted as "needs a location": it has
+// none by design, and reporting it inflates every count on the Location screen
+// and makes the whole thing read as broken. A pairing whose components are NOT
+// linked yet still counts — nothing is holding its location.
+export function holdsOwnLocation(record) {
+  const p = record?.pairing;
+  if (!p) return true;
+  return !(p.holder_component_id || p.insert_component_id);
+}
+
 // ─── Records: tools AND components ───────────────────────────────────────────
 // ⚠️ Everything below operates on RECORDS, not tools. A component (an insert
 // tool's holder body / insert) is a real physical object in a real drawer, so it
@@ -379,6 +398,8 @@ export function analyzeSystem(records, system, systems = null) {
   const cascade = systems && hasConfiguredImportRules(systems);
 
   for (const tool of list) {
+    // An insert pairing's location is held by its components — see holdsOwnLocation.
+    if (!holdsOwnLocation(tool)) continue;
     const current = tool.tool_location?.system_id;
     if (current === system.id) continue;   // already in this system
     // ⚠️ A record already filed in ANOTHER system is settled — normalize assigns
@@ -422,6 +443,9 @@ export function libraryLocationStatus(records, systems) {
   const assignedTools = [];
   const unassigned = [];
   for (const tool of list) {
+    // A paired tool has no location of its own — its components carry it, and
+    // listing it as unassigned is a row the user can never clear.
+    if (!holdsOwnLocation(tool)) continue;
     const sysId = tool.tool_location?.system_id;
     if (sysId && findSystem(systems, sysId)) assignedTools.push(tool);
     else unassigned.push(tool);
@@ -429,7 +453,10 @@ export function libraryLocationStatus(records, systems) {
   const withLocation = unassigned.filter(t => (t.location || '').trim());
   const withoutLocation = unassigned.filter(t => !(t.location || '').trim());
   return {
-    total: list.length,
+    // The POPULATION this panel is about — records that can hold a location.
+    // Counting the excluded pairings here would leave assigned + unassigned
+    // failing to add up to the total shown right next to them.
+    total: assignedTools.length + unassigned.length,
     assigned: assignedTools.length,
     unassigned: unassigned.length,
     withLocation: withLocation.length,
