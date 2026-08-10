@@ -24,6 +24,9 @@ import { holderShortName } from '../utils/holderNaming.js';
 import { toolsUsingHolder, assemblyUsesHolder } from '../schema/holderResolve.js';
 import { segmentsMatch } from '../schema/holderIdentity.js';
 import { defaultToolLibraryId, machineNumberArgs } from './appState.js';
+import {
+  orphanMetadataRecords, orphanImpact, assemblyOohIssues, oohIssuesByTool, floorAssemblyOoh,
+} from '../utils/libraryHealth.js';
 
 // ─── Fusion field patchers ───────────────────────────────────────────────────
 // One entry per field that can be pushed to Fusion on its own, used by
@@ -1544,5 +1547,102 @@ export function createLibraryOps(ctx) {
     }
   };
 
-  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary, restampHolderTools, linkToolsToHolders, pushFieldToFusion, relinkPresetMaterials, pushPresetFieldToFusion };
+  // ─── Library health: orphan metadata ──────────────────────────────────────
+  // A tool deleted directly in Fusion leaves its metadata record behind, and the
+  // orphan-ghost guard (correctly) refuses to build it — so it is invisible in
+  // the app while still holding a machine number and a tool_id. This is the only
+  // way to see one, and the only way to remove it.
+  //
+  // ⚠️ Reads the STORED records, never toolsRef. An orphan is BY DEFINITION
+  // absent from the in-memory tools, so a detector fed toolsRef can only ever
+  // report nothing. Same reasoning as relinkPresetMaterials.
+  const findOrphanMetadata = async () => {
+    if (!googleRef.current) throw new Error('Connect Google Drive to check metadata records');
+    const metaList = await toolStore.loadAll();
+    const orphans = orphanMetadataRecords(metaList, toolsRef.current);
+    const { start } = machineNumberArgs(shopSettingsRef.current);
+    return { orphans, impact: orphanImpact(orphans, toolsRef.current, { machineStart: start }) };
+  };
+
+  // Metadata-only, record-scoped deletion — these records have no Fusion entry
+  // by definition, so there is nothing to write to the library. Re-checks that
+  // each id is still an orphan immediately before deleting, so a record that was
+  // adopted back (re-created in Fusion, or marked no_fusion_link) since the
+  // preview can never be removed out from under a live tool.
+  const deleteOrphanMetadata = async (ids) => {
+    if (!googleRef.current) throw new Error('Connect Google Drive to delete metadata records');
+    const wanted = new Set(ids || []);
+    if (!wanted.size) return { deleted: 0, skipped: 0 };
+
+    const metaList = await toolStore.loadAll();
+    const stillOrphan = new Set(orphanMetadataRecords(metaList, toolsRef.current).map(o => o.id));
+    const toDelete = [...wanted].filter(id => stillOrphan.has(id));
+
+    for (const id of toDelete) await toolStore.deleteById(id);
+    return { deleted: toDelete.length, skipped: wanted.size - toDelete.length };
+  };
+
+  // ─── Library health: assemblies below the tool's MIN OOH floor ────────────
+  // MIN OOH arrives from ProShop, normalize only floors UNTRACKED tools, and
+  // validateGeometry never looked at assembly OOH — so a fully-tracked library
+  // can sit in a state its own rules forbid with nothing on screen to say so.
+  //
+  // ⚠️ This writes real geometry. `ooh` is `geometry.LB` in Fusion and it feeds
+  // `geometry.assemblyGaugeLength`, so raising it MOVES THE TOOL in every job
+  // that reloads the library. Hence per-row selection in the UI and a preview
+  // that leads with the delta, not the count: the corrections run from 0.001" to
+  // over a third of an inch on the real library, and those are not the same
+  // decision.
+  const findOohFloorIssues = () => {
+    const issues = assemblyOohIssues(toolsRef.current);
+    return { issues, toolCount: oohIssuesByTool(issues).size };
+  };
+
+  // `toolKeys` restricts the write to the user's selection; omit for all.
+  // Fusion-linked tools go through writeToolsToFusion (TOOL-scoped: the whole
+  // entry legitimately changes — LB, the body-length expression and the assembly
+  // gauge all move together, which is exactly what splitToFusionInstances
+  // rebuilds). No-Fusion tools are metadata-only, so they are partitioned out
+  // rather than being pushed at a library that has no entry for them.
+  const fixOohFloors = async ({ dryRun = false, toolKeys = null } = {}) => {
+    const wanted = toolKeys ? new Set(toolKeys) : null;
+    const candidates = (toolsRef.current || []).filter(t => {
+      const key = t.tracking_id || t.id;
+      return !wanted || wanted.has(key);
+    });
+
+    const fixed = [];
+    for (const t of candidates) {
+      const next = floorAssemblyOoh(t);
+      if (next !== t) fixed.push(next);          // identity = nothing moved
+    }
+    const linked = fixed.filter(t => t.no_fusion_link !== true);
+    const unlinked = fixed.filter(t => t.no_fusion_link === true);
+    const assemblyCount = assemblyOohIssues(candidates).length;
+
+    const summary = {
+      toolCount: fixed.length, assemblyCount,
+      fusionCount: linked.length, metadataOnlyCount: unlinked.length,
+    };
+    if (dryRun || !fixed.length) return { ...summary, wrote: false };
+
+    dispatch({ type: 'SAVE_START' });
+    try {
+      if (linked.length) await writeToolsToFusion(linked);
+      if (unlinked.length) {
+        if (!googleRef.current) throw new Error('Connect Google Drive to save metadata-only tools');
+        await toolStore.upsertMany(unlinked.map(t => buildMetadataTool(t)));
+        for (const t of unlinked) dispatch({ type: 'UPDATE_TOOL', tool: t });
+      }
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify(`Raised ${assemblyCount} assembl${assemblyCount === 1 ? 'y' : 'ies'} to the MIN OOH floor`, 'success');
+      return { ...summary, wrote: true };
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Could not apply the floor: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  };
+
+  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary, restampHolderTools, linkToolsToHolders, pushFieldToFusion, relinkPresetMaterials, pushPresetFieldToFusion, findOrphanMetadata, deleteOrphanMetadata, findOohFloorIssues, fixOohFloors };
 }
