@@ -1,0 +1,822 @@
+{
+  "version": 1,
+  "entities": [
+    {
+      "id": "e87e1de5-1258-4e3e-aeba-96cf27c6aa81",
+      "name": "Accupro",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 0
+    },
+    {
+      "id": "26b7bd59-9d98-47b2-aeb8-15d36f584595",
+      "name": "ALMCO",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "ALM1",
+      "order": 2
+    },
+    {
+      "id": "35171d20-325b-4b6a-bc47-d95d5b3b6064",
+      "name": "B&B Dynamic Machining",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "BBD1",
+      "order": 3
+    },
+    {
+      "id": "a59ae08a-0a11-4a41-8dcb-9a918e771cb9",
+      "name": "Boedeker Plastics, Inc.",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "BOE1",
+      "order": 4
+    },
+    {
+      "id": "f122d4d1-c260-40ac-8c4f-99fb0acec8b9",
+      "name": "Butler Bros Supply Division",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "BUT1",
+      "order": 5
+    },
+    {
+      "id": "37561427-5be8-450c-afd1-fc01e557afe0",
+      "name": "Camden Tool Inc",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "CAM1",
+      "order": 6,
+      "aliases": [
+        "Camden"
+      ]
+    },
+    {
+      "id": "eade2563-5c50-4a45-9707-bf86567c2bba",
+      "name": "Castle Metals",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "CAS1",
+      "order": 7
+    },
+    {
+      "id": "41e7ccf9-51c9-442c-be02-fb9e9cb14476",
+      "name": "Cleveland",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 8
+    },
+    {
+      "id": "911042eb-663b-477e-bde2-b3df5bd3a0ca",
+      "name": "CMW Tech",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "CMW1",
+      "order": 9
+    },
+    {
+      "id": "e770f7f3-1d18-451c-82b3-6f03e45d86a3",
+      "name": "Copper and Brass Sales",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "COP1",
+      "order": 10
+    },
+    {
+      "id": "b459f5ea-a44e-4aa9-85fc-066194516a5c",
+      "name": "Emuge",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 11
+    },
+    {
+      "id": "041c82c4-ba43-49ec-bc62-ef137932efdb",
+      "name": "Evans Heat Treating",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "EVA1",
+      "order": 12
+    },
+    {
+      "id": "9dd8924e-706b-4bad-9aa5-aca1e07e2b2c",
+      "name": "Fastenal",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": true,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 13
+    },
+    {
+      "id": "fd90ca12-3305-4bbc-923c-ebac3a24291f",
+      "name": "Finishing Innovations LLC",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "FIN1",
+      "order": 14
+    },
+    {
+      "id": "3ccdb1b1-678a-4a57-ba1f-8f643406dd4e",
+      "name": "Fraisa USA",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": "https://webshop.fraisa.com/US/en/cylindrical/prd{edp}",
+      "vendor_num_url_pattern": null,
+      "proshop_id": "FRA1",
+      "order": 15,
+      "aliases": [
+        "Fraisa",
+        "Fraisa Tool"
+      ]
+    },
+    {
+      "id": "646c0303-fc22-45ec-9cb7-8fb3cfb37421",
+      "name": "GARR Tool",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": "https://www.garrtool.com/product-details/?EDP={edp}",
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 17,
+      "aliases": [
+        "GARR"
+      ]
+    },
+    {
+      "id": "46bfe240-0537-43d4-a061-e44e24988889",
+      "name": "Grainger",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": true,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 18
+    },
+    {
+      "id": "bffe9a3c-0fdc-41ce-b899-3247468e5fdb",
+      "name": "Guhring",
+      "is_manufacturer": true,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 19
+    },
+    {
+      "id": "f80ff76d-f9e0-408c-8cd0-0b6efb78146a",
+      "name": "Haas Automation",
+      "is_manufacturer": true,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": "https://www.haastooling.com/p/{edp}",
+      "vendor_num_url_pattern": "https://www.haastooling.com/p/{vendor_num}",
+      "proshop_id": "HAA1",
+      "order": 20,
+      "aliases": [
+        "Haas",
+        "Haas Tool"
+      ],
+      "material_code_system": "vdi_3323"
+    },
+    {
+      "id": "eea5d7bb-f0d4-4b98-a81f-4184fc13d331",
+      "name": "Hadco Metal Trading",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "HAD2",
+      "order": 21
+    },
+    {
+      "id": "4b22a082-12ec-4c34-a459-364a4ded099b",
+      "name": "HAIMER",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 22
+    },
+    {
+      "id": "9426a9e8-b24d-47d7-a858-4161609ed076",
+      "name": "Hard Chrome Specialists, Inc.",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "HAR1",
+      "order": 23
+    },
+    {
+      "id": "65ba8790-159e-4a47-923a-b1d5c0d4e975",
+      "name": "Harvey Tool",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": "https://www.harveytool.com/products/tool-details-{edp_lower}",
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 24,
+      "aliases": [
+        "Harvey",
+        "Harvy"
+      ]
+    },
+    {
+      "id": "671477d4-42e4-4819-85a7-8385709fa0b1",
+      "name": "Helical Solutions",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": "https://www.helicaltool.com/products/tool-details-{edp}",
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 25,
+      "aliases": [
+        "Helical"
+      ]
+    },
+    {
+      "id": "af0cf94c-823a-455a-ab82-cc76aa3ed591",
+      "name": "Hertel",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 26
+    },
+    {
+      "id": "5f1efe3a-2db3-4fe7-ba8e-b01b1bd784e2",
+      "name": "Hillock Anodizing",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "HIL1",
+      "order": 27
+    },
+    {
+      "id": "08318e31-4503-4595-a8b4-d03517ac9b26",
+      "name": "Industraplate",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "IND1",
+      "order": 28
+    },
+    {
+      "id": "fc0c956a-e048-4e54-a63c-0b53655aac25",
+      "name": "Ingersoll Cutting Tools",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 29
+    },
+    {
+      "id": "73f910bb-4e0d-42f5-834e-74327b343dde",
+      "name": "Internal Tool",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 30
+    },
+    {
+      "id": "c052c5ea-2387-485d-8d61-b27a58828d97",
+      "name": "Iscar",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 31
+    },
+    {
+      "id": "1197b575-b93b-4a32-86b4-e69c62c41df7",
+      "name": "Jones Kinden",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "JON1",
+      "order": 32
+    },
+    {
+      "id": "41467419-26b4-49b6-ad7d-c14821393ef2",
+      "name": "K&L Plating Company",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "KLP1",
+      "order": 33
+    },
+    {
+      "id": "223214b3-ef8f-44a9-8c7a-8c81f2944afc",
+      "name": "Kennametal",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 34,
+      "material_code_system": "kennametal"
+    },
+    {
+      "id": "f50b96e8-500a-404c-811c-7256d31b3de8",
+      "name": "Keo",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 35
+    },
+    {
+      "id": "43c927d3-c449-471b-94ee-8a299ff91eca",
+      "name": "Lakeshore Carbide",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "LAK1",
+      "order": 36
+    },
+    {
+      "id": "ff306ea1-749f-435d-8788-b582bb1fcff1",
+      "name": "Laser Source",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "LAS1",
+      "order": 37
+    },
+    {
+      "id": "28682d7b-da72-4073-9240-c06669305adc",
+      "name": "Liberty Manufacturing",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "LIB2",
+      "order": 38
+    },
+    {
+      "id": "8901c82d-4d8e-408a-8dca-135703dcdf81",
+      "name": "Liberty Tool Co",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "LIB1",
+      "order": 39
+    },
+    {
+      "id": "856b9fcd-0bc7-4391-9b25-b6bad2f52114",
+      "name": "LMT",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 40
+    },
+    {
+      "id": "11c1570c-e883-4426-8298-be6950d6dd12",
+      "name": "M.A. Ford",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 41
+    },
+    {
+      "id": "2b926fa5-8ba0-4159-b160-5246758955b2",
+      "name": "McMaster-Carr",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": true,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": "https://www.mcmaster.com/{vendor_num}/",
+      "proshop_id": "MCM1",
+      "order": 42,
+      "aliases": [
+        "McMaster"
+      ]
+    },
+    {
+      "id": "0b562957-73c6-4444-898c-5c330bedef45",
+      "name": "Melin Tool",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 43,
+      "aliases": [
+        "Melin"
+      ]
+    },
+    {
+      "id": "6ee83388-0d75-4152-a00d-af9b14782ee4",
+      "name": "Metropolitan Flag & Banner Co",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "MET1",
+      "order": 44
+    },
+    {
+      "id": "82a19ef7-602e-4ac6-b8cb-63aa3d352750",
+      "name": "Micro 100",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": "https://www.micro100.com/products/tool-details-{edp_lower}",
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 45,
+      "aliases": [
+        "Micro100"
+      ]
+    },
+    {
+      "id": "99b84655-fd3e-45d8-afc8-6c3abb1a8ae1",
+      "name": "Mitsubishi",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 46
+    },
+    {
+      "id": "9bb2932a-39cd-4ba5-871a-d3ed3b04be9b",
+      "name": "MSC Industrial",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": true,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": "https://www.mscdirect.com/product/details/{vendor_num}",
+      "proshop_id": "MSC1",
+      "order": 47,
+      "aliases": [
+        "MSC"
+      ]
+    },
+    {
+      "id": "5a5ba48a-daab-4628-95db-e267fea63482",
+      "name": "NexGenSolutions",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "NEX1",
+      "order": 48
+    },
+    {
+      "id": "3fee65c1-87dc-4eb6-b752-6b7c805915b6",
+      "name": "Online Metals",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "ONL1",
+      "order": 49
+    },
+    {
+      "id": "82b79ec4-390b-4158-9c36-d76421fe934d",
+      "name": "Orange Vise Company LLC",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "ORA1",
+      "order": 50
+    },
+    {
+      "id": "aea39b9e-1a6a-4559-b979-05602daf58ca",
+      "name": "OSG",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": "https://osgtool.com/{edp_lower}/",
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 51
+    },
+    {
+      "id": "fbe5908b-4eb9-4e5a-8548-f6905b0972a0",
+      "name": "Penn Stainless Products",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "PEN2",
+      "order": 52
+    },
+    {
+      "id": "ffc3ac5a-1355-4851-a65d-a5d857d44413",
+      "name": "Pennsylvania Steel Company",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "PEN3",
+      "order": 53
+    },
+    {
+      "id": "0df12862-42f1-49b8-8ef7-811a80bf5a62",
+      "name": "Pierson Workholding",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "PIE1",
+      "order": 54
+    },
+    {
+      "id": "237ca494-6961-424f-ace2-3761c28c8cde",
+      "name": "Precision Finishing",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "PRE1",
+      "order": 55
+    },
+    {
+      "id": "46b8679f-76c0-466a-8ff0-34b1a19413b6",
+      "name": "PTSolutions",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "PTS1",
+      "order": 56
+    },
+    {
+      "id": "6fd6ef97-8865-4024-9450-f7d798b02be8",
+      "name": "RobbJack",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 57
+    },
+    {
+      "id": "757164b2-1193-464c-82af-973cd1b11cfe",
+      "name": "Sandvik Coromant",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 58,
+      "aliases": [
+        "Sandvik"
+      ]
+    },
+    {
+      "id": "bcd2b34b-4d3d-40e0-915d-5cf1b14c60d3",
+      "name": "Seco",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 59
+    },
+    {
+      "id": "05e41178-a876-4d1d-8333-4e807a3c022e",
+      "name": "SGS",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 60
+    },
+    {
+      "id": "1afa0cd5-89a7-4802-8142-5d91a08851b7",
+      "name": "SK Industrial",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "SKI1",
+      "order": 61
+    },
+    {
+      "id": "f60b9c4c-fa33-43ff-8195-9e2cf2e6739f",
+      "name": "Titan USA",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 62,
+      "aliases": [
+        "Titan"
+      ]
+    },
+    {
+      "id": "818ba902-0911-4a16-aabc-80272d25d39b",
+      "name": "Travers Tool",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": true,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 63
+    },
+    {
+      "id": "55f6e6da-ca5e-4e56-8405-534e0cde26f9",
+      "name": "Tungaloy",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 64
+    },
+    {
+      "id": "657323e4-34bf-434c-a9d1-8d8d7d0c8113",
+      "name": "Value Collection",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 65
+    },
+    {
+      "id": "648ff488-a73e-402f-ab9a-ff6959733151",
+      "name": "Vibrant Finish LLC",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "VIB1",
+      "order": 66
+    },
+    {
+      "id": "d210598e-2998-4825-b2dc-cb7aaffc82d8",
+      "name": "Widia",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 67
+    },
+    {
+      "id": "8989e8e0-9124-4d5c-b990-0a80edcf96e7",
+      "name": "Yamazen Inc",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "YAM1",
+      "order": 68
+    },
+    {
+      "id": "a6e8f349-a479-4d99-8747-d6919f55abe7",
+      "name": "Yarde Metals",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": "YAR1",
+      "order": 69
+    },
+    {
+      "id": "4a01164e-d05d-4ed2-a7df-883abc3c3dd5",
+      "name": "YG-1",
+      "is_manufacturer": true,
+      "is_vendor": false,
+      "has_own_catalog_number": false,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 70,
+      "aliases": [
+        "YG1"
+      ]
+    },
+    {
+      "id": "48c78d66-dc8d-45f6-86af-22c496e4e6c1",
+      "name": "Zoro Tools",
+      "is_manufacturer": false,
+      "is_vendor": true,
+      "has_own_catalog_number": true,
+      "edp_url_pattern": null,
+      "vendor_num_url_pattern": null,
+      "proshop_id": null,
+      "order": 71,
+      "aliases": [
+        "Zoro"
+      ]
+    }
+  ]
+}
