@@ -1,7 +1,7 @@
 // New-tool factory + validation (hard-block validateTool, non-blocking
 // geometry-chain warnings from validateGeometry).
 import { generateId } from './identity.js';
-import { getDefaultUnit, unitAbbr } from '../utils/units.js';
+import { getDefaultUnit, unitAbbr, lengthEps } from '../utils/units.js';
 
 // ─── Create a new blank tool ───────────────────────────────────────────────
 const TAP_TYPES = new Set(['tap']);
@@ -160,6 +160,29 @@ export function validateGeometry(tool) {
       warnings.push({
         fields: ['corner_radius'],
         message: `Bull Nose corner radius (${fmt(corner_radius)}) must be less than cut diameter ÷ 2 (${fmt(diameter / 2)})`,
+      });
+    }
+  }
+
+  // ⚠️ The chain above is TOOL-level; this is the per-ASSEMBLY end of the same
+  // rule, and leaving it out made the rule unenforceable in practice.
+  // `AssemblyForm` hard-blocks saving an OOH below the floor and
+  // `normalizeLibrary` floors them on import — but normalize only ever touches
+  // UNTRACKED tools, so once a library is fully tracked a later ProShop import
+  // can lower MIN OOH beneath existing assemblies with nothing anywhere to
+  // report it. The app refused to CREATE the state while having no way to SHOW
+  // it. Same unit rule as the chain: min_ooh and each assembly's ooh are both in
+  // the tool's own unit, compared with the shared unit-aware tolerance so float
+  // noise never registers. Cleared by Settings → Library Health, or by editing
+  // the assembly.
+  if (isValid(min_ooh) && Array.isArray(tool.assemblies)) {
+    const eps = lengthEps(tool.unit);
+    const below = tool.assemblies.filter(a => isValid(a?.ooh) && a.ooh < min_ooh - eps);
+    for (const a of below) {
+      warnings.push({
+        fields: ['min_ooh'],
+        message: `Assembly ${a.asm_number || a.holder_description || ''} sticks out ${fmt(a.ooh)}`
+          + `, less than MIN OOH (${fmt(min_ooh)})`.trimStart(),
       });
     }
   }

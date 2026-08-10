@@ -169,9 +169,20 @@ N-48   ooh=0.60  min_ooh=0.62      R-149  ooh=1.44  min_ooh=1.72
 A-35   ooh=0.61  min_ooh=0.65      A-123  ooh=0.30  min_ooh=0.33
 ```
 
-Most gaps are 0.01–0.05", which tells you what happened: **`min_ooh` arrived from
-the ProShop merge (2026-07-17) *after* normalize ran (2026-07-14)**, and the
-flooring pass never re-ran. Not a code bug — an ordering artifact.
+Most gaps are small, but they run up to **0.36"** (`D-90`, 0.70 → 1.06) — large
+enough to be a real machining change, so these want per-row review rather than a
+blanket apply.
+
+What happened: **`min_ooh` arrived from the ProShop merge (2026-07-17) *after*
+normalize ran (2026-07-14)**, and the flooring pass never re-ran.
+
+⚠️ **Re-running normalize cannot fix this** — an earlier draft of this document said
+it could, and that was wrong. `normalizeLibrary` applies the floor only inside its
+`for (const raw of untracked)` loop; already-tracked tools are explicitly *"rebuild
+unchanged"*. Every tool here is tracked, so `needsNormalize` is false (the banner
+never renders and `NormalizeModal` is unreachable) and the pass would be a no-op
+even if it could be opened. **Fixed instead by Settings → Library Health →
+"Assemblies below MIN OOH"**, added for this.
 
 Also in the same family:
 - **9** tools with `shoulder_length > min_ooh` (normalize sets shoulder = min_ooh)
@@ -343,17 +354,27 @@ is just JSON writing `2.0` as `2`. SQLite `REAL` takes both.
 
 Each step's output is checkable, and the early ones are cheap.
 
-**1 — Delete the 8 orphans** *(minutes, highest leverage)*
-Clears 5 duplicate machine numbers, 2 below-start numbers, 7 dangling
-`instance_guid`s, 3 duplicate `tool_id` clusters and both invalid `tool_type`s in
-one action. Decide separately where the probe and the holder record should live.
-*Verify: machine-number issues card reads zero.*
+> **Steps 1 and 2 had no UI when this audit was written** — an orphan is
+> deliberately never loaded, and assembly OOH sat outside `validateGeometry`'s
+> chain, so neither was reachable or even visible. Both are now
+> **Settings → Library Health**, built as derived preview→commit worklists in the
+> same shape as `LocationIssuesPanel`.
 
-**2 — Re-run normalize** *(minutes)*
-Floors the 62 `ooh < min_ooh` assemblies and re-sets the 9 bad shoulder lengths.
-This is the fix for the largest block of wrong numbers, and it only needs re-running
-because ProShop's `min_ooh` landed after the first pass.
-*Verify: re-run the ordering-chain check — should be zero.*
+**1 — Delete the 8 orphans** *(minutes, highest leverage)*
+Settings → Library Health → **Check for orphaned records**. Clears 5 duplicate
+machine numbers, 2 below-start numbers, 7 dangling `instance_guid`s, 3 duplicate
+`tool_id` clusters and both invalid `tool_type`s in one action. Ghosts (a live tool
+already holds the Tool ID) are pre-ticked; the 5 stale ones start unticked so each
+is a deliberate call. Decide separately where the probe and the holder record
+should live.
+*Verify: the machine-number issues card reads zero.*
+
+**2 — Raise the 62 assemblies to their MIN OOH floor** *(minutes)*
+Settings → Library Health → **Check stickout against MIN OOH**. Per-tool
+selection, because this writes `geometry.LB` and moves the assembly gauge length
+with it — corrections over 0.05″ are highlighted. The same violations now also
+show as geometry warnings on each tool page.
+*Verify: re-check — it should report zero, and a second run has nothing to do.*
 
 **3 — Clear the 14 conflicts + fix the 4 `stock-materials` rows** *(under an hour)*
 The 4 location conflicts are ProShop-side bad data (vendor names in the Location

@@ -6,6 +6,7 @@ import { generateMachineNumbers, generateId, duplicateIdClusters, findMachineNum
 import { isExcludedFrom } from '../utils/idSystems.js';
 import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../utils/toolIdSystem.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
+import { isNotableOohDelta } from '../utils/libraryHealth.js';
 import { ASM_MODES, previewAsmNumber } from '../utils/assemblyIdSystem.js';
 import { useDragReorder } from './useDragReorder.js';
 import { MACHINE_COLOR_PALETTE, machineColor, nextMachineColor } from '../utils/machineColors.js';
@@ -1308,6 +1309,12 @@ export default function Settings() {
           only; Fusion's copy of the NAME is a separate push. */}
       <MaterialLinkCard dirty={dirty} />
 
+      {/* Library health — orphaned metadata records and assemblies below their
+          tool's MIN OOH floor. Both are states with no other surface in the app:
+          an orphan is deliberately never loaded, and assembly OOH was outside
+          validateGeometry's chain. */}
+      <LibraryHealthCard dirty={dirty} />
+
       {/* Program list import — one-time CSV load into the Program Number
           Manager (/programs). Writes to jobs.json, so it needs Drive/demo. */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
@@ -1872,6 +1879,278 @@ export default function Settings() {
 //
 // Metadata-only. Fusion still holds the OLD material name until each tool's next
 // save — the result says so plainly rather than leaving it to be discovered.
+// ─── Library Health ─────────────────────────────────────────────────────────
+// Two states the app can REACH but had no way to SHOW, so nobody could fix them:
+//
+//   Orphaned records — a tool deleted directly in Fusion leaves its metadata
+//   behind, and the orphan-ghost guard (rightly) refuses to build it. Invisible
+//   in the app, but still holding a machine number and a tool_id, so it collides
+//   with live tools in the machine-number card and the reconcile pass.
+//
+//   Assemblies below MIN OOH — validateGeometry checked the tool-level chain but
+//   never an assembly's own stickout, and normalize only floors UNTRACKED tools,
+//   so a fully-tracked library could never be re-floored after a ProShop import
+//   brought MIN OOH in.
+//
+// Derived on demand, never stored — a row disappears by itself once the thing
+// behind it is fixed (the same contract as LocationIssuesPanel).
+function LibraryHealthCard({ dirty }) {
+  const {
+    findOrphanMetadata, deleteOrphanMetadata, findOohFloorIssues, fixOohFloors,
+    googleAuthenticated, demoMode, notify, tools,
+  } = useApp();
+
+  const [orphans, setOrphans] = useState(null);
+  const [orphanPick, setOrphanPick] = useState(() => new Set());
+  const [orphanBusy, setOrphanBusy] = useState(false);
+  const [orphanDone, setOrphanDone] = useState(null);
+
+  const [ooh, setOoh] = useState(null);
+  const [oohPick, setOohPick] = useState(() => new Set());
+  const [oohBusy, setOohBusy] = useState(false);
+  const [oohDone, setOohDone] = useState(null);
+
+  const blocked = !googleAuthenticated || demoMode || dirty;
+  const blockedWhy = dirty ? 'Save or cancel your changes first'
+    : demoMode ? 'Not available in demo mode'
+      : !googleAuthenticated ? 'Connect Google Drive first' : undefined;
+
+  const toggle = (set, key, apply) => {
+    const next = new Set(set);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    apply(next);
+  };
+
+  const checkOrphans = async () => {
+    setOrphanBusy(true); setOrphanDone(null);
+    try {
+      const res = await findOrphanMetadata();
+      setOrphans(res);
+      // Ghosts are pre-ticked (their live twin already carries the data); a
+      // stale record is a real decision, so it starts unticked.
+      setOrphanPick(new Set(res.orphans.filter(o => o.reason === 'ghost').map(o => o.id)));
+    } catch (err) { notify(err.message, 'error', 7000); }
+    finally { setOrphanBusy(false); }
+  };
+
+  const removeOrphans = async () => {
+    setOrphanBusy(true);
+    try {
+      const res = await deleteOrphanMetadata([...orphanPick]);
+      setOrphanDone(res); setOrphans(null); setOrphanPick(new Set());
+      notify(`Deleted ${res.deleted} orphaned record${res.deleted === 1 ? '' : 's'}`, 'success');
+    } catch (err) { notify(err.message, 'error', 7000); }
+    finally { setOrphanBusy(false); }
+  };
+
+  const checkOoh = () => {
+    setOohDone(null);
+    const res = findOohFloorIssues();
+    setOoh(res);
+    setOohPick(new Set(res.issues.map(i => i.toolKey)));
+  };
+
+  const applyOoh = async () => {
+    setOohBusy(true);
+    try {
+      const res = await fixOohFloors({ toolKeys: [...oohPick] });
+      setOohDone(res); setOoh(null); setOohPick(new Set());
+    } catch { /* notified in the action */ }
+    finally { setOohBusy(false); }
+  };
+
+  const fmt = (n, unit) => Number(n).toFixed(unit === 'millimeters' ? 3 : 4).replace(/\.?0+$/, '');
+  // Unit-derived, not a bare inch number — see isNotableOohDelta.
+  const notable = (d, unit) => isNotableOohDelta(d, unit);
+  // Group by tool: the write is per tool, so the selection has to be too.
+  const oohByTool = [];
+  if (ooh) {
+    const m = new Map();
+    for (const i of ooh.issues) {
+      if (!m.has(i.toolKey)) m.set(i.toolKey, { key: i.toolKey, tool_id: i.tool_id, description: i.description, unit: i.unit, rows: [] });
+      m.get(i.toolKey).rows.push(i);
+    }
+    oohByTool.push(...m.values());
+  }
+  const pickedAssemblies = ooh ? ooh.issues.filter(i => oohPick.has(i.toolKey)).length : 0;
+
+  return (
+    <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <AlertCircle size={16} style={{ color: 'var(--blue)' }} />
+        <h3 style={{ margin: 0 }}>Library Health</h3>
+        <InfoTip
+          alignRight
+          text="Two problems the app can end up with but has no other way to show you. Both are checked on demand and nothing is changed until you apply it."
+        />
+      </div>
+      <p className="text-sub text-sm mb-16">
+        Leftover records from tools deleted in Fusion, and assemblies sticking out
+        less than their tool&apos;s own minimum.
+      </p>
+
+      {/* ── Orphaned metadata ─────────────────────────────────────────────── */}
+      <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginBottom: 4 }}>
+        <div className="text-sm" style={{ fontWeight: 600, marginBottom: 4 }}>Orphaned records</div>
+        <p className="text-sub text-sm mb-16">
+          Deleting a tool in Fusion 360 leaves its record here. The app hides it on
+          purpose — so it never comes back as a ghost tool — but it keeps its machine
+          number and Tool ID, which then collide with real tools. This is the only
+          place they can be seen or removed.
+        </p>
+
+        <div className="flex gap-8">
+          <button className="btn btn-secondary btn-sm" onClick={checkOrphans} disabled={blocked || orphanBusy} title={blockedWhy}>
+            {orphanBusy && !orphans ? 'Checking…' : 'Check for orphaned records'}
+          </button>
+          {orphans && orphanPick.size > 0 && (
+            <button className="btn btn-danger btn-sm" onClick={removeOrphans} disabled={orphanBusy}>
+              <Trash2 size={13} /> {orphanBusy ? 'Deleting…' : `Delete ${orphanPick.size} record${orphanPick.size === 1 ? '' : 's'}`}
+            </button>
+          )}
+        </div>
+
+        {orphans && orphans.orphans.length === 0 && (
+          <div className="text-sm mt-12" style={{ color: 'var(--green, #4ade80)' }}>
+            ✓ No orphaned records — every metadata record belongs to a real tool.
+          </div>
+        )}
+
+        {orphans && orphans.orphans.length > 0 && (
+          <div className="mt-12">
+            <div className="text-sm mb-8">
+              <strong>{orphans.impact.total}</strong> orphaned record{orphans.impact.total === 1 ? '' : 's'}.
+              {' '}Removing them also clears{' '}
+              <strong>{orphans.impact.clashes}</strong> duplicate machine number{orphans.impact.clashes === 1 ? '' : 's'},{' '}
+              <strong>{orphans.impact.belowStart}</strong> below-start number{orphans.impact.belowStart === 1 ? '' : 's'} and{' '}
+              <strong>{orphans.impact.danglingRefs}</strong> dangling assembly reference{orphans.impact.danglingRefs === 1 ? '' : 's'}.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {orphans.orphans.map(o => (
+                <label key={o.id} style={{
+                  display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 10px',
+                  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                  borderLeft: `3px solid ${o.reason === 'ghost' ? 'var(--orange)' : 'var(--text-sub)'}`,
+                  background: 'var(--surface-2)', cursor: 'pointer',
+                }}>
+                  <input type="checkbox" checked={orphanPick.has(o.id)}
+                    onChange={() => toggle(orphanPick, o.id, setOrphanPick)} style={{ marginTop: 3 }} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="text-sm" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                      <span className="font-mono" style={{ color: 'var(--orange)' }}>{o.tool_id || '(no Tool ID)'}</span>
+                      <span>{o.description || '(no description)'}</span>
+                    </div>
+                    <div className="text-xs text-sub mt-4">
+                      <span className="font-mono">{o.id}</span>
+                      {o.machine_tool_number != null && <> · T{o.machine_tool_number}</>}
+                      {o.assemblyCount > 0 && <> · {o.assemblyCount} assembl{o.assemblyCount === 1 ? 'y' : 'ies'}</>}
+                      {o.presetCount > 0 && <> · {o.presetCount} preset{o.presetCount === 1 ? '' : 's'}</>}
+                      {o.hasPhoto && <> · has a photo</>}
+                    </div>
+                    <div className="text-xs mt-4" style={{ color: o.reason === 'ghost' ? 'var(--orange)' : 'var(--text-sub)' }}>
+                      {o.reason === 'ghost'
+                        ? <>Leftover copy — the live tool <span className="font-mono">{o.twinId}</span> already has this Tool ID. Safe to delete.</>
+                        : <>Nothing else claims this Tool ID — check it before deleting.</>}
+                      {o.invalidType && <> · <strong>Not a cutting tool</strong> (type &ldquo;{o.tool_type}&rdquo;).</>}
+                    </div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {orphanDone && (
+          <div className="text-sm mt-12" style={{ color: 'var(--green, #4ade80)' }}>
+            ✓ Deleted {orphanDone.deleted} record{orphanDone.deleted === 1 ? '' : 's'}.
+            {orphanDone.skipped > 0 && <> {orphanDone.skipped} skipped — no longer orphaned.</>}
+          </div>
+        )}
+      </div>
+
+      {/* ── MIN OOH floor ─────────────────────────────────────────────────── */}
+      <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 14 }}>
+        <div className="text-sm" style={{ fontWeight: 600, marginBottom: 4 }}>Assemblies below MIN OOH</div>
+        <p className="text-sub text-sm mb-16">
+          MIN OOH comes from ProShop and is the least a tool can stick out of the
+          holder. An assembly below it is a setup the app would refuse to let you
+          save today. Raising one <strong>changes the stickout in Fusion</strong>, and
+          the assembly gauge length moves with it — so check the amount on each before
+          applying.
+        </p>
+
+        <div className="flex gap-8">
+          <button className="btn btn-secondary btn-sm" onClick={checkOoh} disabled={dirty || tools.length === 0} title={dirty ? 'Save or cancel your changes first' : undefined}>
+            Check stickout against MIN OOH
+          </button>
+          {ooh && pickedAssemblies > 0 && (
+            <button className="btn btn-primary btn-sm" onClick={applyOoh} disabled={oohBusy || blocked} title={blockedWhy}>
+              {oohBusy ? 'Applying…' : `Raise ${pickedAssemblies} assembl${pickedAssemblies === 1 ? 'y' : 'ies'}`}
+            </button>
+          )}
+        </div>
+
+        {ooh && ooh.issues.length === 0 && (
+          <div className="text-sm mt-12" style={{ color: 'var(--green, #4ade80)' }}>
+            ✓ Every assembly sticks out at least its tool&apos;s MIN OOH.
+          </div>
+        )}
+
+        {ooh && ooh.issues.length > 0 && (
+          <div className="mt-12">
+            <div className="text-sm mb-8">
+              <strong>{ooh.issues.length}</strong> assembl{ooh.issues.length === 1 ? 'y' : 'ies'} on{' '}
+              <strong>{ooh.toolCount}</strong> tool{ooh.toolCount === 1 ? '' : 's'} stick out less than the minimum.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflowY: 'auto' }}>
+              {oohByTool.map(t => {
+                const biggest = Math.max(...t.rows.map(r => r.delta));
+                const flagged = notable(biggest, t.unit);
+                return (
+                  <label key={t.key} style={{
+                    display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 10px',
+                    border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                    borderLeft: `3px solid ${flagged ? 'var(--orange)' : 'var(--border)'}`,
+                    background: 'var(--surface-2)', cursor: 'pointer',
+                  }}>
+                    <input type="checkbox" checked={oohPick.has(t.key)}
+                      onChange={() => toggle(oohPick, t.key, setOohPick)} style={{ marginTop: 3 }} />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div className="text-sm" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                        <span className="font-mono" style={{ color: 'var(--orange)' }}>{t.tool_id || t.key}</span>
+                        <span>{t.description}</span>
+                      </div>
+                      {t.rows.map((r, n) => (
+                        <div key={r.assembly_id || n} className="text-xs text-sub mt-4 font-mono">
+                          {r.holder_description || '(no holder)'} ·{' '}
+                          <span style={{ color: 'var(--text)' }}>
+                            {fmt(r.ooh, r.unit)} → {fmt(r.min_ooh, r.unit)}
+                          </span>{' '}
+                          <span style={{ color: notable(r.delta, r.unit) ? 'var(--orange)' : 'var(--text-sub)' }}>
+                            (+{fmt(r.delta, r.unit)})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {oohDone && (
+          <div className="text-sm mt-12" style={{ color: 'var(--green, #4ade80)' }}>
+            ✓ Raised {oohDone.assemblyCount} assembl{oohDone.assemblyCount === 1 ? 'y' : 'ies'} across {oohDone.toolCount} tool
+            {oohDone.toolCount === 1 ? '' : 's'}
+            {oohDone.metadataOnlyCount > 0 && <> ({oohDone.metadataOnlyCount} metadata-only)</>}.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function MaterialLinkCard({ dirty }) {
   const { relinkPresetMaterials, pushPresetFieldToFusion, tools, googleAuthenticated, demoMode, notify } = useApp();
   const [preview, setPreview] = useState(null);
