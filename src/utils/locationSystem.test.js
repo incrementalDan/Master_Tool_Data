@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  newLocationSystem, newLevelOption,
-  systemOutputSignature, systemStructureSignature, findSystemConflicts,
-  parseLocationString, analyzeSystem, nextBin,
-  newImportRule, routeProShopLocations, parseTriggerList, pruneAcknowledgedGaps,
-  libraryLocationIssues, analyzeBinSequence, findBinGaps, usedBinsForSystem,
+  newLocationSystem, newLevelOption, systemOutputSignature, systemStructureSignature, findSystemConflicts, parseLocationString, analyzeSystem, nextBin, newImportRule, routeProShopLocations, parseTriggerList, pruneAcknowledgedGaps, libraryLocationIssues, analyzeBinSequence, findBinGaps, usedBinsForSystem, normalizeBin, composeLocationString,
 } from './locationSystem.js';
 
 // Helper: a system with a custom-prefix drawer + auto bin (the default shape).
@@ -484,5 +480,108 @@ describe('analyzeSystem sees components too', () => {
     const matched = analyzeSystem([{ id: 'c1', location: 'LC-212' }], s).matched;
     expect(matched.length).toBe(1);
     expect(matched[0].location.bin).toBe(212);
+  });
+});
+
+describe('nextBin ignores out-of-range outliers', () => {
+  // Straight from a real run: the LC cabinet ends at 253, one tool sits on the
+  // drill-index sentinel 10000, and "Next available bin" read 10001 — so every
+  // new tool would have been filed above the sentinel.
+  it('continues above the highest IN-RANGE bin, not the outlier', () => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    const used = new Set();
+    for (let i = 1; i <= 253; i++) used.add(i);
+    used.add(10000);
+    expect(nextBin(s, used)).toBe(254);
+  });
+
+  it('a bin just past the end is still the next bin, not an outlier', () => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    expect(nextBin(s, new Set([1, 2, 3]))).toBe(4);
+  });
+
+  it('still skips a reserved number at the top of the in-range run', () => {
+    const s = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    s.levels.bin.skip = [4];
+    expect(nextBin(s, new Set([1, 2, 3, 9999]))).toBe(5);
+  });
+});
+
+describe('normalize must not steal records from another system', () => {
+  // Straight from the real library: 236 tools in an "LC" cabinet whose custom
+  // prefix is OPTIONAL when parsing, and 19 in a fixed-bin drill index that
+  // composes its location as the bare "10000". LC's lenient pattern parsed that
+  // as LC bin 10000, so Analyze offered to move all 19 out of the system they
+  // correctly belong to — and its "next available bin" read 10001.
+  const shop = () => {
+    const [lc, di] = twoSystemShop();
+    di.levels.bin = { fixed: true, start: 1000, fixedVal: '10000', skip: [] };
+    di.levels.drawer = { on: false, levelType: 'Drawer', customTypeName: '', identFormat: 'letter', customIdent: '', options: [] };
+    return [lc, di];
+  };
+  it('leaves records that already belong to another system alone', () => {
+    const [lc, di] = shop();
+    const records = [
+      { id: 'a1', tool_location: { system_id: lc.id, bin: 1 }, location: 'LC-1' },
+      // 19 drill-index records, composed as the bare sentinel
+      ...Array.from({ length: 19 }, (_, i) => ({
+        id: 'd' + i, tool_location: { system_id: di.id, bin: '10000' }, location: '10000',
+      })),
+    ];
+    const a = analyzeSystem(records, lc, [lc, di]);
+    expect(a.matched).toEqual([]);              // was 19 — every drill tool
+    expect(a.nextBin).toBe(2);                  // was 10001
+  });
+
+  it('an UNASSIGNED bare sentinel goes to the system whose rule claims it', () => {
+    const [lc, di] = shop();
+    const records = [
+      { id: 'a1', tool_location: { system_id: lc.id, bin: 1 }, location: 'LC-1' },
+      { id: 'new', location: '10000' },         // no structured location yet
+      { id: 'new2', location: '42' },
+    ];
+    // LC's any_unique rule must not swallow the sentinel — DI's trigger owns it.
+    expect(analyzeSystem(records, lc, [lc, di]).matched.map(m => m.tool.id)).toEqual(['new2']);
+    expect(analyzeSystem(records, di, [lc, di]).matched.map(m => m.tool.id)).toEqual(['new']);
+  });
+
+  it('with no rules configured it still assigns unassigned records', () => {
+    const lc = lcSystem('LC', { ident: 'LC', binStart: 1 });
+    const records = [{ id: 'x', location: 'LC-7' }, { id: 'y', location: '8' }];
+    expect(analyzeSystem(records, lc, [lc]).matched.length).toBe(2);
+  });
+});
+
+describe('one canonical shape for a stored bin', () => {
+  it('numbers stay numbers; a non-numeric fixed label stays a string', () => {
+    expect(normalizeBin(140)).toBe(140);
+    expect(normalizeBin('140')).toBe(140);
+    expect(normalizeBin(' 10000 ')).toBe(10000);
+    expect(normalizeBin('SHELF')).toBe('SHELF');
+    expect(normalizeBin('')).toBe(null);
+    expect(normalizeBin(null)).toBe(null);
+  });
+
+  it('a fixed-bin system writes the SAME shape from import and from normalize', () => {
+    // These disagreed: the import wrote the config string "10000", the picker
+    // wrote the string too, and normalize wrote null (the parser never captures
+    // a fixed bin) — the same drawer in three shapes.
+    const [lc, di] = twoSystemShop();
+    di.levels.bin = { fixed: true, start: 1000, fixedVal: '10000', skip: [] };
+    di.levels.drawer = { on: false, levelType: 'Drawer', customTypeName: '', identFormat: 'letter', customIdent: '', options: [] };
+
+    const fromImport = routeProShopLocations(rows([['D-1', '10000']]), [lc, di]).assignments[0].location;
+    const fromNormalize = parseLocationString('10000', di);
+    expect(fromImport.bin).toBe(10000);
+    expect(fromNormalize.bin).toBe(10000);
+    expect(fromImport.bin).toBe(fromNormalize.bin);
+  });
+
+  it('the composed string is unchanged either way', () => {
+    const [, di] = twoSystemShop();
+    di.levels.bin = { fixed: true, start: 1000, fixedVal: '10000', skip: [] };
+    di.levels.drawer = { on: false, levelType: 'Drawer', customTypeName: '', identFormat: 'letter', customIdent: '', options: [] };
+    expect(composeLocationString({ system_id: di.id, bin: 10000 }, di)).toBe('10000');
+    expect(composeLocationString({ system_id: di.id, bin: '10000' }, di)).toBe('10000');
   });
 });

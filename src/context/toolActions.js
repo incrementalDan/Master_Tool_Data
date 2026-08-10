@@ -413,7 +413,7 @@ export function createToolActions(ctx) {
     // their bins looked empty.
     const toolList = toolsRef.current || [];
     const compList = componentsRef.current?.components || [];
-    const { matched: matchedAll } = analyzeSystem([...toolList, ...compList], system);
+    const { matched: matchedAll } = analyzeSystem([...toolList, ...compList], system, systems);
     // Skip records explicitly excluded from the Location system — they keep their
     // current location and aren't assigned/normalized into this system.
     const matched = matchedAll.filter(m => !isExcludedFrom(m.tool, 'location'));

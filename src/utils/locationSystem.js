@@ -249,8 +249,18 @@ export function nextBin(system, usedBins = new Set()) {
   const skip = new Set((bin.skip || []).map(Number));
   const used = usedBins instanceof Set ? usedBins : new Set(usedBins);
   const start = Number(bin.start) || 1;
+  // ⚠️ Continue above the highest IN-RANGE bin, not the highest bin outright.
+  // An out-of-range outlier (a tool left on a sentinel like 10000 in a cabinet
+  // that ends at 253) would otherwise push every new tool to 10001 — worse than
+  // the hole-filling this replaced. analyzeBinSequence already knows which bins
+  // are outliers; nextBin has to ask it rather than trusting the raw maximum.
+  const { outliers } = analyzeBinSequence(system, used);
+  const outlierSet = new Set(outliers);
   let maxUsed = null;
-  for (const n of used) if (maxUsed == null || n > maxUsed) maxUsed = n;
+  for (const n of used) {
+    if (outlierSet.has(n)) continue;
+    if (maxUsed == null || n > maxUsed) maxUsed = n;
+  }
   let n = (maxUsed != null && maxUsed >= start) ? maxUsed + 1 : start;
   while (skip.has(n) || used.has(n)) n++;
   return n;
@@ -332,11 +342,16 @@ export function parseLocationString(str, system) {
   if (!built) return null;
   const m = text.match(built.regex);
   if (!m) return null;
-  const loc = { system_id: system.id, zone_id: null, station_id: null, drawer_id: null, bin: null };
+  const loc = {
+    system_id: system.id, zone_id: null, station_id: null, drawer_id: null,
+    // A fixed-bin system captures nothing — its bin IS the configured value, and
+    // normalize must record the same shape the import and picker write.
+    bin: system.levels?.bin?.fixed ? normalizeBin(system.levels.bin.fixedVal) : null,
+  };
   built.capturedLevels.forEach((key, i) => {
     const captured = m[i + 1];
     if (key === 'bin') {
-      loc.bin = Number(captured);
+      loc.bin = normalizeBin(captured);
     } else {
       const opt = levelOptions(system, key).find(o => o.label.toLowerCase() === captured.toLowerCase());
       loc[`${key}_id`] = opt ? opt.id : null;
@@ -350,18 +365,41 @@ export function parseLocationString(str, system) {
 // candidate when it is not already assigned to this system. Returns matched
 // (with the parsed structured location), unmatched (had location text but no
 // parse), a noLocation count, and the next available bin after the matches.
-export function analyzeSystem(records, system) {
+export function analyzeSystem(records, system, systems = null) {
   const matched = [];
   const unmatched = [];
   let noLocation = 0;
   const used = usedBinsForSystem(records, system.id);
+  const list = records || [];
 
-  for (const tool of records || []) {
-    if (tool.tool_location?.system_id === system.id) continue; // already in this system
+  // ⚠️ Uniqueness is judged over the WHOLE library, exactly as it is on import —
+  // a number that many records share is not "unique" just because most of them
+  // are already filed away.
+  const counts = countLocationNumbers(list.map(r => ({ value: r.location })));
+  const cascade = systems && hasConfiguredImportRules(systems);
+
+  for (const tool of list) {
+    const current = tool.tool_location?.system_id;
+    if (current === system.id) continue;   // already in this system
+    // ⚠️ A record already filed in ANOTHER system is settled — normalize assigns
+    // UNASSIGNED records, it does not re-route assigned ones. Without this, a
+    // system with a lenient pattern silently steals them: an "LC" system whose
+    // prefix is optional parses a drill-index record's bare "10000" as LC bin
+    // 10000, and normalize would have moved all of them out of the system they
+    // correctly belong to. Moving between systems is the ProShop import's job
+    // (it routes by the per-system rules) or a manual re-assign.
+    if (current) continue;
     const text = (tool.location || '').trim();
     if (!text) { noLocation++; continue; }
     const parsed = parseLocationString(text, system);
     if (parsed) {
+      // Same question the import answers: which system OWNS this number? When
+      // the shop has configured rules, honour them here too — otherwise the most
+      // permissive pattern wins by accident rather than by intent.
+      if (cascade && parsed.bin != null) {
+        const owner = claimSystemForNumber(Number(parsed.bin), systems, counts);
+        if (owner && owner.id !== system.id) { unmatched.push({ tool, location: text }); continue; }
+      }
       if (parsed.bin != null) used.add(Number(parsed.bin));
       matched.push({ tool, location: parsed, previous: text });
     } else {
@@ -455,6 +493,22 @@ export function libraryLocationIssues(records, systems) {
     }
   }
   return out;
+}
+
+// ⚠️ ONE canonical shape for a stored bin. A fixed-bin system's `fixedVal` is a
+// config STRING, so writing it straight through stored "10000" while every
+// auto-increment system stored the number 10000 — the same bin in two types,
+// from three different write paths (ProShop import, the picker, and normalize,
+// which stored null for a fixed bin because the parser never captures one).
+// Numeric values are stored as numbers; a non-numeric fixed label (e.g. "SHELF")
+// stays a string. Existing string bins compare equal via String(), so adopting
+// this changes nothing that is already stored — it just stops the drift.
+export function normalizeBin(value) {
+  if (value == null || value === '') return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : text;
 }
 
 // An empty structured location for a given system (nothing picked yet).
@@ -718,7 +772,7 @@ export function routeProShopLocations(rows, systems) {
       });
       continue;
     }
-    const binVal = sys.levels?.bin?.fixed ? sys.levels.bin.fixedVal : num;
+    const binVal = sys.levels?.bin?.fixed ? normalizeBin(sys.levels.bin.fixedVal) : num;
     const location = { system_id: sys.id, zone_id: null, station_id: null, drawer_id: null, bin: binVal };
     const entry = { key: row?.key, bin: num, systemId: sys.id, systemName: sys.name, location };
     assignments.push(entry);

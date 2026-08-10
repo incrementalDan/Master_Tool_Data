@@ -1,6 +1,7 @@
 // The tool_metadata.json record shape: buildMetadataTool is the authoritative
 // source of the full metadata field set (add new metadata fields there first),
 // and mergeFusionAndMetadata reads them back onto the internal tool object.
+import { normalizeBin } from '../utils/locationSystem.js';
 import { generateId, generateAssemblyId } from './identity.js';
 import { mergeToolConflicts } from '../utils/toolConflicts.js';
 
@@ -344,7 +345,12 @@ export function buildMetadataTool(tool) {
     // station_id, drawer_id, bin } referencing level option UUIDs. The composed
     // display string is derived on read (never stored). null when the tool has
     // no structured location yet (legacy free-text only).
-    location: tool.tool_location || null,
+    // Self-correct a legacy string bin to the canonical numeric shape on the
+    // record's next save (see normalizeBin) — nothing compares differently
+    // either way, this just stops the two shapes coexisting.
+    location: tool.tool_location
+      ? { ...tool.tool_location, bin: normalizeBin(tool.tool_location.bin) }
+      : null,
     bin_size_id: tool.bin_size_id || null,
     legacy_locations: tool.legacy_locations || [],
     // Machine tool number — persisted here as the source of truth, independent
