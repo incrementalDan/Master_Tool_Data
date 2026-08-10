@@ -1,0 +1,1483 @@
+{
+    "data": [
+        {
+            "description": "NBT30-SK13C-120 ER16 12mm Shank-EX OOH2.25",
+            "expressions": {
+                "tool_description": "'NBT30-SK13C-120 ER16 12mm Shank-EX OOH2.25'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height + segment_10_height + segment_11_height + segment_12_height",
+                "tool_productId": "'HLD-CE3310'"
+            },
+            "gaugeLength": 172.159,
+            "guid": "60fba7a1-b240-48da-ae8c-ceced7b6fc7d",
+            "last_modified": 1783898382781,
+            "product-id": "HLD-CE3310",
+            "product-link": "",
+            "reference_guid": "354bbd29-aa9c-440b-979c-6e7074f1b12b",
+            "segments": [
+                {
+                    "height": 18,
+                    "lower-diameter": 22,
+                    "upper-diameter": 22
+                },
+                {
+                    "height": 19,
+                    "lower-diameter": 19,
+                    "upper-diameter": 19
+                },
+                {
+                    "height": 20.16,
+                    "lower-diameter": 12,
+                    "upper-diameter": 12
+                },
+                {
+                    "height": 95,
+                    "lower-diameter": 33,
+                    "upper-diameter": 33
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.6,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75,
+                    "upper-diameter": 31.75
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": ""
+        },
+        {
+            "description": "NBT30-SK13C-120 W/er 8 extension  OOH1.22",
+            "expressions": {
+                "tool_description": "'NBT30-SK13C-120 W/er 8 extension  OOH1.22'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height + segment_10_height",
+                "tool_productId": "'HLD-5DB565'"
+            },
+            "gaugeLength": 146.749,
+            "guid": "183882d2-3a6d-4f0d-a3c3-14e4d8c3e69f",
+            "last_modified": 1783898382781,
+            "product-id": "HLD-5DB565",
+            "product-link": "",
+            "reference_guid": "0354a031-4c1e-4c55-9c4e-bdf23c825ab0",
+            "segments": [
+                {
+                    "height": 31.75,
+                    "lower-diameter": 12,
+                    "upper-diameter": 12
+                },
+                {
+                    "height": 95,
+                    "lower-diameter": 33,
+                    "upper-diameter": 33
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.6,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75,
+                    "upper-diameter": 31.75
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": ""
+        },
+        {
+            "description": "NBT30 Holder for hass 2.5\" shell mill",
+            "expressions": {
+                "tool_description": "'NBT30 Holder for hass 2.5\" shell mill'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height",
+                "tool_productId": "'HLD-6AF522'"
+            },
+            "gaugeLength": 1.199102204724412,
+            "guid": "f592547e-92be-4175-b8e1-602004f95fe3",
+            "last_modified": 1783898382781,
+            "product-id": "HLD-6AF522",
+            "product-link": "",
+            "reference_guid": "24fe7638-b0f8-411a-916a-b6de0a81368d",
+            "segments": [
+                {
+                    "height": 0.41174,
+                    "lower-diameter": 1.7322834645669,
+                    "upper-diameter": 1.7322834645669
+                },
+                {
+                    "height": 0.039370078740157,
+                    "lower-diameter": 1.7322834645669,
+                    "upper-diameter": 1.8110236220472
+                },
+                {
+                    "height": 0.13385826771654,
+                    "lower-diameter": 1.8110236220472,
+                    "upper-diameter": 1.8110236220472
+                },
+                {
+                    "height": 0.090905511811024,
+                    "lower-diameter": 1.8110236220472,
+                    "upper-diameter": 1.496062992126
+                },
+                {
+                    "height": 0.13311023622047,
+                    "lower-diameter": 1.496062992126,
+                    "upper-diameter": 1.496062992126
+                },
+                {
+                    "height": 0.090905511811024,
+                    "lower-diameter": 1.496062992126,
+                    "upper-diameter": 1.8110236220472
+                },
+                {
+                    "height": 0.25984251968504,
+                    "lower-diameter": 1.8110236220472,
+                    "upper-diameter": 1.8110236220472
+                },
+                {
+                    "height": 0.039370078740157,
+                    "lower-diameter": 1.8110236220472,
+                    "upper-diameter": 1.7322834645669
+                },
+                {
+                    "height": 0.078740157480315,
+                    "lower-diameter": 1.25,
+                    "upper-diameter": 1.25
+                }
+            ],
+            "type": "holder",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "description": "NBT30-SK20C-60 w/ER16 EXT 2.385OOH",
+            "expressions": {
+                "tool_description": "'NBT30-SK20C-60 w/ER16 EXT 2.385OOH'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height + segment_10_height + segment_11_height",
+                "tool_productId": "'HLD-CCB999'",
+                "tool_vendor": "'Nikken'"
+            },
+            "gaugeLength": 90.424,
+            "guid": "24da06d7-c791-49df-950a-248024f33e7e",
+            "last_modified": 1783898382781,
+            "product-id": "HLD-CCB999",
+            "product-link": "",
+            "reference_guid": "f4e1a139-d730-42ca-96d1-29473ac68a67",
+            "segments": [
+                {
+                    "height": 17.78,
+                    "lower-diameter": 22.225,
+                    "upper-diameter": 22.225
+                },
+                {
+                    "height": 42.799,
+                    "lower-diameter": 19.05,
+                    "upper-diameter": 19.05
+                },
+                {
+                    "height": 9.846,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.600000000000001,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75000000000002,
+                    "upper-diameter": 31.75000000000002
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": "Nikken"
+        },
+        {
+            "description": "BT30 SK13-120 ER16 12mmEXOOH1.75",
+            "expressions": {
+                "tool_description": "'BT30 SK13-120 ER16 12mmEXOOH1.75'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height + segment_10_height + segment_11_height + segment_12_height",
+                "tool_productId": "'HLD-CC0F37'"
+            },
+            "gaugeLength": 159.459,
+            "guid": "30ef0ee1-afb2-4461-80e5-d625361b180c",
+            "last_modified": 1783898382781,
+            "product-id": "HLD-CC0F37",
+            "product-link": "",
+            "reference_guid": "f8feca5c-9046-4ed8-a604-352ca5c2ea34",
+            "segments": [
+                {
+                    "height": 18,
+                    "lower-diameter": 22,
+                    "upper-diameter": 22
+                },
+                {
+                    "height": 19,
+                    "lower-diameter": 19,
+                    "upper-diameter": 19
+                },
+                {
+                    "height": 7.46,
+                    "lower-diameter": 12,
+                    "upper-diameter": 12
+                },
+                {
+                    "height": 95,
+                    "lower-diameter": 33,
+                    "upper-diameter": 33
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.6,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75,
+                    "upper-diameter": 31.75
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": ""
+        },
+        {
+            "description": "NBT30-SK13C-90 (85mm)",
+            "expressions": {
+                "tool_description": "'NBT30-SK13C-90 (85mm)'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height",
+                "tool_productId": "'HLD-C8EB24'"
+            },
+            "gaugeLength": 84.999,
+            "guid": "c8a9aa5f-8a66-4024-8467-5b68a20ae718",
+            "last_modified": 1783898382781,
+            "product-id": "HLD-C8EB24",
+            "product-link": "",
+            "reference_guid": "40518d5f-1630-4a25-83c0-47d384c40e06",
+            "segments": [
+                {
+                    "height": 65,
+                    "lower-diameter": 33,
+                    "upper-diameter": 33
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.6,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75,
+                    "upper-diameter": 31.75
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": ""
+        },
+        {
+            "description": "NBT30-SK20C-90",
+            "expressions": {
+                "tool_description": "'NBT30-SK20C-90'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height",
+                "tool_productId": "'HLD-60874A'"
+            },
+            "gaugeLength": 82.999,
+            "guid": "5e1b4822-b93c-4e37-8071-ac924aa28ff7",
+            "last_modified": 1783898382781,
+            "product-id": "HLD-60874A",
+            "product-link": "",
+            "reference_guid": "f8a64470-52e9-401e-a805-bacef2b45735",
+            "segments": [
+                {
+                    "height": 63,
+                    "lower-diameter": 49,
+                    "upper-diameter": 49
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.6,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75,
+                    "upper-diameter": 31.75
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": ""
+        },
+        {
+            "description": "DRILL CHUCK - NBT30",
+            "expressions": {
+                "tool_description": "'DRILL CHUCK - NBT30'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height + segment_10_height + segment_11_height",
+                "tool_productId": "'HLD-7E7DDD'",
+                "tool_productLink": "'https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Drill-Chucks/c23_33_444_533/p17945/BT30-DUAL-CONTACT-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html'",
+                "tool_unit": "'inches'",
+                "tool_vendor": "'Maritool'"
+            },
+            "gaugeLength": 4.2650038582677166,
+            "guid": "b282c5f6-397f-4f77-906a-7878c080b580",
+            "last_modified": 1783898382781,
+            "product-id": "HLD-7E7DDD",
+            "product-link": "https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Drill-Chucks/c23_33_444_533/p17945/BT30-DUAL-CONTACT-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html",
+            "reference_guid": "751cb37c-905b-4137-8fd4-1fa148640c52",
+            "segments": [
+                {
+                    "height": 0.23,
+                    "lower-diameter": 0.685,
+                    "upper-diameter": 0.9
+                },
+                {
+                    "height": 0.8,
+                    "lower-diameter": 1.5,
+                    "upper-diameter": 1.943
+                },
+                {
+                    "height": 0.1,
+                    "lower-diameter": 1.95,
+                    "upper-diameter": 1.95
+                },
+                {
+                    "height": 1.82087,
+                    "lower-diameter": 1.99,
+                    "upper-diameter": 1.99
+                },
+                {
+                    "height": 0.7,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.09090551181102365,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.4960629921259845
+                },
+                {
+                    "height": 0.13311023622047244,
+                    "lower-diameter": 1.4960629921259845,
+                    "upper-diameter": 1.4960629921259845
+                },
+                {
+                    "height": 0.09090551181102365,
+                    "lower-diameter": 1.4960629921259845,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.25984251968503935,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.03937007874015748,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.7322834645669292
+                },
+                {
+                    "height": 0.07874015748031496,
+                    "lower-diameter": 1.25,
+                    "upper-diameter": 1.25
+                }
+            ],
+            "type": "holder",
+            "unit": "inches",
+            "vendor": "Maritool"
+        },
+        {
+            "description": "NBT30-SK13C-150",
+            "expressions": {
+                "tool_description": "'NBT30-SK13C-150'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height",
+                "tool_productId": "'HLD-E9FADF'",
+                "tool_vendor": "'Lindex nikken'"
+            },
+            "gaugeLength": 142.999,
+            "guid": "ebb9af4b-b34b-42e0-a230-d9a1aaeb6bb4",
+            "last_modified": 1783898382781,
+            "product-id": "HLD-E9FADF",
+            "product-link": "",
+            "reference_guid": "f163477f-47a8-4635-b8c0-a9fcb59e9a36",
+            "segments": [
+                {
+                    "height": 123,
+                    "lower-diameter": 33,
+                    "upper-diameter": 33
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.6,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75,
+                    "upper-diameter": 31.75
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": "Lindex nikken"
+        },
+        {
+            "description": "NBT30-SK13C-120 er16 12mm shank ext OOH2.5",
+            "expressions": {
+                "tool_description": "'NBT30-SK13C-120 er16 12mm shank ext OOH2.5'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height + segment_10_height + segment_11_height + segment_12_height",
+                "tool_productId": "'HLD-B94907'"
+            },
+            "gaugeLength": 178.799,
+            "guid": "fb236ece-ff52-4458-804f-e0b54838e33b",
+            "last_modified": 1783898382781,
+            "product-id": "HLD-B94907",
+            "product-link": "",
+            "reference_guid": "23267082-970c-466f-98a9-fc72ae5f7c51",
+            "segments": [
+                {
+                    "height": 18,
+                    "lower-diameter": 22,
+                    "upper-diameter": 22
+                },
+                {
+                    "height": 19,
+                    "lower-diameter": 19,
+                    "upper-diameter": 19
+                },
+                {
+                    "height": 26.8,
+                    "lower-diameter": 12,
+                    "upper-diameter": 12
+                },
+                {
+                    "height": 95,
+                    "lower-diameter": 33,
+                    "upper-diameter": 33
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.6,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75,
+                    "upper-diameter": 31.75
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": ""
+        },
+        {
+            "description": "TEST NBT30-SK13C-fake",
+            "expressions": {
+                "tool_description": "'TEST NBT30-SK13C-fake'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height",
+                "tool_productId": "'HLD-AC5E04'"
+            },
+            "gaugeLength": 164.999,
+            "guid": "31014ded-f74e-4e7b-a82b-7ecc5a94476e",
+            "product-id": "HLD-AC5E04",
+            "product-link": "",
+            "segments": [
+                {
+                    "height": 145,
+                    "lower-diameter": 33,
+                    "upper-diameter": 33
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.6,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75,
+                    "upper-diameter": 31.75
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": ""
+        },
+        {
+            "description": "NBT30-SK13C-60 w/ ER8 EXT 1.2OOH",
+            "expressions": {
+                "tool_description": "'NBT30-SK13C-60 w/ ER8 EXT 1.2OOH'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height + segment_10_height",
+                "tool_productId": "'HLD-408CD7'"
+            },
+            "gaugeLength": 85.479,
+            "guid": "2919928f-95c8-45fd-a552-82a1f9185a7b",
+            "last_modified": 1783898382782,
+            "product-id": "HLD-408CD7",
+            "product-link": "",
+            "reference_guid": "e3df30a1-b2dc-4c50-be39-83049afdc14d",
+            "segments": [
+                {
+                    "height": 30.48,
+                    "lower-diameter": 12,
+                    "upper-diameter": 12
+                },
+                {
+                    "height": 35,
+                    "lower-diameter": 33,
+                    "upper-diameter": 33
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.6,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75,
+                    "upper-diameter": 31.75
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": ""
+        },
+        {
+            "description": "NBT30-SK20C-60",
+            "expressions": {
+                "tool_description": "'NBT30-SK20C-60'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height",
+                "tool_productId": "'HLD-24FDA9'",
+                "tool_vendor": "'Nikken'"
+            },
+            "gaugeLength": 54.998999999999995,
+            "guid": "47ac39f4-c14a-46d7-9b17-216cdfd2170e",
+            "last_modified": 1783898382782,
+            "product-id": "HLD-24FDA9",
+            "product-link": "",
+            "reference_guid": "83d49ca2-0576-4b48-b932-f265d8f518df",
+            "segments": [
+                {
+                    "height": 35,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.600000000000001,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75000000000002,
+                    "upper-diameter": 31.75000000000002
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": "Nikken"
+        },
+        {
+            "description": "NBT30-SK13C-120 W/er 8 extension  OOH2.0",
+            "expressions": {
+                "tool_description": "'NBT30-SK13C-120 W/er 8 extension  OOH2.0'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height + segment_10_height",
+                "tool_productId": "'HLD-67E0B7'"
+            },
+            "gaugeLength": 165.799,
+            "guid": "9d79d987-7d3b-4465-b9ba-c06fa7fd1ca7",
+            "last_modified": 1783898382782,
+            "product-id": "HLD-67E0B7",
+            "product-link": "",
+            "reference_guid": "7218b8ac-7528-45e5-a7d7-d475aafa218c",
+            "segments": [
+                {
+                    "height": 50.8,
+                    "lower-diameter": 12,
+                    "upper-diameter": 12
+                },
+                {
+                    "height": 95,
+                    "lower-diameter": 33,
+                    "upper-diameter": 33
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.6,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75,
+                    "upper-diameter": 31.75
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": ""
+        },
+        {
+            "description": "NBT30-SK20C-90 w/ER16 EXT 2.2OOH",
+            "expressions": {
+                "tool_description": "'NBT30-SK20C-90 w/ER16 EXT 2.2OOH'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height + segment_10_height + segment_11_height",
+                "tool_productId": "'HLD-3AF99E'",
+                "tool_vendor": "'Nikken'"
+            },
+            "gaugeLength": 139.879,
+            "guid": "cb748048-9529-4d11-a4c1-ba45261925d6",
+            "last_modified": 1783898382782,
+            "product-id": "HLD-3AF99E",
+            "product-link": "",
+            "reference_guid": "d3895db1-0d12-4d27-b6c6-4c77abdee0ed",
+            "segments": [
+                {
+                    "height": 17.78,
+                    "lower-diameter": 22.225,
+                    "upper-diameter": 22.225
+                },
+                {
+                    "height": 38.1,
+                    "lower-diameter": 19.05,
+                    "upper-diameter": 19.05
+                },
+                {
+                    "height": 64,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.600000000000001,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75000000000002,
+                    "upper-diameter": 31.75000000000002
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": "Nikken"
+        },
+        {
+            "description": "NBT30-SK13C-60 w/ ER8 EXT 1.65OOH",
+            "expressions": {
+                "tool_description": "'NBT30-SK13C-60 w/ ER8 EXT 1.65OOH'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height + segment_10_height",
+                "tool_productId": "'HLD-5B71E2'"
+            },
+            "gaugeLength": 96.909,
+            "guid": "0d54da70-3f69-4b1b-9a3b-aab989933e15",
+            "last_modified": 1783898382782,
+            "product-id": "HLD-5B71E2",
+            "product-link": "",
+            "reference_guid": "e8cc08bd-b74b-4bd3-b2e8-308060d5b28a",
+            "segments": [
+                {
+                    "height": 41.91,
+                    "lower-diameter": 12,
+                    "upper-diameter": 12
+                },
+                {
+                    "height": 35,
+                    "lower-diameter": 33,
+                    "upper-diameter": 33
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.6,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75,
+                    "upper-diameter": 31.75
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": ""
+        },
+        {
+            "description": "FACE MILL BT30 DC",
+            "expressions": {
+                "tool_description": "'FACE MILL BT30 DC'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height",
+                "tool_productId": "'HLD-D5FFE8'",
+                "tool_productLink": "'https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Shell-Mill-Holders/c23_33_444_506/p25604/BT30-.750-DUAL-CONTACT-FACE-MILL-TOOL-HOLDER-.750-2.5/product_info.html'",
+                "tool_unit": "'inches'",
+                "tool_vendor": "'Maritool'"
+            },
+            "gaugeLength": 2.46063220472441,
+            "guid": "5727ced8-62f0-4baf-a828-423993f66be4",
+            "last_modified": 1783898382782,
+            "product-id": "HLD-D5FFE8",
+            "product-link": "https://www.maritool.com/Mill-Tool-Holders-BT30-Dual-Contact-BT30-Shell-Mill-Holders/c23_33_444_506/p25604/BT30-.750-DUAL-CONTACT-FACE-MILL-TOOL-HOLDER-.750-2.5/product_info.html",
+            "reference_guid": "f127e6c2-0c0f-46bc-9799-6e74ce80b32b",
+            "segments": [
+                {
+                    "height": 1.67327,
+                    "lower-diameter": 1.73,
+                    "upper-diameter": 1.73
+                },
+                {
+                    "height": 0.03937007874015748,
+                    "lower-diameter": 1.7322834645669292,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.13385826771653542,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.09090551181102365,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.4960629921259845
+                },
+                {
+                    "height": 0.13311023622047244,
+                    "lower-diameter": 1.4960629921259845,
+                    "upper-diameter": 1.4960629921259845
+                },
+                {
+                    "height": 0.09090551181102365,
+                    "lower-diameter": 1.4960629921259845,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.25984251968503946,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.03937007874015748,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.7322834645669292
+                },
+                {
+                    "height": 0.07874015748031496,
+                    "lower-diameter": 1.2500000000000009,
+                    "upper-diameter": 1.2500000000000009
+                }
+            ],
+            "type": "holder",
+            "unit": "inches",
+            "vendor": "Maritool"
+        },
+        {
+            "description": "NBT30-SK13C-60",
+            "expressions": {
+                "tool_description": "'NBT30-SK13C-60'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height",
+                "tool_productId": "'HLD-7E2F62'"
+            },
+            "gaugeLength": 54.998999999999995,
+            "guid": "c8305bcc-bbe0-4291-86f9-b9e234271baa",
+            "last_modified": 1783898382782,
+            "product-id": "HLD-7E2F62",
+            "product-link": "",
+            "reference_guid": "040e1adb-db54-4f43-b97f-377dfebfbe0e",
+            "segments": [
+                {
+                    "height": 35,
+                    "lower-diameter": 33,
+                    "upper-diameter": 33
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.6,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75,
+                    "upper-diameter": 31.75
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": ""
+        },
+        {
+            "description": "NBT30-SK20C-90 w/ER16 EXT 2.5OOH",
+            "expressions": {
+                "tool_description": "'NBT30-SK20C-90 w/ER16 EXT 2.5OOH'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height + segment_10_height + segment_11_height",
+                "tool_productId": "'HLD-0CC866'",
+                "tool_vendor": "'Nikken'"
+            },
+            "gaugeLength": 147.479,
+            "guid": "51072afe-449d-4ab4-a50f-f498ff32464b",
+            "last_modified": 1783898382782,
+            "product-id": "HLD-0CC866",
+            "product-link": "",
+            "reference_guid": "e95e10e4-b793-48cf-893c-1554fa9adffa",
+            "segments": [
+                {
+                    "height": 17.78,
+                    "lower-diameter": 22.225,
+                    "upper-diameter": 22.225
+                },
+                {
+                    "height": 45.7,
+                    "lower-diameter": 19.05,
+                    "upper-diameter": 19.05
+                },
+                {
+                    "height": 64,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 44,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 3.4,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 46,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 3.381,
+                    "lower-diameter": 38,
+                    "upper-diameter": 38
+                },
+                {
+                    "height": 2.309,
+                    "lower-diameter": 38,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 6.600000000000001,
+                    "lower-diameter": 46,
+                    "upper-diameter": 46
+                },
+                {
+                    "height": 1,
+                    "lower-diameter": 46,
+                    "upper-diameter": 44
+                },
+                {
+                    "height": 2,
+                    "lower-diameter": 31.75000000000002,
+                    "upper-diameter": 31.75000000000002
+                }
+            ],
+            "type": "holder",
+            "unit": "millimeters",
+            "vendor": "Nikken"
+        },
+        {
+            "description": "BBT30-CKB3-79 (For  EWN Boring Heads)",
+            "expressions": {
+                "tool_description": "'BBT30-CKB3-79 (For  EWN Boring Heads)'",
+                "tool_holderGaugeLength": "segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height + segment_10_height + segment_11_height",
+                "tool_productId": "'HLD-5BBE03'"
+            },
+            "gaugeLength": 3.027362204724409,
+            "guid": "66184b29-180b-41a6-afee-08c17307a989",
+            "last_modified": 1783898382782,
+            "product-id": "HLD-5BBE03",
+            "product-link": "",
+            "reference_guid": "10bdf5f2-74b8-47eb-bd66-02b9b3273940",
+            "segments": [
+                {
+                    "height": 1.99,
+                    "lower-diameter": 1.22,
+                    "upper-diameter": 1.22
+                },
+                {
+                    "height": 0.25,
+                    "lower-diameter": 1.22,
+                    "upper-diameter": 1.6
+                },
+                {
+                    "height": 0.03937007874015748,
+                    "lower-diameter": 1.7322834645669292,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.13385826771653542,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.09090551181102365,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.4960629921259845
+                },
+                {
+                    "height": 0.13311023622047244,
+                    "lower-diameter": 1.4960629921259845,
+                    "upper-diameter": 1.4960629921259845
+                },
+                {
+                    "height": 0.09090551181102365,
+                    "lower-diameter": 1.4960629921259845,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.2598425196850394,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.03937007874015748,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.7322834645669292
+                },
+                {
+                    "height": 0.078740157480315,
+                    "lower-diameter": 1.25,
+                    "upper-diameter": 1.25
+                },
+                {
+                    "height": 0.07874015748031496,
+                    "lower-diameter": 1.2500000000000004,
+                    "upper-diameter": 1.2500000000000004
+                }
+            ],
+            "type": "holder",
+            "unit": "inches",
+            "vendor": ""
+        },
+        {
+            "description": "NBT30SK13-90 -ER16 TAP C EX2.0OOH",
+            "expressions": {
+                "tool_description": "'NBT30SK13-90 -ER16 TAP C EX2.0OOH'",
+                "tool_holderGaugeLength": "segment_2_height + segment_3_height + segment_4_height + segment_5_height + segment_6_height + segment_7_height + segment_8_height + segment_9_height + segment_10_height + segment_11_height",
+                "tool_productId": "'HLD-7B0B72'",
+                "tool_unit": "'inches'",
+                "tool_vendor": "'Nikken'"
+            },
+            "gaugeLength": 5.346417322834648,
+            "guid": "7a26a569-9e6a-4427-b712-f3025f9ae5dd",
+            "product-id": "HLD-7B0B72",
+            "product-link": "",
+            "segments": [
+                {
+                    "height": 0.7,
+                    "lower-diameter": 0.875,
+                    "upper-diameter": 0.875
+                },
+                {
+                    "height": 1.3,
+                    "lower-diameter": 0.75,
+                    "upper-diameter": 0.75
+                },
+                {
+                    "height": 2.559055118110237,
+                    "lower-diameter": 1.299212598425197,
+                    "upper-diameter": 1.299212598425197
+                },
+                {
+                    "height": 0.03937007874015748,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.13385826771653542,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.09090551181102365,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.4960629921259845
+                },
+                {
+                    "height": 0.13311023622047244,
+                    "lower-diameter": 1.4960629921259845,
+                    "upper-diameter": 1.4960629921259845
+                },
+                {
+                    "height": 0.09090551181102365,
+                    "lower-diameter": 1.4960629921259845,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.25984251968503946,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.811023622047244
+                },
+                {
+                    "height": 0.03937007874015748,
+                    "lower-diameter": 1.811023622047244,
+                    "upper-diameter": 1.7322834645669292
+                },
+                {
+                    "height": 0.07874015748031496,
+                    "lower-diameter": 1.2500000000000009,
+                    "upper-diameter": 1.2500000000000009
+                }
+            ],
+            "type": "holder",
+            "unit": "inches",
+            "vendor": "Nikken"
+        }
+    ],
+    "version": 36
+}
