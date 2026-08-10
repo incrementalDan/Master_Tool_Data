@@ -23,12 +23,18 @@ export default function MaterialLinkBanner({ tool, onSave, isSaving }) {
   // SHOP RULE: Fusion's material library is generated from ours, so a preset's
   // stock-material must be one of our CAM presets. Anything else is a leftover
   // reference to the Fusion material library that was replaced — Fusion resolves
-  // it to nothing. Flagged only; correcting it is a judgement call about what
-  // that preset should cut, so it's done by hand in the preset editor.
+  // it to nothing. Never corrected automatically, but it IS offered as a click:
+  // the field has no editor of its own, so without one the flag could only be
+  // cleared by re-picking a material that already looks correct.
   const stockStale = stockMaterialIssues(tool.presets || [], materials);
   if (broken.length === 0 && stockStale.length === 0) return null;
 
   const fixable = broken.filter(b => b.suggestion);
+  // A stale stock-material can be corrected in one click WHEN the preset already
+  // carries a CAM-preset link (`expected`) — that isn't a guess, it's applying
+  // the link the preset already has. Without one there's nothing to apply and
+  // the user picks a material in the editor instead.
+  const stockFixable = stockStale.filter(s => s.expected);
 
   // Re-link the given presets to their suggested CAM preset, in one save.
   const applyFixes = async (rows) => {
@@ -44,6 +50,20 @@ export default function MaterialLinkBanner({ tool, onSave, isSaving }) {
         material: { ...(p.material || {}), query: cam.name, category: materialCategory(cam.name) },
         'stock-materials': [cam.name],                     // Fusion's real material link
       };
+    });
+    setBusy(true);
+    try { await onSave({ ...tool, presets }); }
+    finally { setBusy(false); }
+  };
+
+  // Point Fusion's own material assignment at the CAM preset this preset is
+  // already linked to. Only `stock-materials` changes — the app's material was
+  // never wrong here, Fusion's copy was.
+  const applyStockFixes = async (rows) => {
+    const byGuid = new Map(rows.filter(r => r.expected).map(r => [r.guid, r.expected]));
+    const presets = (tool.presets || []).map(p => {
+      const name = byGuid.get(p.guid);
+      return name ? { ...p, 'stock-materials': [name] } : p;
     });
     setBusy(true);
     try { await onSave({ ...tool, presets }); }
@@ -80,23 +100,32 @@ export default function MaterialLinkBanner({ tool, onSave, isSaving }) {
         </div>
       )}
 
-      {/* Fusion's own material assignment points at a material that no longer
-          exists — a leftover from the replaced Fusion material library. Flag
-          only: which material it should now be is the user's call, made in the
-          preset editor. */}
+      {/* Fusion's own material assignment still names a material from the library
+          that was replaced. The APP's material is already right here — it is
+          Fusion's separate assignment that is stale, and it has no field of its
+          own in the editor, so this offers the one click that fixes it. Never
+          automatic: the button names the material it will apply. */}
       {stockStale.length > 0 && (
         <div style={{ marginTop: broken.length > 0 ? 12 : 0, paddingTop: broken.length > 0 ? 12 : 0, borderTop: broken.length > 0 ? '1px solid var(--border)' : 'none' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
             <FlaskConical size={16} style={{ color: 'var(--orange, #f59e0b)', flexShrink: 0, marginTop: 2 }} />
             <span style={{ flex: 1, minWidth: 220, lineHeight: 1.5 }}>
               <strong>
-                {stockStale.length} preset{stockStale.length > 1 ? 's point' : ' points'} at a Fusion material
-                that isn&apos;t in the Materials library.
+                {stockStale.length} preset{stockStale.length > 1 ? 's still tell' : ' still tells'} Fusion to
+                cut a material that no longer exists.
               </strong>{' '}
-              Fusion matches its material by name, so {stockStale.length > 1 ? 'these resolve' : 'this resolves'} to
-              nothing — left over from the Fusion material library that was replaced. Open the preset and
-              pick the material {stockStale.length > 1 ? 'they' : 'it'} should cut.
+              The material here is right — but Fusion keeps its own assignment, matched by name, and
+              {stockStale.length > 1 ? ' these ' : ' this '}
+              still names something from the material library that was replaced, so Fusion resolves it to
+              nothing. {stockFixable.length > 0
+                ? 'Point it at the material this preset is already linked to:'
+                : 'Open the preset and pick the material it should cut.'}
             </span>
+            {stockFixable.length > 1 && (
+              <button className="btn btn-primary" disabled={working} onClick={() => applyStockFixes(stockFixable)}>
+                {working ? 'Fixing…' : `Fix all ${stockFixable.length}`}
+              </button>
+            )}
           </div>
           <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
             {stockStale.map(s => (
@@ -105,10 +134,17 @@ export default function MaterialLinkBanner({ tool, onSave, isSaving }) {
                 <span className="text-xs text-sub" style={{ fontFamily: 'var(--font-mono)' }}>
                   Fusion: {s.unknown.join(', ')}
                 </span>
-                {s.expected && (
-                  <span className="text-xs text-sub" style={{ fontFamily: 'var(--font-mono)' }}>
-                    · linked to: {s.expected}
-                  </span>
+                {s.expected ? (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    disabled={working}
+                    title={`Tell Fusion this preset cuts "${s.expected}"`}
+                    onClick={() => applyStockFixes([s])}
+                  >
+                    <Check size={13} /> Use {s.expected}
+                  </button>
+                ) : (
+                  <span className="text-xs text-sub">Open the preset and pick a material</span>
                 )}
               </div>
             ))}
