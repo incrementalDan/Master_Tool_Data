@@ -65,6 +65,30 @@ const NO_TAP          = ALL_TYPES.filter(t => t !== 'tap');
 // chamfer-mill-only). Tapered mill has no such expression — UI-only transform.
 export const INCLUSIVE_ANGLE_TYPES = new Set(['chamfer mill', 'tapered mill']);
 
+// ⚠️ `taper_angle` is the ONE field whose stored number is not the number the
+// app shows: for a chamfer/tapered mill the store holds Fusion's HALF angle
+// (geometry.TA = 30) and every screen shows the INCLUDED angle (60). So any
+// component rendering a raw `tool.taper_angle` is showing a different number
+// from the panel next to it — which reads as the app disagreeing with itself.
+// That is not hypothetical: the conflict banner showed "Taper Angle 30" over a
+// geometry panel reading "Included/Inclusive Tip Angle 60" for the same tool,
+// and its "Use 60" button would have stored 60 and made the panel read 120.
+//
+// These two helpers are the single rule. Render a `taper_angle` through them or
+// don't render it — never reach for `tool.taper_angle` directly in a component.
+// Both are display-only: the stored value stays the half angle Fusion expects.
+export function showsInclusiveAngle(field, toolType) {
+  return field === 'taper_angle' && INCLUSIVE_ANGLE_TYPES.has(toolType);
+}
+
+// The number to SHOW for a field, given the value that is STORED.
+export function toDisplayValue(field, value, toolType) {
+  if (value === null || value === undefined || value === '') return value;
+  if (!showsInclusiveAngle(field, toolType)) return value;
+  const n = Number(value);
+  return isNaN(n) ? value : n * 2;
+}
+
 export const FIELD_REGISTRY = {
 
   // ── Identity & System ─────────────────────────────────────────────────────

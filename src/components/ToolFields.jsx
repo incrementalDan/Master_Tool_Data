@@ -7,7 +7,7 @@
 // lists and the visibility rule.
 import { useState } from 'react';
 import { AlertTriangle, ScanLine, Check, Undo2, X } from 'lucide-react';
-import { fieldLabel, FIELD_REGISTRY, INCLUSIVE_ANGLE_TYPES } from '../schema/fieldRegistry.js';
+import { fieldLabel, FIELD_REGISTRY, INCLUSIVE_ANGLE_TYPES, showsInclusiveAngle } from '../schema/fieldRegistry.js';
 import {
   getToolFieldSections, fieldControl, SELECT_OPTIONS,
   MATERIAL_SUITABILITY_OPTIONS, FLUTE_DESIGN_OPTIONS, COATING_SEED,
@@ -77,7 +77,8 @@ function labelFor(field, tool) {
 }
 
 // taper_angle is shown ×2 (included angle) for chamfer/tapered mills; stored ÷2.
-const showsDoubled = (field, tool) => field === 'taper_angle' && INCLUSIVE_ANGLE_TYPES.has(tool.tool_type);
+// The rule itself lives in fieldRegistry.js so every component shares it.
+const showsDoubled = (field, tool) => showsInclusiveAngle(field, tool.tool_type);
 
 // ── Spec-sheet proposals (see src/schema/extractionDiff.js) ─────────────────
 // Rendered INLINE, under the field they belong to, because that is where the
