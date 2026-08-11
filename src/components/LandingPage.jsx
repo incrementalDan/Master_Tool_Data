@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Search, X, Plus, LayoutGrid, List, PackageOpen, FolderOpen, GitMerge, AlertTriangle, CloudOff } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { applyFilters, matchedLegacyId, matchedComponent } from '../services/searchEngine.js';
+import { applyFilters, matchedLegacyId, matchedComponent, matchedPurchasing, sortResults } from '../services/searchEngine.js';
 import { toolNeedsAttention } from '../utils/toolConflicts.js';
 import { getDefaultUnit } from '../utils/units.js';
 import { machineColor } from '../utils/machineColors.js';
@@ -193,7 +193,9 @@ export default function LandingPage() {
       machines.length > 0 ? machineFilter : null, tols,
       toolLibraries.length > 1 ? libraryFilter : null,
     );
-    return [...result].sort(SORTS[sort]?.fn || SORTS.added.fn);
+    // Relevance first, the chosen sort within each tier — so an exact ID match
+    // reaches the top without overriding the sort the user picked.
+    return sortResults(result, textQuery, SORTS[sort]?.fn || SORTS.added.fn);
   }, [tools, selectedTypes, textQuery, facets, flaggedOnly, noFusionOnly, materials, components, sort, machineFilter, machines.length, exactMode, libraryFilter, toolLibraries.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleQueryChange = useCallback((val) => {
@@ -476,11 +478,11 @@ export default function LandingPage() {
         </div>
       ) : view === 'list' ? (
         <div className="tool-list">
-          {filtered.map(tool => <ToolCard key={tool.id} tool={tool} variant="list" matchedLegacyId={matchedLegacyId(tool, textQuery)} matchedComponent={matchedComponent(tool, textQuery, componentList)} />)}
+          {filtered.map(tool => <ToolCard key={tool.id} tool={tool} variant="list" matchedLegacyId={matchedLegacyId(tool, textQuery)} matchedComponent={matchedComponent(tool, textQuery, componentList)} matchedPurchasing={matchedPurchasing(tool, textQuery)} />)}
         </div>
       ) : (
         <div className="tool-grid">
-          {filtered.map(tool => <ToolCard key={tool.id} tool={tool} matchedLegacyId={matchedLegacyId(tool, textQuery)} matchedComponent={matchedComponent(tool, textQuery, componentList)} />)}
+          {filtered.map(tool => <ToolCard key={tool.id} tool={tool} matchedLegacyId={matchedLegacyId(tool, textQuery)} matchedComponent={matchedComponent(tool, textQuery, componentList)} matchedPurchasing={matchedPurchasing(tool, textQuery)} />)}
         </div>
       )}
       </div>
