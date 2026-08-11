@@ -1153,12 +1153,17 @@ src/
                                   # .machine-num-badge, .location-tag
     ToolTypeGrid.jsx              # Tool type selector tiles (icons size 36)
     FacetFilters.jsx              # Cascading facet filter UI
-    AddToolFlow.jsx               # New tool flow (extractor or manual)
+    AddToolFlow.jsx               # New tool flow: choose scan-or-manual → (scan)
+                                  # ExtractionInput → extraction → straight into
+                                  # ToolForm, pre-filled. No standalone extractor UI
     ImportFlow.jsx                # Bulk Fusion JSON / ProShop CSV import
                                   # Reached via Settings → Import. Step 2 hosts Import ProShop Photos
                                   # as a sub-section (button → ImportPhotosModal). Machine-number
                                   # step (4) is optional + non-destructive (see ProShop Integration).
                                   # Named-exports parseCSV + matchProShopToTools for reuse.
+    ExtractionInput.jsx           # The screenshot / PDF / paste picker (drag, browse,
+                                  # Ctrl+V). Shared by BOTH extraction entry points so
+                                  # the upload behaviour can't drift
     ExtractUpdateModal.jsx        # "Scan spec sheet" upload for an EXISTING tool.
                                   # Upload only — every accept/reject happens inline
                                   # in ToolForm, at the field being changed
@@ -1270,7 +1275,6 @@ src/
                                   # (Google Drive) config panels are embedded INSIDE their steps,
                                   # not separate cards), Shop (+ Save button), Machine Numbers,
                                   # ProShop Export, Rename, Advanced
-    ToolExtractorTab.jsx          # Hosts the tool-extractor image/spec extraction UI
     Toast.jsx                     # Fixed bottom-right toast stack
 
     icons/
@@ -1287,7 +1291,8 @@ src/
       QueuePanel.jsx              # Batch queue sidebar with status badges
       SummaryStep.jsx             # End-of-batch summary + bulk clipboard copy
 
-tool-extractor.tsx                # Source of truth for tool types, field visibility,
+tool-extractor.tsx                # DATA AND LOGIC ONLY — no UI. Source of truth for
+                                  # tool types, field visibility,
                                   # Fusion↔ProShop mapping, and image extraction UI
 ```
 
@@ -1696,7 +1701,15 @@ The document a scan read from is the provenance of every value it produced ("whe
 
 The keep/discard choice sits in the **summary bar**, not the upload modal — it is next to Save, which is when it actually happens. It appears only when there is a real file (a pasted-text scan has no document) and only when Drive is connected (otherwise the bar says so rather than silently dropping the file). Discarding the scan drops the pending file too. A pasted screenshot arrives named `image.png` for every scan, which would make a tool's Files list unreadable, so a generic name is replaced with `spec-sheet-<date>.<ext>`; a real uploaded filename is kept, since it is usually the part number.
 
-**Deferred:** the description is not auto-rebuilt when accepted geometry makes it stale — a hint appears next to the field and "Suggest" is one click away. Retiring the standalone extractor UI in favour of the tool-page UI (the user's stated end goal) is a separate follow-on; this feature builds the shared module it needs.
+### The standalone extractor UI is retired
+
+The old `tool-extractor.tsx` screen — a full second tool form with its own inputs, ProShop/Fusion export buttons and a recent-tools strip — is **gone**. Adding a tool by scan now goes: pick "Scan Tool Label / Drawing" → **`ExtractionInput`** (the same picker the update modal uses) → extraction → **straight into `ToolForm`**, pre-filled, with a banner saying so. One tool form in the app, not two.
+
+- ⚠️ **A new tool still writes every field, and that is a DIFFERENT path from the update.** The add flow merges the sparse result onto `BLANK` via `applyExtractionToBlank` (clearing what the sheet didn't mention) and converts it with `extractorToTool` — the original, test-locked behaviour. It does **not** run the proposal machinery: there is nothing to diff against yet, so every value is simply the starting point and the form is where it gets checked.
+- The scanned sheet is attached as `data_extraction` here too — after `addTool` returns, against the tool it returned (the record has no id or Drive folder before that).
+- **`tool-extractor.tsx` is now data and logic only** (998 → ~350 lines): the tool-type list, `FIELD_VISIBILITY`, ProShop group letters and columns, coolant values, and the CSV/row builders that the schema barrel re-exports. Its default `App` export, the theme block and every UI helper were deleted; `ToolExtractorTab.jsx` is gone. The filename and `.tsx` extension are kept only because many modules import from that path — renaming it is a mechanical change worth doing on its own.
+
+**Deferred:** the description is not auto-rebuilt when accepted geometry makes it stale — a hint appears next to the field and "Suggest" is one click away.
 
 -----
 
