@@ -293,18 +293,50 @@ Suggested order — each step independently shippable, none requiring the next:
    the mechanism already exists, it just lives in the wrong component.
 4. **Fold the form-only fields** (description + Suggest, `tool_id`, tool type, unit,
    insert-style toggle) into the Identity panel as controlled inputs.
-5. **Retire `ToolForm`** as a route once nothing renders it but the add flow, which
-   needs its own decision (see below).
+5. **Retire `ToolForm`** as a route once nothing renders it but the add flow — which
+   is covered by decision A below, so it is no longer a blocker.
 
-### Open questions — decide before starting, not during
+### Decisions (shop-owner input, 2026-08-11)
 
-- **The add flow has no tool to view.** `AddToolFlow` renders `ToolForm` for a record
-  that does not exist yet, so "view, unlocked" has nothing to unlock. Either the form
-  survives as a create-only shell, or the page renders a draft tool. Unresolved.
-- **`ToolForm`'s dirty guard is `JSON.stringify(data) !== JSON.stringify(tool)`.**
-  With immediate panels writing to the same tool mid-edit, that comparison gets a
-  moving baseline. Needs a per-section dirty model.
-- **Spec-sheet proposals replay against a frozen base.** While purchasing rows are
-  outstanding the editable panel is deliberately hidden (`ToolForm.jsx`, the
-  `purchRows.length === 0` guard). Unifying means deciding whether a hand-edit can
-  coexist with a pending scan row — which trades away the current undo guarantee.
+The three questions this section originally left open are answered. They turned out
+to be **one rule**, which is why they are recorded together.
+
+**A. A new tool starts unlocked.** The page renders an empty draft already in edit
+mode — no create-only shell, no separate route. "View, unlocked" isn't a problem for
+a record that doesn't exist yet; it just starts unlocked. Scan or manual, same entry.
+
+**B. ⚠️ An instant-save panel is unavailable while the page has unsaved edits.**
+Photo, Files and Location prompt *"create/save the tool first"* rather than acting.
+
+For a **new** tool this is not a design choice, it is a constraint the code already
+obeys: attachments live in `tool_files/{trackingId}/`, a folder that cannot exist
+before the tool does — which is exactly why the add flow already attaches a scanned
+sheet *after* `addTool` returns, against the tool the save returned. `assignToolLocation`
+is a full `writeLogicalTool`, so for a non-existent tool that write *is* the creation.
+
+For an **existing** tool the same block is what makes the merge safe, and it is the
+part worth not losing: an instant-save panel writes the whole tool record it is
+handed, so firing one mid-edit either reverts the uncommitted draft (if handed the
+`tool` prop) or silently persists it (if handed the draft) — the trap described
+above, arriving through a different door. Blocking while dirty means an instant save
+and a live draft can never coexist.
+
+**This also dissolves the dirty-baseline question.** The concern was that
+`JSON.stringify(data) !== JSON.stringify(tool)` gets a moving reference point once
+instant panels write mid-edit. Under B that moment cannot occur, so the existing
+whole-page comparison remains valid and no per-section dirty model is needed.
+
+**C. A hand-edit is never discarded.** Standing rule, per the shop owner: *"hand-edits
+should not disappear"* — a save prompt is an acceptable cost, silent loss is not.
+Consistent with the app's wider "informed, never silently reverted" philosophy.
+
+This does **not** require giving up the scan's undo. Do not fold hand-edits into the
+frozen base (that bakes accepted rows in and breaks un-ticking). Instead layer them:
+**replay the accepted rows from the frozen base, then re-apply the hand-edits on
+top.** Un-ticking a row still undoes cleanly because the replay is untouched, and a
+hand-edit always wins because it is applied last. The `purchRows.length === 0` guard
+in `ToolForm` is the interim stand-in for this and can be removed once it lands.
+
+Scope note: this applies only to the **existing-tool** "Scan spec sheet" path. The
+add flow has no proposal machinery at all (`applyExtractionToBlank` fills the blank
+form directly), so a hand-edit there already survives today — nothing to change.
