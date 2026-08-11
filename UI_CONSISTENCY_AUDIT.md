@@ -1,12 +1,16 @@
 # UI_CONSISTENCY_AUDIT.md — UI Consistency Pass
 
-> **STATUS: Quick Wins + Mediums + the Larger Redesign all implemented ✅.** Item 11 (the
+> **STATUS: Quick Wins + Mediums implemented ✅; the Larger Redesign is HALF done.** Item 11 (the
 > two-column edit layout) shipped as part of a deeper change: view and edit now render the
 > Geometry/Setup fields through ONE shared component (`ToolFields`) driven by one shared
 > layout (`toolFieldLayout.js`), so they can't drift and field positions no longer shift
 > between two tools of the same type (all applicable fields always render; only an explicit
 > `VIEW_HIDE_WHEN_EMPTY` set collapses when empty). See the "Shared field layout" section at
-> the bottom. Remaining: long-tail inline-style cleanup, done opportunistically.
+> the bottom. Remaining: long-tail inline-style cleanup, done opportunistically — and
+> **§12, view/edit unification part 2**, which is NOT done: item 11 unified the *fields*,
+> but the panels around them (Photo, Location, Jobs, Files, Notes & Tags, …) are still
+> split between the two screens. Read §12 before moving any panel between them — the
+> obvious approach silently reverts unsaved edits.
 
 Walkthrough of the main views against the design tokens in `src/index.css` (the `:root` block:
 surfaces, `--blue/--orange/--green/--red/--amber`, radii, shadows, plus the button/panel/modal/
@@ -165,7 +169,7 @@ then a flat single-column form.
 | 8 | Custom checkbox/select styling | Medium ✅ — `accent-color: var(--blue)` on all checkboxes/radios; `select.field-input` gets a theme chevron (`appearance: none` + inline SVG) |
 | 9 | Utility classes + opportunistic inline-style cleanup | Medium ✏️ partial — `.flex-wrap` + `.picker-row` added; ToolForm rows and HolderPicker rows converted; remaining inline styles cleaned as components get touched |
 | 10 | ~~DiffStep `.diff-table` + shared `.list-item`~~ | Already fine — `.diff-row` grid and `.queue-item` hover/active were already CSS classes; original finding overstated |
-| 11 | Two-column edit layout mirroring view mode | Larger Redesign |
+| 11 | Two-column edit layout mirroring view mode | Larger Redesign ✅ for the *fields* (see "Shared field layout"); the *panels* are still split — see §12 |
 
 ---
 
@@ -208,3 +212,99 @@ So a missing value shifted positions, and view/edit could silently disagree.
 `fieldRegistry.js` (applies-to-types, label) and its position in
 `GEOMETRY_FIELDS` / `SETUP_FIELDS` / `THREAD_FIELDS` in `toolFieldLayout.js`.
 Both view and edit update together — there is no second list to keep in sync.
+
+---
+
+## 12. View/edit unification, part 2 — the panels (NOT yet done)
+
+Item 11 unified the **fields**. The **panels around them** are still two different
+worlds, and the reason is not layout — it is **when an edit becomes real**. Anyone
+picking this up should read this section before moving a panel, because the obvious
+move (drop the view panels into `ToolForm`) has a data-loss trap in it.
+
+### What is actually shared today
+
+| Panel | View (`ToolDetail`) | Edit (`ToolForm`) | Save semantics |
+|---|---|---|---|
+| Geometry & Setup | `ToolFields mode="view"` | `ToolFields mode="edit"` | ✅ buffered — item 11 |
+| Purchasing | `PurchasingSection` (own pencil/Save) | `PurchasingSection` controlled | ✅ both — dual-mode |
+| Identity (description, `tool_id`, tool type, unit) | display only | editable | buffered |
+| **Notes & Tags** | **read-only display** (`ToolDetail.jsx:809`) | editable | ⚠️ **inverse asymmetry** |
+| Photo | `PhotoSlot` (`:765`) | absent | immediate — Drive upload |
+| Location | `LocationPicker` → `assignToolLocation` (`:788`) | free-text box, disabled when structured | immediate — Fusion round-trip |
+| Jobs | `JobsSection` → `saveTool` (`:802`) | absent | immediate |
+| Files | `FilesSection` → Drive (`:824`) | absent | immediate |
+| Assemblies | `AssembliesSection` → `sectionSave` | absent | immediate |
+| Presets | `PresetPanel` | absent | immediate |
+| Speeds & Feeds | `SpeedFeedSection` → `saveTool` | absent | immediate |
+
+**Notes & Tags is the one that runs the other way** — the view page can only *show*
+notes/tags/revision notes, so the only way to edit them is to open the whole form.
+It is the strongest candidate to become inline-editable next; it is pure metadata
+with no side effects, so it buffers cleanly (same shape as Purchasing).
+
+### ⚠️ The trap — a view panel is ACTIVELY UNSAFE inside a dirty form
+
+Every immediate panel saves as `onSave({ ...tool, <its field> })` → `sectionSave`
+(`ToolDetail.jsx:306`) → `saveTool` → a full `writeLogicalTool` round-trip. That
+`tool` is the **pre-edit record**. Render such a panel inside a buffered form and
+its Save writes the old geometry back — **silently reverting every unsaved edit
+beside it**. Two real instances of this shape:
+
+- the attachment upload, which writes the whole tool it is handed (already
+  documented in `ToolForm`'s `sourceFile` comment: attach *after* the save, against
+  the tool the save returned);
+- `PurchasingSection`'s own `handleSave`, which is why it grew a controlled mode
+  rather than being dropped in as-is.
+
+**Rule: a panel may only appear inside a buffered form in controlled mode** (`value`
++ `onChange` into the draft, no Save of its own). `PurchasingSection` is the
+reference implementation.
+
+### Buffered vs immediate — the classification to keep
+
+Not everything should buffer, and forcing it would be wrong:
+
+- **Buffer into the draft** (part of the tool record, no side effects): Geometry &
+  Setup ✅, Purchasing ✅, Notes & Tags, Identity, Jobs.
+- **Stay immediate, and say so in the UI**: Photo and Files (a Drive upload is not a
+  draft — the bytes are already gone), Location (`assignToolLocation` is its own
+  context action with its own Fusion write), Assemblies, Presets, Speeds & Feeds
+  (each has its own sub-editor and its own Fusion semantics).
+
+A panel that stays immediate needs to *look* immediate, or "Cancel" implies it
+undoes something it cannot undo.
+
+### Destination
+
+**There is no separate edit screen.** `ToolDetail` is the page; "Edit" flips the
+buffered sections into inputs in place (`ToolFields` already does exactly this) and
+raises the existing sticky Save/Cancel bar. Immediate panels keep their own controls
+and are visually distinct.
+
+Suggested order — each step independently shippable, none requiring the next:
+
+1. **Notes & Tags → inline-editable** on the view page, controlled. Closes the
+   inverse asymmetry and is the smallest end-to-end rehearsal of the pattern.
+2. **Decompose first, merge second.** `ToolDetail` is ~1259 lines and `ToolForm`
+   ~842; merging naively yields one ~2000-line component. Extract the right-column
+   panels and the sticky header into their own files *before* joining anything.
+3. **Lift the `editing` flag into the page**, with `ToolFields` switched by it —
+   the mechanism already exists, it just lives in the wrong component.
+4. **Fold the form-only fields** (description + Suggest, `tool_id`, tool type, unit,
+   insert-style toggle) into the Identity panel as controlled inputs.
+5. **Retire `ToolForm`** as a route once nothing renders it but the add flow, which
+   needs its own decision (see below).
+
+### Open questions — decide before starting, not during
+
+- **The add flow has no tool to view.** `AddToolFlow` renders `ToolForm` for a record
+  that does not exist yet, so "view, unlocked" has nothing to unlock. Either the form
+  survives as a create-only shell, or the page renders a draft tool. Unresolved.
+- **`ToolForm`'s dirty guard is `JSON.stringify(data) !== JSON.stringify(tool)`.**
+  With immediate panels writing to the same tool mid-edit, that comparison gets a
+  moving baseline. Needs a per-section dirty model.
+- **Spec-sheet proposals replay against a frozen base.** While purchasing rows are
+  outstanding the editable panel is deliberately hidden (`ToolForm.jsx`, the
+  `purchRows.length === 0` guard). Unifying means deciding whether a hand-edit can
+  coexist with a pending scan row — which trades away the current undo guarantee.
