@@ -19,7 +19,7 @@ import ToolTypeDropdown from './ToolTypeDropdown.jsx';
 import ToolFields from './ToolFields.jsx';
 import ExtractUpdateModal from './ExtractUpdateModal.jsx';
 import { applyPurchasingRows } from '../schema/extractionDiff.js';
-import { getToolFieldSections } from '../schema/toolFieldLayout.js';
+import { getToolFieldSections, coatingOptions } from '../schema/toolFieldLayout.js';
 import {
   INSERT_FAMILIES, INSERT_FAMILY_BY_ID, ALWAYS_INSERT_TYPES,
   defaultActivationFamily, newPairing, isCombinedProShopId,
@@ -241,6 +241,10 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
     return !!suggested && suggested !== data.description;
   }, [hasProposals, data]);
 
+  // Coating suggestions grow with the library — a manufacturer's own name for a
+  // coating must always be storable, so this is a hint list, not a gate.
+  const datalistOptions = useMemo(() => ({ coating: coatingOptions(tools) }), [tools]);
+
   const dirty = useMemo(() => JSON.stringify(data) !== JSON.stringify(tool), [data, tool]);
 
   // New taps default to HSS — taps are rarely carbide.
@@ -363,6 +367,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
               geoIssueFields={geoIssueFields}
               proposals={inlineProposalMap}
               onResolveProposal={resolveProposal}
+              listOptions={datalistOptions}
             />
             {geoIssues.length > 0 && (
               <div className="warn-banner" style={{ marginTop: 12 }}>

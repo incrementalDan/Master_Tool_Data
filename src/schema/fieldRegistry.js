@@ -2,6 +2,30 @@
 // Add new fields HERE before touching toolSchema.js, fusionExport.js, or proShopExport.js.
 import { unitAbbr, getDefaultUnit } from '../utils/units.js';
 
+// ── Shared option lists ──────────────────────────────────────────────────────
+// Here, not in toolFieldLayout, because the extraction service validates
+// against them too and this module is a leaf (it imports only units.js). Adding
+// them to a module that reaches tool-extractor.tsx would deepen that cycle.
+
+// ⚠️ COATING IS AN OPEN, GROWING LIST — a seed, never a whitelist.
+// Every manufacturer names its coating differently (ZPLUS, Tuff-Coat, nACo…),
+// so a value outside this list is normal and must be storable verbatim. The
+// field renders as a datalist (free text + suggestions), and the suggestions
+// are this seed UNIONED with every coating already used in the library
+// (`coatingOptions`), so the list grows itself as tools are added.
+// It was a closed <select>, which silently swallowed any real-world coating: a
+// scanned "ZPLUS" was stored but displayed blank, and was lost the moment the
+// dropdown was touched.
+export const COATING_SEED = ['UC', 'AlTiN', 'TiAlN', 'TiN', 'ZrN', 'DLC'];
+
+// ⚠️ FLUTE DESIGN IS A CLOSED LIST — deliberately.
+// Manufacturers describe the same geometry a dozen ways ("variable pitch",
+// "variable index", "unequal flute spacing"); the shop picks ONE vocabulary so
+// the field stays searchable. An extraction must map a manufacturer's wording
+// onto one of these, not invent a new value.
+export const FLUTE_DESIGN_OPTIONS = ['Variable Index', 'Variable Flute', 'Variable Helix', 'Variable Pitch'];
+
+
 //
 // Field entry shape:
 //   label          — display label (matches FIELD_LABELS in toolSchema.js)

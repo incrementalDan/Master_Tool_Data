@@ -13,8 +13,12 @@
 //   • The only exceptions are VIEW_HIDE_WHEN_EMPTY: a small, explicit set that
 //     collapses in the VIEW when empty/false (e.g. Custom Grind = No). Edit mode
 //     always reveals every box so you can fill it in.
-import { FIELD_REGISTRY, fieldsForType } from './fieldRegistry.js';
-import { MA, CO, WM } from './toolSchema.js';
+import { FIELD_REGISTRY, fieldsForType, COATING_SEED, FLUTE_DESIGN_OPTIONS } from './fieldRegistry.js';
+import { MA, WM } from './toolSchema.js';
+
+// Re-exported so existing importers keep working; both now live in the leaf
+// registry so the extraction service can validate against them too.
+export { COATING_SEED, FLUTE_DESIGN_OPTIONS };
 
 // ── Tool-type groups (shared with the landing-page grid and the type dropdown) ──
 // Grouped the way Fusion's tool-type picker groups them. Anything not listed
@@ -70,13 +74,28 @@ export const THREAD_FIELDS = [
 // Select-control option lists (UI enums that the registry doesn't carry).
 export const SELECT_OPTIONS = {
   material: MA,
-  coating: CO,                      // '' = None
+  // coating is deliberately NOT here — it is an open datalist, not a closed
+  // select. See COATING_SEED in fieldRegistry.js.
   cutting_direction: ['Right Hand', 'Left Hand'],
   flute_type: ['', 'Roughing', 'Semi-Finishing', 'Finishing', 'Yes', 'No'],
   point_type: ['', 'Bottoming', 'Modified Bottoming', 'Plug', 'Taper', 'Spiral Point', 'Spiral Flute'],
 };
 export const MATERIAL_SUITABILITY_OPTIONS = WM.filter(w => w);  // drop the blank
-export const FLUTE_DESIGN_OPTIONS = ['Variable Index', 'Variable Flute', 'Variable Helix', 'Variable Pitch'];
+
+/**
+ * Suggestions for the coating datalist: the seed plus every coating already in
+ * use, so the list grows with the library instead of gating what can be stored.
+ * De-duplicated case-insensitively, keeping the first spelling seen.
+ */
+export function coatingOptions(tools = []) {
+  const seen = new Map();
+  for (const c of COATING_SEED) seen.set(c.toLowerCase(), c);
+  for (const t of tools) {
+    const c = (t?.coating || '').trim();
+    if (c && !seen.has(c.toLowerCase())) seen.set(c.toLowerCase(), c);
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b));
+}
 
 // Fields that collapse in the VIEW when empty/false (edit always shows them).
 // Refine this set as needed — it is the one knob for "what may disappear".
@@ -88,7 +107,8 @@ export const VIEW_HIDE_WHEN_EMPTY = new Set([
 // 'select' | 'chips' | 'bool' | 'datalist' | 'num' | 'text'
 export function fieldControl(field) {
   if (field === 'material_suitability') return 'chips';
-  if (field === 'flute_design') return 'datalist';
+  // Open lists: free text with suggestions. Coating especially — see COATING_SEED.
+  if (field === 'flute_design' || field === 'coating') return 'datalist';
   if (SELECT_OPTIONS[field]) return 'select';
   const def = FIELD_REGISTRY[field] || {};
   if (def.type === 'boolean') return 'bool';

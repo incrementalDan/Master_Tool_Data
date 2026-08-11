@@ -297,7 +297,7 @@ function buildProShopCSV(f){
 const BLANK={
   toolType:"flat end mill",diameter:"",loc:"",oal:"",flutes:"",shankDia:"",cornerRadius:"0",material:"carbide",
   coating:"",workpieceMats:[],tipAngle:"",pitch:"",edpNumber:"",productLink:"",presetName:"",toolNumber:"",
-  coolant:"flood",helixAngle:"",centerCutting:false,customGrind:false,fluteType:"",grouping:"",approvedBrand:"",vendor:"",
+  coolant:"flood",helixAngle:"",centerCutting:false,customGrind:false,fluteType:"",fluteDesign:"",grouping:"",approvedBrand:"",vendor:"",
   cost:"",vendorStockNum:"",tapClass:"",pointType:"",shoulderLen:"",ooh:"",minOoh:"",taperAngle:"",
   minThreadPitch:"",maxThreadPitch:"",fullProfile:false,stubJobber:"",backsideCapable:false,doubleEnded:false,
   cuttingDirection:"Right Hand",tipDiameter:"",lowerRadius:"",upperRadius:"",profileRadius:"",axialDistance:"",
