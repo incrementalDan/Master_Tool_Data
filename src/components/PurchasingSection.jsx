@@ -24,7 +24,7 @@ function emptyPurchasing() {
 // stored URL, but a generator matches the part number) — so they become real
 // stored values the user can see/override afterward. Never overwrites a URL
 // the user already set.
-function backfillUrls(data) {
+export function backfillUrls(data) {
   return {
     ...data,
     manufacturers: (data.manufacturers || []).map(m => ({
@@ -41,7 +41,7 @@ function backfillUrls(data) {
 
 // Re-sequence `order` fields: manufacturers by their own order, vendors by
 // order within their manufacturer group.
-function normalizePurchasing(data) {
+export function normalizePurchasing(data) {
   const manufacturers = [...(data.manufacturers || [])]
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     .map((m, i) => ({ ...m, order: i }));
@@ -280,11 +280,35 @@ function VendorRow({ vendor, editing, isDragOver, revealed, onChange, onRemove, 
   );
 }
 
-export default function PurchasingSection({ tool, onSave, isSaving }) {
+// Two modes, and the difference is WHEN the edit becomes real:
+//
+//  • uncontrolled (ToolDetail / PairingSections) — the panel owns its own
+//    buffer and a pencil/Save/Cancel of its own, and `onSave` writes the tool
+//    immediately. Correct on the view page, where this panel is the only thing
+//    being edited.
+//  • controlled (`value` + `onChange`, used by ToolForm) — there is no buffer
+//    of its own and no Save button: edits go straight up into the parent's
+//    draft and are committed by the form's one Save.
+//
+// ⚠️ The controlled mode exists because the uncontrolled one is ACTIVELY UNSAFE
+// inside a dirty form: `handleSave` writes `{...tool, purchasing}` from the
+// tool prop it was handed, which inside ToolForm is the pre-edit record — so
+// saving purchasing would silently revert every unsaved geometry edit beside
+// it. Never render the uncontrolled mode inside a buffered form.
+export default function PurchasingSection({ tool, onSave, isSaving, value, onChange }) {
   const { vendorRegistry } = useApp();
+  const controlled = typeof onChange === 'function';
   const [open, setOpen] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [data, setData] = useState(() => tool.purchasing || emptyPurchasing());
+  const [ownEditing, setEditing] = useState(false);
+  const [ownData, setOwnData] = useState(() => tool.purchasing || emptyPurchasing());
+  // Controlled: always editing (the form's mode decides), and the parent's
+  // draft IS the buffer. Keeping the `setData(d => …)` updater signature means
+  // every handler below is shared verbatim between the two modes.
+  const editing = controlled ? true : ownEditing;
+  const data = controlled ? (value || emptyPurchasing()) : ownData;
+  const setData = controlled
+    ? (updater) => onChange(typeof updater === 'function' ? updater(value || emptyPurchasing()) : updater)
+    : setOwnData;
   const [revealedVendorNums, setRevealedVendorNums] = useState(new Set());
   const [dragOverKey, setDragOverKey] = useState(null);
   const dragSrc = useRef(null);
@@ -570,7 +594,9 @@ export default function PurchasingSection({ tool, onSave, isSaving }) {
             </button>
           )}
 
-          {editing && (
+          {/* Controlled mode has no Save/Cancel of its own — the form's one
+              Save commits this along with everything else in the draft. */}
+          {editing && !controlled && (
             <div className="purchasing-actions">
               <button type="button" className="btn btn-secondary btn-sm" onClick={handleCancel} disabled={isSaving}>Cancel</button>
               <button type="button" className="btn btn-primary btn-sm" onClick={handleSave} disabled={isSaving}>

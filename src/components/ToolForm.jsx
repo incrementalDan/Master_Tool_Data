@@ -18,6 +18,7 @@ import { useApp } from '../context/AppContext.jsx';
 import ToolTypeDropdown from './ToolTypeDropdown.jsx';
 import ToolFields from './ToolFields.jsx';
 import ExtractUpdateModal from './ExtractUpdateModal.jsx';
+import PurchasingSection, { normalizePurchasing, backfillUrls } from './PurchasingSection.jsx';
 import { applyPurchasingRows } from '../schema/extractionDiff.js';
 import { getToolFieldSections, coatingOptions } from '../schema/toolFieldLayout.js';
 import {
@@ -79,6 +80,12 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
   // that isn't already always-insert — turning it on sets a pairing (default
   // family from the tool type, refinable in the dropdown); the tool page then
   // splits into Holder Body / Insert sections. Nothing changes in Fusion.
+  // ≥1 component actually linked — not the mere presence of a pairing, so an
+  // insert tool mid-setup keeps its tool-level purchasing visible until data
+  // has really moved onto a component.
+  const hasComponents = !!(data.pairing
+    && (data.pairing.holder_component_id || data.pairing.insert_component_id));
+
   const togglePairing = (on) => {
     if (on) {
       setField('pairing', data.pairing || newPairing(defaultActivationFamily(data.tool_type)));
@@ -259,8 +266,15 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
     const { valid, errors: errs } = validateTool(data);
     if (!valid) { setErrors(errs); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     setErrors([]);
+    // Purchasing is edited in place in the draft, so the re-sequencing and
+    // generated-link backfill the standalone panel does on its own Save has to
+    // happen here instead. Only when the tool actually has purchasing — a tool
+    // that never had any must not gain an empty object.
+    const payload = data.purchasing
+      ? { ...data, purchasing: normalizePurchasing(backfillUrls(data.purchasing)) }
+      : data;
     try {
-      await onSave(data, (sourceFile && keepSourceFile) ? sourceFile : null);
+      await onSave(payload, (sourceFile && keepSourceFile) ? sourceFile : null);
     } catch (err) {
       setErrors([err.message]);
     }
@@ -521,6 +535,25 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
               </div>
             </div>
           </Section>
+
+          {/* Purchasing — edited in place in the draft (controlled mode), so it
+              is committed by this form's Save like every other field. Mirrors
+              the view page, which hides tool-level purchasing once components
+              are linked: on an insert tool the purchasing lives on each
+              component, not on the pairing. */}
+          {/* ⚠️ Not while a scan's purchasing rows are outstanding. Those rows
+              replay against a FROZEN base (see purchasingFor), so a hand-edit
+              made alongside them would be silently wiped by the next row
+              toggle. For that session SpecPurchasingPanel is the one editor —
+              it already shows current → proposed for every purchasing change,
+              and Discard scan brings this panel back. */}
+          {!hasComponents && purchRows.length === 0 && (
+            <PurchasingSection
+              tool={data}
+              value={data.purchasing}
+              onChange={p => setField('purchasing', p)}
+            />
+          )}
 
           <Section title="Notes & Tags" icon={StickyNote}>
             <div className="form-grid">
