@@ -712,7 +712,7 @@ function SpecSummary({
         <span style={{ flex: 1 }} />
         {pending > 0 && (
           <button type="button" className="btn btn-ghost btn-sm" onClick={onAcceptAll}>
-            <Check size={13} /> Use all
+            <Check size={13} /> Update all
           </button>
         )}
         <button type="button" className="btn btn-ghost btn-sm" onClick={onDiscard} title="Put every value back and drop the scan">
@@ -773,7 +773,7 @@ function SpecPurchasingPanel({ rows, homeless, unit, newMfgAck, onAck, onResolve
         {status === 'pending' ? (
           <>
             <button type="button" className="spec-proposal-btn accept" onClick={onAccept} disabled={disabled}>
-              <Check size={11} /> Use
+              <Check size={11} /> Update
             </button>
             <button type="button" className="spec-proposal-btn" onClick={onReject}>
               <X size={11} /> Keep
@@ -782,7 +782,7 @@ function SpecPurchasingPanel({ rows, homeless, unit, newMfgAck, onAck, onResolve
         ) : (
           <button type="button" className="spec-proposal-btn"
             onClick={status === 'accepted' ? onReject : onAccept} disabled={status !== 'accepted' && disabled}>
-            <Undo2 size={11} /> {status === 'accepted' ? 'Undo' : 'Use it'}
+            <Undo2 size={11} /> {status === 'accepted' ? 'Undo' : 'Update'}
           </button>
         )}
       </div>
