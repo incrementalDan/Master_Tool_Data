@@ -46,7 +46,7 @@ function derivePitchFromThreadSize(pitchStr, toolUnit = 'inches') {
 }
 
 export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDelete }) {
-  const { tools, shopSettings } = useApp();
+  const { tools, shopSettings, googleAuthenticated } = useApp();
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
   const [data, setData] = useState({ ...tool });
   const [errors, setErrors] = useState([]);
@@ -101,6 +101,13 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
   const [specExtracted, setSpecExtracted] = useState(null); // sparse payload
   const [typeNotice, setTypeNotice] = useState(null);
   const [newMfgAck, setNewMfgAck] = useState(false);
+  // The screenshot/PDF the scan read, held until the tool is actually saved.
+  // ⚠️ Uploaded AFTER the save, never before: uploadToolAttachment writes the
+  // whole tool it is handed, so attaching from the unsaved draft would persist
+  // edits the user hasn't committed — and attaching from the pre-edit `tool`
+  // prop would silently revert the ones they just made.
+  const [sourceFile, setSourceFile] = useState(null);
+  const [keepSourceFile, setKeepSourceFile] = useState(true);
   // The purchasing object as it was when the sheet was read. Rows are replayed
   // against THIS, never against the running draft — otherwise un-ticking a row
   // could not undo its effect.
@@ -125,8 +132,10 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
     return { ...draft, purchasing, vendor: (wasBlank && first) ? first : draft.vendor };
   };
 
-  const receiveProposals = ({ extracted, proposals, purchasingRows, typeNotice: notice }) => {
+  const receiveProposals = ({ extracted, proposals, purchasingRows, typeNotice: notice, sourceFile: src }) => {
     basePurchasingRef.current = data.purchasing || { manufacturers: [], vendors: [] };
+    setSourceFile(src || null);
+    setKeepSourceFile(true);
 
     // Blank fields are filled automatically — but every fill is still a visible
     // row with an Undo, per "filling in blanks is fine, but must be visible".
@@ -179,6 +188,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
     });
     setSpecProposals([]); setPurchRows([]); setSpecExtracted(null);
     setTypeNotice(null); setNewMfgAck(false); basePurchasingRef.current = null;
+    setSourceFile(null);
   };
 
   const acceptAllPending = () => {
@@ -246,7 +256,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
     if (!valid) { setErrors(errs); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     setErrors([]);
     try {
-      await onSave(data);
+      await onSave(data, (sourceFile && keepSourceFile) ? sourceFile : null);
     } catch (err) {
       setErrors([err.message]);
     }
@@ -321,6 +331,10 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
           pending={pendingCount}
           accepted={acceptedCount}
           typeNotice={typeNotice}
+          sourceFile={sourceFile}
+          keepSourceFile={keepSourceFile}
+          onKeepSourceFile={setKeepSourceFile}
+          canAttach={googleAuthenticated}
           onAcceptAll={acceptAllPending}
           onDiscard={discardProposals}
         />
@@ -643,7 +657,10 @@ function Section({ title, icon: Icon, children, forceOpen = false }) {
 // ── Spec-sheet summary bar ───────────────────────────────────────────────────
 // The count is the whole point: it says how many decisions are outstanding, so
 // a pending row can never be lost simply by not scrolling to it.
-function SpecSummary({ pending, accepted, typeNotice, onAcceptAll, onDiscard }) {
+function SpecSummary({
+  pending, accepted, typeNotice, onAcceptAll, onDiscard,
+  sourceFile, keepSourceFile, onKeepSourceFile, canAttach,
+}) {
   return (
     <div className={`spec-summary ${pending > 0 ? 'has-pending' : ''} mb-16`}>
       <div className="spec-summary-row">
@@ -668,6 +685,23 @@ function SpecSummary({ pending, accepted, typeNotice, onAcceptAll, onDiscard }) 
         Nothing is saved until you press Save. Presets, assemblies, Tool ID, location
         and machine number are not touched by a scan.
       </p>
+      {/* The sheet is kept as evidence for the values it produced. The choice
+          lives here rather than in the upload modal so it is next to Save —
+          the point at which it actually happens. */}
+      {sourceFile && canAttach && (
+        <label className="checkbox-row spec-summary-keep">
+          <input type="checkbox" checked={keepSourceFile} onChange={e => onKeepSourceFile(e.target.checked)} />
+          <span className="text-xs text-sub">
+            Save <strong>{sourceFile.name}</strong> to this tool's Files, under
+            {' '}<strong>Data Extraction</strong>
+          </span>
+        </label>
+      )}
+      {sourceFile && !canAttach && (
+        <p className="spec-summary-note">
+          Connect Google Drive to keep the spec sheet with this tool.
+        </p>
+      )}
       {typeNotice && (
         <p className="spec-summary-type">
           <AlertTriangle size={12} />

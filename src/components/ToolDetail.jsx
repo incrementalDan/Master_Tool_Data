@@ -221,8 +221,19 @@ export default function ToolDetail() {
     }
   };
 
-  const handleSave = async (updated) => {
-    await saveTool(updated);
+  // `sourceFile` is the screenshot/PDF a "Scan spec sheet" run read its values
+  // from, handed up by ToolForm. ⚠️ It is attached to the tool the save RETURNED,
+  // never to the draft or to the pre-edit `tool` — uploadToolAttachment writes
+  // the whole record it is given, so either of those would undo the save.
+  // A failed attach must not fail the save: the tool data is already committed
+  // and correct, and uploadToolAttachment has toasted the reason.
+  const handleSave = async (updated, sourceFile = null) => {
+    const saved = await saveTool(updated);
+    if (sourceFile && saved) {
+      try {
+        await uploadToolAttachment(saved, sourceFile.blob, sourceFile.name, 'data_extraction');
+      } catch { /* already surfaced by the action */ }
+    }
     setEditing(false);
     clearEditParam();
   };

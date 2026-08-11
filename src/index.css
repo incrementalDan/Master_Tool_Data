@@ -6001,3 +6001,8 @@ input.sf-ref-num { text-align: right; }
   color: var(--blue);
   font-size: var(--text-xs);
 }
+.spec-summary-keep {
+  margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid var(--border);
+  align-items: flex-start; gap: 7px;
+}

@@ -812,7 +812,7 @@ Stored in a single file on Google Drive. The file contains an array of metadata 
     {
       "file_id": "Google Drive file ID",
       "filename": "original filename",
-      "type": "photo | spec_sheet | model_3d | fusion_file | other",
+      "type": "photo | spec_sheet | data_extraction | speeds_feeds | model_3d | fusion_file | other",
       "uploaded_at": "ISO timestamp"
     }
   ],
@@ -1686,6 +1686,12 @@ A **fill** (the field was blank) is applied immediately — but still renders as
 
 **⚠️ The service and `tool-extractor.tsx` import each other**, so anything derived from the extractor's exports (`EXTRACT_RESET` from `BLANK`, the valid-coolant set from `COOLANT_OPTS`) is computed **lazily inside a function**, never at module scope — in an ES-module cycle a top-level `const` in the partially-initialised module is still in the temporal dead zone, and hoisting these back would throw at import time for every consumer of the schema barrel.
 
+### The scanned sheet is kept as evidence (`data_extraction`)
+
+The document a scan read from is the provenance of every value it produced ("where did 38° helix come from?"), so it is attached to the tool under the **`data_extraction`** file category. ⚠️ **Uploaded AFTER the tool save, against the tool the save RETURNED** — `uploadToolAttachment` writes the whole record it is handed, so attaching from the unsaved draft would persist edits the user hasn't committed, and attaching from the pre-edit `tool` prop would silently revert the ones they just made. A failed attach never fails the save: the tool data is already committed and correct, and the action has toasted the reason.
+
+The keep/discard choice sits in the **summary bar**, not the upload modal — it is next to Save, which is when it actually happens. It appears only when there is a real file (a pasted-text scan has no document) and only when Drive is connected (otherwise the bar says so rather than silently dropping the file). Discarding the scan drops the pending file too. A pasted screenshot arrives named `image.png` for every scan, which would make a tool's Files list unreadable, so a generic name is replaced with `spec-sheet-<date>.<ext>`; a real uploaded filename is kept, since it is usually the part number.
+
 **Deferred:** the description is not auto-rebuilt when accepted geometry makes it stale — a hint appears next to the field and "Suggest" is one click away. Retiring the standalone extractor UI in favour of the tool-page UI (the user's stated end goal) is a separate follow-on; this feature builds the shared module it needs.
 
 -----
@@ -2188,7 +2194,7 @@ Each tool can have a primary photo and a list of other file attachments (spec sh
 
 ### Metadata fields
 - `primary_photo_id` / `primary_photo_name` — Drive file ID + filename of the primary photo. Stored in `tool_metadata.json` per-tool. Displayed in the Identity section of ToolDetail.
-- `attachments[]` — array of `{ file_id, filename, type, uploaded_at }`. `type` is one of `photo | spec_sheet | model_3d | fusion_file | other`. Displayed in the collapsible "Files & Attachments" panel in ToolDetail.
+- `attachments[]` — array of `{ file_id, filename, type, uploaded_at }`. `type` is one of `photo | spec_sheet | data_extraction | speeds_feeds | model_3d | fusion_file | other` (the display order + group headings live in `TYPE_ORDER`/`TYPE_LABELS`, `FilesSection.jsx`; the picker list in `AttachmentUploadModal.jsx` — keep the two in step). Displayed in the collapsible "Files & Attachments" panel in ToolDetail. **`data_extraction`** is the screenshot/PDF a "Scan spec sheet" run read its values from — see that section; it is also manually selectable for a sheet uploaded by hand.
 
 ### UI components
 - `FilesSection.jsx` — collapsible panel showing the attachments list with view/download/delete per file.

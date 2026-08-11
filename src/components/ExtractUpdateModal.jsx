@@ -13,6 +13,16 @@ import { runExtraction } from '../services/extractionService.js';
 import { buildFieldProposals, buildPurchasingProposals } from '../schema/extractionDiff.js';
 import { unitAbbr } from '../utils/units.js';
 
+// A pasted screenshot arrives as "image.png" for every scan, which would make a
+// tool's Files list unreadable. Name it for what it is and when it was read;
+// keep a real uploaded filename as-is, since that is usually the part number.
+function sourceFileName(file) {
+  const generic = !file.name || /^(image|screenshot|pasted)/i.test(file.name);
+  if (!generic) return file.name;
+  const ext = file.kind === 'pdf' ? 'pdf' : (file.mediaType?.split('/')[1] || 'png');
+  return `spec-sheet-${new Date().toISOString().slice(0, 10)}.${ext}`;
+}
+
 export default function ExtractUpdateModal({ open, tool, onClose, onProposals }) {
   const [mode, setMode] = useState('file');       // 'file' | 'text'
   const [file, setFile] = useState(null);         // { kind, data, mediaType, name, preview }
@@ -33,15 +43,18 @@ export default function ExtractUpdateModal({ open, tool, onClose, onProposals })
     if (!f) return;
     setError(''); setEmpty(false);
     const reader = new FileReader();
+    // The raw File is kept alongside the base64: the extraction needs the
+    // bytes, and the form may then attach the same file to the tool so the
+    // values it produced stay traceable to their source.
     if (f.type === 'application/pdf') {
       reader.onload = e => setFile({
-        kind: 'pdf', data: e.target.result.split(',')[1], name: f.name, preview: null,
+        kind: 'pdf', data: e.target.result.split(',')[1], name: f.name, preview: null, blob: f,
       });
       reader.readAsDataURL(f);
     } else if (f.type.startsWith('image/')) {
       reader.onload = e => setFile({
         kind: 'image', data: e.target.result.split(',')[1],
-        mediaType: f.type || 'image/png', name: f.name, preview: e.target.result,
+        mediaType: f.type || 'image/png', name: f.name, preview: e.target.result, blob: f,
       });
       reader.readAsDataURL(f);
     } else {
@@ -85,7 +98,14 @@ export default function ExtractUpdateModal({ open, tool, onClose, onProposals })
         setBusy(false);
         if (!typeNotice) return;
       }
-      onProposals({ extracted, proposals, purchasingRows, typeNotice, newManufacturer });
+      onProposals({
+        extracted, proposals, purchasingRows, typeNotice, newManufacturer,
+        // Only a real file can be attached — a pasted-text extraction has no
+        // document to keep.
+        sourceFile: mode === 'file' && file?.blob
+          ? { blob: file.blob, name: sourceFileName(file) }
+          : null,
+      });
       onClose();
     } catch (e) {
       setError(e.message || 'Extraction failed');
