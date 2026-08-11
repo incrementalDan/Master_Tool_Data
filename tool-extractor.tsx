@@ -1,6 +1,9 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { THROUGH_COOLANT_VALUES, smartDiam, buildDesc } from "./src/utils/toolNaming.js";
-import { getManufacturerNames, getVendorNames, resolveVendorName } from "./src/schema/vendorRegistry.js";
+import { getManufacturerNames, getVendorNames } from "./src/schema/vendorRegistry.js";
+// The extraction call itself lives in the shared service so this form and the
+// "scan spec sheet" update on the tool page can never drift apart.
+import { runExtraction, applyExtractionToBlank } from "./src/services/extractionService.js";
 
 // The Cloudflare Worker "doorman" that holds the Anthropic API key and relays
 // extraction requests. The URL is not sensitive (the secret key lives inside
@@ -9,10 +12,6 @@ import { getManufacturerNames, getVendorNames, resolveVendorName } from "./src/s
 // NOTE: `import.meta.env` exists under Vite (browser) but is undefined under
 // plain Node — this module is imported by the schema barrel, which the
 // round-trip audit runs in Node. Optional-chain so it can't crash there.
-const EXTRACTOR_API_URL =
-  import.meta.env?.VITE_EXTRACTOR_API_URL ||
-  "https://tooldex-extractor.yinglingd.workers.dev";
-
 // ─── THEME ────────────────────────────────────────────────────────────────────
 const BLUE   = "#4a8fff";
 const ORANGE = "#d97830";
@@ -365,20 +364,6 @@ function getVisibleFields(toolType){
 
 // Advisory hint lists for the extraction prompt — the seed names are fine here
 // (the prompt also tells the model to return brands not in the list).
-const VENDOR_LIST_STR=getVendorNames().join(", ");
-const MANUFACTURER_LIST_STR=getManufacturerNames().join(", ");
-function buildSYS(){
-  return `You are a machining expert. Extract tool data from product pages, spec sheets, or text. Return ONLY valid JSON — no markdown, no extra text:
-{"toolType":"flat end mill|ball end mill|bull nose end mill|tapered mill|radius mill|form mill|lollipop mill|slot/key cutter|dovetail|thread mill|face mill|chamfer mill|circle segment barrel|circle segment lens|circle segment oval|circle segment taper|drill|center drill|spot drill|reamer|counter bore|counter sink|tap|boring head|turning general","diameter":"cutting diameter decimal inches","loc":"flute/cutting length decimal inches","oal":"overall length decimal inches","flutes":"integer string","shankDia":"shank diameter decimal inches","cornerRadius":"0 for square, half-dia for ball, actual CR for bull nose","material":"carbide|hss|cobalt|ceramic","coating":"Normalize: Uncoated/Bright → UC. Otherwise copy verbatim. Empty if not stated.","workpieceMats":"Array ISO codes N=Al,M=SS,P=Steel,S=HTA,K=CI primary first","tipAngle":"included angle degrees for drills/chamfers/spot — else empty","helixAngle":"helix degrees if visible","pitch":"thread size x pitch (e.g. 1/4-20 or M6x1.0) for taps/thread mills — else empty","productLink":"url if visible","edpNumber":"Mfr# — NOT distributor stock#","approvedBrand":"manufacturer of the tool. Match to: ${MANUFACTURER_LIST_STR}. If the brand is not in the list but clearly a tool manufacturer, still return it exactly as shown on the page.","vendorStockNum":"distributor catalog#. Empty if not found.","vendor":"seller. Match: ${VENDOR_LIST_STR}. Empty if not confident.","coolant":"flood|disabled|mist|through tool|air|air through tool|suction|flood and mist|flood and through tool — default flood. If tool is described as through-coolant or through-spindle coolant, return \"flood and through tool\".","centerCutting":true,"fluteType":"Roughing|Semi-Finishing|Finishing|Yes|No or empty","tapClass":"Tolerance class, e.g. H3/6H or D2-D6. Empty if not tap.","tapSubType":"cut|form — tap sub-type from description/markings. Empty if not tap.","isSTI":"true if the tap is an STI/Helicoil thread insert tap, else false. Only relevant for taps.","threadUnit":"inch|metric — infer from the thread designation format (M-prefix or mm pitch = metric). Empty if not tap or thread mill.","pointType":"Bottoming|Modified Bottoming|Plug|Taper|Spiral Point|Spiral Flute|Forming. Empty if not tap.","shoulderLen":"shoulder length >= LOC decimal inches. Empty if unsure.","ooh":"Leave empty — user sets manually.","cost":"The best actual purchase price for this specific tool. Follow these rules in order:
-  1. HAAS TOOLS ONLY: Use the Winner's Circle price if shown — ignore all other prices.
-  2. DISCOUNTED PRICE: If a sale price, your price, web price, or discounted price is shown alongside a list/regular price, use the discounted one.
-  3. PACK PRICING: If the item is only sold in a multi-pack (e.g. pkg of 10, box of 5), use the total pack price — not the per-unit breakdown price.
-  4. SINGLE-TOOL PRICE: If multiple different tools are listed on the same page (e.g. a size chart or related products), only use the price for the specific tool being described — not the cheapest one on the page.
-  5. FALLBACK: If only one price is shown with no pack or discount context, use it.
-  Return as a decimal string (e.g. \"28.28\"). Empty if no price found.","sourceUnits":"in|mm","taperAngle":"taper/lead angle degrees","minThreadPitch":"thread mill TPN decimal inches","maxThreadPitch":"thread mill TPX decimal inches","tpiMin":"thread mill minimum TPI (threads per inch) capability — integer string. Empty if not thread mill.","tpiMax":"thread mill maximum TPI capability — integer string. Empty if not thread mill.","threadProfileAngle":"thread mill thread profile included angle in degrees (e.g. 60 for unified, 55 for Whitworth). Empty if not thread mill or unknown.","fullProfile":false,"stubJobber":"Stub or Jobber if specified","backsideCapable":false,"doubleEnded":false,"cuttingDirection":"Right Hand or Left Hand","notes":"brief note"}
-Rules: Convert metric to inches. Ball cornerRadius=dia/2. Drills tipAngle=full included angle (135 not 67.5). Return ONLY JSON.`;
-}
-
 function tryCopy(text,taRef,setLbl,done,reset){
   const fb=()=>{if(taRef?.current){taRef.current.value=text;taRef.current.focus();taRef.current.select();try{document.execCommand("copy");setLbl(done);}catch{setLbl("Select all & Ctrl+C");}setTimeout(()=>setLbl(reset),3000);}};
   if(navigator.clipboard?.writeText){navigator.clipboard.writeText(text).then(()=>{setLbl(done);setTimeout(()=>setLbl(reset),2500);}).catch(fb);}else{fb();}
@@ -575,65 +560,29 @@ export default function App({ onExtract } = {}){
   const go=async()=>{
     setLoading(true);setErr("");setNotes("");
     try{
-      let messages;
-      if(inputMode==="file"&&fileType==="image"&&imgB64) messages=[{role:"user",content:[{type:"image",source:{type:"base64",media_type:imgType,data:imgB64}},{type:"text",text:"Extract all tool data including price/cost if shown anywhere on this product page."}]}];
-      else if(inputMode==="file"&&fileType==="pdf"&&pdfB64) messages=[{role:"user",content:[{type:"document",source:{type:"base64",media_type:"application/pdf",data:pdfB64}},{type:"text",text:"Extract all tool data including price/cost if shown anywhere."}]}];
-      else messages=[{role:"user",content:"Extract tool data including price/cost:\n\n"+txt}];
-      const r=await fetch(EXTRACTOR_API_URL,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-5",max_tokens:2048,system:buildSYS(),messages})});
-      if(!r.ok){const t=await r.text();throw new Error(`API ${r.status}: ${t.slice(0,200)}`);}
-      const d=await r.json();
-      const t=(d.content||[]).map(b=>b.text||"").join("").replace(/```json|```/g,"").trim();
-      const p=JSON.parse(t);
-      const validCoolants=COOLANT_OPTS.map(([v])=>v);
-      setF(prev=>({...prev,
-        toolType:TT.includes(p.toolType)?p.toolType:prev.toolType,
-        diameter:p.diameter||"",loc:p.loc||"",oal:p.oal||"",flutes:p.flutes||"",
-        shankDia:p.shankDia||"",cornerRadius:p.cornerRadius??"0",
-        material:MA.includes(p.material)?p.material:"carbide",coating:p.coating||"",
-        workpieceMats:Array.isArray(p.workpieceMats)?p.workpieceMats.filter(x=>WM.includes(x)):(WM.includes(p.workpieceMat)?[p.workpieceMat]:[]),
-        tipAngle:p.tipAngle||"",helixAngle:p.helixAngle||"",pitch:p.pitch||"",productLink:p.productLink||"",
-        edpNumber:p.edpNumber||"",
-        approvedBrand:resolveVendorName(p.approvedBrand||""),  // canonicalize alias→preferred; unknown free text passes through
-        vendor:(()=>{const r=resolveVendorName(p.vendor||"");return getVendorNames().includes(r)?r:"";})(),
-        vendorStockNum:p.vendorStockNum||"",
-        coolant:(()=>{
-          const raw=p.coolant||"";
-          if(!raw||!validCoolants.includes(raw)) return "flood";
-          // If tool is through-coolant capable, use flood and through tool; otherwise flood
-          if(raw==="through tool"||raw==="air through tool") return "flood and through tool";
-          return raw;
-        })(),
-        centerCutting:!!p.centerCutting,fluteType:p.fluteType||"",cost:p.cost||"",
-        tapClass:p.tapClass||"",pointType:p.pointType||"",shoulderLen:p.shoulderLen||"",ooh:p.ooh||"",
-        taperAngle:p.taperAngle||"",minThreadPitch:p.minThreadPitch||"",maxThreadPitch:p.maxThreadPitch||"",
-        tapSubType:["cut","form"].includes(p.tapSubType)?p.tapSubType:"",isSTI:!!p.isSTI,
-        tpiMin:p.tpiMin||"",tpiMax:p.tpiMax||"",threadProfileAngle:p.threadProfileAngle||"",
-        fullProfile:!!p.fullProfile,stubJobber:p.stubJobber||"",backsideCapable:!!p.backsideCapable,
-        doubleEnded:!!p.doubleEnded,cuttingDirection:p.cuttingDirection||"Right Hand",
-      }));
-      if(p.notes)setNotes(p.notes);
-      setInputWasMm(p.sourceUnits==="mm");
+      // One shared extraction path (src/services/extractionService.js) — the
+      // same call the tool page's "scan spec sheet" update uses. It returns a
+      // SPARSE result; applyExtractionToBlank restores this form's original
+      // "clear anything the sheet didn't mention" behaviour.
+      const input = (inputMode==="file"&&fileType==="image"&&imgB64)
+        ? {kind:"image",data:imgB64,mediaType:imgType}
+        : (inputMode==="file"&&fileType==="pdf"&&pdfB64)
+          ? {kind:"pdf",data:pdfB64}
+          : {kind:"text",data:txt};
+      const {fields,notes:extractedNotes,sourceUnits}=await runExtraction(input);
+
+      setF(prev=>applyExtractionToBlank(prev,fields));
+      if(extractedNotes)setNotes(extractedNotes);
+      setInputWasMm(sourceUnits==="mm");
       setExd(true);
-      // Save snapshot to recent — capture current state after setF
-      // We use a microtask so setF has flushed
+
+      // Snapshot for the recent-tools strip. Built off BLANK (not the live
+      // form) so a recent entry is the extraction alone, without whatever the
+      // user had typed in before running it.
       const snapData={
-        toolType:TT.includes(p.toolType)?p.toolType:"flat end mill",
-        diameter:p.diameter||"",loc:p.loc||"",oal:p.oal||"",flutes:p.flutes||"",
-        shankDia:p.shankDia||"",cornerRadius:p.cornerRadius??"0",
-        material:MA.includes(p.material)?p.material:"carbide",coating:p.coating||"",
-        workpieceMats:Array.isArray(p.workpieceMats)?p.workpieceMats.filter(x=>WM.includes(x)):[],
-        tipAngle:p.tipAngle||"",pitch:p.pitch||"",edpNumber:p.edpNumber||"",
-        approvedBrand:resolveVendorName(p.approvedBrand||""),vendor:(()=>{const r=resolveVendorName(p.vendor||"");return getVendorNames().includes(r)?r:"";})(),
-        vendorStockNum:p.vendorStockNum||"",cost:p.cost||"",productLink:p.productLink||"",
-        coolant:"flood",tapClass:p.tapClass||"",pointType:p.pointType||"",
-        shoulderLen:p.shoulderLen||"",ooh:p.ooh||"",taperAngle:p.taperAngle||"",
-        minThreadPitch:p.minThreadPitch||"",maxThreadPitch:p.maxThreadPitch||"",
-        tapSubType:["cut","form"].includes(p.tapSubType)?p.tapSubType:"",isSTI:!!p.isSTI,
-        tpiMin:p.tpiMin||"",tpiMax:p.tpiMax||"",threadProfileAngle:p.threadProfileAngle||"",
-        fullProfile:!!p.fullProfile,stubJobber:p.stubJobber||"",
-        backsideCapable:!!p.backsideCapable,doubleEnded:!!p.doubleEnded,
-        cuttingDirection:p.cuttingDirection||"Right Hand",
-        helixAngle:p.helixAngle||"",fluteType:p.fluteType||"",
+        ...BLANK,...fields,
+        toolType:fields.toolType||"flat end mill",
+        coolant:"flood",
         grouping:"",presetName:"",toolNumber:"",psToolId:"",location:"",
         tipDiameter:"",lowerRadius:"",upperRadius:"",profileRadius:"",axialDistance:"",
       };

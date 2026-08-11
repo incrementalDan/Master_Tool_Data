@@ -1,5 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Tag, Ruler, Layers, Save, X, AlertTriangle, Wand2, ChevronDown, ChevronRight, StickyNote, Link2, Trash2 } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  Tag, Ruler, Layers, Save, X, AlertTriangle, Wand2, ChevronDown, ChevronRight,
+  StickyNote, Link2, Trash2, ScanLine, Check, Undo2, ShoppingCart,
+} from 'lucide-react';
 import {
   validateTool, validateGeometry, getNextMachineNumber, toolToExtractor,
   INCH_THREAD_SIZES, METRIC_THREAD_SIZES,
@@ -14,6 +17,9 @@ import { buildDesc } from '../utils/toolNaming.js';
 import { useApp } from '../context/AppContext.jsx';
 import ToolTypeDropdown from './ToolTypeDropdown.jsx';
 import ToolFields from './ToolFields.jsx';
+import ExtractUpdateModal from './ExtractUpdateModal.jsx';
+import { applyPurchasingRows } from '../schema/extractionDiff.js';
+import { getToolFieldSections } from '../schema/toolFieldLayout.js';
 import {
   INSERT_FAMILIES, INSERT_FAMILY_BY_ID, ALWAYS_INSERT_TYPES,
   defaultActivationFamily, newPairing, isCombinedProShopId,
@@ -40,7 +46,7 @@ function derivePitchFromThreadSize(pitchStr, toolUnit = 'inches') {
 }
 
 export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDelete }) {
-  const { tools, shopSettings } = useApp();
+  const { tools, shopSettings, googleAuthenticated } = useApp();
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
   const [data, setData] = useState({ ...tool });
   const [errors, setErrors] = useState([]);
@@ -83,6 +89,158 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
     }
   };
 
+  // ── Spec-sheet extraction onto an EXISTING tool ────────────────────────────
+  // An update is not a create. Everything here can do exactly one thing: write
+  // an accepted scalar into the draft (or rebuild `purchasing` from the
+  // accepted rows). It never constructs presets, assemblies or a new tool, and
+  // it never touches Tool ID, location or machine number — those aren't in the
+  // proposal set at all. Nothing persists until the normal Save.
+  const [scanOpen, setScanOpen] = useState(false);
+  const [specProposals, setSpecProposals] = useState([]);   // [{field,…,status}]
+  const [purchRows, setPurchRows] = useState([]);           // [{key,…,status}]
+  const [specExtracted, setSpecExtracted] = useState(null); // sparse payload
+  const [typeNotice, setTypeNotice] = useState(null);
+  const [newMfgAck, setNewMfgAck] = useState(false);
+  // The screenshot/PDF the scan read, held until the tool is actually saved.
+  // ⚠️ Uploaded AFTER the save, never before: uploadToolAttachment writes the
+  // whole tool it is handed, so attaching from the unsaved draft would persist
+  // edits the user hasn't committed — and attaching from the pre-edit `tool`
+  // prop would silently revert the ones they just made.
+  const [sourceFile, setSourceFile] = useState(null);
+  const [keepSourceFile, setKeepSourceFile] = useState(true);
+  // The purchasing object as it was when the sheet was read. Rows are replayed
+  // against THIS, never against the running draft — otherwise un-ticking a row
+  // could not undo its effect.
+  const basePurchasingRef = useRef(null);
+
+  // Replay the accepted purchasing rows against the FROZEN base. Never against
+  // the running draft — replaying a mutated object could not undo a row.
+  const purchasingFor = (rows, extracted) => applyPurchasingRows(
+    basePurchasingRef.current || { manufacturers: [], vendors: [] },
+    extracted,
+    rows.filter(r => r.status === 'accepted').map(r => r.key),
+  );
+
+  // `tool.vendor` is the manufacturer's display name; purchasing is where the
+  // manufacturer actually lives. So vendor FOLLOWS the accepted purchasing
+  // rather than being a second, separately-decidable proposal for the same
+  // fact — and only when it is blank, because adding a second supplier must
+  // not restamp a tool that is still primarily the first one's.
+  const withVendorFollow = (draft, purchasing) => {
+    const first = purchasing?.manufacturers?.[0]?.name || '';
+    const wasBlank = !(basePurchasingRef.current?.manufacturers?.[0]?.name) && !tool.vendor;
+    return { ...draft, purchasing, vendor: (wasBlank && first) ? first : draft.vendor };
+  };
+
+  const receiveProposals = ({ extracted, proposals, purchasingRows, typeNotice: notice, sourceFile: src }) => {
+    basePurchasingRef.current = data.purchasing || { manufacturers: [], vendors: [] };
+    setSourceFile(src || null);
+    setKeepSourceFile(true);
+
+    // Blank fields are filled automatically — but every fill is still a visible
+    // row with an Undo, per "filling in blanks is fine, but must be visible".
+    // A real value is only ever replaced by an explicit decision.
+    const withStatus = proposals.map(p => ({ ...p, status: p.kind === 'fill' ? 'accepted' : 'pending' }));
+    // Same rule for purchasing, except a row needing acknowledgement (a
+    // genuinely different manufacturer) always waits for the user.
+    const rows = purchasingRows.map(r => ({
+      ...r,
+      status: (r.kind === 'fill' && !r.requiresAck) ? 'accepted' : 'pending',
+    }));
+
+    setSpecExtracted(extracted);
+    setTypeNotice(notice || null);
+    setNewMfgAck(false);
+    setSpecProposals(withStatus);
+    setPurchRows(rows);
+    setData(d => {
+      const next = { ...d };
+      for (const p of withStatus) if (p.status === 'accepted') next[p.field] = p.proposed;
+      return withVendorFollow(next, purchasingFor(rows, extracted));
+    });
+  };
+
+  const resolveProposal = (field, action) => {
+    const p = specProposals.find(x => x.field === field);
+    if (!p) return;
+    const status = action === 'accept' ? 'accepted' : 'rejected';
+    setSpecProposals(prev => prev.map(x => (x.field === field ? { ...x, status } : x)));
+    setData(d => ({ ...d, [field]: status === 'accepted' ? p.proposed : p.current }));
+  };
+
+  const resolvePurchRow = (key, action) => {
+    const next = purchRows.map(r => (r.key === key ? { ...r, status: action === 'accept' ? 'accepted' : 'rejected' } : r));
+    setPurchRows(next);
+    setData(d => withVendorFollow(d, purchasingFor(next, specExtracted)));
+  };
+
+  // Discarding puts EVERYTHING back — including the auto-accepted fills. There
+  // is deliberately no "hide but keep" option: a change that stayed in the
+  // draft with its row hidden would be exactly the invisible edit this whole
+  // feature exists to prevent.
+  const discardProposals = () => {
+    setData(d => {
+      const next = { ...d };
+      for (const p of specProposals) next[p.field] = p.current;
+      if (basePurchasingRef.current) next.purchasing = basePurchasingRef.current;
+      next.vendor = tool.vendor;   // vendor follows purchasing, so put it back too
+      return next;
+    });
+    setSpecProposals([]); setPurchRows([]); setSpecExtracted(null);
+    setTypeNotice(null); setNewMfgAck(false); basePurchasingRef.current = null;
+    setSourceFile(null);
+  };
+
+  const acceptAllPending = () => {
+    const pend = specProposals.filter(p => p.status === 'pending');
+    setSpecProposals(prev => prev.map(p => (p.status === 'pending' ? { ...p, status: 'accepted' } : p)));
+    const nextRows = purchRows.map(r => (
+      r.status === 'pending' && (!r.requiresAck || newMfgAck) ? { ...r, status: 'accepted' } : r
+    ));
+    setPurchRows(nextRows);
+    setData(d => {
+      const next = { ...d };
+      for (const p of pend) next[p.field] = p.proposed;
+      return withVendorFollow(next, purchasingFor(nextRows, specExtracted));
+    });
+  };
+
+  // Any proposal whose field ToolFields does not render for this tool type has
+  // no box to sit under. Rather than drop it silently (which would break "all
+  // changes are visible"), route it into the spec panel.
+  const homelessProposals = useMemo(() => {
+    if (!specProposals.length) return [];
+    const s = getToolFieldSections(data.tool_type);
+    const rendered = new Set([
+      ...s.geometry, ...s.setup, 'material_suitability',
+      // The tap/thread cluster — including the two controls ThreadBlock draws
+      // itself — only exists when that block is on screen.
+      ...(s.showThreadBlock ? [...s.thread, 'tap_sub_type', 'is_sti'] : []),
+    ]);
+    return specProposals.filter(p => !rendered.has(p.field));
+  }, [specProposals, data.tool_type]);
+  const homelessFields = useMemo(() => new Set(homelessProposals.map(p => p.field)), [homelessProposals]);
+  const inlineProposalMap = useMemo(() => {
+    const m = new Map();
+    for (const p of specProposals) if (!homelessFields.has(p.field)) m.set(p.field, p);
+    return m;
+  }, [specProposals, homelessFields]);
+
+  const pendingCount = specProposals.filter(p => p.status === 'pending').length
+    + purchRows.filter(r => r.status === 'pending').length;
+  const acceptedCount = specProposals.filter(p => p.status === 'accepted').length
+    + purchRows.filter(r => r.status === 'accepted').length;
+  const hasProposals = specProposals.length > 0 || purchRows.length > 0;
+
+  // The description is composed from geometry, so accepting a geometry change
+  // can leave it stale. Surfaced as a hint next to the field — never applied on
+  // the user's behalf.
+  const descStale = useMemo(() => {
+    if (!hasProposals || !data.description) return false;
+    const suggested = buildDesc(toolToExtractor(data));
+    return !!suggested && suggested !== data.description;
+  }, [hasProposals, data]);
+
   const dirty = useMemo(() => JSON.stringify(data) !== JSON.stringify(tool), [data, tool]);
 
   // New taps default to HSS — taps are rarely carbide.
@@ -98,14 +256,20 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
     if (!valid) { setErrors(errs); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     setErrors([]);
     try {
-      await onSave(data);
+      await onSave(data, (sourceFile && keepSourceFile) ? sourceFile : null);
     } catch (err) {
       setErrors([err.message]);
     }
   };
 
   const handleCancel = () => {
-    if (dirty && !window.confirm('Discard unsaved changes?')) return;
+    // An undecided spec-sheet difference is worth naming — it is the one thing
+    // in the draft the user was asked a question about and hasn't answered.
+    if (pendingCount > 0 && !window.confirm(
+      `${pendingCount} spec-sheet difference${pendingCount !== 1 ? 's' : ''} ${pendingCount !== 1 ? 'are' : 'is'} still undecided. `
+      + 'Leaving now discards the scan and every change from it. Continue?'
+    )) return;
+    if (pendingCount === 0 && dirty && !window.confirm('Discard unsaved changes?')) return;
     onCancel();
   };
 
@@ -147,6 +311,35 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
         </div>
       )}
 
+      {/* Update an existing tool from a manufacturer spec sheet. Not offered
+          when creating — the add flow has its own extraction step, and there is
+          nothing to compare against yet. */}
+      {!isNew && !hasProposals && (
+        <div className="spec-scan-bar mb-16">
+          <ScanLine size={15} style={{ color: 'var(--blue)', flexShrink: 0 }} />
+          <span className="text-sm text-sub" style={{ flex: 1 }}>
+            Update this tool from a manufacturer spec sheet or product page.
+          </span>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setScanOpen(true)}>
+            <ScanLine size={14} /> Scan spec sheet
+          </button>
+        </div>
+      )}
+
+      {hasProposals && (
+        <SpecSummary
+          pending={pendingCount}
+          accepted={acceptedCount}
+          typeNotice={typeNotice}
+          sourceFile={sourceFile}
+          keepSourceFile={keepSourceFile}
+          onKeepSourceFile={setKeepSourceFile}
+          canAttach={googleAuthenticated}
+          onAcceptAll={acceptAllPending}
+          onDiscard={discardProposals}
+        />
+      )}
+
       {/* Tool type — a dropdown of grouped icon cards (Milling / Hole Making / …). */}
       <div className="panel open mb-16" style={{ overflow: 'visible' }}>
         <div className="panel-header static">
@@ -162,8 +355,15 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
           "view, unlocked": geometry/material on the left, identity/notes on the right. */}
       <div className="detail-layout">
         <div className="detail-layout-left">
-          <Section title="Geometry & Setup" icon={Ruler}>
-            <ToolFields tool={data} mode="edit" setField={setField} geoIssueFields={geoIssueFields} />
+          <Section title="Geometry & Setup" icon={Ruler} forceOpen={inlineProposalMap.size > 0}>
+            <ToolFields
+              tool={data}
+              mode="edit"
+              setField={setField}
+              geoIssueFields={geoIssueFields}
+              proposals={inlineProposalMap}
+              onResolveProposal={resolveProposal}
+            />
             {geoIssues.length > 0 && (
               <div className="warn-banner" style={{ marginTop: 12 }}>
                 {geoIssues.map((issue, i) => (
@@ -229,6 +429,18 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
         </div>
 
         <div className="detail-layout-right">
+          {(purchRows.length > 0 || homelessProposals.length > 0) && (
+            <SpecPurchasingPanel
+              rows={purchRows}
+              homeless={homelessProposals}
+              unit={data.unit}
+              newMfgAck={newMfgAck}
+              onAck={setNewMfgAck}
+              onResolveRow={resolvePurchRow}
+              onResolveField={resolveProposal}
+            />
+          )}
+
           <Section title="Identity" icon={Tag}>
             {/* Machine tool number — read-only, managed by the app */}
             {hasMachineNum && (
@@ -281,6 +493,11 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
                   <Wand2 size={14} /> Suggest
                 </button>
               </div>
+              {descStale && (
+                <p className="spec-desc-hint">
+                  <AlertTriangle size={11} /> The description no longer matches the geometry — “Suggest” rebuilds it.
+                </p>
+              )}
             </div>
             <div className="form-grid">
               <FieldInput field="tool_id" label={toolIdLabel(idMode)} data={data} setField={setField} placeholder="e.g. A-3" />
@@ -410,12 +627,21 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
           )}
         </button>
       </div>
+
+      <ExtractUpdateModal
+        open={scanOpen}
+        tool={data}
+        onClose={() => setScanOpen(false)}
+        onProposals={receiveProposals}
+      />
     </div>
   );
 }
 
-function Section({ title, icon: Icon, children }) {
+function Section({ title, icon: Icon, children, forceOpen = false }) {
   const [open, setOpen] = useState(true);
+  // A collapsed section must not be able to hide a pending decision.
+  useEffect(() => { if (forceOpen) setOpen(true); }, [forceOpen]);
   return (
     <div className={`panel ${open ? 'open' : ''} mb-16`}>
       <button className="panel-header" onClick={() => setOpen(o => !o)}>
@@ -424,6 +650,157 @@ function Section({ title, icon: Icon, children }) {
         <span className="panel-chevron">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
       </button>
       {open && <div className="panel-body">{children}</div>}
+    </div>
+  );
+}
+
+// ── Spec-sheet summary bar ───────────────────────────────────────────────────
+// The count is the whole point: it says how many decisions are outstanding, so
+// a pending row can never be lost simply by not scrolling to it.
+function SpecSummary({
+  pending, accepted, typeNotice, onAcceptAll, onDiscard,
+  sourceFile, keepSourceFile, onKeepSourceFile, canAttach,
+}) {
+  return (
+    <div className={`spec-summary ${pending > 0 ? 'has-pending' : ''} mb-16`}>
+      <div className="spec-summary-row">
+        <ScanLine size={15} style={{ color: 'var(--blue)', flexShrink: 0 }} />
+        <span className="spec-summary-counts">
+          {pending > 0
+            ? <><strong>{pending}</strong> difference{pending !== 1 ? 's' : ''} to review</>
+            : <>All spec-sheet differences reviewed</>}
+          {accepted > 0 && <span className="text-sub"> · {accepted} applied</span>}
+        </span>
+        <span style={{ flex: 1 }} />
+        {pending > 0 && (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onAcceptAll}>
+            <Check size={13} /> Use all
+          </button>
+        )}
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onDiscard} title="Put every value back and drop the scan">
+          <Undo2 size={13} /> Discard scan
+        </button>
+      </div>
+      <p className="spec-summary-note">
+        Nothing is saved until you press Save. Presets, assemblies, Tool ID, location
+        and machine number are not touched by a scan.
+      </p>
+      {/* The sheet is kept as evidence for the values it produced. The choice
+          lives here rather than in the upload modal so it is next to Save —
+          the point at which it actually happens. */}
+      {sourceFile && canAttach && (
+        <label className="checkbox-row spec-summary-keep">
+          <input type="checkbox" checked={keepSourceFile} onChange={e => onKeepSourceFile(e.target.checked)} />
+          <span className="text-xs text-sub">
+            Save <strong>{sourceFile.name}</strong> to this tool's Files, under
+            {' '}<strong>Data Extraction</strong>
+          </span>
+        </label>
+      )}
+      {sourceFile && !canAttach && (
+        <p className="spec-summary-note">
+          Connect Google Drive to keep the spec sheet with this tool.
+        </p>
+      )}
+      {typeNotice && (
+        <p className="spec-summary-type">
+          <AlertTriangle size={12} />
+          The sheet looks like a <strong>{typeNotice.extractedType}</strong>, but this tool is a{' '}
+          <strong>{typeNotice.currentType}</strong>. The type is not changed by a scan — use the Tool
+          Type picker above if it is genuinely wrong.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Purchasing + homeless-field proposals ────────────────────────────────────
+// Purchasing is {manufacturers[], vendors[]} with FK links, so it has no single
+// input to sit under; the same is true of any proposal whose field this tool
+// type doesn't render. Both land here so every difference has a visible home.
+function SpecPurchasingPanel({ rows, homeless, unit, newMfgAck, onAck, onResolveRow, onResolveField }) {
+  const ackRow = rows.find(r => r.requiresAck);
+  const fmt = (v) => (v === null || v === undefined || v === '' ? 'empty' : String(v));
+
+  const Row = ({ label, current, proposed, status, note, disabled, onAccept, onReject }) => (
+    <div className={`spec-row spec-proposal-${status}`}>
+      <div className="spec-row-label">{label}</div>
+      <div className="spec-row-values">
+        {status === 'rejected'
+          ? <><s>{fmt(proposed)}</s> <span className="text-sub">— ignored</span></>
+          : <><s>{fmt(current)}</s> → <strong>{fmt(proposed)}</strong></>}
+        {note && <span className="spec-proposal-note"> · {note}</span>}
+      </div>
+      <div className="spec-row-actions">
+        {status === 'pending' ? (
+          <>
+            <button type="button" className="spec-proposal-btn accept" onClick={onAccept} disabled={disabled}>
+              <Check size={11} /> Use
+            </button>
+            <button type="button" className="spec-proposal-btn" onClick={onReject}>
+              <X size={11} /> Keep
+            </button>
+          </>
+        ) : (
+          <button type="button" className="spec-proposal-btn"
+            onClick={status === 'accepted' ? onReject : onAccept} disabled={status !== 'accepted' && disabled}>
+            <Undo2 size={11} /> {status === 'accepted' ? 'Undo' : 'Use it'}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="panel open mb-16 spec-panel">
+      <div className="panel-header static">
+        <ShoppingCart size={15} className="panel-header-icon" />
+        <span className="panel-header-title">From the spec sheet</span>
+      </div>
+      <div className="panel-body">
+        {ackRow && (
+          <div className="warn-banner spec-ack">
+            <label className="checkbox-row">
+              <input type="checkbox" checked={newMfgAck} onChange={e => onAck(e.target.checked)} />
+              <span className="text-sm">
+                This sheet is for <strong>{ackRow.proposed}</strong>, not{' '}
+                <strong>{ackRow.current}</strong>. I know the manufacturer is different —
+                add it as an additional maker.
+              </span>
+            </label>
+            <p className="text-xs text-sub" style={{ margin: '6px 0 0 24px' }}>
+              The existing manufacturer is kept either way; nothing is replaced.
+            </p>
+          </div>
+        )}
+
+        {homeless.map(p => (
+          <Row
+            key={p.field}
+            label={p.label}
+            current={p.current}
+            proposed={p.proposed}
+            status={p.status}
+            note={p.converted ? `converted from in to ${unitAbbr(unit)}` : null}
+            onAccept={() => onResolveField(p.field, 'accept')}
+            onReject={() => onResolveField(p.field, 'reject')}
+          />
+        ))}
+
+        {rows.map(r => (
+          <Row
+            key={r.key}
+            label={r.label}
+            current={r.current}
+            proposed={r.proposed}
+            status={r.status}
+            note={r.generated ? 'auto-generated link' : null}
+            disabled={r.requiresAck && !newMfgAck}
+            onAccept={() => onResolveRow(r.key, 'accept')}
+            onReject={() => onResolveRow(r.key, 'reject')}
+          />
+        ))}
+      </div>
     </div>
   );
 }

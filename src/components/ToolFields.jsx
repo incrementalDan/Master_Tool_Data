@@ -6,7 +6,7 @@
 // read-only value for an input. See src/schema/toolFieldLayout.js for the field
 // lists and the visibility rule.
 import { useState } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, ScanLine, Check, Undo2, X } from 'lucide-react';
 import { fieldLabel, FIELD_REGISTRY, INCLUSIVE_ANGLE_TYPES } from '../schema/fieldRegistry.js';
 import {
   getToolFieldSections, fieldControl, SELECT_OPTIONS,
@@ -78,10 +78,87 @@ function labelFor(field, tool) {
 // taper_angle is shown ×2 (included angle) for chamfer/tapered mills; stored ÷2.
 const showsDoubled = (field, tool) => field === 'taper_angle' && INCLUSIVE_ANGLE_TYPES.has(tool.tool_type);
 
-export default function ToolFields({ tool, mode, setField, geoIssueFields }) {
+// ── Spec-sheet proposals (see src/schema/extractionDiff.js) ─────────────────
+// Rendered INLINE, under the field they belong to, because that is where the
+// current value already is — a separate review list would be a second place to
+// read the same numbers, and would hide which box is about to change.
+
+// Render a proposed/previous value the same way the field itself renders it,
+// including the ×2 included-angle display, so the two are directly comparable.
+// No unit suffix: the field's own label already carries "(in)"/"(mm)"/"(°)",
+// and repeating it here made the strip wrap in a narrow form column.
+function proposalValueText(field, value, tool) {
+  if (value === null || value === undefined || value === '') return 'empty';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (Array.isArray(value)) return value.length ? value.join(', ') : 'empty';
+  const def = FIELD_REGISTRY[field] || {};
+  if (def.type === 'number') {
+    const shown = showsDoubled(field, tool) ? Number(value) * 2 : Number(value);
+    const n = fmtNum(shown, def.precision);
+    return n == null ? 'empty' : n;
+  }
+  return String(value);
+}
+
+function ProposalStrip({ proposal, tool, onResolve }) {
+  if (!proposal) return null;
+  const { field, status, kind, current, proposed, converted } = proposal;
+  const was = proposalValueText(field, current, tool);
+  const now = proposalValueText(field, proposed, tool);
+
+  return (
+    <div className={`spec-proposal spec-proposal-${status}`}>
+      <ScanLine size={11} className="spec-proposal-icon" />
+      <span className="spec-proposal-text">
+        {status === 'pending' && (
+          <>Spec sheet: <s>{was}</s> → <strong>{now}</strong></>
+        )}
+        {status === 'accepted' && (
+          kind === 'fill'
+            ? <>Filled from spec sheet</>
+            : <>From spec sheet — was <s>{was}</s></>
+        )}
+        {status === 'rejected' && <>Ignored: <s>{now}</s></>}
+        {converted && status !== 'rejected' && (
+          <span className="spec-proposal-note"> · converted from in</span>
+        )}
+      </span>
+      <span className="spec-proposal-actions">
+        {status === 'pending' ? (
+          <>
+            <button type="button" className="spec-proposal-btn accept"
+              onClick={() => onResolve(field, 'accept')} title="Use the spec-sheet value">
+              <Check size={11} /> Use
+            </button>
+            <button type="button" className="spec-proposal-btn"
+              onClick={() => onResolve(field, 'reject')} title="Keep the current value">
+              <X size={11} /> Keep
+            </button>
+          </>
+        ) : (
+          <button type="button" className="spec-proposal-btn"
+            onClick={() => onResolve(field, status === 'accepted' ? 'reject' : 'accept')}
+            title={status === 'accepted' ? 'Put the previous value back' : 'Use the spec-sheet value after all'}>
+            <Undo2 size={11} /> {status === 'accepted' ? 'Undo' : 'Use it'}
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
+export default function ToolFields({
+  tool, mode, setField, geoIssueFields,
+  proposals = null, onResolveProposal = null,
+}) {
   const sections = getToolFieldSections(tool.tool_type);
   const edit = mode === 'edit';
   const warn = geoIssueFields || new Set();
+  const propFor = (field) => (edit && proposals ? proposals.get(field) : null) || null;
+  const strip = (field) => {
+    const p = propFor(field);
+    return p ? <ProposalStrip proposal={p} tool={tool} onResolve={onResolveProposal} /> : null;
+  };
 
   // ── one generic field ──
   const renderField = (field) => {
@@ -129,12 +206,14 @@ export default function ToolFields({ tool, mode, setField, geoIssueFields }) {
     }
 
     // EDIT
+    const prop = propFor(field);
     const fieldGroup = (children) => (
-      <div className="field-group" key={field}>
+      <div className={`field-group ${prop ? `has-proposal proposal-${prop.status}` : ''}`} key={field}>
         <label className="field-label">
           {label}{def.required && <span className="required"> *</span>}
         </label>
         {children}
+        {strip(field)}
       </div>
     );
 
@@ -158,7 +237,7 @@ export default function ToolFields({ tool, mode, setField, geoIssueFields }) {
     if (control === 'chips') {
       const cur = tool[field] || [];
       return (
-        <div className="field-group form-grid-wide" key={field}>
+        <div className={`field-group form-grid-wide ${prop ? `has-proposal proposal-${prop.status}` : ''}`} key={field}>
           <label className="field-label">{label}</label>
           <div className="chip-group">
             {MATERIAL_SUITABILITY_OPTIONS.map(w => (
@@ -168,6 +247,7 @@ export default function ToolFields({ tool, mode, setField, geoIssueFields }) {
               </button>
             ))}
           </div>
+          {strip(field)}
         </div>
       );
     }
@@ -216,7 +296,7 @@ export default function ToolFields({ tool, mode, setField, geoIssueFields }) {
       </div>
 
       {sections.showThreadBlock && (
-        <ThreadBlock tool={tool} mode={mode} setField={setField} fields={sections.thread} />
+        <ThreadBlock tool={tool} mode={mode} setField={setField} fields={sections.thread} strip={strip} />
       )}
 
       <div className="tool-fields-section">
@@ -234,7 +314,7 @@ export default function ToolFields({ tool, mode, setField, geoIssueFields }) {
 // ── Tap / thread-mill cluster ──
 // Bespoke controls (thread-size combobox, derived pitch, limit-tolerance and
 // class-of-fit selects with info tips). Rendered identically in both modes.
-function ThreadBlock({ tool, mode, setField, fields }) {
+function ThreadBlock({ tool, mode, setField, fields, strip = () => null }) {
   const edit = mode === 'edit';
   const isTap = tool.tool_type === 'tap';
   const isMetricThread = tool.tap_thread_unit === 'metric';
@@ -260,6 +340,7 @@ function ThreadBlock({ tool, mode, setField, fields }) {
         <label className="field-label">{label || fieldLabel(field, tool.unit)}</label>
         <NumInput className="field-input" step={STEP[field] || '0.001'} precision={def.precision} value={tool[field]}
           onChange={e => setField(field, e.target.value === '' ? null : parseFloat(e.target.value))} placeholder="—" />
+        {strip(field)}
       </div>
     );
   };
@@ -285,6 +366,7 @@ function ThreadBlock({ tool, mode, setField, fields }) {
                 {tool.tap_sub_type ? (tool.tap_sub_type === 'form' ? 'Form' : 'Cut') : '—'}
               </span>
             )}
+            {edit && strip('tap_sub_type')}
           </div>
           <div className="field-group" style={{ flex: '0 0 auto' }}>
             <label className="field-label">STI / Helicoil</label>
@@ -296,6 +378,7 @@ function ThreadBlock({ tool, mode, setField, fields }) {
             ) : (
               <span className={tool.is_sti ? 'sti-pill' : 'detail-field-value detail-field-empty'}>{tool.is_sti ? 'STI / Helicoil' : 'No'}</span>
             )}
+            {edit && strip('is_sti')}
           </div>
           {has('tap_thread_unit') && (
             <div className="field-group" style={{ flex: '0 0 auto' }}>
@@ -335,6 +418,7 @@ function ThreadBlock({ tool, mode, setField, fields }) {
                   STI / Helicoil — thread size is the <strong>parent</strong> thread, not the oversized tap size.
                 </p>
               )}
+              {strip('pitch')}
             </div>
           ) : (
             <div className="detail-field">
@@ -362,6 +446,7 @@ function ThreadBlock({ tool, mode, setField, fields }) {
               <select className="field-input" value={tool.point_type || ''} onChange={e => setField('point_type', e.target.value)}>
                 {SELECT_OPTIONS.point_type.map(p => <option key={p} value={p}>{p || 'Not specified'}</option>)}
               </select>
+              {strip('point_type')}
             </div>
           ) : (
             <div className="detail-field">
@@ -382,6 +467,7 @@ function ThreadBlock({ tool, mode, setField, fields }) {
                 <option value="">Not specified</option>
                 {tolOptions.map(t => <option key={t} value={t}>{t}{t === tolDefault ? ' — standard' : ''}</option>)}
               </select>
+              {strip('tap_class')}
             </div>
           ) : (
             <div className="detail-field">

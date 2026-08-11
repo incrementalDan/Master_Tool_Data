@@ -812,7 +812,7 @@ Stored in a single file on Google Drive. The file contains an array of metadata 
     {
       "file_id": "Google Drive file ID",
       "filename": "original filename",
-      "type": "photo | spec_sheet | model_3d | fusion_file | other",
+      "type": "photo | spec_sheet | data_extraction | speeds_feeds | model_3d | fusion_file | other",
       "uploaded_at": "ISO timestamp"
     }
   ],
@@ -1003,6 +1003,10 @@ src/
                                   # familySignature, groupByTrackingId, readOohFromFusion,
                                   # machine numbers (generateMachineNumbers, getNext…,
                                   # applyToolIdToFusion, applyMachineNumberToFusion)
+    extractionDiff.js             # Spec-sheet extraction → per-field PROPOSALS
+                                  # against an EXISTING tool (sparse-in, type-gated,
+                                  # unit-corrected) + the purchasing sub-diff.
+                                  # See "Spec-Sheet Extraction onto an EXISTING tool"
     extractorConvert.js           # extractorToTool / toolToExtractor, getFacetFields,
                                   # getRequiredFields
     combine.js                    # combineToolsByToolId / duplicateIdClusters
@@ -1064,6 +1068,9 @@ src/
                                   # wasn't handed (the G1 invariant). Do NOT call
                                   # driveService.{load,saveAll,upsert,delete}Metadata
                                   # directly outside this module.
+    extractionService.js          # The ONE screenshot/PDF/text → tool-data call.
+                                  # Shared by the add flow and "Scan spec sheet";
+                                  # returns a SPARSE result (only what was answered)
     searchEngine.js               # In-memory faceted search + filter logic
     duplicateDetector.js          # Weighted similarity scoring for Phase 2 matching
     mergeQueue.js                 # Phase 2 queue state: parseIncoming, buildQueue
@@ -1152,6 +1159,9 @@ src/
                                   # as a sub-section (button → ImportPhotosModal). Machine-number
                                   # step (4) is optional + non-destructive (see ProShop Integration).
                                   # Named-exports parseCSV + matchProShopToTools for reuse.
+    ExtractUpdateModal.jsx        # "Scan spec sheet" upload for an EXISTING tool.
+                                  # Upload only — every accept/reject happens inline
+                                  # in ToolForm, at the field being changed
     ProShopImportModal.jsx        # Single-tool ProShop data import (ToolDetail "Import PS"
                                   # button) — finds this tool's row, previews field changes,
                                   # applies via saveTool. See ProShop Integration → Single-tool
@@ -1632,6 +1642,57 @@ For taps, `buildDesc` strips the UNC/UNF thread-series designation from `pitch` 
 This is, alongside the preset operation-type assignment, one of the few normalization steps requiring per-tool user decisions; the two may share a single pre-flight review modal if the UX allows.
 
 **Priority rule**: PS description wins by default; if the PS description is blank, keep the Fusion description. User confirmation is **always** required. (Implemented in `src/components/DescRenameModal.jsx` — a standalone per-tool rename confirmation modal that uses `buildDesc(toolToExtractor(t))` for suggestions and commits via `saveFullLibrary`. `NormalizeModal` handles the preset operation-type assignment step.)
+
+-----
+
+## Spec-Sheet Extraction onto an EXISTING tool ("Scan spec sheet")
+
+The AI extractor could only ever **create** a tool. But the common real cases are all **updates**: a tool pulled from a manufacturer's Fusion library, a tool duplicated in Fusion and tweaked, or — most of the library — a tool entered years ago with half its manufacturer specs never filled in. **Edit mode → "Scan spec sheet"** uploads a screenshot / PDF / pasted text and compares it against the tool already in the app, one difference at a time.
+
+**⚠️ A create and an update are DIFFERENT WRITE PATHS and must stay that way.** A create writes every field of a valid Fusion tool (`newTool()` → the full add flow). An update must touch **nothing that wasn't individually agreed to** — and must never mint a default preset, an assembly, or anything else a create legitimately produces. That is enforced **structurally**, not by discipline: the whole feature reduces an extraction to a list of `{field, current, proposed}` proposals whose only possible effect is `setData(d => ({...d, [field]: value}))` on the **ToolForm draft**, plus one rebuild of `purchasing`. There is no code path from here to a preset, an assembly, or a Fusion write. Nothing persists until the normal **Save** + revision note.
+
+### The three rules the diff exists to enforce (`src/schema/extractionDiff.js`)
+
+1. **⚠️ SPARSE IN — this is the whole feature.** `extractorToTool` fills *every* key with a default (`material: 'carbide'`, `cutting_direction: 'Right Hand'`, a regenerated description). Diffing a converted extraction against a real tool would therefore report **every field the sheet never mentioned** as a change, most of them proposing to blank real data. So `sanitizeExtraction` (`src/services/extractionService.js`) **omits** rather than defaults, and only keys actually present can become proposals. A model `false` boolean is treated as *absent* too — indistinguishable from "didn't look", and an update must never turn a real capability flag off on that basis.
+2. **TYPE-GATED, before the UI.** A field outside the tool type's `appliesToTypes` is dropped in the builder — so it can't be swept up by "Use all" and pushed to Fusion on a type that has no such field. (A `cornerRadius` from an end-mill sheet lands on a *flat* end mill and is discarded; on a bull nose it is kept.)
+3. **UNIT-CORRECTED.** ⚠️ The model is instructed to convert everything to **inches** regardless of the source document (`sourceUnits` only records what the source *used*, for metric-aware naming). A millimetres tool would otherwise show every length as an enormous change, so lengths are converted into the record's own unit via `convertLength` before comparison, and the row says it was converted. The float-noise floor (`5e-5`, the app's existing display-precision rule) scales ×25.4 for a mm record.
+
+**⚠️ `tool_type` is deliberately NOT proposable.** Accepting it would change the applicable field set out from under every other proposal in the list. A disagreement is surfaced as a **notice** ("the sheet looks like a flat end mill, but this tool is a drill"); changing the type stays the form's own Tool Type picker.
+
+**Never in the proposal set at all:** presets, assemblies, `tool_id`, `location`, `machine_tool_number`, and per-assembly `ooh` (stick-out is per-assembly — a spec sheet has no business setting it). These aren't filtered out, they were never in the extraction's vocabulary. Locked by `extractionDiff.test.js`.
+
+### Change vs. fill, and why fills auto-accept
+
+A **fill** (the field was blank) is applied immediately — but still renders as a visible row with an **Undo**, per "filling in blanks is fine, but it must be visible". A **change** (a real value would be replaced) is *never* applied until explicitly accepted. A boolean arriving `true` over a stored `false` counts as a **change**, not a fill: `false` is a real answer.
+
+**⚠️ Proposals render INLINE, at the field**, not as a separate review list — the current value is already there, so a list would be a second place to read the same numbers and would hide *which box* is about to change. Consequences that are easy to get wrong and are handled:
+- A section with proposals **auto-expands** (`Section`'s `forceOpen`) — a collapsed panel must not be able to hide a pending decision.
+- A proposal whose field this tool type **doesn't render** (e.g. `product_link`) has no box to sit under, so `ToolForm` routes it into the spec panel rather than dropping it silently. Computed from `getToolFieldSections`, so a future field can't quietly disappear.
+- **Discarding puts EVERYTHING back**, including the auto-accepted fills. There is deliberately no "hide but keep": a change left in the draft with its row hidden is exactly the invisible edit this feature exists to prevent.
+- Leaving with undecided rows warns and names the count (`handleCancel`).
+
+### Purchasing is a sub-diff, not a field row
+
+`purchasing` is `{manufacturers[], vendors[]}` with FK links, so it can't be a scalar proposal. It gets entity-level row matching, then one write back. Rows are keyed (`mfg:edp`, `vendor:price`, …) and `applyPurchasingRows` **replays only the accepted keys against the purchasing object as it was when the sheet was read** — never against the running draft, or un-ticking a row could not undo it.
+
+- **⚠️ "Different manufacturer" means a different registry ENTITY, not a different string.** The vendor registry's alias system exists because catalogues spell things inconsistently — `GARR` / `GARR Tool`, `Helical` / `Helical Solutions` are ONE entity (`sameEntity` → `entityByName`). Comparing raw strings would fire the warning on nearly every scan, which is the nag loop that makes a warning worthless.
+- A genuinely different manufacturer on a tool that already has one is **added, never substituted**, and only after the user ticks an explicit acknowledgement ("I know the manufacturer is different"). The Use/Keep buttons on that row stay disabled until they do. The first manufacturer on a bare tool needs no acknowledgement.
+- **URLs**: the generator wins where a pattern exists (`generateManufacturerUrl` / `generateVendorUrl` — canonical, survives a catalogue redesign); otherwise the scraped `productLink` is used. **Filled only when blank**, so a hand-corrected URL is never overwritten. New rows stamp `registry_id` at creation.
+- **⚠️ `approvedBrand` does NOT become a `vendor` field proposal.** It is the same fact as the purchasing manufacturer row, and offering both would be two independent decisions for one answer — accept one, reject the other, and `tool.vendor` disagrees with `purchasing.manufacturers` forever. Purchasing owns the manufacturer; `tool.vendor` **follows** it, and only when blank (adding a *second* maker must not restamp a tool that is still primarily the first one's).
+
+### One extraction implementation, shared
+
+`src/services/extractionService.js` owns the prompt, the API call and the sanitizer. **Both** entry points use it: `tool-extractor.tsx`'s add flow (via `applyExtractionToBlank`, which restores that form's original "clear anything the sheet didn't mention" behaviour) and this update flow. The add path's behaviour is unchanged and test-locked, including the deliberate asymmetry that the add form still owns `ooh` while the update path can't propose it.
+
+**⚠️ The service and `tool-extractor.tsx` import each other**, so anything derived from the extractor's exports (`EXTRACT_RESET` from `BLANK`, the valid-coolant set from `COOLANT_OPTS`) is computed **lazily inside a function**, never at module scope — in an ES-module cycle a top-level `const` in the partially-initialised module is still in the temporal dead zone, and hoisting these back would throw at import time for every consumer of the schema barrel.
+
+### The scanned sheet is kept as evidence (`data_extraction`)
+
+The document a scan read from is the provenance of every value it produced ("where did 38° helix come from?"), so it is attached to the tool under the **`data_extraction`** file category. ⚠️ **Uploaded AFTER the tool save, against the tool the save RETURNED** — `uploadToolAttachment` writes the whole record it is handed, so attaching from the unsaved draft would persist edits the user hasn't committed, and attaching from the pre-edit `tool` prop would silently revert the ones they just made. A failed attach never fails the save: the tool data is already committed and correct, and the action has toasted the reason.
+
+The keep/discard choice sits in the **summary bar**, not the upload modal — it is next to Save, which is when it actually happens. It appears only when there is a real file (a pasted-text scan has no document) and only when Drive is connected (otherwise the bar says so rather than silently dropping the file). Discarding the scan drops the pending file too. A pasted screenshot arrives named `image.png` for every scan, which would make a tool's Files list unreadable, so a generic name is replaced with `spec-sheet-<date>.<ext>`; a real uploaded filename is kept, since it is usually the part number.
+
+**Deferred:** the description is not auto-rebuilt when accepted geometry makes it stale — a hint appears next to the field and "Suggest" is one click away. Retiring the standalone extractor UI in favour of the tool-page UI (the user's stated end goal) is a separate follow-on; this feature builds the shared module it needs.
 
 -----
 
@@ -2133,7 +2194,7 @@ Each tool can have a primary photo and a list of other file attachments (spec sh
 
 ### Metadata fields
 - `primary_photo_id` / `primary_photo_name` — Drive file ID + filename of the primary photo. Stored in `tool_metadata.json` per-tool. Displayed in the Identity section of ToolDetail.
-- `attachments[]` — array of `{ file_id, filename, type, uploaded_at }`. `type` is one of `photo | spec_sheet | model_3d | fusion_file | other`. Displayed in the collapsible "Files & Attachments" panel in ToolDetail.
+- `attachments[]` — array of `{ file_id, filename, type, uploaded_at }`. `type` is one of `photo | spec_sheet | data_extraction | speeds_feeds | model_3d | fusion_file | other` (the display order + group headings live in `TYPE_ORDER`/`TYPE_LABELS`, `FilesSection.jsx`; the picker list in `AttachmentUploadModal.jsx` — keep the two in step). Displayed in the collapsible "Files & Attachments" panel in ToolDetail. **`data_extraction`** is the screenshot/PDF a "Scan spec sheet" run read its values from — see that section; it is also manually selectable for a sheet uploaded by hand.
 
 ### UI components
 - `FilesSection.jsx` — collapsible panel showing the attachments list with view/download/delete per file.
@@ -2357,6 +2418,13 @@ One known gap remains: **the Tool ID actions** — `assignToolIds` / `renumberAl
 - **Location System ↔ Tool ID — refine the seam (working, but rough).** The current split is: the Location System *finds + assigns location data only* (never writes `tool_id`), and the Tool ID System's explicit **Assign IDs / Re-number** actions are the only thing that generates IDs (deriving from the structured `tool_location` when in `location` mode). This is wired and documented (see "Location ≠ ID" under Tool ID System) and the separation is surfaced via banners/tooltips — but it's **confusing and lacks refinement**, and the Location System is **unfinished**. Known rough edges to revisit: (1) a location-system **bin-renumber** action (the system's own future "renumber" ability — assign/reassign bin numbers in bulk, distinct from Tool ID renumber); (2) in `location` mode, after assigning/normalizing a location the tool's `tool_id` is **stale until the user manually re-numbers** — there's no prompt or "IDs out of date" indicator nudging them to do it, so the two-step flow is easy to miss; (3) the metadata-only normalization write leaves Fusion out of sync until each tool's next individual save — the **vendor/location** half is now handled (`pushFieldToFusion` + the **Fusion sync** block in `LocationIssuesPanel`, and the writes say so explicitly), but **`product-id` is still lazy and still unmentioned to the user**; closing it should be a second `FUSION_FIELD_PATCHERS` entry (`product-id` ↔ `expressions.tool_productId` is the same native+expression pair shape as location), not a bespoke push; (4) the whole flow (configure system → assign/normalize locations → go elsewhere to generate IDs) could likely be made a single guided path. Not yet tested end-to-end against real data. Revisit holistically rather than patching piecemeal — the goal is one clear, refined Location→ID workflow, not more notes bolted on.
 
 - **Speeds & Feeds Reference — link to stepdown/stepover as a %.** Each tool carries `speed_feed_refs[]` (metadata-only: `{ preset_id → materials.presets, operation_type (rough/finish/… or null), sfm, chip_load }`) — a per-CAM-preset + per-operation SFM + chip-load starting-point table, edited in `SpeedFeedSection.jsx` (a panel in ToolDetail's left column, same save pattern as `PurchasingSection`). The material cell opens the shared **`CamPresetPicker`** modal (search "6061"/"1018" → its CAM preset), the operation is an `OP_TYPES` dropdown, and the Save button shows a `.spinner` while the `writeLogicalTool` round-trip is in flight (it's a local `saving` state, not the global `isSaving`). The section shows derived RPM + feed per row using the tool's own diameter + flute count (`deriveRPM`, generic over the tool's unit; feed via chip_load × rpm × flutes). **Next step (deferred):** express stepdown/stepover as a % (e.g. of diameter) and connect them so the reference drives full proven preset values rather than just SFM/chip-load — the user explicitly scoped this for later. These values are a manual starting point today; a future path could also pull from existing Fusion presets.
+
+- **Scan a manufacturer speeds & feeds chart into `speed_feed_refs[]` (planned).** The same scrape → propose → accept → keep-the-source workflow as **Spec-Sheet Extraction onto an EXISTING tool**, pointed at the speeds & feeds reference instead of the tool's own fields. Metadata-only (`speed_feed_refs[]`), so it never touches Fusion, a preset, or a preset's values — this fills the **recommendation** table the user works from, not a preset. Three things make it harder than it looks, and each has an existing answer worth reusing rather than re-inventing:
+  - **Which row is THIS tool's?** Manufacturers publish one chart for a whole series (every diameter, every LOC). Picking the row for this tool's diameter/flute count is the genuinely new problem and is a prompt/vision job, not a code one. It must be **shown, not assumed** — the proposal should say which row it read.
+  - **Manufacturer material → our CAM preset.** ⚠️ Do NOT ask the model to guess our CAM preset names. The app already resolves a foreign material string through a tested cascade — `camPresetIdFromGrade` → `findMaterialInLibrary` → `suggestCamPresetName`, with `CamPresetPicker` for the user-confirmed remainder (see **Material comes from the Materials library**). Have the model return the manufacturer's own material designation verbatim and run it through that, so an unmatched material is **surfaced, not guessed** — the same rule `MaterialLinkBanner` already follows.
+  - **Units.** A chart may be SFM/IPT or m/min/mm-per-tooth. ⚠️ Surface speed is the ONE unit-dependent relation (`rpmToSFM`/`sfmToRPM` divide by 12 vs 1000) — omit the flag and a metric chart is off by ~83×. Chip load is a length in the tool's own unit.
+  
+  **On reuse — deliberately NOT generalized yet.** The tempting piece (`buildFieldProposals`) is the one that won't fit: a speeds & feeds reference is an ARRAY of rows keyed by (CAM preset × operation), so its diff is row-shaped and closer to `buildPurchasingProposals` (match / add / update by key) than to the scalar field diff. What is likely to be worth extracting **when the second case exists, not before**: (1) `runExtraction` taking a prompt + response shape rather than owning one, and (2) the proposal UI — `ProposalStrip`, the pending/accepted/rejected statuses, the summary bar, and the discard-restores-everything rule — which is currently welded to `ToolFields`/`ToolForm`. (3) The `data_extraction` attach-after-save hook transfers as-is. Two use cases is the point at which the seam is knowable; guessing it from one would likely put it in the wrong place.
 
 - **Local mode, phase 2 — full edit with manual re-export.** Today's local browse mode (see above) is read-only. A bigger follow-up: allow editing/saving everything in-memory while in local mode (tools, presets, assemblies, metadata), plus a "Download updated library" button that produces a new `fusion_tool_library.json` (and `tool_metadata.json` if applicable) for the user to manually re-upload to Autodesk/Drive themselves. **This is a big ask** — `writeLogicalTool`, `saveFullLibrary`, `renumberLibrary`, `deleteTool`, `addTool`, `normalizeLibrary`, and the whole Phase 2 merge flow all currently assume `uploadFusionList`/`downloadFusionList` hit APS; each would need a local-mode branch that mutates `toolsRef`/state in place and marks the library "dirty" instead of calling APS, plus export/download plumbing for the edited JSON. Confirm scope before starting.
 

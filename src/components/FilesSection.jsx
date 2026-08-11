@@ -1,12 +1,15 @@
 import { useState } from 'react';
-import { Paperclip, Download, X, Image, FileText, Box, Layers, File, Plus, Loader, TrendingUp } from 'lucide-react';
+import { Paperclip, Download, X, Image, FileText, Box, Layers, File, Plus, Loader, TrendingUp, ScanLine } from 'lucide-react';
 import AttachmentUploadModal from './AttachmentUploadModal.jsx';
 import { fetchFileBlob } from '../services/driveService.js';
 
-const TYPE_ORDER = ['photo', 'spec_sheet', 'speeds_feeds', 'model_3d', 'fusion_file', 'other'];
+const TYPE_ORDER = ['photo', 'spec_sheet', 'data_extraction', 'speeds_feeds', 'model_3d', 'fusion_file', 'other'];
 const TYPE_LABELS = {
   photo: 'Photos',
   spec_sheet: 'Spec Sheets',
+  // The screenshot/PDF a "Scan spec sheet" run read its values from — kept so a
+  // field's provenance is auditable later ("where did 38° helix come from?").
+  data_extraction: 'Data Extraction',
   speeds_feeds: 'Speeds & Feeds',
   model_3d: '3D Models',
   fusion_file: 'Fusion Files',
@@ -30,6 +33,9 @@ function isPdfFile(filename) {
 
 function AttIcon({ filename, type, size = 14 }) {
   const ext = getExt(filename);
+  // The extraction source is marked by its ROLE, not its format — a screenshot
+  // and a PDF are the same kind of evidence here.
+  if (type === 'data_extraction') return <ScanLine size={size} style={{ color: 'var(--blue)', flexShrink: 0 }} />;
   if (isImageFile(filename)) return <Image size={size} style={{ color: 'var(--blue)', flexShrink: 0 }} />;
   if (ext === '.pdf') return <FileText size={size} style={{ color: 'var(--orange)', flexShrink: 0 }} />;
   if (MODEL_EXTS.includes(ext)) return <Box size={size} style={{ color: '#2dd4bf', flexShrink: 0 }} />;
