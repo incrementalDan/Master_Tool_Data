@@ -816,3 +816,75 @@ describe('a holder duplicated in Fusion', () => {
       .toBe('ref-only');
   });
 });
+
+// ⚠️ THE CREATE PATH WAS THE LAST PLACE STILL TRUSTING A FUSION GUID.
+//
+// From the real library: a holder was duplicated in Fusion, one copy edited into
+// a test holder with a long stickout, and the original lost. The app's
+// NBT30-SK13C-120 record still remembered the guid it was pushed on — which
+// Fusion had by then given to that test holder. Because a create falls back to
+// `record.fusion_guid`, pushing wrote a library with TWO entries carrying one
+// guid. Fusion re-issued one, the app stopped recognising the holder, and the
+// next push offered to create it again — a loop with no way out from the app.
+describe('creating a holder whose remembered guid was taken over', () => {
+  const SHARED = '31014ded-f74e-4e7b-a82b-7ecc5a94476e';
+  // The impostor: sitting in Fusion on the guid, correctly matched to its own
+  // record, and nothing to do with the holder being created.
+  const impostor = { ...holderRecordToFusion(fusionHolderToRecord(OTHER), null), guid: SHARED, 'product-id': 'HLD-FAKE' };
+  const impostorRec = { ...fusionHolderToRecord(OTHER), id: 'rec-fake', holder_ref: 'HLD-FAKE', fusion_guid: SHARED };
+  // The holder that went missing from Fusion, still remembering that guid.
+  const missing = { ...fusionHolderToRecord(F), id: 'rec-missing', holder_ref: 'HLD-MISSING', fusion_guid: SHARED };
+
+  const push = () => {
+    const list = [impostor];
+    const plan = holderPushPlan(list, [impostorRec, missing], undefined, holderRecordToFusion);
+    return { plan, next: applyHolderPushPlan(list, plan, holderRecordToFusion) };
+  };
+
+  it('creates it without duplicating the guid', () => {
+    const { plan, next } = push();
+    expect(plan.creates.map(r => r.holder_ref)).toEqual(['HLD-MISSING']);
+    const guids = next.map(e => e.guid);
+    expect(new Set(guids).size).toBe(guids.length);
+  });
+
+  it('leaves the entry that legitimately owns the guid alone', () => {
+    const { next } = push();
+    expect(next.find(e => e['product-id'] === 'HLD-FAKE').guid).toBe(SHARED);
+    expect(next.find(e => e['product-id'] === 'HLD-MISSING').guid).not.toBe(SHARED);
+  });
+
+  // The loop this closes: the created holder must be recognised next time.
+  it('settles — the second push has nothing to create', () => {
+    const { next } = push();
+    const again = holderPushPlan(next, [impostorRec, missing], undefined, holderRecordToFusion);
+    expect(again.creates).toHaveLength(0);
+    expect(matchFusionHolder(next.find(e => e['product-id'] === 'HLD-MISSING'), [missing]).status)
+      .toBe('exact');
+  });
+
+  // Determinism matters: a preview and the commit that follows it must agree,
+  // and holderRecordToFusion also runs on every tool write.
+  it('picks the same guid every time', () => {
+    expect(push().next.map(e => e.guid)).toEqual(push().next.map(e => e.guid));
+  });
+
+  // The remembered guid is still preferred when it is genuinely free — this
+  // narrows the create path, it doesn't abandon the hint.
+  it('still reuses the remembered guid when nothing else holds it', () => {
+    const plan = holderPushPlan([], [missing], undefined, holderRecordToFusion);
+    expect(applyHolderPushPlan([], plan, holderRecordToFusion)[0].guid).toBe(SHARED);
+  });
+
+  // A guid freed by a removal in the same push is available again.
+  it('reuses a guid the same push is removing', () => {
+    const retired = { ...impostorRec, archived: true };
+    const list = [impostor];
+    const plan = holderPushPlan(list, [retired, missing], undefined, holderRecordToFusion);
+    expect(plan.deletes).toHaveLength(1);
+    const next = applyHolderPushPlan(list, plan, holderRecordToFusion);
+    expect(next).toHaveLength(1);
+    expect(next[0]['product-id']).toBe('HLD-MISSING');
+    expect(next[0].guid).toBe(SHARED);
+  });
+});
