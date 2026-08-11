@@ -1153,12 +1153,17 @@ src/
                                   # .machine-num-badge, .location-tag
     ToolTypeGrid.jsx              # Tool type selector tiles (icons size 36)
     FacetFilters.jsx              # Cascading facet filter UI
-    AddToolFlow.jsx               # New tool flow (extractor or manual)
+    AddToolFlow.jsx               # New tool flow: choose scan-or-manual → (scan)
+                                  # ExtractionInput → extraction → straight into
+                                  # ToolForm, pre-filled. No standalone extractor UI
     ImportFlow.jsx                # Bulk Fusion JSON / ProShop CSV import
                                   # Reached via Settings → Import. Step 2 hosts Import ProShop Photos
                                   # as a sub-section (button → ImportPhotosModal). Machine-number
                                   # step (4) is optional + non-destructive (see ProShop Integration).
                                   # Named-exports parseCSV + matchProShopToTools for reuse.
+    ExtractionInput.jsx           # The screenshot / PDF / paste picker (drag, browse,
+                                  # Ctrl+V). Shared by BOTH extraction entry points so
+                                  # the upload behaviour can't drift
     ExtractUpdateModal.jsx        # "Scan spec sheet" upload for an EXISTING tool.
                                   # Upload only — every accept/reject happens inline
                                   # in ToolForm, at the field being changed
@@ -1270,7 +1275,6 @@ src/
                                   # (Google Drive) config panels are embedded INSIDE their steps,
                                   # not separate cards), Shop (+ Save button), Machine Numbers,
                                   # ProShop Export, Rename, Advanced
-    ToolExtractorTab.jsx          # Hosts the tool-extractor image/spec extraction UI
     Toast.jsx                     # Fixed bottom-right toast stack
 
     icons/
@@ -1287,7 +1291,8 @@ src/
       QueuePanel.jsx              # Batch queue sidebar with status badges
       SummaryStep.jsx             # End-of-batch summary + bulk clipboard copy
 
-tool-extractor.tsx                # Source of truth for tool types, field visibility,
+tool-extractor.tsx                # DATA AND LOGIC ONLY — no UI. Source of truth for
+                                  # tool types, field visibility,
                                   # Fusion↔ProShop mapping, and image extraction UI
 ```
 
@@ -1657,6 +1662,10 @@ The AI extractor could only ever **create** a tool. But the common real cases ar
 2. **TYPE-GATED, before the UI.** A field outside the tool type's `appliesToTypes` is dropped in the builder — so it can't be swept up by "Use all" and pushed to Fusion on a type that has no such field. (A `cornerRadius` from an end-mill sheet lands on a *flat* end mill and is discarded; on a bull nose it is kept.)
 3. **UNIT-CORRECTED.** ⚠️ The model is instructed to convert everything to **inches** regardless of the source document (`sourceUnits` only records what the source *used*, for metric-aware naming). A millimetres tool would otherwise show every length as an enormous change, so lengths are converted into the record's own unit via `convertLength` before comparison, and the row says it was converted. The float-noise floor (`5e-5`, the app's existing display-precision rule) scales ×25.4 for a mm record.
 
+**⚠️ Two field lists the extraction has to respect, and they are opposite kinds.** `COATING_SEED` and `FLUTE_DESIGN_OPTIONS` both live in **`fieldRegistry.js`** — not `toolFieldLayout.js` — because the extraction service validates against them and the registry is a leaf (it imports only `units.js`); putting them anywhere that reaches `tool-extractor.tsx` would deepen that import cycle.
+- **Coating is OPEN and GROWING.** Every manufacturer names its coating differently (`ZPLUS`, `Tuff-Coat`, `nACo`), so a value outside the list is normal and must store verbatim. The field is a **datalist** whose suggestions are the seed UNIONED with every coating already used in the library (`coatingOptions(tools)`, passed in by `ToolForm`), so the list grows itself. ⚠️ It was a closed `<select>` of six generic names, which meant a scanned `ZPLUS` **was extracted and stored but rendered blank**, and was lost the moment the dropdown was touched — indistinguishable from "the scan didn't pull the coating". The prompt says *copy exactly, do not restrict to a list, do not translate a brand name into a generic one*.
+- **Flute design is CLOSED, on purpose.** Manufacturers describe one geometry a dozen ways ("variable pitch" / "unequal spacing" / "unequal indexing"), and the shop picks one vocabulary so the field stays searchable. So the prompt carries the list **plus a synonym map**, tells the model to read the product TITLE (where it usually lives) and not just the spec table, and `sanitizeExtraction` matches case/space-insensitively — dropping anything unrecognised rather than inventing a new option.
+
 **⚠️ `tool_type` is deliberately NOT proposable.** Accepting it would change the applicable field set out from under every other proposal in the list. A disagreement is surfaced as a **notice** ("the sheet looks like a flat end mill, but this tool is a drill"); changing the type stays the form's own Tool Type picker.
 
 **Never in the proposal set at all:** presets, assemblies, `tool_id`, `location`, `machine_tool_number`, and per-assembly `ooh` (stick-out is per-assembly — a spec sheet has no business setting it). These aren't filtered out, they were never in the extraction's vocabulary. Locked by `extractionDiff.test.js`.
@@ -1692,7 +1701,15 @@ The document a scan read from is the provenance of every value it produced ("whe
 
 The keep/discard choice sits in the **summary bar**, not the upload modal — it is next to Save, which is when it actually happens. It appears only when there is a real file (a pasted-text scan has no document) and only when Drive is connected (otherwise the bar says so rather than silently dropping the file). Discarding the scan drops the pending file too. A pasted screenshot arrives named `image.png` for every scan, which would make a tool's Files list unreadable, so a generic name is replaced with `spec-sheet-<date>.<ext>`; a real uploaded filename is kept, since it is usually the part number.
 
-**Deferred:** the description is not auto-rebuilt when accepted geometry makes it stale — a hint appears next to the field and "Suggest" is one click away. Retiring the standalone extractor UI in favour of the tool-page UI (the user's stated end goal) is a separate follow-on; this feature builds the shared module it needs.
+### The standalone extractor UI is retired
+
+The old `tool-extractor.tsx` screen — a full second tool form with its own inputs, ProShop/Fusion export buttons and a recent-tools strip — is **gone**. Adding a tool by scan now goes: pick "Scan Tool Label / Drawing" → **`ExtractionInput`** (the same picker the update modal uses) → extraction → **straight into `ToolForm`**, pre-filled, with a banner saying so. One tool form in the app, not two.
+
+- ⚠️ **A new tool still writes every field, and that is a DIFFERENT path from the update.** The add flow merges the sparse result onto `BLANK` via `applyExtractionToBlank` (clearing what the sheet didn't mention) and converts it with `extractorToTool` — the original, test-locked behaviour. It does **not** run the proposal machinery: there is nothing to diff against yet, so every value is simply the starting point and the form is where it gets checked.
+- The scanned sheet is attached as `data_extraction` here too — after `addTool` returns, against the tool it returned (the record has no id or Drive folder before that).
+- **`tool-extractor.tsx` is now data and logic only** (998 → ~350 lines): the tool-type list, `FIELD_VISIBILITY`, ProShop group letters and columns, coolant values, and the CSV/row builders that the schema barrel re-exports. Its default `App` export, the theme block and every UI helper were deleted; `ToolExtractorTab.jsx` is gone. The filename and `.tsx` extension are kept only because many modules import from that path — renaming it is a mechanical change worth doing on its own.
+
+**Deferred:** the description is not auto-rebuilt when accepted geometry makes it stale — a hint appears next to the field and "Suggest" is one click away.
 
 -----
 

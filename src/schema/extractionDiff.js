@@ -65,6 +65,7 @@ export const EXTRACTED_TO_FIELD = {
   tpiMax: 'tpi_max',
   threadProfileAngle: 'thread_profile_angle',
   fluteType: 'flute_type',
+  fluteDesign: 'flute_design',
   centerCutting: 'center_cutting',
   cuttingDirection: 'cutting_direction',
   fullProfile: 'full_profile',

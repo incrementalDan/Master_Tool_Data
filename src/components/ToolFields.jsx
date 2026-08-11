@@ -10,7 +10,8 @@ import { AlertTriangle, ScanLine, Check, Undo2, X } from 'lucide-react';
 import { fieldLabel, FIELD_REGISTRY, INCLUSIVE_ANGLE_TYPES } from '../schema/fieldRegistry.js';
 import {
   getToolFieldSections, fieldControl, SELECT_OPTIONS,
-  MATERIAL_SUITABILITY_OPTIONS, FLUTE_DESIGN_OPTIONS, VIEW_HIDE_WHEN_EMPTY,
+  MATERIAL_SUITABILITY_OPTIONS, FLUTE_DESIGN_OPTIONS, COATING_SEED,
+  VIEW_HIDE_WHEN_EMPTY,
 } from '../schema/toolFieldLayout.js';
 import {
   INCH_THREAD_SIZES, METRIC_THREAD_SIZES,
@@ -147,9 +148,16 @@ function ProposalStrip({ proposal, tool, onResolve }) {
   );
 }
 
+// Fallback suggestions per datalist field. `listOptions` overrides these — the
+// coating list is library-derived, so it can only be supplied by the caller.
+const DATALIST_FALLBACK = {
+  flute_design: FLUTE_DESIGN_OPTIONS,
+  coating: COATING_SEED,
+};
+
 export default function ToolFields({
   tool, mode, setField, geoIssueFields,
-  proposals = null, onResolveProposal = null,
+  proposals = null, onResolveProposal = null, listOptions = null,
 }) {
   const sections = getToolFieldSections(tool.tool_type);
   const edit = mode === 'edit';
@@ -252,12 +260,13 @@ export default function ToolFields({
       );
     }
     if (control === 'datalist') {
+      const opts = listOptions?.[field] || DATALIST_FALLBACK[field] || [];
       return fieldGroup(
         <>
           <input className="field-input" list={`dl-${field}`} value={tool[field] || ''}
             onChange={e => setField(field, e.target.value)} placeholder="None" />
           <datalist id={`dl-${field}`}>
-            {FLUTE_DESIGN_OPTIONS.map(v => <option key={v} value={v} />)}
+            {opts.map(v => <option key={v} value={v} />)}
           </datalist>
         </>
       );

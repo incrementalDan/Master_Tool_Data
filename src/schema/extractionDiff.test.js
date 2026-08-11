@@ -14,6 +14,7 @@ import {
 import { setActiveVendorRegistry, DEFAULT_VENDOR_REGISTRY } from './vendorRegistry.js';
 import { sanitizeExtraction, applyExtractionToBlank } from '../services/extractionService.js';
 import { BLANK } from '../../tool-extractor.tsx';
+import { fieldControl, coatingOptions } from './toolFieldLayout.js';
 
 beforeAll(() => setActiveVendorRegistry(DEFAULT_VENDOR_REGISTRY));
 
@@ -331,6 +332,65 @@ describe('an update can never reach beyond scalar fields', () => {
     for (const forbidden of ['presets', 'assemblies', 'tool_id', 'location', 'machine_tool_number', 'ooh']) {
       expect(fields).not.toContain(forbidden);
     }
+  });
+});
+
+describe('coating is an OPEN, growing list', () => {
+  // Regression: coating rendered as a closed <select> of 6 generic names, so a
+  // real manufacturer coating ("ZPLUS" on a Helical page) was extracted and
+  // stored but displayed BLANK — and was lost the moment the dropdown was
+  // touched. It reads as "the scan didn't pull the coating".
+  it('is a datalist, never a closed select', () => {
+    expect(fieldControl('coating')).toBe('datalist');
+  });
+
+  it('keeps a manufacturer coating verbatim', () => {
+    const { fields } = sanitizeExtraction({ coating: 'ZPLUS' });
+    expect(fields.coating).toBe('ZPLUS');
+    const { proposals } = buildFieldProposals(endMill(), { coating: 'ZPLUS' });
+    expect(proposals).toEqual([expect.objectContaining({ field: 'coating', proposed: 'ZPLUS', kind: 'fill' })]);
+  });
+
+  it('suggests the seed plus every coating already in the library', () => {
+    const opts = coatingOptions([
+      { coating: 'ZPLUS' }, { coating: 'Tuff-Coat' }, { coating: '' }, { coating: 'altin' },
+    ]);
+    expect(opts).toContain('ZPLUS');
+    expect(opts).toContain('Tuff-Coat');
+    expect(opts).toContain('AlTiN');           // seed spelling wins
+    expect(opts.filter(o => o.toLowerCase() === 'altin')).toHaveLength(1);  // deduped
+  });
+});
+
+describe('flute design is a CLOSED list the model maps onto', () => {
+  // Regression: fluteDesign was never asked for at all, so "Variable Pitch" in
+  // a product title was silently never extracted.
+  it('is extracted and mapped to the app field', () => {
+    const { fields } = sanitizeExtraction({ fluteDesign: 'Variable Pitch' });
+    expect(fields.fluteDesign).toBe('Variable Pitch');
+    const { proposals } = buildFieldProposals(endMill(), { fluteDesign: 'Variable Pitch' });
+    expect(proposals).toEqual([expect.objectContaining({ field: 'flute_design', proposed: 'Variable Pitch' })]);
+  });
+
+  it('accepts a differently-cased or -spaced answer', () => {
+    expect(sanitizeExtraction({ fluteDesign: 'variable  pitch' }).fields.fluteDesign).toBe('Variable Pitch');
+    expect(sanitizeExtraction({ fluteDesign: 'VARIABLE HELIX' }).fields.fluteDesign).toBe('Variable Helix');
+  });
+
+  it('drops an answer outside the list rather than inventing an option', () => {
+    const { fields } = sanitizeExtraction({ fluteDesign: 'Unequal Spacing' });
+    expect('fluteDesign' in fields).toBe(false);
+  });
+
+  it('never reaches a tap, which has no flute design', () => {
+    const tap = endMill({ tool_type: 'tap', material: 'hss' });
+    const { proposals } = buildFieldProposals(tap, { fluteDesign: 'Variable Pitch' });
+    expect(proposals).toHaveLength(0);
+  });
+
+  it('is cleared by the add path when the sheet does not mention it', () => {
+    const { fields } = sanitizeExtraction({ diameter: '0.5' });
+    expect(applyExtractionToBlank({ ...BLANK, fluteDesign: 'Variable Helix' }, fields).fluteDesign).toBe('');
   });
 });
 
