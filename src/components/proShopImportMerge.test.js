@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchProShopToTools } from './ImportFlow.jsx';
+import { matchProShopToTools, psRowToTool } from './ImportFlow.jsx';
 
 // A fill-gap field where the app already has a DIFFERENT value than ProShop is
 // flagged (not overwritten, not silently ignored). ProShop-authoritative fields
@@ -161,5 +161,48 @@ describe('ProShop merge — authoritative fields still auto-win (no flag)', () =
     const m = merge({ 'Through Coolant': 'true' }, baseTool({ tsc_capable: false }));
     expect(m.additions.tsc_capable).toBe(true);
     expect(m.conflicts.some(c => c.field === 'tsc_capable')).toBe(false);
+  });
+});
+
+// ⚠️ ProShop's `Taper` column is uncontrolled free text and does not share our
+// convention. We store Fusion's HALF angle (geometry.TA); the column is mostly
+// the INCLUDED angle and not even consistently that — measured on the real
+// export, L-124 90/45, L-267 90/45 and L-250 60/30 are included while L-189
+// 45/45 is half. No conversion is right for all four, so the field is not
+// imported at all. Importing it raw is what put 60 into L-250's half-angle
+// field and raised a conflict about data that was correct in Fusion.
+describe('ProShop import — taper angle is never taken from ProShop', () => {
+  const row = (over = {}) => [{
+    'Tool #': 'L-250', 'Tool Group': 'L', Description: '.25 CHAMFER 60DEG',
+    'Cut Dia': '0.25', ...over,
+  }];
+
+  it('leaves taper_angle unset on a new chamfer tool', () => {
+    const t = psRowToTool(row({ Taper: '60' }));
+    expect(t.tool_type).toBe('chamfer mill');
+    expect(t.taper_angle ?? null).toBeNull();
+  });
+
+  // The half-angle-looking value must be ignored too — the point is that the
+  // column carries no reliable convention, not that one number is suspicious.
+  it('ignores the column even when it already looks like a half angle', () => {
+    expect(psRowToTool(row({ Taper: '45' })).taper_angle ?? null).toBeNull();
+  });
+
+  // Everything else on the row still imports — this is one field, not a retreat
+  // from ProShop geometry.
+  it('still imports the rest of the row', () => {
+    const t = psRowToTool(row({ Taper: '60', 'No.ofFlutes': '5', 'Overall Length': '2.5' }));
+    expect(t.diameter).toBe(0.25);
+    expect(t.number_of_flutes).toBe(5);
+    expect(t.overall_length).toBe(2.5);
+  });
+
+  // matchProShopToTools never touched taper_angle; lock that it stays that way,
+  // so an existing tool's correct angle can't be overwritten from ProShop later.
+  it('never merges taper_angle onto an existing tool', () => {
+    const m = merge({ Taper: '60' }, baseTool({ tool_type: 'chamfer mill', taper_angle: 30 }));
+    expect(m.additions.taper_angle).toBeUndefined();
+    expect((m.conflicts || []).some(c => c.field === 'taper_angle')).toBe(false);
   });
 });

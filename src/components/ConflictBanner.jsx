@@ -1,5 +1,5 @@
 import { AlertTriangle } from 'lucide-react';
-import { fieldLabel } from '../schema/fieldRegistry.js';
+import { fieldLabel, showsInclusiveAngle, toDisplayValue } from '../schema/fieldRegistry.js';
 import { displayConflicts } from '../utils/toolConflicts.js';
 import { useApp } from '../context/AppContext.jsx';
 
@@ -50,7 +50,8 @@ export default function ConflictBanner({ tool }) {
             return <MachineNumberRow key={c.id} c={c} disabled={isSaving}
               onClear={() => resolveToolConflict(tool.id, c.id)} />;
           }
-          return <FieldRow key={c.id} c={c} unit={tool.unit} current={tool[c.field]} disabled={isSaving}
+          return <FieldRow key={c.id} c={c} unit={tool.unit} toolType={tool.tool_type}
+            current={tool[c.field]} disabled={isSaving}
             onKeep={() => resolveToolConflict(tool.id, c.id)}
             onUse={(v) => resolveToolConflict(tool.id, c.id, v)} />;
         })}
@@ -59,22 +60,34 @@ export default function ConflictBanner({ tool }) {
   );
 }
 
-function FieldRow({ c, unit, current, onKeep, onUse, disabled }) {
+// ⚠️ Every number here is SHOWN through `toDisplayValue` and every number sent
+// back to `onUse` is the STORED one, untransformed. On a chamfer mill those two
+// differ by ×2 (see showsInclusiveAngle, fieldRegistry.js): the store holds
+// Fusion's half angle, the app shows the included angle. Rendering the raw value
+// put "Taper Angle 30" directly above a geometry panel reading "Included/
+// Inclusive Tip Angle 60" for the same tool — the app appearing to contradict
+// itself about a value that was right all along — and "Use 60" would have
+// stored 60, doubling the tool to a 120° included angle on the next render.
+function FieldRow({ c, unit, toolType, current, onKeep, onUse, disabled }) {
   const [kept, other] = c.values || [];
+  const show = (v) => fmt(toDisplayValue(c.field, v, toolType));
+  const label = showsInclusiveAngle(c.field, toolType)
+    ? 'Included/Inclusive Tip Angle (°)'
+    : (fieldLabel(c.field, unit) || c.field);
   return (
     <div>
-      <div className="text-sm" style={{ fontWeight: 600 }}>{fieldLabel(c.field, unit) || c.field}</div>
+      <div className="text-sm" style={{ fontWeight: 600 }}>{label}</div>
       <div className="text-xs text-sub" style={{ marginBottom: 6 }}>
         Instances disagreed — current value is{' '}
-        <span className="font-mono" style={{ color: 'var(--text)' }}>{fmt(current)}</span>.
+        <span className="font-mono" style={{ color: 'var(--text)' }}>{show(current)}</span>.
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button className="btn btn-ghost btn-sm" disabled={disabled} onClick={onKeep}>
-          Keep <span className="font-mono">{fmt(kept)}</span>
+          Keep <span className="font-mono">{show(kept)}</span>
         </button>
-        {!Object.is(fmt(kept), fmt(other)) && (
+        {!Object.is(show(kept), show(other)) && (
           <button className="btn btn-ghost btn-sm" disabled={disabled} onClick={() => onUse(other)}>
-            Use <span className="font-mono">{fmt(other)}</span>
+            Use <span className="font-mono">{show(other)}</span>
           </button>
         )}
       </div>

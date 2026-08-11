@@ -125,21 +125,33 @@ export function validateGeometry(tool) {
 
   // All lengths (flute_length / shoulder_length / overall_length / min_ooh) are
   // stored in the tool's native unit, so the chain compares directly — no conversion.
-  if (isValid(flute_length) && isValid(shoulder_length) && flute_length > shoulder_length) {
+  //
+  // ⚠️ Every link is ≤, so EQUAL is legal at each step — and the chain is
+  // compared with the same unit-aware tolerance the assembly check below uses.
+  // Without it a bare `>` reports float noise as a violation, and because the
+  // message rounds to 4 decimals it comes out self-contradicting: "Flute Length
+  // (0.125) must be less than or equal to Shoulder Length (0.125)". A
+  // slot/key cutter hits this every time — `normalizeLibrary` sets its shoulder
+  // FROM its flute length (the unbroken shoulder is the kerf, not the MIN OOH
+  // stick-out), so the two are meant to be identical and a Fusion float
+  // round-trip is all it takes to make one a hair larger.
+  const eps = lengthEps(tool.unit);
+
+  if (isValid(flute_length) && isValid(shoulder_length) && flute_length > shoulder_length + eps) {
     warnings.push({
       fields: ['flute_length', 'shoulder_length'],
       message: `Flute Length (${fmt(flute_length)}) must be less than or equal to Shoulder Length (${fmt(shoulder_length)})`,
     });
   }
 
-  if (isValid(shoulder_length) && isValid(min_ooh) && shoulder_length > min_ooh) {
+  if (isValid(shoulder_length) && isValid(min_ooh) && shoulder_length > min_ooh + eps) {
     warnings.push({
       fields: ['shoulder_length', 'min_ooh'],
       message: `Shoulder Length (${fmt(shoulder_length)}) must be less than or equal to MIN OOH (${fmt(min_ooh)})`,
     });
   }
 
-  if (isValid(min_ooh) && isValid(overall_length) && min_ooh > overall_length) {
+  if (isValid(min_ooh) && isValid(overall_length) && min_ooh > overall_length + eps) {
     warnings.push({
       fields: ['min_ooh', 'overall_length'],
       message: `MIN OOH (${fmt(min_ooh)}) must be less than or equal to Overall Length (${fmt(overall_length)})`,
@@ -176,7 +188,6 @@ export function validateGeometry(tool) {
   // noise never registers. Cleared by Settings → Library Health, or by editing
   // the assembly.
   if (isValid(min_ooh) && Array.isArray(tool.assemblies)) {
-    const eps = lengthEps(tool.unit);
     const below = tool.assemblies.filter(a => isValid(a?.ooh) && a.ooh < min_ooh - eps);
     for (const a of below) {
       warnings.push({

@@ -827,7 +827,7 @@ function locationCountsForGroups(groups) {
   return countLocationNumbers((groups || []).map(g => ({ value: g?.[0]?.['Location'] })));
 }
 
-function psRowToTool(group, psUnit = 'inches', locationSystems = [], locCounts = null) {
+export function psRowToTool(group, psUnit = 'inches', locationSystems = [], locCounts = null) {
   const r = group[0];
   const structuredLoc = proShopStructuredLocation(r['Location'], locationSystems, locCounts);
   const grouping = r['Tool Group'] || '';
@@ -848,7 +848,19 @@ function psRowToTool(group, psUnit = 'inches', locationSystems = [], locCounts =
     tip_angle: psNum(r['Tip Angle']),
     tip_diameter: psNum(r['Tip Diameter']),
     helix_angle: psNum(r['HelixAngle']),
-    taper_angle: psNum(r['Taper']),
+    // ⚠️ `taper_angle` is deliberately NOT imported from ProShop's `Taper`.
+    // The column is uncontrolled free text — whatever the person filling the
+    // row thought was right — and it does not share our convention. We store
+    // Fusion's HALF angle (geometry.TA); ProShop's column is mostly the INCLUDED
+    // angle and not even consistently that. Measured across the real export:
+    // L-124 90/45, L-267 90/45, L-250 60/30 (included), but L-189 45/45 (half).
+    // So there is no conversion that is right for all four, and importing the
+    // raw number wrote an included angle into a half-angle field — which is how
+    // L-250 ended up carrying 60 against Fusion's 30 and raising a conflict
+    // about data that was correct all along. No value beats a wrong one: a new
+    // tool comes in with taper_angle unset and the user fills it in, where the
+    // form labels it "Included/Inclusive Tip Angle" and halves it on the way in.
+    // ProShop EXPORT still emits the column — this is the read direction only.
     coating: r['Coating'] || '',
     material: psMaterial(r['Tool Material']),
     ...resolveThreadSize(r['Thread'] || r['Pitch'] || ''),
