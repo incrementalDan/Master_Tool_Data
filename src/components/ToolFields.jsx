@@ -128,8 +128,8 @@ function ProposalStrip({ proposal, tool, onResolve }) {
         {status === 'pending' ? (
           <>
             <button type="button" className="spec-proposal-btn accept"
-              onClick={() => onResolve(field, 'accept')} title="Use the spec-sheet value">
-              <Check size={11} /> Use
+              onClick={() => onResolve(field, 'accept')} title="Update to the spec-sheet value">
+              <Check size={11} /> Update
             </button>
             <button type="button" className="spec-proposal-btn"
               onClick={() => onResolve(field, 'reject')} title="Keep the current value">
@@ -139,8 +139,8 @@ function ProposalStrip({ proposal, tool, onResolve }) {
         ) : (
           <button type="button" className="spec-proposal-btn"
             onClick={() => onResolve(field, status === 'accepted' ? 'reject' : 'accept')}
-            title={status === 'accepted' ? 'Put the previous value back' : 'Use the spec-sheet value after all'}>
-            <Undo2 size={11} /> {status === 'accepted' ? 'Undo' : 'Use it'}
+            title={status === 'accepted' ? 'Put the previous value back' : 'Update to the spec-sheet value after all'}>
+            <Undo2 size={11} /> {status === 'accepted' ? 'Undo' : 'Update'}
           </button>
         )}
       </span>
