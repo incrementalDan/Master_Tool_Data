@@ -57,8 +57,9 @@ Same input twice — does the second report nothing to do? **This is the highest
 → *Caught: the holder GUID ping-pong; "N refreshed" inflated by float round-trip noise.*
 
 **4. Is every link I store an ID?**
-Or am I recovering a relationship by parsing a formatted name, or by trusting a foreign system's GUID? (See "Relational integrity — every link is an ID".)
-→ *Caught: presets orphaned by an OOH rename; three holder queries keyed on Fusion's GUID, silently covering a fraction of the tools.*
+⚠️ **NOT A JUDGEMENT CALL — there is nothing to weigh.** A link stores a stable, database-ready id: a UUID, a tracking id, or a config slug. Never a ProShop number, a description, a location, a machine number, or any other human-facing value — every one of those is **mutable by design** (a ProShop number is re-numberable; that is what `legacy_ids` is *for*), so a link built on one severs itself the first time the shop renumbers or renames anything. If a request says "link them by the ProShop number", that means *look it up* by ProShop number and *store the id*. Am I recovering a relationship by parsing a formatted name, or by trusting a foreign system's GUID? (See "Relational integrity — every link is an ID".)
+**Enforced, not remembered:** `relationalIntegrity.test.js` scans the whole metadata record and fails on any link-shaped field holding a human identifier — **including a field that doesn't exist yet**. If it fails on a field you just added, that is the check working; register it and confirm it holds an id.
+→ *Caught: presets orphaned by an OOH rename; three holder queries keyed on Fusion's GUID, silently covering a fraction of the tools; `selected_holder_guid` missing from the inventory entirely.*
 
 **5. Can this fail and still look like it worked?**
 Write first, then update memory. No silent no-ops. A bulk save must **merge**, not replace.
@@ -2038,6 +2039,7 @@ Every entity link in the app. When you add a relationship, add a row. When you t
 | assembly → Fusion entry | `instance_guid` | metadata | ✅ |
 | **assembly → holder record** | **`holder_id`** | metadata → `holder_library.holders[]` | ✅ the authoritative link |
 | assembly → holder (Fusion mirror) | `holder_guid` (+ cached `holder_description`) | metadata | ✅ what Fusion absorbed — a HINT for an assembly with no FK yet, never an authority |
+| tool → selected holder (legacy) | `selected_holder_guid` | metadata | ⚠️ pre-assemblies; a Fusion guid, so a hint and never an identity |
 | **holder → Fusion holder entry** | **`holder_ref` (stamped in Fusion `product-id`) + a segment match** | `holder_library.json` ↔ Fusion | ✅ both required — see Holder identity |
 | holder → what Fusion was last given | `last_pushed { segments, unit }` | `holder_library.json` | ✅ the only thing separating an app-side redraw from a Fusion-side edit |
 | archived holder → its survivor | `merged_into` | `holder_library.json` | ✅ dangling tolerated; archived records match nothing |
@@ -2067,6 +2069,10 @@ Every entity link in the app. When you add a relationship, add a row. When you t
 | program → machine | `machine_id` (+ cached `machine_label`) | `jobs.json` → `shop_settings.machines[]` | ✅ |
 | job → program | `jobs[].program_id` | `jobs.json` | ✅ dangling tolerated |
 | shop → default machine | `default_machine_id` | `shop_settings.json` | ✅ |
+
+**⚠️ This is enforced, not remembered.** `src/schema/relationalIntegrity.test.js` builds a metadata record whose human identifiers are distinctive sentinels and walks EVERY value in it. Three guards, and the third is the one that matters most: (1) no link holds the ProShop number / description / location / machine number; (2) no link value has the shape of a ProShop number; (3) **every link-shaped key** (`*_id`, `*_ids`, `*_guid`, `*_guids`, `linked_*`) must be registered in `LINK_SHAPED_KEYS` — so a link-shaped field **that does not exist yet** fails the suite the moment it is added, forcing a look at what it stores. Verified by deliberately introducing the mistake (`linked_fixture_id: tool.tool_id`): all four assertions fire. It has already earned it — the coverage guard is how `selected_holder_guid` was found missing from the inventory below.
+
+**A request phrased in human terms is still a request for an id.** "Link them by the ProShop number" means *look the tool up* by its ProShop number — the picker's job — and *store its tracking id*. There is no version of a linking feature where a mutable display value is the key, and no trade-off to weigh per feature.
 
 **Dangling ids are tolerated everywhere** (the referenced record may be deleted) — resolvers return null and callers fall back to a stored label. That's deliberate: it's soft-delete tolerance, not a broken link.
 
