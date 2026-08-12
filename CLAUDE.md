@@ -57,8 +57,9 @@ Same input twice — does the second report nothing to do? **This is the highest
 → *Caught: the holder GUID ping-pong; "N refreshed" inflated by float round-trip noise.*
 
 **4. Is every link I store an ID?**
-Or am I recovering a relationship by parsing a formatted name, or by trusting a foreign system's GUID? (See "Relational integrity — every link is an ID".)
-→ *Caught: presets orphaned by an OOH rename; three holder queries keyed on Fusion's GUID, silently covering a fraction of the tools.*
+⚠️ **NOT A JUDGEMENT CALL — there is nothing to weigh.** A link stores a stable, database-ready id: a UUID, a tracking id, or a config slug. Never a ProShop number, a description, a location, a machine number, or any other human-facing value — every one of those is **mutable by design** (a ProShop number is re-numberable; that is what `legacy_ids` is *for*), so a link built on one severs itself the first time the shop renumbers or renames anything. If a request says "link them by the ProShop number", that means *look it up* by ProShop number and *store the id*. Am I recovering a relationship by parsing a formatted name, or by trusting a foreign system's GUID? (See "Relational integrity — every link is an ID".)
+**Enforced, not remembered:** `relationalIntegrity.test.js` scans the whole metadata record and fails on any link-shaped field holding a human identifier — **including a field that doesn't exist yet**. If it fails on a field you just added, that is the check working; register it and confirm it holds an id.
+→ *Caught: presets orphaned by an OOH rename; three holder queries keyed on Fusion's GUID, silently covering a fraction of the tools; `selected_holder_guid` missing from the inventory entirely.*
 
 **5. Can this fail and still look like it worked?**
 Write first, then update memory. No silent no-ops. A bulk save must **merge**, not replace.
@@ -1516,6 +1517,21 @@ A collapsible "Purchasing" panel in `ToolDetail`'s right column. Nested table: o
 
 -----
 
+## Linked Tools (tap ↔ drill, reamer ↔ drill)
+
+A **symmetric, role-free** tool↔tool relationship — "these go together": a tap and the drill that precedes it, a reamer and its drill. There is no direction and no parent; linking A to B links B to A. Pure logic in **`src/utils/toolLinks.js`** (`normalizeLinkIds`, `linkPatch`, `linkedTools`, `symmetrizeToolLinks`, `toolsNeedingLinkRepair`), UI in **`LinkedToolsSection.jsx`** (a panel directly under Purchasing in ToolDetail) + **`ToolLinkPicker.jsx`**.
+
+- **⚠️ The link is the partner's TRACKING ID** (`tool.id` = `FTL-XXXXXX`), stored in the metadata-only **`linked_tools[]`**. You *look a tool up* by its ProShop #/EDP#/description — that is the picker's job — but a ProShop number is **re-numberable by design** (that is what `legacy_ids` exists for), so storing one would silently sever every link the next time the shop changed ID scheme. Standard **Relational integrity** rule: store the id, resolve the display at read time.
+- **Metadata-only.** Fusion has nowhere to put a tool↔tool link, so it is never written there and `writeLogicalTool` is deliberately **not** used: that would re-download and re-upload the whole Fusion library *twice* (once per side) to store a field Fusion never sees. `AppContext.setToolLink(toolId, otherId, linked)` (`toolActions.js`) does one `toolStore.upsertMany` covering **both** tools, with an optimistic in-memory update that is **rolled back** if the write fails — claiming a link that didn't persist is worse than failing loudly. Same reasoning as `normalizeLocationSystem` / `importLocationsFromProShop`.
+- **⚠️ Symmetry is stored on BOTH sides, and written in ONE save.** A JSON file per tool has no join table, so each side carries the other's id. Writing the pair in a single `upsertMany` is what makes that safe — a partial failure cannot leave A pointing at B while B knows nothing about A.
+- **`symmetrizeToolLinks(tools)` is the load-time backstop** (wired into **all four** `loadTools` build sites alongside the FK backfills), for links written before this rule or by a future writer that forgets. It **only ever ADDS the missing reverse half**; persisted lazily on the tool's next save. Two invariants it must keep: it returns the **same array and same tool references** when everything already agrees (callers use identity to decide whether there is anything to persist — the `syncPresetMaterialName` rule), and it **KEEPS a dangling id** — "not in the list I was handed" is not "deleted" (the library may be partly loaded), so dropping one and persisting would destroy a real link. A dangling link is hidden from the *display* list (`linkedTools`) only.
+- **Display**: each partner is a badge card carrying the three things needed to go find it — **tool ID, description, location** — and opens in a **new tab** (a plain `<a href="#/tool/:id" target="_blank">`, so middle-click and "open in new window" work too). Following the link is for *comparing* two tools, not navigating away from the one being read.
+- **The picker reuses the landing page's search**, not a second implementation: `textSearch` + `sortResults` from `searchEngine.js`, so typing a ProShop #, EDP#, vendor number or retired ID behaves identically to the main search box and an exact ID match floats to the top. Plus a tool-type dropdown built from the types actually present. The tool itself and anything already linked are **removed** from results rather than greyed out.
+- Gated on `googleAuthenticated || demoMode`; demo never sets `googleAuthenticated`, so a demo link stays in memory. Locked by `src/utils/toolLinks.test.js` (incl. idempotence, the identity invariant, and the dangling-link rule).
+- **Deferred**: no *role* on a link (pilot drill vs. tap drill), no bulk linking, and no auto-suggestion by diameter/thread — the ask was explicitly "mainly just a way to link the tools".
+
+-----
+
 ## Jobs (program # + part #) — preset & tool job links
 
 A **job = a program number + a part number** — the shop's unit of "where was this used." Jobs are **shop-level entities with stable UUIDs** in **`jobs.json`** (the 4th shared Drive file); presets and tools reference jobs **by id only**, never by copying the strings. This is the foundation for a future jobs page (assigning program numbers to part numbers and operations, replacing the manually-managed Google Sheet): that page will edit the registry directly and every reference follows. Reference data today — deliberately low-key in the UI.
@@ -2023,6 +2039,7 @@ Every entity link in the app. When you add a relationship, add a row. When you t
 | assembly → Fusion entry | `instance_guid` | metadata | ✅ |
 | **assembly → holder record** | **`holder_id`** | metadata → `holder_library.holders[]` | ✅ the authoritative link |
 | assembly → holder (Fusion mirror) | `holder_guid` (+ cached `holder_description`) | metadata | ✅ what Fusion absorbed — a HINT for an assembly with no FK yet, never an authority |
+| tool → selected holder (legacy) | `selected_holder_guid` | metadata | ⚠️ pre-assemblies; a Fusion guid, so a hint and never an identity |
 | **holder → Fusion holder entry** | **`holder_ref` (stamped in Fusion `product-id`) + a segment match** | `holder_library.json` ↔ Fusion | ✅ both required — see Holder identity |
 | holder → what Fusion was last given | `last_pushed { segments, unit }` | `holder_library.json` | ✅ the only thing separating an app-side redraw from a Fusion-side edit |
 | archived holder → its survivor | `merged_into` | `holder_library.json` | ✅ dangling tolerated; archived records match nothing |
@@ -2036,6 +2053,7 @@ Every entity link in the app. When you add a relationship, add a row. When you t
 | preset → machine | `preset_meta[guid].machine_id` | metadata | ✅ |
 | preset → jobs | `preset_meta[guid].job_ids[]` | metadata | ✅ |
 | tool → jobs | `job_ids[]` | metadata | ✅ |
+| **tool ↔ tool** (tap/drill, reamer/drill) | `linked_tools[]` | metadata | ✅ symmetric — stored BOTH sides, one write; `symmetrizeToolLinks` heals a half-link at load |
 | tool → preferred machine | `preferred_machine_id` | metadata | ✅ |
 | tool → location | `location.{system_id,zone_id,station_id,drawer_id}` | metadata → `shop_settings.location_config` | ✅ |
 | tool → bin size | `bin_size_id` | metadata → `location_config.bin_sizes[]` | ✅ |
@@ -2051,6 +2069,10 @@ Every entity link in the app. When you add a relationship, add a row. When you t
 | program → machine | `machine_id` (+ cached `machine_label`) | `jobs.json` → `shop_settings.machines[]` | ✅ |
 | job → program | `jobs[].program_id` | `jobs.json` | ✅ dangling tolerated |
 | shop → default machine | `default_machine_id` | `shop_settings.json` | ✅ |
+
+**⚠️ This is enforced, not remembered.** `src/schema/relationalIntegrity.test.js` builds a metadata record whose human identifiers are distinctive sentinels and walks EVERY value in it. Three guards, and the third is the one that matters most: (1) no link holds the ProShop number / description / location / machine number; (2) no link value has the shape of a ProShop number; (3) **every link-shaped key** (`*_id`, `*_ids`, `*_guid`, `*_guids`, `linked_*`) must be registered in `LINK_SHAPED_KEYS` — so a link-shaped field **that does not exist yet** fails the suite the moment it is added, forcing a look at what it stores. Verified by deliberately introducing the mistake (`linked_fixture_id: tool.tool_id`): all four assertions fire. It has already earned it — the coverage guard is how `selected_holder_guid` was found missing from the inventory below.
+
+**A request phrased in human terms is still a request for an id.** "Link them by the ProShop number" means *look the tool up* by its ProShop number — the picker's job — and *store its tracking id*. There is no version of a linking feature where a mutable display value is the key, and no trade-off to weigh per feature.
 
 **Dangling ids are tolerated everywhere** (the referenced record may be deleted) — resolvers return null and callers fall back to a stored label. That's deliberate: it's soft-delete tolerance, not a broken link.
 
@@ -2430,6 +2452,10 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 
 - **Holder locations → the Location System (deferred, deliberately).** A holder's `location` is free text today; the shop's holders are on a shelf and easy to find, so this is a want-not-need (see **Holders and the rest of the app — decided, not overlooked**). Doing it properly means a **separate holder location system**: the existing `location_config.systems[]` is tool-scoped (bins, ProShop export rules, tool-bin collision checks), so it needs a per-system scope flag, a structured `holder_location` on the record (sitting alongside the free-text `location` exactly as `tool_location` does for tools), read-time resolution, and the picker taught to count holder bins. Additive when it happens — nothing today blocks it. **Also still deferred:** machine-taper filtering for assemblies, swapping `HolderPill` in at every existing call site, fully deriving a holder's segments from its parts rather than storing both, and a configurable holder-ID system (explicitly NOT to be built speculatively — see the same section).
 
+
+- **Retire `selected_holder_guid` in favour of a `holder_id` FK (low priority — currently DORMANT).** The pre-assemblies way of saying "this tool uses this holder": a **Fusion holder guid** on the tool record. Now used only as a **fallback for a tool with no assembly yet** — it seeds the new assembly's holder (`logicalTools.js` `splitToFusionInstances`, `toolActions.js`, `libraryOps.js`) and picks the holder for an export when no assembly is selected (`fusionExport.js`). Once a tool has an assembly, the assembly's own holder wins and this field is never read.
+  ⚠️ **The problem is what it stores.** A Fusion holder guid is not an identity — Fusion re-issues them, which is the premise of the entire Holder Management System (see **Holder identity**). So a stored value can silently come to point at a *different* holder, exactly the failure already observed on `NBT30-SK13C-120`. The modern equivalent is the assembly's **`holder_id`** (a stable app-owned id, resolved FK-first by `resolveHolderForWrite`).
+  **Not urgent, and measured:** **0 of 268** records in the real library carry one, so nothing is wrong today and there is nothing to migrate. The fix when it's worth doing: add a `selected_holder_id` alongside it, resolve it FK-first (mirroring `resolveHolderForWrite`), backfill from the guid at load via `matchFusionHolder`, and drop the guid to a hint. Surfaced by the `LINK_SHAPED_KEYS` coverage guard in `relationalIntegrity.test.js` — it was a live relationship missing from the inventory table entirely, which is precisely what that guard exists to catch.
 
 - **Self-healing audit (not yet done).** The **Self-healing** philosophy section above was written *after* most of the mechanisms it describes, so it documents the pattern rather than verifying it holds everywhere. Worth one deliberate pass: (1) **coverage** — every derived/linked value that could go stale actually has a repair or a flag (candidates not yet reviewed: `material_suitability` free text, `tags`, `coating`/`pitch` fill-gap fields, holder library links, `speed_feed_refs.preset_id` dangling ids, `jobs[].program_id` dangling after a program delete); (2) **no nag loops** — for each existing flag, confirm the fix action clears the detector (walk `ConflictBanner`, `DriftBanner`, `MergeSiblingBanner`, the duplicate-preset banner, `MaterialLinkBanner`, `_productIdConflict`); (3) **load cost** — the silent repairs are all in-memory, but they're now a stack of full-library passes (`combineToolsByToolId` → `derivePairings` → 4 × backfill…), so confirm they're still cheap at real library size and consider folding them into one walk; (4) **noise calibration** — how many tools actually surface a flag against the real library, and whether any flag fires so broadly it becomes wallpaper (`MaterialLinkBanner` on legacy `"AL FIN"` strings is the likely candidate).
 

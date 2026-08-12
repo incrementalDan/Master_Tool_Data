@@ -51,17 +51,33 @@ export function matchedPurchasing(tool, query) {
   return { ...hit, label: `${hit.name ? hit.name + ' ' : ''}${hit.kind} ${hit.value}` };
 }
 
-// Tool-MATERIAL search synonyms (what the tool is made of — carbide/hss/cobalt/
-// ceramic; see fieldRegistry.material "Tool Material"). SEARCH-ONLY: merges
-// Cobalt and HSS so a query for either surfaces both, without touching the
-// stored value, the facet option list, or any other field's matching.
-const MATERIAL_SEARCH_SYNONYMS = [
-  new Set(['cobalt', 'hss']),
+// Tool-MATERIAL search groups (what the tool is made of — carbide/hss/cobalt/
+// ceramic; see fieldRegistry.material "Tool Material").
+//
+// HSS and Cobalt are ONE thing to look for. Fusion has no Cobalt option at all
+// (a cobalt tool is written out as hss — see toFusionMaterial), and nobody
+// searching for a cobalt drill wants the HSS ones hidden, so they share a single
+// facet chip labelled "HSS/Cobalt" that pulls up both. Stored values are
+// untouched: a tool is still Cobalt or HSS on its own page and in Fusion.
+//
+// SEARCH-ONLY, and material-only — no other field's matching changes.
+const MATERIAL_GROUPS = [
+  { label: 'HSS/Cobalt', members: new Set(['cobalt', 'hss']) },
 ];
 
 function materialSynonymGroup(term) {
   const t = String(term || '').toLowerCase().trim();
-  return MATERIAL_SEARCH_SYNONYMS.find(group => group.has(t)) || null;
+  const g = MATERIAL_GROUPS.find(x => x.members.has(t) || x.label.toLowerCase() === t);
+  return g ? g.members : null;
+}
+
+// The single facet value a stored material belongs under — its group's label, or
+// the value itself. Both the option LIST and the match test go through this, so
+// a chip can never offer a value that then matches nothing.
+export function materialFacetValue(value) {
+  const t = String(value ?? '').toLowerCase().trim();
+  const g = MATERIAL_GROUPS.find(x => x.members.has(t) || x.label.toLowerCase() === t);
+  return g ? g.label : value;
 }
 
 // True if a tool's `material` value should match search term `q` — exact
@@ -341,12 +357,11 @@ function matchesFacetSingle(tool, field, value, tolerances = null) {
   if (field === 'flute_design') {
     return String(value).toLowerCase() === String(tool.flute_design || '').toLowerCase();
   }
+  // Compared as GROUPS, so the "HSS/Cobalt" chip matches both stored values —
+  // and so does picking plain "hss" or "cobalt" from a URL or a saved filter.
   if (field === 'material') {
-    const tv = String(tool.material || '').toLowerCase().trim();
-    const v = String(value).toLowerCase().trim();
-    if (tv === v) return true;
-    const group = materialSynonymGroup(v);
-    return group ? group.has(tv) : false;
+    return String(materialFacetValue(tool.material) ?? '').toLowerCase().trim()
+      === String(materialFacetValue(value) ?? '').toLowerCase().trim();
   }
   // Numeric exact or close match (bare-value path — e.g. chip-selected small option sets)
   if (['diameter', 'flute_length', 'overall_length', 'number_of_flutes', 'corner_radius'].includes(field)) {
@@ -387,7 +402,9 @@ export function getAvailableOptions(tools, activeFilters, targetField, tolerance
       if (typeof v === 'boolean') {
         values.add(v ? 'Yes' : 'No');
       } else if (v !== null && v !== undefined && v !== '') {
-        values.add(v);
+        // Grouped materials collapse to ONE option ("HSS/Cobalt") rather than
+        // two chips that each pull up the same set of tools.
+        values.add(targetField === 'material' ? materialFacetValue(v) : v);
       }
     }
   }

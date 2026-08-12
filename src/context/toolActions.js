@@ -12,6 +12,7 @@ import {
   getNextMachineNumber, combineToolsByToolId, mergeNoFusionIntoFusion,
 } from '../schema/toolSchema.js';
 import { normProShopId } from '../schema/insertFamilies.js';
+import { linkPatch } from '../utils/toolLinks.js';
 import { composeAsmNumber, autoAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
 import {
   presetMatchesAssembly, isAutoPresetName, autoPresetName, HOLE_MAKING_TYPES,
@@ -609,6 +610,52 @@ export function createToolActions(ctx) {
       }
     }
     return { updated: changed.length, changed };
+  };
+
+  // ─── Linked tools (tap ↔ its drill, reamer ↔ its drill) ───────────────────
+  // ⚠️ METADATA-ONLY, and BOTH SIDES IN ONE WRITE. Fusion has nowhere to put a
+  // tool↔tool link, so this deliberately does NOT go through `writeLogicalTool`:
+  // that would re-download and re-upload the ENTIRE Fusion library twice (once
+  // per side) to store a field Fusion never sees. Same reasoning as
+  // `normalizeLocationSystem` / `importLocationsFromProShop`.
+  //
+  // Writing the pair in a single upsertMany is what makes symmetry safe: a
+  // partial failure can't leave A pointing at B while B knows nothing about A.
+  // (`symmetrizeToolLinks` at load is the backstop for links written by anything
+  // that doesn't come through here.)
+  const setToolLink = async (toolId, otherId, linked) => {
+    const tools = toolsRef.current || [];
+    const a = tools.find(t => t.id === toolId);
+    const b = tools.find(t => t.id === otherId);
+    if (!a || !b) throw new Error('Tool not found');
+    const patch = linkPatch(a, b, linked);
+    if (!patch) throw new Error('A tool cannot be linked to itself');
+
+    const updated = tools.map(t => (patch[t.id] ? { ...t, linked_tools: patch[t.id] } : t));
+    dispatch({ type: 'SET_TOOLS', tools: updated });
+
+    // Drive-gated, same as the other metadata-only writers. Demo mode never sets
+    // googleAuthenticated, so a demo link lands in memory and nowhere else —
+    // which is what a throwaway sandbox should do.
+    if (googleRef.current) {
+      try {
+        const metaList = await toolStore.loadAll();
+        const metaById = new Map(metaList.map(m => [m.id, m]));
+        for (const t of updated) {
+          if (!patch[t.id]) continue;
+          const key = t.tracking_id || t.id;
+          metaById.set(key, { ...(metaById.get(key) || { id: key }), linked_tools: patch[t.id] });
+        }
+        await toolStore.upsertMany([...metaById.values()]);
+      } catch (err) {
+        // Put the in-memory state back — claiming a link that didn't persist is
+        // worse than failing loudly.
+        dispatch({ type: 'SET_TOOLS', tools });
+        notify(`Link write failed: ${err.message}`, 'error', 7000);
+        throw err;
+      }
+    }
+    return { linked };
   };
 
   const addTool = async (tool) => {
@@ -1309,6 +1356,7 @@ export function createToolActions(ctx) {
   return {
     writeLogicalTool,
     saveTool, assignToolLocation, normalizeLocationSystem, importLocationsFromProShop,
+    setToolLink,
     addTool, cloneTool, mergeTool, deleteTool, mergeTools,
     addAssembly, updateAssembly, deleteAssembly,
     reconcileTool, applyReconcile,

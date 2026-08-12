@@ -1,7 +1,9 @@
 // The tool_metadata.json record shape: buildMetadataTool is the authoritative
 // source of the full metadata field set (add new metadata fields there first),
 // and mergeFusionAndMetadata reads them back onto the internal tool object.
+import { sameFusionMaterial, resolveMaterial } from './fieldRegistry.js';
 import { normalizeBin } from '../utils/locationSystem.js';
+import { normalizeLinkIds } from '../utils/toolLinks.js';
 import { generateId, generateAssemblyId } from './identity.js';
 import { mergeToolConflicts } from '../utils/toolConflicts.js';
 
@@ -16,7 +18,13 @@ export const DRIFT_FIELDS = [
   'material', 'tip_angle', 'tip_diameter', 'shoulder_length', 'cutting_direction',
 ];
 
-function driftEqual(a, b) {
+function driftEqual(a, b, field) {
+  // ⚠️ `cobalt` and `hss` are ONE value to Fusion (see toFusionMaterial): Fusion
+  // has no Cobalt option, so we write cobalt out as hss. A string compare would
+  // call that a difference forever — the drift banner firing on every load and
+  // the 3-way merge below raising a conflict on every save, with nothing the
+  // user could do to clear either, because Fusion can never hold `cobalt`.
+  if (field === 'material') return sameFusionMaterial(a, b);
   if (typeof a === 'number' || typeof b === 'number') {
     const na = Number(a), nb = Number(b);
     if (Number.isNaN(na) || Number.isNaN(nb)) return String(a) === String(b);
@@ -45,7 +53,7 @@ export function detectFusionDrift(internals, meta) {
     if (appVal === null || appVal === undefined || appVal === '') continue;
     let found = false, fusionVal = null;
     for (const inst of list) {
-      if (!driftEqual(appVal, inst?.[f])) { found = true; fusionVal = inst?.[f] ?? null; break; }
+      if (!driftEqual(appVal, inst?.[f], f)) { found = true; fusionVal = inst?.[f] ?? null; break; }
     }
     if (found) drift.push({ field: f, fusionValue: fusionVal, appValue: appVal });
   }
@@ -69,8 +77,8 @@ export function mergeSharedFieldsWithFusion(tool, baseInternal, remoteInternal, 
   const patch = {};
   for (const f of DRIFT_FIELDS) {
     const baseVal = baseInternal[f];
-    if (driftEqual(remoteInternal[f], baseVal)) continue;  // Fusion didn't change it
-    if (!driftEqual(tool[f], baseVal)) {                   // app ALSO changed it → conflict
+    if (driftEqual(remoteInternal[f], baseVal, f)) continue;  // Fusion didn't change it
+    if (!driftEqual(tool[f], baseVal, f)) {                   // app ALSO changed it → conflict
       if (conflicts) conflicts.push({ field: f, appValue: tool[f], fusionValue: remoteInternal[f] ?? null });
       continue;                                            // keep the app's value
     }
@@ -107,7 +115,7 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     corner_radius: fusionInternal.corner_radius ?? meta.corner_radius ?? null,
     taper_angle: fusionInternal.taper_angle ?? meta.taper_angle ?? null,
     thread_pitch: fusionInternal.thread_pitch ?? meta.thread_pitch ?? null,
-    material: fusionInternal.material ?? meta.material ?? 'carbide',
+    material: resolveMaterial(fusionInternal.material, meta.material),
     vendor: meta.vendor || '',
     coating: meta.coating || '',
     purchasing: meta.purchasing || { manufacturers: [], vendors: [] },
@@ -185,6 +193,10 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
       location: !!meta.id_system_exclusions?.location,
     },
     job_ids: meta.job_ids || [],
+    // Symmetric tool↔tool links (a tap and its drill, a reamer and its drill).
+    // Metadata-only — Fusion has nowhere to put them. Stored as the partner's
+    // stable tracking id on BOTH sides; see src/utils/toolLinks.js.
+    linked_tools: meta.linked_tools || [],
     notes: meta.notes || '',
     last_used_job: meta.last_used_job || '',
     // Preferred machine: FK into shop_settings.machines[] (rename-proof); the
@@ -431,6 +443,7 @@ export function buildMetadataTool(tool) {
     // Tool-level job links (jobs.json registry ids) — "this tool was used on
     // job X" without preset context. Preset-proven links live in preset_meta.
     job_ids: tool.job_ids || [],
+    linked_tools: normalizeLinkIds(tool.linked_tools, tool.tracking_id || tool.id),
     notes: tool.notes || '',
     last_used_job: tool.last_used_job || '',
     preferred_machine_id: tool.preferred_machine_id || null, // FK — see machines.js

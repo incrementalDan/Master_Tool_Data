@@ -9,9 +9,21 @@
 //      catches the real failure mode: someone adds a link, or refactors
 //      buildMetadataTool, and an id silently stops being persisted — the link is
 //      then quietly lost on the next load with nothing failing.
+//   3. ⚠️ NO LINK EVER STORES A HUMAN-FACING IDENTIFIER. Not a ProShop number,
+//      not a description, not a machine number, not a location string. This is
+//      not a preference to be weighed per feature — it is the invariant the
+//      SQLite migration rests on, and every one of those values is deliberately
+//      MUTABLE (a ProShop number is re-numberable by design; that is what
+//      `legacy_ids` exists for). A link built on one silently severs the moment
+//      the shop renumbers, renames or re-files anything.
+//
+//      Rules 1 and 2 assume the right thing was stored. Rule 3 is what makes
+//      that structural instead of remembered — it scans the WHOLE record and
+//      fails on any link-shaped field, INCLUDING ONE THAT DOES NOT EXIST YET.
 //
 // When you add a relationship, add it to the inventory table in CLAUDE.md AND to
-// FK_ROUND_TRIP below.
+// FK_ROUND_TRIP below. If you add a link-shaped field, LINK_SHAPED_KEYS must
+// cover it or these tests fail — that is deliberate.
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_MATERIALS, DEFAULT_JOBS } from './sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY } from './vendorRegistry.js';
@@ -151,5 +163,143 @@ describe('every foreign key survives the metadata round-trip', () => {
     expect(meta.purchasing.manufacturers[0].registry_id).toBe('reg_mfg');
     expect(meta.assemblies[0].linked_preset_guids).toEqual(['p1']);
     expect(meta.preset_meta.p1.assembly_id).toBe('as1');
+  });
+});
+
+// ─── RULE 3: no link ever stores a human-facing identifier ──────────────────
+//
+// The two tests above both assume the correct value was stored in the first
+// place. This one removes the assumption. It builds a tool whose HUMAN
+// identifiers are all distinctive sentinels, produces the metadata record, and
+// walks every value in it — so it fails on a link-shaped field that does not
+// exist yet, which is the whole point. A rule that only holds while someone
+// remembers it is not a rule.
+
+// The human-facing identifiers a link must NEVER be built on. Each is mutable
+// by design, which is exactly why it is unusable as a key:
+//   tool_id        — re-numberable (that is what legacy_ids exists for)
+//   description    — renamed constantly (the whole Description Rename workflow)
+//   location       — changes when a tool is re-filed
+//   machine number — reassigned per job
+const HUMAN_IDENTIFIERS = {
+  tool_id: 'PS-4242',
+  description: 'HUMAN-DESCRIPTION-SENTINEL',
+  location: 'HUMAN-LOCATION-SENTINEL',
+  machine_tool_number: 987654,
+};
+
+// Where a human identifier is legitimately STORED (as data to display or match
+// on) rather than used as a link. Anything outside this set is a defect.
+const HUMAN_ID_ALLOWED_PATHS = [
+  /^tool_id$/,                     // the ProShop number itself
+  /^legacy_ids\[\d+\]$/,           // retired ProShop numbers, kept for matching
+  /^description$/,
+  /^location$/,
+  /^machine_tool_number$/,
+  /^assemblies\[\d+\]\.holder_description$/,  // cached label, not a link
+  /^assemblies\[\d+\]\.asm_number$/,          // composed FROM other fields
+  /^preferred_machine$/,                      // display name derived from the FK
+];
+
+// Every link-shaped key the metadata record is allowed to contain. A NEW key
+// matching the link shape must be added here — that failure is the trap: it
+// forces a look at whether the new field stores an id.
+const LINK_SHAPED_KEYS = new Set([
+  'id', 'tracking_id',                                   // the record's own keys
+  'tool_id',                                             // NOT a link — the ProShop display number
+  'legacy_ids',
+  'assembly_id', 'instance_guid', 'holder_id', 'holder_guid', 'linked_preset_guids',
+  // Pre-assemblies legacy field. A Fusion holder guid, so a HINT and never an
+  // identity (see "Holder identity" — Fusion re-issues these). Surfaced by the
+  // trap below, which is how it got into the inventory at all.
+  'selected_holder_guid',
+  'legacy_asm_numbers',
+  'material_preset_id', 'machine_id', 'job_ids', 'preset_id',
+  'preferred_machine_id', 'bin_size_id', 'system_id', 'zone_id', 'station_id', 'drawer_id',
+  'holder_component_id', 'insert_component_id', 'holder_proshop_id', 'insert_proshop_id',
+  'registry_id', 'manufacturer_id',
+  'linked_tools',
+  'file_id', 'primary_photo_id',                         // Google Drive file handles
+  'library_id',
+]);
+
+const LINK_SHAPE = /(_id|_ids|_guid|_guids)$/;
+const isLinkShaped = (key) => LINK_SHAPE.test(key) || key.startsWith('linked_') || key === 'id';
+
+// Walk every leaf, remembering the path we reached it by.
+function walk(node, path, visit) {
+  if (Array.isArray(node)) {
+    node.forEach((v, i) => walk(v, `${path}[${i}]`, visit));
+  } else if (node && typeof node === 'object') {
+    for (const [k, v] of Object.entries(node)) {
+      visit(k, v, path ? `${path}.${k}` : k);
+      walk(v, path ? `${path}.${k}` : k, visit);
+    }
+  }
+}
+
+describe('no link ever stores a human-facing identifier', () => {
+  // A tool carrying BOTH a stable tracking id and a distinct ProShop number,
+  // linked to a partner that also has both — so storing the wrong one is
+  // detectable rather than coincidentally identical.
+  const LINKED_TOOL = {
+    ...FK_TOOL,
+    ...HUMAN_IDENTIFIERS,
+    legacy_ids: ['PS-OLD-1'],
+    linked_tools: ['FTL-PARTNER'],
+  };
+  const meta = buildMetadataTool(LINKED_TOOL);
+
+  it('the ProShop number appears ONLY where it is the displayed value', () => {
+    const offenders = [];
+    walk(meta, '', (_k, v, path) => {
+      if (v !== HUMAN_IDENTIFIERS.tool_id) return;
+      if (HUMAN_ID_ALLOWED_PATHS.some(re => re.test(path))) return;
+      offenders.push(path);
+    });
+    expect(offenders, `ProShop number stored at: ${offenders.join(', ')}`).toEqual([]);
+  });
+
+  it('no description, location or machine number is used as a key', () => {
+    const offenders = [];
+    const humans = new Set(Object.values(HUMAN_IDENTIFIERS));
+    walk(meta, '', (_k, v, path) => {
+      if (!humans.has(v)) return;
+      if (HUMAN_ID_ALLOWED_PATHS.some(re => re.test(path))) return;
+      offenders.push(`${path} = ${v}`);
+    });
+    expect(offenders, `human identifier used as a link at: ${offenders.join(', ')}`).toEqual([]);
+  });
+
+  it('the tool↔tool link stores the partner’s tracking id', () => {
+    expect(meta.linked_tools).toEqual(['FTL-PARTNER']);
+  });
+
+  // ⚠️ THE TRAP THAT CLOSES ON FIELDS THAT DO NOT EXIST YET. Add a link-shaped
+  // field and this fails until it is registered above — which is the moment to
+  // check that it holds an id and not a ProShop number.
+  it('every link-shaped field in the record is a known relationship', () => {
+    const unknown = new Set();
+    walk(meta, '', (k) => { if (isLinkShaped(k) && !LINK_SHAPED_KEYS.has(k)) unknown.add(k); });
+    expect(
+      [...unknown],
+      `Unregistered link-shaped field(s): ${[...unknown].join(', ')}. `
+      + 'A link stores a STABLE ID — never a ProShop number, description or location. '
+      + 'Add it to LINK_SHAPED_KEYS and to the inventory table in CLAUDE.md.',
+    ).toEqual([]);
+  });
+
+  // Every registered link that carries a value must carry an ID-shaped one: a
+  // uuid, a tracking id, or a slug — never `A-1` / `D-128`, the ProShop shape.
+  it('no link value has the shape of a ProShop number', () => {
+    const PROSHOP_SHAPE = /^[A-Za-z]{1,3}-\d+$/;
+    const offenders = [];
+    walk(meta, '', (k, v, path) => {
+      if (!isLinkShaped(k) || k === 'tool_id' || k === 'legacy_ids') return;
+      for (const val of Array.isArray(v) ? v : [v]) {
+        if (typeof val === 'string' && PROSHOP_SHAPE.test(val)) offenders.push(`${path} = ${val}`);
+      }
+    });
+    expect(offenders, `ProShop-shaped value in a link field: ${offenders.join(', ')}`).toEqual([]);
   });
 });

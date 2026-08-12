@@ -14,6 +14,7 @@ import AssemblyForm from './AssemblyForm.jsx';
 import ReconcileModal from './ReconcileModal.jsx';
 import FilesSection from './FilesSection.jsx';
 import PurchasingSection from './PurchasingSection.jsx';
+import LinkedToolsSection from './LinkedToolsSection.jsx';
 import SpeedFeedSection from './SpeedFeedSection.jsx';
 import JobsSection from './JobsSection.jsx';
 import AttachmentUploadModal from './AttachmentUploadModal.jsx';
@@ -796,6 +797,12 @@ export default function ToolDetail() {
                 />
               </>
             )}
+
+            {/* Sits directly under Purchasing, but OUTSIDE the pairing guard
+                above: an insert tool hides its tool-level photo/location/
+                purchasing once components are linked, yet it can still be
+                related to another tool. */}
+            <LinkedToolsSection tool={tool} />
 
             {/* Structured job links (program # + part #) — supersedes the old
                 free-text "Last Used Job" display (data kept, no longer shown). */}

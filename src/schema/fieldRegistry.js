@@ -25,6 +25,50 @@ export const COATING_SEED = ['UC', 'AlTiN', 'TiAlN', 'TiN', 'ZrN', 'DLC'];
 // onto one of these, not invent a new value.
 export const FLUTE_DESIGN_OPTIONS = ['Variable Index', 'Variable Flute', 'Variable Helix', 'Variable Pitch'];
 
+// ⚠️ COBALT IS AN APP-SIDE MATERIAL — FUSION HAS NO SUCH OPTION.
+// Fusion's Tool Material (BMC) list is carbide / hss / ceramic / unspecified;
+// confirmed against the real library, which holds only carbide, hss and
+// unspecified across 303 tools. The shop's cobalt drills and reamers ARE hss as
+// far as Fusion is concerned, so cobalt is written OUT as `hss` and read back as
+// Cobalt from metadata, which keeps the more specific name the shop actually
+// uses. Same shape as the location↔vendor repurposing: translate at the
+// boundary, keep the app's own vocabulary on our side.
+//
+// Every comparison of two material values must go through `sameFusionMaterial`,
+// NOT string equality. `cobalt` and `hss` are the same value to Fusion, so a
+// plain compare reports a difference that is not real — and because Fusion can
+// never hold `cobalt`, that difference can never be resolved: the drift banner
+// would fire on every load and the write-time 3-way merge would raise a conflict
+// on every save, with no action available to clear either. A flag the user
+// cannot make go away is the failure mode this rule exists to prevent.
+const FUSION_MATERIAL_ALIASES = { cobalt: 'hss' };
+
+// The value Fusion should receive for an app material. Non-aliased values pass
+// through untouched (original casing preserved — Fusion stores it verbatim).
+export function toFusionMaterial(material) {
+  if (typeof material !== 'string' || !material.trim()) return material;
+  return FUSION_MATERIAL_ALIASES[material.trim().toLowerCase()] ?? material;
+}
+
+// True when two material values are indistinguishable TO FUSION.
+export function sameFusionMaterial(a, b) {
+  const norm = (v) => {
+    const t = toFusionMaterial(v);
+    return typeof t === 'string' ? t.trim().toLowerCase() : '';
+  };
+  return norm(a) === norm(b);
+}
+
+// Which material the app should SHOW for a Fusion-linked tool. Fusion's `hss` is
+// ambiguous — it is both real HSS and every cobalt tool we wrote out — so when
+// the two agree as far as Fusion is concerned, the app's stored name wins and
+// Cobalt survives the round trip. A genuine Fusion-side change to a DIFFERENT
+// material still wins, exactly as before.
+export function resolveMaterial(fusionValue, metaValue) {
+  if (metaValue && sameFusionMaterial(fusionValue, metaValue)) return metaValue;
+  return fusionValue ?? metaValue ?? 'carbide';
+}
+
 
 //
 // Field entry shape:
@@ -405,6 +449,28 @@ export const FIELD_REGISTRY = {
     fusionPath: 'geometry.tip-diameter',
     proShopColumn: 'tipDiameter',
     metadataOnly: false,
+    // ⚠️ TAPS HAVE NO TIP DIAMETER — the old FIELD_VISIBILITY matrix in
+    // tool-extractor.tsx is WRONG about this. Its `tipDiameter` row marks `tap`
+    // as 1; this list is right and that row is not. Verified against every
+    // Fusion export in the repo: across 68 tap entries in 4 files, ZERO carry a
+    // non-zero geometry['tip-diameter']. 9 of the 20 taps in
+    // `Full_Type_List Examples.json` carry the KEY at value 0, which is a
+    // leftover default, not data — the tell is the paired expression, since
+    // Fusion writes `expressions.tool_tipDiameter` for a type that really has
+    // the field. In that reference set the expression appears on exactly two
+    // types: chamfer mill (10/10) and spot drill (9/10). No tap has one.
+    //
+    // The stale row is inert today — the only thing reading it is
+    // `getRequiredFields`, which nothing calls since the standalone extractor UI
+    // was retired — so it is left alone rather than edited, per the standing
+    // rule that FIELD_VISIBILITY is a tracked audit exception (SCHEMA_AUDIT.md
+    // FR1–FR4). If it is ever wired back up, fix the row; don't trust it.
+    //
+    // Also present but unlisted: a scatter of non-zero values on flat end mills
+    // (7), bull nose (3), thread mill (3), slot mill (2) with NO expression —
+    // stale geometry carried forward by tools duplicated in Fusion, not a sign
+    // those types own the field. `internalToFusionTool` preserves an existing
+    // non-zero value regardless of type, so none of it is lost.
     appliesToTypes: [
       'chamfer mill', 'dovetail', 'thread mill', 'circle segment taper',
       'center drill', 'spot drill', 'counter sink',

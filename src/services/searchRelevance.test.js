@@ -5,7 +5,10 @@
 //      A-11, A-101, A-123 …) and textSearch is a FILTER, so the one tool
 //      actually called A-1 sat wherever the sort dropdown left it.
 import { describe, it, expect } from 'vitest';
-import { textSearch, sortResults, relevanceTier, matchedPurchasing, RELEVANCE } from './searchEngine.js';
+import {
+  textSearch, sortResults, relevanceTier, matchedPurchasing, RELEVANCE,
+  getAvailableOptions, applyFilters,
+} from './searchEngine.js';
 
 // Shapes and values from the shop's real records.
 const tool = (over = {}) => ({
@@ -94,5 +97,44 @@ describe('search — relevance', () => {
     const t = tool({ tool_id: 'A-9', machine_tool_number: 31 });
     expect(relevanceTier(t, '31')).toBe(RELEVANCE.EXACT_ID);
     expect(relevanceTier(t, 'T31')).toBe(RELEVANCE.EXACT_ID);
+  });
+});
+
+// HSS and Cobalt are one thing to look for — Fusion has no Cobalt option at all,
+// and nobody searching for a cobalt drill wants the HSS ones hidden. One chip,
+// both materials. Stored values are untouched.
+describe('search — HSS/Cobalt is one material facet', () => {
+  const lib = [
+    tool({ tool_id: 'D-1', material: 'cobalt' }),
+    tool({ tool_id: 'D-2', material: 'hss' }),
+    tool({ tool_id: 'A-2', material: 'carbide' }),
+  ];
+  const filtered = (v) => applyFilters(lib, { facets: { material: v } }).map(t => t.tool_id);
+
+  it('offers ONE option covering both', () => {
+    const { options } = getAvailableOptions(lib, { facets: {} }, 'material');
+    expect(options).toContain('HSS/Cobalt');
+    expect(options).not.toContain('hss');
+    expect(options).not.toContain('cobalt');
+    expect(options).toContain('carbide');
+  });
+
+  it('pulls up both when selected', () => {
+    expect(filtered('HSS/Cobalt').sort()).toEqual(['D-1', 'D-2']);
+  });
+
+  // A saved filter or shared URL may still carry the raw value.
+  it('still works when the raw value is selected', () => {
+    expect(filtered('cobalt').sort()).toEqual(['D-1', 'D-2']);
+    expect(filtered('hss').sort()).toEqual(['D-1', 'D-2']);
+  });
+
+  it('does not drag in other materials', () => {
+    expect(filtered('carbide')).toEqual(['A-2']);
+  });
+
+  it('finds both by typing either word', () => {
+    expect(textSearch(lib, 'cobalt').map(t => t.tool_id).sort()).toEqual(['D-1', 'D-2']);
+    expect(textSearch(lib, 'hss').map(t => t.tool_id).sort()).toEqual(['D-1', 'D-2']);
   });
 });

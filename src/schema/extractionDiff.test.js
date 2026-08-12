@@ -15,6 +15,8 @@ import { setActiveVendorRegistry, DEFAULT_VENDOR_REGISTRY } from './vendorRegist
 import { sanitizeExtraction, applyExtractionToBlank } from '../services/extractionService.js';
 import { BLANK } from '../../tool-extractor.tsx';
 import { fieldControl, coatingOptions } from './toolFieldLayout.js';
+import { FIELD_REGISTRY } from './fieldRegistry.js';
+import { readFileSync } from 'node:fs';
 
 beforeAll(() => setActiveVendorRegistry(DEFAULT_VENDOR_REGISTRY));
 
@@ -415,5 +417,90 @@ describe('the second run reports nothing to do', () => {
 
     expect(buildFieldProposals(applied, extracted).proposals).toEqual([]);
     expect(buildPurchasingProposals(applied, extracted).rows).toEqual([]);
+  });
+});
+
+// ⚠️ TIP DIAMETER WAS NEVER ASKED FOR. The extraction schema had `tipAngle` but
+// no `tipDiameter` key at all, it was absent from EXTRACTED_KEYS, and the UPDATE
+// path's field map (extractionDiff) lacked it even though the ADD path's
+// (extractorConvert) had it. So a chamfer mill's tip diameter could not be
+// scanned no matter how the sheet labelled it — the observed miss was on a sheet
+// that shortened the column to just "Tip".
+//
+// Real-library evidence for the types that matter: ALL 17 chamfer mills and 10
+// of 11 spot drills carry a non-zero geometry.tip-diameter.
+describe('tip diameter is extractable', () => {
+  const chamfer = {
+    id: 'FTL-1', tool_type: 'chamfer mill', unit: 'inches',
+    description: '.25 CHAMFER 60DEG', diameter: 0.25, tip_diameter: null,
+  };
+
+  it('survives the sanitizer instead of being dropped', () => {
+    const { fields } = sanitizeExtraction({ tipDiameter: '0.055' });
+    expect(fields).toHaveProperty('tipDiameter', '0.055');
+  });
+
+  it('becomes a proposal on a chamfer mill', () => {
+    const { proposals } = buildFieldProposals(chamfer, { tipDiameter: '0.055' });
+    const row = proposals.find(x => x.field === 'tip_diameter');
+    expect(row).toBeTruthy();
+    expect(row.proposed).toBeCloseTo(0.055, 6);
+    expect(row.kind).toBe('fill');          // the tool had none
+  });
+
+  it('reaches the other types that have a tip', () => {
+    for (const t of ['spot drill', 'center drill', 'counter sink', 'dovetail', 'thread mill']) {
+      const { proposals } = buildFieldProposals({ ...chamfer, tool_type: t }, { tipDiameter: '0.055' });
+      expect(proposals.some(x => x.field === 'tip_diameter')).toBe(true);
+    }
+  });
+
+  // Rule 2 — type-gated before the UI, so it can't be swept up by "Update all"
+  // and pushed to Fusion on a type that has no such field.
+  it('is still dropped on a type that has no tip diameter', () => {
+    const { proposals } = buildFieldProposals({ ...chamfer, tool_type: 'flat end mill' }, { tipDiameter: '0.055' });
+    expect(proposals.some(x => x.field === 'tip_diameter')).toBe(false);
+  });
+
+  // Rule 3 — the model always answers in inches; a mm tool must not read 0.055
+  // as millimetres (it would show a change on a tool that is already correct).
+  it('converts into a millimetres tool\u2019s own unit', () => {
+    const mm = { ...chamfer, unit: 'millimeters', tip_diameter: 1.397 };
+    const { proposals } = buildFieldProposals(mm, { tipDiameter: '0.055' });
+    expect(proposals.some(x => x.field === 'tip_diameter')).toBe(false);   // 0.055in === 1.397mm
+  });
+
+  it('flows through the ADD path too', () => {
+    const { fields } = sanitizeExtraction({ tipDiameter: '0.055' });
+    expect(applyExtractionToBlank(BLANK, fields).tipDiameter).toBe('0.055');
+  });
+});
+
+// ⚠️ TAPS HAVE NO TIP DIAMETER, and the old FIELD_VISIBILITY matrix says they
+// do. This asserts the registry against the real Fusion exports so the claim in
+// the registry comment can't rot: the tell is the paired expression, which
+// Fusion writes only for a type that really owns the field.
+describe('which types actually have a tip diameter (real Fusion exports)', () => {
+  const REF = JSON.parse(
+    readFileSync(new URL('../../FUSION TOOL Library REF/Full_Type_List Examples.json', import.meta.url), 'utf8')
+  ).data;
+  const withExpression = (type) => REF.filter(t => t.type === type && t.expressions?.tool_tipDiameter);
+
+  it('no tap carries a tip diameter', () => {
+    const taps = REF.filter(t => String(t.type || '').includes('tap'));
+    expect(taps.length).toBeGreaterThan(0);
+    expect(taps.filter(t => (t.geometry || {})['tip-diameter'])).toHaveLength(0);
+    expect(withExpression('tap right hand')).toHaveLength(0);
+  });
+
+  it('chamfer mills and spot drills do', () => {
+    expect(withExpression('chamfer mill').length).toBeGreaterThan(0);
+    expect(withExpression('spot drill').length).toBeGreaterThan(0);
+  });
+
+  it('the registry does not claim taps have one', () => {
+    expect(FIELD_REGISTRY.tip_diameter.appliesToTypes).not.toContain('tap');
+    expect(FIELD_REGISTRY.tip_diameter.appliesToTypes).toContain('chamfer mill');
+    expect(FIELD_REGISTRY.tip_diameter.appliesToTypes).toContain('spot drill');
   });
 });

@@ -4,7 +4,7 @@
 // numeric sync, sync-never-inject, geometry field minimalism) is documented in
 // CLAUDE.md and FUSION_SCHEMA.md. Known field-registry exceptions live here
 // (SCHEMA_AUDIT.md FR1–FR4) — don't add new hardcoded paths elsewhere.
-import { isMetadataOnly } from './fieldRegistry.js';
+import { isMetadataOnly, toFusionMaterial } from './fieldRegistry.js';
 import { generateId, stripQuotes, readTrackingId } from './identity.js';
 import { parsePresetName, materialCategory, HOLE_MAKING_TYPES, TURNING_TYPES } from '../utils/presetNaming.js';
 
@@ -613,7 +613,11 @@ export function internalToFusionTool(tool) {
   };
   const exGeo = existing.geometry || {};
   syncStrExpr('tool_description', tool.description, existing.description);
-  syncStrExpr('tool_material', tool.material || 'carbide', existing.BMC);
+  // Cobalt is an app-side material Fusion has no option for — it goes out as
+  // `hss` and is read back as Cobalt from metadata (see toFusionMaterial).
+  // Native + expression must carry the SAME translated value or Fusion
+  // re-derives the untranslated one from the expression on load.
+  syncStrExpr('tool_material', toFusionMaterial(tool.material) || 'carbide', existing.BMC);
   syncStrExpr('tool_productId', tool.tool_id, existing['product-id']);
   syncStrExpr('tool_productLink', tool.product_link, existing['product-link']);
   syncStrExpr('tool_vendor', tool.location,
@@ -654,7 +658,7 @@ export function internalToFusionTool(tool) {
 
   const fusionObj = {
     ...existing,
-    BMC: tool.material || existing.BMC || 'carbide',
+    BMC: toFusionMaterial(tool.material) || existing.BMC || 'carbide',
     // GRADE is absent on ~27% of native Fusion tools (the UI defaults it). Only
     // carry it forward when the original entry had one — never inject a default.
     ...(existing.GRADE ? { GRADE: existing.GRADE } : {}),
