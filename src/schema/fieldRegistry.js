@@ -25,6 +25,50 @@ export const COATING_SEED = ['UC', 'AlTiN', 'TiAlN', 'TiN', 'ZrN', 'DLC'];
 // onto one of these, not invent a new value.
 export const FLUTE_DESIGN_OPTIONS = ['Variable Index', 'Variable Flute', 'Variable Helix', 'Variable Pitch'];
 
+// ⚠️ COBALT IS AN APP-SIDE MATERIAL — FUSION HAS NO SUCH OPTION.
+// Fusion's Tool Material (BMC) list is carbide / hss / ceramic / unspecified;
+// confirmed against the real library, which holds only carbide, hss and
+// unspecified across 303 tools. The shop's cobalt drills and reamers ARE hss as
+// far as Fusion is concerned, so cobalt is written OUT as `hss` and read back as
+// Cobalt from metadata, which keeps the more specific name the shop actually
+// uses. Same shape as the location↔vendor repurposing: translate at the
+// boundary, keep the app's own vocabulary on our side.
+//
+// Every comparison of two material values must go through `sameFusionMaterial`,
+// NOT string equality. `cobalt` and `hss` are the same value to Fusion, so a
+// plain compare reports a difference that is not real — and because Fusion can
+// never hold `cobalt`, that difference can never be resolved: the drift banner
+// would fire on every load and the write-time 3-way merge would raise a conflict
+// on every save, with no action available to clear either. A flag the user
+// cannot make go away is the failure mode this rule exists to prevent.
+const FUSION_MATERIAL_ALIASES = { cobalt: 'hss' };
+
+// The value Fusion should receive for an app material. Non-aliased values pass
+// through untouched (original casing preserved — Fusion stores it verbatim).
+export function toFusionMaterial(material) {
+  if (typeof material !== 'string' || !material.trim()) return material;
+  return FUSION_MATERIAL_ALIASES[material.trim().toLowerCase()] ?? material;
+}
+
+// True when two material values are indistinguishable TO FUSION.
+export function sameFusionMaterial(a, b) {
+  const norm = (v) => {
+    const t = toFusionMaterial(v);
+    return typeof t === 'string' ? t.trim().toLowerCase() : '';
+  };
+  return norm(a) === norm(b);
+}
+
+// Which material the app should SHOW for a Fusion-linked tool. Fusion's `hss` is
+// ambiguous — it is both real HSS and every cobalt tool we wrote out — so when
+// the two agree as far as Fusion is concerned, the app's stored name wins and
+// Cobalt survives the round trip. A genuine Fusion-side change to a DIFFERENT
+// material still wins, exactly as before.
+export function resolveMaterial(fusionValue, metaValue) {
+  if (metaValue && sameFusionMaterial(fusionValue, metaValue)) return metaValue;
+  return fusionValue ?? metaValue ?? 'carbide';
+}
+
 
 //
 // Field entry shape:
