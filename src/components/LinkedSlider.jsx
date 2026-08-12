@@ -59,6 +59,21 @@ const METRIC_RANGES = {
   v_f_ramp:       { min: 0, max: 5700, step: 10, softMax: true },
 };
 
+// ── Per-tool-type ceilings ──────────────────────────────────────────────────
+// A range is only useful if the real values land in the middle of it. The plunge
+// slider shares the cutting-feed ceiling (225 in/min), which is right for
+// milling and useless for a drill: measured across the shop's library, drill
+// plunge runs 2–40 in/min (median 9.25) and NEVER exceeds 40, so every drill sat
+// in the leftmost 3% of the track. Milling plunge is a different animal —
+// median 50, and 284 of 468 presets above 40 — so this is per-type, not a new
+// global default.
+//
+// softMax still applies: a value past the ceiling stretches the range, so this
+// is a sensible default, never a limit on what can be entered.
+export const DRILL_PLUNGE_MAX = { inch: 40, metric: 1000 };   // 40 in/min ≈ 1016 mm/min
+export const drillPlungeMax = (metric) =>
+  (metric ? DRILL_PLUNGE_MAX.metric : DRILL_PLUNGE_MAX.inch);
+
 // Fields that always show full decimal places, trailing zeros and all — a chip
 // load reading "0.001" instead of "0.0010" makes a machinist re-read it.
 const FIXED_DECIMALS = new Set(['f_z', 'f_n']);
