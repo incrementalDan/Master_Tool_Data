@@ -15,7 +15,7 @@ import { setActiveVendorRegistry, DEFAULT_VENDOR_REGISTRY } from './vendorRegist
 import { sanitizeExtraction, applyExtractionToBlank } from '../services/extractionService.js';
 import { BLANK } from '../../tool-extractor.tsx';
 import { fieldControl, coatingOptions } from './toolFieldLayout.js';
-import { FIELD_REGISTRY } from './fieldRegistry.js';
+import { FIELD_REGISTRY, FLUTE_DESIGN_OPTIONS } from './fieldRegistry.js';
 import { readFileSync } from 'node:fs';
 
 beforeAll(() => setActiveVendorRegistry(DEFAULT_VENDOR_REGISTRY));
@@ -502,5 +502,45 @@ describe('which types actually have a tip diameter (real Fusion exports)', () =>
     expect(FIELD_REGISTRY.tip_diameter.appliesToTypes).not.toContain('tap');
     expect(FIELD_REGISTRY.tip_diameter.appliesToTypes).toContain('chamfer mill');
     expect(FIELD_REGISTRY.tip_diameter.appliesToTypes).toContain('spot drill');
+  });
+});
+
+// ⚠️ "None" IS AN ANSWER; BLANK IS NOT.
+//   blank — nobody has looked at this tool yet (the default)
+//   None  — somebody DID look, and the flutes are plain
+// The distinction is the point of the option: it turns "we don't know" into a
+// shrinking worklist. Collapsing the two, in either direction, destroys it.
+describe('flute design — None is a recorded answer, blank is not', () => {
+  it('accepts None as a real value', () => {
+    expect(sanitizeExtraction({ fluteDesign: 'None' }).fields.fluteDesign).toBe('None');
+    expect(sanitizeExtraction({ fluteDesign: 'none' }).fields.fluteDesign).toBe('None');
+  });
+
+  it('offers None in the picker list, with the variable options still there', () => {
+    expect(FLUTE_DESIGN_OPTIONS).toContain('None');
+    for (const o of ['Variable Index', 'Variable Flute', 'Variable Helix', 'Variable Pitch']) {
+      expect(FLUTE_DESIGN_OPTIONS).toContain(o);
+    }
+  });
+
+  // Setting None on a tool nobody had checked is a real edit, and must show as
+  // one — not be swallowed as "still empty".
+  it('proposes None over a blank field', () => {
+    const { proposals } = buildFieldProposals(endMill({ flute_design: '' }), { fluteDesign: 'None' });
+    expect(proposals).toEqual([expect.objectContaining({ field: 'flute_design', proposed: 'None' })]);
+  });
+
+  // ⚠️ The one that protects the meaning: a silent sheet must stay blank. The
+  // prompt says so explicitly; this locks that nothing downstream fills it in.
+  it('an extraction that says nothing leaves the field alone', () => {
+    const { fields } = sanitizeExtraction({ diameter: '0.5' });
+    expect('fluteDesign' in fields).toBe(false);
+    const { proposals } = buildFieldProposals(endMill({ flute_design: '' }), { diameter: '0.5' });
+    expect(proposals.some(p => p.field === 'flute_design')).toBe(false);
+  });
+
+  // None must not be quietly downgraded to blank on the way through storage.
+  it('survives the metadata round trip as None', () => {
+    expect(sanitizeExtraction({ fluteDesign: 'None' }).fields.fluteDesign).not.toBe('');
   });
 });
