@@ -9,7 +9,7 @@ import { machineColor } from '../utils/machineColors.js';
 import MachinePill from './MachinePill.jsx';
 import CamPresetPicker from './CamPresetPicker.jsx';
 import JobProgramPicker from './JobProgramPicker.jsx';
-import LinkedSlider from './LinkedSlider.jsx';
+import LinkedSlider, { drillPlungeMax } from './LinkedSlider.jsx';
 import InfoTip from './InfoTip.jsx';
 import { boreCompensation, SmallBoreIcon } from '../utils/boreCompensation.jsx';
 import {
@@ -1694,9 +1694,13 @@ function EditCard({
       {isDrillFamily && (
         <EditorSection label="Feedrates" accent="var(--blue)">
           <div className="pe-feed-grid">
+            {/* Drill plunge tops out around 40 in/min in practice, so it gets
+                its own ceiling instead of the 225 milling cutting-feed range —
+                see drillPlungeMax. softMax still stretches past it. */}
             <LinkedSlider
               field="v_f_plunge" label="Plunge feedrate" unit={feedUnit}
               value={draft.v_f_plunge} fxState={fx.v_f_plunge} metric={isMetricTool}
+              max={drillPlungeMax(isMetricTool)}
               warning={noSpeed ? 'Set spindle speed first' : undefined}
               onChange={v => handleNumChange('v_f_plunge', v)}
             />
