@@ -36,6 +36,27 @@ export const DEFAULT_FX = {
 const followsSource = (val, src) =>
   val == null || Math.abs(Number(val) - Number(src ?? 0)) < 1e-6;
 
+// ⚠️ A FORMULA WITH NO INPUT DOES NOT PRODUCE AN ANSWER — IT PRODUCES ZERO.
+//
+// The pair note above says a Fusion-consistent preset has both sides already
+// equal, so recomputing the derived side on open is a no-op. That premise is
+// false whenever Fusion stored only ONE side of the pair, which is routine: a
+// drill carries a plunge feedrate (`v_f_plunge`) and NO feed-per-rev (`f_n`).
+// Opening such a preset recomputed plunge as f_n × n = 0 × 16000 = 0 and wiped
+// a proven feed — the collapsed card still showed the real value, so the editor
+// silently disagreed with the card right above it.
+//
+// Measured on the real library: 109 presets carry a plunge their f_n cannot
+// reproduce because there is no f_n at all, plus 1 surface speed with no RPM.
+// Every one of them was zeroed on open, and saved as 0 on save.
+//
+// So: a derived side whose SOURCE is missing keeps its stored value (manual).
+// This is the same rule `followsSource` already applies to the one-directional
+// followers, extended to the locked pairs — "don't overwrite a real stored value
+// with something the formula can't actually compute".
+const hasValue = (v) => v != null && v !== '' && Number(v) !== 0 && !Number.isNaN(Number(v));
+const derivedIsOrphaned = (derived, source) => hasValue(derived) && !hasValue(source);
+
 // The fx state a preset opens with, given the tool-type flags. This is the
 // single source of the open-time linkage decisions — the piece that decides
 // which stored values are preserved vs. recomputed. See computeFormulaDraft.
@@ -67,6 +88,14 @@ export function initialPresetFx(preset, { isMilling, isSpotDrill, isTurning, isD
   fx.v_f_leadOut    = followsSource(preset.v_f_leadOut, preset.v_f)    ? 'formula' : 'manual';
   fx.v_f_transition = followsSource(preset.v_f_transition, preset.v_f) ? 'formula' : 'manual';
   fx.n_ramp         = followsSource(preset.n_ramp, preset.n)           ? 'formula' : 'manual';
+
+  // LAST, so it overrides every rule above: a derived value whose source is
+  // missing is the only value there is — never recompute it to zero. Applies to
+  // all three locked pairs; on the real library it is plunge (109) and surface
+  // speed (1) that actually hit this.
+  if (derivedIsOrphaned(preset.v_f_plunge, preset.f_n)) fx.v_f_plunge = 'manual';
+  if (derivedIsOrphaned(preset.v_f, preset.f_z))        fx.v_f        = 'manual';
+  if (derivedIsOrphaned(preset.v_c, preset.n))          fx.v_c        = 'manual';
 
   return fx;
 }
