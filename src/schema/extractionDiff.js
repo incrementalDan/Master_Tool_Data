@@ -51,6 +51,7 @@ export const EXTRACTED_TO_FIELD = {
   coating: 'coating',
   workpieceMats: 'material_suitability',
   tipAngle: 'tip_angle',
+  tipDiameter: 'tip_diameter',
   helixAngle: 'helix_angle',
   taperAngle: 'taper_angle',
   shoulderLen: 'shoulder_length',
