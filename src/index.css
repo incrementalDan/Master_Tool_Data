@@ -6006,3 +6006,62 @@ input.sf-ref-num { text-align: right; }
   border-top: 1px solid var(--border);
   align-items: flex-start; gap: 7px;
 }
+
+/* ── Linked tools (tap ↔ drill, reamer ↔ drill) ───────────────────────────── */
+.linked-tool-list { display: flex; flex-direction: column; gap: 6px; }
+
+.linked-tool-card {
+  display: flex; align-items: stretch; gap: 4px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--input-bg); overflow: hidden;
+}
+.linked-tool-card:hover { border-color: color-mix(in srgb, var(--blue) 50%, var(--border)); }
+
+.linked-tool-open {
+  display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0;
+  padding: 7px 9px; text-decoration: none; color: inherit;
+}
+.linked-tool-open > svg:first-child { color: var(--text-sub); flex-shrink: 0; }
+
+.linked-tool-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.linked-tool-top { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.linked-tool-top .tool-id-pill { font-size: 10px; padding: 1px 7px; }
+.linked-tool-desc {
+  font-size: var(--text-sm); color: var(--text); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.linked-tool-meta { display: flex; align-items: center; gap: 6px; font-size: 11px; flex-wrap: wrap; }
+.linked-tool-meta .location-tag { font-size: 10px; padding: 1px 6px; }
+
+.linked-tool-ext { color: var(--text-sub); flex-shrink: 0; opacity: 0; transition: opacity var(--motion-fast, 120ms) ease; }
+.linked-tool-card:hover .linked-tool-ext { opacity: 0.8; }
+
+.linked-tool-unlink { align-self: center; margin-right: 5px; flex-shrink: 0; }
+
+/* Link picker overlay — a small window over the library, not a second page. */
+.tool-link-search {
+  display: flex; align-items: center; gap: 7px; flex: 1;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--input-bg); padding: 0 10px;
+}
+.tool-link-search > svg { color: var(--text-sub); flex-shrink: 0; }
+.tool-link-search input {
+  flex: 1; border: 0; background: transparent; color: var(--text);
+  padding: 8px 0; font-size: var(--text-sm); outline: none; min-width: 0;
+}
+
+.tool-link-results { max-height: 46vh; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+
+.tool-link-result {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--input-bg); padding: 7px 9px; cursor: pointer;
+  color: inherit; font: inherit;
+}
+.tool-link-result:hover { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 8%, var(--input-bg)); }
+.tool-link-result > svg:first-child { color: var(--text-sub); flex-shrink: 0; }
+.tool-link-result-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.tool-link-result-desc {
+  font-size: var(--text-sm); color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

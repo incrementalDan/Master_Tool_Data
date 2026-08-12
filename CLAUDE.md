@@ -1516,6 +1516,21 @@ A collapsible "Purchasing" panel in `ToolDetail`'s right column. Nested table: o
 
 -----
 
+## Linked Tools (tap ↔ drill, reamer ↔ drill)
+
+A **symmetric, role-free** tool↔tool relationship — "these go together": a tap and the drill that precedes it, a reamer and its drill. There is no direction and no parent; linking A to B links B to A. Pure logic in **`src/utils/toolLinks.js`** (`normalizeLinkIds`, `linkPatch`, `linkedTools`, `symmetrizeToolLinks`, `toolsNeedingLinkRepair`), UI in **`LinkedToolsSection.jsx`** (a panel directly under Purchasing in ToolDetail) + **`ToolLinkPicker.jsx`**.
+
+- **⚠️ The link is the partner's TRACKING ID** (`tool.id` = `FTL-XXXXXX`), stored in the metadata-only **`linked_tools[]`**. You *look a tool up* by its ProShop #/EDP#/description — that is the picker's job — but a ProShop number is **re-numberable by design** (that is what `legacy_ids` exists for), so storing one would silently sever every link the next time the shop changed ID scheme. Standard **Relational integrity** rule: store the id, resolve the display at read time.
+- **Metadata-only.** Fusion has nowhere to put a tool↔tool link, so it is never written there and `writeLogicalTool` is deliberately **not** used: that would re-download and re-upload the whole Fusion library *twice* (once per side) to store a field Fusion never sees. `AppContext.setToolLink(toolId, otherId, linked)` (`toolActions.js`) does one `toolStore.upsertMany` covering **both** tools, with an optimistic in-memory update that is **rolled back** if the write fails — claiming a link that didn't persist is worse than failing loudly. Same reasoning as `normalizeLocationSystem` / `importLocationsFromProShop`.
+- **⚠️ Symmetry is stored on BOTH sides, and written in ONE save.** A JSON file per tool has no join table, so each side carries the other's id. Writing the pair in a single `upsertMany` is what makes that safe — a partial failure cannot leave A pointing at B while B knows nothing about A.
+- **`symmetrizeToolLinks(tools)` is the load-time backstop** (wired into **all four** `loadTools` build sites alongside the FK backfills), for links written before this rule or by a future writer that forgets. It **only ever ADDS the missing reverse half**; persisted lazily on the tool's next save. Two invariants it must keep: it returns the **same array and same tool references** when everything already agrees (callers use identity to decide whether there is anything to persist — the `syncPresetMaterialName` rule), and it **KEEPS a dangling id** — "not in the list I was handed" is not "deleted" (the library may be partly loaded), so dropping one and persisting would destroy a real link. A dangling link is hidden from the *display* list (`linkedTools`) only.
+- **Display**: each partner is a badge card carrying the three things needed to go find it — **tool ID, description, location** — and opens in a **new tab** (a plain `<a href="#/tool/:id" target="_blank">`, so middle-click and "open in new window" work too). Following the link is for *comparing* two tools, not navigating away from the one being read.
+- **The picker reuses the landing page's search**, not a second implementation: `textSearch` + `sortResults` from `searchEngine.js`, so typing a ProShop #, EDP#, vendor number or retired ID behaves identically to the main search box and an exact ID match floats to the top. Plus a tool-type dropdown built from the types actually present. The tool itself and anything already linked are **removed** from results rather than greyed out.
+- Gated on `googleAuthenticated || demoMode`; demo never sets `googleAuthenticated`, so a demo link stays in memory. Locked by `src/utils/toolLinks.test.js` (incl. idempotence, the identity invariant, and the dangling-link rule).
+- **Deferred**: no *role* on a link (pilot drill vs. tap drill), no bulk linking, and no auto-suggestion by diameter/thread — the ask was explicitly "mainly just a way to link the tools".
+
+-----
+
 ## Jobs (program # + part #) — preset & tool job links
 
 A **job = a program number + a part number** — the shop's unit of "where was this used." Jobs are **shop-level entities with stable UUIDs** in **`jobs.json`** (the 4th shared Drive file); presets and tools reference jobs **by id only**, never by copying the strings. This is the foundation for a future jobs page (assigning program numbers to part numbers and operations, replacing the manually-managed Google Sheet): that page will edit the registry directly and every reference follows. Reference data today — deliberately low-key in the UI.
@@ -2036,6 +2051,7 @@ Every entity link in the app. When you add a relationship, add a row. When you t
 | preset → machine | `preset_meta[guid].machine_id` | metadata | ✅ |
 | preset → jobs | `preset_meta[guid].job_ids[]` | metadata | ✅ |
 | tool → jobs | `job_ids[]` | metadata | ✅ |
+| **tool ↔ tool** (tap/drill, reamer/drill) | `linked_tools[]` | metadata | ✅ symmetric — stored BOTH sides, one write; `symmetrizeToolLinks` heals a half-link at load |
 | tool → preferred machine | `preferred_machine_id` | metadata | ✅ |
 | tool → location | `location.{system_id,zone_id,station_id,drawer_id}` | metadata → `shop_settings.location_config` | ✅ |
 | tool → bin size | `bin_size_id` | metadata → `location_config.bin_sizes[]` | ✅ |

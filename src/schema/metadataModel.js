@@ -3,6 +3,7 @@
 // and mergeFusionAndMetadata reads them back onto the internal tool object.
 import { sameFusionMaterial, resolveMaterial } from './fieldRegistry.js';
 import { normalizeBin } from '../utils/locationSystem.js';
+import { normalizeLinkIds } from '../utils/toolLinks.js';
 import { generateId, generateAssemblyId } from './identity.js';
 import { mergeToolConflicts } from '../utils/toolConflicts.js';
 
@@ -192,6 +193,10 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
       location: !!meta.id_system_exclusions?.location,
     },
     job_ids: meta.job_ids || [],
+    // Symmetric tool↔tool links (a tap and its drill, a reamer and its drill).
+    // Metadata-only — Fusion has nowhere to put them. Stored as the partner's
+    // stable tracking id on BOTH sides; see src/utils/toolLinks.js.
+    linked_tools: meta.linked_tools || [],
     notes: meta.notes || '',
     last_used_job: meta.last_used_job || '',
     // Preferred machine: FK into shop_settings.machines[] (rename-proof); the
@@ -438,6 +443,7 @@ export function buildMetadataTool(tool) {
     // Tool-level job links (jobs.json registry ids) — "this tool was used on
     // job X" without preset context. Preset-proven links live in preset_meta.
     job_ids: tool.job_ids || [],
+    linked_tools: normalizeLinkIds(tool.linked_tools, tool.tracking_id || tool.id),
     notes: tool.notes || '',
     last_used_job: tool.last_used_job || '',
     preferred_machine_id: tool.preferred_machine_id || null, // FK — see machines.js

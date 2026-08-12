@@ -16,6 +16,7 @@ import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeU
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { backfillMaterialPresetIds, backfillPresetAssemblyLinks, autoLinkMaterialByGrade } from '../utils/presetNaming.js';
 import { backfillPreferredMachineIds } from '../utils/machines.js';
+import { symmetrizeToolLinks } from '../utils/toolLinks.js';
 import { backfillHolderIds } from '../schema/holderResolve.js';
 import { matchFusionHolder, holderPushPlan, applyHolderPushPlan, pushChangeGroup, lastPushedFrom, retiredHolderFor } from '../schema/holderIdentity.js';
 import { derivePairings } from '../schema/insertFamilies.js';
@@ -1066,11 +1067,11 @@ export function AppProvider({ children }) {
     const built = [];
     for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
     for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
-    const tools = backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(derivePairings(
+    const tools = symmetrizeToolLinks(backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(derivePairings(
       combineToolsByToolId(built)
         .map(t => ({ ...t, library_id: 'demo', library_name: 'Demo library' })),
       components?.components || [],
-    ), materials), materials), vendorRegistry), shopSettings?.machines)), holderLibrary?.holders || []);
+    ), materials), materials), vendorRegistry), shopSettings?.machines)), holderLibrary?.holders || []));
     // Tag demo holders with a single synthetic library so the picker grouping works.
     const taggedHolders = (holders || []).map(h => ({ ...h, _libraryId: 'demo', _libraryName: 'Demo holders' }));
 
@@ -1203,7 +1204,7 @@ export function AppProvider({ children }) {
               return composed ? { ...t, location: composed, proshop_location: proShopLocationValue(sys, composed) } : t;
             });
             const paired = derivePairings(provisional, componentsFile?.components || []);
-            dispatch({ type: 'LOAD_PROVISIONAL', tools: backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords) });
+            dispatch({ type: 'LOAD_PROVISIONAL', tools: symmetrizeToolLinks(backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords)) });
           }
         } catch { /* stage 2 below is authoritative */ }
       }
@@ -1242,7 +1243,7 @@ export function AppProvider({ children }) {
       if (!fusionEnabled) {
         const built = metaList.map(m => buildUnlinkedTool(m)).map(composeToolLocation);
         const paired = derivePairings(built, componentsFile?.components || []);
-        const finalTools = backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords);
+        const finalTools = symmetrizeToolLinks(backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(paired, effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords));
         dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize: false, normalizeCount: 0 });
         return;
       }
@@ -1332,7 +1333,7 @@ export function AppProvider({ children }) {
       // backfillMaterialPresetIds: adopt the CAM-preset FK id from a name-matched
       // material.query + refresh each preset's derived material name (same lazy
       // persist-on-next-save pattern).
-      const finalTools = backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(pairedTools, effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords);
+      const finalTools = symmetrizeToolLinks(backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(pairedTools, effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords));
 
       dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize, normalizeCount: untrackedCount });
       // Surface the otherwise-invisible load-time auto-combine: entries sharing a
