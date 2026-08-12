@@ -23,7 +23,21 @@ export const COATING_SEED = ['UC', 'AlTiN', 'TiAlN', 'TiN', 'ZrN', 'DLC'];
 // "variable index", "unequal flute spacing"); the shop picks ONE vocabulary so
 // the field stays searchable. An extraction must map a manufacturer's wording
 // onto one of these, not invent a new value.
-export const FLUTE_DESIGN_OPTIONS = ['Variable Index', 'Variable Flute', 'Variable Helix', 'Variable Pitch'];
+//
+// ⚠️ "None" IS AN ANSWER; BLANK IS NOT. They are not the same state and must
+// never be collapsed:
+//   blank  — nobody has looked at this tool yet. The default, and the only
+//            thing a new or imported tool should ever have.
+//   None   — somebody DID look, and the flutes are plain/evenly spaced.
+// That distinction is the whole point of the option: it turns "we don't know"
+// into a shrinking worklist instead of an ambiguity that never resolves. So
+// nothing may auto-fill None (see the extraction rule — it may only return None
+// when a page explicitly SAYS the flutes are standard, never because the page
+// was silent), and no code may treat None as equivalent to empty.
+export const FLUTE_DESIGN_OPTIONS = [
+  'None',
+  'Variable Index', 'Variable Flute', 'Variable Helix', 'Variable Pitch',
+];
 
 // ⚠️ COBALT IS AN APP-SIDE MATERIAL — FUSION HAS NO SUCH OPTION.
 // Fusion's Tool Material (BMC) list is carbide / hss / ceramic / unspecified;
