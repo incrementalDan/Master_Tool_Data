@@ -15,6 +15,8 @@ import { setActiveVendorRegistry, DEFAULT_VENDOR_REGISTRY } from './vendorRegist
 import { sanitizeExtraction, applyExtractionToBlank } from '../services/extractionService.js';
 import { BLANK } from '../../tool-extractor.tsx';
 import { fieldControl, coatingOptions } from './toolFieldLayout.js';
+import { FIELD_REGISTRY } from './fieldRegistry.js';
+import { readFileSync } from 'node:fs';
 
 beforeAll(() => setActiveVendorRegistry(DEFAULT_VENDOR_REGISTRY));
 
@@ -471,5 +473,34 @@ describe('tip diameter is extractable', () => {
   it('flows through the ADD path too', () => {
     const { fields } = sanitizeExtraction({ tipDiameter: '0.055' });
     expect(applyExtractionToBlank(BLANK, fields).tipDiameter).toBe('0.055');
+  });
+});
+
+// ⚠️ TAPS HAVE NO TIP DIAMETER, and the old FIELD_VISIBILITY matrix says they
+// do. This asserts the registry against the real Fusion exports so the claim in
+// the registry comment can't rot: the tell is the paired expression, which
+// Fusion writes only for a type that really owns the field.
+describe('which types actually have a tip diameter (real Fusion exports)', () => {
+  const REF = JSON.parse(
+    readFileSync(new URL('../../FUSION TOOL Library REF/Full_Type_List Examples.json', import.meta.url), 'utf8')
+  ).data;
+  const withExpression = (type) => REF.filter(t => t.type === type && t.expressions?.tool_tipDiameter);
+
+  it('no tap carries a tip diameter', () => {
+    const taps = REF.filter(t => String(t.type || '').includes('tap'));
+    expect(taps.length).toBeGreaterThan(0);
+    expect(taps.filter(t => (t.geometry || {})['tip-diameter'])).toHaveLength(0);
+    expect(withExpression('tap right hand')).toHaveLength(0);
+  });
+
+  it('chamfer mills and spot drills do', () => {
+    expect(withExpression('chamfer mill').length).toBeGreaterThan(0);
+    expect(withExpression('spot drill').length).toBeGreaterThan(0);
+  });
+
+  it('the registry does not claim taps have one', () => {
+    expect(FIELD_REGISTRY.tip_diameter.appliesToTypes).not.toContain('tap');
+    expect(FIELD_REGISTRY.tip_diameter.appliesToTypes).toContain('chamfer mill');
+    expect(FIELD_REGISTRY.tip_diameter.appliesToTypes).toContain('spot drill');
   });
 });
