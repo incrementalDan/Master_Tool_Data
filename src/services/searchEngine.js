@@ -3,6 +3,54 @@ import { toolNeedsAttention } from '../utils/toolConflicts.js';
 
 const TEXT_FIELDS = ['description', 'vendor', 'material', 'coating', 'notes', 'location', 'tool_id', 'preferred_machine'];
 
+// ID normalization — dash/space/case insensitive, matching the `normId` used by
+// the ProShop photo import and component matching. So "a1" finds "A-1", and a
+// part number typed with or without its punctuation still lands.
+const normId = (s) => String(s ?? '').replace(/[\s-]/g, '').toUpperCase();
+
+// ─── Purchasing numbers are searchable ──────────────────────────────────────
+// An EDP#, a manufacturer part number and a vendor's own catalog number are all
+// things someone types into the search box to find a tool — they are how the
+// tool is identified to the people who BUY it, and on the real library that is
+// 151 EDPs and 156 vendor numbers that matched nothing at all. Names are
+// included too: `TEXT_FIELDS` covers the legacy top-level `vendor` string, but
+// the normalized purchasing model that replaced it was never reached.
+function purchasingEntries(tool) {
+  const p = tool?.purchasing;
+  if (!p) return [];
+  const out = [];
+  for (const m of p.manufacturers || []) {
+    if (m?.edp) out.push({ kind: 'EDP', name: m.name || '', value: String(m.edp) });
+    if (m?.mfg_num) out.push({ kind: 'MFG', name: m.name || '', value: String(m.mfg_num) });
+  }
+  for (const v of p.vendors || []) {
+    if (v?.vendor_num) out.push({ kind: 'Vendor #', name: v.name || '', value: String(v.vendor_num) });
+  }
+  return out;
+}
+
+function purchasingNames(tool) {
+  const p = tool?.purchasing;
+  if (!p) return [];
+  return [...(p.manufacturers || []), ...(p.vendors || [])].map(e => e?.name).filter(Boolean);
+}
+
+function purchasingMatches(tool, q) {
+  return purchasingEntries(tool).some(e => e.value.toLowerCase().includes(q))
+    || purchasingNames(tool).some(n => String(n).toLowerCase().includes(q));
+}
+
+// The purchasing number the query matched, or null — mirrors matchedLegacyId, so
+// a card can say WHY it matched. Searching an EDP otherwise surfaces a tool
+// whose visible text has nothing to do with what was typed.
+export function matchedPurchasing(tool, query) {
+  const q = query?.toLowerCase().trim();
+  if (!q) return null;
+  const hit = purchasingEntries(tool).find(e => e.value.toLowerCase().includes(q));
+  if (!hit) return null;
+  return { ...hit, label: `${hit.name ? hit.name + ' ' : ''}${hit.kind} ${hit.value}` };
+}
+
 // Tool-MATERIAL search synonyms (what the tool is made of — carbide/hss/cobalt/
 // ceramic; see fieldRegistry.material "Tool Material"). SEARCH-ONLY: merges
 // Cobalt and HSS so a query for either surfaces both, without touching the
@@ -130,8 +178,60 @@ export function textSearch(tools, query, componentText = null) {
     if (Array.isArray(tool.assemblies) && tool.assemblies.some(a =>
       String(a.asm_number || '').toLowerCase().includes(q)
       || (a.legacy_asm_numbers || []).some(l => String(l).toLowerCase().includes(q)))) return true;
+    // Purchasing numbers + manufacturer/vendor names (EDP#, MFG#, Vendor #).
+    if (purchasingMatches(tool, q)) return true;
+    // Tool ID with punctuation normalized away, so "a1" finds "A-1".
+    if (tool.tool_id && normId(tool.tool_id).includes(normId(q))) return true;
     return false;
   });
+}
+
+// ─── Relevance ──────────────────────────────────────────────────────────────
+// ⚠️ `textSearch` is a FILTER — it answers "does this match" and preserves the
+// incoming order, which is whatever the sort dropdown says. So an exact hit had
+// no way to reach the top: typing "A-1" matched 33 tools on the real library
+// (A-1, A-11, A-101, A-123 …) and the one tool actually called A-1 sat wherever
+// "Recently added" happened to put it. Substring matching is right for finding
+// things; it just can't rank them.
+//
+// Deliberately a TIER, not a score. It composes with the user's chosen sort
+// rather than replacing it — pick "Diameter ↑" and you still get diameter
+// order, with the exact match lifted out to the top. A score would silently
+// override a sort the user explicitly selected.
+export const RELEVANCE = { EXACT_ID: 0, ID_PREFIX: 1, OTHER: 2 };
+
+// Every identifier an exact match could land on. A tool has several and any of
+// them being typed in full is an unambiguous "I want THIS tool".
+function exactIdentifiers(tool) {
+  const ids = [tool?.tool_id, ...(tool?.legacy_ids || [])];
+  for (const a of tool?.assemblies || []) {
+    ids.push(a?.asm_number, ...(a?.legacy_asm_numbers || []));
+  }
+  for (const e of purchasingEntries(tool)) ids.push(e.value);
+  const mtn = tool?.machine_tool_number;
+  if (mtn !== null && mtn !== undefined && mtn !== '') ids.push(String(mtn), `T${mtn}`);
+  return ids.filter(v => v !== null && v !== undefined && v !== '');
+}
+
+export function relevanceTier(tool, query) {
+  const q = normId(query);
+  if (!q) return RELEVANCE.OTHER;
+  if (exactIdentifiers(tool).some(v => normId(v) === q)) return RELEVANCE.EXACT_ID;
+  if (tool?.tool_id && normId(tool.tool_id).startsWith(q)) return RELEVANCE.ID_PREFIX;
+  return RELEVANCE.OTHER;
+}
+
+// Sort `tools` by relevance to `query`, breaking ties with `sortFn` (the user's
+// chosen sort). With no query this is exactly `sortFn` — relevance never
+// reorders an unsearched library.
+export function sortResults(tools, query, sortFn) {
+  const list = [...(tools || [])];
+  if (!query?.trim()) return list.sort(sortFn);
+  // Tiers are computed ONCE per tool, not inside the comparator — a comparator
+  // is called O(n log n) times and each tier walks the tool's assemblies and
+  // purchasing rows.
+  const tier = new Map(list.map(t => [t, relevanceTier(t, query)]));
+  return list.sort((a, b) => (tier.get(a) - tier.get(b)) || sortFn(a, b));
 }
 
 // A numeric facet's filter value (diameter, flute length, OAL, …) — set via the

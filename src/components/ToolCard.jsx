@@ -21,7 +21,7 @@ function proshotUrl(id) {
   return `https://americanprecisionworks.adionsystems.com/procnc/tools/${prefix}/${id}$`;
 }
 
-export default function ToolCard({ tool, variant = 'grid', matchedLegacyId = null, matchedComponent = null }) {
+export default function ToolCard({ tool, variant = 'grid', matchedLegacyId = null, matchedComponent = null, matchedPurchasing = null }) {
   const navigate = useNavigate();
   const { cloneTool, notify, shopSettings } = useApp();
   const label = TOOL_TYPE_LABELS[tool.tool_type] || tool.tool_type;
@@ -100,6 +100,14 @@ export default function ToolCard({ tool, variant = 'grid', matchedLegacyId = nul
       {matchedComponent && (
         <span className="text-sub font-mono" style={{ fontSize: 9, opacity: 0.7, whiteSpace: 'nowrap' }} title="Matched a part of this tool">
           part {matchedComponent.tool_id || matchedComponent.description || ''}
+        </span>
+      )}
+      {/* Why this matched, when the hit was on a purchasing number (EDP#, MFG#,
+          vendor #). None of those appear on the card, so without this the
+          result has nothing on it resembling what was typed. */}
+      {matchedPurchasing && (
+        <span className="text-sub font-mono" style={{ fontSize: 9, opacity: 0.7, whiteSpace: 'nowrap' }} title="Matched a purchasing number">
+          {matchedPurchasing.label}
         </span>
       )}
       {/* Only shown when the search matched a former (retired) ID. */}

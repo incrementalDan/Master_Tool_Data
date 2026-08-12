@@ -571,6 +571,44 @@ export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL
 // given the same list, and identity-keying quietly did nothing when a caller
 // rebuilt the array in between — the write looked like it ran and changed
 // nothing. Index is the honest expression of that contract.
+// ⚠️ A CREATE MUST NOT REUSE A GUID THE LIBRARY IS ALREADY USING.
+//
+// `holderRecordToFusion` gives a new entry `record.fusion_guid || record.id` —
+// deliberately deterministic (it also runs on every tool write, where a fresh
+// guid each time would re-point the tool's holder link). That is right for an
+// UPDATE, where the existing entry's guid wins outright. On a CREATE there is no
+// existing entry, so it falls back to the guid the record remembers FROM A
+// PREVIOUS LIFE — and a create only happens when nothing in Fusion matches the
+// record by ref or by shape, which is exactly the state where that remembered
+// guid is most likely to have been handed to something else.
+//
+// Observed on the real library: a holder was duplicated in Fusion, one copy
+// edited into a test holder and the original lost. The app's NBT30-SK13C-120
+// still remembered guid 31014ded…, which Fusion had since given to that test
+// holder. Pushing wrote a library with TWO entries on that one guid — so Fusion
+// re-issued one, the app no longer recognised the holder, and the next push
+// offered to create it again. A loop with no way out from inside the app.
+//
+// This is the same premise the whole module rests on (holder guids churn and are
+// never identity) applied to the one path that was still trusting one.
+// Candidates stay deterministic so a preview and its commit agree: the
+// remembered guid, then the record's own id, then a UUID-shaped counter off that
+// id. Whichever is written is stamped back onto the record by the push, so the
+// record self-corrects.
+function createGuid(record, used) {
+  const base = record?.id || '';
+  const candidates = [record?.fusion_guid, base].filter(Boolean);
+  for (const c of candidates) if (!used.has(c)) return c;
+  // Both taken — Fusion holds an entry on this record's own app id that matched
+  // neither its ref nor its shape. Vanishingly rare, but emitting a duplicate
+  // anyway is the one outcome this function exists to prevent.
+  for (let n = 1; n <= 0xffff; n++) {
+    const alt = base.slice(0, -4) + n.toString(16).padStart(4, '0');
+    if (!used.has(alt)) return alt;
+  }
+  return base;
+}
+
 export function applyHolderPushPlan(list, plan, toFusion) {
   const byIndex = new Map(plan.updates.map(u => [u.index, u.record]));
   const dropped = new Set((plan.deletes || []).map(d => d.index));
@@ -580,7 +618,15 @@ export function applyHolderPushPlan(list, plan, toFusion) {
     const record = byIndex.get(i);
     out.push(record ? toFusion(record, entry) : entry);
   });
-  for (const record of plan.creates) out.push(toFusion(record, null));
+  // Everything the file already holds AFTER the updates and removals above —
+  // a guid freed by a removal is legitimately available again.
+  const used = new Set(out.map(e => e?.guid).filter(Boolean));
+  for (const record of plan.creates) {
+    const created = toFusion(record, null);
+    const guid = createGuid(record, used);
+    used.add(guid);
+    out.push(created?.guid === guid ? created : { ...created, guid });
+  }
   return out;
 }
 
