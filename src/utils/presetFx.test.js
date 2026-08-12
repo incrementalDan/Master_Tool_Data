@@ -97,3 +97,57 @@ describe('presetFx — opening a preset never clobbers an independent stored val
     expect(out.v_f_plunge).toBe(5);
   });
 });
+
+// ⚠️ A FORMULA WITH NO INPUT PRODUCES ZERO, NOT AN ANSWER.
+//
+// Reported on drill D-258: the collapsed card showed Plunge 6.4 in/min while the
+// editor right below it showed 0, slider pinned left. The preset carries a
+// plunge feedrate and NO feed-per-rev, so opening it recomputed
+// plunge = f_n x n = 0 x 16000 = 0 and wiped a proven feed — and saved the zero.
+//
+// Measured on the real library: 109 presets carry a plunge no f_n can reproduce
+// because there is no f_n at all, plus 1 surface speed with no RPM.
+describe('a derived value whose source is missing is never recomputed to zero', () => {
+  // The real preset from the screenshot.
+  const D258 = { n: 16000, v_c: 288.6076, v_f_plunge: 6.4, v_f_retract: 20, f_n: 0 };
+  const DRILL = { isMilling: false, isSpotDrill: false, isTurning: false, isDrillFamily: true };
+
+  it('opens the plunge feed as manual, not formula', () => {
+    expect(initialPresetFx(D258, DRILL).v_f_plunge).toBe('manual');
+  });
+
+  it('keeps the stored plunge feed byte-for-byte on open', () => {
+    const fx = initialPresetFx(D258, DRILL);
+    expect(computeFormulaDraft({ ...D258 }, fx, 0.0689, 2).v_f_plunge).toBe(6.4);
+  });
+
+  it('does not invent a feed-per-rev to go with it', () => {
+    const fx = initialPresetFx(D258, DRILL);
+    expect(computeFormulaDraft({ ...D258 }, fx, 0.0689, 2).f_n).toBe(0);
+  });
+
+  // The pair still works normally when Fusion stored both sides.
+  it('still derives plunge when a feed-per-rev IS present', () => {
+    const p = { n: 10000, f_n: 0.001, v_f_plunge: 10 };
+    const fx = initialPresetFx(p, DRILL);
+    expect(fx.v_f_plunge).toBe('formula');
+    expect(computeFormulaDraft({ ...p }, fx, 0.25, 2).v_f_plunge).toBe(10);
+  });
+
+  it('protects a cutting feed with no chip load, and a surface speed with no RPM', () => {
+    const noFz = initialPresetFx({ v_f: 50, f_z: 0, n: 8000 }, { isMilling: true });
+    expect(noFz.v_f).toBe('manual');
+    expect(computeFormulaDraft({ v_f: 50, f_z: 0, n: 8000 }, noFz, 0.5, 4).v_f).toBe(50);
+
+    const noN = initialPresetFx({ v_c: 300, n: 0 }, DRILL);
+    expect(noN.v_c).toBe('manual');
+    expect(computeFormulaDraft({ v_c: 300, n: 0 }, noN, 0.25, 2).v_c).toBe(300);
+  });
+
+  // A blank preset must still behave — nothing stored means nothing to protect.
+  it('leaves a blank preset fully linked', () => {
+    const fx = initialPresetFx({ n: 0, v_f_plunge: 0, f_n: 0, v_f: 0, f_z: 0 }, DRILL);
+    expect(fx.v_f_plunge).toBe('formula');
+    expect(fx.v_f).toBe('formula');
+  });
+});

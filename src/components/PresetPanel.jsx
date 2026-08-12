@@ -1110,10 +1110,14 @@ function EditCard({
       newDraft.f_z = roundForField('f_z', ipmToFPT(value ?? 0, n, numberOfFlutes));
       newFx.f_z    = 'formula';
     } else if ((field === 'n' || field === 'v_c') && !isTurning) {
-      // n changed — cascade whichever side is manual (turning's v_f is manual)
+      // n changed — cascade whichever side is manual (turning's v_f is manual).
+      // Same guard as the plunge group below: a cutting feed with no chip load
+      // to scale by must not be recomputed to zero.
       if (fx.f_z === 'manual') {
-        newDraft.v_f = roundForField('v_f', fptToIPM(draft.f_z ?? 0, n, numberOfFlutes));
-        newFx.v_f    = 'formula';
+        if (Number(draft.f_z) > 0) {
+          newDraft.v_f = roundForField('v_f', fptToIPM(draft.f_z, n, numberOfFlutes));
+          newFx.v_f    = 'formula';
+        }
       } else {
         newDraft.f_z = roundForField('f_z', ipmToFPT(draft.v_f ?? 0, n, numberOfFlutes));
         newFx.f_z    = 'formula';
@@ -1128,9 +1132,15 @@ function EditCard({
       newDraft.f_n = roundForField('f_n', ipmToIPR(value ?? 0, n));
       newFx.f_n    = 'formula';
     } else if ((field === 'n' || field === 'v_c') && !isTurning) {
+      // ⚠️ Only scale plunge by a feed-per-rev that EXISTS. A drill routinely
+      // stores a plunge feedrate and no f_n at all, and f_n × n = 0 would wipe
+      // it — the same zeroing initialPresetFx guards on open, which would
+      // otherwise come straight back the moment the user touched the RPM.
       if (fx.f_n === 'manual') {
-        newDraft.v_f_plunge = roundForField('v_f_plunge', iprToIPM(draft.f_n ?? 0, n));
-        newFx.v_f_plunge    = 'formula';
+        if (Number(draft.f_n) > 0) {
+          newDraft.v_f_plunge = roundForField('v_f_plunge', iprToIPM(draft.f_n, n));
+          newFx.v_f_plunge    = 'formula';
+        }
       } else {
         newDraft.f_n = roundForField('f_n', ipmToIPR(draft.v_f_plunge ?? 0, n));
         newFx.f_n    = 'formula';
