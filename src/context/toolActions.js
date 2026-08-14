@@ -13,6 +13,7 @@ import {
 } from '../schema/toolSchema.js';
 import { normProShopId } from '../schema/insertFamilies.js';
 import { linkPatch } from '../utils/toolLinks.js';
+import { holderForGuid } from '../utils/holderDuplicates.js';
 import { composeAsmNumber, autoAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
 import {
   presetMatchesAssembly, isAutoPresetName, autoPresetName, HOLE_MAKING_TYPES,
@@ -1025,6 +1026,16 @@ export function createToolActions(ctx) {
       const assemblies = (tool.assemblies || []).map(a => {
         if (a.assembly_id !== assemblyId) return a;
         const upd = { ...a, ...patch };
+        // ⚠️ Same rule as AssemblyForm: holder_id is the authoritative link and
+        // resolveHolderForWrite consults it BEFORE the guid, so a patch that
+        // moves the guid without the FK leaves the old holder in place — the
+        // write bakes the old geometry and migrates the guid back, reporting
+        // success the whole way. Re-point the FK whenever the guid moves;
+        // null when the new holder isn't in the app library, which makes the
+        // write resolve by guid and re-stamp the FK itself.
+        if (holderChanged && !('holder_id' in patch)) {
+          upd.holder_id = holderForGuid(holderLibraryRef.current?.holders || [], next.holder_guid)?.id ?? null;
+        }
         // Auto asm_number is a pure product of holder + tool_id + OOH, so it must
         // re-derive. Other modes (RTA / ERP / sequential) are NOT derived from
         // these fields — leave those numbers alone.

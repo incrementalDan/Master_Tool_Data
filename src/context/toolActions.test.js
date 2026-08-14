@@ -515,3 +515,66 @@ describe('updateAssembly — OOH/holder change re-derives everything built from 
     expect(out.assemblies[0].asm_number).toBe('RTA-77');   // user-entered, not derived
   });
 });
+
+// ⚠️ CHANGING AN ASSEMBLY'S HOLDER MUST MOVE THE FK, NOT JUST THE GUID.
+//
+// `resolveHolderForWrite` consults holder_id FIRST and treats holder_guid as a
+// hint — correct in general, because Fusion re-issues holder guids. But it means
+// a patch that moves the guid and leaves the old FK behind resolves the OLD
+// holder, bakes its geometry, and then migrates holder_guid BACK to it. The save
+// reports success and the holder and description are unchanged — reported live.
+// Creating a new assembly worked only because it has no prior FK in the way.
+describe('updateAssembly — swapping the holder re-points the FK', () => {
+  const RECORDS = [
+    { id: 'rec-60', holder_ref: 'HLD-60', fusion_guid: 'H1', description: 'NBT30-SK13C-60', segments: [{ height: 60 }] },
+    { id: 'rec-90', holder_ref: 'HLD-90', fusion_guid: 'H2', description: 'NBT30-SK13C-90', segments: [{ height: 90 }] },
+  ];
+  const toolOn60 = () => ({
+    id: 'FTL-BBB', tracking_id: 'FTL-BBB', tool_id: '1002',
+    tool_type: 'flat end mill', unit: 'inches', no_fusion_link: true,
+    description: '1/2 EM', diameter: 0.5, presets: [],
+    assemblies: [{
+      assembly_id: 'as1', holder_guid: 'H1', holder_id: 'rec-60',
+      holder_description: 'NBT30-SK13C-60', ooh: 2.125, linked_preset_guids: [],
+    }],
+  });
+  const ctxWith = (tool) => makeCtx({
+    toolsRef: { current: [tool] },
+    materialsRef: { current: null },
+    holderLibraryRef: { current: { holders: RECORDS } },
+  });
+
+  it('points holder_id at the newly chosen holder', async () => {
+    const { updateAssembly } = createToolActions(ctxWith(toolOn60()));
+    const out = await updateAssembly('FTL-BBB', 'as1', {
+      holder_guid: 'H2', holder_description: 'NBT30-SK13C-90',
+    });
+    const a = out.assemblies[0];
+    expect(a.holder_guid).toBe('H2');
+    expect(a.holder_id).toBe('rec-90');      // was 'rec-60' — the actual bug
+    expect(a.holder_description).toBe('NBT30-SK13C-90');
+  });
+
+  // A holder that isn't in the app library yet: clearing the FK is what lets the
+  // write resolve by guid and re-stamp the correct FK itself. Leaving the old
+  // one would silently keep the old holder.
+  it('clears a stale FK when the new holder has no app record', async () => {
+    const { updateAssembly } = createToolActions(ctxWith(toolOn60()));
+    const out = await updateAssembly('FTL-BBB', 'as1', { holder_guid: 'H-UNKNOWN' });
+    expect(out.assemblies[0].holder_id).toBeNull();
+  });
+
+  it('leaves the FK alone when the holder did not change', async () => {
+    const { updateAssembly } = createToolActions(ctxWith(toolOn60()));
+    const out = await updateAssembly('FTL-BBB', 'as1', { notes: 'just a note' });
+    expect(out.assemblies[0].holder_id).toBe('rec-60');
+    expect(out.assemblies[0].holder_guid).toBe('H1');
+  });
+
+  // An explicit holder_id in the patch is the caller being precise — respect it.
+  it('respects an explicitly supplied holder_id', async () => {
+    const { updateAssembly } = createToolActions(ctxWith(toolOn60()));
+    const out = await updateAssembly('FTL-BBB', 'as1', { holder_guid: 'H2', holder_id: 'rec-90' });
+    expect(out.assemblies[0].holder_id).toBe('rec-90');
+  });
+});

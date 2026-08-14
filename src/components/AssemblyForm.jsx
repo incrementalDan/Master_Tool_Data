@@ -5,11 +5,12 @@ import { presetMatchesAssembly, presetMaterialColor } from '../utils/presetNamin
 import { autoAsmNumber, shouldRetireAsmNumber } from '../utils/assemblyIdSystem.js';
 import { unitAbbr } from '../utils/units.js';
 import { useApp } from '../context/AppContext.jsx';
+import { holderForGuid } from '../utils/holderDuplicates.js';
 import HolderPicker from './HolderPicker.jsx';
 import { HolderTag } from './HolderPill.jsx';
 
 export default function AssemblyForm({ tool, holders, assembly, onSave, onClose }) {
-  const { materials, shopSettings } = useApp();
+  const { materials, shopSettings, holderLibrary } = useApp();
   const isNew = !assembly;
   const asmMode = shopSettings?.assembly_id_system?.mode || 'auto';
 
@@ -51,6 +52,21 @@ export default function AssemblyForm({ tool, holders, assembly, onSave, onClose 
       assembly_id: assembly?.assembly_id || generateAssemblyId(),
       instance_guid: assembly?.instance_guid,   // preserved on edit; assigned on add
       holder_guid: holderGuid,
+      // ⚠️ THE FK MUST MOVE WITH THE GUID, OR THE HOLDER SILENTLY DOES NOT CHANGE.
+      // `resolveHolderForWrite` resolves holder_id FIRST and treats holder_guid
+      // as a hint (Fusion re-issues guids, so the FK has to win in general). The
+      // `...assembly` spread above carries the OLD holder_id forward, so picking
+      // a different holder used to leave the stale FK in place: the write
+      // resolved the OLD record, baked its geometry, and then — because the
+      // resolved guid no longer matched the one just picked — migrated
+      // holder_guid BACK to the old holder. The save reported success and the
+      // holder and description were unchanged. Creating a new assembly worked
+      // only because it has no prior FK to get in the way.
+      // Null when the holder isn't in the app library yet; the write then
+      // resolves by guid and re-stamps the FK itself.
+      holder_id: holderGuid === (assembly?.holder_guid || '')
+        ? (assembly?.holder_id ?? null)
+        : (holderForGuid(holderLibrary?.holders || [], holderGuid)?.id ?? null),
       holder_description: selectedHolder?.description || assembly?.holder_description || '',
       ooh: oohNum,
       notes,
