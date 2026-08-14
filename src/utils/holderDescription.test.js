@@ -4,7 +4,7 @@ import {
   composeHolderDescription, healHolderDescription, applyHealToRecord,
   suggestExtensionSegments, findHolderOptionByLabel, HOLDER_DESC_LIMIT,
 } from './holderDescription.js';
-import { holderShortName } from './holderNaming.js';
+import { holderNameToken } from './holderNaming.js';
 import { DEFAULT_HOLDER_CONFIG, holderOptionLabel } from '../schema/holderOptions.js';
 import { newHolderRecord, fusionHolderToRecord } from '../schema/holderRecord.js';
 import {
@@ -84,13 +84,13 @@ describe('composeHolderDescription', () => {
   });
 });
 
-// ⚠️ THE CASCADE GUARD. holderShortName() parses a holder description into the
-// token embedded in preset names and asm_number; presetMatchesAssembly reads it
-// back out to link presets to assemblies. If a composed description produced a
-// different short name than the hand-written one it replaces, every preset on
-// that holder would silently orphan.
-describe('cascade guard — holderShortName stays stable', () => {
-  it('gives the same short name for the composed and the real hand-written description', () => {
+// ⚠️ THE CASCADE GUARD. A holder's description IS the token embedded in preset
+// names and asm_number, and presetMatchesAssembly reads it back out to seed the
+// preset→assembly FK. So a composed description that differs from the
+// hand-written one it replaces silently changes every name built from that
+// holder — and orphans any preset still matched by name. That is what this pins.
+describe('cascade guard — the composed description matches the real one', () => {
+  it('composes exactly the hand-written description', () => {
     const cases = [
       [rec(), 'NBT30-SK13C-60'],
       [rec({ collet_size_id: optId('collet_sizes', 'SK20'), length: 90 }), 'NBT30-SK20C-90'],
@@ -100,16 +100,16 @@ describe('cascade guard — holderShortName stays stable', () => {
     for (const [record, realDesc] of cases) {
       const composed = composeHolderDescription(record, CFG);
       expect(composed).toBe(realDesc);
-      expect(holderShortName(composed)).toBe(holderShortName(realDesc));
+      expect(holderNameToken(composed)).toBe(holderNameToken(realDesc));
     }
   });
 
-  it('every real holder description still yields its short name unchanged', () => {
-    // Nothing in this feature touches holderShortName; this pins that.
-    expect(holderShortName('NBT30-SK13C-60')).toBe('30-SK13-60');
-    expect(holderShortName('NBT30-SK20C-90 w/ER16 EXT 2.2OOH')).toBe('30-SK20-90 w/ER16 EXT 2.2OOH');
+  it('every real holder description is used verbatim as its name token', () => {
+    // A holder has ONE name. Nothing abbreviates it any more.
+    expect(holderNameToken('NBT30-SK13C-60')).toBe('NBT30-SK13C-60');
+    expect(holderNameToken('NBT30-SK20C-90 w/ER16 EXT 2.2OOH')).toBe('NBT30-SK20C-90 w/ER16 EXT 2.2OOH');
     for (const h of REAL) {
-      expect(typeof holderShortName(h.description)).toBe('string');
+      expect(holderNameToken(h.description)).toBe(String(h.description ?? '').trim());
     }
   });
 });

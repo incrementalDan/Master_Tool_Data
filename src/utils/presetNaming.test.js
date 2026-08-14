@@ -417,10 +417,10 @@ describe('composePresetName', () => {
     })).toBe('SS 2.125 30-SK13-60 - Rough');
   });
 
-  it('derives the holder short name from a description', () => {
+  it('uses the holder DESCRIPTION when given one', () => {
     expect(composePresetName({
       materialQuery: 'AL', ooh: 1.5, holderDescription: 'NBT30-SK20C-90', opType: 'finish',
-    })).toBe('AL 1.500 30-SK20-90 - Finish');
+    })).toBe('AL 1.500 NBT30-SK20C-90 - Finish');
   });
 
   it('builds incrementally, omitting missing pieces', () => {

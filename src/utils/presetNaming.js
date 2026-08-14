@@ -11,13 +11,14 @@
 //   - Material code: AL / SS / STEEL / MILD / BRONZE / BRASS / TI / CI / PLASTIC
 //     (Fusion's preset material.query). Unknown/blank -> "GEN".
 //   - OOH: stick-out in inches, fixed 3 decimals, no inch mark.
-//   - Holder short name: from holderNaming.holderShortName().
+//   - Holder name: the holder's DESCRIPTION (holderNaming.holderNameToken).
+//     There is no short name any more — see holderNaming.js.
 //   - Operation: spelled-out word, separated by " - ".
 //
 // The name is authoritative on import: operation_type is parsed from it; if it
 // cannot be parsed, the UI prompts the user.
 
-import { holderShortName } from './holderNaming.js';
+import { holderNameToken, holderTokensMatch } from './holderNaming.js';
 import {
   isNewFormatPreset, readStrategyBucket, presetStrategyLabel,
 } from '../schema/camStrategies.js';
@@ -287,7 +288,7 @@ export function autoPresetName(preset, assembly, materials, { isHoleMaking = fal
   return composePresetName({
     materialQuery: materialNameCode(preset.material?.query, materials),
     ooh: assembly?.ooh,
-    holderShort: assembly ? holderShortName(assembly.holder_description || '') : null,
+    holderShort: assembly ? holderNameToken(assembly.holder_description || '') : null,
     opType: isHoleMaking ? null : opType,
     intensityWord,
     strategyLabel,
@@ -691,7 +692,7 @@ export function formatOoh(ooh) {
 }
 
 // Compose a preset name from its parts. `holderShort` is already-derived
-// (call holderNaming.holderShortName on the holder description first), or pass
+// (call holderNaming.holderNameToken on the holder description first), or pass
 // `holderDescription` and it will be derived here.
 // The operation tail is `[<intensityWord>] <opWord> [<strategyLabel>]` —
 // intensityWord ("Fine"/"Fast") goes in FRONT of Rough/Finish when the strategy
@@ -737,7 +738,7 @@ export function isAutoPresetName(name, strategyLabels = []) {
 }
 
 export function composePresetName({ materialQuery, ooh, holderShort, holderDescription, opType, intensityWord, strategyLabel, smallBore }) {
-  const short = holderShort != null ? holderShort : holderShortName(holderDescription || '');
+  const short = holderShort != null ? holderShort : holderNameToken(holderDescription || '');
   const head = [materialToCode(materialQuery), formatOoh(ooh), short]
     .filter(s => s != null && String(s).trim() !== '')
     .join(' ');
@@ -815,9 +816,10 @@ export function presetMatchesAssembly(preset, assembly, unit = 'inches') {
   if (!preset || !assembly) return false;
   const parsed = parsePresetName(preset.name);
   if (!parsed) return false;
-  const aShort = holderShortName(assembly.holder_description || '');
-  const holderOk = !!parsed.holderShortName && !!aShort &&
-    parsed.holderShortName.toUpperCase() === aShort.toUpperCase();
+  // Tolerant of the retired short form: names already stored carry it and are
+  // deliberately NOT being rewritten, but this seeds preset.assembly_id for a
+  // preset that has no FK yet, so it must still recognise them.
+  const holderOk = holderTokensMatch(parsed.holderShortName, assembly.holder_description || '');
   const oohOk = parsed.ooh != null && assembly.ooh != null &&
     Math.abs(parsed.ooh - assembly.ooh) <= lengthEps(unit);
   return holderOk && oohOk;

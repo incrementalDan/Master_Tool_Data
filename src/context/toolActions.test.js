@@ -479,7 +479,7 @@ describe('updateAssembly — OOH/holder change re-derives everything built from 
     const out = await updateAssembly('FTL-AAA', 'as1', { ooh: 3.0 });
 
     // Auto asm_number re-derived from the new OOH (was …-2.125).
-    expect(out.assemblies[0].asm_number).toBe('30-SK13-60-1001-3');
+    expect(out.assemblies[0].asm_number).toBe('NBT30-SK13C-60-1001-3');
     // A re-derivable Auto value is not worth retiring.
     expect(out.assemblies[0].legacy_asm_numbers ?? []).toEqual([]);
 
@@ -487,7 +487,7 @@ describe('updateAssembly — OOH/holder change re-derives everything built from 
     // links it to the assembly instead of silently orphaning it.
     const p1 = out.presets.find(p => p.guid === 'p1');
     // Preset names carry OOH at 3 decimals (asm_number trims it) — both follow.
-    expect(p1.name).toBe('AL 3.000 30-SK13-60 - Rough Adaptive');
+    expect(p1.name).toBe('AL 3.000 NBT30-SK13C-60 - Rough Adaptive');
 
     // The hand-typed name is the user's — untouched.
     const p2 = out.presets.find(p => p.guid === 'p2');

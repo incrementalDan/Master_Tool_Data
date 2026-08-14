@@ -20,7 +20,7 @@ import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSys
 import { isExcludedFrom } from '../utils/idSystems.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
 import { composePresetName, opTypeWord, parsePresetName, materialNameCode, materialCategory, findMaterialInLibrary, syncPresetMaterialName, findCamPresetById, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
-import { holderShortName } from '../utils/holderNaming.js';
+import { holderNameToken } from '../utils/holderNaming.js';
 import { toolsUsingHolder, assemblyUsesHolder } from '../schema/holderResolve.js';
 import { segmentsMatch } from '../schema/holderIdentity.js';
 import { defaultToolLibraryId, machineNumberArgs } from './appState.js';
@@ -908,7 +908,7 @@ export function createLibraryOps(ctx) {
         // Rename presets to the convention against the primary assembly, and set
         // operation_type (name wins, else the user-supplied override).
         const primary = assemblies[0];
-        const primaryHolderShort = holderShortName(primary.holder_description || '');
+        const primaryHolderShort = holderNameToken(primary.holder_description || '');
         const isHoleMakingTool = HOLE_MAKING_TYPES.has(merged.tool_type);
         const presets = (merged.presets || []).map(p => {
           // Link the material to the user's chosen (or auto-suggested) CAM preset

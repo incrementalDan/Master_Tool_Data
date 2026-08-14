@@ -14,6 +14,7 @@ import {
 import { normProShopId } from '../schema/insertFamilies.js';
 import { linkPatch } from '../utils/toolLinks.js';
 import { holderForGuid } from '../utils/holderDuplicates.js';
+import { holderTokensMatch } from '../utils/holderNaming.js';
 import { composeAsmNumber, autoAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
 import {
   presetMatchesAssembly, isAutoPresetName, autoPresetName, HOLE_MAKING_TYPES,
@@ -1046,8 +1047,13 @@ export function createToolActions(ctx) {
             { holderDescription: holderDescOf(upd), tool_id: tool.tool_id, ooh: upd.ooh, assembly_id: upd.assembly_id });
           // Only replace a value that WAS auto-derived; anything else (an RTA
           // carried over from another mode) is external — retire it, never drop it.
-          if (after && after !== upd.asm_number) {
-            if (upd.asm_number && upd.asm_number !== before) {
+          // ⚠️ "Was auto-derived" is matched TOLERANTLY: stored numbers spell the
+          // holder the retired short way ("30-SK13-60-…" for what now composes as
+          // "NBT30-SK13C-60-…"), and a strict compare would read every one as
+          // external and retire it into legacy_asm_numbers — the searchable list
+          // meant for real ProShop RTA numbers.
+          if (after && !holderTokensMatch(after, upd.asm_number)) {
+            if (upd.asm_number && !holderTokensMatch(upd.asm_number, before)) {
               upd.legacy_asm_numbers = [...(upd.legacy_asm_numbers || []), upd.asm_number];
             }
             upd.asm_number = after;

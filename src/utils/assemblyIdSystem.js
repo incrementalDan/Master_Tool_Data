@@ -22,7 +22,7 @@
 //   sequential   — a plain incrementing integer from `serial_start`.
 //   erp_external — reserved placeholder; not selectable yet.
 
-import { holderShortName } from './holderNaming.js';
+import { holderNameToken, holderTokensMatch } from './holderNaming.js';
 import { INSERT_FAMILY_BY_ID, pairedAsmIdPart } from '../schema/insertFamilies.js';
 
 export const ASM_MODES = [
@@ -77,7 +77,7 @@ export function composeAsmNumber(asmConfig, toolIdConfig, asm, seqNumber) {
   switch (mode) {
     case 'auto': {
       const sep = resolveAsmSeparator(asmConfig, toolIdConfig);
-      const holderShort = holderShortName(asm?.holderDescription || '');
+      const holderShort = holderNameToken(asm?.holderDescription || '');
       const idPart = asm?.tool_id || last6(asm?.assembly_id);
       const oohPart = trimOoh(asm?.ooh);
       return [holderShort, idPart, oohPart].filter(p => p !== '' && p != null).join(sep);
@@ -103,7 +103,14 @@ export function autoAsmNumber(asmConfig, toolIdConfig, asm) {
 // worth keeping — an Auto value equals what Auto composes, so it's dropped
 // (re-derivable). Empty old values are never retired.
 export function shouldRetireAsmNumber(oldValue, autoComposed) {
-  return !!oldValue && oldValue !== autoComposed;
+  // ⚠️ Tolerant of the retired holder short form. Numbers already stored spell
+  // the holder the old way ("30-SK13-60-1001-2.125" for what now composes as
+  // "NBT30-SK13C-60-1001-2.125"). A plain !== would read every one of those as
+  // an externally-assigned value and retire it into legacy_asm_numbers — which
+  // is for real external IDs (a ProShop RTA#) and is searchable. They are ours
+  // and re-derivable, just spelled the old way, so they are replaced silently
+  // exactly as before. A genuine RTA# still fails the match and is retired.
+  return !!oldValue && !holderTokensMatch(oldValue, autoComposed);
 }
 
 // Serial numbers already taken across the library (plain integers only — that's
@@ -171,7 +178,14 @@ export function backfillAsmNumbers(tools, shopSettings, components = null, holde
           || (holders || []).find(h => h.guid === a.holder_guid)?.description || '',
         tool_id: idToken, ooh: a.ooh, assembly_id: a.assembly_id,
       });
-      if (!asm_number || asm_number === a.asm_number) return a;
+      // ⚠️ Same tolerance, and here it is what keeps the change quiet. Every
+      // stored number spells the holder the old way, so a strict compare would
+      // call all ~283 of them stale and raise the "assembly numbers corrected"
+      // banner on every tool at once — churn over a value that is a reference,
+      // not a link. An old-spelling number is left exactly as it is; only a
+      // number that is stale for a REAL reason (the OOH moved, the tool was
+      // renumbered) still gets corrected.
+      if (!asm_number || holderTokensMatch(asm_number, a.asm_number)) return a;
       touched = true;
       // An Auto number is a PURE product of holder + tool_id + OOH and has no
       // edit UI in this mode (AssemblyForm only exposes it for proshop_rta), so
