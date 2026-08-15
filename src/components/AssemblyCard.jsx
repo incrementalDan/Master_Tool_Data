@@ -4,9 +4,8 @@ import { presetsForAssembly, presetMaterialColor } from '../utils/presetNaming.j
 import { unitAbbr } from '../utils/units.js';
 import { useApp } from '../context/AppContext.jsx';
 import { HolderTag } from './HolderPill.jsx';
-// Kept as a re-export: the color list moved to utils/holderColors.js, but
-// several call sites still import holderColor from here.
-export { holderColor } from '../utils/holderColors.js';
+// Kept as a re-export: the colour rule lives in utils/holderColors.js.
+export { holderDisplayColor } from '../utils/holderColors.js';
 
 function fmtMeasured(v) {
   try { return new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
