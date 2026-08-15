@@ -109,7 +109,7 @@ describe('combineToolsByToolId — conflict detection', () => {
     const other = makeTool({
       tracking_id: null, tool_id: 'BR-1',
       description: 'Original (copy)', overall_length: 3.5, shoulder_length: 1.2,
-      custom_grind: '-',
+      custom_grind: false,
     });
 
     const [result] = combineToolsByToolId([primary, other]);
@@ -117,8 +117,7 @@ describe('combineToolsByToolId — conflict detection', () => {
     expect(result.description).toBe('Original');        // keep primary — not a conflict
     expect(result.overall_length).toBe(3.5);            // biggest wins
     expect(result.shoulder_length).toBe(1.2);           // smallest wins
-    // None of these — nor the metadata-only custom_grind — record a conflict.
-    for (const f of ['description', 'overall_length', 'shoulder_length', 'custom_grind']) {
+    for (const f of ['description', 'overall_length', 'shoulder_length']) {
       expect(result._combineConflicts?.find(c => c.field === f)).toBeUndefined();
     }
   });
@@ -285,6 +284,109 @@ describe('mergeNoFusionIntoFusion', () => {
     const conflict = merged._combineConflicts?.find(c => c.field === 'diameter');
     expect(conflict).toBeDefined();
     expect(conflict.values).toEqual([0.2505, 0.25]);
+  });
+
+  // ─── REGRESSION: adding a ProShop-only tool to Fusion wiped its ProShop data ──
+  // A tool that exists only in ProShop is created in Fusion, then merged. The
+  // Fusion side is primary so its GEOMETRY must win — but it has no metadata
+  // record at all, so it has NO OPINION on purchasing / TSC / location / photo,
+  // and its blank defaults must never beat what the app already knows.
+  describe('a Fusion entry with no metadata record has no opinion on metadata-only fields', () => {
+    // Exactly what fusionToolToInternal produces for a tool with no metadata:
+    // "Metadata fields default empty — filled from metadata file".
+    const freshFusionSide = (extra = {}) => makeTool({
+      id: 'FTL-PS1', tracking_id: 'FTL-PS1', tool_id: 'D-2',
+      no_fusion_link: false, library_id: 'lib-1',
+      _noMetadata: true,
+      diameter: 0.228, description: '.2280 Carbide Drill',
+      vendor: '', coating: '',
+      purchasing: { manufacturers: [], vendors: [] },
+      tsc_capable: false, center_cutting: false,
+      tags: [], notes: '', material_suitability: [],
+      _fusionRaw: { guid: 'guid-fusion' },
+      ...extra,
+    });
+    const proShopSide = (extra = {}) => makeTool({
+      id: 'FTL-PS1', tracking_id: 'FTL-PS1', tool_id: 'D-2',
+      no_fusion_link: true,
+      diameter: 0.228, description: '#1 (0.2280) DRILL',
+      vendor: 'OSG', coating: 'TiAlN',
+      purchasing: {
+        manufacturers: [{ id: 'm1', name: 'OSG', edp: '', order: 0 }],
+        vendors: [{ id: 'v1', manufacturer_id: 'm1', name: 'MSC Industrial', price: 27.97, order: 0 }],
+      },
+      tsc_capable: true, center_cutting: false,
+      min_ooh: 0.75, point_type: 'Plug',
+      primary_photo_id: 'drive-file-1',
+      tool_location: { system_id: 'sys-1', bin: 173 },
+      tags: [], notes: '', material_suitability: [],
+      ...extra,
+    });
+
+    // ⚠️ The original bug. `{ manufacturers: [], vendors: [] }` is an OBJECT, so
+    // the old empty-check read it as a real value, the gap-fill never fired, and
+    // the whole purchasing block was dropped — on 54 of the 58 real no-Fusion
+    // records in the shop's library.
+    it('a blank-default purchasing object does not beat a real one', () => {
+      const merged = mergeNoFusionIntoFusion(freshFusionSide(), proShopSide());
+      expect(merged.purchasing.manufacturers).toHaveLength(1);
+      expect(merged.purchasing.manufacturers[0].name).toBe('OSG');
+      expect(merged.purchasing.vendors[0].price).toBe(27.97);
+    });
+
+    // `false` is not "empty", so a boolean placeholder could never be gap-filled
+    // over — a ProShop through-coolant flag came back as No, silently.
+    it('a false boolean placeholder does not beat a real true', () => {
+      const merged = mergeNoFusionIntoFusion(freshFusionSide(), proShopSide());
+      expect(merged.tsc_capable).toBe(true);
+      expect(merged._combineConflicts?.find(c => c.field === 'tsc_capable')).toBeUndefined();
+    });
+
+    it('keeps every other ProShop-sourced field the Fusion side cannot hold', () => {
+      const merged = mergeNoFusionIntoFusion(freshFusionSide(), proShopSide());
+      expect(merged.vendor).toBe('OSG');
+      expect(merged.coating).toBe('TiAlN');
+      expect(merged.min_ooh).toBe(0.75);
+      expect(merged.point_type).toBe('Plug');
+      expect(merged.primary_photo_id).toBe('drive-file-1');
+      expect(merged.tool_location).toEqual({ system_id: 'sys-1', bin: 173 });
+    });
+
+    it('still lets Fusion win on geometry', () => {
+      const merged = mergeNoFusionIntoFusion(
+        freshFusionSide({ diameter: 0.228, flute_length: 1.5 }),
+        proShopSide({ diameter: 0.25, flute_length: null }));
+      expect(merged.diameter).toBe(0.228);
+      expect(merged.flute_length).toBe(1.5);
+      expect(merged._combineConflicts?.find(c => c.field === 'diameter')?.values)
+        .toEqual([0.228, 0.25]);
+    });
+
+    // A freshly-built Fusion tool stamps created_at = now, so merging into it
+    // reset the record's real creation date to today.
+    it('keeps the earliest creation date', () => {
+      const merged = mergeNoFusionIntoFusion(
+        freshFusionSide({ created_at: '2026-08-15T00:00:00.000Z' }),
+        proShopSide({ created_at: '2026-07-17T15:47:24.044Z' }));
+      expect(merged.created_at).toBe('2026-07-17T15:47:24.044Z');
+    });
+
+    // The result DOES hold metadata now — a later merge must not treat its
+    // values as blanks all over again.
+    it('the merged tool no longer claims to have no metadata', () => {
+      const merged = mergeNoFusionIntoFusion(freshFusionSide(), proShopSide());
+      expect(merged._noMetadata).toBeUndefined();
+    });
+
+    // When BOTH records genuinely hold a metadata-only value and they differ,
+    // that is a real disagreement — surfaced, not silently resolved.
+    it('flags a real metadata-only disagreement between two records that both know', () => {
+      const merged = mergeNoFusionIntoFusion(
+        freshFusionSide({ _noMetadata: undefined, coating: 'AlTiN' }),
+        proShopSide({ coating: 'TiAlN' }));
+      expect(merged._combineConflicts?.find(c => c.field === 'coating')?.values)
+        .toEqual(['AlTiN', 'TiAlN']);
+    });
   });
 });
 

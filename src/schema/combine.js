@@ -86,7 +86,21 @@ function mergeLogicalTools(group) {
     'ooh', 'selected_holder_guid',
     'created_at', 'updated_at', 'updated_by', 'revision_notes',
   ]);
-  const isEmpty = (v) => v == null || v === '' || (Array.isArray(v) && v.length === 0);
+  // ⚠️ A BLANK DEFAULT IS NOT DATA. `fusionToolToInternal` fills every
+  // metadata-only field with a placeholder ("Metadata fields default empty —
+  // filled from metadata file"), and for `purchasing` that placeholder is an
+  // OBJECT — { manufacturers: [], vendors: [] }. The old check only knew about
+  // null / '' / [], so it read that placeholder as a real value, the gap-fill
+  // below never fired, and merging a ProShop-imported tool into a fresh Fusion
+  // entry silently dropped its ENTIRE purchasing block (measured: 54 of the 58
+  // real no-Fusion records). An object is empty when everything in it is empty,
+  // all the way down.
+  const isEmpty = (v) => {
+    if (v == null || v === '') return true;
+    if (Array.isArray(v)) return v.length === 0;
+    if (typeof v === 'object') return Object.values(v).every(isEmpty);
+    return false;
+  };
   const scalarConflict = (a, b) => {
     if (typeof a === 'number' && typeof b === 'number') return round4(a) !== round4(b);
     if (typeof a === 'string' && typeof b === 'string') return a.trim() !== b.trim();
@@ -102,27 +116,45 @@ function mergeLogicalTools(group) {
   if (oals.length) merged.overall_length = Math.max(...oals);
   const shoulders = group.map(t => Number(t.shoulder_length)).filter(v => !isNaN(v) && v > 0);
   if (shoulders.length) merged.shoulder_length = Math.min(...shoulders);
+  // created_at is in SKIP_KEYS, so it came from the primary — and a freshly-built
+  // Fusion tool with no metadata stamps `new Date()`. Merging into it would reset
+  // a record's real creation date to today. The earliest across the group is the
+  // one true answer for a single physical tool.
+  const created = group.map(t => t.created_at).filter(Boolean).sort();
+  if (created.length) merged.created_at = created[0];
 
   const combineConflicts = [];
   const allKeys = new Set(group.flatMap(t => Object.keys(t)));
 
+  // ⚠️ A tool built from a Fusion entry with NO metadata record has no opinion on
+  // any metadata-only field — Fusion has nowhere to store one, so every such value
+  // on it is a blank default from fusionToolToInternal. Reading it as data is what
+  // let a placeholder beat a real value on merge. Drop it from the running so a
+  // record that DOES hold the value always wins, and so a placeholder can never be
+  // flagged as a disagreement. See buildLogicalTool's `_noMetadata`.
+  const opinionOf = (t, key) => (t._noMetadata && isMetadataOnly(key)) ? undefined : t[key];
+  const isPrim = (v) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+
   for (const key of allKeys) {
     if (SKIP_KEYS.has(key) || key.startsWith('_')) continue;
     // Gap-fill still applies to every field; only CONFLICT flagging is suppressed
-    // for fields that resolve by rule (description/OAL/shoulder), are a derived
-    // cache of the presets (flat speed/feed), or are metadata/ProShop-only and thus
-    // absent on the Fusion side (custom_grind, min_ooh, vendor, coating, …).
-    const conflictable = !AUTO_RESOLVE.has(key) && !SPEED_FEED_MIRROR.has(key) && !isMetadataOnly(key);
+    // for fields that resolve by rule (description/OAL/shoulder) or are a derived
+    // cache of the presets (flat speed/feed). A metadata-only field CAN now
+    // conflict: with placeholders dropped above, two differing values means two
+    // records that both genuinely hold one — a real disagreement the user should
+    // see rather than have silently resolved. (Measured on the real library: zero
+    // new flags — no two records there share a ProShop number.)
+    const conflictable = !AUTO_RESOLVE.has(key) && !SPEED_FEED_MIRROR.has(key);
+    // Seed from `merged` (not `primary`) so the rule-resolved lengths above stand.
+    let curVal = (primary._noMetadata && isMetadataOnly(key)) ? undefined : merged[key];
     for (const other of ordered.slice(1)) {
-      const curVal = merged[key];
-      const otherVal = other[key];
+      const otherVal = opinionOf(other, key);
       if (isEmpty(curVal) && !isEmpty(otherVal)) {
-        merged[key] = otherVal;                                  // gap-fill
+        curVal = otherVal;                                       // gap-fill
       } else if (
         conflictable &&
         !isEmpty(curVal) && !isEmpty(otherVal) &&
-        (typeof curVal === 'string' || typeof curVal === 'number' || typeof curVal === 'boolean') &&
-        (typeof otherVal === 'string' || typeof otherVal === 'number' || typeof otherVal === 'boolean') &&
+        isPrim(curVal) && isPrim(otherVal) &&
         scalarConflict(curVal, otherVal) &&
         !combineConflicts.some(c => c.field === key)            // one entry per field
       ) {
@@ -136,6 +168,10 @@ function mergeLogicalTools(group) {
         });
       }
     }
+    // Nobody had an opinion → leave the primary's blank default in place so the
+    // merged tool keeps its shape (`purchasing: {manufacturers:[],vendors:[]}`,
+    // `tags: []`, …) rather than losing the key.
+    if (curVal !== undefined) merged[key] = curVal;
   }
 
   // no_fusion_link: clear the flag if any tool in the group is a real Fusion entry.
@@ -152,6 +188,9 @@ function mergeLogicalTools(group) {
   return {
     ...merged,
     no_fusion_link,
+    // The merged tool has no opinion on metadata-only fields only if NOTHING in
+    // the group did — otherwise a later merge would treat real values as blanks.
+    ...(group.every(t => t._noMetadata) ? { _noMetadata: true } : { _noMetadata: undefined }),
     machine_tool_number: machine,
     assemblies,
     presets,
