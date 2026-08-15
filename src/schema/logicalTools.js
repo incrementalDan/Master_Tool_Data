@@ -130,6 +130,15 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
     // Count of real duplicate presets folded on load — the tool-page banner offers
     // a one-click save to persist the cleanup. Only present when there are any.
     ...(_duplicatePresets > 0 ? { _duplicatePresets } : {}),
+    // ⚠️ This tool was built from a Fusion entry with NO metadata record, so it
+    // has NO OPINION on any metadata-only field — every one of them above is a
+    // blank default from fusionToolToInternal ("Metadata fields default empty"),
+    // not data. Fusion has nowhere to store them, so it cannot have an opinion.
+    // mergeLogicalTools reads this to keep a placeholder from beating (or being
+    // flagged as disagreeing with) a record that genuinely holds the value —
+    // the "merging a ProShop-imported tool into a fresh Fusion entry wipes its
+    // purchasing / TSC flag" bug. Runtime-only, like _drift; never persisted.
+    ...(meta ? {} : { _noMetadata: true }),
   };
 }
 
