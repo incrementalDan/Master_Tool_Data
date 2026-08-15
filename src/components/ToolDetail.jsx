@@ -9,7 +9,7 @@ import PresetPanel from './PresetPanel.jsx';
 import LocationPicker from './LocationPicker.jsx';
 import AssemblyCard from './AssemblyCard.jsx';
 import { HolderTag, holderForDisplay } from './HolderPill.jsx';
-import { holderColor } from '../utils/holderColors.js';
+import { holderDisplayColor } from '../utils/holderColors.js';
 import AssemblyForm from './AssemblyForm.jsx';
 import ReconcileModal from './ReconcileModal.jsx';
 import FilesSection from './FilesSection.jsx';
@@ -1124,10 +1124,17 @@ function AssemblyExportPicker({ tool, holders, onConfirm, onCancel }) {
   // The selected row's tint must be the SAME color the pill shows, so resolve
   // it the same way rather than always falling back to the legacy list.
   const { holderLibrary } = useApp();
-  const rowColor = (a) => holderForDisplay({
-    records: holderLibrary?.holders, holderId: a.holder_id,
-    holderGuid: a.holder_guid, description: a.holder_description,
-  })?.color || holderColor(a.holder_description || null);
+  // ⚠️ Resolve the record and colour it the SAME way the pill does. Reading
+  // `?.color` and falling back to a bare description hash re-derived the chain
+  // here, so once the pill keyed its hash on the record id the two disagreed —
+  // the same holder in two colours on one screen.
+  const rowColor = (a) => {
+    const rec = holderForDisplay({
+      records: holderLibrary?.holders, holderId: a.holder_id,
+      holderGuid: a.holder_guid, description: a.holder_description,
+    });
+    return holderDisplayColor(rec || { description: a.holder_description || null });
+  };
   const assemblies = tool.assemblies || [];
   const [selected, setSelected] = useState('none'); // 'none' | assembly_id | 'new'
   const [newHolderGuid, setNewHolderGuid] = useState('');

@@ -27,7 +27,7 @@
 
 import { holderOption, holderConfigOf } from '../schema/holderOptions.js';
 import { holderForGuid } from '../utils/holderDuplicates.js';
-import { holderColor } from '../utils/holderColors.js';
+import { holderDisplayColor } from '../utils/holderColors.js';
 import { useApp } from '../context/AppContext.jsx';
 
 // ─── Scoop cap geometry ─────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ export default function HolderPill({ holder, config, compact = false, title, sty
   // one, so falling straight to the default made every holder teal HERE while
   // the tool pages showed the by-size color — the same holder, two colors.
   // holderColor() already returns that same teal when there's no description.
-  const color = holderColor(holder.description, holder.color);
+  const color = holderDisplayColor(holder);
   const colletOpt = holderOption(config, 'collet_sizes', holder.collet_size_id);
   const span = colletOpt ? findColletSpan(holder.description, colletOpt.label) : null;
 
