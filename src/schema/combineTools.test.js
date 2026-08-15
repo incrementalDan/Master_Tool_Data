@@ -371,6 +371,22 @@ describe('mergeNoFusionIntoFusion', () => {
       expect(merged.created_at).toBe('2026-07-17T15:47:24.044Z');
     });
 
+    // machine_tool_number is metadata-owned, so the app-assigned number wins over
+    // whatever the programmer happened to type into the new Fusion entry.
+    it('keeps the app-assigned machine tool number', () => {
+      const merged = mergeNoFusionIntoFusion(
+        freshFusionSide({ machine_tool_number: 40 }),
+        proShopSide({ machine_tool_number: 288 }));
+      expect(merged.machine_tool_number).toBe(288);
+    });
+
+    it('still takes the Fusion number when the app has none', () => {
+      const merged = mergeNoFusionIntoFusion(
+        freshFusionSide({ machine_tool_number: 40 }),
+        proShopSide({ machine_tool_number: null }));
+      expect(merged.machine_tool_number).toBe(40);
+    });
+
     // The result DOES hold metadata now — a later merge must not treat its
     // values as blanks all over again.
     it('the merged tool no longer claims to have no metadata', () => {

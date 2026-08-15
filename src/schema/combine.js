@@ -47,7 +47,6 @@ function mergeLogicalTools(group) {
   const mergeHistory = [];
   const registered = [];
   const seenRegGuid = new Set();
-  let machine = null;
 
   for (const t of ordered) {
     for (const ra of (t._registeredAssemblies || [])) {
@@ -69,9 +68,22 @@ function mergeLogicalTools(group) {
     // Merge presets: identical-within-tolerance ones collapse; a same-name preset
     // with genuinely different values is kept, its name indexed up (Rough → Rough 2).
     presets = mergePresetLists(presets, t.presets || [], unit);
-    if (machine == null && t.machine_tool_number != null) machine = t.machine_tool_number;
     if (Array.isArray(t.merge_history)) mergeHistory.push(...t.merge_history);
   }
+
+  // machine_tool_number is METADATA-OWNED — metadata is the source of truth and
+  // wins over the value mirrored from the Fusion JSON. A tool built from a Fusion
+  // entry with no metadata record is only carrying whatever number the programmer
+  // typed there, so it supplies one only when nothing in the group has an
+  // app-assigned value. ⚠️ Without the two passes, merging a ProShop-only tool
+  // into a freshly created Fusion entry silently replaced its app-assigned T#
+  // with Fusion's — the same placeholder-beats-real-data bug as `purchasing`,
+  // and this field is in SKIP_KEYS so it never even flagged.
+  const firstMachine = (pred) => {
+    for (const t of ordered) if (pred(t) && t.machine_tool_number != null) return t.machine_tool_number;
+    return null;
+  };
+  const machine = firstMachine(t => !t._noMetadata) ?? firstMachine(() => true);
 
   // ── Gap-fill + conflict detect ──────────────────────────────────────────────
   // Start from primary's scalar values. For every other tool in the group:
