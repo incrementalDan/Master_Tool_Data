@@ -5,7 +5,7 @@
 
 import assert from 'node:assert';
 import { composePresetName, parsePresetName, presetMatchesAssembly, matchOpType, formatOoh, materialCategory } from '../presetNaming.js';
-import { holderShortName } from '../holderNaming.js';
+import { holderNameToken, holderTokensMatch } from '../holderNaming.js';
 
 // Preset material category ("Filter by Type") — never blank
 assert.equal(materialCategory(''), 'all');
@@ -14,9 +14,11 @@ assert.equal(materialCategory('ST'), 'metal');
 assert.equal(materialCategory('PLASTIC'), 'plastic');
 
 // Holder short name derivation
-assert.equal(holderShortName('NBT30-SK13C-60'), '30-SK13-60');
-assert.equal(holderShortName('NBT30-SK20C-90'), '30-SK20-90');
-assert.equal(holderShortName('NBT30-SK13C-60 w/ER16 EXT 2.2OOH'), '30-SK13-60 w/ER16 EXT 2.2OOH');
+// A holder has ONE name: its description. The old short form is still
+// RECOGNISED for matching, but nothing composes it any more.
+assert.equal(holderNameToken('NBT30-SK13C-60'), 'NBT30-SK13C-60');
+assert.ok(holderTokensMatch('30-SK13-60', 'NBT30-SK13C-60'));
+assert.ok(!holderTokensMatch('30-SK20-90', 'NBT30-SK13C-60'));
 
 // Compose → parse round trip
 const name = composePresetName({ materialQuery: 'SS', ooh: 2.125, holderShort: '30-SK13-60', opType: 'rough' });
@@ -24,7 +26,7 @@ assert.equal(name, 'SS 2.125 30-SK13-60 - Rough');
 const parsed = parsePresetName(name);
 assert.equal(parsed.materialCode, 'SS');
 assert.equal(parsed.ooh, 2.125);
-assert.equal(parsed.holderShortName, '30-SK13-60');
+assert.equal(parsed.holderShortName, '30-SK13-60');   // parsed OUT of a legacy name
 assert.equal(parsed.opType, 'rough');
 
 // OOH formatting + tolerance matching

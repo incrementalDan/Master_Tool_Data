@@ -23,16 +23,16 @@ describe('resolveAsmSeparator', () => {
 
 describe('composeAsmNumber — auto', () => {
   const cfg = { mode: 'auto', separator: null };
-  it('uses the existing holderShortName (30-SK13-60), Tool ID, and OOH', () => {
+  it('uses the holder DESCRIPTION, Tool ID, and OOH', () => {
     expect(composeAsmNumber(cfg, { separator: '-' }, {
       holderDescription: 'NBT30-SK13C-60', tool_id: '1001', ooh: 2.125,
-    })).toBe('30-SK13-60-1001-2.125');
+    })).toBe('NBT30-SK13C-60-1001-2.125');
   });
   it('falls back to last 6 of the assembly UUID when no tool_id', () => {
     const out = composeAsmNumber(cfg, { separator: '-' }, {
       holderDescription: 'NBT30-SK20C-90', ooh: 1.875, assembly_id: 'abcdef12-3456-7890-aaaa-bbbbccccdddd',
     });
-    expect(out).toBe('30-SK20-90-ccdddd-1.875');
+    expect(out).toBe('NBT30-SK20C-90-ccdddd-1.875');
   });
   it('omits empty pieces', () => {
     expect(composeAsmNumber(cfg, { separator: '-' }, { holderDescription: '', tool_id: 'T30', ooh: 2.5 }))
@@ -63,13 +63,13 @@ describe('retirement — digital reference vs. re-derivable Auto', () => {
   const auto = autoAsmNumber({ mode: 'proshop_rta', separator: null }, { separator: '-' }, asm);
 
   it('autoAsmNumber composes the Auto value regardless of the active mode', () => {
-    expect(auto).toBe('30-SK13-60-1001-2.125');
+    expect(auto).toBe('NBT30-SK13C-60-1001-2.125');
   });
   it('retires an externally-assigned value (RTA# ≠ Auto)', () => {
     expect(shouldRetireAsmNumber('RTA-1234', auto)).toBe(true);
   });
   it('does NOT retire a re-derivable Auto value', () => {
-    expect(shouldRetireAsmNumber('30-SK13-60-1001-2.125', auto)).toBe(false);
+    expect(shouldRetireAsmNumber('NBT30-SK13C-60-1001-2.125', auto)).toBe(false);
   });
   it('never retires an empty old value', () => {
     expect(shouldRetireAsmNumber('', auto)).toBe(false);
@@ -87,21 +87,21 @@ describe('backfillAsmNumbers', () => {
       tool_id: '1001',
       assemblies: [
         { assembly_id: 'a', holder_description: 'NBT30-SK13C-60', ooh: 2.125 },
-        { assembly_id: 'b', holder_description: 'NBT30-SK13C-90', ooh: 3, asm_number: '30-SK13-90-1001-2.5' },
+        { assembly_id: 'b', holder_description: 'NBT30-SK13C-90', ooh: 3, asm_number: 'NBT30-SK13C-90-1001-2.5' },
       ],
     }];
     const out = backfillAsmNumbers(tools, shop);
-    expect(out[0].assemblies[0].asm_number).toBe('30-SK13-60-1001-2.125'); // filled
-    expect(out[0].assemblies[1].asm_number).toBe('30-SK13-90-1001-3');     // corrected
+    expect(out[0].assemblies[0].asm_number).toBe('NBT30-SK13C-60-1001-2.125'); // filled
+    expect(out[0].assemblies[1].asm_number).toBe('NBT30-SK13C-90-1001-3');     // corrected
     expect(out[0]._asmNumbersFixed).toEqual([          // reports old → new, not just a count
-      { from: '30-SK13-90-1001-2.5', to: '30-SK13-90-1001-3' },
+      { from: 'NBT30-SK13C-90-1001-2.5', to: 'NBT30-SK13C-90-1001-3' },
     ]);
   });
 
   it('is idempotent and raises no flag when every number is already correct', () => {
     const tools = [{
       tool_id: '1001',
-      assemblies: [{ assembly_id: 'a', holder_description: 'NBT30-SK13C-60', ooh: 2.125, asm_number: '30-SK13-60-1001-2.125' }],
+      assemblies: [{ assembly_id: 'a', holder_description: 'NBT30-SK13C-60', ooh: 2.125, asm_number: 'NBT30-SK13C-60-1001-2.125' }],
     }];
     const out = backfillAsmNumbers(tools, shop);
     expect(out).toBe(tools);                        // untouched reference
@@ -147,7 +147,7 @@ describe('backfillAsmNumbers', () => {
       assemblies: [{ assembly_id: 'a', holder_description: 'NBT30-SK13C-60', ooh: 2.125 }],
     }];
     const out = backfillAsmNumbers(tools, shop, { components });
-    expect(out[0].assemblies[0].asm_number).toBe('30-SK13-60-1001+1042-2.125');
+    expect(out[0].assemblies[0].asm_number).toBe('NBT30-SK13C-60-1001+1042-2.125');
   });
 });
 
@@ -162,7 +162,7 @@ describe('backfillAsmNumbers — no FALSE "out of date" flags', () => {
       tool_id: '1001',
       assemblies: [{
         assembly_id: 'a', holder_guid: 'H1', holder_description: '', ooh: 1.4,
-        asm_number: '30-SK13-150-1001-1.4',
+        asm_number: 'NBT30-SK13C-150-1001-1.4',
       }],
     }];
     const holders = [{ guid: 'H1', description: 'NBT30-SK13C-150' }];
@@ -178,7 +178,7 @@ describe('backfillAsmNumbers — no FALSE "out of date" flags', () => {
       tool_id: 'M-132',
       assemblies: [{
         assembly_id: 'a', holder_description: 'NBT30-SK13C-150',
-        ooh: 1.4000000000000001, asm_number: '30-SK13-150-M-132-1.4',
+        ooh: 1.4000000000000001, asm_number: 'NBT30-SK13C-150-M-132-1.4',
       }],
     }];
     const out = backfillAsmNumbers(tools, shopAuto, null, []);

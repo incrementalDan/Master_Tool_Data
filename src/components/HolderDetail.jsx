@@ -402,8 +402,8 @@ export default function HolderDetail({
   // collet family / size / length aren't filled in yet it collapses to little
   // more than the taper — "BBT30" offered as a replacement for
   // "BBT30-CKB3-79 (For EWN Boring Heads)". One click and the real name is
-  // gone, and a holder description is load-bearing: holderShortName() parses it
-  // into preset names and asm_numbers. Offer it only when it isn't strictly
+  // gone, and a holder description is load-bearing: it is used verbatim in
+  // preset names and asm_numbers. Offer it only when it isn't strictly
   // less information than what's already written.
   const norm = (s) => String(s || '').trim().toUpperCase().replace(/\s+/g, ' ');
   const offerAuto = !!suggested
@@ -756,8 +756,8 @@ export default function HolderDetail({
               </span>
               {/* Suggestion only — an explicit click puts it in the draft, and
                   the draft still has to be saved. A description is never
-                  rewritten automatically: holderShortName() parses it into
-                  preset names and asm_number, so a silent rewrite can orphan
+                  rewritten automatically: it is used verbatim in preset
+                  names and asm_number, so a silent rewrite can orphan
                   presets. */}
               {offerAuto && (
                 <>

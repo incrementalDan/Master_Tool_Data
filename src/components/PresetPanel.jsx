@@ -22,7 +22,7 @@ import {
   materialNameCode, presetMaterialColor, findMaterialInLibrary, syncPresetMaterialName, isAutoPresetName,
   HOLE_MAKING_TYPES, TURNING_TYPES,
 } from '../utils/presetNaming.js';
-import { holderShortName } from '../utils/holderNaming.js';
+import { holderNameToken } from '../utils/holderNaming.js';
 import {
   rpmToSFM, sfmToRPM,
   fptToIPM, ipmToFPT,
@@ -959,7 +959,7 @@ function EditCard({
       // Material token comes from the Materials library code for the stored query.
       materialQuery: materialNameCode(d.material?.query, materials),
       ooh: a?.ooh,
-      holderShort: a ? holderShortName(holderDescOf(a)) : null,
+      holderShort: a ? holderNameToken(holderDescOf(a)) : null,
       opType: isHoleMaking ? null : opType,
       intensityWord,
       strategyLabel,
@@ -1314,7 +1314,7 @@ function EditCard({
               {assemblies.length > 0 && <option value="">— None —</option>}
               {assemblies.map(a => (
                 <option key={a.assembly_id} value={a.assembly_id}>
-                  {holderShortName(holderDescOf(a)) || 'holder'} · {a.ooh != null ? `${Number(a.ooh).toFixed(3)} ${lenUnit}` : 'no OOH'}
+                  {holderNameToken(holderDescOf(a)) || 'holder'} · {a.ooh != null ? `${Number(a.ooh).toFixed(3)} ${lenUnit}` : 'no OOH'}
                 </option>
               ))}
             </select>

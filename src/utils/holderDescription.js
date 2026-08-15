@@ -1,7 +1,7 @@
 // ─── Holder descriptions — compose (suggest) and heal (parse) ───────────────
 //
 // ⚠️ THE CASCADE RISK — holder descriptions are LOAD-BEARING.
-// holderShortName() parses a description → that token feeds preset names and
+// holderNameToken() takes the description verbatim → it feeds preset names and
 // asm_number → and presetMatchesAssembly links presets back to assemblies by
 // parsing the short name out of the preset name. A stale value there SILENTLY
 // ORPHANS THE PRESET (CLAUDE.md is explicit about this).
