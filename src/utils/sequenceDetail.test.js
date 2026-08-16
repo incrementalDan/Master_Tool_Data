@@ -8,6 +8,7 @@ import {
 import {
   buildSequenceImport, buildToolIndex, findToolByProShopId, locationConflict, upsertDetail,
 } from './sequenceImport.js';
+import { archiveFileName } from '../context/programActions.js';
 
 // The real posted Sequence Detail for O1218 (B Side OP60), straight from the
 // cascade post — same run that produced the matching G-code.
@@ -259,6 +260,19 @@ describe('versions', () => {
     expect(next.details).toHaveLength(2);
     expect(next.details.find(d => d.program_id === 'prg-1').posted).toBe('new');
     expect(next.details.find(d => d.program_id === 'prg-2')).toBeTruthy();
+  });
+});
+
+describe('archive naming', () => {
+  it('names a retired version by its posted stamp and proven state', () => {
+    // Chronologically sortable in Drive, and the proven state travels with the
+    // version rather than the program.
+    expect(archiveFileName(1218, '8-10-2026 10:51', false)).toBe('O1218_20260810-1051_unproven.csv');
+    expect(archiveFileName(1218, '8-10-2026 10:51', true)).toBe('O1218_20260810-1051_proven.csv');
+  });
+
+  it('never invents a date when the stamp is unreadable', () => {
+    expect(archiveFileName(1218, '', false)).toBe('O1218_unknown_unproven.csv');
   });
 });
 

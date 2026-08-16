@@ -21,7 +21,7 @@ import { backfillHolderIds } from '../schema/holderResolve.js';
 import { matchFusionHolder, holderPushPlan, applyHolderPushPlan, pushChangeGroup, lastPushedFrom, retiredHolderFor } from '../schema/holderIdentity.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
-import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
+import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS, DEFAULT_PROGRAM_DETAILS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry, getActiveVendorRegistry, backfillPurchasingRegistryIds } from '../schema/vendorRegistry.js';
 import { findJob, newJob } from '../utils/jobs.js';
 import { fusionHolderToRecord, holderRecordToFusion, archiveHolderRecord, restoreArchivedHolder, isActiveHolder } from '../schema/holderRecord.js';
@@ -37,6 +37,7 @@ import { createToolActions } from './toolActions.js';
 import { createLibraryOps } from './libraryOps.js';
 import { createAttachmentActions } from './attachmentActions.js';
 import { createComponentActions } from './componentActions.js';
+import { createProgramActions } from './programActions.js';
 
 export { SETUP_STEPS, defaultToolLibraryId };
 
@@ -64,6 +65,7 @@ export function AppProvider({ children }) {
   const materialsRef = useRef(state.materials);
   const jobsRef = useRef(state.jobs);
   const componentsRef = useRef(state.components);
+  const programDetailsRef = useRef(state.programDetails);
   const holderLibraryRef = useRef(state.holderLibrary);
   // Pending debounced shared-Drive-file writes, keyed by file key →
   // { timer, write(keepalive) }. Lets typing coalesce into one write and lets
@@ -104,6 +106,7 @@ export function AppProvider({ children }) {
   materialsRef.current = state.materials;
   jobsRef.current = state.jobs;
   componentsRef.current = state.components;
+  programDetailsRef.current = state.programDetails;
   holderLibraryRef.current = state.holderLibrary;
 
   // Guards the once-per-session seeding of an established shop's setup completion
@@ -310,6 +313,7 @@ export function AppProvider({ children }) {
         : key === 'materials' ? materialsRef.current
         : key === 'jobs' ? jobsRef.current
         : key === 'components' ? componentsRef.current
+        : key === 'programDetails' ? programDetailsRef.current
         : key === 'holderLibrary' ? holderLibraryRef.current
         : fallbackData;
       return driveService.saveSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, payload, { keepalive })
@@ -347,6 +351,7 @@ export function AppProvider({ children }) {
       : key === 'vendorRegistry' ? 'vendorRegistry'
       : key === 'jobs' ? 'jobs'
       : key === 'components' ? 'components'
+      : key === 'programDetails' ? 'programDetails'
       : key === 'holderLibrary' ? 'holderLibrary'
       : 'materials';
     // Demo mode: update in-memory state only (no Drive write, no Google guard) so
@@ -396,6 +401,14 @@ export function AppProvider({ children }) {
     saveSharedFile('jobs', jobs, 'SET_JOBS'), [saveSharedFile]);
   const saveComponents = useCallback((components) =>
     saveSharedFile('components', components, 'SET_COMPONENTS'), [saveSharedFile]);
+  // ⚠️ Same onSaved-hook reasoning as saveHolderLibrary: the sequence import
+  // saves the details file and then immediately reads the ref back (to archive
+  // the prior version), so the ref has to move synchronously — refs are
+  // assigned during render, and waiting for one would read the PREVIOUS file
+  // and drop the record just written.
+  const saveProgramDetails = useCallback((programDetails) =>
+    saveSharedFile('programDetails', programDetails, 'SET_PROGRAM_DETAILS',
+      (data) => { programDetailsRef.current = data; }), [saveSharedFile]);
 
   // ─── App-owned holder library (holder_library.json) ───────────────────────
   // The holder table is the source of truth; the Fusion holder library is an
@@ -1133,7 +1146,7 @@ export function AppProvider({ children }) {
           driveService.loadOrCreateSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, def)
             .catch(e => { if (e.code === 'TOKEN_EXPIRED') throw e; return def; });
         try {
-          const [meta, materials, vendorRegistry, shopSettings, jobs, components, holderLibrary] = await Promise.all([
+          const [meta, materials, vendorRegistry, shopSettings, jobs, components, holderLibrary, programDetails] = await Promise.all([
             toolStore.loadAll(),
             sharedSafe('materials', DEFAULT_MATERIALS),
             sharedSafe('vendorRegistry', DEFAULT_VENDOR_REGISTRY),
@@ -1141,6 +1154,7 @@ export function AppProvider({ children }) {
             sharedSafe('jobs', DEFAULT_JOBS),
             sharedSafe('components', DEFAULT_COMPONENTS),
             sharedSafe('holderLibrary', DEFAULT_HOLDER_LIBRARY),
+            sharedSafe('programDetails', DEFAULT_PROGRAM_DETAILS),
           ]);
           metaList = meta;
           componentsFile = components;
@@ -1164,7 +1178,7 @@ export function AppProvider({ children }) {
           }
           effectiveShop = ss;
           saveRegistryMirror(ss);
-          dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings: ss, jobs, components, holderLibrary });
+          dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings: ss, jobs, components, holderLibrary, programDetails });
           dispatch({ type: 'SET_LIBRARIES', shopSettings: ss }); // sync pointers
           // Shared files are now loaded — Drive writes are safe. Set synchronously
           // (it's a ref) so the setup-step effects that re-fire on this dispatch,
@@ -1402,6 +1416,10 @@ export function AppProvider({ children }) {
     dispatch, notify, googleRef, componentsRef, saveComponents,
   }), [notify, saveComponents]);
 
+  const programActions = useMemo(() => createProgramActions({
+    notify, googleRef, demoModeRef, programDetailsRef, saveProgramDetails,
+  }), [notify, saveProgramDetails]);
+
   const clearError = useCallback(() => dispatch({ type: 'CLEAR_ERROR' }), []);
 
   return (
@@ -1467,6 +1485,9 @@ export function AppProvider({ children }) {
       ...attachmentActions,
       // Holder body / insert component records (componentActions.js)
       ...componentActions,
+      // Sequence Detail import / proven state (programActions.js)
+      ...programActions,
+      saveProgramDetails,
       // App-owned holder library (holder_library.json) — metadata-only writes
       saveHolderLibrary,
       saveHolderRecord,

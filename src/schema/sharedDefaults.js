@@ -18,6 +18,17 @@ export const DEFAULT_JOBS = { version: 1, jobs: [] };
 // Starts empty — components are created inline from the pairing picker.
 export const DEFAULT_COMPONENTS = { version: 1, components: [] };
 
+// program_details.json — the parsed Sequence Detail for each program: the
+// condensed tool list (one row per pocket), the POSTED version stamp, the
+// proven flag, and a pointer to the untouched raw CSV in Drive.
+//
+// Deliberately CONDENSED ONLY. The full per-toolpath sequence is re-parsed from
+// the stored raw CSV when it's actually asked for, so there is no second
+// derived copy of it to drift — and what the Sequence Detail tab shows is
+// provably the file the post wrote. Only the LATEST version's parsed data is
+// kept here; older versions are read live from their archived raw file.
+export const DEFAULT_PROGRAM_DETAILS = { version: 1, details: [] };
+
 // holder_library.json — the APP-OWNED holder table (see schema/holderRecord.js).
 // The Fusion holder library becomes an export target; this is the source of
 // truth. Starts empty and is populated by the one-time migration from the
