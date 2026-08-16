@@ -6065,3 +6065,91 @@ input.sf-ref-num { text-align: right; }
   font-size: var(--text-sm); color: var(--text);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Sequence Detail — the job page, tool lists and the upload dialog.
+   Builds on the Program Number Manager's .pn-* surface so a job reads as the
+   same page family, not a bolt-on.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+/* Whole-page drop target: a CSV dragged anywhere on /programs is an upload. */
+.pn-page.sd-drag { outline: 2px dashed var(--blue); outline-offset: 8px; border-radius: 12px; }
+
+.sd-program-head {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 9px 14px; cursor: pointer; user-select: none;
+}
+.sd-program-head:hover { background: var(--surface-2); }
+.sd-program-head > svg { color: var(--blue); flex-shrink: 0; }
+.sd-head-right { margin-left: auto; display: flex; align-items: center; gap: 7px; cursor: default; }
+.sd-op-label {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--text-sub); text-transform: uppercase;
+}
+.sd-job-list { border-color: color-mix(in srgb, var(--blue) 35%, var(--border)); }
+.sd-tabs { margin: 0 14px; }
+.sd-tab-meta { margin-left: auto; align-self: center; padding-bottom: 6px; }
+
+/* Proven / unproven — display only in this phase: it never blocks or changes a
+   print, it records whether this version actually ran on the machine. */
+.sd-proven {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600; font-family: inherit;
+  padding: 3px 9px; border-radius: 999px; cursor: pointer;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-sub);
+}
+.sd-proven:hover:not(:disabled) { border-color: var(--green); color: var(--text); }
+.sd-proven.on {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  border-color: color-mix(in srgb, var(--green) 40%, transparent);
+}
+.sd-proven:disabled { cursor: not-allowed; opacity: 0.6; }
+
+.sd-count-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 10.5px; font-weight: 600; padding: 2px 7px; border-radius: 999px;
+  color: var(--blue); background: var(--blue-tint);
+}
+
+/* Tool list / sequence tables — numeric columns in the mono face, as measured
+   data (same rule as every other number in the app). */
+.sd-table td { white-space: nowrap; }
+.sd-table .sd-num { font-family: var(--font-mono); font-size: 12px; }
+.sd-table .sd-op { font-weight: 600; }
+.sd-seq {
+  font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--blue);
+}
+.sd-holder { display: inline-flex; align-items: center; gap: 5px; }
+.sd-holder-unknown { color: var(--text-sub); display: inline-flex; }
+
+/* A location the CSV and the library disagree about. Shown, never resolved —
+   the CSV is what the program was proven with. */
+.sd-flag {
+  margin-left: 6px; font-size: 10.5px; font-family: var(--font-mono);
+  color: var(--amber); background: color-mix(in srgb, var(--amber) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 35%, transparent);
+  border-radius: 5px; padding: 1px 5px; cursor: help;
+}
+
+/* Upload dialog callouts: blocking (red, commit disabled) vs informational. */
+.sd-blocker, .sd-ok, .sd-note {
+  display: flex; gap: 8px; align-items: flex-start;
+  font-size: 12.5px; line-height: 1.5; border-radius: 8px; padding: 9px 11px;
+}
+.sd-blocker {
+  color: var(--text); background: color-mix(in srgb, var(--red) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--red) 35%, transparent);
+}
+.sd-ok {
+  color: var(--text); background: color-mix(in srgb, var(--green) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 28%, transparent);
+}
+.sd-note { color: var(--text-sub); background: var(--surface-2); border: 1px solid var(--border); }
+.sd-note.warn {
+  background: color-mix(in srgb, var(--amber) 8%, transparent);
+  border-color: color-mix(in srgb, var(--amber) 30%, transparent);
+}
+.sd-blocker-list { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+.sd-blocker-list li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+.pn-import-drop.dragging { border-color: var(--blue); border-style: solid; color: var(--text); background: var(--blue-tint); }

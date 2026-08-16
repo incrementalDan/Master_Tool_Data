@@ -31,6 +31,13 @@ export function archiveFileName(programNumber, posted, proven) {
   return `${formatProgramNumber(programNumber)}_${stamp}_${proven ? 'proven' : 'unproven'}.csv`;
 }
 
+// Demo mode has no Drive, so an uploaded file has nowhere to live. Keeping the
+// text in memory for the session lets the sandbox exercise the whole flow —
+// including the Sequence Detail tab, which re-parses the raw file — without
+// adding a demo-only field to the stored record shape. Session-scoped and
+// deliberately not persisted: the demo is a throwaway.
+const demoRawText = new Map();   // detail id → the uploaded CSV text
+
 export function createProgramActions(ctx) {
   const { notify, googleRef, demoModeRef, programDetailsRef, saveProgramDetails } = ctx;
 
@@ -78,6 +85,8 @@ export function createProgramActions(ctx) {
 
       const uploaded = await driveService.uploadToolFile(folderId, file, detail.file_name);
       rawFileId = uploaded.id;
+    } else {
+      demoRawText.set(detail.id, await file.text());
     }
 
     const stored = { ...detail, raw_file_id: rawFileId };
@@ -108,7 +117,9 @@ export function createProgramActions(ctx) {
   // Fetch the stored raw CSV. The full per-toolpath Sequence Detail is parsed
   // from this on demand, so what's displayed is provably the posted file.
   const fetchSequenceCsv = async (detail) => {
-    if (!detail?.raw_file_id) return null;
+    if (!detail) return null;
+    if (demoModeRef.current && demoRawText.has(detail.id)) return demoRawText.get(detail.id);
+    if (!detail.raw_file_id) return null;
     return driveService.fetchFileText(detail.raw_file_id);
   };
 

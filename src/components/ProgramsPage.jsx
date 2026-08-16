@@ -1,9 +1,12 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus, X, Check, Search, ChevronDown, ChevronRight, Pencil, Trash2,
-  ArrowUp, ArrowDown, ArrowUpDown, LayoutGrid, Table2, Hash,
+  ArrowUp, ArrowDown, ArrowUpDown, LayoutGrid, Table2, Hash, UploadCloud, ExternalLink, Wrench,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
+import SequenceUploadModal from './SequenceUploadModal.jsx';
+import { detailsOf } from '../utils/sequenceImport.js';
 import {
   INT_EXT, FIXTURING_OPTIONS, nextProgramNumber, formatProgramNumber, formatOperation,
   partsOf, programsOf, programMaterial, alloyLabel,
@@ -26,7 +29,7 @@ import { machineColorFor } from '../utils/machineColors.js';
 
 // ── Grouped view ──────────────────────────────────────────────────────────────
 
-function PartHeader({ part, programCount, expanded, onToggle, materials, canEdit, customers, onUpdatePart, onDeletePart }) {
+function PartHeader({ part, programCount, detailCount, expanded, onToggle, materials, canEdit, customers, onOpenJob, onUpdatePart, onDeletePart }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -85,6 +88,16 @@ function PartHeader({ part, programCount, expanded, onToggle, materials, canEdit
       <span className="pn-part-count text-xs text-sub">
         {programCount} program{programCount !== 1 ? 's' : ''}
       </span>
+      {detailCount > 0 && (
+        <span className="sd-count-chip" title={`${detailCount} of this job's operations have a Sequence Detail uploaded`}>
+          <Wrench size={11} /> {detailCount}
+        </span>
+      )}
+      <button type="button" className="btn btn-ghost btn-sm"
+        title="Open the job — tool lists, sequence detail and labels"
+        onClick={e => { e.stopPropagation(); onOpenJob(part.id); }}>
+        Job <ExternalLink size={11} />
+      </button>
       {canEdit && (
         confirmDelete ? (
           <span className="pn-op-delete-confirm" onClick={e => e.stopPropagation()}>
@@ -238,7 +251,7 @@ function OperationRow({ program, part, materials, machines, canEdit, onUpdatePro
   );
 }
 
-function GroupedView({ jobsFile, materials, machines, canEdit, customers, collapsed, onToggle, onUpdatePart, onDeletePart, onUpdateProgram, onDeleteProgram }) {
+function GroupedView({ jobsFile, materials, machines, canEdit, customers, collapsed, detailByProgram, onToggle, onOpenJob, onUpdatePart, onDeletePart, onUpdateProgram, onDeleteProgram }) {
   const parts = partsOf(jobsFile);
   if (parts.length === 0) {
     return <div className="pn-empty">No parts yet — click <strong>Add program</strong> to create the first one.</div>;
@@ -259,7 +272,8 @@ function GroupedView({ jobsFile, materials, machines, canEdit, customers, collap
           <div key={part.id} className="pn-part-card">
             <PartHeader
               part={part} programCount={progs.length} expanded={isOpen}
-              onToggle={() => onToggle(part.id)}
+              detailCount={progs.filter(p => detailByProgram.has(p.id)).length}
+              onToggle={() => onToggle(part.id)} onOpenJob={onOpenJob}
               materials={materials} canEdit={canEdit} customers={customers}
               onUpdatePart={onUpdatePart} onDeletePart={onDeletePart}
             />
@@ -504,10 +518,25 @@ function TableView({ jobsFile, materials, machines, canEdit, customers, onUpdate
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProgramsPage() {
-  const { jobs: jobsFile, saveJobs, materials, shopSettings, user, googleAuthenticated, demoMode } = useApp();
+  const { jobs: jobsFile, saveJobs, materials, shopSettings, programDetails, user, googleAuthenticated, demoMode } = useApp();
+  const navigate = useNavigate();
   const canEdit = googleAuthenticated || demoMode;
   const [view, setView] = useState('grouped');
   const [showAdd, setShowAdd] = useState(false);
+  // A CSV dropped anywhere on the page opens the upload dialog already holding
+  // it — the whole point of the feature is fewer clicks than ProShop, so
+  // "drag the file in" has to be the shortest path there is.
+  const [dropped, setDropped] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+
+  const detailByProgram = useMemo(() => {
+    const m = new Map();
+    for (const d of detailsOf(programDetails)) m.set(d.program_id, d);
+    return m;
+  }, [programDetails]);
+
+  const openJob = (partId) => navigate(`/programs/part/${partId}`);
   // Parts are expanded by default (program numbers front and center) — this
   // set tracks the parts the user has explicitly collapsed.
   const [collapsed, setCollapsed] = useState(() => new Set());
@@ -565,8 +594,22 @@ export default function ProgramsPage() {
   const totalParts = partsOf(jobsFile).length;
   const totalPrograms = programsOf(jobsFile).length;
 
+  const onDrop = (e) => {
+    const file = [...(e.dataTransfer?.files || [])].find(f => /\.csv$/i.test(f.name));
+    e.preventDefault();
+    setDragOver(false);
+    if (!file || !canEdit) return;
+    setDropped(file);
+    setUploading(true);
+  };
+
   return (
-    <div className="pn-page">
+    <div
+      className={`pn-page${dragOver ? ' sd-drag' : ''}`}
+      onDragOver={e => { if (canEdit) { e.preventDefault(); setDragOver(true); } }}
+      onDragLeave={e => { if (e.currentTarget === e.target) setDragOver(false); }}
+      onDrop={onDrop}
+    >
       <div className="detail-header mb-16">
         <span className="detail-header-icon"><Hash size={22} /></span>
         <div>
@@ -579,9 +622,14 @@ export default function ProgramsPage() {
             <span className="pn-next-num">{formatProgramNumber(nextNum)}</span>
           </div>
           {canEdit && (
-            <button className="btn btn-primary" onClick={() => setShowAdd(true)}>
-              <Plus size={15} /> Add program
-            </button>
+            <>
+              <button className="btn btn-secondary" onClick={() => { setDropped(null); setUploading(true); }}>
+                <UploadCloud size={15} /> Upload Sequence Detail
+              </button>
+              <button className="btn btn-primary" onClick={() => setShowAdd(true)}>
+                <Plus size={15} /> Add program
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -604,6 +652,7 @@ export default function ProgramsPage() {
           jobsFile={jobsFile} materials={materials} machines={machines}
           canEdit={canEdit} customers={customers}
           collapsed={collapsed} onToggle={toggleExpand}
+          detailByProgram={detailByProgram} onOpenJob={openJob}
           onUpdatePart={updatePart} onDeletePart={deletePart}
           onUpdateProgram={updateProgram} onDeleteProgram={deleteProgram}
         />
@@ -612,6 +661,19 @@ export default function ProgramsPage() {
           jobsFile={jobsFile} materials={materials} machines={machines}
           canEdit={canEdit} customers={customers}
           onUpdatePart={updatePart} onUpdateProgram={updateProgram} onDeleteProgram={deleteProgram}
+        />
+      )}
+
+      {uploading && (
+        <SequenceUploadModal
+          presetFile={dropped}
+          onClose={() => { setUploading(false); setDropped(null); }}
+          onImported={(_stored, _program, part) => {
+            setUploading(false);
+            setDropped(null);
+            // Straight to the job it belongs to — the reason you uploaded it.
+            if (part) navigate(`/programs/part/${part.id}`);
+          }}
         />
       )}
 
