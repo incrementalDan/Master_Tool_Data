@@ -33,6 +33,41 @@ describe('label fields', () => {
   });
 });
 
+describe('location — the app wins, the file does not', () => {
+  // The CSV's LC comes from Fusion's vendor field, which the app updates
+  // lazily, so a posted file routinely names a bin the shop has since changed.
+  // The label exists to send someone to the right drawer.
+  const toolsById = new Map([['FTL-1', { id: 'FTL-1', location: 'LC-99' }]]);
+
+  it('prints the app location over the posted one', () => {
+    const f = labelFieldsOf(row({ tool_ref: 'FTL-1', lc: 'LC-52' }), part, toolsById);
+    expect(f.Location).toBe('LC-99');
+  });
+
+  it('falls back to the file when the app has no location for the tool', () => {
+    // An insert tool keeps its location on its components, so the pairing has
+    // none — the posted value is all there is.
+    const noLoc = new Map([['FTL-1', { id: 'FTL-1', location: '' }]]);
+    expect(labelFieldsOf(row({ tool_ref: 'FTL-1', lc: 'LC-52' }), part, noLoc).Location).toBe('LC-52');
+    expect(labelFieldsOf(row({ tool_ref: null, lc: 'LC-52' }), part, toolsById).Location).toBe('LC-52');
+  });
+
+  it('changes nothing else about the label', () => {
+    const f = labelFieldsOf(row({ tool_ref: 'FTL-1', lc: 'LC-52' }), part, toolsById);
+    expect(f).toMatchObject({ Holder: 'NBT30-SK13C-60', OOH: '0.61', ToolNo: 'A-35' });
+  });
+
+  it('collapses two rows that differ only by a stale posted location', () => {
+    // Both resolve to the same drawer, so it is one label — printing two would
+    // be printing the same tag twice.
+    const rows = [
+      { ...row({ tool_ref: 'FTL-1', lc: 'LC-52' }), program_id: 'p1' },
+      { ...row({ tool_ref: 'FTL-1', lc: 'LC-244' }), program_id: 'p2' },
+    ];
+    expect(jobLabelRows(rows, part, toolsById)).toHaveLength(1);
+  });
+});
+
 describe('dedupe — never print two identical labels', () => {
   it('collapses the same pocket running the same assembly in two OPs', () => {
     const rows = [

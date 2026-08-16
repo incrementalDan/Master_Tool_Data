@@ -82,6 +82,29 @@ const binOf = (s) => {
   return digits || null;
 };
 
+// ⚠️ LOCATION IS THE ONE DELIBERATE EXCEPTION TO "THE CSV WINS".
+//
+// Everywhere else the CSV is fact, because it's what the machine will actually
+// do and a wrong value is a crash. Location isn't like that: the CSV's LC comes
+// from Fusion's vendor field, which the app writes lazily (a tool's Fusion copy
+// only catches up on its next individual save), so a posted file routinely
+// carries a location the shop has since changed. ToolDex OWNS location — it has
+// the Location System, the bins and the ProShop import behind it — so the app's
+// value is the more current one, and it's the one that belongs on the label the
+// operator uses to go find the tool.
+//
+// This changes DISPLAY and PRINT only. The CSV's own value is still stored
+// verbatim on the row, and the raw file is never edited.
+export function resolveRowLocation(row, toolsById) {
+  const csv = String(row?.lc ?? '').trim();
+  const tool = row?.tool_ref ? toolsById?.get?.(row.tool_ref) : null;
+  const app = String(tool?.location ?? '').trim();
+  // No linked tool, or the app doesn't know where this one lives (an insert
+  // tool keeps its location on its components) — the CSV is all there is.
+  if (!app) return { value: csv, source: 'csv', csv, app: '' };
+  return { value: app, source: 'app', csv, app };
+}
+
 export function locationConflict(csvLc, tool) {
   const csvBin = binOf(csvLc);
   const appBin = binOf(tool?.location);

@@ -13,9 +13,10 @@ import { formatProgramNumber, formatOperation } from '../utils/programs.js';
 // Both block the WHOLE upload: a partially-stored program prints a partial set
 // of labels, which is worse than printing none.
 //
-// Everything else is INFORMATION, not an obstacle — a location disagreement or
-// an unmatched holder is shown and the upload proceeds with the CSV's values,
-// because the CSV is what the program was proven with.
+// Everything else is INFORMATION, not an obstacle — an unmatched holder or a
+// stale location is shown and the upload proceeds, because the CSV is what the
+// program was proven with. (Location is the one field the app's own value wins
+// on and gets printed — see resolveRowLocation.)
 export default function SequenceUploadModal({ onClose, onImported, presetFile = null }) {
   const {
     jobs: jobsFile, tools, holderLibrary, programDetails,
@@ -161,9 +162,9 @@ export default function SequenceUploadModal({ onClose, onImported, presetFile = 
                     <div className="sd-note warn">
                       <AlertTriangle size={13} style={{ color: 'var(--amber)', flexShrink: 0 }} />
                       <div>
-                        {result.flags.lc.length} location{result.flags.lc.length !== 1 ? 's' : ''} disagree with the library
-                        ({result.flags.lc.map(c => `${c.t} ${c.csv} vs ${c.app}`).join(', ')}).
-                        The CSV value is kept and flagged on the tool list.
+                        {result.flags.lc.length} location{result.flags.lc.length !== 1 ? 's' : ''} in this file are out of date
+                        ({result.flags.lc.map(c => `${c.t} says ${c.csv}, ToolDex has ${c.app}`).join('; ')}).
+                        ToolDex owns location, so its value is what's shown and printed — Fusion's copy just hasn't caught up.
                       </div>
                     </div>
                   )}
