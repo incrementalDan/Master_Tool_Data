@@ -37,7 +37,14 @@ export function parseCsvRows(text) {
         if (ch === '\n') line++;                      // newline inside a quoted field
         cur += ch;
       }
-    } else if (ch === '"') {
+    } else if (ch === '"' && cur === '') {
+      // ⚠️ A quote only opens a quoted field at the START of that field.
+      // Mid-field it is DATA — tool descriptions carry inch marks (`.203"
+      // REACH`, `7x Reach"`), and treating one as an opening quote makes the
+      // parser swallow every comma and line break after it until the next
+      // quote anywhere in the file. That silently glues whole rows into one
+      // cell: a real posted Sequence Detail came through with one tool's
+      // description holding the rest of its row plus the entire next row.
       inQ = true;
     } else if (ch === ',') {
       pushCell();
