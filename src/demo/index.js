@@ -15,7 +15,7 @@ import demoHolders from './demo_holder_library.json';
 import demoMaterials from './demo_materials.json';
 import demoVendorRegistry from './demo_vendor_registry.json';
 import demoShopSettings from './demo_shop_settings.json';
-import demoJobs from './demo_jobs.json';
+import demoParts from './demo_parts.json';
 import demoComponents from './demo_components.json';
 import { fusionHolderToRecord } from '../schema/holderRecord.js';
 import { healHolderDescription, applyHealToRecord, suggestExtensionSegments } from '../utils/holderDescription.js';
@@ -69,7 +69,7 @@ export function getDemoData() {
     materials: demoMaterials,
     vendorRegistry: demoVendorRegistry,
     shopSettings: demoShopSettings,
-    jobs: demoJobs,
+    parts: demoParts,
     components: demoComponents,
   };
 }

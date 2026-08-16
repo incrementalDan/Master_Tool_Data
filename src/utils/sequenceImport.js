@@ -17,7 +17,7 @@
 // partial set of labels, which is worse than printing none.
 import { activeHolders } from '../schema/holderRecord.js';
 import { generateId } from '../schema/identity.js';
-import { programsOf, partsOf } from './programs.js';
+import { operationByProgramNumber, routingById, partById } from './parts.js';
 import {
   parseSequenceCsv, condenseTools, programNumberFromFileName, proShopIdKey, postedToIso,
 } from './sequenceDetail.js';
@@ -119,7 +119,7 @@ export function locationConflict(csvLc, tool) {
 export function buildSequenceImport({
   csvText,
   fileName,
-  jobsFile = {},
+  partsFile = {},
   tools = [],
   holderRecords = [],
   existingDetails = [],
@@ -129,10 +129,11 @@ export function buildSequenceImport({
   const parsed = parseSequenceCsv(csvText);
 
   // ── The program: matched on the FILENAME, never the row-0 header ──
+  // A program IS an operation — the number lives on the operation record (an OP
+  // has at most one program), so this resolves straight to the step it belongs
+  // to, and its routing and part come off that.
   const programNumber = programNumberFromFileName(fileName);
-  const program = programNumber == null
-    ? null
-    : programsOf(jobsFile).find(p => Number(p.program_number) === programNumber) || null;
+  const program = programNumber == null ? null : operationByProgramNumber(partsFile, programNumber);
 
   if (programNumber == null) {
     blockers.push({
@@ -153,7 +154,8 @@ export function buildSequenceImport({
     });
   }
 
-  const part = program ? partsOf(jobsFile).find(p => p.id === program.part_id) || null : null;
+  const routing = program ? routingById(partsFile, program.routing_id) : null;
+  const part = routing ? partById(partsFile, routing.part_id) : null;
 
   // ── Tools ──
   const toolIndex = buildToolIndex(tools);
@@ -212,12 +214,14 @@ export function buildSequenceImport({
   // The POSTED stamp is the version key: it's set by post logic and appears in
   // both the CSV and the G-code, so it's what pairs them. Re-uploading the same
   // stamp is the SAME version — no new archive copy, nothing to change.
-  const prior = program ? existingDetails.find(d => d.program_id === program.id) || null : null;
+  const prior = program ? existingDetails.find(d => d.operation_id === program.id) || null : null;
   const sameVersion = !!(prior && parsed.posted && prior.posted === parsed.posted);
 
   const detail = program ? {
     id: prior?.id || generateId(),
-    program_id: program.id,
+    // The operation the program belongs to — the durable link. The number is
+    // cached alongside it for display and for the Drive folder name.
+    operation_id: program.id,
     program_number: Number(program.program_number),
     file_name: String(fileName || ''),
     posted: parsed.posted,
@@ -241,6 +245,7 @@ export function buildSequenceImport({
     blockers,
     detail,
     program,
+    routing,
     part,
     parsed,
     prior,
@@ -258,10 +263,10 @@ export function buildSequenceImport({
 // versions are read live from their archived raw file).
 export function upsertDetail(detailsFile, detail) {
   const list = detailsFile?.details || [];
-  const without = list.filter(d => d.program_id !== detail.program_id);
+  const without = list.filter(d => d.operation_id !== detail.operation_id);
   return { ...(detailsFile || {}), version: 1, details: [...without, detail] };
 }
 
 export const detailsOf = (file) => file?.details || [];
-export const detailForProgram = (file, programId) =>
-  detailsOf(file).find(d => d.program_id === programId) || null;
+export const detailForOperation = (file, operationId) =>
+  detailsOf(file).find(d => d.operation_id === operationId) || null;

@@ -1,7 +1,7 @@
 // Pure (non-React) state layer for AppContext: localStorage keys and readers,
 // the multi-library registry helpers, the setup-steps list, initialState, and
 // the reducer. No side effects beyond localStorage.
-import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS, DEFAULT_PROGRAM_DETAILS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
+import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_PARTS, DEFAULT_COMPONENTS, DEFAULT_PROGRAM_DETAILS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY } from '../schema/vendorRegistry.js';
 
 const LOCATION_KEY = 'aps_library_location';
@@ -198,7 +198,7 @@ export const initialState = {
   materials: DEFAULT_MATERIALS,
   vendorRegistry: DEFAULT_VENDOR_REGISTRY,
   shopSettings: SEEDED_SHOP_SETTINGS,
-  jobs: DEFAULT_JOBS,         // jobs.json — shop-wide job registry (program # + part #)
+  parts: DEFAULT_PARTS,       // parts.json — parts → routings → operations (utils/parts.js)
   components: DEFAULT_COMPONENTS, // tool_components.json — holder body / insert records (insert-style tools)
   // program_details.json — the parsed Sequence Detail per program (condensed
   // tool list + version stamp + proven flag). See utils/sequenceDetail.js.
@@ -271,7 +271,7 @@ export function reducer(state, action) {
         materials: action.materials,
         vendorRegistry: action.vendorRegistry,
         shopSettings: action.shopSettings,
-        jobs: action.jobs || DEFAULT_JOBS,
+        parts: action.parts || DEFAULT_PARTS,
         components: action.components || DEFAULT_COMPONENTS,
         programDetails: action.programDetails || DEFAULT_PROGRAM_DETAILS,
         holderLibrary: action.holderLibrary || DEFAULT_HOLDER_LIBRARY,
@@ -309,9 +309,9 @@ export function reducer(state, action) {
     case 'SET_TOOLS': return { ...state, tools: action.tools, ...(action.needsNormalize !== undefined ? { needsNormalize: action.needsNormalize } : {}), ...(action.normalizeCount !== undefined ? { normalizeCount: action.normalizeCount } : {}) };
     case 'METADATA_FILE_WARNING': return { ...state, metadataFileWarning: action.warning };
     case 'SET_SHARED_FILES':
-      return { ...state, materials: action.materials, vendorRegistry: action.vendorRegistry, shopSettings: action.shopSettings, jobs: action.jobs, components: action.components || state.components, programDetails: action.programDetails || state.programDetails, holderLibrary: action.holderLibrary || state.holderLibrary };
+      return { ...state, materials: action.materials, vendorRegistry: action.vendorRegistry, shopSettings: action.shopSettings, parts: action.parts, components: action.components || state.components, programDetails: action.programDetails || state.programDetails, holderLibrary: action.holderLibrary || state.holderLibrary };
     case 'SET_MATERIALS': return { ...state, materials: action.materials };
-    case 'SET_JOBS': return { ...state, jobs: action.jobs };
+    case 'SET_PARTS': return { ...state, parts: action.parts };
     case 'SET_COMPONENTS': return { ...state, components: action.components };
     case 'SET_PROGRAM_DETAILS': return { ...state, programDetails: action.programDetails };
     case 'SET_HOLDER_LIBRARY': return { ...state, holderLibrary: action.holderLibrary };

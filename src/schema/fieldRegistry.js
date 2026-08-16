@@ -1119,20 +1119,12 @@ export const FIELD_REGISTRY = {
     precision: null,
   },
 
-  // Tool-level job links — jobs.json registry ids (a job = program # + part #).
-  // Superseded the free-text last_used_job display; see src/utils/jobs.js and
-  // the Jobs / Where Used panel. Preset-level links live in preset_meta.
-  job_ids: {
-    label: 'Jobs',
-    type: 'array',
-    unit: null,
-    fusionPath: null,
-    proShopColumn: null,
-    metadataOnly: true,
-    appliesToTypes: 'all',
-    required: false,
-    precision: null,
-  },
+  // NOTE: there is no tool-level job/program link field. "Where is this tool
+  // used" is DERIVED from the stored Sequence Detail (program_details.json rows
+  // carry tool_ref), so it is always current and there is nothing to go stale.
+  // A preset's link to the operation it was proven on IS stored, in
+  // preset_meta[guid].operation_ids — that's an assertion a person makes, which
+  // no posted file can tell us.
 
   preferred_machine: {
     label: 'Preferred Machine',

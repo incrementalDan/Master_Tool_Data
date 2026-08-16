@@ -26,11 +26,11 @@ describe('Copy preset for Fusion — clipboard shape', () => {
     const p = internal.presets[0];
     // simulate app-only fields riding on the in-memory preset
     const obj = presetToFusionClipboardObject(internal, {
-      ...p, operation_type: 'rough', machine_id: 'm1', job_ids: ['j1'],
+      ...p, operation_type: 'rough', machine_id: 'm1', operation_ids: ['j1'],
       small_bore: true, small_bore_diameter: 0.4, f_z_base: 0.001, intensity: 'aggressive',
     });
     const out = obj.presets[0];
-    for (const k of ['operation_type', 'machine_id', 'job_ids', 'small_bore', 'small_bore_diameter', 'f_z_base', 'intensity']) {
+    for (const k of ['operation_type', 'machine_id', 'operation_ids', 'small_bore', 'small_bore_diameter', 'f_z_base', 'intensity']) {
       expect(k in out).toBe(false);
     }
     expect('expressions' in out).toBe(false);     // milling preset: no preset-level expressions

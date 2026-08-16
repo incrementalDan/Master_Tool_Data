@@ -6153,3 +6153,23 @@ input.sf-ref-num { text-align: right; }
 .sd-blocker-list { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
 .sd-blocker-list li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
 .pn-import-drop.dragging { border-color: var(--blue); border-style: solid; color: var(--text); background: var(--blue-tint); }
+
+/* A routing — one way of making a part. Groups the operations under it. */
+.sd-routing { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.sd-routing + .sd-routing { margin-top: 10px; }
+.sd-routing-head {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 9px 14px; border-bottom: 1px solid var(--border); background: var(--surface-2);
+}
+.sd-routing-name { font-weight: 600; font-size: 13px; }
+.sd-routing .sd-program { border: none; border-radius: 0; background: transparent; }
+.sd-routing .sd-program + .sd-program { border-top: 1px solid var(--border); }
+
+/* "Where Used" — derived from the stored Sequence Detail, never a stored link. */
+.where-used-list { display: flex; flex-direction: column; gap: 6px; }
+.where-used-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+.where-used-pockets { font-family: var(--font-mono); font-size: 11.5px; color: var(--text-sub); }
+.where-used-proven {
+  font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
+  color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent);
+}

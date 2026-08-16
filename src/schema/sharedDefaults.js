@@ -5,11 +5,11 @@
 import { genLocId } from '../utils/locationSystem.js';
 import { DEFAULT_HOLDER_CONFIG } from './holderOptions.js';
 
-// jobs.json — the shop-wide jobs registry. A job = program number + part
-// number, with a stable UUID; presets/tools reference jobs by id (see
-// src/utils/jobs.js). Starts empty — jobs are created on first link (Sync Job
-// commit, preset editor, or the tool Jobs panel).
-export const DEFAULT_JOBS = { version: 1, jobs: [] };
+// parts.json — the PARTS module: parts → routings → operations (each operation
+// carrying its own program number). See src/utils/parts.js for the model and
+// why the middle tier is called a routing and not a job. Starts empty; the
+// shop's existing program list is brought in by the one-time CSV import.
+export const DEFAULT_PARTS = { version: 1, parts: [], routings: [], operations: [] };
 
 // tool_components.json — holder body / insert component records for
 // insert-style tools (see src/schema/insertFamilies.js). Each component is a

@@ -1,18 +1,26 @@
-// One-time CSV import of an existing program-number list into the Program
-// Number Manager. Pure (no React) so it's unit-testable; the Settings modal
+// One-time CSV import of the shop's existing program-number list into the Parts
+// module. Pure (no React) so it's unit-testable; the Settings modal
 // (ProgramsImportModal.jsx) drives file → preview → commit around it.
 //
 // Expected CSV header (order-independent; aliases tolerated):
 //   Program #, Machine, Fixturing, Internal or external, internal Part #,
 //   Rev, Customer, Description, OP #, Fixture Y/N
 //
-// Each row is one PROGRAM. Rows are grouped into PARTS by (part_number, rev)
-// — a part appearing on many rows becomes one record; a part already in the
-// registry is reused by id, never duplicated. program_number is the global
-// permanent key: a number already present (in the registry or earlier in the
-// file) is skipped as a duplicate. A blank Program # is auto-assigned the next
-// available number (max + 1), honoring "the app knows the next number".
-import { newPart, newProgram, nextProgramNumber, partsOf, programsOf, machineOptions } from './programs.js';
+// Each row is one OPERATION. Rows group upward into the three tiers:
+//   - PART by part_number alone (rev is NOT part of a part's identity).
+//   - ROUTING by (part, rev) — the CSV can't say what the shop's routings
+//     actually are, so one routing per rev is the only honest reading. The user
+//     splits or merges them by hand afterward, which is a two-click job on the
+//     part page and an unrecoverable guess if we did it for them.
+//   - OPERATION per row, carrying its own program number.
+// Existing records are reused by id, never duplicated. program_number is the
+// global permanent key: a number already present (in the file or earlier in the
+// import) is skipped as a duplicate. A blank Program # is auto-assigned the
+// next available number (max + 1), honoring "the app knows the next number".
+import {
+  newPart, newRouting, newOperation, nextProgramNumber,
+  partsOf, routingsOf, operationsOf, machineOptions,
+} from './parts.js';
 import { parseCsvRows } from './csv.js';
 
 // ── CSV → row objects ─────────────────────────────────────────────────────────
@@ -65,9 +73,6 @@ export function parseProgramsCsv(text) {
 }
 
 // ── Value parsing ─────────────────────────────────────────────────────────────
-const partKey = (partNumber, rev) =>
-  `${String(partNumber ?? '').trim().toLowerCase()}|${String(rev ?? '').trim().toLowerCase()}`;
-
 function parseFixture(v) {
   return /^(y|yes|true|t|1|fixture|fix)$/i.test(String(v ?? '').trim());
 }
@@ -96,41 +101,46 @@ function resolveMachine(raw, machines) {
 
 // ── Build the import ──────────────────────────────────────────────────────────
 // Returns everything the modal needs to preview and commit:
-//   { parts, programs, mergedFile, summary: { partsNew, partsReused,
-//     programsNew, autoAssigned, duplicates[], errors[] } }
-// parts/programs are the NEW records to append; mergedFile is the ready-to-save
-// jobs.json (v2). Existing records are untouched (reused parts share their id).
-export function buildProgramsImport(csvText, { jobsFile = {}, shopSettings = {}, createdBy = '' } = {}) {
+//   { parts, routings, operations, mergedFile, summary }
+// parts/routings/operations are the NEW records to append; mergedFile is the
+// ready-to-save parts.json. Existing records are untouched.
+export function buildProgramsImport(csvText, { partsFile = {}, shopSettings = {}, createdBy = '' } = {}) {
   const { rows, missingColumns } = parseProgramsCsv(csvText);
   const machines = machineOptions(shopSettings);
 
   const summary = {
     totalRows: rows.length,
-    partsNew: 0, partsReused: 0, programsNew: 0,
+    partsNew: 0, partsReused: 0, routingsNew: 0, operationsNew: 0,
     autoAssigned: [], duplicates: [], errors: [],
     missingColumns,
   };
 
   if (missingColumns.includes('part_number')) {
-    return { parts: [], programs: [], mergedFile: jobsFile, summary };
+    return { parts: [], routings: [], operations: [], mergedFile: partsFile, summary };
   }
 
   // Existing state we dedupe against.
-  const existingPartByKey = new Map(partsOf(jobsFile).map(p => [partKey(p.part_number, p.rev), p]));
-  const usedNumbers = new Set(programsOf(jobsFile).map(p => Number(p.program_number)).filter(n => !isNaN(n)));
-  let counter = nextProgramNumber(jobsFile) - 1;   // running max; ++ before use
+  const partKeyOf = (n) => String(n ?? '').trim().toLowerCase();
+  const routingKeyOf = (partId, rev) => `${partId}|${String(rev ?? '').trim().toLowerCase()}`;
+
+  const existingPartByKey = new Map(partsOf(partsFile).map(p => [partKeyOf(p.part_number), p]));
+  const existingRoutingByKey = new Map(routingsOf(partsFile).map(r => [routingKeyOf(r.part_id, r.rev), r]));
+  const usedNumbers = new Set(
+    operationsOf(partsFile).map(o => Number(o.program_number)).filter(n => !isNaN(n)));
+  let counter = nextProgramNumber(partsFile) - 1;   // running max; ++ before use
 
   const newParts = [];
+  const newRoutings = [];
+  const newOperations = [];
   const newPartByKey = new Map();
-  const newPrograms = [];
+  const newRoutingByKey = new Map();
 
-  // Two passes so an auto-assigned blank can never steal a number that a later
-  // row states explicitly: explicit numbers first, blanks after.
+  // Two passes so an auto-assigned blank can never steal a number a later row
+  // states explicitly: explicit numbers first, blanks after.
   const explicit = [], blanks = [];
   for (const row of rows) {
-    // Strip a leading "O" (the shop's primary program-number reference form,
-    // e.g. "O1108") — the underlying value stored/compared is always the
-    // plain integer.
+    // Strip a leading "O" (the shop's primary reference form, e.g. "O1108") —
+    // the value stored and compared is always the plain integer.
     const rawNum = String(row.program_number ?? '').trim().replace(/^o(?=\d)/i, '');
     if (rawNum === '') { blanks.push(row); continue; }
     const n = Number(rawNum);
@@ -144,17 +154,15 @@ export function buildProgramsImport(csvText, { jobsFile = {}, shopSettings = {},
   const resolvePart = (row) => {
     const partNumber = String(row.part_number ?? '').trim();
     if (!partNumber) return null;
-    const key = partKey(partNumber, row.rev);
+    const key = partKeyOf(partNumber);
     const existing = existingPartByKey.get(key);
-    if (existing) { summary.partsReused++; existingPartByKey.set(key, existing); return existing.id; }
+    if (existing) { summary.partsReused++; return existing.id; }
     if (newPartByKey.has(key)) return newPartByKey.get(key).id;
     const part = newPart({
       part_number: partNumber,
       customer: row.customer || '',
-      rev: row.rev || 'A',
-      // Material isn't in the CSV — left unset; add it later on the part.
-      material_id: null,
-      material_custom: '',
+      // Material isn't in the CSV — left unset; added later on the part.
+      material_id: null, material_custom: '',
     }, createdBy);
     newParts.push(part);
     newPartByKey.set(key, part);
@@ -162,17 +170,36 @@ export function buildProgramsImport(csvText, { jobsFile = {}, shopSettings = {},
     return part.id;
   };
 
-  const addProgram = (row, number) => {
+  // One routing per (part, rev). The CSV has no concept of a routing, so this
+  // is the most it can honestly say — see the header note.
+  const resolveRouting = (partId, rev) => {
+    const key = routingKeyOf(partId, rev);
+    const existing = existingRoutingByKey.get(key) || newRoutingByKey.get(key);
+    if (existing) return existing.id;
+    const routing = newRouting({
+      part_id: partId,
+      rev: String(rev ?? '').trim(),
+      name: '',
+      order: newRoutingByKey.size,
+    }, createdBy);
+    newRoutings.push(routing);
+    newRoutingByKey.set(key, routing);
+    summary.routingsNew++;
+    return routing.id;
+  };
+
+  const addOperation = (row, number) => {
     const partId = resolvePart(row);
     if (!partId) {
       summary.errors.push({ line: row._line, message: 'Missing Part #' });
       return;
     }
+    const routingId = resolveRouting(partId, row.rev || 'A');
     const isFixture = parseFixture(row.is_fixture);
-    const program = newProgram({
+    newOperations.push(newOperation({
+      routing_id: routingId,
+      op_number: row.operation || '',
       program_number: number,
-      part_id: partId,
-      operation: row.operation || '',
       description: row.description || '',
       ...resolveMachine(row.machine, machines),
       is_fixture: isFixture,
@@ -180,10 +207,10 @@ export function buildProgramsImport(csvText, { jobsFile = {}, shopSettings = {},
       fixturing: row.fixturing || '',
       // No material / pallet columns in the import.
       material_id: null, material_custom: '', pallet: '',
-    }, createdBy);
-    newPrograms.push(program);
+      order: newOperations.length,
+    }, createdBy));
     usedNumbers.add(number);
-    summary.programsNew++;
+    summary.operationsNew++;
   };
 
   for (const { row, number } of explicit) {
@@ -191,21 +218,21 @@ export function buildProgramsImport(csvText, { jobsFile = {}, shopSettings = {},
       summary.duplicates.push({ line: row._line, program_number: number });
       continue;
     }
-    addProgram(row, number);
+    addOperation(row, number);
   }
   for (const row of blanks) {
     do { counter++; } while (usedNumbers.has(counter));
-    addProgram(row, counter);
+    addOperation(row, counter);
     summary.autoAssigned.push(counter);
   }
 
   const mergedFile = {
-    ...jobsFile,
-    version: 2,
-    jobs: jobsFile.jobs || [],
-    parts: [...partsOf(jobsFile), ...newParts],
-    programs: [...programsOf(jobsFile), ...newPrograms],
+    ...partsFile,
+    version: 1,
+    parts: [...partsOf(partsFile), ...newParts],
+    routings: [...routingsOf(partsFile), ...newRoutings],
+    operations: [...operationsOf(partsFile), ...newOperations],
   };
 
-  return { parts: newParts, programs: newPrograms, mergedFile, summary };
+  return { parts: newParts, routings: newRoutings, operations: newOperations, mergedFile, summary };
 }

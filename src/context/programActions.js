@@ -17,7 +17,7 @@
 // copy is made.
 import * as driveService from '../services/driveService.js';
 import { upsertDetail, detailsOf } from '../utils/sequenceImport.js';
-import { formatProgramNumber } from '../utils/programs.js';
+import { formatProgramNumber } from '../utils/parts.js';
 import { postedToIso } from '../utils/sequenceDetail.js';
 
 // Archived name: O1218_20260810-1051_proven.csv — sorts chronologically in

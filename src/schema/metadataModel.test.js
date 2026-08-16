@@ -102,7 +102,7 @@ const toolWithPresets = {
       n: 12000, v_c: 900, v_f: 120, f_z: 0.0025, f_n: 0,
       'use-stepdown': true, stepdown: 0.05, 'use-stepover': false, stepover: null,
       'tool-coolant': 'flood', 'ramp-angle': 2,
-      operation_type: 'rough', machine_id: 'machine-uuid-1', job_ids: ['job-1'],
+      operation_type: 'rough', machine_id: 'machine-uuid-1', operation_ids: ['job-1'],
     },
   ],
 };
@@ -118,10 +118,10 @@ describe('Phase A increment 2 — presets in the complete record', () => {
     expect(p.stepdown).toBe(0.05);
     expect(p.operation_type).toBe('rough'); // app-only fields carried too
     expect(p.machine_id).toBe('machine-uuid-1');
-    expect(p.job_ids).toEqual(['job-1']);
+    expect(p.operation_ids).toEqual(['job-1']);
     // preset_meta (the linked-read overlay) is still written and consistent
     expect(meta.preset_meta['preset-guid-1']).toMatchObject({
-      operation_type: 'rough', machine_id: 'machine-uuid-1', job_ids: ['job-1'],
+      operation_type: 'rough', machine_id: 'machine-uuid-1', operation_ids: ['job-1'],
     });
   });
 
@@ -163,7 +163,7 @@ describe('Phase A increment 2 — presets in the complete record', () => {
     expect(tool.presets[0]['use-stepdown']).toBe(true);
     expect(tool.presets[0].operation_type).toBe('rough');
     expect(tool.presets[0].machine_id).toBe('machine-uuid-1');
-    expect(tool.presets[0].job_ids).toEqual(['job-1']);
+    expect(tool.presets[0].operation_ids).toEqual(['job-1']);
   });
 });
 
@@ -297,8 +297,8 @@ describe('Phase B increment 5a — Fusion drift detection (D3)', () => {
 });
 
 describe('mergePresetsWithFusion — never wipe a concurrent Fusion preset edit', () => {
-  const base   = [{ guid: 'p1', name: 'Rough', n: 8000, v_f: 100, operation_type: 'rough', machine_id: 'm1', job_ids: ['j1'] }];
-  const local  = [{ guid: 'p1', name: 'Rough', n: 8000, v_f: 100, operation_type: 'rough', machine_id: 'm1', job_ids: ['j1'] }];
+  const base   = [{ guid: 'p1', name: 'Rough', n: 8000, v_f: 100, operation_type: 'rough', machine_id: 'm1', operation_ids: ['j1'] }];
+  const local  = [{ guid: 'p1', name: 'Rough', n: 8000, v_f: 100, operation_type: 'rough', machine_id: 'm1', operation_ids: ['j1'] }];
 
   it('adopts a Fusion edit the app did not touch (the wipe bug)', () => {
     // Fusion changed the feed (100 -> 130); the app left the preset alone.
@@ -307,11 +307,11 @@ describe('mergePresetsWithFusion — never wipe a concurrent Fusion preset edit'
     expect(out[0].v_f).toBe(130);              // Fusion's edit preserved — NOT wiped
     expect(out[0].operation_type).toBe('rough'); // app-only overlay kept
     expect(out[0].machine_id).toBe('m1');
-    expect(out[0].job_ids).toEqual(['j1']);
+    expect(out[0].operation_ids).toEqual(['j1']);
   });
 
   it('keeps the app edit when Fusion did not change the preset', () => {
-    const appEdit = [{ guid: 'p1', name: 'Rough', n: 8000, v_f: 150, operation_type: 'rough', machine_id: 'm1', job_ids: [] }];
+    const appEdit = [{ guid: 'p1', name: 'Rough', n: 8000, v_f: 150, operation_type: 'rough', machine_id: 'm1', operation_ids: [] }];
     const remote = [{ guid: 'p1', name: 'Rough', n: 8000, v_f: 100 }]; // Fusion unchanged
     const out = mergePresetsWithFusion(appEdit, base, remote);
     expect(out[0].v_f).toBe(150);   // app's edit preserved

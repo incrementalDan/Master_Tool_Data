@@ -3,7 +3,7 @@ import { Plus, X, Check, GripVertical, Trash2, ChevronDown, Cpu, Briefcase, Clip
 import { generateId, COOLANT_OPTS } from '../schema/toolSchema.js';
 import { copyPresetToClipboard } from '../utils/fusionExport.js';
 import { useApp } from '../context/AppContext.jsx';
-import { jobById, jobLabel } from '../utils/jobs.js';
+import { operationById, partForOperation, formatProgramNumber, formatOperation } from '../utils/parts.js';
 import { HolderTag } from './HolderPill.jsx';
 import { machineColor } from '../utils/machineColors.js';
 import MachinePill from './MachinePill.jsx';
@@ -55,7 +55,7 @@ function blankPreset() {
     stepdown: null, stepover: null,
     'ramp-spindle-speed': 'n',
     machine_id: null,
-    job_ids: [],
+    operation_ids: [],
     // Small-bore comp (app-only, metadata-owned) — off by default.
     small_bore: false, small_bore_diameter: '', f_z_base: null,
   };
@@ -67,27 +67,37 @@ function blankPreset() {
 // the job labels. In edit mode it removes links and adds one via the shared
 // JobProgramPicker (search a program # / part # from the Program Number Manager,
 // or add a new program) — the same control the Sync-Job flow uses.
-function PresetJobsBlock({ jobIds = [], jobsFile, editable = false, canAdd = true, onAddProgram, onRemove }) {
+// The programs a preset was proven on. The stored link is the OPERATION id (a
+// program is an operation — see utils/parts.js); the label is resolved live, so
+// renaming a part or re-speccing an OP is reflected without touching the preset.
+function PresetJobsBlock({ opIds = [], partsFile, editable = false, canAdd = true, onAddProgram, onRemove }) {
   const [open, setOpen] = useState(false);
-  const count = jobIds.length;
+  const count = opIds.length;
 
   return (
     <div className="preset-card-jobs">
       <button type="button" className="preset-jobs-toggle" onClick={() => setOpen(o => !o)}>
         <Briefcase size={10} />
-        <span>Jobs ({count})</span>
+        <span>Programs ({count})</span>
         <ChevronDown size={11} className={`preset-jobs-chev${open ? ' open' : ''}`} />
       </button>
       {open && (
         <div className="preset-jobs-list">
-          {count === 0 && <div className="text-xs text-sub">No jobs linked yet.</div>}
-          {jobIds.map(id => {
-            const job = jobById(jobsFile, id);
+          {count === 0 && <div className="text-xs text-sub">No programs linked yet.</div>}
+          {opIds.map(id => {
+            const op = operationById(partsFile, id);
+            const part = op ? partForOperation(partsFile, op) : null;
+            // A dangling id (the operation was deleted) is shown, not hidden —
+            // silently dropping a link is how provenance disappears unnoticed.
+            const opLabel = op
+              ? [formatProgramNumber(op.program_number), part?.part_number, formatOperation(op.op_number)]
+                  .filter(Boolean).join(' · ')
+              : '(program removed)';
             return (
               <div key={id} className="preset-jobs-row">
-                <span className="font-mono">{job ? jobLabel(job) : '(job removed from registry)'}</span>
+                <span className="font-mono">{opLabel}</span>
                 {editable && (
-                  <button type="button" className="icon-btn preset-jobs-del" title="Unlink job" onClick={() => onRemove(id)}>
+                  <button type="button" className="icon-btn preset-jobs-del" title="Unlink program" onClick={() => onRemove(id)}>
                     <X size={11} />
                   </button>
                 )}
@@ -108,7 +118,7 @@ function PresetJobsBlock({ jobIds = [], jobsFile, editable = false, canAdd = tru
 }
 
 export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
-  const { holders, materials, shopSettings, jobs, findOrCreateJob, user, googleAuthenticated, demoMode } = useApp();
+  const { holders, materials, shopSettings, parts: partsFile, user, googleAuthenticated, demoMode } = useApp();
   // Job links persist in metadata (jobs.json + preset_meta on Drive), so adding
   // them needs Drive (or the demo sandbox, which keeps everything in memory).
   const canAddJobs = googleAuthenticated || demoMode;
@@ -304,9 +314,9 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
     let np;
     if (copySrc.type === 'preset') {
       const src = presets.find(p => p.guid === copySrc.id);
-      // Clear job_ids on the copy — proven-job provenance belongs to the original
+      // Clear the program link on the copy — proven provenance is the original's
       // preset, not a fresh unproven copy of it (machine_id IS carried, by design).
-      if (src) np = { ...src, guid: generateId(), name: `${src.name || 'Preset'} (copy)`, job_ids: [] };
+      if (src) np = { ...src, guid: generateId(), name: `${src.name || 'Preset'} (copy)`, operation_ids: [] };
     }
     if (!np && copySrc.type === 'ref') {
       const ref = sfRefs.find(r => r.preset_id === copySrc.id);
@@ -459,7 +469,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
                   linkedAssemblies={[assemblyForPreset(preset, tool.assemblies, tool.unit)].filter(Boolean)}
                   holders={holders}
                   machines={machines}
-                  jobsFile={jobs}
+                  partsFile={partsFile}
                   onEdit={() => handleEditClick(preset.guid)}
                   onDelete={() => setDeleteConfirmId(preset.guid)}
                   onCopyFusion={() => copyForFusion(preset, preset.guid)}
@@ -560,8 +570,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
             holders={holders}
             materials={materials}
             shopSettings={shopSettings}
-            jobsFile={jobs}
-            findOrCreateJob={findOrCreateJob}
+            partsFile={partsFile}
             canAddJobs={canAddJobs}
             currentUser={user?.email || user?.name || ''}
             onSave={handlePresetSave}
@@ -581,7 +590,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
 function CollapsedCard({
   preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
   isEditing, pickMode, picked, onPick, isDragOver, dragEnabled,
-  linkedAssemblies, holders, machines, jobsFile,
+  linkedAssemblies, holders, machines, partsFile,
   onEdit, onDelete, onCopyFusion, copied,
   onDragStart, onDragOver, onDrop, onDragEnd,
 }) {
@@ -680,7 +689,7 @@ function CollapsedCard({
         )}
       </div>
       {!pickMode && (
-        <PresetJobsBlock jobIds={preset.job_ids || []} jobsFile={jobsFile} />
+        <PresetJobsBlock opIds={preset.operation_ids || []} partsFile={partsFile} />
       )}
       <div className="preset-card-footer">
         {pickMode ? (
@@ -729,7 +738,7 @@ function EditCard({
   preset, isFresh, toolType, accentColor, lenUnit, feedUnit, speedUnit,
   diameter, fluteLength, numberOfFlutes,
   assemblies = [], holders = [], materials, shopSettings,
-  jobsFile, findOrCreateJob, canAddJobs = false, currentUser = '',
+  partsFile, canAddJobs = false, currentUser = '',
   onSave, onCancel, onDirtyChange, onCopyFusion, copied, isSaving,
 }) {
   const isTap = toolType === 'tap';
@@ -754,7 +763,7 @@ function EditCard({
     const d = computeFormulaDraft({ ...preset }, initialFx, diameter, numberOfFlutes, isMetricTool);
     d.operation_type = preset.operation_type ?? parsePresetName(preset.name)?.opType ?? null;
     d.machine_id = preset.machine_id ?? null;
-    d.job_ids = preset.job_ids ?? [];
+    d.operation_ids = preset.operation_ids ?? [];
     return d;
   });
 
@@ -1737,20 +1746,21 @@ function EditCard({
           twice = one record); saved with the preset via preset_meta. */}
       <EditorSection label="Jobs" accent="var(--text-sub)">
         <PresetJobsBlock
-          jobIds={draft.job_ids || []}
-          jobsFile={jobsFile}
+          opIds={draft.operation_ids || []}
+          partsFile={partsFile}
           editable
           canAdd={canAddJobs}
           onAddProgram={(sel) => {
-            const job = findOrCreateJob(sel.program_number, sel.part_number, currentUser, sel.program_id);
+            // The operation already exists — the picker only ever returns one,
+            // so there is nothing to create and nothing to persist separately.
             touch();
-            setDraft(d => (d.job_ids || []).includes(job.id)
+            setDraft(d => (d.operation_ids || []).includes(sel.operation_id)
               ? d
-              : { ...d, job_ids: [...(d.job_ids || []), job.id] });
+              : { ...d, operation_ids: [...(d.operation_ids || []), sel.operation_id] });
           }}
           onRemove={(id) => {
             touch();
-            setDraft(d => ({ ...d, job_ids: (d.job_ids || []).filter(j => j !== id) }));
+            setDraft(d => ({ ...d, operation_ids: (d.operation_ids || []).filter(j => j !== id) }));
           }}
         />
       </EditorSection>
