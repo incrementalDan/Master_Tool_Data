@@ -2,8 +2,8 @@
 // Manager, used by ProgramsPage, AddProgramModal, and JobProgramPicker so the
 // "add program" UI and the row chrome stay identical everywhere.
 import { useState } from 'react';
-import { X } from 'lucide-react';
-import { FIXTURING_OPTIONS, customerColor, formatProgramNumber } from '../utils/programs.js';
+import { X, Check } from 'lucide-react';
+import { INT_EXT, FIXTURING_OPTIONS, customerColor, formatProgramNumber, isPalletMachine } from '../utils/programs.js';
 import AlloyPicker from './AlloyPicker.jsx';
 
 const tint = (color, alpha) => (color || '#888') + alpha;
@@ -146,5 +146,138 @@ export function MachineSelect({ value, machines, onChange }) {
     >
       {machines.map(m => <option key={m.label} value={m.label}>{m.label}</option>)}
     </select>
+  );
+}
+
+// Draft shape for a program's editable fields — shared by every place a
+// program is edited: the Programs page (grouped + table) and the part page.
+export function programDraftOf(program) {
+  return {
+    operation: program.operation,
+    description: program.description || '',
+    machine_id: program.machine_id || null,
+    machine_label: program.machine_label || '',
+    is_fixture: !!program.is_fixture,
+    internal_external: program.internal_external || 'External',
+    fixturing: fixturingSelOf(program.fixturing),
+    material: materialSelOf(program.material_id, program.material_custom),
+    pallet: program.pallet || '1',
+  };
+}
+
+export function programFieldsOf(draft, fallback) {
+  return {
+    operation: draft.operation.trim() || fallback.operation,
+    description: draft.description.trim(),
+    machine_id: draft.machine_id,
+    machine_label: draft.machine_label,
+    is_fixture: draft.is_fixture,
+    internal_external: draft.is_fixture ? 'Internal' : draft.internal_external,
+    fixturing: fixturingValueOf(draft.fixturing),
+    ...(draft.is_fixture ? materialFieldsOf(draft.material) : { material_id: null, material_custom: '' }),
+    pallet: isPalletMachine(draft.machine_label) ? draft.pallet : '',
+  };
+}
+
+// The inline edit form for a program. ONE implementation — the Programs page
+// (both views) and the part page render this same form, so a field added here
+// appears everywhere a program can be edited.
+export function ProgramEditForm({ draft, setDraft, machines, materials, onSave, onCancel }) {
+  return (
+    <div className="pn-op-edit">
+      <div className="pn-edit-row">
+        <input className="field-input" style={{ width: 110 }} value={draft.operation} placeholder="Operation"
+          onChange={e => setDraft({ ...draft, operation: e.target.value })} />
+        <div style={{ flex: 1 }}>
+          <MachineSelect value={draft.machine_label} machines={machines}
+            onChange={m => setDraft({ ...draft, ...m })} />
+        </div>
+      </div>
+      <input className="field-input" value={draft.description} placeholder="Description (optional)"
+        onChange={e => setDraft({ ...draft, description: e.target.value })} />
+      <div className="pn-edit-row" style={{ flexWrap: 'wrap' }}>
+        <FixtureSwitch checked={draft.is_fixture}
+          onChange={v => setDraft({ ...draft, is_fixture: v, internal_external: v ? 'Internal' : 'External' })} />
+        {!draft.is_fixture && (
+          <select className="field-input" style={{ width: 110 }} value={draft.internal_external}
+            onChange={e => setDraft({ ...draft, internal_external: e.target.value })}>
+            {INT_EXT.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+        )}
+        {isPalletMachine(draft.machine_label) && (
+          <select className="field-input" style={{ width: 100 }} value={draft.pallet}
+            onChange={e => setDraft({ ...draft, pallet: e.target.value })}>
+            <option value="1">Pallet 1</option>
+            <option value="2">Pallet 2</option>
+          </select>
+        )}
+      </div>
+      <SelectWithCustom
+        value={draft.fixturing}
+        onChange={v => setDraft({ ...draft, fixturing: v })}
+        options={FIXTURING_OPTIONS.map(f => ({ value: f, label: f }))}
+        placeholder="— Select fixturing —"
+        customPlaceholder="Describe the fixturing"
+      />
+      {draft.is_fixture && (
+        <MaterialSelect value={draft.material} onChange={v => setDraft({ ...draft, material: v })}
+          materials={materials} placeholder="— Select fixture material —" />
+      )}
+      <div className="pn-edit-actions">
+        <button className="btn btn-primary btn-sm" onClick={onSave}><Check size={13} /> Save</button>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}><X size={13} /> Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// The inline edit form for a PART. Same reasoning as ProgramEditForm: the
+// Programs page header and the part page both edit a part, and they must not
+// drift into two different sets of fields.
+export function PartEditForm({ draft, setDraft, materials, customers, onSave, onCancel }) {
+  return (
+    <div className="pn-part-edit">
+      <div className="pn-edit-row">
+        <input className="field-input" style={{ flex: 1 }} value={draft.part_number} placeholder="Part number"
+          onChange={e => setDraft({ ...draft, part_number: e.target.value })} />
+        <input className="field-input" style={{ width: 64 }} value={draft.rev} maxLength={4} placeholder="Rev"
+          onChange={e => setDraft({ ...draft, rev: e.target.value })} />
+      </div>
+      <input className="field-input" list="pn-customers" value={draft.customer} placeholder="Customer"
+        onChange={e => setDraft({ ...draft, customer: e.target.value })} />
+      <datalist id="pn-customers">{customers.map(c => <option key={c} value={c} />)}</datalist>
+      <MaterialSelect value={draft.material} onChange={v => setDraft({ ...draft, material: v })} materials={materials} />
+      <div className="pn-edit-actions">
+        <button className="btn btn-primary btn-sm" onClick={onSave}><Check size={13} /> Save</button>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}><X size={13} /> Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+export const partDraftOf = (part) => ({
+  part_number: part.part_number,
+  rev: part.rev,
+  customer: part.customer || '',
+  material: materialSelOf(part.material_id, part.material_custom),
+});
+
+export const partFieldsOf = (draft, fallback) => ({
+  part_number: draft.part_number.trim() || fallback.part_number,
+  rev: draft.rev.trim() || fallback.rev,
+  customer: draft.customer.trim(),
+  ...materialFieldsOf(draft.material),
+});
+
+// Destructive actions confirm INLINE rather than through a browser dialog or a
+// modal — same pattern as the Settings machine list. Used for deleting a part
+// and deleting a program, in both places each can be deleted from.
+export function InlineConfirm({ message, confirmLabel = 'Delete', onConfirm, onCancel }) {
+  return (
+    <span className="pn-op-delete-confirm" onClick={e => e.stopPropagation()}>
+      <span className="text-xs" style={{ color: 'var(--red)' }}>{message}</span>
+      <button type="button" className="btn btn-danger btn-sm" onClick={onConfirm}>{confirmLabel}</button>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
+    </span>
   );
 }

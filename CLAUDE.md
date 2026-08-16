@@ -1287,10 +1287,11 @@ src/
                                   # Settings). Not shown for returning devices or when ShopConnect
                                   # path A auto-links libraries from shop_settings.
     LoginScreen.jsx               # APS PKCE login gate (unauthorized visitors)
-    PartDetailPage.jsx            # /programs/part/:id — the JOB page (a part + rev
-                                  # and every OP on it): job-level mega tool list,
-                                  # per-program Tool List / Sequence Detail tabs,
-                                  # proven toggle, label printing
+    PartDetailPage.jsx            # /programs/part/:id — the PART page: the same
+                                  # part/program edit + add controls as the main
+                                  # list (shared forms + mutations), plus the
+                                  # all-tools list, per-program Tool List /
+                                  # Sequence Detail tabs, proven toggle, labels
     ToolListTable.jsx             # The condensed tool list (setup-sheet column
                                   # order) + row selection for partial printing
     SequenceDetailTable.jsx       # The full per-toolpath sequence, re-parsed from
@@ -1302,8 +1303,11 @@ src/
                                   # Jobs section). Helpers in src/utils/programs.js
     programsUi.jsx                # Shared Program-manager widgets + select-state
                                   # helpers (CustomerBadge, ProgramNumBadge,
-                                  # FixtureSwitch, Material/MachineSelect, …) reused
-                                  # by ProgramsPage, AddProgramModal, JobProgramPicker
+                                  # FixtureSwitch, Material/MachineSelect, …) AND
+                                  # the one implementation of the part/program
+                                  # inline edit forms + InlineConfirm — reused by
+                                  # ProgramsPage, PartDetailPage, AddProgramModal,
+                                  # JobProgramPicker
     AddProgramModal.jsx           # Self-contained "Add program" flow (search/create
                                   # part → reserve program numbers). Reused by the
                                   # Programs page AND JobProgramPicker
@@ -1687,9 +1691,10 @@ If you find yourself writing code that "fixes" a CSV value against the library, 
 
 Lives in the Program Number Manager, **not a new top-level tab**.
 
-- **A JOB is a part + rev and every operation on it** (`/programs/part/:id`). The part header on `/programs` opens it; a new upload navigates straight there.
+- **The PART page** (`/programs/part/:id`) holds a part + rev and every operation on it. The part header on `/programs` opens it; a new upload navigates straight there. It's a *part* page rather than a "job" page because a part can carry more than one set of programs, and the shop wants all of them on the one page for that part.
+- ⚠️ **It carries the SAME edit controls as the main Programs list** — edit the part, edit or delete any program, add a new program — by rendering the **same shared forms** (`ProgramEditForm` / `PartEditForm` / `InlineConfirm` + the `*DraftOf` / `*FieldsOf` helpers in `programsUi.jsx`) through the **same shared mutations** (`updatePartIn` / `updateProgramIn` / `deleteProgramIn` / `deletePartIn` in `programs.js`). There is deliberately no second implementation: a field added to a program shows up in both places, and the "a program number is permanent" / "deleting frees the number" rules are stated once. `AddProgramModal` takes a **`partId`** that scopes it to this part (skips the part search, hides "Change part").
 - Per program: **Tool List** and **Sequence Detail** tabs, the proven toggle, and a download of the current posted file.
-- Per job: a **mega tool list** across every OP (with an OP column), because a job usually needs every label at once. **Sequence Detail is per-program only** — there is no job-level sequence.
+- Per part: an **all-tools list** across every OP (with an OP column), because a part usually needs every label at once. **Sequence Detail is per-program only** — there is no part-level sequence.
 - Tool List columns, in this order: G-Code T# · H Offset # · D Offset # · Dim Tag # · ProShop Tool # · Location · Description · Cut Dia · Tip · Holder · OOH · Tool Life (M) · Init D Offset. **Dim Tag #, Tool Life (M) and Init D Offset are deliberately empty placeholders** — wired in a later phase, and the space is held so the table doesn't reshuffle when they arrive. `RTA #`, `Gauge Len`, `WO #` and `Operator` are explicitly **not** columns.
 - ⚠️ **Both flags are computed LIVE, not read from what was stored at import** — the location disagreement against the current tool, the unmatched-holder marker against the current holder library. Stored at import, fixing the library would leave the marker showing until someone re-uploaded the CSV: a flag the user can't clear.
 
@@ -1697,7 +1702,7 @@ Lives in the Program Number Manager, **not a new top-level tab**.
 
 **The tag layout is COPIED from the shop's Chrome extension** (`docs/proshop_brother_label_extension_v9/content.js`), not redesigned. These labels are already printed, read and trusted on the floor, and the geometry is tuned to a physical label on a physical printer (the 0.04/0.02in nudge exists because the tag clipped without it). Only the data source changed: ToolDex's stored Sequence Detail instead of scraping the ProShop DOM. DK-11201, 3.5" × 1.1", 2.2" tag + 0.25" footer, inches-based auto-fit, one page per label.
 
-- Print **all**, or tick individual rows and print just those. Available **per program** and **per job** (a job often needs every label for every OP at once).
+- Print **all**, or tick individual rows and print just those. Available **per program** and **per part** (a part often needs every label for every OP at once).
 - **The label carries the T# only** — not H or D.
 - **RTA: the field stays on the label, the value is dropped.** A stale RTA is worse than a blank.
 - ⚠️ **Dedupe: never print two labels that are 100% identical, and ANY difference makes it a separate label.** The consequences are deliberate and pull in opposite directions: the same tool in **two pockets** of one program prints **two** labels (two setups, different T#), while one pocket shared by **two OPs** prints **one** (nothing about it differs).

@@ -8,14 +8,15 @@ import { useApp } from '../context/AppContext.jsx';
 import SequenceUploadModal from './SequenceUploadModal.jsx';
 import { detailsOf } from '../utils/sequenceImport.js';
 import {
-  INT_EXT, FIXTURING_OPTIONS, nextProgramNumber, formatProgramNumber, formatOperation,
-  partsOf, programsOf, programMaterial, alloyLabel,
-  machineOptions, isPalletMachine, customerNames,
+  nextProgramNumber, formatProgramNumber, formatOperation,
+  partsOf, programsOf, programMaterial, alloyLabel, machineOptions, customerNames,
+  updatePartIn, updateProgramIn, deleteProgramIn, deletePartIn,
 } from '../utils/programs.js';
 import {
-  CustomerBadge, TypePill, ProgramNumBadge, FixtureSwitch, SelectWithCustom,
-  MaterialSelect, MachineSelect, materialSelOf, materialFieldsOf,
-  fixturingSelOf, fixturingValueOf,
+  CustomerBadge, TypePill, ProgramNumBadge, MaterialSelect,
+  ProgramEditForm, PartEditForm, InlineConfirm,
+  programDraftOf, programFieldsOf, partDraftOf, partFieldsOf,
+  materialSelOf, materialFieldsOf,
 } from './programsUi.jsx';
 import AddProgramModal from './AddProgramModal.jsx';
 import MachinePill from './MachinePill.jsx';
@@ -36,43 +37,17 @@ function PartHeader({ part, programCount, detailCount, expanded, onToggle, mater
 
   const startEdit = (e) => {
     e.stopPropagation();
-    setDraft({
-      part_number: part.part_number,
-      rev: part.rev,
-      customer: part.customer || '',
-      material: materialSelOf(part.material_id, part.material_custom),
-    });
+    setDraft(partDraftOf(part));
     setEditing(true);
-  };
-
-  const save = () => {
-    onUpdatePart(part.id, {
-      part_number: draft.part_number.trim() || part.part_number,
-      rev: draft.rev.trim() || part.rev,
-      customer: draft.customer.trim(),
-      ...materialFieldsOf(draft.material),
-    });
-    setEditing(false);
   };
 
   if (editing) {
     return (
-      <div className="pn-part-edit">
-        <div className="pn-edit-row">
-          <input className="field-input" style={{ flex: 1 }} value={draft.part_number} placeholder="Part number"
-            onChange={e => setDraft({ ...draft, part_number: e.target.value })} />
-          <input className="field-input" style={{ width: 64 }} value={draft.rev} maxLength={4} placeholder="Rev"
-            onChange={e => setDraft({ ...draft, rev: e.target.value })} />
-        </div>
-        <input className="field-input" list="pn-customers" value={draft.customer} placeholder="Customer"
-          onChange={e => setDraft({ ...draft, customer: e.target.value })} />
-        <datalist id="pn-customers">{customers.map(c => <option key={c} value={c} />)}</datalist>
-        <MaterialSelect value={draft.material} onChange={v => setDraft({ ...draft, material: v })} materials={materials} />
-        <div className="pn-edit-actions">
-          <button className="btn btn-primary btn-sm" onClick={save}><Check size={13} /> Save</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => setEditing(false)}><X size={13} /> Cancel</button>
-        </div>
-      </div>
+      <PartEditForm
+        draft={draft} setDraft={setDraft} materials={materials} customers={customers}
+        onSave={() => { onUpdatePart(part.id, partFieldsOf(draft, part)); setEditing(false); }}
+        onCancel={() => setEditing(false)}
+      />
     );
   }
 
@@ -89,24 +64,22 @@ function PartHeader({ part, programCount, detailCount, expanded, onToggle, mater
         {programCount} program{programCount !== 1 ? 's' : ''}
       </span>
       {detailCount > 0 && (
-        <span className="sd-count-chip" title={`${detailCount} of this job's operations have a Sequence Detail uploaded`}>
+        <span className="sd-count-chip" title={`${detailCount} of this part's operations have a Sequence Detail uploaded`}>
           <Wrench size={11} /> {detailCount}
         </span>
       )}
       <button type="button" className="btn btn-ghost btn-sm"
-        title="Open the job — tool lists, sequence detail and labels"
+        title="Open this part — programs, tool lists, sequence detail and labels"
         onClick={e => { e.stopPropagation(); onOpenJob(part.id); }}>
-        Job <ExternalLink size={11} />
+        Open <ExternalLink size={11} />
       </button>
       {canEdit && (
         confirmDelete ? (
-          <span className="pn-op-delete-confirm" onClick={e => e.stopPropagation()}>
-            <span className="text-xs" style={{ color: 'var(--red)' }}>
-              Delete {part.part_number}{programCount > 0 ? ` and its ${programCount} program${programCount !== 1 ? 's' : ''}` : ''}?
-            </span>
-            <button type="button" className="btn btn-danger btn-sm" onClick={() => onDeletePart(part.id)}>Delete</button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(false)}>Cancel</button>
-          </span>
+          <InlineConfirm
+            message={`Delete ${part.part_number}${programCount > 0 ? ` and its ${programCount} program${programCount !== 1 ? 's' : ''}` : ''}?`}
+            onConfirm={() => onDeletePart(part.id)}
+            onCancel={() => setConfirmDelete(false)}
+          />
         ) : (
           <>
             <span className="icon-btn" title="Edit part" onClick={startEdit}><Pencil size={12} /></span>
@@ -117,85 +90,6 @@ function PartHeader({ part, programCount, detailCount, expanded, onToggle, mater
           </>
         )
       )}
-    </div>
-  );
-}
-
-// Draft shape for a program's editable fields (shared by grouped + table edit).
-function programDraftOf(program) {
-  return {
-    operation: program.operation,
-    description: program.description || '',
-    machine_id: program.machine_id || null,
-    machine_label: program.machine_label || '',
-    is_fixture: !!program.is_fixture,
-    internal_external: program.internal_external || 'External',
-    fixturing: fixturingSelOf(program.fixturing),
-    material: materialSelOf(program.material_id, program.material_custom),
-    pallet: program.pallet || '1',
-  };
-}
-
-function programFieldsOf(draft, fallback) {
-  return {
-    operation: draft.operation.trim() || fallback.operation,
-    description: draft.description.trim(),
-    machine_id: draft.machine_id,
-    machine_label: draft.machine_label,
-    is_fixture: draft.is_fixture,
-    internal_external: draft.is_fixture ? 'Internal' : draft.internal_external,
-    fixturing: fixturingValueOf(draft.fixturing),
-    ...(draft.is_fixture ? materialFieldsOf(draft.material) : { material_id: null, material_custom: '' }),
-    pallet: isPalletMachine(draft.machine_label) ? draft.pallet : '',
-  };
-}
-
-// The inline edit form for a program (grouped view + table view share it).
-function ProgramEditForm({ draft, setDraft, machines, materials, onSave, onCancel }) {
-  return (
-    <div className="pn-op-edit">
-      <div className="pn-edit-row">
-        <input className="field-input" style={{ width: 110 }} value={draft.operation} placeholder="Operation"
-          onChange={e => setDraft({ ...draft, operation: e.target.value })} />
-        <div style={{ flex: 1 }}>
-          <MachineSelect value={draft.machine_label} machines={machines}
-            onChange={m => setDraft({ ...draft, ...m })} />
-        </div>
-      </div>
-      <input className="field-input" value={draft.description} placeholder="Description (optional)"
-        onChange={e => setDraft({ ...draft, description: e.target.value })} />
-      <div className="pn-edit-row" style={{ flexWrap: 'wrap' }}>
-        <FixtureSwitch checked={draft.is_fixture}
-          onChange={v => setDraft({ ...draft, is_fixture: v, internal_external: v ? 'Internal' : 'External' })} />
-        {!draft.is_fixture && (
-          <select className="field-input" style={{ width: 110 }} value={draft.internal_external}
-            onChange={e => setDraft({ ...draft, internal_external: e.target.value })}>
-            {INT_EXT.map(v => <option key={v} value={v}>{v}</option>)}
-          </select>
-        )}
-        {isPalletMachine(draft.machine_label) && (
-          <select className="field-input" style={{ width: 100 }} value={draft.pallet}
-            onChange={e => setDraft({ ...draft, pallet: e.target.value })}>
-            <option value="1">Pallet 1</option>
-            <option value="2">Pallet 2</option>
-          </select>
-        )}
-      </div>
-      <SelectWithCustom
-        value={draft.fixturing}
-        onChange={v => setDraft({ ...draft, fixturing: v })}
-        options={FIXTURING_OPTIONS.map(f => ({ value: f, label: f }))}
-        placeholder="— Select fixturing —"
-        customPlaceholder="Describe the fixturing"
-      />
-      {draft.is_fixture && (
-        <MaterialSelect value={draft.material} onChange={v => setDraft({ ...draft, material: v })}
-          materials={materials} placeholder="— Select fixture material —" />
-      )}
-      <div className="pn-edit-actions">
-        <button className="btn btn-primary btn-sm" onClick={onSave}><Check size={13} /> Save</button>
-        <button className="btn btn-ghost btn-sm" onClick={onCancel}><X size={13} /> Cancel</button>
-      </div>
     </div>
   );
 }
@@ -231,11 +125,11 @@ function OperationRow({ program, part, materials, machines, canEdit, onUpdatePro
       {program.description && <span className="text-xs text-sub pn-op-desc">{program.description}</span>}
       {canEdit && (
         confirmDelete ? (
-          <span className="pn-op-delete-confirm">
-            <span className="text-xs" style={{ color: 'var(--red)' }}>Delete {formatProgramNumber(program.program_number)}?</span>
-            <button type="button" className="btn btn-danger btn-sm" onClick={() => onDeleteProgram(program.id)}>Delete</button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(false)}>Cancel</button>
-          </span>
+          <InlineConfirm
+            message={`Delete ${formatProgramNumber(program.program_number)}?`}
+            onConfirm={() => onDeleteProgram(program.id)}
+            onCancel={() => setConfirmDelete(false)}
+          />
         ) : (
           <>
             <span className="icon-btn pn-op-edit-btn" title="Edit operation" onClick={() => { setDraft(programDraftOf(program)); setEditing(true); }}>
@@ -552,44 +446,13 @@ export default function ProgramsPage() {
     return next;
   });
 
-  // All mutations write the whole jobs.json (v2) through the shared-file layer:
-  // optimistic state update + debounced Drive write (demo stays in-memory).
-  const updatePart = (id, patch) => {
-    saveJobs({
-      ...jobsFile, version: 2,
-      parts: partsOf(jobsFile).map(p => (p.id === id ? { ...p, ...patch } : p)),
-    });
-  };
-
-  // program_number is deliberately not patchable — permanent once reserved.
-  const updateProgram = (id, patch) => {
-    const { program_number, ...rest } = patch;
-    saveJobs({
-      ...jobsFile, version: 2,
-      programs: programsOf(jobsFile).map(p => (p.id === id ? { ...p, ...rest } : p)),
-    });
-  };
-
-  // Deleting a program never renumbers anything else — "next #" is always
-  // computed live as max(existing) + 1 (nextProgramNumber), never stored. So
-  // removing a non-max entry leaves the max (and "next") untouched; removing
-  // the current highest entry naturally recomputes "next" down to reclaim it.
-  const deleteProgram = (id) => {
-    saveJobs({
-      ...jobsFile, version: 2,
-      programs: programsOf(jobsFile).filter(p => p.id !== id),
-    });
-  };
-
-  // Deleting a part removes the part AND all of its programs (the numbers are
-  // freed the same way deleteProgram frees them — "next #" recomputes live).
-  const deletePart = (id) => {
-    saveJobs({
-      ...jobsFile, version: 2,
-      parts: partsOf(jobsFile).filter(p => p.id !== id),
-      programs: programsOf(jobsFile).filter(p => p.part_id !== id),
-    });
-  };
+  // All mutations go through the shared pure helpers (programs.js) and write the
+  // whole jobs.json (v2) through the shared-file layer: optimistic state update
+  // + debounced Drive write. The part page uses the same helpers.
+  const updatePart = (id, patch) => saveJobs(updatePartIn(jobsFile, id, patch));
+  const updateProgram = (id, patch) => saveJobs(updateProgramIn(jobsFile, id, patch));
+  const deleteProgram = (id) => saveJobs(deleteProgramIn(jobsFile, id));
+  const deletePart = (id) => saveJobs(deletePartIn(jobsFile, id));
 
   const totalParts = partsOf(jobsFile).length;
   const totalPrograms = programsOf(jobsFile).length;

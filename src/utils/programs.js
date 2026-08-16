@@ -207,3 +207,47 @@ export function searchPrograms(jobsFile, query, limit = 25) {
   });
   return rows.slice(0, limit);
 }
+
+// ── Mutations ────────────────────────────────────────────────────────────────
+// Pure jobsFile → jobsFile. Every page that edits a part or a program goes
+// through these, so the rules below are stated once instead of being
+// re-implemented (and re-reasoned about) per screen. Each caller hands the
+// result to saveJobs, which is the optimistic + debounced Drive write.
+
+export function updatePartIn(jobsFile, id, patch) {
+  return {
+    ...jobsFile, version: 2,
+    parts: partsOf(jobsFile).map(p => (p.id === id ? { ...p, ...patch } : p)),
+  };
+}
+
+// ⚠️ program_number is deliberately NOT patchable — it's permanent once
+// reserved. It's stripped here rather than trusted to every caller.
+export function updateProgramIn(jobsFile, id, patch) {
+  const { program_number, ...rest } = patch;
+  return {
+    ...jobsFile, version: 2,
+    programs: programsOf(jobsFile).map(p => (p.id === id ? { ...p, ...rest } : p)),
+  };
+}
+
+// Deleting never renumbers anything else: "next #" is always computed live as
+// max(existing) + 1 (nextProgramNumber), never stored. So removing a non-max
+// entry leaves the max — and "next" — untouched, while removing the current
+// highest naturally recomputes "next" down to reclaim it.
+export function deleteProgramIn(jobsFile, id) {
+  return {
+    ...jobsFile, version: 2,
+    programs: programsOf(jobsFile).filter(p => p.id !== id),
+  };
+}
+
+// Deleting a part takes ALL of its programs with it — their numbers are freed
+// the same way deleteProgramIn frees one.
+export function deletePartIn(jobsFile, id) {
+  return {
+    ...jobsFile, version: 2,
+    parts: partsOf(jobsFile).filter(p => p.id !== id),
+    programs: programsOf(jobsFile).filter(p => p.part_id !== id),
+  };
+}

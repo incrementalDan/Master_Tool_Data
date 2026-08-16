@@ -16,11 +16,15 @@ import { machineColorFor } from '../utils/machineColors.js';
 
 // The "Add program" modal — search/create a part, then reserve one or more
 // operations (each grabs the next program number). Self-contained: reads the
-// jobs registry from context and writes through saveJobs, so both the Programs
-// page and the Sync-Job program picker render it the same way. `onCreated` (if
-// given) fires after each reservation with the new program + its part — the
-// picker uses it to auto-select; the Programs page just reflects state.
-export default function AddProgramModal({ onClose, onCreated }) {
+// jobs registry from context and writes through saveJobs, so the Programs page,
+// the part page and the Sync-Job program picker all render it the same way.
+// `onCreated` (if given) fires after each reservation with the new program +
+// its part — the picker uses it to auto-select; the pages just reflect state.
+//
+// `partId` opens it already scoped to that part: it skips the search step and
+// hides "Change part", because on a part's own page adding a program to a
+// DIFFERENT part is never what was meant.
+export default function AddProgramModal({ onClose, onCreated, partId = null }) {
   const { jobs: jobsFile, saveJobs, materials, shopSettings, user } = useApp();
   const machines = machineOptions(shopSettings);
   const customers = customerNames(jobsFile);
@@ -28,9 +32,9 @@ export default function AddProgramModal({ onClose, onCreated }) {
   const seedable = programsOf(jobsFile).length === 0;
   const nextNumber = nextProgramNumber(jobsFile);
 
-  const [step, setStep] = useState('search');           // search | new-part | operations
+  const [step, setStep] = useState(partId ? 'operations' : 'search');   // search | new-part | operations
   const [query, setQuery] = useState('');
-  const [activePartId, setActivePartId] = useState(null);
+  const [activePartId, setActivePartId] = useState(partId);
   const [sessionAdded, setSessionAdded] = useState([]);
   const [seedNumber, setSeedNumber] = useState(String(nextNumber));
 
@@ -191,9 +195,12 @@ export default function AddProgramModal({ onClose, onCreated }) {
                 {(activePart.material_id || activePart.material_custom) && (
                   <span className="text-xs text-sub">{alloyLabel(materials, activePart.material_id, activePart.material_custom)}</span>
                 )}
-                <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => { setStep('search'); setQuery(''); }}>
-                  Change part
-                </button>
+                {!partId && (
+                  <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }}
+                    onClick={() => { setStep('search'); setQuery(''); }}>
+                    Change part
+                  </button>
+                )}
               </div>
 
               {sessionAdded.length > 0 && (
