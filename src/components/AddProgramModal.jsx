@@ -18,7 +18,7 @@ import { machineColorFor } from '../utils/machineColors.js';
 // The "Add program" modal — find or create a part, land on one of its routings,
 // then reserve one or more operations (each grabs the next program number).
 // Self-contained: reads parts.json from context and writes through saveParts,
-// so the Programs page, the part page and the program picker all render it the
+// so the Parts page, the part page and the program picker all render it the
 // same way. `onCreated` fires after each reservation with the new operation +
 // its routing and part — the picker uses it to auto-select.
 //

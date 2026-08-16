@@ -1287,7 +1287,7 @@ src/
                                   # Settings). Not shown for returning devices or when ShopConnect
                                   # path A auto-links libraries from shop_settings.
     LoginScreen.jsx               # APS PKCE login gate (unauthorized visitors)
-    PartDetailPage.jsx            # /programs/part/:id — the PART page: the same
+    PartDetailPage.jsx            # /parts/:id — the PART page: the same
                                   # part/program edit + add controls as the main
                                   # list (shared forms + mutations), plus the
                                   # all-tools list, per-program Tool List /
@@ -1298,9 +1298,9 @@ src/
                                   # the stored raw CSV on demand
     SequenceUploadModal.jsx       # Upload a posted CSV: file → preview → commit,
                                   # with the blocking rules shown, not just refused
-    ProgramsPage.jsx              # /programs — Program Number Manager (parts +
-                                  # program numbers per operation/machine; see the
-                                  # Parts module). Helpers in src/utils/parts.js
+    ProgramsPage.jsx              # /parts — the Parts page (grouped + table over
+                                  # one shared filtered/sorted set; PartsFilterBar
+                                  # serves both). Helpers in src/utils/parts.js
     programsUi.jsx                # Shared Program-manager widgets + select-state
                                   # helpers (CustomerBadge, ProgramNumBadge,
                                   # FixtureSwitch, Material/MachineSelect, …) AND
@@ -1316,7 +1316,7 @@ src/
                                   # CommitStep, the tool Jobs panel, and preset job
                                   # blocks. Exports SelectedProgramChip.
     ProgramsImportModal.jsx       # One-time CSV import of an existing program list
-                                  # into /programs (Settings → Import Program List).
+                                  # into /parts (Settings → Import Program List).
                                   # Parser in src/utils/programsImport.js
     Settings.jsx                  # Settings — one of 5 top-bar chrome-style tabs
                                   # Sections: Account (sign-out), Setup & Import (6-step tracker —
@@ -1614,8 +1614,8 @@ Pure helpers: `src/utils/parts.js` (framework-free, mirrors `toolIdSystem.js` / 
 
 ### The pages
 
-- **`/programs` — the Program Number registry.** Every number the shop has assigned, grouped Part → Routing → Operation, plus a Table view. One VIEW of the parts module, not its container.
-- **`/programs/part/:id` — the PART page.** The module proper: the part, its routings, every operation, the all-tools list, per-operation Tool List / Sequence Detail tabs, proven, and label printing. Full edit controls at every tier.
+- **`/parts` — the Parts page.** Every part, and with it every program number, in two renderings of **ONE filtered, sorted set**: a grouped list (Part → Routing → Operation) and a flat table. ⚠️ The search / filter / sort bar (`PartsFilterBar`) is **shared by both**, reading one `applyPartsFilters` result — a row you can find in one view is a row you can find in the other, by construction. Search reaches program #, part #, customer, material, machine, OP #, routing name and description; a hit on a PART's own fields keeps the whole part (searching a part number shows everything under it). Sort: **Recently updated (default, newest first)**, newest program #, part number, customer — with a direction toggle. A part's "activity" is the newest timestamp across the part and everything under it, so editing an operation floats its part to the top; ties fall back to the program number, which is what makes the default useful straight after a CSV import where every record shares one stamp. **`updated_at` is stamped inside the shared mutations** (`touch`), so no screen can edit a record without the sort noticing.
+- **`/parts/:id` — the PART page.** The module proper: the part, its routings, every operation, the all-tools list, per-operation Tool List / Sequence Detail tabs, proven, and label printing. Full edit controls at every tier.
 - Both render the **same shared forms** (`programsUi.jsx`: `PartEditForm` / `RoutingEditForm` / `ProgramEditForm` / `InlineConfirm` + the `*DraftOf` / `*FieldsOf` helpers) through the **same shared mutations**. There is deliberately no second implementation to drift.
 - **`AddProgramModal`** walks part → routing → operation, and takes `partId` / `routingId` to open already scoped. A part with exactly **one** routing skips the routing step — the common case shouldn't cost a click for a choice that isn't one.
 
@@ -1667,7 +1667,7 @@ If you find yourself writing code that "fixes" a CSV value against the library, 
 | `src/utils/toolLabels.js` | `labelFieldsOf`, `labelKey`, `jobLabelRows` — the dedupe rule |
 | `src/utils/labelPrint.js` | `tagCSS` / `tagMarkup` / `inchesAutoFit` / `printToolTags` — the tag layout |
 | `src/context/programActions.js` | `importSequenceDetail`, `setProgramProven`, `fetchSequenceCsv`, `archiveFileName` |
-| `src/components/PartDetailPage.jsx` | `/programs/part/:id` — the JOB page |
+| `src/components/PartDetailPage.jsx` | `/parts/:id` — the PART page |
 | `src/components/ToolListTable.jsx` / `SequenceDetailTable.jsx` / `SequenceUploadModal.jsx` | the two tables + the upload dialog |
 
 ### Import — two blocking rules, everything else informs
@@ -1699,7 +1699,7 @@ If you find yourself writing code that "fixes" a CSV value against the library, 
 
 Lives in the Program Number Manager, **not a new top-level tab**.
 
-- **The PART page** (`/programs/part/:id`) holds a part + rev and every operation on it. The part header on `/programs` opens it; a new upload navigates straight there. It's a *part* page rather than a "job" page because a part can carry more than one set of programs, and the shop wants all of them on the one page for that part.
+- **The PART page** (`/parts/:id`) holds a part + rev and every operation on it. The part header on `/programs` opens it; a new upload navigates straight there. It's a *part* page rather than a "job" page because a part can carry more than one set of programs, and the shop wants all of them on the one page for that part.
 - ⚠️ **It carries the SAME edit controls as the main Programs list at every tier** — edit the part, edit or delete any routing or operation, add a new one — by rendering the **same shared forms** and the **same shared mutations**. See **The Parts module** for both. There is deliberately no second implementation to drift.
 - Per program: **Tool List** and **Sequence Detail** tabs, the proven toggle, and a download of the current posted file.
 - Per part: an **all-tools list** across every OP (with an OP column), because a part usually needs every label at once. **Sequence Detail is per-program only** — there is no part-level sequence.

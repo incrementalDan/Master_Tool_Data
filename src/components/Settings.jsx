@@ -1316,12 +1316,12 @@ export default function Settings() {
       <LibraryHealthCard dirty={dirty} />
 
       {/* Program list import — one-time CSV load into the Program Number
-          Manager (/programs). Writes to jobs.json, so it needs Drive/demo. */}
+          module (/parts). Writes to parts.json, so it needs Drive/demo. */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <Hash size={16} style={{ color: 'var(--blue)' }} />
           <h3 style={{ margin: 0 }}>Import Program List</h3>
-          <InfoTip text="One-time CSV import of your existing program-number list into the Programs page. Columns: Program #, Machine, Fixturing, Internal or external, internal Part #, Rev, Customer, Description, OP #, Fixture Y/N. Existing numbers are skipped; the app assigns the next available number to any blank." alignRight />
+          <InfoTip text="One-time CSV import of your existing program-number list into the Parts page. Columns: Program #, Machine, Fixturing, Internal or external, internal Part #, Rev, Customer, Description, OP #, Fixture Y/N. Existing numbers are skipped; the app assigns the next available number to any blank." alignRight />
         </div>
         <p className="text-sub text-sm mb-16">
           Bulk-load the shop's current program list (from the Google Sheet) into the

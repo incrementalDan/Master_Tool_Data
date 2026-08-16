@@ -291,19 +291,24 @@ export function searchPrograms(file, query, limit = 25) {
 // are stated once instead of being re-implemented per page. Each caller hands
 // the result to saveParts (optimistic + debounced Drive write).
 
+// Every edit stamps `updated_at`, which is what "Recently updated" sorts on.
+// It goes here rather than at each call site so no screen can edit a record
+// without the sort noticing — the whole point is to find what you touched last.
+const touch = (rec, patch) => ({ ...rec, ...patch, updated_at: new Date().toISOString() });
+
 export function updatePartIn(file, id, patch) {
-  return { ...file, parts: partsOf(file).map(p => (p.id === id ? { ...p, ...patch } : p)) };
+  return { ...file, parts: partsOf(file).map(p => (p.id === id ? touch(p, patch) : p)) };
 }
 
 export function updateRoutingIn(file, id, patch) {
-  return { ...file, routings: routingsOf(file).map(r => (r.id === id ? { ...r, ...patch } : r)) };
+  return { ...file, routings: routingsOf(file).map(r => (r.id === id ? touch(r, patch) : r)) };
 }
 
 // ⚠️ program_number is deliberately NOT patchable — permanent once reserved.
 // Stripped here rather than trusted to every caller.
 export function updateOperationIn(file, id, patch) {
   const { program_number, ...rest } = patch;
-  return { ...file, operations: operationsOf(file).map(o => (o.id === id ? { ...o, ...rest } : o)) };
+  return { ...file, operations: operationsOf(file).map(o => (o.id === id ? touch(o, rest) : o)) };
 }
 
 export function deleteOperationIn(file, id) {
@@ -325,4 +330,154 @@ export function deletePartIn(file, id) {
     routings: routingsOf(file).filter(r => r.part_id !== id),
     operations: operationsOf(file).filter(o => !gone.has(o.routing_id)),
   };
+}
+
+// ── Search, filter, sort ─────────────────────────────────────────────────────
+// The Parts page offers the same controls in BOTH views — the grouped list and
+// the table are two renderings of one filtered, sorted set, not two features.
+
+// Everything one operation can be found by, including the part and routing it
+// belongs to: searching "6061" or a customer name has to reach the operations
+// under that part, not just the part row.
+export function operationHaystack(file, materials, op, part, routing) {
+  const mat = operationMaterial(op, part);
+  return [
+    formatProgramNumber(op.program_number),
+    op.program_number,
+    formatOperation(op.op_number),
+    op.description,
+    op.machine_label,
+    op.fixturing,
+    op.is_fixture ? 'fixture' : op.internal_external,
+    op.pallet ? `pallet ${op.pallet}` : '',
+    routing ? routingLabel(routing) : '',
+    routing?.rev ? `rev ${routing.rev}` : '',
+    routing?.notes,
+    part?.part_number,
+    part?.customer,
+    alloyLabel(materials, mat.material_id, mat.material_custom),
+  ].filter(Boolean).join(' \u0000 ').toLowerCase();
+}
+
+// What a PART alone can be found by. A hit here keeps the whole part — searching
+// a part number should show everything under it, not just rows that repeat it.
+export function partHaystack(materials, part) {
+  return [
+    part.part_number,
+    part.customer,
+    alloyLabel(materials, part.material_id, part.material_custom),
+  ].filter(Boolean).join(' \u0000 ').toLowerCase();
+}
+
+// → { operationIds: Set, partIds: Set }. Both views read this one result, so a
+// part shown in the grouped list and a row shown in the table can never
+// disagree about what matches.
+export function applyPartsFilters(file, materials, { text = '', machine = 'All', type = 'All' } = {}) {
+  const q = String(text ?? '').trim().toLowerCase();
+  const routings = new Map(routingsOf(file).map(r => [r.id, r]));
+  const parts = new Map(partsOf(file).map(p => [p.id, p]));
+  const partMatchesText = new Map(
+    partsOf(file).map(p => [p.id, !q || partHaystack(materials, p).includes(q)]));
+
+  const operationIds = new Set();
+  const partIds = new Set();
+
+  for (const op of operationsOf(file)) {
+    const routing = routings.get(op.routing_id) || null;
+    const part = routing ? parts.get(routing.part_id) || null : null;
+
+    if (machine !== 'All' && op.machine_label !== machine) continue;
+    if (type !== 'All') {
+      const isType = type === 'Fixture' ? op.is_fixture : (!op.is_fixture && op.internal_external === type);
+      if (!isType) continue;
+    }
+    const hit = !q
+      || (part && partMatchesText.get(part.id))
+      || operationHaystack(file, materials, op, part, routing).includes(q);
+    if (!hit) continue;
+
+    operationIds.add(op.id);
+    if (part) partIds.add(part.id);
+  }
+
+  // A part that matches on its own fields stays visible even with no operations
+  // (or none that survived a machine/type filter) — otherwise searching a part
+  // number you just created would come back empty.
+  if (q && machine === 'All' && type === 'All') {
+    for (const p of partsOf(file)) if (partMatchesText.get(p.id)) partIds.add(p.id);
+  } else if (!q && machine === 'All' && type === 'All') {
+    for (const p of partsOf(file)) partIds.add(p.id);
+  }
+
+  return { operationIds, partIds };
+}
+
+// The most recent activity on a record: when it was last edited, else created.
+export const recordActivityAt = (rec) => rec?.updated_at || rec?.created_at || '';
+
+// A part's activity is the newest across the part itself and everything under
+// it — editing an operation is activity on its part, which is how you find the
+// thing you were last working on.
+export function partActivityAt(file, part) {
+  let newest = recordActivityAt(part);
+  for (const r of routingsForPart(file, part.id)) {
+    if (recordActivityAt(r) > newest) newest = recordActivityAt(r);
+  }
+  for (const o of operationsForPart(file, part.id)) {
+    if (recordActivityAt(o) > newest) newest = recordActivityAt(o);
+  }
+  return newest;
+}
+
+// A part's highest program number — the tiebreak that makes "recently updated"
+// useful straight after a CSV import, where every record shares one timestamp.
+export function partNewestProgram(file, part) {
+  const nums = operationsForPart(file, part.id)
+    .map(o => Number(o.program_number))
+    .filter(n => !isNaN(n) && n > 0);
+  return nums.length ? Math.max(...nums) : -1;
+}
+
+export const PART_SORTS = [
+  { key: 'activity', label: 'Recently updated' },
+  { key: 'program', label: 'Newest program #' },
+  { key: 'part', label: 'Part number' },
+  { key: 'customer', label: 'Customer' },
+];
+
+const dirMul = (dir) => (dir === 'asc' ? 1 : -1);
+const cmpStr = (a, b) => String(a ?? '').toLowerCase().localeCompare(String(b ?? '').toLowerCase());
+
+export function sortParts(file, parts, key = 'activity', dir = 'desc') {
+  const m = dirMul(dir);
+  return [...parts].sort((a, b) => {
+    switch (key) {
+      case 'program': return m * (partNewestProgram(file, a) - partNewestProgram(file, b));
+      case 'part': return m * cmpStr(a.part_number, b.part_number);
+      case 'customer': return m * cmpStr(a.customer, b.customer) || cmpStr(a.part_number, b.part_number);
+      default: {
+        const d = m * cmpStr(partActivityAt(file, a), partActivityAt(file, b));
+        // Same timestamp (a freshly imported batch) — fall back to the program
+        // number so the order still means something.
+        return d !== 0 ? d : m * (partNewestProgram(file, a) - partNewestProgram(file, b));
+      }
+    }
+  });
+}
+
+// The table view sorts OPERATIONS by the same vocabulary, so switching views
+// keeps the ordering you chose.
+export function sortOperations(rows, key = 'activity', dir = 'desc') {
+  const m = dirMul(dir);
+  return [...rows].sort((a, b) => {
+    switch (key) {
+      case 'program': return m * ((Number(a.program_number) || -1) - (Number(b.program_number) || -1));
+      case 'part': return m * cmpStr(a.part?.part_number, b.part?.part_number);
+      case 'customer': return m * cmpStr(a.part?.customer, b.part?.customer);
+      default: {
+        const d = m * cmpStr(recordActivityAt(a), recordActivityAt(b));
+        return d !== 0 ? d : m * ((Number(a.program_number) || -1) - (Number(b.program_number) || -1));
+      }
+    }
+  });
 }

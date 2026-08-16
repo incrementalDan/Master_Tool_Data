@@ -2,8 +2,8 @@
 // Manager, used by ProgramsPage, AddProgramModal, and JobProgramPicker so the
 // "add program" UI and the row chrome stay identical everywhere.
 import { useState } from 'react';
-import { X, Check } from 'lucide-react';
-import { INT_EXT, FIXTURING_OPTIONS, customerColor, formatProgramNumber, isPalletMachine } from '../utils/parts.js';
+import { X, Check, Search, ArrowUp, ArrowDown } from 'lucide-react';
+import { INT_EXT, FIXTURING_OPTIONS, PART_SORTS, customerColor, formatProgramNumber, isPalletMachine } from '../utils/parts.js';
 import AlloyPicker from './AlloyPicker.jsx';
 
 const tint = (color, alpha) => (color || '#888') + alpha;
@@ -150,7 +150,7 @@ export function MachineSelect({ value, machines, onChange }) {
 }
 
 // Draft shape for a program's editable fields — shared by every place a
-// program is edited: the Programs page (grouped + table) and the part page.
+// program is edited: the Parts page (grouped + table) and the part page.
 export function programDraftOf(program) {
   return {
     op_number: program.op_number,
@@ -179,7 +179,7 @@ export function programFieldsOf(draft, fallback) {
   };
 }
 
-// The inline edit form for a program. ONE implementation — the Programs page
+// The inline edit form for a program. ONE implementation — the Parts page
 // (both views) and the part page render this same form, so a field added here
 // appears everywhere a program can be edited.
 export function ProgramEditForm({ draft, setDraft, machines, materials, onSave, onCancel }) {
@@ -303,3 +303,62 @@ export function InlineConfirm({ message, confirmLabel = 'Delete', onConfirm, onC
     </span>
   );
 }
+
+// The Parts page's search / filter / sort bar. ONE control shared by the
+// grouped list and the table — they are two renderings of the same filtered,
+// sorted set, so filtering in one view and finding the other disagrees would be
+// a bug rather than a feature.
+export function PartsFilterBar({ value, onChange, machines }) {
+  const set = (patch) => onChange({ ...value, ...patch });
+  return (
+    <div className="pn-table-filters">
+      <div className="pn-search">
+        <Search size={14} />
+        <input
+          className="field-input"
+          value={value.text}
+          placeholder="Program #, part #, customer, material, machine, OP…"
+          onChange={e => set({ text: e.target.value })}
+        />
+        {value.text && (
+          <button type="button" className="icon-btn" title="Clear search" onClick={() => set({ text: '' })}>
+            <X size={13} />
+          </button>
+        )}
+      </div>
+
+      <select className="field-input" style={{ width: 'auto' }} value={value.machine}
+        onChange={e => set({ machine: e.target.value })}>
+        <option>All</option>
+        {machines.map(m => <option key={m.label}>{m.label}</option>)}
+      </select>
+
+      <select className="field-input" style={{ width: 'auto' }} value={value.type}
+        onChange={e => set({ type: e.target.value })}>
+        <option>All</option>
+        {INT_EXT.map(v => <option key={v}>{v}</option>)}
+        <option>Fixture</option>
+      </select>
+
+      <div className="pn-sort">
+        <span className="text-xs text-sub">Sort</span>
+        <select className="field-input" style={{ width: 'auto' }} value={value.sort}
+          onChange={e => set({ sort: e.target.value })}>
+          {PART_SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+        </select>
+        <button
+          type="button"
+          className="icon-btn"
+          title={value.dir === 'desc' ? 'Newest / highest first' : 'Oldest / lowest first'}
+          onClick={() => set({ dir: value.dir === 'desc' ? 'asc' : 'desc' })}
+        >
+          {value.dir === 'desc' ? <ArrowDown size={14} /> : <ArrowUp size={14} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Newest first by what was touched last — the thing you were working on is the
+// thing you want at the top.
+export const DEFAULT_PARTS_FILTERS = { text: '', machine: 'All', type: 'All', sort: 'activity', dir: 'desc' };

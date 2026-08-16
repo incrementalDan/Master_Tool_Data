@@ -95,7 +95,7 @@ function OperationCard({
     }
   };
 
-  // The same inline form the Programs page uses — one implementation, so a
+  // The same inline form the Parts page uses — one implementation, so a
   // field added there shows up here too.
   if (editing) {
     return (
@@ -250,7 +250,7 @@ export default function PartDetailPage() {
   const [routingDraft, setRoutingDraft] = useState(null);
   const [confirmDeleteRouting, setConfirmDeleteRouting] = useState(null);
 
-  // The same shared mutations the Programs page uses — see parts.js.
+  // The same shared mutations the Parts page uses — see parts.js.
   const updatePart = (pid, patch) => saveParts(updatePartIn(partsFile, pid, patch));
   const updateRouting = (rid, patch) => saveParts(updateRoutingIn(partsFile, rid, patch));
   const updateOperation = (oid, patch) => saveParts(updateOperationIn(partsFile, oid, patch));
@@ -258,7 +258,7 @@ export default function PartDetailPage() {
   const deleteRouting = (rid) => { saveParts(deleteRoutingIn(partsFile, rid)); setConfirmDeleteRouting(null); };
   const deletePart = (pid) => {
     saveParts(deletePartIn(partsFile, pid));
-    navigate('/programs');   // the page's subject is gone
+    navigate('/parts');   // the page's subject is gone
   };
 
   const routings = useMemo(() => routingsForPart(partsFile, id), [partsFile, id]);
@@ -291,7 +291,7 @@ export default function PartDetailPage() {
     return (
       <div className="pn-page">
         <div className="pn-empty">
-          That part isn't in the registry. <Link to="/programs">Back to programs</Link>
+          That part isn't in the registry. <Link to="/parts">Back to parts</Link>
         </div>
       </div>
     );
@@ -324,7 +324,7 @@ export default function PartDetailPage() {
   return (
     <div className="pn-page">
       <div className="detail-header mb-16">
-        <button className="icon-btn" onClick={() => navigate('/programs')} title="Back to programs">
+        <button className="icon-btn" onClick={() => navigate('/parts')} title="Back to parts">
           <ArrowLeft size={18} />
         </button>
         <span className="detail-header-icon"><Package size={22} /></span>
@@ -510,7 +510,7 @@ export default function PartDetailPage() {
             setUploading(false);
             // A CSV for a different job goes to that job — the upload is the
             // reason you're looking at it.
-            if (importedPart && importedPart.id !== id) navigate(`/programs/part/${importedPart.id}`);
+            if (importedPart && importedPart.id !== id) navigate(`/parts/${importedPart.id}`);
           }}
         />
       )}
