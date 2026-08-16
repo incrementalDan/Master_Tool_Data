@@ -572,7 +572,9 @@ Google Drive (shared team folder)
 ├── shop_settings.json           ← Shop-wide settings (shared)
 ├── jobs.json                    ← Jobs registry: program # + part # pairs w/ UUIDs (shared)
 ├── tool_components.json         ← Holder body / insert component records for insert-style tools (shared)
-└── holder_library.json          ← The APP-OWNED holder library: holder records + parts (shared)
+├── program_details.json         ← Parsed Sequence Detail per program: condensed tool list + version (shared)
+├── holder_library.json          ← The APP-OWNED holder library: holder records + parts (shared)
+└── JobFiles/{O####}/            ← Each program's RAW posted files, byte-for-byte untouched
 
 Web App (GitHub Pages, client-side only)
 ├── APS PKCE OAuth login (required — gates all library access)
@@ -987,6 +989,11 @@ src/
     attachmentActions.js           # createAttachmentActions(ctx): uploadToolPhoto,
                                   # uploadToolAttachment, deleteToolAttachment,
                                   # importProShopPhotos
+    programActions.js              # createProgramActions(ctx): importSequenceDetail,
+                                  # setProgramProven, fetchSequenceCsv — the posted
+                                  # Sequence Detail CSV (raw file to Drive untouched,
+                                  # condensed list to program_details.json) + the
+                                  # rename-archive versioning
     componentActions.js            # createComponentActions(ctx): saveComponent,
                                   # assignComponentLocation, uploadComponentPhoto,
                                   # deleteComponentPhoto (holder body / insert records —
@@ -1094,6 +1101,21 @@ src/
                                   # app's own export) header conventions on import.
                                   # canonicalProShopHeader / proShopRowsToObjects /
                                   # detectProShopFormat. See ProShop Integration.
+    csv.js                        # The app's ONE quote-aware CSV tokenizer
+                                  # (honors quotes across newlines) — shared by
+                                  # every CSV reader so quoting can't drift
+    sequenceDetail.js             # Sequence Detail CSV parsing + condensing to one
+                                  # row per POCKET. ⚠️ Pass-through: values stay
+                                  # strings, nothing is corrected against the library
+    sequenceImport.js             # Match a posted CSV to a program (by FILENAME),
+                                  # link tools by ProShop id incl. legacy_ids, flag
+                                  # location/holder differences, block on the two
+                                  # unrecoverable cases
+    toolLabels.js                 # Label field rows + the dedupe rule (any
+                                  # difference = a separate label)
+    labelPrint.js                 # The DK-11201 tool tag: tagCSS / tagMarkup /
+                                  # inchesAutoFit / printToolTags. COPIED from the
+                                  # shop's Chrome extension — do not redesign
     presetNaming.js               # composePresetName, parsePresetName, presetMatchesAssembly,
                                   # OP_TYPES / opTypeWord / matchOpType
     holderNaming.js               # holderNameToken (a holder's name IS its
@@ -1265,6 +1287,16 @@ src/
                                   # Settings). Not shown for returning devices or when ShopConnect
                                   # path A auto-links libraries from shop_settings.
     LoginScreen.jsx               # APS PKCE login gate (unauthorized visitors)
+    PartDetailPage.jsx            # /programs/part/:id — the JOB page (a part + rev
+                                  # and every OP on it): job-level mega tool list,
+                                  # per-program Tool List / Sequence Detail tabs,
+                                  # proven toggle, label printing
+    ToolListTable.jsx             # The condensed tool list (setup-sheet column
+                                  # order) + row selection for partial printing
+    SequenceDetailTable.jsx       # The full per-toolpath sequence, re-parsed from
+                                  # the stored raw CSV on demand
+    SequenceUploadModal.jsx       # Upload a posted CSV: file → preview → commit,
+                                  # with the blocking rules shown, not just refused
     ProgramsPage.jsx              # /programs — Program Number Manager (parts +
                                   # program numbers per operation/machine; see the
                                   # Jobs section). Helpers in src/utils/programs.js
@@ -1583,9 +1615,105 @@ The page that replaces the manually-managed Google Sheet assigning unique CNC pr
 
 -----
 
+## Sequence Detail & Label Printing
+
+**The point of this feature is to stop printing tool labels out of ProShop.** Getting a tool list into ProShop and printing labels takes too many clicks, and labels are often needed *before* the program is finished — so the same job gets uploaded to ProShop repeatedly just to reprint tags. The final Sequence Detail still goes to ProShop for operators; this does not replace that.
+
+### ⚠️ THE GOVERNING RULE — THE CSV ALWAYS WINS
+
+**The Sequence Detail CSV is a pass-through of proven job data. It is preserved, never corrected.**
+
+It comes out of a **cascade post** — Fusion emits it at the same time as the G-code, from the same post logic — so it **matches the G-code exactly**. That is the entire point of it. ToolDex is *standard reference data*; the CSV is *what the machine will actually do*. A wrong OOH, holder, tool or T offset **causes a crash**, so printing an app-corrected value that was never proven in CAM is not acceptable.
+
+Consequences that run through every file below:
+- If ToolDex disagrees with the CSV (OOH, holder, description, location), **the CSV value is what gets stored and printed**. Matching against the library may only **add a foreign key** or **raise a flag** — never substitute a value.
+- **A 0.1" OOH difference is a different tool assembly**, not a data error to fix.
+- Values stay **strings** end to end. No numeric round-tripping — `0.70` must not print as `0.7`.
+- The uploaded file is stored **byte-for-byte untouched**.
+
+If you find yourself writing code that "fixes" a CSV value against the library, stop.
+
+### The data
+
+`{programNumber}.csv` (e.g. `O1218.csv`) lists **every toolpath operation** in the program.
+
+- **Seq# correlates directly to the `N##` in the G-code.** The operator reads it to find where in the program an operation happens and whether they can start there. A sequence number is output on a **tool change**; extra toolpaths under one tool change get `.1` / `.2` so they stay in order (`15`, `15.1`).
+- **One tool can run at non-adjacent sequence numbers** (A-265 at 15 *and* 25), and **the same tool can occupy more than one pocket** in one program (T03 and T04 both A-35).
+- **Row `0`** is a structured free-text header (program #, file name, POSTED stamp, cycle time, machine, stock). It is **uncontrolled free text in Fusion** and carries a known post typo (`OO1218`, double-O) — so **the program number inside the file is ignored entirely. The FILENAME is the truth.**
+- **Row `0.5`** is the fixture line. Stored raw, not used yet (ToolDex has its own spot for fixtures).
+- **T offset # ≠ ToolDex machine tool number.** Offsets are renumbered to match what's physically loaded and to stay under 98 (Brother control limit).
+- **H and D always equal T** — the post enforces it, and the H column carries an (incorrect) gauge-length reference in newer files. So the CSV's H/D columns are **deliberately ignored** and both are derived from T (`offsetOf`).
+
+### Modules
+
+| File | Contents |
+|---|---|
+| `src/utils/csv.js` | The app's **one** CSV tokenizer (quote-aware across newlines), extracted from `programsImport.js` so quoting can't drift between two parsers |
+| `src/utils/sequenceDetail.js` | `parseSequenceCsv`, `condenseTools`, `toolNumberOf`/`formatToolNumber`/`offsetOf`, `proShopIdKey`, `parsePosted`/`postedToIso`, `programNumberFromFileName` |
+| `src/utils/sequenceImport.js` | `buildSequenceImport` (preview→commit, mirroring `buildProgramsImport`), `buildToolIndex`/`findToolByProShopId`, `buildHolderIndex`, `locationConflict`, `upsertDetail`/`detailsOf`/`detailForProgram` |
+| `src/utils/toolLabels.js` | `labelFieldsOf`, `labelKey`, `jobLabelRows` — the dedupe rule |
+| `src/utils/labelPrint.js` | `tagCSS` / `tagMarkup` / `inchesAutoFit` / `printToolTags` — the tag layout |
+| `src/context/programActions.js` | `importSequenceDetail`, `setProgramProven`, `fetchSequenceCsv`, `archiveFileName` |
+| `src/components/PartDetailPage.jsx` | `/programs/part/:id` — the JOB page |
+| `src/components/ToolListTable.jsx` / `SequenceDetailTable.jsx` / `SequenceUploadModal.jsx` | the two tables + the upload dialog |
+
+### Import — two blocking rules, everything else informs
+
+- **Matched to a program by FILENAME** (`O1218.csv` → program 1218). Operation and part number come from the **ToolDex program record**, never the CSV header.
+- **BLOCKING — no matching program record.** ToolDex is what assigns program numbers, so this should be rare and means something is genuinely wrong.
+- **BLOCKING — a ProShop Tool # that resolves to no tool.** A tool list with a hole prints labels for an assembly nobody can look up.
+- Both block the **whole upload**: a partially-stored program prints a partial set of labels, which is worse than printing none.
+- **Legacy IDs count.** `legacy_ids[]` holds numbers retired by an ID-scheme renumber; a CSV posted before that renumber names the old number for a tool that is still in the library, and blocking there would be the app failing on a change *the app itself made*. The current id always wins when both resolve.
+- **Combined insert ids match as an unordered SET of halves** (`proShopIdKey`), so Fusion's arbitrary order/spacing (`I-224 / G-223`, `G223/I224`) resolves to one tool. ⚠️ **Matching only** — the stored, displayed and printed value stays the CSV's own string. Re-rendering it in the app's canonical body-first order is a **later TODO** (it depends on the pairing's confirmed order, which isn't always known).
+- **Holder matching is optional enrichment.** The CSV's holder string is stored and printed either way; a match only adds `holder_id` for later phases. Deliberately an exact (normalized) description match — a fuzzy guess would attach the wrong record to a proven assembly, and real holder matching (taper, collet, gauge length, extension) is its own phase.
+- **Location: CSV wins, disagreement flagged.** Compared on the bin **number** only.
+
+### Condensing — one row per POCKET
+
+`condenseTools` keys on **T#, not on the tool**: the same tool in two pockets is two physical assemblies to set up and label, while one pocket appearing at non-adjacent sequence numbers is one entry that remembers both (`seqs: ['15','15.1','25']`). A blank on a pocket's first row is filled from a later row (the post repeats the assembly data), but **an existing value is never overwritten**.
+
+### Display
+
+Lives in the Program Number Manager, **not a new top-level tab**.
+
+- **A JOB is a part + rev and every operation on it** (`/programs/part/:id`). The part header on `/programs` opens it; a new upload navigates straight there.
+- Per program: **Tool List** and **Sequence Detail** tabs, the proven toggle, and a download of the current posted file.
+- Per job: a **mega tool list** across every OP (with an OP column), because a job usually needs every label at once. **Sequence Detail is per-program only** — there is no job-level sequence.
+- Tool List columns, in this order: G-Code T# · H Offset # · D Offset # · Dim Tag # · ProShop Tool # · Location · Description · Cut Dia · Tip · Holder · OOH · Tool Life (M) · Init D Offset. **Dim Tag #, Tool Life (M) and Init D Offset are deliberately empty placeholders** — wired in a later phase, and the space is held so the table doesn't reshuffle when they arrive. `RTA #`, `Gauge Len`, `WO #` and `Operator` are explicitly **not** columns.
+- ⚠️ **Both flags are computed LIVE, not read from what was stored at import** — the location disagreement against the current tool, the unmatched-holder marker against the current holder library. Stored at import, fixing the library would leave the marker showing until someone re-uploaded the CSV: a flag the user can't clear.
+
+### Labels — the deliverable
+
+**The tag layout is COPIED from the shop's Chrome extension** (`docs/proshop_brother_label_extension_v9/content.js`), not redesigned. These labels are already printed, read and trusted on the floor, and the geometry is tuned to a physical label on a physical printer (the 0.04/0.02in nudge exists because the tag clipped without it). Only the data source changed: ToolDex's stored Sequence Detail instead of scraping the ProShop DOM. DK-11201, 3.5" × 1.1", 2.2" tag + 0.25" footer, inches-based auto-fit, one page per label.
+
+- Print **all**, or tick individual rows and print just those. Available **per program** and **per job** (a job often needs every label for every OP at once).
+- **The label carries the T# only** — not H or D.
+- **RTA: the field stays on the label, the value is dropped.** A stale RTA is worse than a blank.
+- ⚠️ **Dedupe: never print two labels that are 100% identical, and ANY difference makes it a separate label.** The consequences are deliberate and pull in opposite directions: the same tool in **two pockets** of one program prints **two** labels (two setups, different T#), while one pocket shared by **two OPs** prints **one** (nothing about it differs).
+- A blocked popup is reported — it looks exactly like a broken button otherwise.
+
+### Proven / unproven
+
+**Per program**, and the distinction matters: proven means **this program ran on the machine and did not crash**. Uploading a CSV never implies that — a person sets it deliberately, later. It applies to the **currently uploaded version** and **travels with that version**: archiving encodes it in the retired filename. **Phase 1 is display only** — it neither blocks nor alters printing.
+
+### Storage & versioning
+
+- **The condensed list** goes in `program_details.json`; **the raw file** goes to `JobFiles/{O####}/` untouched. Only the **latest** version's parsed data is stored.
+- ⚠️ **The full sequence is re-parsed from the raw file on demand, not stored.** There is no second derived copy to drift, and what the Sequence Detail tab shows is *provably* the file the post wrote. Costs one Drive fetch when the tab is opened.
+- **Version key = the POSTED timestamp** — set by post logic into both the CSV and the G-code, so it's what pairs them. Re-uploading the same stamp is the same version: no new archive copy, and the proven state is kept.
+- **The current version keeps its original filename** (so "download the current file" is unambiguous); a new upload **renames** the previous one to `O1218_20260810-1051_proven.csv` — chronologically sortable, carrying the proven state of the version being retired. Renaming preserves the Drive file ID, so nothing referencing it breaks. **Archiving is best-effort**: failing to rename an old file must not cost the user the upload they actually asked for.
+- Demo mode keeps an uploaded file's text in memory for the session, so the sandbox exercises the whole flow (including the Sequence Detail tab) without a demo-only field on the stored record.
+
+### Explicitly OUT of scope (do not partially build these)
+
+G-code upload/parsing (the versioning scheme already anticipates it) · tool assembly linking and the "CSV assembly" (a metadata-only assembly record with a stable FK, grayed out with a "not in Fusion" icon and a push-to-Fusion button) · real holder matching · Google Drive sync (a manual "is there a newer posted version" button + a per-machine folder picker) · editing imported data in the table · extra header fields (stock size, cycle time, machine, material, fixture) · ProShop CSV export of this data · wiring the placeholder columns · version history UI.
+
+
+-----
+
 ## Shared Drive Files (materials / vendor registry / shop settings / jobs)
 
-Five shop-wide JSON files live in the **same Drive root as `tool_metadata.json`** and are loaded at startup **in parallel** with the metadata (in `loadTools`, when Google is connected). Each is **created from its default content if it doesn't exist yet**; a load failure on any one falls back to its default and never blocks the library load. All five are exposed via `useApp()` as `state.materials` / `state.vendorRegistry` / `state.shopSettings` / `state.jobs` / `state.components` (defaulting to their seeds before load), with save functions `saveMaterials` / `saveVendorRegistry` / `saveShopSettings` / `saveJobs` / `saveComponents` (the fifth, `tool_components.json`, holds the holder body / insert component records — see **Insert-Style Tools**).
+Shop-wide JSON files live in the **same Drive root as `tool_metadata.json`** and are loaded at startup **in parallel** with the metadata (in `loadTools`, when Google is connected). Each is **created from its default content if it doesn't exist yet**; a load failure on any one falls back to its default and never blocks the library load. All are exposed via `useApp()` as `state.materials` / `state.vendorRegistry` / `state.shopSettings` / `state.jobs` / `state.components` / `state.programDetails` / `state.holderLibrary` (defaulting to their seeds before load), with save functions `saveMaterials` / `saveVendorRegistry` / `saveShopSettings` / `saveJobs` / `saveComponents` / `saveProgramDetails` / `saveHolderLibrary` (`tool_components.json` holds the holder body / insert component records — see **Insert-Style Tools**; `program_details.json` holds the parsed Sequence Detail — see **Sequence Detail & Label Printing**).
 
 **How they are found (never need separate selection):** `loadOrCreateSharedJson` calls `getMetaParentFolderId()` (the parent folder of the connected `tool_metadata.json`) to locate them. Their Drive file IDs are cached in localStorage under the keys in `SHARED_FILES`; on a fresh machine (empty cache) the function searches the metadata folder by name and re-caches. A missing file is created from its default seed. This means connecting `tool_metadata.json` once is sufficient — the other shared files auto-join on the next `loadTools`. The `MetadataConnect.jsx` folder picker checks for all of them in parallel during browsing and shows a ✓/— status grid in the callout so users can confirm all files are present before connecting (see **Google Drive — Shared Drive Support** below).
 
@@ -1604,6 +1732,7 @@ Five shop-wide JSON files live in the **same Drive root as `tool_metadata.json`*
 
 - **`shop_settings.json`** (default in `sharedDefaults.js`) — `{ shop_name, default_units, machine_number:{start,skip}, machines:[], default_machine_id:null, tool_id_system:{mode,separator,start,skip,digits,show_legacy,location:{cabinet_identifier,drawer_identifier}}, location_config:{show_legacy,systems:[…],bin_sizes:[…{uuid id}]}, assembly_id_system:{mode,separator,serial_start,show_legacy}, presetter:{serial_format,serial_start}, import:{...}, aps:{...}, setup_steps:{fusionConnected,metadataConnected,toolIdConfigured,locationConfigured,assemblyIdConfigured,normalized,holdersLinked,proshopMerged,proshopPhotos,machineNumbers,proshopExported} }`. **Wired into behavior**: `default_units` is mirrored to `setDefaultUnit` on load; `machine_number.{start,skip}` drives renumber/add-tool — and **`resolveMachineNumberCollision`** (`identity.js`), which reassigns a Fusion tool's incoming machine number on import/normalize when it's already used, is a **reserved/skip** number, OR is **below the start** (start + reserved numbers are treated as already assigned — e.g. a tool arriving as T2 with start T30, or on a reserved T99, is reassigned to the next free number and flagged via `_machineNumberConflict`). The same rule backs a **library-wide sweep** — Settings → **Machine number issues** card → `AppContext.fixDuplicateMachineNumbers` (`libraryOps.js`) — which walks the whole library (Fusion + no-Fusion), keeps the first tool on each valid number, and reassigns every duplicate, reserved, or below-start number (flagging each). `findMachineNumbersToFix(tools, start, skip)` (`identity.js`, reason: `duplicate`/`reserved`/`belowStart`) is the read-only detector the card's count/preview uses; `tool_id_system` drives the configurable Tool ID System (see that section) — `mode` controls ID generation/display and `machine_linked` mode keeps `machine_number` in sync. `setup_steps` holds ISO timestamps written by `markSetupStepInSettings()` (AppContext) each time a setup step completes — shared across devices via Drive. The **canonical `SETUP_STEPS`** (exported from AppContext, in order) are: `fusionConnected`, `metadataConnected`, `toolIdConfigured`, `locationConfigured`, `assemblyIdConfigured`, `normalized`, **`holdersLinked`**, `proshopMerged`, `machineNumbers`, `proshopExported`. **`holdersLinked`** ("Set up the holder library") sits **immediately after `normalized` and before `proshopMerged`** — connecting the library, normalizing it and getting the holders under control are one job (getting the **Fusion** data right); ProShop is a different system and may come before or after, but the holder step can't precede normalize (linking matches against tools that must already carry tracking IDs). Step 1 links the holder library *file*; this step is the **work** — import → normalize names → merge duplicates → link tools → push, listed in that order under the step in Settings with a button to `/holders` (the same order + the "edit here, not in Fusion" rule is on the Holders page in `HolderWorkflowBanner`). Like `fusionConnected`/`metadataConnected`/`normalized` it is **derived from the data by a declarative effect**, not from a click: a live (non-archived) holder record exists **AND** at least one assembly carries a `holder_id` — so a shop that did the holder work before the step existed checks off on load. It is deliberately **excluded from the established-shop seed** (a pre-holder-feature library genuinely still has this to do) but **included in `AUTO_DERIVED`**, so its auto-stamp can't be mistaken for "real recorded progress" and deny that seed. Its live-data warning reports no holders imported, or N tools not yet linked to a holder. `toolIdConfigured`/`locationConfigured` are the three-ID-systems group (configured in their Settings cards; `assemblyIdConfigured` is a **disabled "coming soon" placeholder** — `disabled: true`, excluded from the completion/progress math in `SetupGuide`); `proshopPhotos` is a sub-step tracked in `setup_steps` but not in `SETUP_STEPS`. **`metadataConnected`** completes the moment Google Drive connects (a declarative effect in AppContext marks it for both live sign-in and a restored session); seeding derives it from `googleRef.current`, and `loadSetupProgress`'s migration back-fills it (plus `machineNumbers`, `toolIdConfigured`, `locationConfigured`) on an established library (`proshopExported` true). **Still NOT wired**: the `import` and `aps` sub-objects (the import/APS flows don't write them back yet).
 - **`jobs.json`** (default `DEFAULT_JOBS` in `sharedDefaults.js`) — the shop-wide jobs registry (see the **Jobs** section above). Uses the ref-based debounce payload pattern (`jobsRef`, like materials/shopSettings — not vendorRegistry's captured-payload path).
+- **`program_details.json`** (default `DEFAULT_PROGRAM_DETAILS` in `sharedDefaults.js`) — the parsed Sequence Detail per program: the **condensed tool list**, the POSTED version stamp, the proven flag, and a pointer to the raw CSV in Drive. Deliberately **condensed only** — the full per-toolpath sequence is re-parsed from the raw file on demand. See **Sequence Detail & Label Printing**. `saveProgramDetails` carries the same synchronous `onSaved` ref hook as `saveHolderLibrary` (the import saves, then immediately reads the ref back to archive the prior version).
 
 ### Machine Configuration
 
