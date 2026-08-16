@@ -20,6 +20,7 @@ export function signOut() {
   _userInfo = null;
   _expiresAt = null;
   localStorage.removeItem(TOOL_FILES_FOLDER_CACHE_KEY);
+  localStorage.removeItem(JOB_FILES_FOLDER_CACHE_KEY);
   localStorage.removeItem(CACHED_FILE_ID_KEY);
   for (const f of Object.values(SHARED_FILES)) localStorage.removeItem(f.cacheKey);
 }
@@ -49,7 +50,12 @@ export const SHARED_FILES = {
   jobs:            { name: 'jobs.json',            cacheKey: 'drive_jobs_file_id' },
   components:      { name: 'tool_components.json', cacheKey: 'drive_tool_components_file_id' },
   holderLibrary:   { name: 'holder_library.json',  cacheKey: 'drive_holder_library_file_id' },
+  programDetails:  { name: 'program_details.json', cacheKey: 'drive_program_details_file_id' },
 };
+
+// [metadata root]/JobFiles/ — the per-program folders holding each program's
+// raw posted files (the Sequence Detail CSV today, its G-code later).
+const JOB_FILES_FOLDER_CACHE_KEY = 'drive_job_files_folder_id';
 
 // Use localStorage-cached ID first (set after auto-create), then env var.
 function getMetaFileId() {
@@ -480,6 +486,46 @@ export async function ensureToolFolder(trackingId) {
     localStorage.setItem(TOOL_FILES_FOLDER_CACHE_KEY, toolFilesFolderId);
   }
   return findOrCreateFolder(toolFilesFolderId, trackingId);
+}
+
+// Ensures [metadata root]/JobFiles/{folderName}/ exists and returns its Drive
+// ID. One folder per program (e.g. "O1218") holding that program's raw posted
+// files exactly as they came out of the post — never rewritten by the app.
+export async function ensureProgramFolder(folderName) {
+  let jobFilesFolderId = localStorage.getItem(JOB_FILES_FOLDER_CACHE_KEY);
+  if (!jobFilesFolderId) {
+    const parentId = await getMetaParentFolderId();
+    jobFilesFolderId = await findOrCreateFolder(parentId, 'JobFiles');
+    localStorage.setItem(JOB_FILES_FOLDER_CACHE_KEY, jobFilesFolderId);
+  }
+  return findOrCreateFolder(jobFilesFolderId, folderName);
+}
+
+// Rename a Drive file in place — the file ID, and so every reference to it,
+// survives. Used to archive the previous version of a posted file (the current
+// version always keeps its original name, so "download the current file" is
+// unambiguous).
+export async function renameDriveFile(fileId, name) {
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true&fields=id,name`,
+    {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${_accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`File rename failed (${res.status}): ${txt.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+// Fetch a Drive file as text. The raw posted files are stored untouched, so
+// this returns exactly the bytes the post wrote.
+export async function fetchFileText(fileId) {
+  return (await fetchFileBlob(fileId)).text();
 }
 
 // Upload a File object into the given Drive folder. Returns { id, name }.

@@ -22,6 +22,7 @@ import SettingsPage from './components/Settings.jsx';
 import MaterialsEditor from './components/MaterialsEditor.jsx';
 import VendorsEditor from './components/VendorsEditor.jsx';
 import ProgramsPage from './components/ProgramsPage.jsx';
+import PartDetailPage from './components/PartDetailPage.jsx';
 import HoldersPage from './components/HoldersPage.jsx';
 import NormalizeModal from './components/NormalizeModal.jsx';
 import { SetupGuideBanner, SetupCompleteModal } from './components/SetupGuide.jsx';
@@ -105,6 +106,7 @@ function AppShell() {
             <Route path="/materials" element={<MaterialsEditor />} />
             <Route path="/vendors" element={<VendorsEditor />} />
             <Route path="/programs" element={<ProgramsPage />} />
+            <Route path="/programs/part/:id" element={<PartDetailPage />} />
             <Route path="/holders" element={<HoldersPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -161,6 +163,7 @@ function AppShell() {
             <Route path="/materials" element={<MaterialsEditor />} />
             <Route path="/vendors" element={<VendorsEditor />} />
             <Route path="/programs" element={<ProgramsPage />} />
+            <Route path="/programs/part/:id" element={<PartDetailPage />} />
             <Route path="/holders" element={<HoldersPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
