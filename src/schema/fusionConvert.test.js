@@ -162,19 +162,19 @@ describe('stepdown/stepover three-way sync (normalizePreset via internalToFusion
     expect('tool_coolant' in (out2.expressions || {})).toBe(false);
   });
 
-  it('never writes app-only preset fields (operation_type, machine_id, job_ids) to Fusion', () => {
+  it('never writes app-only preset fields (operation_type, machine_id, operation_ids) to Fusion', () => {
     const rawPreset = makePreset();
     const preset = makePreset({
       operation_type: 'rough',
       machine_id: 'uuid-of-machine',
-      job_ids: ['uuid-of-job'],
+      operation_ids: ['uuid-of-job'],
     });
     const out = outPreset(internalToFusionTool(makeTool({ preset, rawPreset })));
     // These live only in preset_meta (tool_metadata.json) — Fusion validates
     // strictly and must never see them.
     expect('operation_type' in out).toBe(false);
     expect('machine_id' in out).toBe(false);
-    expect('job_ids' in out).toBe(false);
+    expect('operation_ids' in out).toBe(false);
   });
 
   it('syncs stepover the same way', () => {

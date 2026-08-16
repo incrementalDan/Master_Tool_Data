@@ -1,35 +1,39 @@
 import { useMemo, useState } from 'react';
 import { Search, X, Plus } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { searchPrograms, partById, alloyLabel, formatOperation, machineOptions } from '../utils/programs.js';
+import { searchPrograms, partById, routingById, routingLabel, alloyLabel, formatOperation, machineOptions } from '../utils/parts.js';
 import { CustomerBadge, ProgramNumBadge, TypePill } from './programsUi.jsx';
 import AddProgramModal from './AddProgramModal.jsx';
 import MachinePill from './MachinePill.jsx';
 import { machineColorFor } from '../utils/machineColors.js';
 
-// The one shared control for linking to a program record (Program Number
-// Manager). Type a PROGRAM NUMBER (exact) or PART NUMBER (contains) → matching
-// programs, each with full context (part/rev/op/machine/customer); pick one and
+// The one shared control for linking to a program. Type a PROGRAM NUMBER
+// (exact) or PART NUMBER (contains) → matching operations, each with full
+// context (part / routing / OP / machine / customer); pick one and
 // `onPick(selection)` fires. "Add new program" opens the same AddProgramModal
 // used on the Programs page and auto-picks what you create. Purely a picker —
-// it holds no selection; consumers decide what to do with each pick (link to a
-// preset, a tool, or a sync commit). selection shape:
-//   { program_id, program_number, part_id, part_number, operation }
+// consumers decide what to do with each pick.
+//
+// ⚠️ A program IS an operation: the number lives on the operation record, so
+// `operation_id` is the durable link and everything else in the selection is
+// context resolved off it.
+//   { operation_id, program_number, part_id, part_number, op_number, routing_id }
 export default function JobProgramPicker({ onPick, placeholder = 'Program # (exact) or part # (contains)', autoFocus = false }) {
-  const { jobs: jobsFile, materials, shopSettings } = useApp();
+  const { parts: partsFile, materials, shopSettings } = useApp();
   const [query, setQuery] = useState('');
   const [showAdd, setShowAdd] = useState(false);
   const machines = machineOptions(shopSettings);
 
-  const results = useMemo(() => searchPrograms(jobsFile, query), [jobsFile, query]);
+  const results = useMemo(() => searchPrograms(partsFile, query), [partsFile, query]);
 
-  const pick = (program, part) => {
+  const pick = (operation, routing, part) => {
     onPick({
-      program_id: program.id,
-      program_number: program.program_number,
-      part_id: part?.id || program.part_id || null,
+      operation_id: operation.id,
+      program_number: operation.program_number,
+      part_id: part?.id || null,
       part_number: part?.part_number || '',
-      operation: program.operation || '',
+      op_number: operation.op_number || '',
+      routing_id: routing?.id || null,
     });
     setQuery('');
   };
@@ -54,16 +58,16 @@ export default function JobProgramPicker({ onPick, placeholder = 'Program # (exa
               No matching program. Use “Add new program” to create one.
             </div>
           )}
-          {results.map(({ program, part }) => (
-            <button key={program.id} type="button" className="job-pick-row" onClick={() => pick(program, part)}>
-              <ProgramNumBadge n={program.program_number} />
+          {results.map(({ operation, routing, part }) => (
+            <button key={operation.id} type="button" className="job-pick-row" onClick={() => pick(operation, routing, part)}>
+              <ProgramNumBadge n={operation.program_number} />
               <span className="pn-part-number">{part?.part_number || '—'}</span>
-              {part && <span className="text-xs text-sub">Rev {part.rev}</span>}
-              <span className="text-xs text-sub">· {formatOperation(program.operation) || '—'}</span>
-              <TypePill isFixture={program.is_fixture} internalExternal={program.internal_external} />
-              <MachinePill label={program.machine_label} color={machineColorFor(program.machine_id, program.machine_label, machines)} />
-              {program.is_fixture && (program.material_id || program.material_custom) && (
-                <span className="text-xs text-sub">{alloyLabel(materials, program.material_id, program.material_custom)}</span>
+              {routing && <span className="text-xs text-sub">{routingLabel(routing)}</span>}
+              <span className="text-xs text-sub">· {formatOperation(operation.op_number) || '—'}</span>
+              <TypePill isFixture={operation.is_fixture} internalExternal={operation.internal_external} />
+              <MachinePill label={operation.machine_label} color={machineColorFor(operation.machine_id, operation.machine_label, machines)} />
+              {operation.is_fixture && (operation.material_id || operation.material_custom) && (
+                <span className="text-xs text-sub">{alloyLabel(materials, operation.material_id, operation.material_custom)}</span>
               )}
               {part && <span style={{ marginLeft: 'auto' }}><CustomerBadge customer={part.customer} /></span>}
             </button>
@@ -77,7 +81,7 @@ export default function JobProgramPicker({ onPick, placeholder = 'Program # (exa
 
       {showAdd && (
         <AddProgramModal
-          onCreated={(program, part) => { pick(program, part); setShowAdd(false); }}
+          onCreated={(operation, routing, part) => { pick(operation, routing, part); setShowAdd(false); }}
           onClose={() => setShowAdd(false)}
         />
       )}
@@ -89,17 +93,18 @@ export default function JobProgramPicker({ onPick, placeholder = 'Program # (exa
 // e.g. the Sync-Job commit step). `value` is a selection object; `onClear`
 // drops it.
 export function SelectedProgramChip({ value, onClear }) {
-  const { jobs: jobsFile } = useApp();
-  const part = value.part_id ? partById(jobsFile, value.part_id) : null;
+  const { parts: partsFile } = useApp();
+  const part = value.part_id ? partById(partsFile, value.part_id) : null;
+  const routing = value.routing_id ? routingById(partsFile, value.routing_id) : null;
   return (
     <div className="job-pick-selected">
       <ProgramNumBadge n={value.program_number} />
       <span className="pn-part-number">{value.part_number || '—'}</span>
-      {part && <span className="text-xs text-sub">Rev {part.rev}</span>}
-      {value.operation && <span className="text-xs text-sub">· {formatOperation(value.operation)}</span>}
+      {routing && <span className="text-xs text-sub">{routingLabel(routing)}</span>}
+      {value.op_number && <span className="text-xs text-sub">· {formatOperation(value.op_number)}</span>}
       {part && <CustomerBadge customer={part.customer} />}
       {onClear && (
-        <button type="button" className="icon-btn" title="Clear job link" style={{ marginLeft: 'auto' }} onClick={onClear}>
+        <button type="button" className="icon-btn" title="Clear program link" style={{ marginLeft: 'auto' }} onClick={onClear}>
           <X size={14} />
         </button>
       )}

@@ -58,66 +58,98 @@ describe('parseProgramsCsv', () => {
 
 describe('buildProgramsImport', () => {
   const shopSettings = { machines: [{ id: 'm-1', model: 'Brother M300X3' }] };
+  const empty = { version: 1, parts: [], routings: [], operations: [] };
 
-  it('groups rows into parts and maps every field', () => {
-    const { parts, programs, summary } = buildProgramsImport(csv, { jobsFile: { version: 2, jobs: [], parts: [], programs: [] }, shopSettings });
-    expect(summary.partsNew).toBe(2);         // one part shared by OP50 + OP60, one for the fixture row
-    expect(summary.programsNew).toBe(3);
+  it('groups rows into parts → routings → operations and maps every field', () => {
+    const { parts, routings, operations, summary } = buildProgramsImport(csv, { partsFile: empty, shopSettings });
+    expect(summary.partsNew).toBe(2);          // one part shared by OP50 + OP60, one for the fixture row
+    expect(summary.operationsNew).toBe(3);
     expect(parts.map(p => p.part_number).sort()).toEqual(['CAD1-114P4344-1', 'GSE1-08D1404']);
 
-    const op50 = programs.find(p => p.program_number === 1108);
-    expect(op50.machine_id).toBe('m-1');       // matched to configured machine
+    // One routing per (part, rev) — the CSV can't say more than that.
+    expect(routings).toHaveLength(2);
+    expect(routings.every(r => r.rev === 'A')).toBe(true);
+
+    const op50 = operations.find(o => o.program_number === 1108);
+    expect(op50.op_number).toBe('OP50');
+    expect(op50.machine_id).toBe('m-1');        // matched to configured machine
     expect(op50.machine_label).toBe('Brother M300X3');
     expect(op50.is_fixture).toBe(false);
     expect(op50.internal_external).toBe('External');
 
-    const fix = programs.find(p => p.program_number === 1115);
+    // Both ops of one part land in the SAME routing.
+    const op60 = operations.find(o => o.program_number === 1109);
+    expect(op60.routing_id).toBe(op50.routing_id);
+
+    const fix = operations.find(o => o.program_number === 1115);
     expect(fix.is_fixture).toBe(true);
     expect(fix.internal_external).toBe('Internal');   // forced for fixtures
+    expect(fix.routing_id).not.toBe(op50.routing_id); // different part
+  });
+
+  it('gives one part number ONE part record even across revs', () => {
+    // Rev is not part of a part's identity — it distinguishes the ROUTING, so
+    // everything for a part number stays on one page.
+    const t = [
+      HEADER,
+      '1600,Brother M300X3,,External,PN-9,A,ACME,,OP10,N',
+      '1601,Brother M300X3,,External,PN-9,B,ACME,,OP10,N',
+    ].join('\n');
+    const { parts, routings } = buildProgramsImport(t, { partsFile: empty, shopSettings });
+    expect(parts).toHaveLength(1);
+    expect(routings).toHaveLength(2);
+    expect(routings.map(r => r.rev).sort()).toEqual(['A', 'B']);
+    expect(new Set(routings.map(r => r.part_id)).size).toBe(1);
   });
 
   it('reuses an existing part and skips a duplicate program number', () => {
     const existing = {
-      version: 2, jobs: [],
-      parts: [{ id: 'pt-x', part_number: 'CAD1-114P4344-1', rev: 'A', customer: 'Cadrex', material_id: 'N_6061', material_custom: '' }],
-      programs: [{ id: 'pr-x', program_number: 1108, part_id: 'pt-x', is_fixture: false }],
+      version: 1,
+      parts: [{ id: 'pt-x', part_number: 'CAD1-114P4344-1', customer: 'Cadrex', material_id: 'N_6061', material_custom: '' }],
+      routings: [{ id: 'rt-x', part_id: 'pt-x', rev: 'A', name: '', order: 0 }],
+      operations: [{ id: 'op-x', routing_id: 'rt-x', program_number: 1108, op_number: 'OP50', is_fixture: false }],
     };
-    const { summary, programs, parts } = buildProgramsImport(csv, { jobsFile: existing, shopSettings });
-    expect(summary.duplicates.map(d => d.program_number)).toContain(1108);   // 1108 already exists
-    expect(summary.programsNew).toBe(2);          // 1109 + 1115
-    expect(parts.find(p => p.part_number === 'CAD1-114P4344-1')).toBeUndefined();  // reused, not re-created
+    const { summary, operations, parts, routings } = buildProgramsImport(csv, { partsFile: existing, shopSettings });
+    expect(summary.duplicates.map(d => d.program_number)).toContain(1108);   // already exists
+    expect(summary.operationsNew).toBe(2);          // 1109 + 1115
+    expect(parts.find(p => p.part_number === 'CAD1-114P4344-1')).toBeUndefined();  // reused
     expect(summary.partsReused).toBeGreaterThan(0);
-    // reused part id flows onto the new 1109 program
-    expect(programs.find(p => p.program_number === 1109).part_id).toBe('pt-x');
+    // The existing routing is reused too — 1109 joins it rather than making a
+    // second Rev A routing for the same part.
+    expect(routings.find(r => r.part_id === 'pt-x')).toBeUndefined();
+    expect(operations.find(o => o.program_number === 1109).routing_id).toBe('rt-x');
   });
 
   it('auto-assigns a blank Program # from the running max', () => {
     const t = `${HEADER}\n,Brother M300X3,,Internal,PN-NEW,B,ACME,New one,OP10,N`;
-    const jobsFile = { version: 2, jobs: [], parts: [], programs: [{ id: 'p', program_number: 2000, part_id: 'x' }] };
-    const { summary, programs } = buildProgramsImport(t, { jobsFile, shopSettings });
+    const partsFile = {
+      version: 1, parts: [], routings: [],
+      operations: [{ id: 'o', routing_id: 'r', program_number: 2000 }],
+    };
+    const { summary, operations } = buildProgramsImport(t, { partsFile, shopSettings });
     expect(summary.autoAssigned).toEqual([2001]);
-    expect(programs[0].program_number).toBe(2001);
+    expect(operations[0].program_number).toBe(2001);
   });
 
   it('reports a non-integer Program # as an error, keeps the rest', () => {
     const t = `${HEADER}\n11AB,Brother M300X3,,External,PN-1,A,ACME,,OP10,N\n1300,Brother M300X3,,External,PN-1,A,ACME,,OP20,N`;
-    const { summary } = buildProgramsImport(t, { jobsFile: { version: 2, jobs: [], parts: [], programs: [] }, shopSettings });
+    const { summary } = buildProgramsImport(t, { partsFile: empty, shopSettings });
     expect(summary.errors).toHaveLength(1);
     expect(summary.errors[0].message).toMatch(/not a whole number/);
-    expect(summary.programsNew).toBe(1);
+    expect(summary.operationsNew).toBe(1);
   });
 
   it('strips a leading "O" from the Program # column (the shop\'s primary reference form)', () => {
     const t = `${HEADER}\nO1500,Brother M300X3,,External,PN-1,A,ACME,,OP10,N`;
-    const { programs, summary } = buildProgramsImport(t, { jobsFile: { version: 2, jobs: [], parts: [], programs: [] }, shopSettings });
+    const { operations, summary } = buildProgramsImport(t, { partsFile: empty, shopSettings });
     expect(summary.errors).toHaveLength(0);
-    expect(programs[0].program_number).toBe(1500);
+    expect(operations[0].program_number).toBe(1500);
   });
 
   it('falls back to the raw machine label when unmatched', () => {
     const t = `${HEADER}\n1400,Haas VF2,,External,PN-1,A,ACME,,OP10,N`;
-    const { programs } = buildProgramsImport(t, { jobsFile: { version: 2, jobs: [], parts: [], programs: [] }, shopSettings });
-    expect(programs[0].machine_id).toBeNull();
-    expect(programs[0].machine_label).toBe('Haas VF2');
+    const { operations } = buildProgramsImport(t, { partsFile: empty, shopSettings });
+    expect(operations[0].machine_id).toBeNull();
+    expect(operations[0].machine_label).toBe('Haas VF2');
   });
 });

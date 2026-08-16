@@ -15,8 +15,8 @@
 // difference as a separate label. The consequence that matters is deliberate —
 // the same tool in two pockets of one program (T03 and T04 both A-35) prints
 // TWO labels, because the T# differs and they are two physical setups. Across a
-// job, the same pocket running the same assembly in OP50 and OP60 is ONE label,
-// because nothing about it differs.
+// part, the same pocket running the same assembly in OP50 and OP60 is ONE
+// label, because nothing about it differs.
 
 import { resolveRowLocation } from './sequenceImport.js';
 
@@ -46,7 +46,7 @@ export function labelFieldsOf(row, part, toolsById) {
 
 // Deduped labels for a set of rows, ordered by OP then pocket so a printed
 // stack matches the order the operator loads the machine.
-export function jobLabelRows(rows, part, toolsById) {
+export function labelRows(rows, part, toolsById) {
   const out = [];
   const seen = new Set();
   for (const row of rows) {
@@ -59,7 +59,7 @@ export function jobLabelRows(rows, part, toolsById) {
   return out;
 }
 
-// A single program's labels (same rule; the rows are already one program's).
+// A single operation's labels (same rule; the rows are already one program's).
 export function programLabelRows(detail, part, toolsById) {
-  return jobLabelRows(detail?.tools || [], part, toolsById);
+  return labelRows(detail?.tools || [], part, toolsById);
 }

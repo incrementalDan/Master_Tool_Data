@@ -15,11 +15,12 @@ import { archiveFileName } from '../context/programActions.js';
 // cascade post — same run that produced the matching G-code.
 const REAL = readFileSync(fileURLToPath(new URL('./__fixtures__/O1218.csv', import.meta.url)), 'utf8');
 
-const jobsFile = {
-  version: 2,
-  parts: [{ id: 'part-1', part_number: 'HINGE-COVER-LEFT', rev: 'B', customer: 'Val' }],
-  programs: [{ id: 'prg-1', program_number: 1218, part_id: 'part-1', operation: '60' }],
-  jobs: [],
+// Part → Routing → Operation; the program number lives on the operation.
+const partsFile = {
+  version: 1,
+  parts: [{ id: 'part-1', part_number: 'HINGE-COVER-LEFT', customer: 'Val' }],
+  routings: [{ id: 'rt-1', part_id: 'part-1', name: '', rev: 'B', order: 0 }],
+  operations: [{ id: 'prg-1', routing_id: 'rt-1', program_number: 1218, op_number: '60' }],
 };
 
 const tools = [
@@ -29,7 +30,7 @@ const tools = [
 ];
 
 const build = (over = {}) => buildSequenceImport({
-  csvText: REAL, fileName: 'O1218.csv', jobsFile, tools, ...over,
+  csvText: REAL, fileName: 'O1218.csv', partsFile, tools, ...over,
 });
 
 describe('parseSequenceCsv — the real posted file', () => {
@@ -198,7 +199,7 @@ describe('buildSequenceImport — blocking', () => {
 
   it('blocks a file that is not a Sequence Detail export', () => {
     const { blockers } = buildSequenceImport({
-      csvText: 'Program #,Machine\n1218,R650\n', fileName: 'O1218.csv', jobsFile, tools,
+      csvText: 'Program #,Machine\n1218,R650\n', fileName: 'O1218.csv', partsFile, tools,
     });
     expect(blockers.map(b => b.type)).toContain('columns');
   });
@@ -240,7 +241,7 @@ describe('versions', () => {
 
   it('treats the same POSTED stamp as the same version and keeps its proven state', () => {
     const prior = {
-      id: 'det-1', program_id: 'prg-1', posted: '8-10-2026 10:51',
+      id: 'det-1', operation_id: 'prg-1', posted: '8-10-2026 10:51',
       proven: true, proven_at: '2026-08-11T00:00:00', proven_by: 'DY', raw_file_id: 'drive-1',
     };
     const { detail, sameVersion } = build({ existingDetails: [prior] });
@@ -249,18 +250,18 @@ describe('versions', () => {
   });
 
   it('drops proven when a NEW version is posted', () => {
-    const prior = { id: 'det-1', program_id: 'prg-1', posted: '8-01-2026 09:00', proven: true, proven_by: 'DY' };
+    const prior = { id: 'det-1', operation_id: 'prg-1', posted: '8-01-2026 09:00', proven: true, proven_by: 'DY' };
     const { detail, sameVersion } = build({ existingDetails: [prior] });
     expect(sameVersion).toBe(false);
     expect(detail).toMatchObject({ id: 'det-1', proven: false, proven_by: '' });
   });
 
   it('stores only the latest parsed data per program', () => {
-    const file = { version: 1, details: [{ id: 'a', program_id: 'prg-1', posted: 'old' }, { id: 'b', program_id: 'prg-2' }] };
-    const next = upsertDetail(file, { id: 'a', program_id: 'prg-1', posted: 'new' });
+    const file = { version: 1, details: [{ id: 'a', operation_id: 'prg-1', posted: 'old' }, { id: 'b', operation_id: 'prg-2' }] };
+    const next = upsertDetail(file, { id: 'a', operation_id: 'prg-1', posted: 'new' });
     expect(next.details).toHaveLength(2);
-    expect(next.details.find(d => d.program_id === 'prg-1').posted).toBe('new');
-    expect(next.details.find(d => d.program_id === 'prg-2')).toBeTruthy();
+    expect(next.details.find(d => d.operation_id === 'prg-1').posted).toBe('new');
+    expect(next.details.find(d => d.operation_id === 'prg-2')).toBeTruthy();
   });
 });
 

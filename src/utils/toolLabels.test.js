@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { jobLabelRows, labelFieldsOf, labelKey } from './toolLabels.js';
+import { labelRows, labelFieldsOf, labelKey } from './toolLabels.js';
 import { tagMarkup } from './labelPrint.js';
 
 const part = { part_number: 'HINGE-COVER-LEFT', rev: 'B' };
@@ -64,7 +64,7 @@ describe('location — the app wins, the file does not', () => {
       { ...row({ tool_ref: 'FTL-1', lc: 'LC-52' }), program_id: 'p1' },
       { ...row({ tool_ref: 'FTL-1', lc: 'LC-244' }), program_id: 'p2' },
     ];
-    expect(jobLabelRows(rows, part, toolsById)).toHaveLength(1);
+    expect(labelRows(rows, part, toolsById)).toHaveLength(1);
   });
 });
 
@@ -74,13 +74,13 @@ describe('dedupe — never print two identical labels', () => {
       { ...row(), program_id: 'p1' },
       { ...row(), program_id: 'p2' },   // OP60 — nothing about the setup differs
     ];
-    expect(jobLabelRows(rows, part)).toHaveLength(1);
+    expect(labelRows(rows, part)).toHaveLength(1);
   });
 
   it('prints TWO labels for the same tool in two pockets', () => {
     // T03 and T04 both A-35 is two physical setups, so it is two tags.
     const rows = [row({ t: 'T03' }), row({ t: 'T04' })];
-    const labels = jobLabelRows(rows, part);
+    const labels = labelRows(rows, part);
     expect(labels).toHaveLength(2);
     expect(labels.map(l => l.TCode)).toEqual(['T03', 'T04']);
   });
@@ -94,17 +94,17 @@ describe('dedupe — never print two identical labels', () => {
       row({ description: '3/16 EM 7FL .60 LOC' }),
       row({ lc: 'LC-53' }),
     ];
-    expect(jobLabelRows(variants, part)).toHaveLength(5);
+    expect(labelRows(variants, part)).toHaveLength(5);
   });
 
   it('ignores fields that never reach the label', () => {
     // The RTA value is dropped, so two rows differing only by it are one label.
-    expect(jobLabelRows([row({ rta: 'RTA-1' }), row({ rta: 'RTA-2' })], part)).toHaveLength(1);
+    expect(labelRows([row({ rta: 'RTA-1' }), row({ rta: 'RTA-2' })], part)).toHaveLength(1);
   });
 
   it('keeps the first occurrence order', () => {
     const rows = [row({ t: 'T10' }), row({ t: 'T03' }), row({ t: 'T10' })];
-    expect(jobLabelRows(rows, part).map(l => l.TCode)).toEqual(['T10', 'T03']);
+    expect(labelRows(rows, part).map(l => l.TCode)).toEqual(['T10', 'T03']);
   });
 });
 

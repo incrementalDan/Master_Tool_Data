@@ -804,14 +804,9 @@ export default function ToolDetail() {
                 related to another tool. */}
             <LinkedToolsSection tool={tool} />
 
-            {/* Structured job links (program # + part #) — supersedes the old
-                free-text "Last Used Job" display (data kept, no longer shown). */}
-            <JobsSection
-              tool={tool}
-              onSave={async (updatedTool) => {
-                await saveTool(updatedTool);
-              }}
-            />
+            {/* Where this tool actually runs — derived from the uploaded
+                Sequence Details, so there is nothing to link by hand. */}
+            <JobsSection tool={tool} />
 
             <Section title="Notes & Tags" icon={StickyNote}>
               {tool.notes && (

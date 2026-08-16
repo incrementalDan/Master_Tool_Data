@@ -3,7 +3,7 @@
 // "add program" UI and the row chrome stay identical everywhere.
 import { useState } from 'react';
 import { X, Check } from 'lucide-react';
-import { INT_EXT, FIXTURING_OPTIONS, customerColor, formatProgramNumber, isPalletMachine } from '../utils/programs.js';
+import { INT_EXT, FIXTURING_OPTIONS, customerColor, formatProgramNumber, isPalletMachine } from '../utils/parts.js';
 import AlloyPicker from './AlloyPicker.jsx';
 
 const tint = (color, alpha) => (color || '#888') + alpha;
@@ -153,7 +153,7 @@ export function MachineSelect({ value, machines, onChange }) {
 // program is edited: the Programs page (grouped + table) and the part page.
 export function programDraftOf(program) {
   return {
-    operation: program.operation,
+    op_number: program.op_number,
     description: program.description || '',
     machine_id: program.machine_id || null,
     machine_label: program.machine_label || '',
@@ -167,7 +167,7 @@ export function programDraftOf(program) {
 
 export function programFieldsOf(draft, fallback) {
   return {
-    operation: draft.operation.trim() || fallback.operation,
+    op_number: draft.op_number.trim() || fallback.op_number,
     description: draft.description.trim(),
     machine_id: draft.machine_id,
     machine_label: draft.machine_label,
@@ -186,8 +186,8 @@ export function ProgramEditForm({ draft, setDraft, machines, materials, onSave, 
   return (
     <div className="pn-op-edit">
       <div className="pn-edit-row">
-        <input className="field-input" style={{ width: 110 }} value={draft.operation} placeholder="Operation"
-          onChange={e => setDraft({ ...draft, operation: e.target.value })} />
+        <input className="field-input" style={{ width: 110 }} value={draft.op_number} placeholder="OP #"
+          onChange={e => setDraft({ ...draft, op_number: e.target.value })} />
         <div style={{ flex: 1 }}>
           <MachineSelect value={draft.machine_label} machines={machines}
             onChange={m => setDraft({ ...draft, ...m })} />
@@ -237,12 +237,10 @@ export function ProgramEditForm({ draft, setDraft, machines, materials, onSave, 
 export function PartEditForm({ draft, setDraft, materials, customers, onSave, onCancel }) {
   return (
     <div className="pn-part-edit">
-      <div className="pn-edit-row">
-        <input className="field-input" style={{ flex: 1 }} value={draft.part_number} placeholder="Part number"
-          onChange={e => setDraft({ ...draft, part_number: e.target.value })} />
-        <input className="field-input" style={{ width: 64 }} value={draft.rev} maxLength={4} placeholder="Rev"
-          onChange={e => setDraft({ ...draft, rev: e.target.value })} />
-      </div>
+      {/* No Rev field: the rev belongs to a ROUTING, not the part — one part
+          number is one record so everything about it stays on one page. */}
+      <input className="field-input" value={draft.part_number} placeholder="Part number"
+        onChange={e => setDraft({ ...draft, part_number: e.target.value })} />
       <input className="field-input" list="pn-customers" value={draft.customer} placeholder="Customer"
         onChange={e => setDraft({ ...draft, customer: e.target.value })} />
       <datalist id="pn-customers">{customers.map(c => <option key={c} value={c} />)}</datalist>
@@ -257,16 +255,40 @@ export function PartEditForm({ draft, setDraft, materials, customers, onSave, on
 
 export const partDraftOf = (part) => ({
   part_number: part.part_number,
-  rev: part.rev,
   customer: part.customer || '',
   material: materialSelOf(part.material_id, part.material_custom),
 });
 
 export const partFieldsOf = (draft, fallback) => ({
   part_number: draft.part_number.trim() || fallback.part_number,
-  rev: draft.rev.trim() || fallback.rev,
   customer: draft.customer.trim(),
   ...materialFieldsOf(draft.material),
+});
+
+// A routing's editable fields: what the user calls it and which rev it's for.
+export function RoutingEditForm({ draft, setDraft, onSave, onCancel }) {
+  return (
+    <div className="pn-part-edit">
+      <div className="pn-edit-row">
+        <input className="field-input" style={{ flex: 1 }} value={draft.name}
+          placeholder="Routing name (e.g. Vise, Fixture plate)"
+          onChange={e => setDraft({ ...draft, name: e.target.value })} />
+        <input className="field-input" style={{ width: 74 }} value={draft.rev} maxLength={6} placeholder="Rev"
+          onChange={e => setDraft({ ...draft, rev: e.target.value })} />
+      </div>
+      <input className="field-input" value={draft.notes} placeholder="Notes (optional)"
+        onChange={e => setDraft({ ...draft, notes: e.target.value })} />
+      <div className="pn-edit-actions">
+        <button className="btn btn-primary btn-sm" onClick={onSave}><Check size={13} /> Save</button>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}><X size={13} /> Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+export const routingDraftOf = (r) => ({ name: r.name || '', rev: r.rev || '', notes: r.notes || '' });
+export const routingFieldsOf = (draft) => ({
+  name: draft.name.trim(), rev: draft.rev.trim(), notes: draft.notes.trim(),
 });
 
 // Destructive actions confirm INLINE rather than through a browser dialog or a

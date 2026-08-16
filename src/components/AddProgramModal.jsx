@@ -2,10 +2,11 @@ import { useState } from 'react';
 import { Plus, X, Check, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import {
-  INT_EXT, FIXTURING_OPTIONS, nextProgramNumber, newPart, newProgram,
-  partsOf, programsOf, partById, alloyLabel,
+  INT_EXT, FIXTURING_OPTIONS, nextProgramNumber, newPart, newRouting, newOperation,
+  partsOf, routingsOf, operationsOf, partById, routingById, routingsForPart,
+  routingLabel, alloyLabel,
   machineOptions, isPalletMachine, customerNames, formatProgramNumber, formatOperation,
-} from '../utils/programs.js';
+} from '../utils/parts.js';
 import {
   CustomerBadge, ProgramNumBadge, FixtureSwitch, SelectWithCustom,
   MaterialSelect, MachineSelect, materialFieldsOf, fixturingValueOf,
@@ -14,33 +15,45 @@ import InfoTip from './InfoTip.jsx';
 import MachinePill from './MachinePill.jsx';
 import { machineColorFor } from '../utils/machineColors.js';
 
-// The "Add program" modal — search/create a part, then reserve one or more
-// operations (each grabs the next program number). Self-contained: reads the
-// jobs registry from context and writes through saveJobs, so the Programs page,
-// the part page and the Sync-Job program picker all render it the same way.
-// `onCreated` (if given) fires after each reservation with the new program +
-// its part — the picker uses it to auto-select; the pages just reflect state.
+// The "Add program" modal — find or create a part, land on one of its routings,
+// then reserve one or more operations (each grabs the next program number).
+// Self-contained: reads parts.json from context and writes through saveParts,
+// so the Programs page, the part page and the program picker all render it the
+// same way. `onCreated` fires after each reservation with the new operation +
+// its routing and part — the picker uses it to auto-select.
 //
-// `partId` opens it already scoped to that part: it skips the search step and
-// hides "Change part", because on a part's own page adding a program to a
-// DIFFERENT part is never what was meant.
-export default function AddProgramModal({ onClose, onCreated, partId = null }) {
-  const { jobs: jobsFile, saveJobs, materials, shopSettings, user } = useApp();
+// `partId` / `routingId` open it already scoped, skipping the steps above and
+// hiding "Change part": from a part's own page, adding to a DIFFERENT part is
+// never what was meant.
+//
+// A part with exactly one routing skips the routing step entirely — the common
+// case shouldn't cost a click for a choice that isn't one.
+export default function AddProgramModal({ onClose, onCreated, partId = null, routingId = null }) {
+  const { parts: partsFile, saveParts, materials, shopSettings, user } = useApp();
   const machines = machineOptions(shopSettings);
-  const customers = customerNames(jobsFile);
+  const customers = customerNames(partsFile);
   const userName = user?.email || user?.name || '';
-  const seedable = programsOf(jobsFile).length === 0;
-  const nextNumber = nextProgramNumber(jobsFile);
+  const seedable = operationsOf(partsFile).length === 0;
+  const nextNumber = nextProgramNumber(partsFile);
 
-  const [step, setStep] = useState(partId ? 'operations' : 'search');   // search | new-part | operations
+  // search | new-part | routing | operations
+  const [step, setStep] = useState(() => {
+    if (routingId) return 'operations';
+    if (partId) return routingsForPart(partsFile, partId).length === 1 ? 'operations' : 'routing';
+    return 'search';
+  });
   const [query, setQuery] = useState('');
   const [activePartId, setActivePartId] = useState(partId);
+  const [activeRoutingId, setActiveRoutingId] = useState(
+    routingId || (partId && routingsForPart(partsFile, partId).length === 1
+      ? routingsForPart(partsFile, partId)[0].id : null));
+  const [newRoutingDraft, setNewRoutingDraft] = useState({ name: '', rev: '' });
   const [sessionAdded, setSessionAdded] = useState([]);
   const [seedNumber, setSeedNumber] = useState(String(nextNumber));
 
   const [newPartDraft, setNewPartDraft] = useState(null);
   const [opForm, setOpForm] = useState({
-    operation: '', description: '',
+    op_number: '', description: '',
     machine_id: machines[0]?.id || null, machine_label: machines[0]?.label || '',
     is_fixture: false, internal_external: 'External',
     fixturing: { sel: '', custom: '' },
@@ -48,25 +61,39 @@ export default function AddProgramModal({ onClose, onCreated, partId = null }) {
     pallet: '1',
   });
 
-  const activePart = partById(jobsFile, activePartId);
+  const activePart = partById(partsFile, activePartId);
+  const activeRouting = routingById(partsFile, activeRoutingId);
+  const partRoutings = activePartId ? routingsForPart(partsFile, activePartId) : [];
   const effectiveNext = seedable && sessionAdded.length === 0
     ? (parseInt(seedNumber, 10) || nextNumber)
     : nextNumber;
 
   const filtered = query.trim()
-    ? partsOf(jobsFile).filter(p => p.part_number.toLowerCase().includes(query.trim().toLowerCase()))
-    : partsOf(jobsFile);
+    ? partsOf(partsFile).filter(p => p.part_number.toLowerCase().includes(query.trim().toLowerCase()))
+    : partsOf(partsFile);
 
   // Writes (optimistic + debounced, via the shared-file layer).
   const addPart = (fields) => {
     const pt = newPart(fields, userName);
-    saveJobs({ ...jobsFile, version: 2, parts: [...partsOf(jobsFile), pt] });
+    saveParts({ ...partsFile, parts: [...partsOf(partsFile), pt] });
     return pt;
   };
-  const reserveProgram = (partId, fields) => {
-    const prg = newProgram({ ...fields, part_id: partId }, userName);
-    saveJobs({ ...jobsFile, version: 2, programs: [...programsOf(jobsFile), prg] });
-    return prg;
+  const addRouting = (forPartId, fields) => {
+    const rt = newRouting({ ...fields, part_id: forPartId, order: routingsForPart(partsFile, forPartId).length }, userName);
+    saveParts({ ...partsFile, routings: [...routingsOf(partsFile), rt] });
+    return rt;
+  };
+  const reserveOperation = (forRoutingId, fields) => {
+    const op = newOperation({ ...fields, routing_id: forRoutingId }, userName);
+    saveParts({ ...partsFile, operations: [...operationsOf(partsFile), op] });
+    return op;
+  };
+
+  const choosePart = (id) => {
+    setActivePartId(id);
+    const rts = routingsForPart(partsFile, id);
+    if (rts.length === 1) { setActiveRoutingId(rts[0].id); setStep('operations'); }
+    else { setActiveRoutingId(null); setStep('routing'); }
   };
 
   const startNewPart = () => {
@@ -79,18 +106,28 @@ export default function AddProgramModal({ onClose, onCreated, partId = null }) {
     const pt = addPart({
       part_number: newPartDraft.part_number,
       customer: newPartDraft.customer,
-      rev: newPartDraft.rev,
       ...materialFieldsOf(newPartDraft.material),
     });
+    // A brand-new part has no routing yet — make its first one from the rev
+    // typed on the part form, so the common path is still one flow.
+    const rt = addRouting(pt.id, { rev: newPartDraft.rev, name: '' });
     setActivePartId(pt.id);
+    setActiveRoutingId(rt.id);
+    setStep('operations');
+  };
+
+  const confirmNewRouting = () => {
+    const rt = addRouting(activePartId, { name: newRoutingDraft.name, rev: newRoutingDraft.rev });
+    setActiveRoutingId(rt.id);
+    setNewRoutingDraft({ name: '', rev: '' });
     setStep('operations');
   };
 
   const reserve = () => {
-    if (!opForm.operation.trim() || !opForm.machine_label) return;
-    const prg = reserveProgram(activePartId, {
+    if (!opForm.op_number.trim() || !opForm.machine_label) return;
+    const prg = reserveOperation(activeRoutingId, {
       program_number: effectiveNext,
-      operation: opForm.operation,
+      op_number: opForm.op_number,
       description: opForm.description,
       machine_id: opForm.machine_id,
       machine_label: opForm.machine_label,
@@ -99,14 +136,15 @@ export default function AddProgramModal({ onClose, onCreated, partId = null }) {
       fixturing: fixturingValueOf(opForm.fixturing),
       ...materialFieldsOf(opForm.material),
       pallet: opForm.pallet,
+      order: operationsOf(partsFile).filter(o => o.routing_id === activeRoutingId).length,
     });
     setSessionAdded(prev => [...prev, {
-      program_number: prg.program_number, operation: opForm.operation.trim(),
+      program_number: prg.program_number, operation: opForm.op_number.trim(),
       machine_id: opForm.machine_id, machine_label: opForm.machine_label, is_fixture: opForm.is_fixture,
     }]);
-    onCreated?.(prg, activePart);
+    onCreated?.(prg, activeRouting, activePart);
     setOpForm(prev => ({
-      ...prev, operation: '', description: '',
+      ...prev, op_number: '', description: '',
       is_fixture: false, internal_external: 'External',
       material: { sel: '', custom: '' },
     }));
@@ -131,7 +169,7 @@ export default function AddProgramModal({ onClose, onCreated, partId = null }) {
               </div>
               <div className="pn-part-picklist">
                 {filtered.map(p => (
-                  <button key={p.id} className="pn-part-pick" onClick={() => { setActivePartId(p.id); setStep('operations'); }}>
+                  <button key={p.id} className="pn-part-pick" onClick={() => choosePart(p.id)}>
                     <span>
                       <span className="pn-part-number">{p.part_number}</span>
                       <span className="text-xs text-sub" style={{ marginLeft: 6 }}>Rev {p.rev}</span>
@@ -186,11 +224,58 @@ export default function AddProgramModal({ onClose, onCreated, partId = null }) {
             </div>
           )}
 
-          {step === 'operations' && activePart && (
+          {step === 'routing' && activePart && (
             <div className="pn-modal-stack">
               <div className="pn-active-part">
                 <span className="pn-part-number">{activePart.part_number}</span>
-                <span className="text-xs text-sub">Rev {activePart.rev}</span>
+                <CustomerBadge customer={activePart.customer} />
+                {!partId && (
+                  <button className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }}
+                    onClick={() => { setStep('search'); setQuery(''); }}>
+                    Change part
+                  </button>
+                )}
+              </div>
+              <label className="field-label">
+                Which routing?
+                <InfoTip text="A routing is one way of making this part — a combination of operations with its own fixturing, machine or process revision. A part can have more than one." />
+              </label>
+              <div className="pn-part-picklist">
+                {partRoutings.map((r, i) => (
+                  <button key={r.id} className="pn-part-pick"
+                    onClick={() => { setActiveRoutingId(r.id); setStep('operations'); }}>
+                    <span>{routingLabel(r, i)}</span>
+                    <span className="text-xs text-sub">
+                      {operationsOf(partsFile).filter(o => o.routing_id === r.id).length} operations
+                    </span>
+                  </button>
+                ))}
+                {partRoutings.length === 0 && (
+                  <p className="text-sm text-sub" style={{ padding: '6px 2px' }}>
+                    This part has no routing yet — add its first one.
+                  </p>
+                )}
+              </div>
+              <div className="pn-edit-row">
+                <input className="field-input" style={{ flex: 1 }} value={newRoutingDraft.name}
+                  placeholder="New routing name (e.g. Vise, Fixture plate)"
+                  onChange={e => setNewRoutingDraft({ ...newRoutingDraft, name: e.target.value })} />
+                <input className="field-input" style={{ width: 74 }} value={newRoutingDraft.rev} maxLength={6}
+                  placeholder="Rev"
+                  onChange={e => setNewRoutingDraft({ ...newRoutingDraft, rev: e.target.value })} />
+                <button className="btn btn-secondary btn-sm" onClick={confirmNewRouting}
+                  disabled={!newRoutingDraft.name.trim() && !newRoutingDraft.rev.trim()}>
+                  <Plus size={13} /> Add
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === 'operations' && activePart && activeRouting && (
+            <div className="pn-modal-stack">
+              <div className="pn-active-part">
+                <span className="pn-part-number">{activePart.part_number}</span>
+                <span className="text-xs text-sub">{routingLabel(activeRouting)}</span>
                 <CustomerBadge customer={activePart.customer} />
                 {(activePart.material_id || activePart.material_custom) && (
                   <span className="text-xs text-sub">{alloyLabel(materials, activePart.material_id, activePart.material_custom)}</span>
@@ -232,8 +317,8 @@ export default function AddProgramModal({ onClose, onCreated, partId = null }) {
               <div className="pn-edit-row">
                 <div style={{ width: 120 }}>
                   <label className="field-label">Operation</label>
-                  <input className="field-input" value={opForm.operation} placeholder="OP50"
-                    onChange={e => setOpForm({ ...opForm, operation: e.target.value })} />
+                  <input className="field-input" value={opForm.op_number} placeholder="OP50"
+                    onChange={e => setOpForm({ ...opForm, op_number: e.target.value })} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <label className="field-label">Machine</label>
@@ -294,7 +379,7 @@ export default function AddProgramModal({ onClose, onCreated, partId = null }) {
               )}
 
               <button className="btn btn-primary" style={{ width: '100%' }}
-                disabled={!opForm.operation.trim()} onClick={reserve}>
+                disabled={!opForm.op_number.trim()} onClick={reserve}>
                 <Plus size={14} /> Reserve program number {formatProgramNumber(effectiveNext)}
               </button>
             </div>

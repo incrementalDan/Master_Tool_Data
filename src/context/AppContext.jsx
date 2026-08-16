@@ -21,9 +21,8 @@ import { backfillHolderIds } from '../schema/holderResolve.js';
 import { matchFusionHolder, holderPushPlan, applyHolderPushPlan, pushChangeGroup, lastPushedFrom, retiredHolderFor } from '../schema/holderIdentity.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
-import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_JOBS, DEFAULT_COMPONENTS, DEFAULT_PROGRAM_DETAILS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
+import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_PARTS, DEFAULT_COMPONENTS, DEFAULT_PROGRAM_DETAILS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry, getActiveVendorRegistry, backfillPurchasingRegistryIds } from '../schema/vendorRegistry.js';
-import { findJob, newJob } from '../utils/jobs.js';
 import { fusionHolderToRecord, holderRecordToFusion, archiveHolderRecord, restoreArchivedHolder, isActiveHolder } from '../schema/holderRecord.js';
 import { setDefaultUnit } from '../utils/units.js';
 import { getDemoData, isDemoRequested } from '../demo/index.js';
@@ -63,7 +62,7 @@ export function AppProvider({ children }) {
   const demoModeRef = useRef(state.demoMode);
   const shopSettingsRef = useRef(state.shopSettings);
   const materialsRef = useRef(state.materials);
-  const jobsRef = useRef(state.jobs);
+  const partsRef = useRef(state.parts);
   const componentsRef = useRef(state.components);
   const programDetailsRef = useRef(state.programDetails);
   const holderLibraryRef = useRef(state.holderLibrary);
@@ -74,7 +73,7 @@ export function AppProvider({ children }) {
   // Once-per-session guard for the complete-record backfill (mode 2) — reset only
   // on a failed write so the next loadTools retries it.
   const backfilledRef = useRef(false);
-  // Whether the shared Drive files (materials / vendors / shop settings / jobs /
+  // Whether the shared Drive files (materials / vendors / shop settings / parts /
   // components) have been LOADED from Drive yet this session. Until they have,
   // in-memory state is still the pre-load DEFAULT, so writing any shared file back
   // to Drive would clobber the real file with defaults. loadTools flips this true
@@ -104,7 +103,7 @@ export function AppProvider({ children }) {
   demoModeRef.current = state.demoMode;
   shopSettingsRef.current = state.shopSettings;
   materialsRef.current = state.materials;
-  jobsRef.current = state.jobs;
+  partsRef.current = state.parts;
   componentsRef.current = state.components;
   programDetailsRef.current = state.programDetails;
   holderLibraryRef.current = state.holderLibrary;
@@ -311,7 +310,7 @@ export function AppProvider({ children }) {
     const write = (keepalive = false) => {
       const payload = key === 'shopSettings' ? shopSettingsRef.current
         : key === 'materials' ? materialsRef.current
-        : key === 'jobs' ? jobsRef.current
+        : key === 'parts' ? partsRef.current
         : key === 'components' ? componentsRef.current
         : key === 'programDetails' ? programDetailsRef.current
         : key === 'holderLibrary' ? holderLibraryRef.current
@@ -349,7 +348,7 @@ export function AppProvider({ children }) {
   const saveSharedFile = useCallback((key, data, dispatchType, onSaved) => {
     const stateKey = key === 'shopSettings' ? 'shopSettings'
       : key === 'vendorRegistry' ? 'vendorRegistry'
-      : key === 'jobs' ? 'jobs'
+      : key === 'parts' ? 'parts'
       : key === 'components' ? 'components'
       : key === 'programDetails' ? 'programDetails'
       : key === 'holderLibrary' ? 'holderLibrary'
@@ -397,8 +396,8 @@ export function AppProvider({ children }) {
     saveSharedFile('vendorRegistry', vendorRegistry, 'SET_VENDOR_REGISTRY', setActiveVendorRegistry), [saveSharedFile]);
   const saveShopSettings = useCallback((shopSettings) =>
     saveSharedFile('shopSettings', shopSettings, 'SET_SHOP_SETTINGS'), [saveSharedFile]);
-  const saveJobs = useCallback((jobs) =>
-    saveSharedFile('jobs', jobs, 'SET_JOBS'), [saveSharedFile]);
+  const saveParts = useCallback((parts) =>
+    saveSharedFile('parts', parts, 'SET_PARTS'), [saveSharedFile]);
   const saveComponents = useCallback((components) =>
     saveSharedFile('components', components, 'SET_COMPONENTS'), [saveSharedFile]);
   // ⚠️ Same onSaved-hook reasoning as saveHolderLibrary: the sequence import
@@ -717,51 +716,12 @@ export function AppProvider({ children }) {
     }
   }, [saveHolderLibrary, loadHolders, notify]);
 
-  // Persist the jobs registry to Drive IMMEDIATELY (not on the shared-file 600ms
-  // debounce). Used when a job is CREATED/enriched and its id is about to be
-  // written into a tool/preset metadata record in the SAME user action: the
-  // debounced path could leave that reference durable on Drive while the
-  // jobs.json write is still pending, so a crash in the window would orphan the
-  // reference (and dangling job ids are hidden silently by collectToolJobs).
-  // Writes the explicit `nextFile` rather than reading jobsRef — the ref lags
-  // this tick's optimistic dispatch, so a ref-based write would drop the new job.
-  // Supersedes any pending debounced jobs write. Demo / no-Drive: state only.
-  const persistJobsNow = useCallback((nextFile) => {
-    dispatch({ type: 'SET_JOBS', jobs: nextFile });
-    if (demoModeRef.current || !googleRef.current) return;
-    const pending = sharedSaveTimersRef.current['jobs'];
-    if (pending?.timer) { clearTimeout(pending.timer); delete sharedSaveTimersRef.current['jobs']; }
-    const { SHARED_FILES } = driveService;
-    driveService.saveSharedJson(SHARED_FILES.jobs.name, SHARED_FILES.jobs.cacheKey, nextFile)
-      .catch(err => {
-        if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
-        notify(`Job save failed: ${err.message}`, 'error', 7000);
-      });
-  }, [notify]);
-
-  // Resolve a (program #, part #) pair to its job record, creating it in the
-  // registry if new. Identity is the case-insensitive trimmed pair (jobKey) —
-  // the same job entered on five tools stays ONE record; references are by id.
-  // `programId` (optional) joins the job to a Program Number Manager record; an
-  // existing loose link is enriched with it the first time we learn it.
-  // A created/enriched record is written to Drive IMMEDIATELY (persistJobsNow) so
-  // it's durable before its id is referenced; an unchanged existing record needs
-  // no write. Demo mode stays in-memory.
-  const findOrCreateJob = useCallback((programNumber, partNumber, createdBy = '', programId = null) => {
-    const file = jobsRef.current || DEFAULT_JOBS;
-    const existing = findJob(file, programNumber, partNumber);
-    if (existing) {
-      if (programId && !existing.program_id) {
-        const enriched = { ...existing, program_id: programId };
-        persistJobsNow({ ...file, jobs: file.jobs.map(j => j.id === existing.id ? enriched : j) });
-        return enriched;
-      }
-      return existing;
-    }
-    const job = newJob(programNumber, partNumber, createdBy, programId);
-    persistJobsNow({ ...file, jobs: [...(file.jobs || []), job] });
-    return job;
-  }, [persistJobsNow]);
+  // NOTE: the old findOrCreateJob / persistJobsNow pair is gone. It existed to
+  // mint a (program #, part #) "job" record on the fly so a tool or preset could
+  // reference its id, which needed an immediate Drive write to avoid a dangling
+  // reference. Under the parts model there is nothing to mint: a preset links to
+  // an OPERATION that already exists, and a tool's where-used is DERIVED from
+  // the sequence detail rather than stored at all.
 
   // Persist only the location_config sub-object (the Settings Location System
   // editor calls this after each add/edit/delete/normalize change). Merges via the
@@ -1073,7 +1033,7 @@ export function AppProvider({ children }) {
   // downloadFusionList/uploadFusionList make every save path fail gracefully
   // (the "Demo Mode — changes are not saved" banner sets the expectation).
   const enterDemoMode = useCallback(() => {
-    const { fusionList, metaList, holders, holderLibrary, materials, vendorRegistry, shopSettings, jobs, components } = getDemoData();
+    const { fusionList, metaList, holders, holderLibrary, materials, vendorRegistry, shopSettings, parts, components } = getDemoData();
     // Build logical tools through the exact same pipeline as a live load.
     const metaByTracking = new Map(metaList.map(m => [m.id, m]));
     const { groups, untracked } = groupByTrackingId(fusionList);
@@ -1093,7 +1053,7 @@ export function AppProvider({ children }) {
     setActiveVendorRegistry(vendorRegistry);
     if (shopSettings?.default_units) setDefaultUnit(shopSettings.default_units);
 
-    dispatch({ type: 'ENTER_DEMO_MODE', tools, holders: taggedHolders, holderLibrary, materials, vendorRegistry, shopSettings, jobs, components });
+    dispatch({ type: 'ENTER_DEMO_MODE', tools, holders: taggedHolders, holderLibrary, materials, vendorRegistry, shopSettings, parts, components });
   }, []);
 
   const exitDemoMode = useCallback(() => {
@@ -1146,12 +1106,12 @@ export function AppProvider({ children }) {
           driveService.loadOrCreateSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, def)
             .catch(e => { if (e.code === 'TOKEN_EXPIRED') throw e; return def; });
         try {
-          const [meta, materials, vendorRegistry, shopSettings, jobs, components, holderLibrary, programDetails] = await Promise.all([
+          const [meta, materials, vendorRegistry, shopSettings, parts, components, holderLibrary, programDetails] = await Promise.all([
             toolStore.loadAll(),
             sharedSafe('materials', DEFAULT_MATERIALS),
             sharedSafe('vendorRegistry', DEFAULT_VENDOR_REGISTRY),
             sharedSafe('shopSettings', DEFAULT_SHOP_SETTINGS),
-            sharedSafe('jobs', DEFAULT_JOBS),
+            sharedSafe('parts', DEFAULT_PARTS),
             sharedSafe('components', DEFAULT_COMPONENTS),
             sharedSafe('holderLibrary', DEFAULT_HOLDER_LIBRARY),
             sharedSafe('programDetails', DEFAULT_PROGRAM_DETAILS),
@@ -1178,7 +1138,7 @@ export function AppProvider({ children }) {
           }
           effectiveShop = ss;
           saveRegistryMirror(ss);
-          dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings: ss, jobs, components, holderLibrary, programDetails });
+          dispatch({ type: 'SET_SHARED_FILES', materials, vendorRegistry, shopSettings: ss, parts, components, holderLibrary, programDetails });
           dispatch({ type: 'SET_LIBRARIES', shopSettings: ss }); // sync pointers
           // Shared files are now loaded — Drive writes are safe. Set synchronously
           // (it's a ref) so the setup-step effects that re-fire on this dispatch,
@@ -1444,9 +1404,8 @@ export function AppProvider({ children }) {
       saveMaterials,
       saveVendorRegistry,
       saveShopSettings,
-      saveJobs,
+      saveParts,
       saveComponents,
-      findOrCreateJob,
       saveLocationConfig,
       markSetupStepInSettings,
       registerNavGuard,

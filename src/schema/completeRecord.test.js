@@ -38,7 +38,7 @@ const rawInstance = ({ guid, lb = 2.125, holderGuid = 'H1', presets = [presetFix
 });
 
 // A metadata record carrying the app-only bits Fusion can never hold — the
-// overlay (machine link, job links) + tool-level metadata.
+// overlay (machine link, operation links) + tool-level metadata.
 const metaFixture = {
   id: 'FTL-ABC123',
   tool_id: 'A-42',
@@ -46,7 +46,7 @@ const metaFixture = {
   tags: ['roughing'],
   min_ooh: 1.5,
   machine_tool_number: 55,
-  preset_meta: { p1: { operation_type: 'rough', machine_id: 'M300', job_ids: ['job-1'] } },
+  preset_meta: { p1: { operation_type: 'rough', machine_id: 'M300', operation_ids: ['job-1'] } },
   assemblies: [{
     assembly_id: 'asm-1', instance_guid: 'g1', holder_guid: 'H1',
     holder_description: 'BT30 SK13 60', ooh: 2.125,
@@ -106,11 +106,11 @@ describe('mode-2 fidelity: Fusion build → buildMetadataTool → buildUnlinkedT
     expect(p.material?.query).toBe('Al Wrought');
   });
 
-  it('reconstructs the app-only preset overlay (operation type, machine link, job links)', () => {
+  it('reconstructs the app-only preset overlay (operation type, machine link, operation links)', () => {
     const p = rebuilt.presets[0];
     expect(p.operation_type).toBe('rough');
     expect(p.machine_id).toBe('M300');
-    expect(p.job_ids).toEqual(['job-1']);
+    expect(p.operation_ids).toEqual(['job-1']);
   });
 
   it('reconstructs assemblies with stable ids and preset links', () => {

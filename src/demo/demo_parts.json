@@ -1,29 +1,10 @@
 {
-  "version": 2,
-  "jobs": [
-    {
-      "id": "0d3a1b2c-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
-      "program_number": "O1042",
-      "part_number": "PN-4417-A",
-      "created_at": "2026-05-12T14:30:00.000Z",
-      "created_by": "demo",
-      "notes": ""
-    },
-    {
-      "id": "1e4b2c3d-5f6a-4b7c-9d8e-0f1a2b3c4d5e",
-      "program_number": "O2210",
-      "part_number": "PN-3308",
-      "created_at": "2026-06-02T09:15:00.000Z",
-      "created_by": "demo",
-      "notes": ""
-    }
-  ],
+  "version": 1,
   "parts": [
     {
       "id": "pt-demo-0001",
       "part_number": "CAD1-114P4344-1",
       "customer": "Cadrex",
-      "rev": "A",
       "material_id": "N_6061",
       "material_custom": "",
       "created_at": "2026-05-10T12:00:00.000Z",
@@ -33,19 +14,48 @@
       "id": "pt-demo-0002",
       "part_number": "GSE1-08D1404",
       "customer": "GS Enterprises",
-      "rev": "A",
       "material_id": "P_1018",
       "material_custom": "",
       "created_at": "2026-05-18T12:00:00.000Z",
       "created_by": "demo"
     }
   ],
-  "programs": [
+  "routings": [
+    {
+      "id": "rt-demo-0001",
+      "part_id": "pt-demo-0001",
+      "name": "Vise",
+      "rev": "A",
+      "notes": "",
+      "order": 0,
+      "created_at": "2026-05-10T12:00:00.000Z",
+      "created_by": "demo"
+    },
+    {
+      "id": "rt-demo-0002",
+      "part_id": "pt-demo-0001",
+      "name": "Soft jaw",
+      "rev": "B",
+      "notes": "Second routing \u2014 same part, different workholding",
+      "order": 1,
+      "created_at": "2026-06-01T12:00:00.000Z",
+      "created_by": "demo"
+    },
+    {
+      "id": "rt-demo-0003",
+      "part_id": "pt-demo-0002",
+      "name": "",
+      "rev": "A",
+      "notes": "",
+      "order": 0,
+      "created_at": "2026-05-18T12:00:00.000Z",
+      "created_by": "demo"
+    }
+  ],
+  "operations": [
     {
       "id": "prg-demo-0001",
       "program_number": 1108,
-      "part_id": "pt-demo-0001",
-      "operation": "OP50",
       "description": "Full part - tabbed",
       "machine_id": null,
       "machine_label": "Brother M300X3",
@@ -56,13 +66,14 @@
       "material_custom": "",
       "pallet": "",
       "created_at": "2026-05-10T12:05:00.000Z",
-      "created_by": "demo"
+      "created_by": "demo",
+      "routing_id": "rt-demo-0001",
+      "op_number": "OP50",
+      "order": 0
     },
     {
       "id": "prg-demo-0002",
       "program_number": 1109,
-      "part_id": "pt-demo-0001",
-      "operation": "OP60",
       "description": "",
       "machine_id": null,
       "machine_label": "Brother R650",
@@ -73,13 +84,14 @@
       "material_custom": "",
       "pallet": "1",
       "created_at": "2026-05-10T12:06:00.000Z",
-      "created_by": "demo"
+      "created_by": "demo",
+      "routing_id": "rt-demo-0001",
+      "op_number": "OP60",
+      "order": 1
     },
     {
       "id": "prg-demo-0003",
       "program_number": 1110,
-      "part_id": "pt-demo-0002",
-      "operation": "Soft Jaw",
       "description": "Soft jaw stock",
       "machine_id": null,
       "machine_label": "Brother M300X3",
@@ -90,6 +102,27 @@
       "material_custom": "",
       "pallet": "",
       "created_at": "2026-05-18T12:10:00.000Z",
+      "created_by": "demo",
+      "routing_id": "rt-demo-0003",
+      "op_number": "Soft Jaw",
+      "order": 2
+    },
+    {
+      "id": "op-demo-0004",
+      "routing_id": "rt-demo-0002",
+      "op_number": "OP50",
+      "program_number": 1120,
+      "description": "Same part, soft-jaw routing",
+      "machine_id": null,
+      "machine_label": "Brother M300X3",
+      "is_fixture": false,
+      "internal_external": "External",
+      "fixturing": "77mm Lang Vise with Soft Jaw",
+      "material_id": null,
+      "material_custom": "",
+      "pallet": "",
+      "order": 0,
+      "created_at": "2026-06-01T12:05:00.000Z",
       "created_by": "demo"
     }
   ]

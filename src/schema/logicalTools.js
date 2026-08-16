@@ -142,7 +142,7 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
   };
 }
 
-// Overlay the app-only per-preset fields (operation_type / machine_id / job_ids)
+// Overlay the app-only per-preset fields (operation_type / machine_id / operation_ids)
 // and infer a blank material from the name. Shared by buildLogicalTool (source =
 // Fusion presets, overlay from preset_meta by guid) and buildUnlinkedTool (source
 // = the complete metadata presets, which already carry these — the `?? p.<field>`
@@ -173,7 +173,7 @@ export function overlayPresets(sourcePresets, presetMeta = {}) {
       machine_id: presetMeta[p.guid]?.machine_id ?? p.machine_id ?? null,
       material_preset_id: presetMeta[p.guid]?.material_preset_id ?? p.material_preset_id ?? null,
       assembly_id: presetMeta[p.guid]?.assembly_id ?? p.assembly_id ?? null,
-      job_ids: presetMeta[p.guid]?.job_ids ?? p.job_ids ?? [],
+      operation_ids: presetMeta[p.guid]?.operation_ids ?? p.operation_ids ?? [],
       // Small-bore comp (app-only, metadata-owned) — see buildMetadataTool.
       small_bore: presetMeta[p.guid]?.small_bore ?? p.small_bore ?? false,
       small_bore_diameter: presetMeta[p.guid]?.small_bore_diameter ?? p.small_bore_diameter ?? '',
@@ -197,7 +197,7 @@ export function overlayPresets(sourcePresets, presetMeta = {}) {
 //   local  = the app's in-memory presets (may carry an intentional app edit).
 // If Fusion changed a preset the app did NOT change → adopt Fusion's version
 // (its values + expressions), keeping only the app-only overlay
-// (operation_type / machine_id / job_ids). Otherwise keep the app's version.
+// (operation_type / machine_id / operation_ids). Otherwise keep the app's version.
 // The rare both-edited conflict keeps the app's version (matches the pre-fix
 // behavior for that case); the common "only Fusion changed it" case no longer
 // wipes. Speed/feed fields are compared raw-vs-raw so the material-name inference
@@ -238,7 +238,7 @@ export function mergePresetsWithFusion(localPresets, basePresets, remotePresets,
         machine_id: local.machine_id ?? null,
         material_preset_id: local.material_preset_id ?? null,
         assembly_id: local.assembly_id ?? null,
-        job_ids: local.job_ids ?? [],
+        operation_ids: local.operation_ids ?? [],
         small_bore: local.small_bore ?? false,
         small_bore_diameter: local.small_bore_diameter ?? '',
         f_z_base: local.f_z_base ?? null,

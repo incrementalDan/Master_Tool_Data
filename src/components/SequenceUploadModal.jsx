@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { X, UploadCloud, AlertTriangle, CheckCircle2, ListOrdered, HelpCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { buildSequenceImport, detailsOf } from '../utils/sequenceImport.js';
-import { formatProgramNumber, formatOperation } from '../utils/programs.js';
+import { formatProgramNumber, formatOperation, routingLabel } from '../utils/parts.js';
 
 // Upload a posted Sequence Detail CSV: file → preview → commit.
 //
@@ -19,7 +19,7 @@ import { formatProgramNumber, formatOperation } from '../utils/programs.js';
 // on and gets printed — see resolveRowLocation.)
 export default function SequenceUploadModal({ onClose, onImported, presetFile = null }) {
   const {
-    jobs: jobsFile, tools, holderLibrary, programDetails,
+    parts: partsFile, tools, holderLibrary, programDetails,
     importSequenceDetail, notify, user,
   } = useApp();
 
@@ -36,7 +36,7 @@ export default function SequenceUploadModal({ onClose, onImported, presetFile = 
       setResult(buildSequenceImport({
         csvText,
         fileName: f.name,
-        jobsFile,
+        partsFile,
         tools,
         holderRecords: holderLibrary?.holders || [],
         existingDetails: detailsOf(programDetails),
@@ -71,7 +71,7 @@ export default function SequenceUploadModal({ onClose, onImported, presetFile = 
           : `${formatProgramNumber(stored.program_number)} updated — ${stored.tools.length} tools`,
         'success',
       );
-      onImported?.(stored, result.program, part);
+      onImported?.(stored, result.program, result.routing, part);
     } catch (err) {
       notify(`Import failed: ${err.message}`, 'error', 8000);
     } finally {
@@ -133,8 +133,9 @@ export default function SequenceUploadModal({ onClose, onImported, presetFile = 
                     <div>
                       <div>
                         <strong>{formatProgramNumber(result.program.program_number)}</strong>
-                        {' · '}{part?.part_number}{part?.rev ? ` Rev ${part.rev}` : ''}
-                        {result.program.operation ? ` · ${formatOperation(result.program.operation)}` : ''}
+                        {' · '}{part?.part_number}
+                        {result.routing ? ` · ${routingLabel(result.routing)}` : ''}
+                        {result.program.op_number ? ` · ${formatOperation(result.program.op_number)}` : ''}
                       </div>
                       <div className="text-xs text-sub">
                         {result.detail.tools.length} tools · {result.detail.row_count} operations

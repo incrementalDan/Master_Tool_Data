@@ -192,7 +192,7 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
       machine_number: !!meta.id_system_exclusions?.machine_number,
       location: !!meta.id_system_exclusions?.location,
     },
-    job_ids: meta.job_ids || [],
+    operation_ids: meta.operation_ids || [],
     // Symmetric tool↔tool links (a tap and its drill, a reamer and its drill).
     // Metadata-only — Fusion has nowhere to put them. Stored as the partner's
     // stable tracking id on BOTH sides; see src/utils/toolLinks.js.
@@ -243,7 +243,7 @@ export function buildMetadataTool(tool) {
     // aggressive) — app-only, a name-modifier hint; 'normal' is the default so
     // it's only stored when it differs.
     const hasIntensity = p.intensity && p.intensity !== 'normal';
-    if (p.guid && (p.operation_type || p.machine_id || p.material_preset_id || p.assembly_id || p.job_ids?.length || hasSmallBore || hasIntensity)) {
+    if (p.guid && (p.operation_type || p.machine_id || p.material_preset_id || p.assembly_id || p.operation_ids?.length || hasSmallBore || hasIntensity)) {
       preset_meta[p.guid] = {
         ...(p.operation_type ? { operation_type: p.operation_type } : {}),
         ...(p.machine_id    ? { machine_id: p.machine_id }         : {}),
@@ -255,7 +255,7 @@ export function buildMetadataTool(tool) {
         ...(p.assembly_id ? { assembly_id: p.assembly_id } : {}),
         // Job links (jobs.json registry ids) proven on this preset — see
         // src/utils/jobs.js. Metadata-only, never written to Fusion.
-        ...(p.job_ids?.length ? { job_ids: p.job_ids } : {}),
+        ...(p.operation_ids?.length ? { operation_ids: p.operation_ids } : {}),
         ...(p.small_bore ? { small_bore: true } : {}),
         ...(p.small_bore_diameter ? { small_bore_diameter: p.small_bore_diameter } : {}),
         ...(p.f_z_base != null ? { f_z_base: p.f_z_base } : {}),
@@ -442,7 +442,6 @@ export function buildMetadataTool(tool) {
     presets: (tool.presets || []).map(p => ({ ...p })),
     // Tool-level job links (jobs.json registry ids) — "this tool was used on
     // job X" without preset context. Preset-proven links live in preset_meta.
-    job_ids: tool.job_ids || [],
     linked_tools: normalizeLinkIds(tool.linked_tools, tool.tracking_id || tool.id),
     notes: tool.notes || '',
     last_used_job: tool.last_used_job || '',

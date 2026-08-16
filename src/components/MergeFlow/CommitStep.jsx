@@ -4,8 +4,8 @@ import { useApp } from '../../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS } from '../../schema/toolSchema.js';
 import { fieldLabel } from '../../schema/fieldRegistry.js';
 import { unitAbbr } from '../../utils/units.js';
+import { formatProgramNumber } from '../../utils/parts.js';
 import { presetMaterialColor } from '../../utils/presetNaming.js';
-import { jobLabel } from '../../utils/jobs.js';
 import { PRESET_FIELD_LABELS } from './DiffStep.jsx';
 import JobProgramPicker, { SelectedProgramChip } from '../JobProgramPicker.jsx';
 import ToolTypeIcon from '../icons/ToolTypeIcon.jsx';
@@ -30,7 +30,7 @@ export default function CommitStep({
   onCommitted, onBack,
   isLastItem = false,
 }) {
-  const { mergeTool, isSaving, user, materials, findOrCreateJob, googleAuthenticated, demoMode } = useApp();
+  const { mergeTool, isSaving, user, materials, googleAuthenticated, demoMode } = useApp();
   const [revisionNote, setRevisionNote] = useState('');
   const [mergedBy, setMergedBy] = useState(user?.email || user?.name || '');
   // The program this sync came from — a selection from the Program Number
@@ -60,10 +60,14 @@ export default function CommitStep({
     // Resolve the selected program to a job link (carrying program_id so the
     // preset's job joins back to the full program record); mergeTool links its
     // id to every preset this commit touches (or the tool, if none).
+    // The program this sync came from. The picker returns an operation that
+    // already exists, so there is nothing to create — the link is just its id.
     let jobLink = null;
     if (jobEnabled && jobSel) {
-      const job = findOrCreateJob(jobSel.program_number, jobSel.part_number, mergedBy.trim(), jobSel.program_id);
-      jobLink = { job_id: job.id, label: jobLabel(job) };
+      jobLink = {
+        operation_id: jobSel.operation_id,
+        label: [formatProgramNumber(jobSel.program_number), jobSel.part_number].filter(Boolean).join(' · '),
+      };
       onJobInput?.(jobSel);
     }
 

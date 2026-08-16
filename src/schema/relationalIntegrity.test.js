@@ -25,7 +25,7 @@
 // FK_ROUND_TRIP below. If you add a link-shaped field, LINK_SHAPED_KEYS must
 // cover it or these tests fail — that is deliberate.
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_MATERIALS, DEFAULT_JOBS } from './sharedDefaults.js';
+import { DEFAULT_MATERIALS, DEFAULT_PARTS } from './sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY } from './vendorRegistry.js';
 import { buildMetadataTool } from './metadataModel.js';
 import { buildUnlinkedTool } from './logicalTools.js';
@@ -83,9 +83,11 @@ describe('seed data — no dangling FKs, no duplicate ids', () => {
     }
   });
 
-  it('jobs.json: programs point at real parts', () => {
-    const partIds = ids(DEFAULT_JOBS.parts);
-    expect((DEFAULT_JOBS.programs || []).filter(p => p.part_id && !partIds.has(p.part_id))).toEqual([]);
+  it('parts.json: routings point at real parts, operations at real routings', () => {
+    const partIds = ids(DEFAULT_PARTS.parts);
+    const routingIds = ids(DEFAULT_PARTS.routings);
+    expect((DEFAULT_PARTS.routings || []).filter(r => r.part_id && !partIds.has(r.part_id))).toEqual([]);
+    expect((DEFAULT_PARTS.operations || []).filter(o => o.routing_id && !routingIds.has(o.routing_id))).toEqual([]);
   });
 });
 
@@ -98,7 +100,6 @@ const FK_TOOL = {
   preferred_machine_id: 'mc_m300', preferred_machine: 'Brother M300',
   bin_size_id: 'bin_std',
   tool_location: { system_id: 'sys1', zone_id: 'z1', station_id: 'st1', drawer_id: 'dr1', bin: 1405 },
-  job_ids: ['job_a'],
   speed_feed_refs: [{ preset_id: 'pre_N_al_wrought', operation_type: 'rough', sfm: 350, chip_load: 0.002 }],
   pairing: { family: 'milling_insert', holder_component_id: 'cmp_h', insert_component_id: 'cmp_i', rta_number: '' },
   purchasing: {
@@ -117,7 +118,7 @@ const FK_TOOL = {
     material_preset_id: 'pre_N_al_wrought',
     machine_id: 'mc_m300',
     assembly_id: 'as1',
-    job_ids: ['job_a'],
+    operation_ids: ['op_a'],
   }],
 };
 
@@ -130,8 +131,10 @@ const FK_ROUND_TRIP = [
   ['preset → assembly (the FK)',     t => t.presets[0].assembly_id,                 'as1'],
   ['preset → CAM preset',            t => t.presets[0].material_preset_id,          'pre_N_al_wrought'],
   ['preset → machine',               t => t.presets[0].machine_id,                  'mc_m300'],
-  ['preset → jobs',                  t => t.presets[0].job_ids,                     ['job_a']],
-  ['tool → jobs',                    t => t.job_ids,                                ['job_a']],
+  // A preset's link to the operation it was proven on. There is deliberately NO
+  // tool-level equivalent: "where is this tool used" is derived from the stored
+  // Sequence Detail (program_details rows carry tool_ref), so it can't go stale.
+  ['preset → operation',             t => t.presets[0].operation_ids,               ['op_a']],
   ['tool → preferred machine',       t => t.preferred_machine_id,                   'mc_m300'],
   ['tool → location system',         t => t.tool_location.system_id,                'sys1'],
   ['tool → location drawer',         t => t.tool_location.drawer_id,                'dr1'],
@@ -214,7 +217,7 @@ const LINK_SHAPED_KEYS = new Set([
   // trap below, which is how it got into the inventory at all.
   'selected_holder_guid',
   'legacy_asm_numbers',
-  'material_preset_id', 'machine_id', 'job_ids', 'preset_id',
+  'material_preset_id', 'machine_id', 'operation_ids', 'preset_id',
   'preferred_machine_id', 'bin_size_id', 'system_id', 'zone_id', 'station_id', 'drawer_id',
   'holder_component_id', 'insert_component_id', 'holder_proshop_id', 'insert_proshop_id',
   'registry_id', 'manufacturer_id',
