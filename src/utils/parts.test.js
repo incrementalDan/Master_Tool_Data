@@ -7,6 +7,7 @@ import {
   customerColor, customerNames, isPalletMachine, machineOptions, searchPrograms,
   updatePartIn, updateRoutingIn, updateOperationIn,
   deleteOperationIn, deleteRoutingIn, deletePartIn,
+  applyPartsFilters, sortParts, sortOperations, recordActivityAt,
 } from './parts.js';
 
 // A part with TWO routings — the case the whole model exists for: same part
@@ -247,5 +248,142 @@ describe('a routing is never nameless, and its name never moves', () => {
     expect(routingsForPart(file, 'p').map((r, i) => routingLabel(r, i))).toEqual(['Routing 1', 'Routing 2']);
     const after = deleteRoutingIn(file, file.routings[0].id);
     expect(routingsForPart(after, 'p').map((r, i) => routingLabel(r, i))).toEqual(['Routing 2']);
+  });
+});
+
+describe('search, filter and sort — one result for both views', () => {
+  const materials = { materials: [{ id: 'N_6061', label: '6061-T6', group_id: 'N' }] };
+  const f = {
+    parts: [
+      { id: 'p1', part_number: 'HINGE-COVER', customer: 'Val', material_id: 'N_6061', created_at: '2026-01-01' },
+      { id: 'p2', part_number: 'BRACKET', customer: 'Acme', material_custom: 'Delrin', created_at: '2026-02-01' },
+    ],
+    routings: [
+      { id: 'r1', part_id: 'p1', name: 'Vise', rev: 'A', order: 0 },
+      { id: 'r2', part_id: 'p2', name: '', rev: 'A', order: 0 },
+    ],
+    operations: [
+      { id: 'o1', routing_id: 'r1', op_number: '50', program_number: 1217, machine_label: 'Brother M300X3', is_fixture: false, internal_external: 'External', created_at: '2026-01-02' },
+      { id: 'o2', routing_id: 'r1', op_number: '60', program_number: 1218, machine_label: 'Brother R650', is_fixture: false, internal_external: 'External', created_at: '2026-01-03', updated_at: '2026-08-16' },
+      { id: 'o3', routing_id: 'r2', op_number: '10', program_number: 1400, machine_label: 'Brother M300X3', is_fixture: true, internal_external: 'Internal', created_at: '2026-02-02' },
+    ],
+  };
+  const filter = (opts) => applyPartsFilters(f, materials, opts);
+
+  it('finds an operation by its program number, with or without the O', () => {
+    expect([...filter({ text: '1218' }).operationIds]).toEqual(['o2']);
+    expect([...filter({ text: 'O1218' }).operationIds]).toEqual(['o2']);
+  });
+
+  it('finds by part number, customer and material — and keeps the WHOLE part', () => {
+    // Searching a part number shows everything under it, not just rows that
+    // happen to repeat the number.
+    expect([...filter({ text: 'hinge' }).operationIds].sort()).toEqual(['o1', 'o2']);
+    expect([...filter({ text: 'acme' }).operationIds]).toEqual(['o3']);
+    expect([...filter({ text: '6061' }).operationIds].sort()).toEqual(['o1', 'o2']);
+    expect([...filter({ text: 'delrin' }).operationIds]).toEqual(['o3']);
+  });
+
+  it('finds by OP number, routing name and machine', () => {
+    expect([...filter({ text: 'OP60' }).operationIds]).toEqual(['o2']);
+    expect([...filter({ text: 'vise' }).operationIds].sort()).toEqual(['o1', 'o2']);
+    expect([...filter({ text: 'r650' }).operationIds]).toEqual(['o2']);
+  });
+
+  it('narrows by machine and by type', () => {
+    expect([...filter({ machine: 'Brother R650' }).operationIds]).toEqual(['o2']);
+    expect([...filter({ type: 'Fixture' }).operationIds]).toEqual(['o3']);
+    expect([...filter({ type: 'External' }).operationIds].sort()).toEqual(['o1', 'o2']);
+  });
+
+  it('drops a part entirely when nothing under it survives the filter', () => {
+    expect([...filter({ machine: 'Brother R650' }).partIds]).toEqual(['p1']);
+  });
+
+  it('shows every part when nothing is filtered', () => {
+    expect(filter({}).partIds.size).toBe(2);
+    expect(filter({}).operationIds.size).toBe(3);
+  });
+
+  it('still finds a part that has no operations yet', () => {
+    const bare = { ...f, parts: [...f.parts, { id: 'p3', part_number: 'NEW-PART', customer: '' }] };
+    expect(applyPartsFilters(bare, materials, { text: 'new-part' }).partIds.has('p3')).toBe(true);
+  });
+});
+
+describe('sorting', () => {
+  const f = {
+    parts: [
+      { id: 'p1', part_number: 'ZULU', customer: 'Val', created_at: '2026-01-01' },
+      { id: 'p2', part_number: 'ALPHA', customer: 'Acme', created_at: '2026-02-01' },
+    ],
+    routings: [
+      { id: 'r1', part_id: 'p1', order: 0 },
+      { id: 'r2', part_id: 'p2', order: 0 },
+    ],
+    operations: [
+      { id: 'o1', routing_id: 'r1', op_number: '50', program_number: 1500, created_at: '2026-01-02' },
+      { id: 'o2', routing_id: 'r2', op_number: '10', program_number: 1100, created_at: '2026-02-02', updated_at: '2026-08-16' },
+    ],
+  };
+
+  it('defaults to the most recently touched part first', () => {
+    // Editing an OPERATION is activity on its part — that's how you find what
+    // you were last working on.
+    expect(sortParts(f, f.parts).map(p => p.part_number)).toEqual(['ALPHA', 'ZULU']);
+  });
+
+  it('sorts by newest program number', () => {
+    expect(sortParts(f, f.parts, 'program').map(p => p.part_number)).toEqual(['ZULU', 'ALPHA']);
+  });
+
+  it('falls back to the program number when timestamps tie', () => {
+    // Straight after a CSV import every record shares one timestamp, so the
+    // number is the only thing left that means anything.
+    const flat = {
+      ...f,
+      operations: [
+        { id: 'o1', routing_id: 'r1', program_number: 1500, created_at: '2026-01-01' },
+        { id: 'o2', routing_id: 'r2', program_number: 1100, created_at: '2026-01-01' },
+      ],
+      parts: f.parts.map(p => ({ ...p, created_at: '2026-01-01' })),
+    };
+    expect(sortParts(flat, flat.parts).map(p => p.part_number)).toEqual(['ZULU', 'ALPHA']);
+  });
+
+  it('sorts by part number and customer, both directions', () => {
+    expect(sortParts(f, f.parts, 'part', 'asc').map(p => p.part_number)).toEqual(['ALPHA', 'ZULU']);
+    expect(sortParts(f, f.parts, 'part', 'desc').map(p => p.part_number)).toEqual(['ZULU', 'ALPHA']);
+    expect(sortParts(f, f.parts, 'customer', 'asc').map(p => p.customer)).toEqual(['Acme', 'Val']);
+  });
+
+  it('sorts operation rows by the same vocabulary', () => {
+    const rows = [
+      { id: 'a', program_number: 1100, created_at: '2026-01-01', part: { part_number: 'B' } },
+      { id: 'b', program_number: 1500, created_at: '2026-05-01', part: { part_number: 'A' } },
+    ];
+    expect(sortOperations(rows, 'program').map(r => r.id)).toEqual(['b', 'a']);
+    expect(sortOperations(rows, 'activity').map(r => r.id)).toEqual(['b', 'a']);
+    expect(sortOperations(rows, 'part', 'asc').map(r => r.id)).toEqual(['b', 'a']);
+  });
+});
+
+describe('every edit stamps updated_at', () => {
+  // "Recently updated" is only trustworthy if no screen can edit without it.
+  const f = {
+    parts: [{ id: 'p', part_number: 'X', created_at: '2026-01-01' }],
+    routings: [{ id: 'r', part_id: 'p', order: 0, created_at: '2026-01-01' }],
+    operations: [{ id: 'o', routing_id: 'r', program_number: 1000, created_at: '2026-01-01' }],
+  };
+
+  it('stamps it on a part, routing and operation edit alike', () => {
+    expect(partsOf(updatePartIn(f, 'p', { customer: 'New' }))[0].updated_at).toBeTruthy();
+    expect(routingsOf(updateRoutingIn(f, 'r', { name: 'N' }))[0].updated_at).toBeTruthy();
+    expect(operationsOf(updateOperationIn(f, 'o', { op_number: '20' }))[0].updated_at).toBeTruthy();
+  });
+
+  it('reads created_at until the record has ever been edited', () => {
+    expect(recordActivityAt({ created_at: '2026-01-01' })).toBe('2026-01-01');
+    expect(recordActivityAt({ created_at: '2026-01-01', updated_at: '2026-05-01' })).toBe('2026-05-01');
   });
 });

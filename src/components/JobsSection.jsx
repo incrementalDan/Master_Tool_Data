@@ -68,7 +68,7 @@ export default function JobsSection({ tool }) {
                 <div key={detail.id} className="where-used-row">
                   <span className="program-num-badge">{formatProgramNumber(detail.program_number)}</span>
                   {part
-                    ? <Link to={`/programs/part/${part.id}`} className="pn-part-number">{part.part_number}</Link>
+                    ? <Link to={`/parts/${part.id}`} className="pn-part-number">{part.part_number}</Link>
                     : <span className="text-sub">(program removed)</span>}
                   {routing && <span className="text-xs text-sub">{routingLabel(routing)}</span>}
                   {operation?.op_number && <span className="text-xs text-sub">{formatOperation(operation.op_number)}</span>}

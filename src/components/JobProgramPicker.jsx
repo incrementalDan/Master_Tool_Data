@@ -11,7 +11,7 @@ import { machineColorFor } from '../utils/machineColors.js';
 // (exact) or PART NUMBER (contains) → matching operations, each with full
 // context (part / routing / OP / machine / customer); pick one and
 // `onPick(selection)` fires. "Add new program" opens the same AddProgramModal
-// used on the Programs page and auto-picks what you create. Purely a picker —
+// used on the Parts page and auto-picks what you create. Purely a picker —
 // consumers decide what to do with each pick.
 //
 // ⚠️ A program IS an operation: the number lives on the operation record, so

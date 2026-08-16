@@ -6173,3 +6173,8 @@ input.sf-ref-num { text-align: right; }
   font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px;
   color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent);
 }
+
+/* Parts page filter bar — shared by the grouped and table views. */
+.pn-table-filters .pn-search { position: relative; flex: 1; min-width: 220px; }
+.pn-table-filters .pn-search .icon-btn { position: absolute; right: 6px; }
+.pn-sort { display: flex; align-items: center; gap: 6px; margin-left: auto; }
