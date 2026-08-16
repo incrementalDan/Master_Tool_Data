@@ -216,3 +216,36 @@ describe('factories', () => {
     expect(newOperation({ routing_id: 'r', op_number: '20' }).program_number).toBeNull();
   });
 });
+
+describe('a routing is never nameless, and its name never moves', () => {
+  it('stamps a stored default name when there is nothing else to call it', () => {
+    // `order` is the count at creation, so the number is right at the time.
+    expect(newRouting({ part_id: 'p', order: 0 }).name).toBe('Routing 1');
+    expect(newRouting({ part_id: 'p', order: 1 }).name).toBe('Routing 2');
+  });
+
+  it('leaves the name blank when the rev already identifies it', () => {
+    // The label then reads "Rev A", which says more than "Routing 1".
+    const r = newRouting({ part_id: 'p', rev: 'A', order: 0 });
+    expect(r.name).toBe('');
+    expect(routingLabel(r)).toBe('Rev A');
+  });
+
+  it('keeps a name the user gave', () => {
+    expect(newRouting({ part_id: 'p', name: 'Soft jaw', rev: 'B', order: 3 }).name).toBe('Soft jaw');
+  });
+
+  it('does NOT rename the survivors when an earlier routing is deleted', () => {
+    // The bug a positional name would cause: delete Routing 1 and Routing 2
+    // silently becomes "Routing 1" — a label moving under the user on a record
+    // they never touched.
+    const file = {
+      parts: [{ id: 'p', part_number: 'X' }],
+      routings: [newRouting({ part_id: 'p', order: 0 }), newRouting({ part_id: 'p', order: 1 })],
+      operations: [],
+    };
+    expect(routingsForPart(file, 'p').map((r, i) => routingLabel(r, i))).toEqual(['Routing 1', 'Routing 2']);
+    const after = deleteRoutingIn(file, file.routings[0].id);
+    expect(routingsForPart(after, 'p').map((r, i) => routingLabel(r, i))).toEqual(['Routing 2']);
+  });
+});

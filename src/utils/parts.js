@@ -127,10 +127,18 @@ export function newPart({ part_number, customer = '', material_id = null, materi
 }
 
 export function newRouting({ part_id, name = '', rev = '', notes = '', order = 0 }, createdBy = '') {
+  // ⚠️ A routing that would otherwise be nameless gets a STORED default name
+  // ("Routing 1", "Routing 2"), not a name derived from its position in the
+  // list. A positional name silently RENAMES the survivors when one is deleted
+  // — delete Routing 1 and Routing 2 becomes "Routing 1" — which is a label
+  // moving under the user for a record they didn't touch. `order` is the count
+  // at creation, so the number is right and then it never moves.
+  const trimmedName = String(name ?? '').trim();
+  const trimmedRev = String(rev ?? '').trim();
   return {
     id: generateId(),
     part_id,
-    name: String(name ?? '').trim(),
+    name: trimmedName || (trimmedRev ? '' : `Routing ${(order ?? 0) + 1}`),
     rev: String(rev ?? '').trim(),
     notes: String(notes ?? '').trim(),
     order,
@@ -240,8 +248,9 @@ export function formatOperation(op) {
   return /^\d+[a-z]*$/i.test(stripped) ? `OP${stripped.toUpperCase()}` : s;
 }
 
-// A routing's display name: what the user called it, else its rev, else a
-// positional fallback so a routing is never nameless in a list.
+// A routing's display name: what the user called it, else its rev. The
+// positional fallback is a last resort for a record that predates the stored
+// default (newRouting stamps one) — see the warning there about names shifting.
 export function routingLabel(routing, index = 0) {
   if (!routing) return '';
   if (routing.name) return routing.name;
