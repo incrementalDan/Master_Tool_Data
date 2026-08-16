@@ -4,16 +4,21 @@ import { HelpCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { HolderTag } from './HolderPill.jsx';
 import { offsetOf } from '../utils/sequenceDetail.js';
-import { buildHolderIndex } from '../utils/sequenceImport.js';
+import { buildHolderIndex, resolveRowLocation } from '../utils/sequenceImport.js';
 
 // The condensed tool list for a program — derived from our existing APW Setup
 // Sheet, in that column order.
 //
-// ⚠️ EVERY VALUE HERE IS THE CSV'S OWN STRING. The Sequence Detail is a
-// pass-through of proven job data: a wrong OOH, holder or T# causes a crash, so
-// what's displayed (and printed) is what the post wrote, never an app-corrected
-// version of it. The library is only ever a LINK (the Tool # pill navigates to
-// the tool) or a FLAG (a location disagreement) — never a substituted value.
+// ⚠️ EVERY VALUE HERE IS THE CSV'S OWN STRING — EXCEPT LOCATION. The Sequence
+// Detail is a pass-through of proven job data: a wrong OOH, holder or T# causes
+// a crash, so what's displayed (and printed) is what the post wrote, never an
+// app-corrected version of it.
+//
+// LOCATION is the one deliberate exception (resolveRowLocation): its CSV value
+// comes from Fusion's vendor field, which the app updates lazily, so a posted
+// file routinely names a bin the shop has since changed — and ToolDex is what
+// owns location. The app's value is shown, with the CSV's noted beside it when
+// they differ. Nothing edits the CSV; the stored row keeps its own value.
 //
 // H and D are the one exception, and they're derived rather than read: the post
 // enforces H = D = T, and the CSV's H column is known to carry an incorrect
@@ -36,11 +41,13 @@ export default function ToolListTable({
   selected,                // Set of row keys
   onToggle,
   onToggleAll,
-  lcConflicts = [],        // [{ t, csv, app }] — keyed per row below
   rowKey = (r) => `${r.program_id || ''}:${r.t_num}`,
 }) {
-  const { holderLibrary } = useApp();
-  const conflictFor = (r) => lcConflicts.find(c => c.t === r.t && (!c.program_id || c.program_id === r.program_id));
+  const { holderLibrary, tools } = useApp();
+
+  // Resolved live against the current library, so correcting a tool's location
+  // in ToolDex is reflected here (and on the next label) with no re-upload.
+  const toolsById = useMemo(() => new Map((tools || []).map(t => [t.id, t])), [tools]);
 
   // ⚠️ The "no matching holder" indicator is resolved against the CURRENT
   // library, not the FK captured when the CSV was imported — otherwise adding
@@ -81,7 +88,7 @@ export default function ToolListTable({
         <tbody>
           {rows.map(r => {
             const key = rowKey(r);
-            const lc = conflictFor(r);
+            const loc = resolveRowLocation(r, toolsById);
             return (
               <tr key={key}>
                 {selectable && (
@@ -101,10 +108,10 @@ export default function ToolListTable({
                     : <span className="tool-id-pill">{r.tool_id || '—'}</span>}
                 </td>
                 <td>
-                  {r.lc ? <span className="location-tag">{r.lc}</span> : DASH}
-                  {lc && (
-                    <span className="sd-flag" title={`ToolDex has this tool at ${lc.app}. The CSV value is kept — it's what the program was proven with.`}>
-                      ≠ {lc.app}
+                  {loc.value ? <span className="location-tag">{loc.value}</span> : DASH}
+                  {loc.source === 'app' && loc.csv && loc.csv !== loc.value && (
+                    <span className="sd-flag" title={`The posted file says ${loc.csv} — Fusion's copy is out of date. ToolDex owns location, so its value is shown and printed. The file itself is untouched.`}>
+                      file: {loc.csv}
                     </span>
                   )}
                 </td>

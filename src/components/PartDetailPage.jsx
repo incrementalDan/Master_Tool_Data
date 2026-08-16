@@ -8,7 +8,7 @@ import { useApp } from '../context/AppContext.jsx';
 import {
   partsOf, programsOf, formatProgramNumber, formatOperation, alloyLabel, machineOptions,
 } from '../utils/programs.js';
-import { detailsOf, locationConflict } from '../utils/sequenceImport.js';
+import { detailsOf } from '../utils/sequenceImport.js';
 import { CustomerBadge } from './programsUi.jsx';
 import MachinePill from './MachinePill.jsx';
 import { machineColorFor } from '../utils/machineColors.js';
@@ -30,7 +30,7 @@ const rowKeyOf = (r) => `${r.program_id}:${r.t_num}`;
 // ── One program ──────────────────────────────────────────────────────────────
 
 function ProgramCard({
-  program, detail, machines, canEdit, selected, lcConflicts, onToggleRows, onPrint, onUpload, onProven,
+  program, detail, machines, canEdit, selected, onToggleRows, onPrint, onUpload, onProven,
 }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('tools');
@@ -131,7 +131,6 @@ function ProgramCard({
               rowKey={rowKeyOf}
               onToggle={(k) => onToggleRows([k])}
               onToggleAll={(on) => onToggleRows(keys, on)}
-              lcConflicts={lcConflicts}
             />
           ) : (
             <SequenceDetailTable detail={detail} />
@@ -192,20 +191,10 @@ export default function PartDetailPage() {
     [programs, detailByProgram],
   );
 
-  // ⚠️ Location conflicts are computed LIVE against the current library, not
-  // read from a value stored at import time — otherwise fixing the tool's
-  // location in ToolDex would leave the flag showing until someone happened to
-  // re-upload the CSV, which is a flag the user can't clear.
-  const lcConflicts = useMemo(() => {
-    const byId = new Map((tools || []).map(t => [t.id, t]));
-    const out = [];
-    for (const r of jobRows) {
-      const tool = r.tool_ref ? byId.get(r.tool_ref) : null;
-      const c = tool ? locationConflict(r.lc, tool) : null;
-      if (c) out.push({ t: r.t, program_id: r.program_id, ...c });
-    }
-    return out;
-  }, [jobRows, tools]);
+  // The label's location comes from the app, not the posted file — see
+  // resolveRowLocation. Resolved live, so a corrected location reaches the next
+  // label with no re-upload.
+  const toolsById = useMemo(() => new Map((tools || []).map(t => [t.id, t])), [tools]);
 
   if (!part) {
     return (
@@ -228,7 +217,7 @@ export default function PartDetailPage() {
     const wanted = new Set(keys);
     const rows = jobRows.filter(r => wanted.has(rowKeyOf(r)));
     if (rows.length === 0) { notify('Nothing selected to print', 'error'); return; }
-    const labels = jobLabelRows(rows, part);
+    const labels = jobLabelRows(rows, part, toolsById);
     // Deliberately reported: a blocked popup looks exactly like a broken button.
     if (!printToolTags(labels)) {
       notify('Your browser blocked the print window — allow popups for this site', 'error', 7000);
@@ -307,7 +296,6 @@ export default function PartDetailPage() {
             key={p.id}
             program={p}
             detail={detailByProgram.get(p.id) || null}
-            lcConflicts={lcConflicts.filter(c => c.program_id === p.id)}
             machines={machines}
             canEdit={canEdit}
             selected={selected}

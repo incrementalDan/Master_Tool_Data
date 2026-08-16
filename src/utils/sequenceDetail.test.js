@@ -7,6 +7,7 @@ import {
 } from './sequenceDetail.js';
 import {
   buildSequenceImport, buildToolIndex, findToolByProShopId, locationConflict, upsertDetail,
+  resolveRowLocation,
 } from './sequenceImport.js';
 import { archiveFileName } from '../context/programActions.js';
 
@@ -281,5 +282,31 @@ describe('idempotence', () => {
     const a = build().detail.tools;
     const b = build().detail.tools;
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
+  });
+});
+
+describe('location — the app wins, and the file is left alone', () => {
+  // ⚠️ The one deliberate exception to "the CSV wins". The CSV's LC comes from
+  // Fusion's vendor field, which the app updates lazily, so a posted file
+  // routinely names a bin the shop has since changed — and ToolDex owns
+  // location. This changes display and print only.
+  const byId = (loc) => new Map([['FTL-B261', { id: 'FTL-B261', location: loc }]]);
+
+  it('resolves to the app value when the tool has one', () => {
+    const row = { tool_ref: 'FTL-B261', lc: 'LC-244' };
+    expect(resolveRowLocation(row, byId('LC-99')))
+      .toEqual({ value: 'LC-99', source: 'app', csv: 'LC-244', app: 'LC-99' });
+  });
+
+  it('keeps the posted value when the app has none', () => {
+    expect(resolveRowLocation({ tool_ref: 'FTL-B261', lc: 'LC-244' }, byId('')))
+      .toMatchObject({ value: 'LC-244', source: 'csv' });
+    expect(resolveRowLocation({ tool_ref: null, lc: 'LC-244' }, byId('LC-99')))
+      .toMatchObject({ value: 'LC-244', source: 'csv' });
+  });
+
+  it('still STORES the posted value verbatim — nothing rewrites the import', () => {
+    const { detail } = build();
+    expect(detail.tools[0].lc).toBe('LC-244');
   });
 });

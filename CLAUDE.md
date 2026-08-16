@@ -1626,7 +1626,8 @@ The page that replaces the manually-managed Google Sheet assigning unique CNC pr
 It comes out of a **cascade post** — Fusion emits it at the same time as the G-code, from the same post logic — so it **matches the G-code exactly**. That is the entire point of it. ToolDex is *standard reference data*; the CSV is *what the machine will actually do*. A wrong OOH, holder, tool or T offset **causes a crash**, so printing an app-corrected value that was never proven in CAM is not acceptable.
 
 Consequences that run through every file below:
-- If ToolDex disagrees with the CSV (OOH, holder, description, location), **the CSV value is what gets stored and printed**. Matching against the library may only **add a foreign key** or **raise a flag** — never substitute a value.
+- If ToolDex disagrees with the CSV (OOH, holder, description), **the CSV value is what gets stored and printed**. Matching against the library may only **add a foreign key** or **raise a flag** — never substitute a value.
+- ⚠️ **LOCATION IS THE ONE DELIBERATE EXCEPTION — see "Location: the app wins" below.**
 - **A 0.1" OOH difference is a different tool assembly**, not a data error to fix.
 - Values stay **strings** end to end. No numeric round-tripping — `0.70` must not print as `0.7`.
 - The uploaded file is stored **byte-for-byte untouched**.
@@ -1666,7 +1667,17 @@ If you find yourself writing code that "fixes" a CSV value against the library, 
 - **Legacy IDs count.** `legacy_ids[]` holds numbers retired by an ID-scheme renumber; a CSV posted before that renumber names the old number for a tool that is still in the library, and blocking there would be the app failing on a change *the app itself made*. The current id always wins when both resolve.
 - **Combined insert ids match as an unordered SET of halves** (`proShopIdKey`), so Fusion's arbitrary order/spacing (`I-224 / G-223`, `G223/I224`) resolves to one tool. ⚠️ **Matching only** — the stored, displayed and printed value stays the CSV's own string. Re-rendering it in the app's canonical body-first order is a **later TODO** (it depends on the pairing's confirmed order, which isn't always known).
 - **Holder matching is optional enrichment.** The CSV's holder string is stored and printed either way; a match only adds `holder_id` for later phases. Deliberately an exact (normalized) description match — a fuzzy guess would attach the wrong record to a proven assembly, and real holder matching (taper, collet, gauge length, extension) is its own phase.
-- **Location: CSV wins, disagreement flagged.** Compared on the bin **number** only.
+- **Location: the APP wins** — the one exception, below.
+
+### Location: the app wins (the one exception to CSV-always-wins)
+
+⚠️ **`resolveRowLocation` (`sequenceImport.js`) — location is displayed and PRINTED from ToolDex, not from the posted file.** Everywhere else the CSV is fact because a wrong value is a crash. Location isn't that kind of value: the CSV's `LC` comes from **Fusion's vendor field**, which the app updates **lazily** (a tool's Fusion copy only catches up on its next individual save, or on the explicit `pushFieldToFusion` sync), so a posted file routinely names a bin the shop has since changed. ToolDex **owns** location — the Location System, the bins and the ProShop location import are all behind it — so the app's value is the current one, and the label's whole job is to send someone to the right drawer.
+
+- **Display and print only.** The row still **stores** the CSV's own `lc` verbatim, and the raw file is never edited. Nothing about this "corrects" the import.
+- **Falls back to the file** when the app has no location for that tool — including an **insert tool**, whose location lives on its components, so the pairing itself has none.
+- **Resolved live** against the current library (not stored at import), so correcting a location in ToolDex reaches the tool list and the next label with no re-upload.
+- The tool list shows a muted **`file: LC-244`** marker where the two differ — that difference is evidence Fusion's copy is stale, which the location **Fusion sync** action exists to fix.
+- **Dedupe consequence**: two rows differing *only* by a stale posted location collapse to ONE label, because both resolve to the same drawer.
 
 ### Condensing — one row per POCKET
 
@@ -1703,6 +1714,16 @@ Lives in the Program Number Manager, **not a new top-level tab**.
 - **Version key = the POSTED timestamp** — set by post logic into both the CSV and the G-code, so it's what pairs them. Re-uploading the same stamp is the same version: no new archive copy, and the proven state is kept.
 - **The current version keeps its original filename** (so "download the current file" is unambiguous); a new upload **renames** the previous one to `O1218_20260810-1051_proven.csv` — chronologically sortable, carrying the proven state of the version being retired. Renaming preserves the Drive file ID, so nothing referencing it breaks. **Archiving is best-effort**: failing to rename an old file must not cost the user the upload they actually asked for.
 - Demo mode keeps an uploaded file's text in memory for the session, so the sandbox exercises the whole flow (including the Sequence Detail tab) without a demo-only field on the stored record.
+
+### TODO — the Sequence Detail tab still shows the FILE's values
+
+The **Tool List** and the **labels** now resolve location from the app (above), but the **Sequence Detail** tab re-parses the raw CSV and renders it as-is, so its `LC` column — and any other field the app has since corrected — **will be out of date**. That is defensible as far as it goes (that tab is deliberately "here is the posted file, provably"), but the two tabs can now disagree about the same tool, which needs a decision rather than a silent difference:
+
+- Resolve the same fields there too, and mark which values came from the app?
+- Keep it verbatim and label the tab as the raw file, so the difference reads as intentional?
+- Split it — a "posted" view and a "current" view?
+
+The same question widens later, since **holder and OOH** have the same lazy-Fusion problem in principle; the difference is that those are crash-relevant and location isn't, which is exactly why only location moved. Revisit when the CSV-assembly work lands (below) — that phase is where a row gains a real FK to an assembly and the question of "which value do we show" gets answered properly for every field at once, rather than one field at a time.
 
 ### Explicitly OUT of scope (do not partially build these)
 
