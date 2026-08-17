@@ -70,9 +70,17 @@ export const operationsForRouting = (file, routingId) =>
 
 // Every operation on a part, across all its routings — what the part page's
 // all-tools list and label printing walk.
+//
+// ⚠️ Ordered by ROUTING first, then OP number. Sorting the whole set by OP
+// number alone interleaves the routings (two routings that both start at OP50
+// alternate), which reads as one confused sequence rather than two ways of
+// making the part — and the label stack comes out in that order.
 export const operationsForPart = (file, partId) => {
-  const ids = new Set(routingsForPart(file, partId).map(r => r.id));
-  return operationsOf(file).filter(o => ids.has(o.routing_id)).sort(byOpOrder);
+  const routings = routingsForPart(file, partId);
+  const rank = new Map(routings.map((r, i) => [r.id, i]));
+  return operationsOf(file)
+    .filter(o => rank.has(o.routing_id))
+    .sort((a, b) => (rank.get(a.routing_id) - rank.get(b.routing_id)) || byOpOrder(a, b));
 };
 
 export const routingForOperation = (file, op) => routingById(file, op?.routing_id);
@@ -295,6 +303,42 @@ export function searchPrograms(file, query, limit = 25) {
 // It goes here rather than at each call site so no screen can edit a record
 // without the sort noticing — the whole point is to find what you touched last.
 const touch = (rec, patch) => ({ ...rec, ...patch, updated_at: new Date().toISOString() });
+
+// ⚠️ A NEW PART AND ITS FIRST ROUTING ARE CREATED IN ONE WRITE.
+//
+// A part with no routing has nowhere to put an operation, so the two are always
+// made together — and they must be ONE file→file step. Two sequential saves in
+// the same handler both build from the same pre-update file (React state does
+// not change mid-handler), so the second silently discards the first: the part
+// vanished and its routing was left orphaned, pointing at nothing.
+export function addPartWithRoutingIn(file, partFields, routingFields = {}, createdBy = '') {
+  const part = newPart(partFields, createdBy);
+  const routing = newRouting({ ...routingFields, part_id: part.id, order: 0 }, createdBy);
+  return {
+    file: {
+      ...file,
+      parts: [...partsOf(file), part],
+      routings: [...routingsOf(file), routing],
+    },
+    part,
+    routing,
+  };
+}
+
+export function addRoutingIn(file, partId, routingFields = {}, createdBy = '') {
+  const routing = newRouting({
+    ...routingFields, part_id: partId, order: routingsForPart(file, partId).length,
+  }, createdBy);
+  return { file: { ...file, routings: [...routingsOf(file), routing] }, routing };
+}
+
+export function addOperationIn(file, routingId, opFields = {}, createdBy = '') {
+  const operation = newOperation({
+    ...opFields, routing_id: routingId,
+    order: operationsOf(file).filter(o => o.routing_id === routingId).length,
+  }, createdBy);
+  return { file: { ...file, operations: [...operationsOf(file), operation] }, operation };
+}
 
 export function updatePartIn(file, id, patch) {
   return { ...file, parts: partsOf(file).map(p => (p.id === id ? touch(p, patch) : p)) };

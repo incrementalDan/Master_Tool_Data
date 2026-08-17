@@ -58,8 +58,3 @@ export function labelRows(rows, part, toolsById) {
   }
   return out;
 }
-
-// A single operation's labels (same rule; the rows are already one program's).
-export function programLabelRows(detail, part, toolsById) {
-  return labelRows(detail?.tools || [], part, toolsById);
-}

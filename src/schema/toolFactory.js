@@ -70,7 +70,6 @@ export function newTool(toolType = 'flat end mill') {
     legacy_locations: [],
     machine_tool_number: null,
     no_fusion_link: false,
-    job_ids: [],
     spindle_speed: null,
     cutting_feedrate: null,
     plunge_feedrate: null,

@@ -100,10 +100,17 @@ export function createProgramActions(ctx) {
   // implied by an upload; a person sets it deliberately, and it belongs to the
   // version currently stored (which is why archiving carries it into the
   // retired filename).
-  const setProgramProven = async (programId, proven, by = '') => {
+  // ⚠️ Keyed on operation_id — a detail belongs to an OPERATION (which carries
+  // the program number), and that is the only id it stores. Matching on a
+  // `program_id` that no record has made this a silent no-op: the caller awaits
+  // it, nothing throws, and the toggle simply never moves.
+  const setProgramProven = async (operationId, proven, by = '') => {
     const file = programDetailsRef.current;
-    const detail = detailsOf(file).find(d => d.program_id === programId);
-    if (!detail) return null;
+    const detail = detailsOf(file).find(d => d.operation_id === operationId);
+    // The toggle only renders on an operation that HAS a stored detail, so a
+    // miss is a real fault, not an ordinary state — say so rather than returning
+    // quietly and letting the click look like it worked.
+    if (!detail) throw new Error('No sequence detail is stored for this program');
     const next = {
       ...detail,
       proven: !!proven,

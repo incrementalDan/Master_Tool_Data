@@ -13,7 +13,7 @@ import {
 } from '../utils/parts.js';
 import { detailsOf } from '../utils/sequenceImport.js';
 import {
-  CustomerBadge, TypePill, PartEditForm, ProgramEditForm, RoutingEditForm, InlineConfirm,
+  CustomerBadge, TypePill, ProgramNumBadge, PartEditForm, ProgramEditForm, RoutingEditForm, InlineConfirm,
   partDraftOf, partFieldsOf, programDraftOf, programFieldsOf, routingDraftOf, routingFieldsOf,
 } from './programsUi.jsx';
 import AddProgramModal from './AddProgramModal.jsx';
@@ -101,7 +101,7 @@ function OperationCard({
     return (
       <div className="pn-part-card sd-program">
         <div className="sd-program-head" style={{ cursor: 'default' }}>
-          <span className="program-num-badge">{formatProgramNumber(operation.program_number)}</span>
+          <ProgramNumBadge n={operation.program_number} />
           <span className="text-xs text-sub">Editing</span>
         </div>
         <ProgramEditForm
@@ -119,7 +119,7 @@ function OperationCard({
     <div className="pn-part-card sd-program">
       <div className="sd-program-head" onClick={() => setOpen(o => !o)}>
         {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-        <span className="program-num-badge">{formatProgramNumber(operation.program_number)}</span>
+        <ProgramNumBadge n={operation.program_number} />
         {operation.op_number && <span className="sd-op-label">{formatOperation(operation.op_number)}</span>}
         {operation.machine_label && (
           <MachinePill label={operation.machine_label}

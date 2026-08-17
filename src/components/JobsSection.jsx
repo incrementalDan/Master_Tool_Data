@@ -4,9 +4,9 @@ import { Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
 import { detailsOf } from '../utils/sequenceImport.js';
 import {
-  operationById, routingById, partById, routingLabel,
-  formatProgramNumber, formatOperation,
+  operationById, routingById, partById, routingLabel, formatOperation,
 } from '../utils/parts.js';
+import { ProgramNumBadge } from './programsUi.jsx';
 
 // "Where Used" — every program this tool actually runs in.
 //
@@ -66,7 +66,7 @@ export default function JobsSection({ tool }) {
             <div className="where-used-list">
               {rows.map(({ detail, operation, routing, part, pockets, proven }) => (
                 <div key={detail.id} className="where-used-row">
-                  <span className="program-num-badge">{formatProgramNumber(detail.program_number)}</span>
+                  <ProgramNumBadge n={detail.program_number} />
                   {part
                     ? <Link to={`/parts/${part.id}`} className="pn-part-number">{part.part_number}</Link>
                     : <span className="text-sub">(program removed)</span>}

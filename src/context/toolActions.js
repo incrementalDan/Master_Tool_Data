@@ -766,10 +766,23 @@ export function createToolActions(ctx) {
   // Merge selected job-tool fields back into a master tool with history tracking.
   // presetChanges: Array<{ masterPresetGuid, incomingPreset, selectedFields: Set }>
   // presetsToAdd:  Array<presetObject> — new presets to append
-  // jobLink: { job_id, label } | null — the job (program # + part #, resolved
-  //   to a jobs.json registry id by CommitStep) this sync came from. Linked to
-  //   every preset touched by this commit (updated in place or added); when the
-  //   commit touches NO presets, linked at tool level instead so it isn't lost.
+  // jobLink: { operation_id, label } | null — the PROGRAM this sync came from,
+  //   as the id of the operation carrying that program number (CommitStep's
+  //   picker returns one that already exists, so there is nothing to create).
+  //   Linked to every preset touched by this commit (updated in place or added).
+  //
+  // ⚠️ A preset's program link is `operation_ids` — the same key metadata,
+  //   logicalTools and normalizePreset all use. This read `jobLink.job_id` into
+  //   a `job_ids` array, both left over from the pre-Parts-module jobs.json:
+  //   the id came back `undefined`, so a commit with a program selected wrote
+  //   `job_ids: [undefined]` onto every preset it touched — a garbage link
+  //   nothing reads, and one `normalizePreset` does not strip, so it would have
+  //   leaked into the strictly-validated Fusion JSON.
+  //
+  // ⚠️ There is deliberately NO tool-level fallback. Which programs a TOOL runs
+  //   in is DERIVED from the stored Sequence Detail rows (see JobsSection's
+  //   toolProgramUsage) — storing it a second time here is the exact field that
+  //   went stale and made the tool page show nothing.
   const mergeTool = async (masterTool, mergedFields, revisionNote, mergedBy, presetChanges = [], presetsToAdd = [], assemblyUpdate = null, jobLink = null) => {
     dispatch({ type: 'SAVE_START' });
     try {
@@ -792,7 +805,7 @@ export function createToolActions(ctx) {
         ...(presetsToAdd.length > 0 ? {
           presets_added: presetsToAdd.map(p => p.name || 'Unnamed'),
         } : {}),
-        ...(jobLink ? { job_linked: jobLink.label || jobLink.job_id } : {}),
+        ...(jobLink ? { job_linked: jobLink.label || jobLink.operation_id } : {}),
       };
       let updated = {
         ...masterTool,
@@ -811,9 +824,11 @@ export function createToolActions(ctx) {
           ...presetsToAdd.map(p => p.guid),
         ]);
         const withJob = (p) => {
-          if (!jobLink || !touchedGuids.has(p.guid)) return p;
-          const ids = p.job_ids || [];
-          return ids.includes(jobLink.job_id) ? p : { ...p, job_ids: [...ids, jobLink.job_id] };
+          if (!jobLink?.operation_id || !touchedGuids.has(p.guid)) return p;
+          const ids = p.operation_ids || [];
+          return ids.includes(jobLink.operation_id)
+            ? p
+            : { ...p, operation_ids: [...ids, jobLink.operation_id] };
         };
         const updatedPresets = (updated.presets || []).map(p => {
           const change = presetChanges.find(c => c.masterPresetGuid === p.guid);
@@ -840,12 +855,9 @@ export function createToolActions(ctx) {
         }
       }
 
-      // A job link with no presets touched attaches at tool level — "this tool
-      // was used on job X" is still worth keeping when only flat fields synced.
-      if (jobLink && presetChanges.length === 0 && presetsToAdd.length === 0) {
-        const ids = updated.job_ids || [];
-        if (!ids.includes(jobLink.job_id)) updated.job_ids = [...ids, jobLink.job_id];
-      }
+      // A commit that touched no presets stores no program link at all — the
+      // merge-history entry above already records which program it came from,
+      // and tool→program is derived, never stored (see the note on jobLink).
 
       // Apply assembly create/link update (metadata only — included in the same write)
       if (assemblyUpdate) {

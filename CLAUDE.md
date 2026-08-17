@@ -1292,6 +1292,8 @@ src/
                                   # list (shared forms + mutations), plus the
                                   # all-tools list, per-program Tool List /
                                   # Sequence Detail tabs, proven toggle, labels
+    JobsSection.jsx               # ToolDetail "Where Used" panel + toolProgramUsage
+                                  # — the DERIVED tool→program scan. No stored link
     ToolListTable.jsx             # The condensed tool list (setup-sheet column
                                   # order) + row selection for partial printing
     SequenceDetailTable.jsx       # The full per-toolpath sequence, re-parsed from
@@ -1604,6 +1606,10 @@ Pure helpers: `src/utils/parts.js` (framework-free, mirrors `toolIdSystem.js` / 
 
 **Mutations are pure `file → file`** (`updatePartIn` / `updateRoutingIn` / `updateOperationIn` / `deleteOperationIn` / `deleteRoutingIn` / `deletePartIn`), so the rules above are stated once and every screen shares them. Deletes cascade down the tiers. Each caller hands the result to `saveParts` (optimistic + debounced).
 
+⚠️ **A part's operations run ROUTING BY ROUTING, never interleaved by OP number** (`operationsForPart`). Two routings are two different ways of making the part, so the vise setup's OP50 and the fixture-plate setup's OP50 are unrelated steps — sorting the pooled list by OP number alternates between them and reads as one impossible sequence. Within a routing it is OP order (numeric, so OP50 precedes OP160RB). This backs the part page's all-tools list and its label printing, which is where a wrong order actually costs something.
+
+⚠️ **A part is created WITH its first routing, in ONE write** (`addPartWithRoutingIn`). Two `saveParts` calls in one handler both build off the same stale closure, so the second discards the first — which silently stored the routing and threw the part away. Any new "create A then B" flow composes one pure mutation the same way.
+
 ### Where a tool is used — DERIVED, never stored
 
 ⚠️ **There is no tool→program link field.** Every stored Sequence Detail row carries the tool it resolved to (`tool_ref`), so "which programs use this tool" is a scan of `program_details` — always current, nothing to maintain, nothing to go stale. `toolProgramUsage(toolId, programDetails, partsFile)` (`JobsSection.jsx`) is that scan; the panel shows program, part, routing, OP, the pockets it occupies, and whether that version is proven.
@@ -1611,6 +1617,8 @@ Pure helpers: `src/utils/parts.js` (framework-free, mirrors `toolIdSystem.js` / 
 **This fixed a real bug**: the tool page read a stored `job_ids` field that the sequence import never wrote, so uploading a CSV linked nothing there. A tool linked to a program is linked to its part by the same derivation — operation → routing → part — and nothing stores that chain twice.
 
 **A PRESET's link IS stored** — `preset_meta[guid].operation_ids`, metadata-only, never written to Fusion (it's in `normalizePreset`'s destructure with the other app-only per-preset keys). "This preset was proven on O1218" is an assertion a person makes; no posted file can tell us. The label is resolved live from the id, and a dangling one is **shown as "(program removed)", not hidden** — silently dropping a link is how provenance disappears unnoticed.
+
+**A Sync Job commit links the PRESETS it touched, and nothing else.** `CommitStep` hands `mergeTool` a `{ operation_id, label }`; every preset updated or added in that commit gets the id appended to its `operation_ids`. A commit that touched no presets stores **no** link at all — the merge-history entry (`job_linked`) already records which program it came from, and tool→program is derived. ⚠️ This read `jobLink.job_id` into a `job_ids` array, both left from the pre-Parts-module `jobs.json`: the id came back `undefined`, so every commit with a program selected wrote `job_ids: [undefined]` onto its presets — a link nothing reads, on a key `normalizePreset` does **not** strip, so it would have leaked into the strictly-validated Fusion JSON. Locked by `toolActions.test.js`.
 
 ### The pages
 
@@ -1663,8 +1671,8 @@ If you find yourself writing code that "fixes" a CSV value against the library, 
 |---|---|
 | `src/utils/csv.js` | The app's **one** CSV tokenizer (quote-aware across newlines), extracted from `programsImport.js` so quoting can't drift between two parsers |
 | `src/utils/sequenceDetail.js` | `parseSequenceCsv`, `condenseTools`, `toolNumberOf`/`formatToolNumber`/`offsetOf`, `proShopIdKey`, `parsePosted`/`postedToIso`, `programNumberFromFileName` |
-| `src/utils/sequenceImport.js` | `buildSequenceImport` (preview→commit, mirroring `buildProgramsImport`), `buildToolIndex`/`findToolByProShopId`, `buildHolderIndex`, `locationConflict`, `upsertDetail`/`detailsOf`/`detailForProgram` |
-| `src/utils/toolLabels.js` | `labelFieldsOf`, `labelKey`, `jobLabelRows` — the dedupe rule |
+| `src/utils/sequenceImport.js` | `buildSequenceImport` (preview→commit, mirroring `buildProgramsImport`), `buildToolIndex`/`findToolByProShopId`, `buildHolderIndex`, `locationConflict`, `upsertDetail`/`detailsOf`, and `resolveRowLocation` — the location exception |
+| `src/utils/toolLabels.js` | `labelFieldsOf`, `labelKey`, `labelRows` — the dedupe rule |
 | `src/utils/labelPrint.js` | `tagCSS` / `tagMarkup` / `inchesAutoFit` / `printToolTags` — the tag layout |
 | `src/context/programActions.js` | `importSequenceDetail`, `setProgramProven`, `fetchSequenceCsv`, `archiveFileName` |
 | `src/components/PartDetailPage.jsx` | `/parts/:id` — the PART page |
@@ -1697,9 +1705,9 @@ If you find yourself writing code that "fixes" a CSV value against the library, 
 
 ### Display
 
-Lives in the Program Number Manager, **not a new top-level tab**.
+Lives in the **Parts** tab, **not a new top-level tab**.
 
-- **The PART page** (`/parts/:id`) holds a part + rev and every operation on it. The part header on `/programs` opens it; a new upload navigates straight there. It's a *part* page rather than a "job" page because a part can carry more than one set of programs, and the shop wants all of them on the one page for that part.
+- **The PART page** (`/parts/:id`) holds a part + rev and every operation on it. The part header on `/parts` opens it; a new upload navigates straight there. It's a *part* page rather than a "job" page because a part can carry more than one set of programs, and the shop wants all of them on the one page for that part.
 - ⚠️ **It carries the SAME edit controls as the main Programs list at every tier** — edit the part, edit or delete any routing or operation, add a new one — by rendering the **same shared forms** and the **same shared mutations**. See **The Parts module** for both. There is deliberately no second implementation to drift.
 - Per program: **Tool List** and **Sequence Detail** tabs, the proven toggle, and a download of the current posted file.
 - Per part: an **all-tools list** across every OP (with an OP column), because a part usually needs every label at once. **Sequence Detail is per-program only** — there is no part-level sequence.
@@ -1806,7 +1814,7 @@ CNC machines are configured in `shop_settings.json` under `machines[]` (each wit
 
 ### Editor UIs (`/materials`, `/vendors`, Settings)
 
-Editor pages, reached from the top-bar chrome-style tabs (**Library**, **Materials**, **Vendors**, **Programs**, **Settings**; Programs = the Program Number Manager, documented in the Jobs section above). Inline editing, no modals. `MaterialsEditor` uses drag-to-reorder via the shared `useDragReorder` hook (`src/components/useDragReorder.js`, HTML5 DnD that renumbers `order`); `VendorsEditor` does **not** reorder (filter/sort instead — see below).
+Editor pages, reached from the top-bar chrome-style tabs (**Library**, **Materials**, **Vendors**, **Parts**, **Settings**; Parts = the Parts module, documented in its own section above). Inline editing, no modals. `MaterialsEditor` uses drag-to-reorder via the shared `useDragReorder` hook (`src/components/useDragReorder.js`, HTML5 DnD that renumbers `order`); `VendorsEditor` does **not** reorder (filter/sort instead — see below).
 
 - **`MaterialsEditor.jsx`** (`/materials`) — a **65/35 two-column layout** (`.mat-layout`, same proportions as `ToolDetail`). **Left (main):** a hierarchy-graph toggle — two separate node buttons, **CAM Presets ──made up of⟶ Material Alloys** (`.mat-hier`) — switches the main list between the two; color-coded full-name **group filter pills** (`.mat-gpill`, e.g. "P — Steel", tinted by group color) drive both lists, alongside a full-width **search box at the top of the page** (matches CAM presets by name/code/description/standard codes + their alloys, or alloys by name/alias/code). CAM presets render as **rich rectangles** (`.cam-card`: left border in the group color, group badge, name + description, the three standard codes ISO 513 / Kennametal / Haas-VDI as columns, and the alloy chips that compose the preset); Material Alloys render as expand-to-edit rows (label/aliases/group/linked CAM preset/condition/code/codes/notes). Click a card/row to expand its inline editor (Delete lives inside the editor). **Right (reference):** the **Material Groups** card (drag-reorder via `useDragReorder`, editable color/label/**code**, ISO groups not deletable, `+ Add Group`), an **"Export for Fusion"** card (see below), and the **"Load reference data"** action (resets the whole library to the bundled seed — one-off migration). Autosaves to `materials.json` on each change via `saveMaterials`. **This library is the only source of material** in the app (the preset picker + naming + coloring all read it) and **group colors drive preset color coding** — see Preset color coding below.
 
@@ -2371,7 +2379,7 @@ Machine tool number is shown inside the Identity section, in the same row as the
 | Machine Tool # | `.machine-num-badge` | Slightly rounded rect (r=5px) | Green — `#4ade80`, mono |
 | Location/Cabinet | `.location-tag` | Rounded rect (r=7px) | Indigo — `#818cf8`, mono |
 | Preset Name | `.preset-tag` | Pill | Colored by **material's ISO group** via `--badge-color` (host sets it from `presetMaterialColor`); default `--iso-p` (steel) |
-| Program # | `.program-num-badge` | Slightly rounded rect (r=7px, 40% larger than the base data-field scale) | Amber mono on dark plate (`--bg`) — CNC-screen look. Shown in its primary `O####` form via `formatProgramNumber`. Used on `/programs` (grouped rows, table, add-modal session list) |
+| Program # | `.program-num-badge` | Slightly rounded rect (r=7px, 40% larger than the base data-field scale) | Amber mono on dark plate (`--bg`) — CNC-screen look. Shown in its primary `O####` form via `formatProgramNumber`. Used on `/parts` (grouped rows, table, add-modal session list). ⚠️ Rendered ONLY through `ProgramNumBadge` (`programsUi.jsx`), which handles the no-program case — a step with none is normal, and a raw span renders an empty badge that reads as a missing value |
 | Customer | `.customer-badge` | Pill | Colored per **customer name** via `--badge-color` (host sets it from `customerColor` hash palette); gray default for "No customer" |
 | Machine (model name) | `.machine-pill` | Pill | Colored per **machine** via `--badge-color` (host sets it from `machineColor`/`machineColorFor`, `src/utils/machineColors.js`); default blue. Rendered by the shared `MachinePill.jsx` — see Machine Configuration |
 

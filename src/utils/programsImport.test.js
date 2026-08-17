@@ -146,6 +146,41 @@ describe('buildProgramsImport', () => {
     expect(operations[0].program_number).toBe(1500);
   });
 
+  it('auto-assigns ABOVE the numbers the same file states, not into a hole below them', () => {
+    // Starting from the pre-import max handed a blank row a LOW free number
+    // (1000 in a file whose stated numbers ran 1108+) — a hole-filler rather
+    // than "the next number", and the opposite of the rule the rest of the app
+    // follows for a new bin.
+    const t = [
+      HEADER,
+      '1108,Brother M300X3,,External,PN-1,A,ACME,,OP50,N',
+      ',Brother M300X3,,External,PN-1,A,ACME,,OP60,N',
+    ].join('\n');
+    const { operations, summary } = buildProgramsImport(t, { partsFile: empty, shopSettings });
+    expect(summary.autoAssigned).toEqual([1109]);
+    expect(operations.find(o => o.op_number === 'OP60').program_number).toBe(1109);
+  });
+
+  it('re-importing the same file is a NO-OP', () => {
+    // The highest-value question: same input twice, does the second run report
+    // nothing to do? A blank-numbered row has no number to dedupe on, so
+    // without an (routing, OP #) key it silently doubled every such step.
+    const t = [
+      HEADER,
+      '1108,Brother M300X3,,External,PN-1,A,ACME,,OP50,N',
+      ',Brother M300X3,,External,PN-1,A,ACME,,OP60,N',
+    ].join('\n');
+    const first = buildProgramsImport(t, { partsFile: empty, shopSettings });
+    const second = buildProgramsImport(t, { partsFile: first.mergedFile, shopSettings });
+    expect(second.summary.operationsNew).toBe(0);
+    expect(second.summary.routingsNew).toBe(0);
+    expect(second.summary.partsNew).toBe(0);
+    expect(second.summary.duplicates).toHaveLength(2);
+    expect(second.mergedFile.operations).toHaveLength(2);
+    // And no program number was burned by the skipped blank row.
+    expect(second.summary.autoAssigned).toEqual([]);
+  });
+
   it('falls back to the raw machine label when unmatched', () => {
     const t = `${HEADER}\n1400,Haas VF2,,External,PN-1,A,ACME,,OP10,N`;
     const { operations } = buildProgramsImport(t, { partsFile: empty, shopSettings });

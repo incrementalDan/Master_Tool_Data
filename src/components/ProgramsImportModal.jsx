@@ -104,7 +104,7 @@ export default function ProgramsImportModal({ onClose }) {
                   )}
                   {s.duplicates.length > 0 && (
                     <div className="pn-import-stat" style={{ color: 'var(--amber)' }}>
-                      <AlertTriangle size={12} /> {s.duplicates.length} skipped — already in the app: {s.duplicates.slice(0, 8).map(d => formatProgramNumber(d.program_number)).join(', ')}{s.duplicates.length > 8 ? '…' : ''}
+                      <AlertTriangle size={12} /> {s.duplicates.length} skipped — already in the app: {s.duplicates.slice(0, 8).map(d => formatProgramNumber(d.program_number) || d.op_number || '(blank)').join(', ')}{s.duplicates.length > 8 ? '…' : ''}
                     </div>
                   )}
                   {s.errors.length > 0 && (
@@ -126,7 +126,7 @@ export default function ProgramsImportModal({ onClose }) {
 
               {!canEdit && (
                 <div className="pn-import-error">
-                  <AlertTriangle size={14} /> Connect Google Drive to import — the program list is stored in the shop's shared jobs.json.
+                  <AlertTriangle size={14} /> Connect Google Drive to import — parts, routings and their program numbers are stored in the shop's shared parts.json.
                 </div>
               )}
             </div>

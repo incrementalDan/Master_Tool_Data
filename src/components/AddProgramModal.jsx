@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { Plus, X, Check, Search } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import {
-  INT_EXT, FIXTURING_OPTIONS, nextProgramNumber, newPart, newRouting, newOperation,
-  partsOf, routingsOf, operationsOf, partById, routingById, routingsForPart,
+  INT_EXT, FIXTURING_OPTIONS, nextProgramNumber,
+  addPartWithRoutingIn, addRoutingIn, addOperationIn,
+  partsOf, operationsOf, partById, routingById, routingsForPart,
   routingLabel, alloyLabel,
   machineOptions, isPalletMachine, customerNames, formatProgramNumber, formatOperation,
 } from '../utils/parts.js';
@@ -73,20 +74,21 @@ export default function AddProgramModal({ onClose, onCreated, partId = null, rou
     : partsOf(partsFile);
 
   // Writes (optimistic + debounced, via the shared-file layer).
-  const addPart = (fields) => {
-    const pt = newPart(fields, userName);
-    saveParts({ ...partsFile, parts: [...partsOf(partsFile), pt] });
-    return pt;
-  };
+  //
+  // ⚠️ ONE saveParts PER HANDLER. Each of these builds from `partsFile`, which
+  // does not change mid-handler — so two writes in one action would both start
+  // from the pre-update file and the second would discard the first. Creating a
+  // part and its first routing is therefore a single composed step
+  // (addPartWithRoutingIn), not two calls.
   const addRouting = (forPartId, fields) => {
-    const rt = newRouting({ ...fields, part_id: forPartId, order: routingsForPart(partsFile, forPartId).length }, userName);
-    saveParts({ ...partsFile, routings: [...routingsOf(partsFile), rt] });
-    return rt;
+    const { file, routing } = addRoutingIn(partsFile, forPartId, fields, userName);
+    saveParts(file);
+    return routing;
   };
   const reserveOperation = (forRoutingId, fields) => {
-    const op = newOperation({ ...fields, routing_id: forRoutingId }, userName);
-    saveParts({ ...partsFile, operations: [...operationsOf(partsFile), op] });
-    return op;
+    const { file, operation } = addOperationIn(partsFile, forRoutingId, fields, userName);
+    saveParts(file);
+    return operation;
   };
 
   const choosePart = (id) => {
@@ -103,16 +105,22 @@ export default function AddProgramModal({ onClose, onCreated, partId = null, rou
 
   const confirmNewPart = () => {
     if (!newPartDraft.part_number.trim()) return;
-    const pt = addPart({
-      part_number: newPartDraft.part_number,
-      customer: newPartDraft.customer,
-      ...materialFieldsOf(newPartDraft.material),
-    });
-    // A brand-new part has no routing yet — make its first one from the rev
-    // typed on the part form, so the common path is still one flow.
-    const rt = addRouting(pt.id, { rev: newPartDraft.rev, name: '' });
-    setActivePartId(pt.id);
-    setActiveRoutingId(rt.id);
+    // The part and its first routing land together in ONE write — see above.
+    // The routing takes the rev typed on the part form, so the common path is
+    // still a single flow.
+    const { file, part, routing } = addPartWithRoutingIn(
+      partsFile,
+      {
+        part_number: newPartDraft.part_number,
+        customer: newPartDraft.customer,
+        ...materialFieldsOf(newPartDraft.material),
+      },
+      { rev: newPartDraft.rev, name: '' },
+      userName,
+    );
+    saveParts(file);
+    setActivePartId(part.id);
+    setActiveRoutingId(routing.id);
     setStep('operations');
   };
 
@@ -136,7 +144,6 @@ export default function AddProgramModal({ onClose, onCreated, partId = null, rou
       fixturing: fixturingValueOf(opForm.fixturing),
       ...materialFieldsOf(opForm.material),
       pallet: opForm.pallet,
-      order: operationsOf(partsFile).filter(o => o.routing_id === activeRoutingId).length,
     });
     setSessionAdded(prev => [...prev, {
       program_number: prg.program_number, operation: opForm.op_number.trim(),

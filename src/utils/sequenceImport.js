@@ -268,5 +268,3 @@ export function upsertDetail(detailsFile, detail) {
 }
 
 export const detailsOf = (file) => file?.details || [];
-export const detailForOperation = (file, operationId) =>
-  detailsOf(file).find(d => d.operation_id === operationId) || null;

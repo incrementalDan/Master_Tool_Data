@@ -8,6 +8,7 @@ import {
   updatePartIn, updateRoutingIn, updateOperationIn,
   deleteOperationIn, deleteRoutingIn, deletePartIn,
   applyPartsFilters, sortParts, sortOperations, recordActivityAt,
+  addPartWithRoutingIn, addRoutingIn, addOperationIn,
 } from './parts.js';
 
 // A part with TWO routings — the case the whole model exists for: same part
@@ -42,7 +43,11 @@ describe('the three tiers', () => {
 
   it('walks every operation on a part across ALL its routings', () => {
     // This is what the part page's all-tools list and label printing run on.
-    expect(operationsForPart(file, 'pt1').map(o => o.id)).toEqual(['op10', 'insp', 'op50', 'op60', 'op160']);
+    // ⚠️ Routing by routing, in routing order — NOT interleaved by OP number.
+    // Two routings are two different ways of making the part, so OP50 of the
+    // vise setup and OP50 of the fixture-plate setup are unrelated steps; a
+    // list that alternates between them reads as one impossible sequence.
+    expect(operationsForPart(file, 'pt1').map(o => o.id)).toEqual(['op50', 'op60', 'op160', 'op10', 'insp']);
     expect(operationsForPart(file, 'pt2')).toHaveLength(1);
   });
 
@@ -385,5 +390,85 @@ describe('every edit stamps updated_at', () => {
   it('reads created_at until the record has ever been edited', () => {
     expect(recordActivityAt({ created_at: '2026-01-01' })).toBe('2026-01-01');
     expect(recordActivityAt({ created_at: '2026-01-01', updated_at: '2026-05-01' })).toBe('2026-05-01');
+  });
+});
+
+describe('creating records — one file→file step, never two writes', () => {
+  // ⚠️ The bug this exists to prevent: a handler that called saveParts twice
+  // built BOTH writes from the same pre-update file (React state doesn't change
+  // mid-handler), so the second silently discarded the first — the new part
+  // vanished and its routing was left pointing at nothing.
+  const empty = { version: 1, parts: [], routings: [], operations: [] };
+
+  it('creates a part and its first routing in ONE result', () => {
+    const { file, part, routing } = addPartWithRoutingIn(empty, { part_number: 'NEW' }, { rev: 'A' }, 'dy');
+    expect(file.parts).toHaveLength(1);
+    expect(file.routings).toHaveLength(1);
+    expect(routing.part_id).toBe(part.id);
+    // The routing points at a part that is actually in the same file.
+    expect(file.parts.some(p => p.id === routing.part_id)).toBe(true);
+  });
+
+  it('never leaves an orphan behind whichever record you look at', () => {
+    const { file } = addPartWithRoutingIn(empty, { part_number: 'NEW' }, { rev: 'A' });
+    const partIds = new Set(file.parts.map(p => p.id));
+    expect(file.routings.every(r => partIds.has(r.part_id))).toBe(true);
+  });
+
+  it('adds a routing with the right order, and an operation into it', () => {
+    let { file } = addPartWithRoutingIn(empty, { part_number: 'X' }, { rev: 'A' });
+    const partId = file.parts[0].id;
+    const second = addRoutingIn(file, partId, { name: 'Soft jaw' });
+    expect(second.routing.order).toBe(1);          // after the first
+    file = second.file;
+
+    const withOp = addOperationIn(file, second.routing.id, { op_number: '50', program_number: 1000 });
+    expect(withOp.operation.routing_id).toBe(second.routing.id);
+    expect(withOp.file.operations).toHaveLength(1);
+    // And the earlier records all survived.
+    expect(withOp.file.parts).toHaveLength(1);
+    expect(withOp.file.routings).toHaveLength(2);
+  });
+
+  it('orders operations within their own routing, not globally', () => {
+    let file = { version: 1, parts: [], routings: [], operations: [] };
+    file = addOperationIn(file, 'rA', { op_number: '10' }).file;
+    file = addOperationIn(file, 'rA', { op_number: '20' }).file;
+    const { operation } = addOperationIn(file, 'rB', { op_number: '10' });
+    expect(operation.order).toBe(0);   // first in rB, not third overall
+  });
+});
+
+describe('a part\'s operations run routing by routing, not interleaved', () => {
+  // Sorting the whole set by OP number alone alternates between routings when
+  // both start at OP50 — which reads as one confused sequence, and comes out of
+  // the printer in that order.
+  const f = {
+    parts: [{ id: 'pt' }],
+    routings: [
+      { id: 'rA', part_id: 'pt', name: 'Vise', order: 0 },
+      { id: 'rB', part_id: 'pt', name: 'Soft jaw', order: 1 },
+    ],
+    operations: [
+      { id: 'b50', routing_id: 'rB', op_number: '50' },
+      { id: 'a60', routing_id: 'rA', op_number: '60' },
+      { id: 'a50', routing_id: 'rA', op_number: '50' },
+      { id: 'b60', routing_id: 'rB', op_number: '60' },
+    ],
+  };
+
+  it('groups by routing order, then by OP number within it', () => {
+    expect(operationsForPart(f, 'pt').map(o => o.id)).toEqual(['a50', 'a60', 'b50', 'b60']);
+  });
+
+  it('still orders OP numbers numerically inside a routing', () => {
+    const g = {
+      ...f,
+      operations: [
+        { id: 'x160', routing_id: 'rA', op_number: '160RB' },
+        { id: 'x50', routing_id: 'rA', op_number: '50' },
+      ],
+    };
+    expect(operationsForPart(g, 'pt').map(o => o.id)).toEqual(['x50', 'x160']);
   });
 });

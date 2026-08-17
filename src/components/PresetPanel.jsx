@@ -119,8 +119,9 @@ function PresetJobsBlock({ opIds = [], partsFile, editable = false, canAdd = tru
 
 export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
   const { holders, materials, shopSettings, parts: partsFile, user, googleAuthenticated, demoMode } = useApp();
-  // Job links persist in metadata (jobs.json + preset_meta on Drive), so adding
-  // them needs Drive (or the demo sandbox, which keeps everything in memory).
+  // A preset's program link persists in preset_meta[guid].operation_ids on
+  // Drive (resolved against parts.json), so adding one needs Drive — or the
+  // demo sandbox, which keeps everything in memory.
   const canAddJobs = googleAuthenticated || demoMode;
   // Resolve a preset's material to its group color (from the Materials library).
   const groupColorOf = (query) => presetMaterialColor(query, materials);
@@ -1741,9 +1742,11 @@ function EditCard({
         </select>
       </EditorSection>
 
-      {/* Jobs — reference links to the jobs this preset was proven on. Adding
-          resolves against the shop-wide jobs.json registry (same job entered
-          twice = one record); saved with the preset via preset_meta. */}
+      {/* Programs this preset was proven on. The picker returns an OPERATION
+          that already exists in parts.json, so the link is just its id, stored
+          in preset_meta[guid].operation_ids and resolved to a label at read
+          time. This is an assertion a person makes — no posted file can say it,
+          which is why it is stored where tool→program is derived. */}
       <EditorSection label="Jobs" accent="var(--text-sub)">
         <PresetJobsBlock
           opIds={draft.operation_ids || []}

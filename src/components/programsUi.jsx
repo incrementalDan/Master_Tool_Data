@@ -22,7 +22,19 @@ export function TypePill({ isFixture, internalExternal }) {
   return <span className={`pn-type-pill ${cls}`}>{isFixture ? 'Fixture' : internalExternal}</span>;
 }
 
+// ⚠️ An operation with NO program is normal (inspection, deburr, an outside
+// process), so the null case is handled HERE rather than by each caller — a
+// caller that forgets renders an empty badge, which reads as a missing value
+// instead of a step that legitimately has none.
 export function ProgramNumBadge({ n }) {
+  if (n == null || n === '') {
+    return (
+      <span className="text-xs text-sub"
+        title="This step has no program — inspection, deburr, an outside process">
+        no program
+      </span>
+    );
+  }
   return <span className="program-num-badge">{formatProgramNumber(n)}</span>;
 }
 

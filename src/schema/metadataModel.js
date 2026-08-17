@@ -192,7 +192,8 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
       machine_number: !!meta.id_system_exclusions?.machine_number,
       location: !!meta.id_system_exclusions?.location,
     },
-    operation_ids: meta.operation_ids || [],
+    // (No tool-level program link: it is derived from the stored Sequence
+    // Detail rows. A preset's link lives in preset_meta[guid].operation_ids.)
     // Symmetric tool↔tool links (a tap and its drill, a reamer and its drill).
     // Metadata-only — Fusion has nowhere to put them. Stored as the partner's
     // stable tracking id on BOTH sides; see src/utils/toolLinks.js.
@@ -440,8 +441,9 @@ export function buildMetadataTool(tool) {
     // redundant-but-retained until the SQLite migration folds both into columns.
     // Both are written from the same tool.presets here, so they can't drift.
     presets: (tool.presets || []).map(p => ({ ...p })),
-    // Tool-level job links (jobs.json registry ids) — "this tool was used on
-    // job X" without preset context. Preset-proven links live in preset_meta.
+    // Tool ↔ tool (tap/drill, reamer/drill) — symmetric, stored on both sides.
+    // ⚠️ NOT a program link: which programs a tool runs in is DERIVED from the
+    // stored Sequence Detail rows, never stored (see JobsSection).
     linked_tools: normalizeLinkIds(tool.linked_tools, tool.tracking_id || tool.id),
     notes: tool.notes || '',
     last_used_job: tool.last_used_job || '',
