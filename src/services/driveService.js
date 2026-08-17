@@ -681,6 +681,14 @@ export async function fetchFileBlob(fileId) {
     { headers: { Authorization: `Bearer ${_accessToken}` } }
   );
   if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  // ⚠️ 404 is a KNOWN state, not a fault: the file was deleted in Drive since
+  // we stored its id. Tagged so a caller that has a sensible answer for "it's
+  // gone" (re-upload to restore it) can act on that, instead of surfacing a raw
+  // "File fetch failed (404)" — which reads as a bug in the app rather than a
+  // thing the user can fix.
+  if (res.status === 404) {
+    throw Object.assign(new Error('That file is no longer in Drive'), { code: 'NOT_FOUND' });
+  }
   if (!res.ok) throw new Error(`File fetch failed (${res.status})`);
   return res.blob();
 }

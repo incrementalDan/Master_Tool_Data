@@ -127,7 +127,16 @@ export function createProgramActions(ctx) {
     if (!detail) return null;
     if (demoModeRef.current && demoRawText.has(detail.id)) return demoRawText.get(detail.id);
     if (!detail.raw_file_id) return null;
-    return driveService.fetchFileText(detail.raw_file_id);
+    try {
+      return await driveService.fetchFileText(detail.raw_file_id);
+    } catch (err) {
+      // A file DELETED in Drive since we stored its id is the same situation as
+      // never having had one: null, so both callers land on their existing
+      // "re-upload the CSV to restore it" message instead of a raw HTTP error.
+      // Anything else is a real fault and still throws.
+      if (err?.code === 'NOT_FOUND') return null;
+      throw err;
+    }
   };
 
   return { importSequenceDetail, setProgramProven, fetchSequenceCsv };
