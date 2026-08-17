@@ -1107,19 +1107,7 @@ export const FIELD_REGISTRY = {
     precision: null,
   },
 
-  last_used_job: {
-    label: 'Last Used Job',
-    type: 'string',
-    unit: null,
-    fusionPath: null,
-    proShopColumn: null,
-    metadataOnly: true,
-    appliesToTypes: 'all',
-    required: false,
-    precision: null,
-  },
-
-  // NOTE: there is no tool-level job/program link field. "Where is this tool
+  // NOTE: there is no tool-level program link field. "Where is this tool
   // used" is DERIVED from the stored Sequence Detail (program_details.json rows
   // carry tool_ref), so it is always current and there is nothing to go stale.
   // A preset's link to the operation it was proven on IS stored, in

@@ -16,7 +16,7 @@ import {
   CustomerBadge, TypePill, ProgramNumBadge,
   ProgramEditForm, PartEditForm, InlineConfirm, PartsFilterBar, DEFAULT_PARTS_FILTERS,
   programDraftOf, programFieldsOf, partDraftOf, partFieldsOf,
-} from './programsUi.jsx';
+} from './partsUi.jsx';
 import AddProgramModal from './AddProgramModal.jsx';
 import SequenceUploadModal from './SequenceUploadModal.jsx';
 import MachinePill from './MachinePill.jsx';

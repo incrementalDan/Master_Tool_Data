@@ -766,7 +766,7 @@ export function createToolActions(ctx) {
   // Merge selected job-tool fields back into a master tool with history tracking.
   // presetChanges: Array<{ masterPresetGuid, incomingPreset, selectedFields: Set }>
   // presetsToAdd:  Array<presetObject> — new presets to append
-  // jobLink: { operation_id, label } | null — the PROGRAM this sync came from,
+  // programLink: { operation_id, label } | null — the PROGRAM this sync came from,
   //   as the id of the operation carrying that program number (CommitStep's
   //   picker returns one that already exists, so there is nothing to create).
   //   Linked to every preset touched by this commit (updated in place or added).
@@ -780,10 +780,10 @@ export function createToolActions(ctx) {
   //   leaked into the strictly-validated Fusion JSON.
   //
   // ⚠️ There is deliberately NO tool-level fallback. Which programs a TOOL runs
-  //   in is DERIVED from the stored Sequence Detail rows (see JobsSection's
+  //   in is DERIVED from the stored Sequence Detail rows (see ProgramUsageSection's
   //   toolProgramUsage) — storing it a second time here is the exact field that
   //   went stale and made the tool page show nothing.
-  const mergeTool = async (masterTool, mergedFields, revisionNote, mergedBy, presetChanges = [], presetsToAdd = [], assemblyUpdate = null, jobLink = null) => {
+  const mergeTool = async (masterTool, mergedFields, revisionNote, mergedBy, presetChanges = [], presetsToAdd = [], assemblyUpdate = null, programLink = null) => {
     dispatch({ type: 'SAVE_START' });
     try {
       const previousValues = {};
@@ -805,7 +805,7 @@ export function createToolActions(ctx) {
         ...(presetsToAdd.length > 0 ? {
           presets_added: presetsToAdd.map(p => p.name || 'Unnamed'),
         } : {}),
-        ...(jobLink ? { job_linked: jobLink.label || jobLink.operation_id } : {}),
+        ...(programLink ? { program_linked: programLink.label || programLink.operation_id } : {}),
       };
       let updated = {
         ...masterTool,
@@ -824,11 +824,11 @@ export function createToolActions(ctx) {
           ...presetsToAdd.map(p => p.guid),
         ]);
         const withJob = (p) => {
-          if (!jobLink?.operation_id || !touchedGuids.has(p.guid)) return p;
+          if (!programLink?.operation_id || !touchedGuids.has(p.guid)) return p;
           const ids = p.operation_ids || [];
-          return ids.includes(jobLink.operation_id)
+          return ids.includes(programLink.operation_id)
             ? p
-            : { ...p, operation_ids: [...ids, jobLink.operation_id] };
+            : { ...p, operation_ids: [...ids, programLink.operation_id] };
         };
         const updatedPresets = (updated.presets || []).map(p => {
           const change = presetChanges.find(c => c.masterPresetGuid === p.guid);
@@ -857,7 +857,7 @@ export function createToolActions(ctx) {
 
       // A commit that touched no presets stores no program link at all — the
       // merge-history entry above already records which program it came from,
-      // and tool→program is derived, never stored (see the note on jobLink).
+      // and tool→program is derived, never stored (see the note on programLink).
 
       // Apply assembly create/link update (metadata only — included in the same write)
       if (assemblyUpdate) {

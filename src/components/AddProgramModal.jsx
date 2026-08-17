@@ -11,7 +11,7 @@ import {
 import {
   CustomerBadge, ProgramNumBadge, FixtureSwitch, SelectWithCustom,
   MaterialSelect, MachineSelect, materialFieldsOf, fixturingValueOf,
-} from './programsUi.jsx';
+} from './partsUi.jsx';
 import InfoTip from './InfoTip.jsx';
 import MachinePill from './MachinePill.jsx';
 import { machineColorFor } from '../utils/machineColors.js';

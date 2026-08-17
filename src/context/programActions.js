@@ -2,8 +2,8 @@
 // Created once by AppProvider via createProgramActions(ctx).
 //
 // Two stores, on purpose:
-//   1. The RAW file goes to Drive under JobFiles/{O####}/ COMPLETELY UNTOUCHED.
-//      It is the proven job data; the app never rewrites a byte of it.
+//   1. The RAW file goes to Drive under ProgramFiles/{O####}/ COMPLETELY
+//      UNTOUCHED. It is the proven job data; the app never rewrites a byte.
 //   2. The CONDENSED tool list goes in program_details.json (shared file), which
 //      is what the tool lists and the labels read. The full per-toolpath
 //      sequence is re-parsed from the raw file on demand — there is no second

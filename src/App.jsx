@@ -21,7 +21,7 @@ import MergeFlow from './components/MergeFlow/index.jsx';
 import SettingsPage from './components/Settings.jsx';
 import MaterialsEditor from './components/MaterialsEditor.jsx';
 import VendorsEditor from './components/VendorsEditor.jsx';
-import PartsPage from './components/ProgramsPage.jsx';
+import PartsPage from './components/PartsPage.jsx';
 import PartDetailPage from './components/PartDetailPage.jsx';
 import HoldersPage from './components/HoldersPage.jsx';
 import NormalizeModal from './components/NormalizeModal.jsx';

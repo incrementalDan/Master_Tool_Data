@@ -574,7 +574,7 @@ Google Drive (shared team folder)
 ├── tool_components.json         ← Holder body / insert component records for insert-style tools (shared)
 ├── program_details.json         ← Parsed Sequence Detail per program: condensed tool list + version (shared)
 ├── holder_library.json          ← The APP-OWNED holder library: holder records + parts (shared)
-└── JobFiles/{O####}/            ← Each program's RAW posted files, byte-for-byte untouched
+└── ProgramFiles/{O####}/        ← Each program's RAW posted files, byte-for-byte untouched
 
 Web App (GitHub Pages, client-side only)
 ├── APS PKCE OAuth login (required — gates all library access)
@@ -743,7 +743,6 @@ Key fields — see `src/schema/toolSchema.js` for the complete list:
   "tags": ["roughing", "stainless"],
   "preferred_machine": "M300",
   "material_suitability": ["316L", "6061"],
-  "last_used_job": "1042",
   "updated_by": "username",
   "revision_notes": "what changed and why",
   "merge_history": [],
@@ -805,7 +804,6 @@ Stored in a single file on Google Drive. The file contains an array of metadata 
   },
   "coating": "",
   "notes": "",
-  "last_used_job": "",
   "preferred_machine": "",
   "material_suitability": [],
   "speed_feed_refs": [
@@ -1292,7 +1290,7 @@ src/
                                   # list (shared forms + mutations), plus the
                                   # all-tools list, per-program Tool List /
                                   # Sequence Detail tabs, proven toggle, labels
-    JobsSection.jsx               # ToolDetail "Where Used" panel + toolProgramUsage
+    ProgramUsageSection.jsx       # ToolDetail "Where Used" panel + toolProgramUsage
                                   # — the DERIVED tool→program scan. No stored link
     ToolListTable.jsx             # The condensed tool list (setup-sheet column
                                   # order) + row selection for partial printing
@@ -1300,23 +1298,23 @@ src/
                                   # the stored raw CSV on demand
     SequenceUploadModal.jsx       # Upload a posted CSV: file → preview → commit,
                                   # with the blocking rules shown, not just refused
-    ProgramsPage.jsx              # /parts — the Parts page (grouped + table over
+    PartsPage.jsx                 # /parts — the Parts page (grouped + table over
                                   # one shared filtered/sorted set; PartsFilterBar
                                   # serves both). Helpers in src/utils/parts.js
-    programsUi.jsx                # Shared Program-manager widgets + select-state
+    partsUi.jsx                   # Shared Parts-module widgets + select-state
                                   # helpers (CustomerBadge, ProgramNumBadge,
                                   # FixtureSwitch, Material/MachineSelect, …) AND
-                                  # the one implementation of the part/program
-                                  # inline edit forms + InlineConfirm — reused by
-                                  # ProgramsPage, PartDetailPage, AddProgramModal,
-                                  # JobProgramPicker
+                                  # the one implementation of the part/routing/
+                                  # operation inline edit forms + InlineConfirm —
+                                  # reused by PartsPage, PartDetailPage,
+                                  # AddProgramModal, ProgramPicker
     AddProgramModal.jsx           # Self-contained "Add program" flow (search/create
                                   # part → reserve program numbers). Reused by the
-                                  # Programs page AND JobProgramPicker
-    JobProgramPicker.jsx          # Shared program picker (search program # exact /
+                                  # Parts page AND ProgramPicker
+    ProgramPicker.jsx             # Shared program picker (search program # exact /
                                   # part # contains, or Add-new). Used by Sync-Job
-                                  # CommitStep, the tool Jobs panel, and preset job
-                                  # blocks. Exports SelectedProgramChip.
+                                  # CommitStep and the preset Programs block.
+                                  # Exports SelectedProgramChip.
     ProgramsImportModal.jsx       # One-time CSV import of an existing program list
                                   # into /parts (Settings → Import Program List).
                                   # Parser in src/utils/programsImport.js
@@ -1337,7 +1335,7 @@ src/
       MatchStep.jsx               # Match confirmation (fuzzy matches only)
       DiffStep.jsx                # Side-by-side diff with per-field checkboxes + preset matching
       CommitStep.jsx              # Revision note + assembly detection + job/program
-                                  # link (JobProgramPicker) + "Commit & Next / Finish"
+                                  # link (ProgramPicker) + "Commit & Next / Finish"
       NewToolStep.jsx             # No-match detected: add to library or skip
       QueuePanel.jsx              # Batch queue sidebar with status badges
       SummaryStep.jsx             # End-of-batch summary + bulk clipboard copy
@@ -1596,9 +1594,13 @@ Pure helpers: `src/utils/parts.js` (framework-free, mirrors `toolIdSystem.js` / 
 
 ⚠️ **"ROUTING", NOT "JOB".** The floor says job; ProShop says routing, and so do we. In an ERP a **job is a work order** — a production run of a part (the shop's own setup sheet carries `WO 26-0027`). That record will be needed and it is **not this one**, so spending the word on this tier would recreate the collision this naming exists to avoid. "Routing" is also the standard term for the sequence of operations that makes a part.
 
+⚠️ **"JOB" IS RESERVED — it means a FUSION JOB FILE, and nothing else.** The word had come to mean three things at once, so it now names exactly one: the job file a programmer copies a tool into, which is what **Sync Job** syncs *from* (`in-job`, `job presets`, `job tool` — all correct, all about that file). The middle tier is a **routing**, never a job. A link to a program is named `program*` — `programLink`, `program_linked`, `ProgramPicker`, `ProgramUsageSection`, `ProgramFiles/` — and the tool page's panel is **Where Used**. There is deliberately **no `last_used_job` field**: which programs a tool runs in is derived (below), and a preset's proven-on link is `operation_ids`. A future ERP **work order** will need the word "job" in its own right; leaving it on two other things is what would make that record impossible to name.
+
 ⚠️ **AN OPERATION CARRIES ITS OWN `program_number` — there is no programs[] table.** An OP has at most one program, so a separate record would be a 1:1 join that buys nothing and gives every link two things it could point at. `program_number` is **null** for a step with no program (inspection, deburr, an outside process) — never `0`, which would look like a real number to `nextProgramNumber` and to the CSV matcher. A program is found by `operationByProgramNumber`, the same way the posted CSV names it.
 
 ⚠️ **REV LIVES ON THE ROUTING, NOT THE PART.** The shop wants everything for a part number on one page; if a part were keyed `(part_number, rev)`, a new rev would be a second part and a second page. A rev that changes *how the part is made* is a new routing — which is one of the things that distinguishes two routings anyway.
+
+⚠️ **A step with NO program never matches a numeric lookup.** `Number(null)` and `Number('')` are both **0**, so a bare numeric compare made every inspection/deburr step answer to program "0" — and to a null or blank query, which is how a caller that forgot to guard gets an unrelated operation back instead of nothing. `operationByProgramNumber` and `searchPrograms` both normalize through one helper; null on either side is never equal.
 
 **Program numbers** are global, permanent and **computed** — `nextProgramNumber` = max + 1, never a stored counter that can drift. So deleting a non-max operation leaves "next #" untouched, and deleting the highest reclaims it. `updateOperationIn` **strips `program_number` from any patch** — permanent once reserved.
 
@@ -1612,19 +1614,21 @@ Pure helpers: `src/utils/parts.js` (framework-free, mirrors `toolIdSystem.js` / 
 
 ### Where a tool is used — DERIVED, never stored
 
-⚠️ **There is no tool→program link field.** Every stored Sequence Detail row carries the tool it resolved to (`tool_ref`), so "which programs use this tool" is a scan of `program_details` — always current, nothing to maintain, nothing to go stale. `toolProgramUsage(toolId, programDetails, partsFile)` (`JobsSection.jsx`) is that scan; the panel shows program, part, routing, OP, the pockets it occupies, and whether that version is proven.
+⚠️ **There is no tool→program link field.** Every stored Sequence Detail row carries the tool it resolved to (`tool_ref`), so "which programs use this tool" is a scan of `program_details` — always current, nothing to maintain, nothing to go stale. `toolProgramUsage(toolId, programDetails, partsFile)` (`ProgramUsageSection.jsx`) is that scan; the panel shows program, part, routing, OP, the pockets it occupies, and whether that version is proven.
 
 **This fixed a real bug**: the tool page read a stored `job_ids` field that the sequence import never wrote, so uploading a CSV linked nothing there. A tool linked to a program is linked to its part by the same derivation — operation → routing → part — and nothing stores that chain twice.
 
 **A PRESET's link IS stored** — `preset_meta[guid].operation_ids`, metadata-only, never written to Fusion (it's in `normalizePreset`'s destructure with the other app-only per-preset keys). "This preset was proven on O1218" is an assertion a person makes; no posted file can tell us. The label is resolved live from the id, and a dangling one is **shown as "(program removed)", not hidden** — silently dropping a link is how provenance disappears unnoticed.
 
-**A Sync Job commit links the PRESETS it touched, and nothing else.** `CommitStep` hands `mergeTool` a `{ operation_id, label }`; every preset updated or added in that commit gets the id appended to its `operation_ids`. A commit that touched no presets stores **no** link at all — the merge-history entry (`job_linked`) already records which program it came from, and tool→program is derived. ⚠️ This read `jobLink.job_id` into a `job_ids` array, both left from the pre-Parts-module `jobs.json`: the id came back `undefined`, so every commit with a program selected wrote `job_ids: [undefined]` onto its presets — a link nothing reads, on a key `normalizePreset` does **not** strip, so it would have leaked into the strictly-validated Fusion JSON. Locked by `toolActions.test.js`.
+**A Sync Job commit links the PRESETS it touched, and nothing else.** `CommitStep` hands `mergeTool` a `{ operation_id, label }`; every preset updated or added in that commit gets the id appended to its `operation_ids`. A commit that touched no presets stores **no** link at all — the merge-history entry (`program_linked`) already records which program it came from, and tool→program is derived. ⚠️ This read `jobLink.job_id` into a `job_ids` array, both left from the pre-Parts-module `jobs.json` (all four names are now `program*`): the id came back `undefined`, so every commit with a program selected wrote `job_ids: [undefined]` onto its presets — a link nothing reads, on a key `normalizePreset` does **not** strip, so it would have leaked into the strictly-validated Fusion JSON. Locked by `toolActions.test.js`.
 
 ### The pages
 
+⚠️ **`sortParts` computes each part's sort keys ONCE, not inside the comparator.** `partActivityAt` and `partNewestProgram` each walk (and sort) every operation on the part, so calling them per comparison re-derived the same two values O(n log n) times over the whole file — measured at 50/150/400 parts: 6ms / 26ms / **147ms**, on every keystroke in the search box. `partSortKeys` builds both in one pass over the file (**1.2ms at 400 parts**, and flat rather than quadratic); the ordering is byte-for-byte the same, and the per-part helpers stay as the single-part form.
+
 - **`/parts` — the Parts page.** Every part, and with it every program number, in two renderings of **ONE filtered, sorted set**: a grouped list (Part → Routing → Operation) and a flat table. ⚠️ The search / filter / sort bar (`PartsFilterBar`) is **shared by both**, reading one `applyPartsFilters` result — a row you can find in one view is a row you can find in the other, by construction. Search reaches program #, part #, customer, material, machine, OP #, routing name and description; a hit on a PART's own fields keeps the whole part (searching a part number shows everything under it). Sort: **Recently updated (default, newest first)**, newest program #, part number, customer — with a direction toggle. A part's "activity" is the newest timestamp across the part and everything under it, so editing an operation floats its part to the top; ties fall back to the program number, which is what makes the default useful straight after a CSV import where every record shares one stamp. **`updated_at` is stamped inside the shared mutations** (`touch`), so no screen can edit a record without the sort noticing.
 - **`/parts/:id` — the PART page.** The module proper: the part, its routings, every operation, the all-tools list, per-operation Tool List / Sequence Detail tabs, proven, and label printing. Full edit controls at every tier.
-- Both render the **same shared forms** (`programsUi.jsx`: `PartEditForm` / `RoutingEditForm` / `ProgramEditForm` / `InlineConfirm` + the `*DraftOf` / `*FieldsOf` helpers) through the **same shared mutations**. There is deliberately no second implementation to drift.
+- Both render the **same shared forms** (`partsUi.jsx`: `PartEditForm` / `RoutingEditForm` / `ProgramEditForm` / `InlineConfirm` + the `*DraftOf` / `*FieldsOf` helpers) through the **same shared mutations**. There is deliberately no second implementation to drift.
 - **`AddProgramModal`** walks part → routing → operation, and takes `partId` / `routingId` to open already scoped. A part with exactly **one** routing skips the routing step — the common case shouldn't cost a click for a choice that isn't one.
 
 ### CSV import (one-time)
@@ -1730,7 +1734,7 @@ Lives in the **Parts** tab, **not a new top-level tab**.
 
 ### Storage & versioning
 
-- **The condensed list** goes in `program_details.json`; **the raw file** goes to `JobFiles/{O####}/` untouched. Only the **latest** version's parsed data is stored.
+- **The condensed list** goes in `program_details.json`; **the raw file** goes to `ProgramFiles/{O####}/` untouched. Only the **latest** version's parsed data is stored.
 - ⚠️ **The full sequence is re-parsed from the raw file on demand, not stored.** There is no second derived copy to drift, and what the Sequence Detail tab shows is *provably* the file the post wrote. Costs one Drive fetch when the tab is opened.
 - **Version key = the POSTED timestamp** — set by post logic into both the CSV and the G-code, so it's what pairs them. Re-uploading the same stamp is the same version: no new archive copy, and the proven state is kept.
 - **The current version keeps its original filename** (so "download the current file" is unambiguous); a new upload **renames** the previous one to `O1218_20260810-1051_proven.csv` — chronologically sortable, carrying the proven state of the version being retired. Renaming preserves the Drive file ID, so nothing referencing it breaks. **Archiving is best-effort**: failing to rename an old file must not cost the user the upload they actually asked for.
@@ -1798,7 +1802,7 @@ CNC machines are configured in `shop_settings.json` under `machines[]` (each wit
 `MACHINE_TYPES` = `['Machining Center', '5-Axis', 'Mill-Turn', 'Lathe / Turret', 'Other']`.
 `TAPER_TYPES` = standard spindle taper names (BT30/40/50, CAT40/50 with dual-contact variants, HSK-A63/A100/E32/E40, Other).
 
-**Machine colors + the `.machine-pill` token** — every machine has its own display color and renders as a colored pill everywhere its name appears standalone (`MachinePill.jsx`, the `.machine-pill` data-field token — same `--badge-color` mechanism as holder pills). Pure helpers in `src/utils/machineColors.js` (tested): `MACHINE_COLOR_PALETTE` (**blue and green first** — the first two machines get those), `machineColor(machine, machines)` (picked `color` else palette-by-list-position, so pre-color machines need no migration), `machineColorFor(machine_id, machine_label, machineOpts)` (resolves a program row's cached id/label against `machineOptions()`, which now stamps `color` on each option; null when the machine was deleted → pill renders in its default blue), and `nextMachineColor(machines)` (first unused palette color — seeds the Add Machine form). The user picks the color via `MachineColorPicker` (swatch row + custom color input) in the Settings machine editor + AddMachineForm. Pill sites: Programs page (grouped rows + table), AddProgramModal session list, JobProgramPicker results, PresetPanel collapsed-card machine link, Settings machine list. The machine **filter chips** (LandingPage + PresetPanel) keep chip behavior but are tinted via `.chip.machine-chip` + `--badge-color`.
+**Machine colors + the `.machine-pill` token** — every machine has its own display color and renders as a colored pill everywhere its name appears standalone (`MachinePill.jsx`, the `.machine-pill` data-field token — same `--badge-color` mechanism as holder pills). Pure helpers in `src/utils/machineColors.js` (tested): `MACHINE_COLOR_PALETTE` (**blue and green first** — the first two machines get those), `machineColor(machine, machines)` (picked `color` else palette-by-list-position, so pre-color machines need no migration), `machineColorFor(machine_id, machine_label, machineOpts)` (resolves a program row's cached id/label against `machineOptions()`, which now stamps `color` on each option; null when the machine was deleted → pill renders in its default blue), and `nextMachineColor(machines)` (first unused palette color — seeds the Add Machine form). The user picks the color via `MachineColorPicker` (swatch row + custom color input) in the Settings machine editor + AddMachineForm. Pill sites: Parts page (grouped rows + table), AddProgramModal session list, ProgramPicker results, PresetPanel collapsed-card machine link, Settings machine list. The machine **filter chips** (LandingPage + PresetPanel) keep chip behavior but are tinted via `.chip.machine-chip` + `--badge-color`.
 
 **Preset machine link** — each preset carries a metadata-only `machine_id` field (null when unlinked). It is stored in `preset_meta[guid].machine_id` in `tool_metadata.json` (alongside `operation_type`, `material_preset_id` — the CAM-preset foreign key, see Material comes from the Materials library — `job_ids`, and the unified-editor fields `small_bore` / `small_bore_diameter` / `f_z_base` / `intensity` — all written only when non-default) and read back in `mergeFusionAndMetadata` / overlaid in `logicalTools.overlayPresets`. **Never written to Fusion JSON** — every app-only per-preset field MUST be in `normalizePreset`'s destructure so it can't leak into the strict Fusion JSON (`strategies` is the exception — it IS Fusion-native). New blank/ref-seeded presets are pre-populated with `shopSettings.default_machine_id`; copied presets keep the original's `machine_id`.
 
@@ -1994,8 +1998,8 @@ await mergeTool(
                        // same-setup presets the user chose to update in place
   newPresetList,       // presetsToAdd from DiffStep
   assemblyUpdate,      // { type: 'create'|'link', assembly: {...} } or null
-  jobLink              // { job_id, label } or null — the job (program # + part #)
-                       // this sync came from; see the Jobs section
+  programLink          // { operation_id, label } or null — the PROGRAM this sync
+                       // came from; linked to the presets this commit touches
 );
 ```
 
@@ -2379,7 +2383,7 @@ Machine tool number is shown inside the Identity section, in the same row as the
 | Machine Tool # | `.machine-num-badge` | Slightly rounded rect (r=5px) | Green — `#4ade80`, mono |
 | Location/Cabinet | `.location-tag` | Rounded rect (r=7px) | Indigo — `#818cf8`, mono |
 | Preset Name | `.preset-tag` | Pill | Colored by **material's ISO group** via `--badge-color` (host sets it from `presetMaterialColor`); default `--iso-p` (steel) |
-| Program # | `.program-num-badge` | Slightly rounded rect (r=7px, 40% larger than the base data-field scale) | Amber mono on dark plate (`--bg`) — CNC-screen look. Shown in its primary `O####` form via `formatProgramNumber`. Used on `/parts` (grouped rows, table, add-modal session list). ⚠️ Rendered ONLY through `ProgramNumBadge` (`programsUi.jsx`), which handles the no-program case — a step with none is normal, and a raw span renders an empty badge that reads as a missing value |
+| Program # | `.program-num-badge` | Slightly rounded rect (r=7px, 40% larger than the base data-field scale) | Amber mono on dark plate (`--bg`) — CNC-screen look. Shown in its primary `O####` form via `formatProgramNumber`. Used on `/parts` (grouped rows, table, add-modal session list). ⚠️ Rendered ONLY through `ProgramNumBadge` (`partsUi.jsx`), which handles the no-program case — a step with none is normal, and a raw span renders an empty badge that reads as a missing value |
 | Customer | `.customer-badge` | Pill | Colored per **customer name** via `--badge-color` (host sets it from `customerColor` hash palette); gray default for "No customer" |
 | Machine (model name) | `.machine-pill` | Pill | Colored per **machine** via `--badge-color` (host sets it from `machineColor`/`machineColorFor`, `src/utils/machineColors.js`); default blue. Rendered by the shared `MachinePill.jsx` — see Machine Configuration |
 

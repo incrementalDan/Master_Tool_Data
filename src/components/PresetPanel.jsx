@@ -8,7 +8,7 @@ import { HolderTag } from './HolderPill.jsx';
 import { machineColor } from '../utils/machineColors.js';
 import MachinePill from './MachinePill.jsx';
 import CamPresetPicker from './CamPresetPicker.jsx';
-import JobProgramPicker from './JobProgramPicker.jsx';
+import ProgramPicker from './ProgramPicker.jsx';
 import LinkedSlider, { drillPlungeMax } from './LinkedSlider.jsx';
 import InfoTip from './InfoTip.jsx';
 import { boreCompensation, SmallBoreIcon } from '../utils/boreCompensation.jsx';
@@ -61,28 +61,29 @@ function blankPreset() {
   };
 }
 
-// ── Jobs dropdown (collapsed + edit modes) ────────────────────────────────────
-// Reference data, deliberately low-key: a one-line toggle showing the linked-job
-// COUNT without opening (so an empty list is obvious at a glance), expanding to
-// the job labels. In edit mode it removes links and adds one via the shared
-// JobProgramPicker (search a program # / part # from the Program Number Manager,
-// or add a new program) — the same control the Sync-Job flow uses.
-// The programs a preset was proven on. The stored link is the OPERATION id (a
-// program is an operation — see utils/parts.js); the label is resolved live, so
-// renaming a part or re-speccing an OP is reflected without touching the preset.
-function PresetJobsBlock({ opIds = [], partsFile, editable = false, canAdd = true, onAddProgram, onRemove }) {
+// ── Programs dropdown (collapsed + edit modes) ───────────────────────────────
+// The programs a preset was proven on. Reference data, deliberately low-key: a
+// one-line toggle showing the linked COUNT without opening (so an empty list is
+// obvious at a glance), expanding to the labels. In edit mode it removes links
+// and adds one via the shared ProgramPicker (search a program # / part # from
+// the Parts page, or add a new program) — the same control Sync Job uses.
+//
+// The stored link is the OPERATION id (a program IS an operation — see
+// utils/parts.js); the label is resolved live, so renaming a part or re-speccing
+// an OP is reflected without touching the preset.
+function PresetProgramsBlock({ opIds = [], partsFile, editable = false, canAdd = true, onAddProgram, onRemove }) {
   const [open, setOpen] = useState(false);
   const count = opIds.length;
 
   return (
-    <div className="preset-card-jobs">
-      <button type="button" className="preset-jobs-toggle" onClick={() => setOpen(o => !o)}>
+    <div className="preset-card-programs">
+      <button type="button" className="preset-programs-toggle" onClick={() => setOpen(o => !o)}>
         <Briefcase size={10} />
         <span>Programs ({count})</span>
-        <ChevronDown size={11} className={`preset-jobs-chev${open ? ' open' : ''}`} />
+        <ChevronDown size={11} className={`preset-programs-chev${open ? ' open' : ''}`} />
       </button>
       {open && (
-        <div className="preset-jobs-list">
+        <div className="preset-programs-list">
           {count === 0 && <div className="text-xs text-sub">No programs linked yet.</div>}
           {opIds.map(id => {
             const op = operationById(partsFile, id);
@@ -94,10 +95,10 @@ function PresetJobsBlock({ opIds = [], partsFile, editable = false, canAdd = tru
                   .filter(Boolean).join(' · ')
               : '(program removed)';
             return (
-              <div key={id} className="preset-jobs-row">
+              <div key={id} className="preset-programs-row">
                 <span className="font-mono">{opLabel}</span>
                 {editable && (
-                  <button type="button" className="icon-btn preset-jobs-del" title="Unlink program" onClick={() => onRemove(id)}>
+                  <button type="button" className="icon-btn preset-programs-del" title="Unlink program" onClick={() => onRemove(id)}>
                     <X size={11} />
                   </button>
                 )}
@@ -105,11 +106,11 @@ function PresetJobsBlock({ opIds = [], partsFile, editable = false, canAdd = tru
             );
           })}
           {editable && (canAdd ? (
-            <div className="preset-jobs-add-picker">
-              <JobProgramPicker onPick={onAddProgram} />
+            <div className="preset-programs-add-picker">
+              <ProgramPicker onPick={onAddProgram} />
             </div>
           ) : (
-            <div className="text-xs text-sub">Connect Google Drive to link jobs.</div>
+            <div className="text-xs text-sub">Connect Google Drive to link a program.</div>
           ))}
         </div>
       )}
@@ -122,7 +123,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
   // A preset's program link persists in preset_meta[guid].operation_ids on
   // Drive (resolved against parts.json), so adding one needs Drive — or the
   // demo sandbox, which keeps everything in memory.
-  const canAddJobs = googleAuthenticated || demoMode;
+  const canAddPrograms = googleAuthenticated || demoMode;
   // Resolve a preset's material to its group color (from the Materials library).
   const groupColorOf = (query) => presetMaterialColor(query, materials);
   const isMetric = tool.unit === 'millimeters';
@@ -572,7 +573,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
             materials={materials}
             shopSettings={shopSettings}
             partsFile={partsFile}
-            canAddJobs={canAddJobs}
+            canAddPrograms={canAddPrograms}
             currentUser={user?.email || user?.name || ''}
             onSave={handlePresetSave}
             onCancel={handleCancelEdit}
@@ -690,7 +691,7 @@ function CollapsedCard({
         )}
       </div>
       {!pickMode && (
-        <PresetJobsBlock opIds={preset.operation_ids || []} partsFile={partsFile} />
+        <PresetProgramsBlock opIds={preset.operation_ids || []} partsFile={partsFile} />
       )}
       <div className="preset-card-footer">
         {pickMode ? (
@@ -739,7 +740,7 @@ function EditCard({
   preset, isFresh, toolType, accentColor, lenUnit, feedUnit, speedUnit,
   diameter, fluteLength, numberOfFlutes,
   assemblies = [], holders = [], materials, shopSettings,
-  partsFile, canAddJobs = false, currentUser = '',
+  partsFile, canAddPrograms = false, currentUser = '',
   onSave, onCancel, onDirtyChange, onCopyFusion, copied, isSaving,
 }) {
   const isTap = toolType === 'tap';
@@ -1728,7 +1729,7 @@ function EditCard({
         </EditorSection>
       )}
 
-      {/* Footer row — Coolant + Jobs, compact */}
+      {/* Footer row — Coolant + Programs, compact */}
       <div className="pe-row">
       <EditorSection label="Coolant" accent="var(--text-sub)">
         <select
@@ -1747,12 +1748,12 @@ function EditCard({
           in preset_meta[guid].operation_ids and resolved to a label at read
           time. This is an assertion a person makes — no posted file can say it,
           which is why it is stored where tool→program is derived. */}
-      <EditorSection label="Jobs" accent="var(--text-sub)">
-        <PresetJobsBlock
+      <EditorSection label="Programs" accent="var(--text-sub)">
+        <PresetProgramsBlock
           opIds={draft.operation_ids || []}
           partsFile={partsFile}
           editable
-          canAdd={canAddJobs}
+          canAdd={canAddPrograms}
           onAddProgram={(sel) => {
             // The operation already exists — the picker only ever returns one,
             // so there is nothing to create and nothing to persist separately.

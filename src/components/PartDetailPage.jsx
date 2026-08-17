@@ -15,7 +15,7 @@ import { detailsOf } from '../utils/sequenceImport.js';
 import {
   CustomerBadge, TypePill, ProgramNumBadge, PartEditForm, ProgramEditForm, RoutingEditForm, InlineConfirm,
   partDraftOf, partFieldsOf, programDraftOf, programFieldsOf, routingDraftOf, routingFieldsOf,
-} from './programsUi.jsx';
+} from './partsUi.jsx';
 import AddProgramModal from './AddProgramModal.jsx';
 import MachinePill from './MachinePill.jsx';
 import { machineColorFor } from '../utils/machineColors.js';
@@ -272,7 +272,7 @@ export default function PartDetailPage() {
 
   // The part-level all-tools list: every operation's tools across every
   // routing, so a whole part can be pulled and labelled in one pass.
-  const jobRows = useMemo(
+  const partRows = useMemo(
     () => allOperations.flatMap(op => {
       const d = detailByOperation.get(op.id);
       if (!d) return [];
@@ -306,7 +306,7 @@ export default function PartDetailPage() {
 
   const print = (keys) => {
     const wanted = new Set(keys);
-    const rows = jobRows.filter(r => wanted.has(rowKeyOf(r)));
+    const rows = partRows.filter(r => wanted.has(rowKeyOf(r)));
     if (rows.length === 0) { notify('Nothing selected to print', 'error'); return; }
     const labels = labelRows(rows, part, toolsById);
     // Deliberately reported: a blocked popup looks exactly like a broken button.
@@ -317,8 +317,8 @@ export default function PartDetailPage() {
 
   const printProgram = (keys) => print(keys);
 
-  const jobKeys = jobRows.map(rowKeyOf);
-  const selectedJob = jobKeys.filter(k => selected.has(k));
+  const partKeys = partRows.map(rowKeyOf);
+  const selectedPartRows = partKeys.filter(k => selected.has(k));
   const withDetail = allOperations.filter(op => detailByOperation.has(op.id)).length;
 
   return (
@@ -380,32 +380,32 @@ export default function PartDetailPage() {
         </div>
       )}
 
-      {jobRows.length > 0 && (
-        <div className="pn-part-card sd-job-list">
+      {partRows.length > 0 && (
+        <div className="pn-part-card sd-all-tools">
           <div className="sd-program-head" onClick={() => setShowJobList(o => !o)}>
             {showJobList ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
             <Wrench size={14} style={{ color: 'var(--blue)' }} />
             <span style={{ fontWeight: 600, fontSize: 13.5 }}>All tools for this part</span>
             <span className="text-xs text-sub">
-              every tool across all {withDetail} operation{withDetail !== 1 ? 's' : ''} — {jobRows.length} rows
+              every tool across all {withDetail} operation{withDetail !== 1 ? 's' : ''} — {partRows.length} rows
             </span>
             <span className="sd-head-right" onClick={e => e.stopPropagation()}>
               <button className="btn btn-secondary btn-sm"
-                onClick={() => print(selectedJob.length ? selectedJob : jobKeys)}>
-                <Printer size={13} /> {selectedJob.length ? `Print ${selectedJob.length} labels` : 'Print all labels'}
+                onClick={() => print(selectedPartRows.length ? selectedPartRows : partKeys)}>
+                <Printer size={13} /> {selectedPartRows.length ? `Print ${selectedPartRows.length} labels` : 'Print all labels'}
               </button>
             </span>
           </div>
           {showJobList && (
             <div className="pn-part-body">
               <ToolListTable
-                rows={jobRows}
+                rows={partRows}
                 showOp
                 selectable
                 selected={selected}
                 rowKey={rowKeyOf}
                 onToggle={(k) => toggleRows([k])}
-                onToggleAll={(on) => toggleRows(jobKeys, on)}
+                onToggleAll={(on) => toggleRows(partKeys, on)}
               />
             </div>
           )}
@@ -508,8 +508,8 @@ export default function PartDetailPage() {
           onClose={() => setUploading(false)}
           onImported={(_stored, _op, _routing, importedPart) => {
             setUploading(false);
-            // A CSV for a different job goes to that job — the upload is the
-            // reason you're looking at it.
+            // A CSV for a different PART navigates there — the upload is the
+            // reason you're looking at a part page at all.
             if (importedPart && importedPart.id !== id) navigate(`/parts/${importedPart.id}`);
           }}
         />

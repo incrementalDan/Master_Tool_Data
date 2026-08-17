@@ -20,7 +20,7 @@ export function signOut() {
   _userInfo = null;
   _expiresAt = null;
   localStorage.removeItem(TOOL_FILES_FOLDER_CACHE_KEY);
-  localStorage.removeItem(JOB_FILES_FOLDER_CACHE_KEY);
+  localStorage.removeItem(PROGRAM_FILES_FOLDER_CACHE_KEY);
   localStorage.removeItem(CACHED_FILE_ID_KEY);
   for (const f of Object.values(SHARED_FILES)) localStorage.removeItem(f.cacheKey);
 }
@@ -53,9 +53,9 @@ export const SHARED_FILES = {
   programDetails:  { name: 'program_details.json', cacheKey: 'drive_program_details_file_id' },
 };
 
-// [metadata root]/JobFiles/ — the per-program folders holding each program's
-// raw posted files (the Sequence Detail CSV today, its G-code later).
-const JOB_FILES_FOLDER_CACHE_KEY = 'drive_job_files_folder_id';
+// [metadata root]/ProgramFiles/ — the per-program folders holding each
+// program's raw posted files (the Sequence Detail CSV today, its G-code later).
+const PROGRAM_FILES_FOLDER_CACHE_KEY = 'drive_program_files_folder_id';
 
 // Use localStorage-cached ID first (set after auto-create), then env var.
 function getMetaFileId() {
@@ -440,7 +440,10 @@ export async function previewShopSettingsFromFolder(folderId) {
 // ─── Tool file storage ────────────────────────────────────────────────────────
 // Folder layout: [metadata root]/tool_files/{trackingId}/{filename}
 
-async function findOrCreateFolder(parentId, name) {
+// Look up a folder by name without creating one — null when absent. Split out
+// so a caller can distinguish "not there" from "made a new one", which is what
+// lets ensureProgramFolder adopt a legacy folder instead of duplicating it.
+async function findFolder(parentId, name) {
   const q = `'${parentId}' in parents and name=${JSON.stringify(name)} and mimeType='application/vnd.google-apps.folder' and trashed=false`;
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id)&supportsAllDrives=true&includeItemsFromAllDrives=true`,
@@ -449,7 +452,12 @@ async function findOrCreateFolder(parentId, name) {
   if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
   if (!res.ok) throw new Error(`Folder search failed (${res.status})`);
   const data = await res.json();
-  if (data.files?.length > 0) return data.files[0].id;
+  return data.files?.[0]?.id || null;
+}
+
+async function findOrCreateFolder(parentId, name) {
+  const existing = await findFolder(parentId, name);
+  if (existing) return existing;
   const cr = await fetch(
     'https://www.googleapis.com/drive/v3/files?supportsAllDrives=true',
     {
@@ -488,17 +496,32 @@ export async function ensureToolFolder(trackingId) {
   return findOrCreateFolder(toolFilesFolderId, trackingId);
 }
 
-// Ensures [metadata root]/JobFiles/{folderName}/ exists and returns its Drive
-// ID. One folder per program (e.g. "O1218") holding that program's raw posted
-// files exactly as they came out of the post — never rewritten by the app.
+// Ensures [metadata root]/ProgramFiles/{folderName}/ exists and returns its
+// Drive ID. One folder per program (e.g. "O1218") holding that program's raw
+// posted files exactly as they came out of the post — never rewritten by the app.
+//
+// ⚠️ This folder was called JobFiles. An existing one is ADOPTED by renaming it
+// in place rather than left behind: a Drive rename keeps the folder's ID, so
+// every already-uploaded raw CSV (and the detail records pointing at them by
+// file id) survives untouched. Creating a second folder instead would strand
+// them somewhere the app no longer looks, which is indistinguishable from
+// having lost them.
 export async function ensureProgramFolder(folderName) {
-  let jobFilesFolderId = localStorage.getItem(JOB_FILES_FOLDER_CACHE_KEY);
-  if (!jobFilesFolderId) {
+  let rootId = localStorage.getItem(PROGRAM_FILES_FOLDER_CACHE_KEY);
+  if (!rootId) {
     const parentId = await getMetaParentFolderId();
-    jobFilesFolderId = await findOrCreateFolder(parentId, 'JobFiles');
-    localStorage.setItem(JOB_FILES_FOLDER_CACHE_KEY, jobFilesFolderId);
+    rootId = await findFolder(parentId, 'ProgramFiles');
+    if (!rootId) {
+      const legacyId = await findFolder(parentId, 'JobFiles');
+      if (legacyId) {
+        await renameDriveFile(legacyId, 'ProgramFiles');
+        rootId = legacyId;
+      }
+    }
+    rootId = rootId || await findOrCreateFolder(parentId, 'ProgramFiles');
+    localStorage.setItem(PROGRAM_FILES_FOLDER_CACHE_KEY, rootId);
   }
-  return findOrCreateFolder(jobFilesFolderId, folderName);
+  return findOrCreateFolder(rootId, folderName);
 }
 
 // Rename a Drive file in place — the file ID, and so every reference to it,

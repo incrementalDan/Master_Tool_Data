@@ -63,9 +63,9 @@ vi.mock('../context/AppContext.jsx', () => ({
   AppProvider: ({ children }) => children,
 }));
 
-const { default: PartsPage } = await import('./ProgramsPage.jsx');
+const { default: PartsPage } = await import('./PartsPage.jsx');
 const { default: PartDetailPage } = await import('./PartDetailPage.jsx');
-const { default: JobsSection, toolProgramUsage } = await import('./JobsSection.jsx');
+const { default: ProgramUsageSection, toolProgramUsage } = await import('./ProgramUsageSection.jsx');
 
 // renderToString splits adjacent JSX text into separate nodes (`2 routing<!-- -->s`)
 // and HTML-encodes quotes, so assert against normalized text rather than raw
@@ -168,7 +168,7 @@ describe('Where Used is derived from the sequence detail', () => {
   });
 
   it('renders the panel without a stored link of any kind', () => {
-    const html = render(<JobsSection tool={{ id: 'FTL-1' }} />);
+    const html = render(<ProgramUsageSection tool={{ id: 'FTL-1' }} />);
     expect(html).toContain('Where Used');
   });
 });

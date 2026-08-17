@@ -1,5 +1,5 @@
 // Shared presentational pieces + select-state helpers for the Program Number
-// Manager, used by ProgramsPage, AddProgramModal, and JobProgramPicker so the
+// Manager, used by ProgramsPage, AddProgramModal, and ProgramPicker so the
 // "add program" UI and the row chrome stay identical everywhere.
 import { useState } from 'react';
 import { X, Check, Search, ArrowUp, ArrowDown } from 'lucide-react';

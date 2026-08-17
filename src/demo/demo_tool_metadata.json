@@ -69,7 +69,6 @@
       }
     ],
     "notes": "Workhorse 3/8 4-flute. Proven for 6061 roughing at 12k rpm and 316L at reduced feed.",
-    "last_used_job": "",
     "preferred_machine": "M300",
     "material_suitability": [],
     "tags": [
@@ -143,7 +142,6 @@
       }
     ],
     "notes": "3-flute ball for aluminum 3D finishing. Watch stickout on deep cavities.",
-    "last_used_job": "",
     "preferred_machine": "M300",
     "material_suitability": [],
     "tags": [
@@ -209,7 +207,6 @@
       }
     ],
     "notes": ".03 corner radius bull nose, runs hot in aluminum \u2014 flood recommended.",
-    "last_used_job": "",
     "preferred_machine": "Haas",
     "material_suitability": [],
     "tags": [
@@ -275,7 +272,6 @@
       }
     ],
     "notes": "1/8 90\u00b0 chamfer. Also used for light spotting on small holes.",
-    "last_used_job": "",
     "preferred_machine": "Haas",
     "material_suitability": [],
     "tags": [
@@ -360,7 +356,6 @@
       }
     ],
     "notes": "25/64 jobber drill. TSC capable \u2014 favor peck cycle in stainless.",
-    "last_used_job": "",
     "preferred_machine": "M300",
     "material_suitability": [],
     "tags": [
@@ -426,7 +421,6 @@
       }
     ],
     "notes": "1/2 90\u00b0 spot/chamfer drill. Spot before all drilled holes.",
-    "last_used_job": "",
     "preferred_machine": "Haas",
     "material_suitability": [],
     "tags": [
@@ -491,7 +485,6 @@
       }
     ],
     "notes": ".194 HSS reamer for dowel-pin holes. Light feed, flood coolant.",
-    "last_used_job": "",
     "preferred_machine": "M300",
     "material_suitability": [],
     "tags": [
@@ -557,7 +550,6 @@
       }
     ],
     "notes": "M5x0.8 form (roll) tap, 4H. No chips \u2014 needs proper drill size hole.",
-    "last_used_job": "",
     "preferred_machine": "Haas",
     "material_suitability": [],
     "tags": [
@@ -623,7 +615,6 @@
       }
     ],
     "notes": ".488 thread mill, 11-32 TPI range. Single-point, climb-mill threads.",
-    "last_used_job": "",
     "preferred_machine": "M300",
     "material_suitability": [],
     "tags": [
@@ -694,7 +685,6 @@
       }
     ],
     "notes": "RTA21 boring head w/ TPGP080204 insert. Fine bore finishing to size.",
-    "last_used_job": "",
     "preferred_machine": "M300",
     "material_suitability": [],
     "tags": [
@@ -759,7 +749,6 @@
       }
     ],
     "notes": "2.5 45\u00b0 face mill, 5 inserts. Aluminum and steel facing presets.",
-    "last_used_job": "",
     "preferred_machine": "Haas",
     "material_suitability": [],
     "tags": [
@@ -824,7 +813,6 @@
       }
     ],
     "notes": "3/16 high-feed mill. Shallow DOC, very high feedrate roughing.",
-    "last_used_job": "",
     "preferred_machine": "M300",
     "material_suitability": [],
     "tags": [

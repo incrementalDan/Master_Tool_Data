@@ -370,7 +370,7 @@ describe('Phase B increment 4 — promote / detach', () => {
 describe('mergeTool — the program a sync came from lands on the presets it touched', () => {
   // ⚠️ This shipped broken and looked fine: CommitStep returns
   // { operation_id, label } (the Parts module's shape), while mergeTool still
-  // read `jobLink.job_id` into a `job_ids` array — both left over from the
+  // read `programLink.job_id` into a `job_ids` array — both left over from the
   // pre-Parts-module jobs.json. The id came back undefined, so every commit
   // with a program selected wrote `job_ids: [undefined]` onto its presets:
   // a link nothing reads, on a key normalizePreset does not strip, so it would
@@ -386,13 +386,13 @@ describe('mergeTool — the program a sync came from lands on the presets it tou
       { guid: 'p-untouched', name: 'AL 1 H - Finish', n: 9000 },
     ],
   });
-  const jobLink = { operation_id: 'op-1218', label: 'O1218 · HINGE-COVER' };
+  const programLink = { operation_id: 'op-1218', label: 'O1218 · HINGE-COVER' };
 
   it('stores the operation id under operation_ids — the key everything else reads', async () => {
     const { mergeTool } = createToolActions(mergeCtx());
     await mergeTool(master(), {}, 'proven', 'dy', [], [
       { guid: 'p-new', name: 'AL 1 H - Rough 2', n: 8200 },
-    ], null, jobLink);
+    ], null, programLink);
 
     const saved = upsertMetadata.mock.calls[0][0];
     const byGuid = Object.fromEntries(saved.presets.map(p => [p.guid, p]));
@@ -408,7 +408,7 @@ describe('mergeTool — the program a sync came from lands on the presets it tou
     const { mergeTool } = createToolActions(mergeCtx());
     await mergeTool(master(), {}, 'proven', 'dy', [
       { masterPresetGuid: 'p-touched', incomingPreset: { n: 8500 }, selectedFields: new Set(['n']) },
-    ], [], null, jobLink);
+    ], [], null, programLink);
 
     const saved = upsertMetadata.mock.calls[0][0];
     const byGuid = Object.fromEntries(saved.presets.map(p => [p.guid, p]));
@@ -422,7 +422,7 @@ describe('mergeTool — the program a sync came from lands on the presets it tou
     const { mergeTool } = createToolActions(mergeCtx());
     await mergeTool(m, {}, 'proven', 'dy', [
       { masterPresetGuid: 'p-touched', incomingPreset: { n: 8500 }, selectedFields: new Set(['n']) },
-    ], [], null, jobLink);
+    ], [], null, programLink);
 
     const saved = upsertMetadata.mock.calls[0][0];
     expect(saved.presets.find(p => p.guid === 'p-touched').operation_ids).toEqual(['op-1218']);
@@ -433,13 +433,13 @@ describe('mergeTool — the program a sync came from lands on the presets it tou
     // Which programs a tool runs in is a scan of the stored Sequence Detail
     // rows; a stored copy is the field that went stale and showed nothing.
     const { mergeTool } = createToolActions(mergeCtx());
-    await mergeTool(master(), { spindle_speed: 7000 }, 'proven', 'dy', [], [], null, jobLink);
+    await mergeTool(master(), { spindle_speed: 7000 }, 'proven', 'dy', [], [], null, programLink);
 
     const saved = upsertMetadata.mock.calls[0][0];
     expect(saved.job_ids).toBeUndefined();
     expect(saved.operation_ids).toBeUndefined();
     // The provenance is still recorded, where it belongs — in the history entry.
-    expect(saved.merge_history.at(-1).job_linked).toBe('O1218 · HINGE-COVER');
+    expect(saved.merge_history.at(-1).program_linked).toBe('O1218 · HINGE-COVER');
   });
 });
 

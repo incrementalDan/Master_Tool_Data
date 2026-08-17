@@ -8,6 +8,7 @@ import {
   updatePartIn, updateRoutingIn, updateOperationIn,
   deleteOperationIn, deleteRoutingIn, deletePartIn,
   applyPartsFilters, sortParts, sortOperations, recordActivityAt,
+  partActivityAt, partNewestProgram,
   addPartWithRoutingIn, addRoutingIn, addOperationIn,
 } from './parts.js';
 
@@ -65,6 +66,19 @@ describe('program numbers', () => {
     expect(operationByProgramNumber(file, 1218).id).toBe('op60');
     expect(operationByProgramNumber(file, '1218').id).toBe('op60');
     expect(operationByProgramNumber(file, 9999)).toBeNull();
+  });
+
+  it('never matches a step that has NO program', () => {
+    // Number(null) is 0, so a bare numeric compare made every inspection /
+    // deburr step answer to program "0" — and to a null or blank query, which
+    // is how a caller that forgot to guard gets an unrelated operation back
+    // instead of nothing.
+    expect(operationByProgramNumber(file, 0)).toBeNull();
+    expect(operationByProgramNumber(file, null)).toBeNull();
+    expect(operationByProgramNumber(file, '')).toBeNull();
+    expect(operationByProgramNumber(file, undefined)).toBeNull();
+    // Searching "0" in the picker must not list every program-less step either.
+    expect(searchPrograms(file, '0')).toEqual([]);
   });
 
   it('is global, permanent and computed — max + 1, never a stored counter', () => {
@@ -360,6 +374,24 @@ describe('sorting', () => {
     expect(sortParts(f, f.parts, 'part', 'asc').map(p => p.part_number)).toEqual(['ALPHA', 'ZULU']);
     expect(sortParts(f, f.parts, 'part', 'desc').map(p => p.part_number)).toEqual(['ZULU', 'ALPHA']);
     expect(sortParts(f, f.parts, 'customer', 'asc').map(p => p.customer)).toEqual(['Acme', 'Val']);
+  });
+
+  it('sorts on keys computed once per part, matching the per-part helpers', () => {
+    // ⚠️ sortParts precomputes both keys in ONE pass over the file, because
+    // calling the helpers from inside the comparator re-walked every operation
+    // O(n log n) times — 147ms at 400 parts, on every keystroke in the search
+    // box. The fast path must not drift from the documented helpers.
+    for (const p of f.parts) {
+      const keyed = sortParts(f, [p]);          // exercises the indexed path
+      expect(keyed).toEqual([p]);
+    }
+    expect(partActivityAt(f, f.parts[1])).toBe('2026-08-16');   // newest OP wins
+    expect(partNewestProgram(f, f.parts[0])).toBe(1500);
+    // A part with no operations falls back to its own timestamp, and to -1 for
+    // the program tiebreak — it must not sort as if it had program 0.
+    const lone = { ...f, parts: [...f.parts, { id: 'p3', part_number: 'MMM', created_at: '2026-03-01' }] };
+    expect(partNewestProgram(lone, lone.parts[2])).toBe(-1);
+    expect(sortParts(lone, lone.parts).map(x => x.part_number)).toEqual(['ALPHA', 'MMM', 'ZULU']);
   });
 
   it('sorts operation rows by the same vocabulary', () => {

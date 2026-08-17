@@ -2182,10 +2182,10 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .preset-card-del:hover { color: var(--red); }
 
 /* ── Preset job links (collapsed dropdown row above the card footer) ── */
-.preset-card-jobs {
+.preset-card-programs {
   border-top: 1px solid var(--border);
 }
-.preset-jobs-toggle {
+.preset-programs-toggle {
   display: flex;
   align-items: center;
   gap: 5px;
@@ -2198,27 +2198,27 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   color: var(--text-sub);
   font-family: inherit;
 }
-.preset-jobs-toggle:hover { color: var(--text); }
-.preset-jobs-chev { margin-left: auto; transition: transform 0.15s ease; }
-.preset-jobs-chev.open { transform: rotate(180deg); }
-.preset-jobs-list {
+.preset-programs-toggle:hover { color: var(--text); }
+.preset-programs-chev { margin-left: auto; transition: transform 0.15s ease; }
+.preset-programs-chev.open { transform: rotate(180deg); }
+.preset-programs-list {
   padding: 0 10px 7px;
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
-.preset-jobs-row {
+.preset-programs-row {
   display: flex;
   align-items: center;
   gap: 4px;
   font-size: 10.5px;
   color: var(--text);
 }
-.preset-jobs-row .preset-jobs-del { margin-left: auto; color: var(--text-sub); padding: 0 2px; }
-.preset-jobs-row .preset-jobs-del:hover { color: var(--red); }
-.preset-jobs-add-picker { margin-top: 6px; }
-.preset-jobs-add-picker .pn-search .field-input { font-size: 11px; padding: 4px 6px 4px 28px; }
-.preset-jobs-add-picker .job-pick-results { max-height: 180px; }
+.preset-programs-row .preset-programs-del { margin-left: auto; color: var(--text-sub); padding: 0 2px; }
+.preset-programs-row .preset-programs-del:hover { color: var(--red); }
+.preset-programs-add-picker { margin-top: 6px; }
+.preset-programs-add-picker .pn-search .field-input { font-size: 11px; padding: 4px 6px 4px 28px; }
+.preset-programs-add-picker .pick-results { max-height: 180px; }
 
 /* ── Program Number Manager (/programs) ─────────────────────────────────── */
 .pn-page { max-width: 1200px; margin: 0 auto; }
@@ -2418,22 +2418,22 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 }
 
 /* Sync-Job program picker (CommitStep) */
-.job-pick-selected {
+.pick-selected {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   background: var(--surface-2); border: 1px solid var(--border);
   border-radius: 8px; padding: 8px 10px;
 }
-.job-pick-results {
+.pick-results {
   display: flex; flex-direction: column; gap: 3px;
   margin-top: 6px; max-height: 240px; overflow-y: auto;
 }
-.job-pick-row {
+.pick-row {
   display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
   text-align: left; font-family: inherit; color: var(--text);
   background: none; border: 1px solid var(--border); border-radius: 7px;
   padding: 6px 9px; cursor: pointer;
 }
-.job-pick-row:hover { background: var(--surface-2); border-color: var(--blue); }
+.pick-row:hover { background: var(--surface-2); border-color: var(--blue); }
 
 /* ── Jobs / Where Used panel (ToolDetail) ── */
 .job-row {
@@ -6086,7 +6086,7 @@ input.sf-ref-num { text-align: right; }
   font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
   color: var(--text-sub); text-transform: uppercase;
 }
-.sd-job-list { border-color: color-mix(in srgb, var(--blue) 35%, var(--border)); }
+.sd-all-tools { border-color: color-mix(in srgb, var(--blue) 35%, var(--border)); }
 .sd-tabs { margin: 0 14px; }
 .sd-tab-meta { margin-left: auto; align-self: center; padding-bottom: 6px; }
 

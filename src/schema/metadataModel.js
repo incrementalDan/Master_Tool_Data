@@ -199,7 +199,6 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     // stable tracking id on BOTH sides; see src/utils/toolLinks.js.
     linked_tools: meta.linked_tools || [],
     notes: meta.notes || '',
-    last_used_job: meta.last_used_job || '',
     // Preferred machine: FK into shop_settings.machines[] (rename-proof); the
     // string is derived from it — see src/utils/machines.js. Null for a legacy
     // free-text value not matching a configured machine.
@@ -254,8 +253,9 @@ export function buildMetadataTool(tool) {
         // preset → assembly FOREIGN KEY (many presets → one assembly). The
         // authoritative link; the name is only the Fusion-boundary carrier.
         ...(p.assembly_id ? { assembly_id: p.assembly_id } : {}),
-        // Job links (jobs.json registry ids) proven on this preset — see
-        // src/utils/jobs.js. Metadata-only, never written to Fusion.
+        // The programs this preset was proven on — OPERATION ids into
+        // parts.json (a program IS an operation). Metadata-only, never written
+        // to Fusion; the label is resolved live from the id.
         ...(p.operation_ids?.length ? { operation_ids: p.operation_ids } : {}),
         ...(p.small_bore ? { small_bore: true } : {}),
         ...(p.small_bore_diameter ? { small_bore_diameter: p.small_bore_diameter } : {}),
@@ -443,10 +443,9 @@ export function buildMetadataTool(tool) {
     presets: (tool.presets || []).map(p => ({ ...p })),
     // Tool ↔ tool (tap/drill, reamer/drill) — symmetric, stored on both sides.
     // ⚠️ NOT a program link: which programs a tool runs in is DERIVED from the
-    // stored Sequence Detail rows, never stored (see JobsSection).
+    // stored Sequence Detail rows, never stored (see ProgramUsageSection).
     linked_tools: normalizeLinkIds(tool.linked_tools, tool.tracking_id || tool.id),
     notes: tool.notes || '',
-    last_used_job: tool.last_used_job || '',
     preferred_machine_id: tool.preferred_machine_id || null, // FK — see machines.js
     preferred_machine: tool.preferred_machine || '',
     material_suitability: tool.material_suitability || [],
