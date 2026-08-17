@@ -196,7 +196,6 @@ function parseFusionCsv(raw) {
       material_suitability: [],
       tags: [],
       notes: '',
-      last_used_job: '',
       preferred_machine_id: null,
     preferred_machine: '',
       machine_tool_number: null,

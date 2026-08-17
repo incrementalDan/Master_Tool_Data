@@ -367,6 +367,82 @@ describe('Phase B increment 4 — promote / detach', () => {
   });
 });
 
+describe('mergeTool — the program a sync came from lands on the presets it touched', () => {
+  // ⚠️ This shipped broken and looked fine: CommitStep returns
+  // { operation_id, label } (the Parts module's shape), while mergeTool still
+  // read `programLink.job_id` into a `job_ids` array — both left over from the
+  // pre-Parts-module jobs.json. The id came back undefined, so every commit
+  // with a program selected wrote `job_ids: [undefined]` onto its presets:
+  // a link nothing reads, on a key normalizePreset does not strip, so it would
+  // have leaked into the strictly-validated Fusion JSON.
+  const mergeCtx = () => makeCtx({ toolsRef: { current: [] } });
+  const master = () => ({
+    // no_fusion_link keeps this a metadata-only write — no Fusion IO to stub,
+    // and the persisted record is what we assert on.
+    tracking_id: 'FTL-JL1', tool_type: 'flat end mill', unit: 'inches',
+    no_fusion_link: true, assemblies: [{ assembly_id: 'a1', ooh: 1 }],
+    presets: [
+      { guid: 'p-touched', name: 'AL 1 H - Rough', n: 8000 },
+      { guid: 'p-untouched', name: 'AL 1 H - Finish', n: 9000 },
+    ],
+  });
+  const programLink = { operation_id: 'op-1218', label: 'O1218 · HINGE-COVER' };
+
+  it('stores the operation id under operation_ids — the key everything else reads', async () => {
+    const { mergeTool } = createToolActions(mergeCtx());
+    await mergeTool(master(), {}, 'proven', 'dy', [], [
+      { guid: 'p-new', name: 'AL 1 H - Rough 2', n: 8200 },
+    ], null, programLink);
+
+    const saved = upsertMetadata.mock.calls[0][0];
+    const byGuid = Object.fromEntries(saved.presets.map(p => [p.guid, p]));
+    expect(byGuid['p-new'].operation_ids).toEqual(['op-1218']);
+    // And it survives into preset_meta, which is what the next load overlays.
+    expect(saved.preset_meta['p-new'].operation_ids).toEqual(['op-1218']);
+    // Never the retired key, and never an undefined entry.
+    expect(byGuid['p-new'].job_ids).toBeUndefined();
+    expect(saved.presets.some(p => (p.operation_ids || []).includes(undefined))).toBe(false);
+  });
+
+  it('links only the presets the commit actually touched', async () => {
+    const { mergeTool } = createToolActions(mergeCtx());
+    await mergeTool(master(), {}, 'proven', 'dy', [
+      { masterPresetGuid: 'p-touched', incomingPreset: { n: 8500 }, selectedFields: new Set(['n']) },
+    ], [], null, programLink);
+
+    const saved = upsertMetadata.mock.calls[0][0];
+    const byGuid = Object.fromEntries(saved.presets.map(p => [p.guid, p]));
+    expect(byGuid['p-touched'].operation_ids).toEqual(['op-1218']);
+    expect(byGuid['p-untouched'].operation_ids || []).toEqual([]);
+  });
+
+  it('does not double-link a program already on the preset', async () => {
+    const m = master();
+    m.presets[0].operation_ids = ['op-1218'];
+    const { mergeTool } = createToolActions(mergeCtx());
+    await mergeTool(m, {}, 'proven', 'dy', [
+      { masterPresetGuid: 'p-touched', incomingPreset: { n: 8500 }, selectedFields: new Set(['n']) },
+    ], [], null, programLink);
+
+    const saved = upsertMetadata.mock.calls[0][0];
+    expect(saved.presets.find(p => p.guid === 'p-touched').operation_ids).toEqual(['op-1218']);
+  });
+
+  it('stores NO tool-level program link — that relationship is derived', async () => {
+    // A commit touching only flat fields used to stash the id on the tool.
+    // Which programs a tool runs in is a scan of the stored Sequence Detail
+    // rows; a stored copy is the field that went stale and showed nothing.
+    const { mergeTool } = createToolActions(mergeCtx());
+    await mergeTool(master(), { spindle_speed: 7000 }, 'proven', 'dy', [], [], null, programLink);
+
+    const saved = upsertMetadata.mock.calls[0][0];
+    expect(saved.job_ids).toBeUndefined();
+    expect(saved.operation_ids).toBeUndefined();
+    // The provenance is still recorded, where it belongs — in the history entry.
+    expect(saved.merge_history.at(-1).program_linked).toBe('O1218 · HINGE-COVER');
+  });
+});
+
 describe('mergeTools — fold two records sharing a ProShop number (tool-page merge)', () => {
   const ioCtx = (overrides = {}) => ({
     dispatch: vi.fn(), notify: vi.fn(),

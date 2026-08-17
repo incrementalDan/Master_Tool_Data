@@ -16,7 +16,7 @@ import {
   CustomerBadge, TypePill, ProgramNumBadge,
   ProgramEditForm, PartEditForm, InlineConfirm, PartsFilterBar, DEFAULT_PARTS_FILTERS,
   programDraftOf, programFieldsOf, partDraftOf, partFieldsOf,
-} from './programsUi.jsx';
+} from './partsUi.jsx';
 import AddProgramModal from './AddProgramModal.jsx';
 import SequenceUploadModal from './SequenceUploadModal.jsx';
 import MachinePill from './MachinePill.jsx';
@@ -53,9 +53,7 @@ function OperationRow({ operation, part, materials, machines, canEdit, onUpdate,
   const mat = operationMaterial(operation, part);
   return (
     <div className="pn-op-row">
-      {operation.program_number != null
-        ? <ProgramNumBadge n={operation.program_number} />
-        : <span className="text-xs text-sub" title="This step has no program — inspection, deburr, an outside process">no program</span>}
+      <ProgramNumBadge n={operation.program_number} />
       <span className="sd-op-label">{formatOperation(operation.op_number)}</span>
       {operation.machine_label
         ? <MachinePill label={operation.machine_label} color={machineColorFor(operation.machine_id, operation.machine_label, machines)} />
@@ -277,7 +275,7 @@ function TableView({ rows, materials, machines, canEdit, onUpdateOperation, onDe
                     </span>
                   )}
                 </td>
-                <td>{row.program_number != null ? <ProgramNumBadge n={row.program_number} /> : <span className="text-sub">—</span>}</td>
+                <td><ProgramNumBadge n={row.program_number} /></td>
                 <td><span className="pn-part-number">{row.part?.part_number || '—'}</span></td>
                 <td><CustomerBadge customer={row.part?.customer} /></td>
                 <td className="text-sub">{row.routing ? routingLabel(row.routing) : '—'}</td>

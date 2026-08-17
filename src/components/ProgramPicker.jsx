@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Search, X, Plus } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { searchPrograms, partById, routingById, routingLabel, alloyLabel, formatOperation, machineOptions } from '../utils/parts.js';
-import { CustomerBadge, ProgramNumBadge, TypePill } from './programsUi.jsx';
+import { CustomerBadge, ProgramNumBadge, TypePill } from './partsUi.jsx';
 import AddProgramModal from './AddProgramModal.jsx';
 import MachinePill from './MachinePill.jsx';
 import { machineColorFor } from '../utils/machineColors.js';
@@ -18,7 +18,7 @@ import { machineColorFor } from '../utils/machineColors.js';
 // `operation_id` is the durable link and everything else in the selection is
 // context resolved off it.
 //   { operation_id, program_number, part_id, part_number, op_number, routing_id }
-export default function JobProgramPicker({ onPick, placeholder = 'Program # (exact) or part # (contains)', autoFocus = false }) {
+export default function ProgramPicker({ onPick, placeholder = 'Program # (exact) or part # (contains)', autoFocus = false }) {
   const { parts: partsFile, materials, shopSettings } = useApp();
   const [query, setQuery] = useState('');
   const [showAdd, setShowAdd] = useState(false);
@@ -52,14 +52,14 @@ export default function JobProgramPicker({ onPick, placeholder = 'Program # (exa
       </div>
 
       {query.trim() && (
-        <div className="job-pick-results">
+        <div className="pick-results">
           {results.length === 0 && (
             <div className="text-xs text-sub" style={{ padding: '6px 2px' }}>
               No matching program. Use “Add new program” to create one.
             </div>
           )}
           {results.map(({ operation, routing, part }) => (
-            <button key={operation.id} type="button" className="job-pick-row" onClick={() => pick(operation, routing, part)}>
+            <button key={operation.id} type="button" className="pick-row" onClick={() => pick(operation, routing, part)}>
               <ProgramNumBadge n={operation.program_number} />
               <span className="pn-part-number">{part?.part_number || '—'}</span>
               {routing && <span className="text-xs text-sub">{routingLabel(routing)}</span>}
@@ -97,7 +97,7 @@ export function SelectedProgramChip({ value, onClear }) {
   const part = value.part_id ? partById(partsFile, value.part_id) : null;
   const routing = value.routing_id ? routingById(partsFile, value.routing_id) : null;
   return (
-    <div className="job-pick-selected">
+    <div className="pick-selected">
       <ProgramNumBadge n={value.program_number} />
       <span className="pn-part-number">{value.part_number || '—'}</span>
       {routing && <span className="text-xs text-sub">{routingLabel(routing)}</span>}

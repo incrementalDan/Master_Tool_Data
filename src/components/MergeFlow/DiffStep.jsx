@@ -42,8 +42,8 @@ const DIFF_SECTIONS = [
     title: 'Notes',
     key: 'notes',
     icon: StickyNote,
-    // last_used_job retired from sync — structured job links (program # +
-    // part #) are captured in CommitStep instead.
+    // No last_used_job — the program a sync came from is picked in CommitStep
+    // and stored on the presets that commit touches.
     fields: ['notes'],
   },
 ];

@@ -135,10 +135,10 @@ function ExcludePicker({ system, tools, busyId, onExclude }) {
         {query && <button className="icon-btn" title="Clear" onClick={() => setQuery('')}><X size={13} /></button>}
       </div>
       {q && (
-        <div className="job-pick-results" style={{ maxWidth: 360 }}>
+        <div className="pick-results" style={{ maxWidth: 360 }}>
           {matches.length === 0 && <div className="text-xs text-sub" style={{ padding: '6px 2px' }}>No matching tool.</div>}
           {matches.map(t => (
-            <button key={t.id} type="button" className="job-pick-row" disabled={busyId === t.id}
+            <button key={t.id} type="button" className="pick-row" disabled={busyId === t.id}
               onClick={() => { onExclude(t.id); setQuery(''); }}>
               <Plus size={12} style={{ color: 'var(--orange)' }} />
               <span className="pn-part-number">{t.description || '—'}</span>

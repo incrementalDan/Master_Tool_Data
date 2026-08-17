@@ -61,8 +61,8 @@ describe('location — the app wins, the file does not', () => {
     // Both resolve to the same drawer, so it is one label — printing two would
     // be printing the same tag twice.
     const rows = [
-      { ...row({ tool_ref: 'FTL-1', lc: 'LC-52' }), program_id: 'p1' },
-      { ...row({ tool_ref: 'FTL-1', lc: 'LC-244' }), program_id: 'p2' },
+      { ...row({ tool_ref: 'FTL-1', lc: 'LC-52' }), operation_id: 'op1' },
+      { ...row({ tool_ref: 'FTL-1', lc: 'LC-244' }), operation_id: 'op2' },
     ];
     expect(labelRows(rows, part, toolsById)).toHaveLength(1);
   });
@@ -71,8 +71,8 @@ describe('location — the app wins, the file does not', () => {
 describe('dedupe — never print two identical labels', () => {
   it('collapses the same pocket running the same assembly in two OPs', () => {
     const rows = [
-      { ...row(), program_id: 'p1' },
-      { ...row(), program_id: 'p2' },   // OP60 — nothing about the setup differs
+      { ...row(), operation_id: 'op1' },
+      { ...row(), operation_id: 'op2' },   // OP60 — nothing about the setup differs
     ];
     expect(labelRows(rows, part)).toHaveLength(1);
   });

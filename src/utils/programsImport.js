@@ -127,13 +127,19 @@ export function buildProgramsImport(csvText, { partsFile = {}, shopSettings = {}
   const existingRoutingByKey = new Map(routingsOf(partsFile).map(r => [routingKeyOf(r.part_id, r.rev), r]));
   const usedNumbers = new Set(
     operationsOf(partsFile).map(o => Number(o.program_number)).filter(n => !isNaN(n)));
-  let counter = nextProgramNumber(partsFile) - 1;   // running max; ++ before use
+  // An operation is also identified by (routing, OP #) — a row with a BLANK
+  // program number has no number to dedupe on, so without this a re-import
+  // would silently add a second copy of every such step. Seeded from what's
+  // already stored and extended as the import runs.
+  const usedOps = new Set(
+    operationsOf(partsFile).map(o => `${o.routing_id}|${String(o.op_number ?? '').trim().toLowerCase()}`));
 
   const newParts = [];
   const newRoutings = [];
   const newOperations = [];
   const newPartByKey = new Map();
   const newRoutingByKey = new Map();
+
 
   // Two passes so an auto-assigned blank can never steal a number a later row
   // states explicitly: explicit numbers first, blanks after.
@@ -195,6 +201,11 @@ export function buildProgramsImport(csvText, { partsFile = {}, shopSettings = {}
       return;
     }
     const routingId = resolveRouting(partId, row.rev || 'A');
+    const opKey = `${routingId}|${String(row.operation ?? '').trim().toLowerCase()}`;
+    if (usedOps.has(opKey)) {
+      summary.duplicates.push({ line: row._line, program_number: number, op_number: row.operation || '' });
+      return;
+    }
     const isFixture = parseFixture(row.is_fixture);
     newOperations.push(newOperation({
       routing_id: routingId,
@@ -210,6 +221,7 @@ export function buildProgramsImport(csvText, { partsFile = {}, shopSettings = {}
       order: newOperations.length,
     }, createdBy));
     usedNumbers.add(number);
+    usedOps.add(opKey);
     summary.operationsNew++;
   };
 
@@ -220,10 +232,21 @@ export function buildProgramsImport(csvText, { partsFile = {}, shopSettings = {}
     }
     addOperation(row, number);
   }
+  // ⚠️ Auto-assign continues ABOVE everything, including the numbers this same
+  // import just claimed. Starting from the pre-import max handed a blank row a
+  // LOW free number (1000 in a file whose stated numbers ran 1108+), which is
+  // a hole-filler rather than "the next number" — and it contradicts the rule
+  // the rest of the app follows (a new bin continues past the highest in use,
+  // it never backfills a gap).
+  let counter = Math.max(nextProgramNumber(partsFile) - 1, ...usedNumbers, 0);
   for (const row of blanks) {
+    const before = summary.operationsNew;
     do { counter++; } while (usedNumbers.has(counter));
     addOperation(row, counter);
-    summary.autoAssigned.push(counter);
+    // Only claim the number if the row actually became an operation — a row
+    // skipped as a duplicate must not burn a program number.
+    if (summary.operationsNew > before) summary.autoAssigned.push(counter);
+    else counter--;
   }
 
   const mergedFile = {

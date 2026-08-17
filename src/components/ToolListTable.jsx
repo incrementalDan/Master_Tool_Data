@@ -41,7 +41,11 @@ export default function ToolListTable({
   selected,                // Set of row keys
   onToggle,
   onToggleAll,
-  rowKey = (r) => `${r.program_id || ''}:${r.t_num}`,
+  // ⚠️ A pocket number is unique only WITHIN one program, so the key has to
+  // carry the operation too — the part-level list pools every OP's rows and
+  // T38 recurs in each. This defaulted to a `program_id` no row has, which
+  // collapsed every row to ":38" and would have made one tick select several.
+  rowKey = (r) => `${r.operation_id || ''}:${r.t_num}`,
 }) {
   const { holderLibrary, tools } = useApp();
 

@@ -16,7 +16,7 @@ import FilesSection from './FilesSection.jsx';
 import PurchasingSection from './PurchasingSection.jsx';
 import LinkedToolsSection from './LinkedToolsSection.jsx';
 import SpeedFeedSection from './SpeedFeedSection.jsx';
-import JobsSection from './JobsSection.jsx';
+import ProgramUsageSection from './ProgramUsageSection.jsx';
 import AttachmentUploadModal from './AttachmentUploadModal.jsx';
 import PhotoSlot from './PhotoSlot.jsx';
 import PairingSections from './PairingSections.jsx';
@@ -806,7 +806,7 @@ export default function ToolDetail() {
 
             {/* Where this tool actually runs — derived from the uploaded
                 Sequence Details, so there is nothing to link by hand. */}
-            <JobsSection tool={tool} />
+            <ProgramUsageSection tool={tool} />
 
             <Section title="Notes & Tags" icon={StickyNote}>
               {tool.notes && (

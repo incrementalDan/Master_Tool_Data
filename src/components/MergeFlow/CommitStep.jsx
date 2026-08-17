@@ -7,7 +7,7 @@ import { unitAbbr } from '../../utils/units.js';
 import { formatProgramNumber } from '../../utils/parts.js';
 import { presetMaterialColor } from '../../utils/presetNaming.js';
 import { PRESET_FIELD_LABELS } from './DiffStep.jsx';
-import JobProgramPicker, { SelectedProgramChip } from '../JobProgramPicker.jsx';
+import ProgramPicker, { SelectedProgramChip } from '../ProgramPicker.jsx';
 import ToolTypeIcon from '../icons/ToolTypeIcon.jsx';
 import InfoTip from '../InfoTip.jsx';
 
@@ -25,8 +25,8 @@ export default function CommitStep({
   presetChanges,      // [{ masterPresetGuid, incomingPreset, selectedFields:Set }] — same-setup updates
   presetsToAdd,       // presetObject[] — new presets + conflict-created presets
   assemblyUpdate,     // { type: 'create'|'link', assembly: {...} } or null — decided in DiffStep
-  initialJob = null,  // selected program-link, remembered at queue level — a batch sync is usually one job
-  onJobInput,         // (selection|null) => void — carry the selection to the next queue item
+  initialProgram = null,  // remembered at queue level — a batch sync is usually one program
+  onProgramInput,         // (selection|null) => void — carry the selection to the next queue item
   onCommitted, onBack,
   isLastItem = false,
 }) {
@@ -34,8 +34,8 @@ export default function CommitStep({
   const [revisionNote, setRevisionNote] = useState('');
   const [mergedBy, setMergedBy] = useState(user?.email || user?.name || '');
   // The program this sync came from — a selection from the Program Number
-  // Manager (JobProgramPicker), or null. Carried across the queue.
-  const [jobSel, setJobSel] = useState(initialJob || null);
+  // Manager (ProgramPicker), or null. Carried across the queue.
+  const [programSel, setProgramSel] = useState(initialProgram || null);
   const [commitError, setCommitError] = useState('');
 
   const fieldList = [...(selectedFields || [])];
@@ -48,7 +48,8 @@ export default function CommitStep({
   // need a written justification.
   const revisionRequired = fieldList.length > 0 || changeList.length > 0;
 
-  const jobEnabled = googleAuthenticated || demoMode;   // job links live in jobs.json (Drive; demo = in-memory)
+  // The link is stored in preset_meta on Drive (demo = in-memory sandbox).
+  const programLinkEnabled = googleAuthenticated || demoMode;
 
   const handleCommit = async () => {
     if (revisionRequired && !revisionNote.trim()) return;
@@ -57,22 +58,20 @@ export default function CommitStep({
     const mergedFields = {};
     for (const f of fieldList) mergedFields[f] = importedTool[f];
 
-    // Resolve the selected program to a job link (carrying program_id so the
-    // preset's job joins back to the full program record); mergeTool links its
-    // id to every preset this commit touches (or the tool, if none).
-    // The program this sync came from. The picker returns an operation that
-    // already exists, so there is nothing to create — the link is just its id.
-    let jobLink = null;
-    if (jobEnabled && jobSel) {
-      jobLink = {
-        operation_id: jobSel.operation_id,
-        label: [formatProgramNumber(jobSel.program_number), jobSel.part_number].filter(Boolean).join(' · '),
+    // The program this sync came from. The picker returns an OPERATION that
+    // already exists, so there is nothing to create — the link is just its id,
+    // which mergeTool appends to every preset this commit touches.
+    let programLink = null;
+    if (programLinkEnabled && programSel) {
+      programLink = {
+        operation_id: programSel.operation_id,
+        label: [formatProgramNumber(programSel.program_number), programSel.part_number].filter(Boolean).join(' · '),
       };
-      onJobInput?.(jobSel);
+      onProgramInput?.(programSel);
     }
 
     try {
-      await mergeTool(masterTool, mergedFields, revisionNote.trim(), mergedBy.trim(), changeList, newPresetList, assemblyUpdate, jobLink);
+      await mergeTool(masterTool, mergedFields, revisionNote.trim(), mergedBy.trim(), changeList, newPresetList, assemblyUpdate, programLink);
       onCommitted();
     } catch (err) {
       setCommitError(err.message);
@@ -198,21 +197,21 @@ export default function CommitStep({
         />
       </div>
 
-      {/* Job link — the "proven on job X" provenance this whole flow exists to
-          capture. Search the Program Number Manager by program # (exact) or
-          part # (contains), or add a new program. Optional; carried across the
-          queue (a batch sync is usually one job). */}
+      {/* Program link — the "proven on O1218" provenance this whole flow exists
+          to capture. Search the Parts page by program # (exact) or part #
+          (contains), or add a new program. Optional; carried across the queue
+          (a batch sync is usually all one program). */}
       <div className="field-group mb-16">
         <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Briefcase size={12} /> Job / program (optional)
-          <InfoTip text="Link this sync to a program (program # + part #) from the Programs page. Type a program number for an exact match, or a part number to see its programs; or add a new one. It links to the presets this commit updates or adds (or the tool itself when no presets change), and shows under each preset + in the tool's Jobs panel. Carried to the next tool in this sync." />
+          <Briefcase size={12} /> Program (optional)
+          <InfoTip text="Link this sync to a program (program # + part #) from the Parts page. Type a program number for an exact match, or a part number to see its programs; or add a new one. It links to the presets this commit updates or adds, and shows under each preset. Carried to the next tool in this sync." />
         </label>
-        {jobEnabled ? (
-          jobSel
-            ? <SelectedProgramChip value={jobSel} onClear={() => setJobSel(null)} />
-            : <JobProgramPicker onPick={setJobSel} />
+        {programLinkEnabled ? (
+          programSel
+            ? <SelectedProgramChip value={programSel} onClear={() => setProgramSel(null)} />
+            : <ProgramPicker onPick={setProgramSel} />
         ) : (
-          <div className="text-sub text-xs">Connect Google Drive to link jobs (job links are stored in the shop metadata).</div>
+          <div className="text-sub text-xs">Connect Google Drive to link a program — the link is stored in the shop metadata.</div>
         )}
       </div>
 

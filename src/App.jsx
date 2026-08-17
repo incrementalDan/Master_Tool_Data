@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useGoogleLogin } from '@react-oauth/google';
 import { FolderOpen, LogOut, Library, Settings, RefreshCw, AlertTriangle, Download, X, FlaskConical, Building2, Hash, Package, CloudOff } from 'lucide-react';
@@ -21,7 +21,7 @@ import MergeFlow from './components/MergeFlow/index.jsx';
 import SettingsPage from './components/Settings.jsx';
 import MaterialsEditor from './components/MaterialsEditor.jsx';
 import VendorsEditor from './components/VendorsEditor.jsx';
-import PartsPage from './components/ProgramsPage.jsx';
+import PartsPage from './components/PartsPage.jsx';
 import PartDetailPage from './components/PartDetailPage.jsx';
 import HoldersPage from './components/HoldersPage.jsx';
 import NormalizeModal from './components/NormalizeModal.jsx';
@@ -45,6 +45,15 @@ export default function App() {
       </AppProvider>
     </GoogleOAuthProvider>
   );
+}
+
+// The part page moved from /programs/part/:id to /parts/:id when the Programs
+// page grew into the Parts module. Carry the id across rather than dropping the
+// user on the list — a bookmarked or pasted part link should still land on that
+// part.
+function LegacyPartRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/parts/${id}`} replace />;
 }
 
 function AppShell() {
@@ -110,7 +119,7 @@ function AppShell() {
             {/* The page was called Programs before it grew into the parts
                 module; keep old links working rather than 404ing them. */}
             <Route path="/programs" element={<Navigate to="/parts" replace />} />
-            <Route path="/programs/part/:id" element={<Navigate to="/parts" replace />} />
+            <Route path="/programs/part/:id" element={<LegacyPartRedirect />} />
             <Route path="/holders" element={<HoldersPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
@@ -171,7 +180,7 @@ function AppShell() {
             {/* The page was called Programs before it grew into the parts
                 module; keep old links working rather than 404ing them. */}
             <Route path="/programs" element={<Navigate to="/parts" replace />} />
-            <Route path="/programs/part/:id" element={<Navigate to="/parts" replace />} />
+            <Route path="/programs/part/:id" element={<LegacyPartRedirect />} />
             <Route path="/holders" element={<HoldersPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

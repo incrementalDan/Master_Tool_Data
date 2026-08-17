@@ -557,8 +557,9 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
 
           <Section title="Notes & Tags" icon={StickyNote}>
             <div className="form-grid">
-              {/* Last Used Job (free text) retired — structured job links live in
-                  ToolDetail's Jobs / Where Used panel + on presets. */}
+              {/* No "Last Used Job" free-text field: which programs a tool runs
+                  in is DERIVED (ToolDetail's Where Used panel), and a preset's
+                  proven-on link is stored per preset. */}
               <FieldInput field="updated_by" label="Updated By" data={data} setField={setField} />
               {/* Preferred Machine — stores the machine's stable id (rename-proof);
                   the name is derived. A legacy free-text value with no matching
