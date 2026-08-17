@@ -470,6 +470,22 @@ async function findOrCreateFolder(parentId, name) {
   return (await cr.json()).id;
 }
 
+// True only when `id` resolves to a real, non-trashed item. A 404 means it was
+// permanently deleted (not just trashed — Drive still resolves a trashed item);
+// treated the same as gone either way, since a cached pointer to a trashed
+// folder is exactly as useless as one to a deleted one.
+async function folderIsUsable(id) {
+  if (!id) return false;
+  const res = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${id}?fields=id,trashed&supportsAllDrives=true`,
+    { headers: { Authorization: `Bearer ${_accessToken}` } }
+  );
+  if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  if (!res.ok) return false;
+  const file = await res.json();
+  return !file.trashed;
+}
+
 async function getMetaParentFolderId() {
   const metaId = getMetaFileId();
   if (!metaId) throw new Error('No metadata file configured — connect Google Drive first');
@@ -485,9 +501,23 @@ async function getMetaParentFolderId() {
   return parentId;
 }
 
-// Ensures [metadata root]/tool_files/{trackingId}/ exists and returns its Drive ID.
+// Ensures [metadata root]/tool_files/{trackingId}/ exists and returns its Drive
+// ID.
+//
+// ⚠️ A cached ID is VERIFIED before trust, not just trusted because it's there.
+// The cache exists to skip the parent-folder lookup on every call, but if the
+// folder was deleted (or trashed) directly in Drive since it was cached, using
+// the dead ID blindly means every subsequent call fails outright — the app
+// then needs a manual "disconnect and reconnect" to recover, which throws away
+// the whole linked-library setup to fix one stale folder pointer. Checking
+// costs one extra request only when the cache is populated, and self-heals by
+// clearing the cache and re-running the normal find-or-create path.
 export async function ensureToolFolder(trackingId) {
   let toolFilesFolderId = localStorage.getItem(TOOL_FILES_FOLDER_CACHE_KEY);
+  if (toolFilesFolderId && !(await folderIsUsable(toolFilesFolderId))) {
+    toolFilesFolderId = null;
+    localStorage.removeItem(TOOL_FILES_FOLDER_CACHE_KEY);
+  }
   if (!toolFilesFolderId) {
     const parentId = await getMetaParentFolderId();
     toolFilesFolderId = await findOrCreateFolder(parentId, 'tool_files');
@@ -506,8 +536,18 @@ export async function ensureToolFolder(trackingId) {
 // file id) survives untouched. Creating a second folder instead would strand
 // them somewhere the app no longer looks, which is indistinguishable from
 // having lost them.
+//
+// ⚠️ The cached root ID is VERIFIED, not just trusted — same reasoning as
+// ensureToolFolder above (a deleted/trashed folder would otherwise hard-fail
+// every future upload until someone manually clears the cache or reconnects
+// Drive). Self-heals by clearing the cache and re-running the normal
+// adopt-legacy-or-create path.
 export async function ensureProgramFolder(folderName) {
   let rootId = localStorage.getItem(PROGRAM_FILES_FOLDER_CACHE_KEY);
+  if (rootId && !(await folderIsUsable(rootId))) {
+    rootId = null;
+    localStorage.removeItem(PROGRAM_FILES_FOLDER_CACHE_KEY);
+  }
   if (!rootId) {
     const parentId = await getMetaParentFolderId();
     rootId = await findFolder(parentId, 'ProgramFiles');
