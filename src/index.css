@@ -2322,6 +2322,18 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .pn-part-header:hover { background: var(--surface-2); }
 .pn-part-header > svg { color: var(--blue); flex-shrink: 0; }
 .pn-part-number { font-weight: 600; font-size: 13.5px; }
+/* The row's identity, and its only link. It stays text-coloured so the row
+   doesn't read as a wall of blue, and declares itself on hover — the standard
+   "this is the thing to click" affordance. */
+.pn-part-link { color: var(--text); text-decoration: none; }
+.pn-part-link:hover { color: var(--blue); text-decoration: underline; }
+.pn-part-link:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 3px; }
+/* A whole row that navigates (the flat table, which has nothing to expand). */
+.pn-row-link { cursor: pointer; }
+/* Keyboard parity for the row-sized secondary target. */
+.pn-part-header:focus-visible, .sd-program-head:focus-visible {
+  outline: 2px solid var(--blue); outline-offset: -2px;
+}
 .pn-part-count { margin-left: auto; }
 .pn-part-body { border-top: 1px solid var(--border); }
 .pn-op-group { padding: 8px 14px; border-bottom: 1px solid var(--border); }

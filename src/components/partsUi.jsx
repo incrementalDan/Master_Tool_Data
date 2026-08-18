@@ -8,6 +8,28 @@ import AlloyPicker from './AlloyPicker.jsx';
 
 const tint = (color, alpha) => (color || '#888') + alpha;
 
+// ── Row interaction ─────────────────────────────────────────────────────────
+// ONE PRIMARY ACTION PER ROW is the rule the Parts module follows: a row's
+// IDENTITY (the part number) is a real <Link>, so it navigates and cmd-click
+// opens a new tab; EVERYTHING ELSE in the row is the row's own secondary
+// action — expand/collapse — with a target the size of the whole row; and any
+// control with a job of its own (edit, delete, print) stops the click there.
+//
+// `disclosureProps` is that middle piece, in one place so the three collapsible
+// rows can't drift: the row is a real button to a keyboard and a screen reader,
+// and Enter/Space toggle it — but only when the row ITSELF has focus, so a link
+// or button inside it keeps its own key handling.
+export const disclosureProps = (open, toggle) => ({
+  onClick: toggle,
+  role: 'button',
+  tabIndex: 0,
+  'aria-expanded': open,
+  onKeyDown: (e) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+  },
+});
+
 export function CustomerBadge({ customer }) {
   const color = customerColor(customer);
   return (

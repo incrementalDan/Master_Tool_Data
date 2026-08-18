@@ -100,6 +100,14 @@ describe('Parts page renders', () => {
     expect(html).toContain('4 operations');   // 3 in Vise + 1 in Rev B
   });
 
+  // ONE PRIMARY ACTION PER ROW: the part number navigates (and is a real link,
+  // so cmd-click works), the rest of the row expands. Before this both did the
+  // same thing and the page was only reachable via a small "Open" button.
+  it('makes the part number a real link to the part page', () => {
+    const html = render(<PartsPage />);
+    expect(html).toMatch(/<a[^>]+href="\/parts\/pt1"[^>]*>DEMO-BRACKET</);
+  });
+
   it('offers the shared search / filter / sort bar', () => {
     const html = render(<PartsPage />);
     expect(html).toContain('Recently updated');

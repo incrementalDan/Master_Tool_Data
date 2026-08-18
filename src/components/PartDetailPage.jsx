@@ -13,7 +13,7 @@ import {
 } from '../utils/parts.js';
 import { detailsOf } from '../utils/sequenceImport.js';
 import {
-  CustomerBadge, TypePill, ProgramNumBadge, PartEditForm, ProgramEditForm, RoutingEditForm, InlineConfirm,
+  CustomerBadge, TypePill, ProgramNumBadge, disclosureProps, PartEditForm, ProgramEditForm, RoutingEditForm, InlineConfirm,
   partDraftOf, partFieldsOf, programDraftOf, programFieldsOf, routingDraftOf, routingFieldsOf,
 } from './partsUi.jsx';
 import AddProgramModal from './AddProgramModal.jsx';
@@ -117,7 +117,7 @@ function OperationCard({
 
   return (
     <div className="pn-part-card sd-program">
-      <div className="sd-program-head" onClick={() => setOpen(o => !o)}>
+      <div className="sd-program-head" {...disclosureProps(open, () => setOpen(o => !o))}>
         {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         <ProgramNumBadge n={operation.program_number} />
         {operation.op_number && <span className="sd-op-label">{formatOperation(operation.op_number)}</span>}
@@ -382,7 +382,7 @@ export default function PartDetailPage() {
 
       {partRows.length > 0 && (
         <div className="pn-part-card sd-all-tools">
-          <div className="sd-program-head" onClick={() => setShowJobList(o => !o)}>
+          <div className="sd-program-head" {...disclosureProps(showJobList, () => setShowJobList(o => !o))}>
             {showJobList ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
             <Wrench size={14} style={{ color: 'var(--blue)' }} />
             <span style={{ fontWeight: 600, fontSize: 13.5 }}>All tools for this part</span>
