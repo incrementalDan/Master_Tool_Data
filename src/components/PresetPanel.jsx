@@ -135,6 +135,15 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
   // none; turning has its own vocabulary the app doesn't edit yet). New milling
   // presets default to the new (strategy) format.
   const isMillingType = !HOLE_MAKING_TYPES.has(toolType) && !TURNING_TYPES.has(toolType);
+  // A probe (CMM stylus) has a completely different preset shape (Link/Lead-in/
+  // Measure feedrate, strategy association — no spindle speed, no material, no
+  // stepdown/stepover). The app deliberately does NOT build a probe preset
+  // editor; the milling EditCard would both mis-render it and — worse — inject
+  // milling fields that would leak into the Fusion probe preset on save. So the
+  // probe's presets are READ-ONLY here: visible for reference, but no Edit / Add
+  // / Delete / reorder. Probe presets are managed in Fusion. (isMillingType is
+  // still true for a probe, but nothing below acts on it once editing is off.)
+  const isProbe = toolType === 'probe';
 
   const diameter = tool.diameter;
   const numberOfFlutes = tool.number_of_flutes;
@@ -467,7 +476,8 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
                   picked={addOpen && copySrc.type === 'preset' && copySrc.id === preset.guid}
                   onPick={() => setCopySrc({ type: 'preset', id: preset.guid })}
                   isDragOver={dragOverIdx === globalIdx}
-                  dragEnabled={materialFilter === 'All' && machineFilter === 'All' && !addOpen}
+                  dragEnabled={materialFilter === 'All' && machineFilter === 'All' && !addOpen && !isProbe}
+                  readOnly={isProbe}
                   linkedAssemblies={[assemblyForPreset(preset, tool.assemblies, tool.unit)].filter(Boolean)}
                   holders={holders}
                   machines={machines}
@@ -500,7 +510,14 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
 
       {/* Add control — a small button under the scroll; clicking expands the
           "copy from" row inline (start blank / pick a preset card above / pick a
-          reference) before the editor pops out below. */}
+          reference) before the editor pops out below. Hidden for a probe: its
+          presets are managed in Fusion (see isProbe note above) — a new blank
+          preset would be milling-shaped and wrong for a probe. */}
+      {isProbe ? (
+        <div className="preset-add-bar">
+          <span className="text-sub text-xs">Probe presets are managed in Fusion.</span>
+        </div>
+      ) : (
       <div className="preset-add-bar">
         {!addOpen ? (
           <button className="preset-add-btn" onClick={handleAddClick} disabled={!!editingId} title="Add preset">
@@ -550,6 +567,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
           </div>
         )}
       </div>
+      )}
 
       {/* Editor — opens as an overlay (like the CAM Preset picker) on add/edit */}
       {editingId && (() => {
@@ -591,7 +609,7 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
 // ── Collapsed card ───────────────────────────────────────────────────────────
 function CollapsedCard({
   preset, toolType, accentColor, lenUnit, feedUnit, speedUnit,
-  isEditing, pickMode, picked, onPick, isDragOver, dragEnabled,
+  isEditing, pickMode, picked, onPick, isDragOver, dragEnabled, readOnly = false,
   linkedAssemblies, holders, machines, partsFile,
   onEdit, onDelete, onCopyFusion, copied,
   onDragStart, onDragOver, onDrop, onDragEnd,
@@ -696,6 +714,21 @@ function CollapsedCard({
       <div className="preset-card-footer">
         {pickMode ? (
           <span className="preset-pick-hint">{picked ? 'Selected to copy' : 'Click to copy'}</span>
+        ) : readOnly ? (
+          // Probe: read-only (managed in Fusion). No Edit/Delete — the milling
+          // editor would inject fields that corrupt the Fusion probe preset.
+          // Copy-as-JSON stays: it's a read-only export, safe and occasionally
+          // useful for reference.
+          <>
+            <span className="text-sub text-xs" style={{ flex: 1 }}>Managed in Fusion</span>
+            <button
+              className="btn btn-ghost btn-sm preset-card-copy"
+              onClick={onCopyFusion}
+              title="Copy this preset as Fusion JSON (Fusion's in-app Paste won't accept a browser copy — see copyForFusion)"
+            >
+              {copied ? <Check size={12} /> : <Clipboard size={12} />}
+            </button>
+          </>
         ) : (
           <>
             <button className="btn btn-secondary btn-sm" onClick={onEdit}>{isEditing ? 'Editing…' : 'Edit'}</button>

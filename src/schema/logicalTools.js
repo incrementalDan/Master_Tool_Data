@@ -77,7 +77,7 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
   let fusionPresets = [];
   for (const int of internalByRaw) fusionPresets = mergePresetLists(fusionPresets, int.presets || [], merged.unit);
   const sourcePresets = fusionPresets.length > 0 ? fusionPresets : (meta?.presets || []);
-  const presets = overlayPresets(sourcePresets, presetMeta);
+  const presets = overlayPresets(sourcePresets, presetMeta, { toolType: merged.tool_type });
 
   // Real duplicate presets = distinct preset NAMES across all Fusion instances
   // minus the collapsed count. Normal shared-set replication (the same-named
@@ -155,9 +155,21 @@ export function buildLogicalTool(rawInstances, metaByTracking = new Map()) {
 // ("Fine Finish", "Fast Rough") is display-only and MUST NOT be parsed back into
 // the old fine_finish/rough_fast op-types, so new-format reads the bucket, never
 // the name. Intensity itself rides in preset_meta (below), not operation_type.
-export function overlayPresets(sourcePresets, presetMeta = {}) {
+//
+// ⚠️ toolType gates the name→material inference: a PROBE has no material at all
+// (Fusion's probe preset editor has no material selector — confirmed), so a
+// probe preset must never have a material.query invented from its name. Without
+// this gate a probe named with a stray material keyword would get a material
+// injected in-memory, which then (a) shows a bogus material on the tool, (b)
+// gets picked up by every material-linking path, and (c) leaks into the Fusion
+// JSON via normalizePreset's probe passthrough — the "never change Fusion data
+// on a probe" rule. matchMaterial('Default preset') is null for the real probe,
+// so this is belt-and-braces, but it's the single injection point so it's the
+// right place to close it.
+export function overlayPresets(sourcePresets, presetMeta = {}, { toolType = null } = {}) {
+  const isProbe = toolType === 'probe';
   return (sourcePresets || []).map(p => {
-    const inferredMat = !p.material?.query ? matchMaterial(p.name) : null;
+    const inferredMat = (!isProbe && !p.material?.query) ? matchMaterial(p.name) : null;
     let operation_type;
     if (isNewFormatPreset(p)) {
       const rb = readStrategyBucket(p);
@@ -383,7 +395,7 @@ export function presetZeroMirror(presets) {
 // pairing-derive still run at load (loadTools), as for linked tools.
 export function buildUnlinkedTool(meta) {
   const merged = mergeFusionAndMetadata(emptyFusionInternal(), meta);
-  const presets = overlayPresets(meta?.presets || [], meta?.preset_meta || {});
+  const presets = overlayPresets(meta?.presets || [], meta?.preset_meta || {}, { toolType: merged.tool_type });
 
   const assemblies = (meta?.assemblies || []).map(a => ({
     assembly_id: a.assembly_id || generateAssemblyId(),

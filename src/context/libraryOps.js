@@ -910,7 +910,15 @@ export function createLibraryOps(ctx) {
         const primary = assemblies[0];
         const primaryHolderShort = holderNameToken(primary.holder_description || '');
         const isHoleMakingTool = HOLE_MAKING_TYPES.has(merged.tool_type);
+        // A probe (CMM stylus) has no material and no operation type, so
+        // normalize must leave its preset entirely alone — no material link, no
+        // op-type, no rename. NormalizeModal already hides both pickers for a
+        // probe (so matOverrides never carries its guid), but short-circuit here
+        // too: this is the one place that could write a material/name into the
+        // Fusion probe preset, and it must round-trip untouched.
+        const isProbeTool = merged.tool_type === 'probe';
         const presets = (merged.presets || []).map(p => {
+          if (isProbeTool) return p;
           // Link the material to the user's chosen (or auto-suggested) CAM preset
           // name. When no override is supplied the preset keeps its existing query.
           // The override is always a real CAM preset name (NormalizeModal's
