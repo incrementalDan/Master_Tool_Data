@@ -141,6 +141,7 @@
   --topbar-h: 54px;
   --rail-w: 72px;          /* library left action rail */
   --content-max: 1400px;   /* page-content max width */
+  --parts-max: 2000px;     /* Parts pages — wide tool tables need the room */
 }
 
 :focus-visible {
@@ -2221,7 +2222,11 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .preset-programs-add-picker .pick-results { max-height: 180px; }
 
 /* ── Program Number Manager (/programs) ─────────────────────────────────── */
-.pn-page { max-width: 1200px; margin: 0 auto; }
+/* The Parts pages carry a wide table (12+ columns), so they get a much larger
+   cap than the app-wide --content-max and trimmed side padding. Still centred:
+   the page just stops fighting the window until it is genuinely very wide. */
+.page-content:has(.pn-page) { max-width: var(--parts-max); padding-left: 24px; padding-right: 24px; }
+.pn-page { max-width: var(--parts-max); margin: 0 auto; }
 .pn-header-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 .pn-next { display: flex; flex-direction: column; align-items: flex-end; }
 .pn-next-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-sub); }
