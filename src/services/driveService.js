@@ -578,6 +578,12 @@ export async function renameDriveFile(fileId, name) {
     }
   );
   if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });
+  // Same rule as fetchFileBlob: 404 is a KNOWN state (the file was deleted in
+  // Drive since we stored its id), not a fault — tagged so a caller with a
+  // sensible answer for "it's already gone" can act on it.
+  if (res.status === 404) {
+    throw Object.assign(new Error('That file is no longer in Drive'), { code: 'NOT_FOUND' });
+  }
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     throw new Error(`File rename failed (${res.status}): ${txt.slice(0, 200)}`);

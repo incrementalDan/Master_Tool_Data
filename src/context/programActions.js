@@ -73,7 +73,13 @@ export function createProgramActions(ctx) {
             archiveFileName(detail.program_number, prior.posted, prior.proven),
           );
         } catch (err) {
-          notify(`Uploaded, but the previous version couldn't be archived: ${err.message}`, 'error', 7000);
+          // The prior file being ALREADY GONE is not a failure to archive —
+          // there was nothing to archive. Warning about it reads as data loss
+          // when the opposite is true, and there is nothing the user could do
+          // about it anyway.
+          if (err?.code !== 'NOT_FOUND') {
+            notify(`Uploaded, but the previous version couldn't be archived: ${err.message}`, 'error', 7000);
+          }
         }
       }
 
