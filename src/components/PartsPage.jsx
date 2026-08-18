@@ -42,11 +42,15 @@ function OperationRow({ operation, part, materials, machines, canEdit, onUpdate,
 
   if (editing) {
     return (
+      // ⚠️ Stops the body's navigate: a click on a field, a select, or Cancel
+      // must not walk away from a half-finished edit.
+      <div onClick={e => e.stopPropagation()}>
       <ProgramEditForm
         draft={draft} setDraft={setDraft} machines={machines} materials={materials}
         onSave={() => { onUpdate(operation.id, programFieldsOf(draft, operation)); setEditing(false); }}
         onCancel={() => setEditing(false)}
       />
+      </div>
     );
   }
 
@@ -67,19 +71,21 @@ function OperationRow({ operation, part, materials, machines, canEdit, onUpdate,
       {operation.description && <span className="text-xs text-sub pn-op-desc">{operation.description}</span>}
       {canEdit && (
         confirmDelete ? (
-          <InlineConfirm
-            message={`Delete ${operation.program_number != null ? formatProgramNumber(operation.program_number) : formatOperation(operation.op_number)}?`}
-            onConfirm={() => onDelete(operation.id)}
-            onCancel={() => setConfirmDelete(false)}
-          />
+          <span onClick={e => e.stopPropagation()}>
+            <InlineConfirm
+              message={`Delete ${operation.program_number != null ? formatProgramNumber(operation.program_number) : formatOperation(operation.op_number)}?`}
+              onConfirm={() => onDelete(operation.id)}
+              onCancel={() => setConfirmDelete(false)}
+            />
+          </span>
         ) : (
           <>
             <span className="icon-btn pn-op-edit-btn" title="Edit operation"
-              onClick={() => { setDraft(programDraftOf(operation)); setEditing(true); }}>
+              onClick={e => { e.stopPropagation(); setDraft(programDraftOf(operation)); setEditing(true); }}>
               <Pencil size={12} />
             </span>
             <span className="icon-btn" title="Delete operation" style={{ color: 'var(--red)' }}
-              onClick={() => setConfirmDelete(true)}>
+              onClick={e => { e.stopPropagation(); setConfirmDelete(true); }}>
               <Trash2 size={12} />
             </span>
           </>
@@ -191,7 +197,14 @@ function GroupedView({ parts, partsFile, materials, machines, canEdit, customers
               onUpdatePart={onUpdatePart} onDeletePart={onDeletePart}
             />
             {isOpen && (
-              <div className="pn-part-body">
+              // The body reads as a stack of rows, and a row in the TABLE view
+              // opens the part — so these do too. The header keeps expand as its
+              // own action; the body has nothing to expand, so like the table it
+              // has no secondary action competing for the click.
+              <div
+                className="pn-part-body pn-body-link"
+                onClick={() => onOpenPart(part.id)}
+              >
                 {routings.map((routing, i) => {
                   const ops = operationsForRouting(partsFile, routing.id).filter(o => visibleOps.has(o.id));
                   return (

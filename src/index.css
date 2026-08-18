@@ -2328,8 +2328,13 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .pn-part-link { color: var(--text); text-decoration: none; }
 .pn-part-link:hover { color: var(--blue); text-decoration: underline; }
 .pn-part-link:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 3px; }
-/* A whole row that navigates (the flat table, which has nothing to expand). */
+/* A whole row (or the expanded body, which reads as a stack of rows) that
+   navigates — neither has anything to expand, so nothing competes for the
+   click. Rows inside light up so it is clear the body is one live surface. */
 .pn-row-link { cursor: pointer; }
+.pn-body-link { cursor: pointer; }
+.pn-body-link .pn-op-row { border-radius: 6px; padding-left: 6px; padding-right: 6px; margin: 0 -6px; }
+.pn-body-link .pn-op-row:hover { background: var(--surface-2); }
 /* Keyboard parity for the row-sized secondary target. */
 .pn-part-header:focus-visible, .sd-program-head:focus-visible {
   outline: 2px solid var(--blue); outline-offset: -2px;
