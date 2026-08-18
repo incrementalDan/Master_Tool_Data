@@ -151,7 +151,11 @@ export default function ToolListTable({
                           {/* Rendered from the CSV string, not the matched record's
                               description — the printed and displayed holder is
                               always the one the program was posted with. */}
-                          <HolderTag description={r.holder} />
+                          {/* holder_id is the FK the import already stamped on
+                              this row — without it HolderTag falls back to a
+                              synthetic stand-in with no id, which colours every
+                              pill the same default and drops the collet tint. */}
+                          <HolderTag holderId={r.holder_id} description={r.holder} />
                           {!holderKnown(r) && (
                             <span className="sd-holder-unknown" title="No holder in the app library matches this description. The CSV value is used as-is.">
                               <HelpCircle size={12} />
