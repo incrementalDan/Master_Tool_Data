@@ -856,8 +856,17 @@ export function createLibraryOps(ctx) {
 
         // Enforce unique machine tool numbers: if this tool's Fusion number is
         // already taken, reassign it the next free one and flag the collision.
-        const { number: mtnResolved, reassignedFrom } = resolveMachineNumberCollision(
-          merged.machine_tool_number, usedMachineNums, mnStart, mnSkip);
+        // A machine-number-locked tool (a probe, T99) is the exception — keep its
+        // number verbatim, never reassign it even off a reserved value. It still
+        // claims its slot so nothing else is handed the same number.
+        let mtnResolved, reassignedFrom = null;
+        if (isExcludedFrom(merged, 'machine_number')) {
+          mtnResolved = (merged.machine_tool_number != null && !isNaN(Number(merged.machine_tool_number)))
+            ? Number(merged.machine_tool_number) : null;
+        } else {
+          ({ number: mtnResolved, reassignedFrom } = resolveMachineNumberCollision(
+            merged.machine_tool_number, usedMachineNums, mnStart, mnSkip));
+        }
         if (mtnResolved != null) usedMachineNums.add(mtnResolved);
         if (reassignedFrom != null) machineReassignedCount++;
 

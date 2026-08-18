@@ -19,6 +19,16 @@ export const ID_SYSTEMS = [
 
 export const ID_SYSTEM_KEYS = ID_SYSTEMS.map(s => s.key);
 
+// Tool types whose MACHINE tool number is locked and must never be
+// auto-assigned or reassigned by any bulk op. A probe (CMM stylus) is pinned to
+// its number (T99 by default) — the machine calls the probe at a fixed T#, so
+// renumber / fix-duplicates / import-assign must all leave it alone and no other
+// tool may be handed that number (99 stays in the reserved `skip` list, which
+// holds it free for the probe). This is a TYPE lock on top of the per-tool
+// explicit exclusion flag; a future Settings control can make the probe's number
+// configurable, at which point this stays the "don't touch it" guarantee.
+export const MACHINE_NUMBER_LOCKED_TYPES = new Set(['probe']);
+
 export function idSystemLabel(key) {
   return ID_SYSTEMS.find(s => s.key === key)?.label || key;
 }
@@ -28,9 +38,14 @@ export function emptyExclusions() {
   return { tool_id: false, machine_number: false, location: false };
 }
 
-// Is this tool explicitly excluded from the given system? Default (no flag) =
-// included, so a tool is only skipped when a bulk action / the user set it.
+// Is this tool excluded from the given system? Default (no flag) = included, so
+// a tool is only skipped when a bulk action / the user set it — EXCEPT that a
+// machine-number-locked type (a probe) is always excluded from the Machine
+// Number system by type, regardless of the flag, so its T# can never be
+// renumbered/reassigned. Tool ID and Location are NOT auto-excluded — a probe
+// has a real Tool ID and a real location.
 export function isExcludedFrom(tool, systemKey) {
+  if (systemKey === 'machine_number' && MACHINE_NUMBER_LOCKED_TYPES.has(tool?.tool_type)) return true;
   return !!tool?.id_system_exclusions?.[systemKey];
 }
 
