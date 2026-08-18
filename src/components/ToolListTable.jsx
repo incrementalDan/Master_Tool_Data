@@ -180,7 +180,7 @@ export default function ToolListTable({
       <div className="sd-file-foot">
         <button
           type="button"
-          className="btn btn-sm sd-file-toggle"
+          className="btn btn-ghost btn-sm sd-file-toggle"
           disabled={diffCount === 0}
           onClick={e => { e.stopPropagation(); setShowFileLoc(v => !v); }}
           title={diffCount === 0
