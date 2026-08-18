@@ -20,6 +20,7 @@ import AddProgramModal from './AddProgramModal.jsx';
 import MachinePill from './MachinePill.jsx';
 import { machineColorFor } from '../utils/machineColors.js';
 import ToolListTable from './ToolListTable.jsx';
+import useRowSelection, { selScope } from './useRowSelection.js';
 import SequenceDetailTable from './SequenceDetailTable.jsx';
 import SequenceUploadModal from './SequenceUploadModal.jsx';
 import { labelRows } from '../utils/toolLabels.js';
@@ -46,6 +47,8 @@ import { printToolTags } from '../utils/labelPrint.js';
 // The Sequence Detail is per operation only — there is no part-level sequence.
 
 const rowKeyOf = (r) => `${r.operation_id}:${r.t_num}`;
+// The all-tools list's selection scope — an operation id can never collide.
+const PART_SCOPE = 'part:all-tools';
 
 function EditControls({ label, onEdit, onDelete }) {
   return (
@@ -61,8 +64,8 @@ function EditControls({ label, onEdit, onDelete }) {
 // ── One program ──────────────────────────────────────────────────────────────
 
 function OperationCard({
-  operation, part, detail, machines, materials, canEdit, selected,
-  onToggleRows, onPrint, onUpload, onProven, onUpdateOperation, onDeleteOperation,
+  operation, part, detail, machines, materials, canEdit, selection,
+  onPrint, onUpload, onProven, onUpdateOperation, onDeleteOperation,
 }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState('tools');
@@ -76,7 +79,8 @@ function OperationCard({
     [detail, operation.id],
   );
   const keys = rows.map(rowKeyOf);
-  const selectedHere = keys.filter(k => selected.has(k));
+  // Only this table's selection — see useRowSelection on why it can't be shared.
+  const selectedHere = selection.keysIn(operation.id);
 
   // "Download the current file" means the un-renamed one — the current version
   // always keeps its original filename, which is exactly why it's kept that way.
@@ -116,7 +120,7 @@ function OperationCard({
   const mat = operationMaterial(operation, part);
 
   return (
-    <div className="pn-part-card sd-program">
+    <div className="pn-part-card sd-program" {...selScope(operation.id)}>
       <div className="sd-program-head" {...disclosureProps(open, () => setOpen(o => !o))}>
         {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         <ProgramNumBadge n={operation.program_number} />
@@ -161,9 +165,15 @@ function OperationCard({
             <button className="btn btn-ghost btn-sm" onClick={download} title="Download the current posted CSV">
               <Download size={12} />
             </button>
-            <button className="btn btn-secondary btn-sm"
-              onClick={() => onPrint(selectedHere.length ? selectedHere : keys)}>
-              <Printer size={12} /> {selectedHere.length ? `Print ${selectedHere.length}` : 'Print all'}
+            {/* Appears only with a selection, to the LEFT of Print all, so
+                "print all" never quietly changes meaning under the cursor. */}
+            {selectedHere.length > 0 && (
+              <button className="btn btn-primary btn-sm" onClick={() => onPrint(selectedHere)}>
+                <Printer size={12} /> Print selected <span className="sd-sel-count">{selectedHere.length}</span>
+              </button>
+            )}
+            <button className="btn btn-secondary btn-sm" onClick={() => onPrint(keys)}>
+              <Printer size={12} /> Print all
             </button>
             {canEdit && <EditControls label="operation"
               onEdit={() => { setDraft(programDraftOf(operation)); setEditing(true); }}
@@ -201,11 +211,9 @@ function OperationCard({
           {tab === 'tools' ? (
             <ToolListTable
               rows={rows}
-              selectable
-              selected={selected}
+              selected={selection.keys}
               rowKey={rowKeyOf}
-              onToggle={(k) => onToggleRows([k])}
-              onToggleAll={(on) => onToggleRows(keys, on)}
+              onRowClick={(k, e) => selection.selectRow(operation.id, keys, k, e)}
             />
           ) : (
             <SequenceDetailTable detail={detail} />
@@ -243,7 +251,7 @@ export default function PartDetailPage() {
   const [editingPart, setEditingPart] = useState(false);
   const [partDraft, setPartDraft] = useState(null);
   const [confirmDeletePart, setConfirmDeletePart] = useState(false);
-  const [selected, setSelected] = useState(() => new Set());
+  const selection = useRowSelection();
   const [showJobList, setShowJobList] = useState(true);
   const [addRoutingId, setAddRoutingId] = useState(null);
   const [editingRoutingId, setEditingRoutingId] = useState(null);
@@ -297,13 +305,6 @@ export default function PartDetailPage() {
     );
   }
 
-  const toggleRows = (keys, on) => setSelected(prev => {
-    const next = new Set(prev);
-    const turnOn = on === undefined ? !keys.every(k => next.has(k)) : on;
-    for (const k of keys) { if (turnOn) next.add(k); else next.delete(k); }
-    return next;
-  });
-
   const print = (keys) => {
     const wanted = new Set(keys);
     const rows = partRows.filter(r => wanted.has(rowKeyOf(r)));
@@ -318,7 +319,7 @@ export default function PartDetailPage() {
   const printProgram = (keys) => print(keys);
 
   const partKeys = partRows.map(rowKeyOf);
-  const selectedPartRows = partKeys.filter(k => selected.has(k));
+  const selectedPartRows = selection.keysIn(PART_SCOPE);
   const withDetail = allOperations.filter(op => detailByOperation.has(op.id)).length;
 
   return (
@@ -381,7 +382,7 @@ export default function PartDetailPage() {
       )}
 
       {partRows.length > 0 && (
-        <div className="pn-part-card sd-all-tools">
+        <div className="pn-part-card sd-all-tools" {...selScope(PART_SCOPE)}>
           <div className="sd-program-head" {...disclosureProps(showJobList, () => setShowJobList(o => !o))}>
             {showJobList ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
             <Wrench size={14} style={{ color: 'var(--blue)' }} />
@@ -390,9 +391,13 @@ export default function PartDetailPage() {
               every tool across all {withDetail} operation{withDetail !== 1 ? 's' : ''} — {partRows.length} rows
             </span>
             <span className="sd-head-right" onClick={e => e.stopPropagation()}>
-              <button className="btn btn-secondary btn-sm"
-                onClick={() => print(selectedPartRows.length ? selectedPartRows : partKeys)}>
-                <Printer size={13} /> {selectedPartRows.length ? `Print ${selectedPartRows.length} labels` : 'Print all labels'}
+              {selectedPartRows.length > 0 && (
+                <button className="btn btn-primary btn-sm" onClick={() => print(selectedPartRows)}>
+                  <Printer size={13} /> Print selected <span className="sd-sel-count">{selectedPartRows.length}</span>
+                </button>
+              )}
+              <button className="btn btn-secondary btn-sm" onClick={() => print(partKeys)}>
+                <Printer size={13} /> Print all labels
               </button>
             </span>
           </div>
@@ -401,11 +406,9 @@ export default function PartDetailPage() {
               <ToolListTable
                 rows={partRows}
                 showOp
-                selectable
-                selected={selected}
+                selected={selection.keys}
                 rowKey={rowKeyOf}
-                onToggle={(k) => toggleRows([k])}
-                onToggleAll={(on) => toggleRows(partKeys, on)}
+                onRowClick={(k, e) => selection.selectRow(PART_SCOPE, partKeys, k, e)}
               />
             </div>
           )}
@@ -464,8 +467,7 @@ export default function PartDetailPage() {
                   machines={machines}
                   materials={materials}
                   canEdit={canEdit}
-                  selected={selected}
-                  onToggleRows={toggleRows}
+                  selection={selection}
                   onPrint={printProgram}
                   onUpload={() => setUploading(true)}
                   onUpdateOperation={updateOperation}

@@ -43,10 +43,8 @@ function OohCell({ value }) {
 export default function ToolListTable({
   rows,
   showOp = false,          // job level: the same pocket number recurs per OP
-  selectable = false,
-  selected,                // Set of row keys
-  onToggle,
-  onToggleAll,
+  selected,                // Set of row keys — the page owns it, see selectRow
+  onRowClick,              // (key, event) — plain / shift / ctrl handled upstream
   // ⚠️ A pocket number is unique only WITHIN one program, so the key has to
   // carry the operation too — the part-level list pools every OP's rows and
   // T38 recurs in each. This defaulted to a `program_id` no row has, which
@@ -66,8 +64,6 @@ export default function ToolListTable({
   const holderIndex = useMemo(() => buildHolderIndex(holderLibrary?.holders || []), [holderLibrary]);
   const holderKnown = (r) => !!r.holder_id
     || holderIndex.has(String(r.holder ?? '').trim().toUpperCase().replace(/\s+/g, ' '));
-  const allOn = selectable && rows.length > 0 && rows.every(r => selected?.has(rowKey(r)));
-
   // Resolved once per render and reused by both the rows and the footer count,
   // so the toggle can never disagree with the markers it reveals.
   const locs = useMemo(
@@ -87,12 +83,6 @@ export default function ToolListTable({
         <table className="pn-table sd-table">
           <thead>
             <tr>
-              {selectable && (
-                <th style={{ width: 34, cursor: 'default' }}>
-                  <input type="checkbox" checked={allOn} onChange={() => onToggleAll?.(!allOn)}
-                    aria-label="Select all tools" />
-                </th>
-              )}
               {showOp && <th style={{ cursor: 'default' }}>OP</th>}
               <th className="sd-th-narrow" style={{ cursor: 'default' }}>G-Code T#</th>
               <th className="sd-th-narrow" style={{ cursor: 'default' }}>H Offset #</th>
@@ -119,20 +109,27 @@ export default function ToolListTable({
               const key = rowKey(r);
               const loc = locs.get(key);
               return (
-                <tr key={key}>
-                  {selectable && (
-                    <td>
-                      <input type="checkbox" checked={!!selected?.has(key)} onChange={() => onToggle?.(key)}
-                        aria-label={`Select ${r.t}`} />
-                    </td>
-                  )}
+                <tr
+                  key={key}
+                  className={[
+                    onRowClick ? 'sd-row-pick' : '',
+                    selected?.has(key) ? 'sd-row-selected' : '',
+                  ].filter(Boolean).join(' ') || undefined}
+                  aria-selected={onRowClick ? !!selected?.has(key) : undefined}
+                  onClick={onRowClick ? (e) => onRowClick(key, e) : undefined}
+                >
                   {showOp && <td className="text-sub sd-op">{r.op_label || '—'}</td>}
                   <td><span className="machine-num-badge">{r.t}</span></td>
                   <td className="sd-num">{offsetOf(r.t_num)}</td>
                   <td className="sd-num">{offsetOf(r.t_num)}</td>
                   <td>
+                    {/* The row selects; this one cell navigates instead, in a NEW
+                        TAB — you open a tool to check something against the list
+                        you are still working through, not to leave it. */}
                     {r.tool_ref
-                      ? <Link to={`/tool/${r.tool_ref}`} className="tool-id-pill">{r.tool_id}</Link>
+                      ? <Link to={`/tool/${r.tool_ref}`} className="tool-id-pill" target="_blank" rel="noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          title="Open this tool in a new tab">{r.tool_id}</Link>
                       : <span className="tool-id-pill">{r.tool_id || '—'}</span>}
                   </td>
                   <td>
@@ -171,7 +168,7 @@ export default function ToolListTable({
               );
             })}
             {rows.length === 0 && (
-              <tr><td colSpan={showOp ? 15 : 14} className="pn-empty">No tools.</td></tr>
+              <tr><td colSpan={showOp ? 14 : 13} className="pn-empty">No tools.</td></tr>
             )}
           </tbody>
         </table>
@@ -181,7 +178,7 @@ export default function ToolListTable({
           type="button"
           className="btn btn-sm sd-file-toggle"
           disabled={diffCount === 0}
-          onClick={() => setShowFileLoc(v => !v)}
+          onClick={e => { e.stopPropagation(); setShowFileLoc(v => !v); }}
           title={diffCount === 0
             ? "Every location here matches the posted file — there is nothing to show."
             : "The posted file's own location for these rows. ToolDex owns location, so its value is what's shown and printed; a difference means Fusion's copy is out of date."}

@@ -6132,6 +6132,24 @@ input.sf-ref-num { text-align: right; }
 /* Tool list / sequence tables — numeric columns in the mono face, as measured
    data (same rule as every other number in the app). */
 .sd-table td { white-space: nowrap; }
+/* Click-to-select rows (see useRowSelection). user-select:none because a
+   shift-click on a text table otherwise drags a blue text highlight across it,
+   which reads as the selection and isn't. The ProShop link keeps its pointer —
+   it is the one cell that navigates rather than selects. */
+.sd-table tbody tr.sd-row-pick { cursor: default; user-select: none; }
+.sd-table tbody tr.sd-row-pick a { cursor: pointer; user-select: text; }
+.sd-table tbody tr.sd-row-selected,
+.sd-table tbody tr.sd-row-selected:hover {
+  background: color-mix(in srgb, var(--blue) 16%, transparent);
+}
+.sd-table tbody tr.sd-row-selected td { border-bottom-color: color-mix(in srgb, var(--blue) 30%, transparent); }
+/* The counter on Print selected. */
+.sd-sel-count {
+  display: inline-block; min-width: 16px; text-align: center;
+  font-family: var(--font-mono); font-size: 10.5px; line-height: 1.5;
+  padding: 0 4px; margin-left: 4px; border-radius: 999px;
+  background: color-mix(in srgb, #000 22%, transparent);
+}
 /* The header may run to two lines so a long label (H Offset #, Init D Offset)
    stops dictating its column's width — the cells below stay on one line, so
    only the heading wraps. Bottom-aligned so a one-line and a two-line heading
