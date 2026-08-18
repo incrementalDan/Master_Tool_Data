@@ -11,7 +11,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 const partsFile = {
   version: 1,
   parts: [
-    { id: 'pt1', part_number: 'HINGE-COVER', customer: 'Val', material_id: 'N_6061', created_at: '2026-01-01' },
+    { id: 'pt1', part_number: 'DEMO-BRACKET', customer: 'Val', material_id: 'N_6061', created_at: '2026-01-01' },
     { id: 'pt2', part_number: 'BRACKET', customer: '', material_custom: 'Delrin', created_at: '2026-02-01' },
   ],
   routings: [
@@ -82,7 +82,7 @@ const render = (ui, path = '/') => renderToString(
 describe('Parts page renders', () => {
   it('renders the grouped view with routings and operations', () => {
     const html = render(<PartsPage />);
-    expect(html).toContain('HINGE-COVER');
+    expect(html).toContain('DEMO-BRACKET');
     expect(html).toContain('BRACKET');
     expect(html).toContain('Vise');          // named routing
     expect(html).toContain('Rev B');         // routing labelled by its rev
@@ -116,7 +116,7 @@ describe('Part page renders', () => {
 
   it('renders the part, its routings and its operations', () => {
     const html = detail();
-    expect(html).toContain('HINGE-COVER');
+    expect(html).toContain('DEMO-BRACKET');
     expect(html).toContain('Vise');
     expect(html).toContain('Rev B');
     expect(html).toContain('O1217');
@@ -158,7 +158,7 @@ describe('Where Used is derived from the sequence detail', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].operation.id).toBe('op60');
     expect(rows[0].routing.name).toBe('Vise');
-    expect(rows[0].part.part_number).toBe('HINGE-COVER');
+    expect(rows[0].part.part_number).toBe('DEMO-BRACKET');
     expect(rows[0].pockets).toEqual(['T38']);
     expect(rows[0].proven).toBe(true);
   });

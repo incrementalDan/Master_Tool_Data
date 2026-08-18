@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { labelRows, labelFieldsOf, labelKey } from './toolLabels.js';
 import { tagMarkup } from './labelPrint.js';
 
-const part = { part_number: 'HINGE-COVER-LEFT', rev: 'B' };
+const part = { part_number: 'DEMO-BRACKET-LEFT', rev: 'B' };
 
 const row = (over = {}) => ({
   t: 'T03', t_num: 3, tool_id: 'A-35', description: '3/16 EM 7FL .57 LOC',
@@ -27,7 +27,7 @@ describe('label fields', () => {
   it('prints the CSV values, never a library correction', () => {
     const f = labelFieldsOf(row(), part);
     expect(f).toMatchObject({
-      PartNumber: 'HINGE-COVER-LEFT', ToolNo: 'A-35',
+      PartNumber: 'DEMO-BRACKET-LEFT', ToolNo: 'A-35',
       Holder: 'NBT30-SK13C-60', OOH: '0.61', Location: 'LC-52',
     });
   });
@@ -111,7 +111,7 @@ describe('dedupe — never print two identical labels', () => {
 describe('tagMarkup', () => {
   it('renders the tag fields the shop already reads', () => {
     const html = tagMarkup(labelFieldsOf(row(), part));
-    expect(html).toContain('HINGE-COVER-LEFT');
+    expect(html).toContain('DEMO-BRACKET-LEFT');
     expect(html).toContain('A-35');
     expect(html).toContain('NBT30-SK13C-60');
     expect(html).toContain('0.61');

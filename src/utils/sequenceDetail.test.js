@@ -10,15 +10,24 @@ import {
   resolveRowLocation,
 } from './sequenceImport.js';
 import { archiveFileName } from '../context/programActions.js';
+import { labelRows } from './toolLabels.js';
 
-// The real posted Sequence Detail for O1218 (B Side OP60), straight from the
-// cascade post — same run that produced the matching G-code.
+// A posted Sequence Detail for O1218 (B Side OP60) as the cascade post writes
+// it — same run that would produce the matching G-code.
+//
+// ⚠️ SANITIZED. The header's part number, customer and fixture name are
+// synthetic; this repo is public and a real posted file names the customer, the
+// part and the fixture. Every STRUCTURAL property under test is the real
+// article: the OO1218 double-O post typo, the pipe-delimited row 0, the POSTED
+// stamp format, the FIXTURE line, the repeated-blank fill, and the pockets that
+// recur at non-adjacent sequence numbers. Keep it that way — the value here is
+// the SHAPE, never the contents.
 const REAL = readFileSync(fileURLToPath(new URL('./__fixtures__/O1218.csv', import.meta.url)), 'utf8');
 
 // Part → Routing → Operation; the program number lives on the operation.
 const partsFile = {
   version: 1,
-  parts: [{ id: 'part-1', part_number: 'HINGE-COVER-LEFT', customer: 'Val' }],
+  parts: [{ id: 'part-1', part_number: 'DEMO-BRACKET-LEFT', customer: 'Val' }],
   routings: [{ id: 'rt-1', part_id: 'part-1', name: '', rev: 'B', order: 0 }],
   operations: [{ id: 'prg-1', routing_id: 'rt-1', program_number: 1218, op_number: '60' }],
 };
@@ -44,7 +53,7 @@ describe('parseSequenceCsv — the real posted file', () => {
 
   it('keeps rows 0 and 0.5 raw instead of parsing them as toolpaths', () => {
     expect(parsed.headerRaw).toContain('NC PRG: OO1218');
-    expect(parsed.fixtureRaw).toBe('FIXTURE = F91 B Side Fixture - HINGE-COVER-RIGHT LEFT');
+    expect(parsed.fixtureRaw).toBe('FIXTURE = F00 B Side Fixture - DEMO-BRACKET-RIGHT LEFT');
   });
 
   it('reads the POSTED stamp — the version key that pairs CSV to G-code', () => {
@@ -309,5 +318,49 @@ describe('location — the app wins, and the file is left alone', () => {
   it('still STORES the posted value verbatim — nothing rewrites the import', () => {
     const { detail } = build();
     expect(detail.tools[0].lc).toBe('LC-244');
+  });
+});
+
+// The seam between the two halves of the feature: the rows buildSequenceImport
+// stores are the rows labelRows prints. Each half is well covered on its own,
+// and nothing crossed the join — so a change to the stored row shape could pass
+// every test and still print blank tags.
+describe('a stored detail prints labels end to end', () => {
+  const part = partsFile.parts[0];
+  const toolsById = new Map(tools.map(t => [t.id, t]));
+
+  it('turns the stored rows straight into labels, no reshaping', () => {
+    const { detail } = build();
+    const labels = labelRows(detail.tools, part, toolsById);
+
+    // Three pockets in this file, all distinct assemblies → three tags.
+    expect(labels).toHaveLength(3);
+    expect(labels.every(l => l.TCode && l.ToolNo && l.Description)).toBe(true);
+    expect(labels.map(l => l.TCode)).toEqual(['T38', 'T56', 'T57']);
+    // The part travels onto every tag from the app's record, not the CSV header.
+    expect(labels.every(l => l.PartNumber === 'DEMO-BRACKET-LEFT')).toBe(true);
+  });
+
+  it('prints the app location and the posted one where they differ', () => {
+    // B-261 is on LC-244 in the file; the library agrees. A-264 is the drift
+    // case — move it in the library and the tag follows, with no re-upload.
+    const moved = new Map(toolsById);
+    moved.set('FTL-A264', { ...toolsById.get('FTL-A264'), location: 'LC-900' });
+    const { detail } = build();
+    const byTool = Object.fromEntries(
+      labelRows(detail.tools, part, moved).map(l => [l.ToolNo, l.Location]));
+    expect(byTool['A-264']).toBe('LC-900');       // app wins
+    expect(byTool['B-261']).toBe('LC-244');       // agrees either way
+    // ...and the file's own value is untouched in storage.
+    expect(detail.tools.find(t => t.tool_id === 'A-264').lc).toBe('LC-247');
+  });
+
+  it('survives the round trip through storage', () => {
+    // What is printed comes off the STORED record, not the in-memory build —
+    // so anything upsertDetail drops would show up here.
+    const { detail } = build();
+    const stored = upsertDetail({ version: 1, details: [] }, detail).details[0];
+    expect(labelRows(stored.tools, part, toolsById))
+      .toEqual(labelRows(detail.tools, part, toolsById));
   });
 });
