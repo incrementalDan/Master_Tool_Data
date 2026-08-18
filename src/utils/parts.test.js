@@ -7,10 +7,11 @@ import {
   customerColor, customerNames, isPalletMachine, machineOptions, searchPrograms,
   updatePartIn, updateRoutingIn, updateOperationIn,
   deleteOperationIn, deleteRoutingIn, deletePartIn,
-  applyPartsFilters, sortParts, sortOperations, recordActivityAt,
+  applyPartsFilters, sortParts, sortOperations, recordActivityAt, duplicateProgramNumbers,
   partActivityAt, partNewestProgram,
   addPartWithRoutingIn, addRoutingIn, addOperationIn,
 } from './parts.js';
+import demoParts from '../demo/demo_parts.json';
 
 // A part with TWO routings — the case the whole model exists for: same part
 // number, different fixturing/machine/process, all on one page.
@@ -94,6 +95,60 @@ describe('program numbers', () => {
   it('deleting a non-max operation leaves the next number alone; deleting the max reclaims it', () => {
     expect(nextProgramNumber(deleteOperationIn(file, 'op50'))).toBe(1401);   // 1217 wasn't the max
     expect(nextProgramNumber(deleteOperationIn(file, 'opb'))).toBe(1301);    // 1400 was
+  });
+});
+
+// ⚠️ Uniqueness is LOAD-BEARING, not tidiness — see duplicateProgramNumbers.
+// The shortcut this guards against is the tempting way to share an operation
+// between two routings: copy it and keep its number. That silently breaks the
+// tool → program → OP → part query, which is the whole point of the module.
+describe('a program number is unique shop-wide', () => {
+  it('the shipped demo data holds no duplicates', () => {
+    expect(duplicateProgramNumbers(demoParts)).toEqual([]);
+  });
+
+  it('nothing the app can do produces one', () => {
+    // nextProgramNumber continues ABOVE the highest in use, so a fresh number
+    // can never collide — including across a gap left by a delete.
+    let f = file;
+    for (let i = 0; i < 5; i++) {
+      const n = nextProgramNumber(f);
+      expect(operationByProgramNumber(f, n)).toBeNull();
+      f = addOperationIn(f, 'rt1', { op_number: `9${i}`, program_number: n }).file;
+      expect(duplicateProgramNumbers(f)).toEqual([]);
+    }
+    // A gap in the middle is NOT backfilled, so it can't collide either.
+    const gapped = deleteOperationIn(f, 'op60');
+    expect(operationByProgramNumber(gapped, 1218)).toBeNull();
+    expect(duplicateProgramNumbers(addOperationIn(gapped, 'rt1',
+      { op_number: '99', program_number: nextProgramNumber(gapped) }).file)).toEqual([]);
+  });
+
+  it('finds a duplicate, and ignores steps that have no program', () => {
+    const clashing = {
+      ...file,
+      operations: [
+        ...operationsOf(file),
+        { id: 'copy', routing_id: 'rt2', op_number: '50', program_number: 1217 },
+        // Two more program-less steps — normal, and never a clash with each other.
+        { id: 'insp2', routing_id: 'rt2', op_number: '30', program_number: null },
+      ],
+    };
+    expect(duplicateProgramNumbers(clashing)).toEqual([
+      { program_number: 1217, operation_ids: ['op50', 'copy'] },
+    ]);
+  });
+
+  it('shows WHY it matters: a duplicate makes the CSV lookup ambiguous', () => {
+    // The posted-CSV import resolves a file name to ONE operation by number.
+    // With two on 1217 it silently picks the first — the other reads as
+    // "no sequence detail" and its tools vanish from Where Used.
+    const clashing = {
+      ...file,
+      operations: [...operationsOf(file), { id: 'copy', routing_id: 'rt2', op_number: '50', program_number: 1217 }],
+    };
+    expect(operationByProgramNumber(clashing, 1217).id).toBe('op50');   // 'copy' is unreachable
+    expect(duplicateProgramNumbers(clashing)).toHaveLength(1);
   });
 });
 

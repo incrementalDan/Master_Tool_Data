@@ -128,6 +128,31 @@ export function nextProgramNumber(file) {
   return nums.length ? Math.max(...nums) + 1 : PROGRAM_NUMBER_START;
 }
 
+// ⚠️ A program number is UNIQUE SHOP-WIDE, and that is load-bearing, not tidy:
+// `operationByProgramNumber` returns the FIRST match, and the posted-CSV import
+// uses it to decide which operation a Sequence Detail belongs to. Two operations
+// on one number means the detail attaches to one of them arbitrarily, the other
+// reads as "no sequence detail", and that routing's tools disappear from the
+// tool → program → OP → part query — the exact thing this module exists to
+// answer. Nothing in the app can currently produce a duplicate (nextProgramNumber
+// continues above the highest in use, and the CSV import dedupes), so this is
+// the detector for a hand-edited file or a future bulk action, and the guard
+// against the tempting shortcut described in "Sharing an operation" (CLAUDE.md):
+// copying an operation into a second routing while keeping its number.
+// → [{ program_number, operation_ids: [...] }], empty when clean.
+export function duplicateProgramNumbers(file) {
+  const byNumber = new Map();
+  for (const o of operationsOf(file)) {
+    const n = programNum(o.program_number);
+    if (n == null) continue;                 // a step with no program is not a clash
+    if (!byNumber.has(n)) byNumber.set(n, []);
+    byNumber.get(n).push(o.id);
+  }
+  return [...byNumber.entries()]
+    .filter(([, ids]) => ids.length > 1)
+    .map(([program_number, operation_ids]) => ({ program_number, operation_ids }));
+}
+
 // ── Factories ────────────────────────────────────────────────────────────────
 
 export function newPart({ part_number, customer = '', material_id = null, material_custom = '' }, createdBy = '') {
