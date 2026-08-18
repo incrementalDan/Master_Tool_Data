@@ -1590,6 +1590,8 @@ The shop's model, and now the app's:
 | **Routing** | a combination of operations — how we make it. A part can have **more than one**: different fixturing, machine, or process revision. |
 | **Operation (OP)** | a sequential step, **and its program**. |
 
+⚠️ **"Operation" is doing two jobs in one record today, on purpose.** Properly there are two things: an **Operation** — the step itself, what it *is* (its program, machine, setup, fixturing) — and a **Routing Step** — that operation's *place* in one routing's sequence. They are fused into one record while every operation belongs to exactly one routing, which is a faithful denormalization rather than a wrong model. See "Sharing an operation across routings" below for when they split and why waiting is safe.
+
 Pure helpers: `src/utils/parts.js` (framework-free, mirrors `toolIdSystem.js` / `locationSystem.js`). Everything is stable UUIDs — one SQLite table per tier.
 
 ⚠️ **"ROUTING", NOT "JOB".** The floor says job; ProShop says routing, and so do we. In an ERP a **job is a work order** — a production run of a part (the shop's own setup sheet carries `WO 26-0027`). That record will be needed and it is **not this one**, so spending the word on this tier would recreate the collision this naming exists to avoid. "Routing" is also the standard term for the sequence of operations that makes a part.
@@ -1603,6 +1605,28 @@ Pure helpers: `src/utils/parts.js` (framework-free, mirrors `toolIdSystem.js` / 
 ⚠️ **A step with NO program never matches a numeric lookup.** `Number(null)` and `Number('')` are both **0**, so a bare numeric compare made every inspection/deburr step answer to program "0" — and to a null or blank query, which is how a caller that forgot to guard gets an unrelated operation back instead of nothing. `operationByProgramNumber` and `searchPrograms` both normalize through one helper; null on either side is never equal.
 
 **Program numbers** are global, permanent and **computed** — `nextProgramNumber` = max + 1, never a stored counter that can drift. So deleting a non-max operation leaves "next #" untouched, and deleting the highest reclaims it. `updateOperationIn` **strips `program_number` from any patch** — permanent once reserved.
+
+⚠️ **A program number is UNIQUE SHOP-WIDE, and that is load-bearing.** `operationByProgramNumber` returns the FIRST match and the posted-CSV import uses it to decide which operation a Sequence Detail belongs to — so two operations on one number means the detail attaches to one arbitrarily, the other reads as "no sequence detail", and that routing's tools **disappear from the tool → program → OP → part query**, which is the thing this module exists to answer. Nothing in the app can currently produce a duplicate (`nextProgramNumber` continues above the highest in use, the CSV import dedupes); **`duplicateProgramNumbers(file)`** is the detector for a hand-edited file or a future bulk action. Locked by `parts.test.js`.
+
+### Revisions and sharing — two axes, one rule
+
+**The operator must never have to know which copy to run.** That single rule cuts opposite ways on the two axes, which is why the answers look contradictory and aren't:
+
+- **REV axis (the design changed) → DUPLICATE.** Rev A → Rev B re-posts every operation under **new program numbers**, top to bottom, even where the G-code is byte-identical. Mixing generations is what forces "for OP50 run the new Rev B number, but for OP60 run the old Rev A one" — tribal knowledge, and exactly the class of thing this module exists to eliminate. A rev is a **self-consistent set**.
+  - ⚠️ **Rev freezing is therefore FREE — there is no copy step.** Rev B's OP50 is a new program number, so it gets its own `ProgramFiles/O####/` folder; Rev A's folder is untouched because nothing points at it but Rev A. Do **not** build a "copy the old rev's folder" action: duplicating files gives every copy a new Drive id (a rewrite of every record that referenced it) and creates two masters that can drift.
+- **ROUTING axis (same rev, different strategy) → SHARE.** Two routings of one rev — e.g. prep on machine A then OP50/OP60 on machine B, versus all three on B — share the operations that are genuinely identical. The operator runs the same number either way, so there is nothing to know; **duplicating** is what would create the drift here (the programmer updates the CAM, updates one copy, the other silently goes stale).
+
+### Sharing an operation across routings — NOT BUILT, deliberately deferred
+
+`operations[].routing_id` is a single FK, so an operation belongs to exactly **one** routing and the ROUTING axis above cannot be represented yet. This is a known, dated limitation, not an oversight — and waiting costs nothing:
+
+- **The migration is mechanical and lossless.** The operation record already holds exactly what a master operation should (program, machine, fixturing, setup). In the split-machine example `Prep-A` and `Prep-B` are genuinely two *different* operations — only OP50/OP60 are shared — so the record itself doesn't change at all when the split happens; only `routing_id` moves out into a link. Every existing operation maps **1:1** to one master operation + one routing step. Nothing is lost and no judgement call is deferred.
+- **Vocabulary for when it lands:** an **Operation** is the step itself (its program, machine, setup); a **Routing Step** is that operation's place in one routing's sequence. Today the two are **fused into one record**, which is a faithful denormalization precisely *while* nothing is shared — a narrower model, not a wrong one.
+- ⚠️ **The shortcut to refuse** is copying an operation into a second routing while KEEPING its program number — see the uniqueness rule above for exactly what breaks. The other shortcut (copy it under a NEW number) is the drift trap the REV/ROUTING split exists to avoid.
+- ⚠️ Note the semantics that change on the day it lands, since they're the real cost: `deleteRoutingIn` can no longer cascade to its operations (another routing may still use them), which introduces an "operation belonging to zero routings" state, and per-routing ordering becomes a question `op_number` alone may not answer.
+- **Trigger to revisit:** the first real part that needs two routings sharing an operation. Not before — ProShop can't represent it either, so nothing upstream is waiting on it.
+
+**The throttling test this came from**, worth applying to the next ERP-shaped question: *cheap now, expensive later* → do it now (**identity and links** — stable ids, permanent numbers, FKs instead of display names; once real data accumulates under a wrong key you cannot recover it). *Mechanical later* → defer freely (**structure** — 1:N → M:N where every record maps cleanly; waiting costs a migration script, not a redesign). Rev-on-part would have been the first kind and was avoided; shared-operations is firmly the second.
 
 **Material** is a specific **alloy** (`material_id` → `materials.materials[]`), with `material_custom` as the free-text escape. **A non-fixture operation stores NO material** — it derives from its part (`operationMaterial`), so editing the part cascades by construction with zero copies to drift. Only fixture ops carry their own.
 
@@ -2271,7 +2295,7 @@ Every entity link in the app. When you add a relationship, add a row. When you t
 | alloy → CAM preset | `materials[].preset_id` | `materials.json` | ✅ preset delete SET NULLs it |
 | alloy → group | `materials[].group_id` | `materials.json` | ✅ |
 | routing → part | `routings[].part_id` | `parts.json` | ✅ |
-| operation → routing | `operations[].routing_id` | `parts.json` | ✅ cascade delete |
+| operation → routing | `operations[].routing_id` | `parts.json` | ✅ cascade delete. ⚠️ 1:N today; the domain is M:N — **deferred**, see "Sharing an operation across routings". Maps 1:1 to a routing-step join when it lands |
 | part / fixture op → alloy | `material_id` | `parts.json` → `materials.materials[]` | ✅ a non-fixture op derives from its part |
 | operation → machine | `machine_id` (+ cached `machine_label`) | `parts.json` → `shop_settings.machines[]` | ✅ |
 | shop → default machine | `default_machine_id` | `shop_settings.json` | ✅ |
