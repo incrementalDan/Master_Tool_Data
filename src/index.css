@@ -6118,7 +6118,21 @@ input.sf-ref-num { text-align: right; }
   font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
   color: var(--text-sub); text-transform: uppercase;
 }
-.sd-all-tools { border-color: color-mix(in srgb, var(--blue) 35%, var(--border)); }
+/* "All tools for this part" is a SUMMARY ACROSS the whole part, not one more
+   program — so it is tinted rather than merely another neutral --surface-2 band,
+   and carries a left accent bar. Two sections that do different jobs shouldn't
+   have to be told apart by reading their titles. */
+.sd-all-tools { border-color: color-mix(in srgb, var(--blue) 40%, var(--border)); }
+.sd-all-tools > .sd-program-head {
+  background: color-mix(in srgb, var(--blue) 15%, var(--surface-2));
+  border-bottom: 1px solid color-mix(in srgb, var(--blue) 30%, var(--border-strong));
+  box-shadow: inset 3px 0 0 var(--blue);
+  padding: 11px 14px;
+}
+.sd-all-tools > .sd-program-head:hover {
+  background: color-mix(in srgb, var(--blue) 22%, var(--surface-2));
+}
+.sd-alltools-title { font-size: 14px; font-weight: 600; color: var(--text); letter-spacing: 0.01em; }
 .sd-tabs { margin: 0 14px; }
 .sd-tab-meta { margin-left: auto; align-self: center; padding-bottom: 6px; }
 
@@ -6183,9 +6197,18 @@ input.sf-ref-num { text-align: right; }
    disabled (and relabelled) when no row disagrees, so the control's state is
    always an answer rather than an unread switch. */
 .sd-file-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
-.sd-file-toggle { font-size: 11.5px; color: var(--text-sub); }
-.sd-file-toggle:not(:disabled):hover { color: var(--text); }
-.sd-file-toggle:disabled { opacity: 0.45; cursor: default; }
+/* A quiet footer control, not a filled button — it competes with Print
+   otherwise, and it is the least important thing on the card. ⚠️ It needs an
+   explicit variant: bare `.btn` sets no background at all, so a variant-less
+   button falls through to the browser's default light grey. */
+.sd-file-toggle {
+  font-size: 11px; color: var(--text-faint);
+  border-color: transparent; padding: 3px 8px;
+}
+.sd-file-toggle:not(:disabled):hover {
+  color: var(--text-sub); background: var(--surface-2); border-color: var(--border);
+}
+.sd-file-toggle:disabled { opacity: 1; color: var(--text-faint); cursor: default; background: transparent; }
 
 /* A location the CSV and the library disagree about. Shown, never resolved —
    the CSV is what the program was proven with. */

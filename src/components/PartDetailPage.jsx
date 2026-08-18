@@ -386,7 +386,7 @@ export default function PartDetailPage() {
           <div className="sd-program-head" {...disclosureProps(showJobList, () => setShowJobList(o => !o))}>
             {showJobList ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
             <Wrench size={14} style={{ color: 'var(--blue)' }} />
-            <span style={{ fontWeight: 600, fontSize: 13.5 }}>All tools for this part</span>
+            <span className="sd-alltools-title">All tools for this part</span>
             <span className="text-xs text-sub">
               every tool across all {withDetail} operation{withDetail !== 1 ? 's' : ''} — {partRows.length} rows
             </span>
