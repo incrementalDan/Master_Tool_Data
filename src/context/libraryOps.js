@@ -856,8 +856,17 @@ export function createLibraryOps(ctx) {
 
         // Enforce unique machine tool numbers: if this tool's Fusion number is
         // already taken, reassign it the next free one and flag the collision.
-        const { number: mtnResolved, reassignedFrom } = resolveMachineNumberCollision(
-          merged.machine_tool_number, usedMachineNums, mnStart, mnSkip);
+        // A machine-number-locked tool (a probe, T99) is the exception — keep its
+        // number verbatim, never reassign it even off a reserved value. It still
+        // claims its slot so nothing else is handed the same number.
+        let mtnResolved, reassignedFrom = null;
+        if (isExcludedFrom(merged, 'machine_number')) {
+          mtnResolved = (merged.machine_tool_number != null && !isNaN(Number(merged.machine_tool_number)))
+            ? Number(merged.machine_tool_number) : null;
+        } else {
+          ({ number: mtnResolved, reassignedFrom } = resolveMachineNumberCollision(
+            merged.machine_tool_number, usedMachineNums, mnStart, mnSkip));
+        }
         if (mtnResolved != null) usedMachineNums.add(mtnResolved);
         if (reassignedFrom != null) machineReassignedCount++;
 
@@ -910,7 +919,15 @@ export function createLibraryOps(ctx) {
         const primary = assemblies[0];
         const primaryHolderShort = holderNameToken(primary.holder_description || '');
         const isHoleMakingTool = HOLE_MAKING_TYPES.has(merged.tool_type);
+        // A probe (CMM stylus) has no material and no operation type, so
+        // normalize must leave its preset entirely alone — no material link, no
+        // op-type, no rename. NormalizeModal already hides both pickers for a
+        // probe (so matOverrides never carries its guid), but short-circuit here
+        // too: this is the one place that could write a material/name into the
+        // Fusion probe preset, and it must round-trip untouched.
+        const isProbeTool = merged.tool_type === 'probe';
         const presets = (merged.presets || []).map(p => {
+          if (isProbeTool) return p;
           // Link the material to the user's chosen (or auto-suggested) CAM preset
           // name. When no override is supplied the preset keeps its existing query.
           // The override is always a real CAM preset name (NormalizeModal's

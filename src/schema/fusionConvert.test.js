@@ -192,3 +192,127 @@ describe('stepdown/stepover three-way sync (normalizePreset via internalToFusion
     expect(out.expressions.tool_stepdown).toBe('.018 in'); // unchanged sibling untouched
   });
 });
+
+// Probe (CMM stylus) — a real Fusion tool type with its own preset vocabulary
+// (Lead-In/Link/Measure feedrate, no spindle speed, no stepdown/stepover).
+// Fixture below mirrors a real Blum stylus export (FUSION TOOL Library REF/
+// Probe REF/Probe Only.json). Every save path (renumber, tool-ID assign,
+// location assign) round-trips a probe tool through internalToFusionTool even
+// though nobody ever opens its preset editor, so this has to be safe with zero
+// user interaction — see fusionConvert.js's isProbe/isProbeTool branches.
+describe('probe (CMM stylus) round-trip', () => {
+  const probeRaw = {
+    guid: 'probe-1',
+    type: 'probe',
+    unit: 'millimeters',
+    description: 'Blum TC52/TC62 Styli 3mm x 50mm',
+    BMC: 'hss',
+    vendor: 'Blum',
+    'product-id': '',
+    'product-link': 'https://example.com/probe',
+    expressions: {
+      tool_bodyLength: '(50+1.5) mm',
+      tool_description: "'Blum TC52/TC62 Styli 3mm x 50mm'",
+      tool_diameter: '3. mm',
+      tool_shaftDiameter: '2. mm',
+    },
+    geometry: {
+      CSP: false, DC: 3, HAND: true, LB: 51.5, LCF: 6, NOF: 0, NT: 1, OAL: 51.5,
+      RE: 1.5, SFDM: 2, TA: 0, assemblyGaugeLength: 136.63,
+      'shoulder-length': 6, 'thread-profile-angle': 60,
+      'tip-diameter': 0, 'tip-length': 0, 'tip-offset': 0,
+    },
+    holder: {
+      description: 'Blum TC52/TC62 with BT30 - BTH 25',
+      gaugeLength: 85.13,
+      guid: 'holder-guid-1',
+      'product-id': 'TC52 (142174); TC62 (142892)',
+      'product-link': '',
+      segments: [{ height: 1, 'lower-diameter': 30, 'upper-diameter': 30 }],
+      type: 'holder',
+      unit: 'millimeters',
+      vendor: 'Blum',
+    },
+    'post-process': { number: 99, 'length-offset': 99, 'diameter-offset': 99 },
+    'start-values': {
+      presets: [{
+        guid: 'probe-preset-1',
+        name: 'Default preset',
+        v_f_leadIn: 1000,
+        v_f_link: 3000,
+        v_f_measure: 102,
+      }],
+    },
+  };
+
+  function probeInternal(overrides = {}) {
+    return {
+      id: 'probe-1',
+      tool_type: 'probe',
+      unit: 'millimeters',
+      description: probeRaw.description,
+      diameter: 3,
+      flute_length: 6,
+      overall_length: 51.5,
+      number_of_flutes: 0,
+      shank_diameter: 2,
+      material: 'hss',
+      tool_id: 'S-1',
+      location: '',
+      cutting_direction: 'Right Hand',
+      presets: probeRaw['start-values'].presets,
+      machine_tool_number: 99,
+      _fusionRaw: probeRaw,
+      ...overrides,
+    };
+  }
+
+  it('never injects a milling/spindle-speed shape into the probe preset', () => {
+    const out = internalToFusionTool(probeInternal());
+    const p = out['start-values'].presets[0];
+    // None of the milling default-seeding fields may appear.
+    for (const key of ['n', 'v_c', 'v_f', 'f_z', 'f_n', 'v_f_plunge', 'v_f_ramp',
+      'v_f_transition', 'n_ramp', 'ramp-angle', 'use-stepdown', 'use-stepover',
+      'stepdown', 'stepover', 'tool-coolant']) {
+      expect(key in p).toBe(false);
+    }
+    // The tool's real values survive untouched.
+    expect(p.v_f_leadIn).toBe(1000);
+    expect(p.v_f_link).toBe(3000);
+    expect(p.v_f_measure).toBe(102);
+    expect(p.name).toBe('Default preset');
+    // No spurious expressions object either.
+    expect('expressions' in p).toBe(false);
+  });
+
+  it('is still "safe" (no milling injection) on a second write — idempotent', () => {
+    const first = internalToFusionTool(probeInternal());
+    const secondRaw = { ...probeRaw, 'start-values': { presets: [first['start-values'].presets[0]] } };
+    const second = internalToFusionTool(probeInternal({ _fusionRaw: secondRaw }));
+    expect(second['start-values'].presets[0]).toEqual(first['start-values'].presets[0]);
+  });
+
+  it('preserves the probe holder byte-for-byte when no app holder record resolves', () => {
+    // splitToFusionInstances is what actually decides the holder (falls back to
+    // raw.holder when resolveHolderForWrite finds no app record) — this test
+    // locks internalToFusionTool's half of the contract: it must never invent
+    // or drop the holder key that logicalTools.js hands it via ...existing.
+    const out = internalToFusionTool(probeInternal());
+    expect(out.holder).toEqual(probeRaw.holder);
+  });
+
+  it('round-trips core geometry unchanged (diameter, shaft diameter, body length)', () => {
+    const out = internalToFusionTool(probeInternal());
+    expect(out.geometry.DC).toBe(3);
+    expect(out.geometry.SFDM).toBe(2);
+    expect(out.geometry.LCF).toBe(6);
+    expect(out.geometry.OAL).toBe(51.5);
+    expect(out.type).toBe('probe');
+  });
+
+  it('mirrors the Tool ID into product-id like any other tool type', () => {
+    const out = internalToFusionTool(probeInternal({ tool_id: 'S-42' }));
+    expect(out['product-id']).toBe('S-42');
+    expect(out.expressions.tool_productId).toBe("'S-42'");
+  });
+});

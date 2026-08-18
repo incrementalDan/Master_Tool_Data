@@ -121,4 +121,31 @@ describe('overlayPresets — operation_type source depends on format', () => {
     expect(overlayPresets([{ guid: 'g2', name: 'SS 2.0 SK13 - Fine Finish' }], {})[0].operation_type).toBe('fine_finish');
     expect(overlayPresets([{ guid: 'g3', name: 'SS 2.0 SK13 - Rough' }], {})[0].operation_type).toBe('rough');
   });
+
+  // A probe has no material (Fusion's probe editor has no material selector).
+  // overlayPresets is the one place a material could be inferred from the name,
+  // and doing so for a probe would inject a material that leaks to Fusion on
+  // write (probe normalizePreset passes `rest` through). Gate it on toolType.
+  it('never infers a material for a probe preset, even when the name contains a material keyword', () => {
+    // "AL" in the name would normally infer an aluminium material for a milling
+    // preset — but for a probe it must be left with no material at all.
+    const probePreset = { guid: 'pr1', name: 'AL calibration probe', v_f_leadIn: 1000, v_f_link: 3000, v_f_measure: 102 };
+    const [asProbe] = overlayPresets([probePreset], {}, { toolType: 'probe' });
+    expect(asProbe.material).toBeUndefined();
+    // The same preset on a milling tool WOULD get the material inferred — proving
+    // the gate is what suppresses it, not that the name simply doesn't match.
+    const [asMill] = overlayPresets([{ ...probePreset }], {}, { toolType: 'flat end mill' });
+    expect(asMill.material?.query).toBe('AL');
+  });
+
+  it('preserves a probe preset\'s real feedrate fields and adds no milling fields', () => {
+    const probePreset = { guid: 'pr2', name: 'Default preset', v_f_leadIn: 1000, v_f_link: 3000, v_f_measure: 102 };
+    const [out] = overlayPresets([probePreset], {}, { toolType: 'probe' });
+    expect(out.v_f_leadIn).toBe(1000);
+    expect(out.v_f_link).toBe(3000);
+    expect(out.v_f_measure).toBe(102);
+    for (const k of ['n', 'v_c', 'v_f', 'f_z', 'use-stepdown', 'use-stepover']) {
+      expect(k in out).toBe(false);
+    }
+  });
 });

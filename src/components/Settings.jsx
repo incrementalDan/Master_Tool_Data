@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
 import { generateMachineNumbers, generateId, duplicateIdClusters, findMachineNumbersToFix, validateGeometry } from '../schema/toolSchema.js';
-import { isExcludedFrom } from '../utils/idSystems.js';
+import { isExcludedFrom, MACHINE_NUMBER_LOCKED_TYPES } from '../utils/idSystems.js';
 import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../utils/toolIdSystem.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
 import { isNotableOohDelta, geometryChainIssues, descriptionLocMismatches } from '../utils/libraryHealth.js';
@@ -462,14 +462,25 @@ export default function Settings() {
     setLoadingPreview(true);
     try {
       const list = await fetchRawLibrary();
-      const numbers = generateMachineNumbers(list.length, Number(machineStart) || 30, skipList);
-      setPreviewRows(list.map((f, i) => ({
-        id: f.guid,
-        description: f.description || '—',
-        tool_type: f.type || '—',
-        current: f['post-process']?.number ?? null,
-        next: numbers[i],
-      })));
+      // A machine-number-locked type (a probe, T99) keeps its number — it is
+      // neither renumbered nor consumes one, matching renumberLibrary. Show it
+      // staying put in the preview so it doesn't promise a change that won't
+      // happen. (Preview keys off the Fusion `type`, which is 'probe'.)
+      const numbers = generateMachineNumbers(
+        list.filter(f => !MACHINE_NUMBER_LOCKED_TYPES.has(f.type)).length,
+        Number(machineStart) || 30, skipList);
+      let ni = 0;
+      setPreviewRows(list.map((f) => {
+        const locked = MACHINE_NUMBER_LOCKED_TYPES.has(f.type);
+        const current = f['post-process']?.number ?? null;
+        return {
+          id: f.guid,
+          description: f.description || '—',
+          tool_type: f.type || '—',
+          current,
+          next: locked ? current : numbers[ni++],
+        };
+      }));
       setStage('preview');
     } catch (err) {
       setError(err.message);

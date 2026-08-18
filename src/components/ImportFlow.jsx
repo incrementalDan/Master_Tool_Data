@@ -5,6 +5,7 @@ import { useApp } from '../context/AppContext.jsx';
 import ImportPhotosModal from './ImportPhotosModal.jsx';
 import { fusionToolToInternal, mergeFusionAndMetadata, generateId, newTool, generateMachineNumbers, getNextMachineNumber, typeFromProShopGroup, resolveThreadSize } from '../schema/toolSchema.js';
 import { machineNumberArgs } from '../context/appState.js';
+import { isExcludedFrom } from '../utils/idSystems.js';
 import { insertComponentIndex, newComponent, normProShopId } from '../schema/insertFamilies.js';
 import { vendorHasOwnCatalogNumber, resolveVendorName, registryIdForName } from '../schema/vendorRegistry.js';
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
@@ -221,13 +222,19 @@ export default function ImportFlow() {
   // Returns a copy of the list with machine numbers applied per the chosen mode.
   // In 'fill' mode a tool that already has a number is returned unchanged.
   const assignMachineNumbers = (list, mode) => {
+    // A machine-number-locked tool (a probe, T99) is never renumbered and never
+    // consumes a number — in BOTH modes. In 'fill' mode it already has a number
+    // so the `hasMachineNumber` short-circuit covers it; in 'all' mode it must be
+    // skipped explicitly or the renumber-from-30 would overwrite its locked T#.
     if (mode === 'all') {
-      const nums = generateMachineNumbers(list.length, mnStart, mnSkip);
-      return list.map((t, i) => ({ ...t, machine_tool_number: nums[i] }));
+      const renumberable = list.filter(t => !isExcludedFrom(t, 'machine_number'));
+      const nums = generateMachineNumbers(renumberable.length, mnStart, mnSkip);
+      let i = 0;
+      return list.map(t => isExcludedFrom(t, 'machine_number') ? t : ({ ...t, machine_tool_number: nums[i++] }));
     }
     const used = new Set(list.filter(hasMachineNumber).map(t => Number(t.machine_tool_number)));
     return list.map(t => {
-      if (hasMachineNumber(t)) return t;
+      if (hasMachineNumber(t) || isExcludedFrom(t, 'machine_number')) return t;
       const num = getNextMachineNumber([...used], mnStart, mnSkip);
       used.add(num);
       return { ...t, machine_tool_number: num };

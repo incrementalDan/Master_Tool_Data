@@ -275,6 +275,12 @@ export default function NormalizeModal({ onClose }) {
               </div>
               {groups.map(({ tool, presets }) => {
                 const isHoleMaking = HOLE_MAKING_TYPES.has(tool.tool_type);
+                // A probe (CMM stylus) has NO material and NO operation type —
+                // Fusion's probe preset editor has neither field. Suppress BOTH
+                // pickers so the user can't inject a material/op that would then
+                // leak into the Fusion probe preset (which must round-trip
+                // untouched). Same "—" treatment hole-making already gets for op.
+                const isProbe = tool.tool_type === 'probe';
                 return (
                   <div key={tool.id} style={{ marginBottom: 14 }}>
                     <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6 }}>
@@ -297,7 +303,11 @@ export default function NormalizeModal({ onClose }) {
                               {p.material?.query ? <span className="text-sub text-xs" style={{ marginLeft: 6 }}>{p.material.query}</span> : null}
                             </span>
 
-                            {/* Material — searchable CAM preset picker (same as preset editor) */}
+                            {/* Material — searchable CAM preset picker (same as preset editor).
+                                Hidden for a probe: it has no material selector in Fusion. */}
+                            {isProbe ? (
+                              <span className="text-sub text-xs" style={{ width: 180, flexShrink: 0, textAlign: 'center' }} title="A probe (CMM stylus) has no material">—</span>
+                            ) : (
                             <div
                               className="preset-mat-field"
                               style={{ width: 180, flexShrink: 0 }}
@@ -323,10 +333,11 @@ export default function NormalizeModal({ onClose }) {
                                 <ChevronDown size={14} className="text-sub" />
                               </span>
                             </div>
+                            )}
 
-                            {/* Operation type — hidden for hole-making tools (no op type) */}
-                            {isHoleMaking ? (
-                              <span className="text-sub text-xs" style={{ width: 130, flexShrink: 0, textAlign: 'center' }} title="Hole-making tools have no operation type">—</span>
+                            {/* Operation type — hidden for hole-making tools AND probes (no op type) */}
+                            {isHoleMaking || isProbe ? (
+                              <span className="text-sub text-xs" style={{ width: 130, flexShrink: 0, textAlign: 'center' }} title="This tool type has no operation type">—</span>
                             ) : (
                               <select
                                 className="field-input"
