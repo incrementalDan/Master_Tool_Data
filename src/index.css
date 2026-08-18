@@ -6128,6 +6128,14 @@ input.sf-ref-num { text-align: right; }
 .sd-holder { display: inline-flex; align-items: center; gap: 5px; }
 .sd-holder-unknown { color: var(--text-sub); display: inline-flex; }
 
+/* The footer toggle that reveals the .sd-flag markers below. Default hidden;
+   disabled (and relabelled) when no row disagrees, so the control's state is
+   always an answer rather than an unread switch. */
+.sd-file-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+.sd-file-toggle { font-size: 11.5px; color: var(--text-sub); }
+.sd-file-toggle:not(:disabled):hover { color: var(--text); }
+.sd-file-toggle:disabled { opacity: 0.45; cursor: default; }
+
 /* A location the CSV and the library disagree about. Shown, never resolved —
    the CSV is what the program was proven with. */
 .sd-flag {

@@ -130,11 +130,16 @@ describe('Part page renders', () => {
     expect(html).toContain('B-261');
   });
 
-  it('prints the APP location, noting the posted one where they differ', () => {
+  it('prints the APP location, and hides the posted one until asked', () => {
     // FTL-1 lives at LC-999 in the library; the posted file said LC-244.
+    // A stale Fusion location is the normal state, so the marker is behind the
+    // footer toggle and the table shows only the location the shop should use.
     const html = detail();
     expect(html).toContain('LC-999');
-    expect(html).toContain('file: LC-244');
+    expect(html).not.toContain('file: LC-244');
+    // The toggle offers it, counts what it would reveal, and is not greyed out.
+    expect(html).toContain('Show file locations (1)');
+    expect(html).not.toContain('No file differences');
   });
 
   it('shows the proven state of the stored version', () => {
