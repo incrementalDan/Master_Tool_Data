@@ -94,19 +94,24 @@ export default function ToolListTable({
                 </th>
               )}
               {showOp && <th style={{ cursor: 'default' }}>OP</th>}
-              <th style={{ cursor: 'default' }}>G-Code T#</th>
-              <th style={{ cursor: 'default' }}>H Offset #</th>
-              <th style={{ cursor: 'default' }}>D Offset #</th>
-              <th style={{ cursor: 'default' }}>Dim Tag #</th>
-              <th style={{ cursor: 'default' }}>ProShop Tool #</th>
+              <th className="sd-th-narrow" style={{ cursor: 'default' }}>G-Code T#</th>
+              <th className="sd-th-narrow" style={{ cursor: 'default' }}>H Offset #</th>
+              <th className="sd-th-narrow" style={{ cursor: 'default' }}>D Offset #</th>
+              <th className="sd-th-narrow" style={{ cursor: 'default' }}>ProShop Tool #</th>
               <th style={{ cursor: 'default' }}>Location</th>
               <th style={{ cursor: 'default' }}>Description</th>
-              <th style={{ cursor: 'default' }}>Cut Dia</th>
-              <th style={{ cursor: 'default' }}>Tip</th>
+              <th className="sd-th-narrow" style={{ cursor: 'default' }}>Cut Dia</th>
+              <th className="sd-th-narrow" style={{ cursor: 'default' }}>Tip</th>
+              {/* OOH sits IN FRONT of the holder: the two are read together as
+                  one assembly (this holder, at this stick-out), so the number
+                  belongs beside the pill rather than the far side of it. */}
+              <th className="sd-th-narrow" style={{ cursor: 'default' }}>OOH</th>
               <th style={{ cursor: 'default' }}>Holder</th>
-              <th style={{ cursor: 'default' }}>OOH</th>
-              <th style={{ cursor: 'default' }}>Tool Life (M)</th>
-              <th style={{ cursor: 'default' }}>Init D Offset</th>
+              <th className="sd-th-narrow" style={{ cursor: 'default' }}>Tool Life (M)</th>
+              <th className="sd-th-narrow" style={{ cursor: 'default' }}>Init D Offset</th>
+              {/* Dim Tag # is a placeholder for a later phase, so it parks at
+                  the far right rather than splitting the offsets from the IDs. */}
+              <th className="sd-th-narrow" style={{ cursor: 'default' }}>Dim Tag #</th>
             </tr>
           </thead>
           <tbody>
@@ -125,7 +130,6 @@ export default function ToolListTable({
                   <td><span className="machine-num-badge">{r.t}</span></td>
                   <td className="sd-num">{offsetOf(r.t_num)}</td>
                   <td className="sd-num">{offsetOf(r.t_num)}</td>
-                  <td>{DASH}</td>
                   <td>
                     {r.tool_ref
                       ? <Link to={`/tool/${r.tool_ref}`} className="tool-id-pill">{r.tool_id}</Link>
@@ -142,6 +146,7 @@ export default function ToolListTable({
                   <td>{r.description || DASH}</td>
                   <td className="sd-num">{r.cut_dia || '—'}</td>
                   <td className="sd-num">{r.tip || '—'}</td>
+                  <td><OohCell value={r.ooh} /></td>
                   <td>
                     {r.holder
                       ? (
@@ -159,7 +164,7 @@ export default function ToolListTable({
                       )
                       : DASH}
                   </td>
-                  <td><OohCell value={r.ooh} /></td>
+                  <td>{DASH}</td>
                   <td>{DASH}</td>
                   <td>{DASH}</td>
                 </tr>

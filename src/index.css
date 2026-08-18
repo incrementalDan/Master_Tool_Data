@@ -6120,6 +6120,12 @@ input.sf-ref-num { text-align: right; }
 /* Tool list / sequence tables — numeric columns in the mono face, as measured
    data (same rule as every other number in the app). */
 .sd-table td { white-space: nowrap; }
+/* The header may run to two lines so a long label (H Offset #, Init D Offset)
+   stops dictating its column's width — the cells below stay on one line, so
+   only the heading wraps. Bottom-aligned so a one-line and a two-line heading
+   sit on the same baseline. */
+.sd-table th { white-space: normal; line-height: 1.25; vertical-align: bottom; }
+.sd-table th.sd-th-narrow { max-width: 68px; }
 .sd-table .sd-num { font-family: var(--font-mono); font-size: 12px; }
 .sd-table .sd-op { font-weight: 600; }
 .sd-seq {
