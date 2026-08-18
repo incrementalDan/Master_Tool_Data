@@ -194,7 +194,14 @@ export function proposeHolderLink(baked, records, config) {
 // being grouped with turning for PRESET purposes, it mounts in an ordinary
 // taper holder and its Fusion entry carries a full 11-segment holder.
 // TODO: turning gets its own holder story — see CLAUDE.md.
-export const HOLDER_LINK_SKIP_TYPES = new Set(['turning general']);
+//
+// `probe` is excluded for a different reason: it DOES carry a full baked
+// holder (the CMM stylus's own measuring head, with real segments), but it's
+// a one-off — the shop doesn't reuse a probe's holder on any other tool, so
+// there is nothing to link it TO in the app's holder library and nothing
+// worth matching against. Without this it would sit in the "candidate/none"
+// tier forever, asking to link a holder that will never have a second user.
+export const HOLDER_LINK_SKIP_TYPES = new Set(['turning general', 'probe']);
 
 // Why a guessed link isn't certain — one line per signal that carried it.
 // Keyed by `matchBakedHolder`'s `via`.

@@ -50,6 +50,7 @@ const AUTO_GROUP = {
   "circle segment barrel":"M","circle segment oval":"M","circle segment taper":"M",
   "thread mill":"N","spot drill":"O","tap":"R",
   "boring head":"TD","boring bar":"TD","turning general":"TF",
+  "probe":"S",
 };
 // Reverse of AUTO_GROUP — ProShop "Tool Group" letter → our tool_type, used to
 // classify a brand-new tool created from a ProShop import row. Several letters
@@ -58,6 +59,16 @@ const AUTO_GROUP = {
 // person reading the ProShop row would. Returns null for groups with no
 // corresponding tool type (inserts, saws, holders, etc.) — the caller falls
 // back to a default.
+//
+// NOTE: "S" (CMM Styli / probe) is deliberately NOT mapped here even though
+// AUTO_GROUP now maps 'probe' -> 'S' for export. A probe is a real, minimally-
+// supported tool type (see fusionConvert.js), but it always arrives already
+// loaded from the Fusion library — it's never meant to be freshly minted from
+// a bare ProShop row. Leaving this case unmapped keeps that path closed: an
+// unmatched 'S' row falls back to the documented "no tool type" behavior
+// (flat end mill + no_fusion_link, flagged for manual cleanup) exactly like
+// the other inserts/saws/holders letters, rather than silently creating a
+// probe tool through a route none of the probe-specific handling covers.
 function typeFromProShopGroup(letter, hints = {}) {
   const desc = (hints.description || "").toLowerCase();
   const cornerRadius = parseFloat(hints.cornerRadius) || 0;

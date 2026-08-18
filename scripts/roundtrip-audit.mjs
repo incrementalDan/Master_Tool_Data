@@ -121,7 +121,7 @@ function classifyExpected(d, raw) {
 // ─── 4. Run ──────────────────────────────────────────────────────────────────
 const { fusionToolToInternal, internalToFusionTool } = await loadSchema();
 
-const files = ['Full_Type_List Examples.json', 'Special Cases.json'];
+const files = ['Full_Type_List Examples.json', 'Special Cases.json', 'Probe REF/Probe Only.json'];
 const perType = new Map();   // fusionType → { tools, toolsWithUnexpected, diffs: Map(signature → {count, examples}) }
 let expectedTally = new Map();
 let toolCount = 0, errorCount = 0;

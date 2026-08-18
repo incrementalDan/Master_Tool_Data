@@ -43,6 +43,11 @@ const FUSION_TYPE_MAP = {
   // classify as turning (TURNING_TYPES) instead of falling through to milling.
   'turning boring': 'turning boring',
   'turning threading': 'turning threading',
+  // Probe (CMM stylus) — Fusion's own type string, mapped to itself explicitly
+  // (matches the fallback that already applies) so the mapping table stays the
+  // single place that lists every recognized Fusion type. See normalizePreset
+  // and internalToFusionTool below for why probe needs its own preset handling.
+  'probe': 'probe',
 };
 
 // Loose numeric equality for "did this value actually change" checks when syncing
@@ -145,7 +150,12 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
   const isDrillFamily = !isTap && !isSpotDrill && HOLE_MAKING_TYPES.has(toolType);
   const isHoleMaking = isTap || isDrillFamily;
   const isTurning = TURNING_TYPES.has(toolType);
-  const isMilling = !isHoleMaking && !isTurning && !isSpotDrill;
+  // Probe (CMM stylus) presets use their own vocabulary — Lead-In / Link /
+  // Measure feedrate (tool_feedEntry / tool_feedProbeLink / tool_feedProbeMeasure)
+  // — nothing like milling/turning/hole-making feeds, no spindle speed, no
+  // stepdown/stepover. See the early return below.
+  const isProbe = toolType === 'probe';
+  const isMilling = !isHoleMaking && !isTurning && !isSpotDrill && !isProbe;
 
   // operation_type, machine_id, material_preset_id, operation_ids, and the small-bore
   // comp fields (small_bore / small_bore_diameter / f_z_base) are app-only
@@ -164,6 +174,24 @@ function normalizePreset(p, tscCapable = false, toolType = 'flat end mill') {
     small_bore, small_bore_diameter, f_z_base, intensity,
     stepdown: _sd, stepover: _so, ...rest
   } = p;
+
+  // ⚠️ Probe presets get almost NO shape here — pass through beyond the
+  // universal app-only-key strip above. A probe preset has no spindle speed,
+  // no cutting/plunge feed, no stepdown/stepover — every one of those fields
+  // the milling/turning/hole-making branches below would inject (n:0, v_c:0,
+  // v_f:0, use-stepdown:false, …) is a field Fusion's probe schema doesn't
+  // use, and this is the ONE spot that decides whether a probe tool corrupts
+  // on every ordinary write (renumber, tool-ID assign, location assign) even
+  // though nobody ever opens its preset editor. Real values the sheet already
+  // carries (v_f_leadIn / v_f_link / v_f_measure) survive via `...rest`.
+  if (isProbe) {
+    return {
+      ...rest,
+      guid: p.guid || generateId(),
+      ...(p.description != null ? { description: p.description } : {}),
+      name: p.name || 'Default preset',
+    };
+  }
 
   // Strip step flags from non-milling presets (native Fusion never writes them
   // there, and a flag with no numeric/expression triggers the three-way-sync
@@ -380,6 +408,7 @@ export function internalToFusionTool(tool) {
     'boring head': 'boring bar',
     'boring bar': 'boring bar',
     'turning general': 'turning general',
+    'probe': 'probe',
   };
 
   // Taps branch on cutting_direction since Fusion has distinct 'tap left/right hand' types.
@@ -412,6 +441,12 @@ export function internalToFusionTool(tool) {
   // Spot drills get a milling-like cutting-feed set PLUS drill plunge/retract —
   // see normalizePreset for the full field-shape rationale.
   const isSpotDrillTool = tool.tool_type === 'spot drill';
+  // Probe (CMM stylus) — no flat speed/feed fields exist on the internal model
+  // for it (its preset vocabulary — Lead-In/Link/Measure feedrate — has no
+  // ToolForm/ToolDetail exposure), so the index-0 sync block below must be
+  // skipped entirely rather than writing a pile of harmless-but-wrong
+  // `undefined` keys onto it.
+  const isProbeTool = tool.tool_type === 'probe';
 
   // Original raw presets by guid — lets the expression sync below detect whether
   // a numeric actually changed (vs. just round-tripping) so unchanged expression
@@ -422,7 +457,7 @@ export function internalToFusionTool(tool) {
 
   const outPresets = sourcePresets.map((p, i) => {
     const np = normalizePreset(p, tool.tsc_capable, tool.tool_type);
-    if (i === 0) {
+    if (i === 0 && !isProbeTool) {
       // Speed fields apply to all tool types — but never (re)create a key both
       // sides lack: native turning presets omit n (CSS presets) or v_c
       // (threading), and normalizePreset just stripped those defaults.
@@ -458,7 +493,11 @@ export function internalToFusionTool(tool) {
     // standard default values so the library is immediately usable without requiring
     // the user to manually enter speeds and feeds first.
     const origExprs = np.expressions || {};
-    const isBlankPreset = !np.n && !np.v_c;
+    // Probe presets never have n/v_c to begin with (normalizePreset's early
+    // return above leaves them out entirely) — never treat that as "blank" or
+    // the milling default-seeding below would inject a fictitious spindle
+    // speed / cutting feed / stepdown set onto a tool type that uses none of it.
+    const isBlankPreset = !isProbeTool && !np.n && !np.v_c;
     if (isBlankPreset) {
       np.n = isTapTool ? 500 : 5000;
       if (isMillingTool) np.n_ramp = np.n;

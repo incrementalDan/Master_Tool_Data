@@ -126,6 +126,15 @@ function paths(type) {
     case 'turning general':
       return [SOLID('M6.5 12 H20 V18 H6.5 Z M6.5 9.6 H11.5 V12 H6.5 Z M4.6 10.6 L8.5 8.3 L11 11.1 L7.1 13.4 Z')];
 
+    // Probe (CMM stylus) — wide collar/head, thin shaft, ball tip. Mirrors the
+    // shape of a real Blum-style stylus: no flutes, since it doesn't cut.
+    case 'probe':
+      return [SOLID(
+        'M8 5 H16 V8 H8 Z' +               // head / collar
+        ' M11 8 H13 V16.5 H11 Z' +          // thin shaft
+        ' M10 18.3 A2 2 0 1 0 14 18.3 A2 2 0 1 0 10 18.3 Z'  // ball tip
+      )];
+
     default:
       return [SOLID('M8.5 5 H15.5 V21 H8.5 Z' + slash(19.8) + slash(16.4))];
   }
