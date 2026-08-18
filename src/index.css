@@ -2378,6 +2378,16 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .pn-sort-idle { opacity: 0.35; }
 .pn-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .pn-table tbody tr:last-child td { border-bottom: none; }
+/* The header sits BELOW the body tone, not above it: every section header in
+   this module is a raised --surface-2 band, so a raised column header competed
+   with it. Sunken reads as part of the table it labels. */
+.pn-table thead th {
+  background: color-mix(in srgb, var(--surface) 84%, #000);
+  border-bottom: 1px solid var(--border-strong);
+}
+/* Zebra — deliberately faint. A 14-column row is hard to track across, and the
+   job here is to keep your eye on one row, not to draw stripes. */
+.pn-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--surface-2) 40%, var(--surface)); }
 .pn-table tbody tr:hover { background: var(--surface-2); }
 .pn-row-editing td { background: color-mix(in srgb, var(--amber) 6%, transparent); }
 
@@ -6202,6 +6212,47 @@ input.sf-ref-num { text-align: right; }
 .sd-blocker-list { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
 .sd-blocker-list li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
 .pn-import-drop.dragging { border-color: var(--blue); border-style: solid; color: var(--text); background: var(--blue-tint); }
+
+/* ── Parts module: making a section read as a section ───────────────────────
+   The page ground (--bg #383838) is LIGHTER than a card (--surface #2a2a2a),
+   so a card is a recessed well rather than a raised tile. Two of those stacked
+   with no header treatment ran together — a section head looked like one more
+   table row until you read it. Four tones now separate them, lightest at the
+   top of the hierarchy:
+
+     routing head   --surface-3   "one way of making this part"
+     section head   --surface-2   a program, or the all-tools list
+     body rows      --surface     + a faint zebra
+     column header  sunken        below the body, so it can't rival a head
+
+   Plus a real edge on the card (a stronger border and a shadow), and more air
+   between siblings — the cheapest separation there is. */
+.pn-part-card, .sd-routing {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+.pn-grouped { gap: 14px; }
+
+/* The head band. Bordered on the bottom only when something is open below it,
+   otherwise a collapsed card shows a hairline against nothing. */
+.pn-part-header, .sd-program-head {
+  background: var(--surface-2);
+}
+.pn-part-header:hover, .sd-program-head:hover {
+  background: color-mix(in srgb, var(--surface-3) 65%, var(--surface-2));
+}
+.pn-part-body { border-top: 1px solid var(--border-strong); }
+
+/* A routing outranks the programs inside it, so it takes the lighter tone. */
+.sd-routing-head { background: var(--surface-3); border-bottom-color: var(--border-strong); }
+
+/* ⚠️ A table nested in a card must NOT carry its own frame — a bordered,
+   rounded panel inside a bordered, rounded panel is most of what made the
+   boundaries mushy. The standalone table on /parts keeps its frame. */
+.pn-part-body .pn-table-wrap {
+  border: none; border-radius: 0; background: transparent;
+}
+.pn-part-body .sd-file-foot { padding: 0 12px 10px; margin-top: 6px; }
 
 /* A routing — one way of making a part. Groups the operations under it. */
 .sd-routing { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
