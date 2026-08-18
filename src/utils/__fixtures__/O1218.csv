@@ -1,6 +1,6 @@
 Seq#,Sequence Description,Tool #,G-Code Tool #,OOH,Holder,RTA #,Length control Dim,Diameter control dim,Cut Diameter,Gage Length,Tip (CR or Angle),T-description,LC
-0,NC PRG: OO1218 | FILE NAME: CAM - HINGE-COVER-LEFT - VAL-REFLEX-ME-REV2  |  POSTED: 8-10-2026 10:51 | Est. Cycle Time: 0:04:03 | Machine: Brother SPEEDIO M300Xd1 | STOCK: X = 1.147 in | Y = 0.875 in | Z = 3.068 in,,,,,,,,,,,,
-0.5,FIXTURE = F91 B Side Fixture - HINGE-COVER-RIGHT LEFT,,,,,,,,,,,,
+0,NC PRG: OO1218 | FILE NAME: CAM - DEMO-BRACKET-LEFT - SAMPLECO-DEMO-REV2  |  POSTED: 8-10-2026 10:51 | Est. Cycle Time: 0:04:03 | Machine: Brother SPEEDIO M300Xd1 | STOCK: X = 1.000 in | Y = 1.000 in | Z = 3.000 in,,,,,,,,,,,,
+0.5,FIXTURE = F00 B Side Fixture - DEMO-BRACKET-RIGHT LEFT,,,,,,,,,,,,
 10,B Side OP60 | Rough Top Profile,B-261,T38,0.70,NBT30-SK13C-150,,6.33,,0.0625,H38,0.031,1/16 (.0625) BALL 3FL .093LOC,LC-244
 10.1,B Side OP60 | Finish Top Profile ,B-261,T38,0.70,NBT30-SK13C-150,,6.33,,0.0625,H38,0.031,1/16 (.0625) BALL 3FL .093LOC,LC-244
 15,B Side OP60 | Finishh Back Contour,A-265,T56,0.60,NBT30-SK13-120 OOH2.33 ER16EX 12mm,,7.46,,0.039,H56,,1mm (.039) 3FL EM .059LOC .203 REACH,

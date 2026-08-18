@@ -386,7 +386,7 @@ describe('mergeTool — the program a sync came from lands on the presets it tou
       { guid: 'p-untouched', name: 'AL 1 H - Finish', n: 9000 },
     ],
   });
-  const programLink = { operation_id: 'op-1218', label: 'O1218 · HINGE-COVER' };
+  const programLink = { operation_id: 'op-1218', label: 'O1218 · DEMO-BRACKET' };
 
   it('stores the operation id under operation_ids — the key everything else reads', async () => {
     const { mergeTool } = createToolActions(mergeCtx());
@@ -439,7 +439,7 @@ describe('mergeTool — the program a sync came from lands on the presets it tou
     expect(saved.job_ids).toBeUndefined();
     expect(saved.operation_ids).toBeUndefined();
     // The provenance is still recorded, where it belongs — in the history entry.
-    expect(saved.merge_history.at(-1).program_linked).toBe('O1218 · HINGE-COVER');
+    expect(saved.merge_history.at(-1).program_linked).toBe('O1218 · DEMO-BRACKET');
   });
 });
 

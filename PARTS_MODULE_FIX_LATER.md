@@ -24,7 +24,42 @@ diff for a hypothetical benefit.
 
 ---
 
-## 2. `docs/` is a mixed bag
+## 2. ⚠️ Real customer data is in a PUBLIC repo's history
+
+The repo is public. `src/utils/__fixtures__/O1218.csv` has been sanitized going
+forward (synthetic part/customer/fixture names, every structural property kept),
+but **the original is still in git history** and reachable by commit hash.
+
+Bigger than that one file, and all of it predates the sanitization:
+
+| What | Size | Contains |
+|---|---|---|
+| `FUSION TOOL Library REF/` | 7.9 MB | Real Fusion tool library + ProShop reference exports |
+| `8-10-26 POST CLEAN UP PM FIX/` | 4.0 MB | A real `tool_metadata.json` snapshot |
+| `Material REF Docs/` | — | Material reference documents |
+| `src/demo/demo_parts.json` | — | Real-looking part numbers (`CAD1-114P4344-1`, `GSE1-08D1404`) and customer names (Cadrex, GS Enterprises) |
+| `docs/ProgramNumberManager.tsx` | — | Same customer names |
+
+**Decisions needed, in rough priority order:**
+
+1. **Is the repo public on purpose?** Flipping it to private is one click and
+   instantly resolves the exposure question for everything above, including
+   history. Everything else below only matters if it stays public. ⚠️ Note
+   GitHub Pages on a private repo needs a paid plan — that's the real
+   constraint, since the app deploys from Pages.
+2. **History rewrite?** Only removes the old blobs if done — a plain delete
+   commit does not. Needs `git filter-repo`/BFG plus a force push, which breaks
+   every existing clone and rewrites every commit hash. Worth it only if the
+   repo stays public and the REF exports are genuinely sensitive.
+3. **Do the REF folders need to be in the repo at all?** CLAUDE.md references
+   them for audits, but they could live in Drive alongside everything else and
+   be pulled down when needed. That would shrink the repo by ~12 MB too.
+4. **Demo data** — the part numbers and customers look real. Cheap to make
+   obviously synthetic, and it ships to anyone who opens `?demo=true`.
+
+None of this is urgent if the answer to (1) is "make it private."
+
+## 3. `docs/` is a mixed bag
 
 `docs/` holds the design references the app is built against
 (`LocationSystemUI.tsx`, `HOLDER SYSTEM PROMPT.md`), the label-printing source
@@ -40,7 +75,7 @@ has to update those pointers in the same commit or the trail goes cold.
 
 ---
 
-## 3. Small things, no decision needed — just not done yet
+## 4. Small things, no decision needed — just not done yet
 
 - **`utils/parts.js` is ~420 lines** and covers the model, display forms,
   filtering and sorting. Splitting `applyPartsFilters` / `sortParts` into

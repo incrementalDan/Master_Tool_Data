@@ -18,7 +18,7 @@ import demoParts from '../demo/demo_parts.json';
 const file = {
   version: 1,
   parts: [
-    { id: 'pt1', part_number: 'HINGE-COVER', customer: 'Val', material_id: 'N_6061', material_custom: '' },
+    { id: 'pt1', part_number: 'DEMO-BRACKET', customer: 'Val', material_id: 'N_6061', material_custom: '' },
     { id: 'pt2', part_number: 'BRACKET', customer: 'Acme', material_id: null, material_custom: 'Delrin' },
   ],
   routings: [
@@ -57,7 +57,7 @@ describe('the three tiers', () => {
     // This is the whole reason a tool linked to a program is also linked to the
     // part: the chain is derivable, so nothing stores it twice.
     const op = operationsOf(file).find(o => o.id === 'op60');
-    expect(partForOperation(file, op).part_number).toBe('HINGE-COVER');
+    expect(partForOperation(file, op).part_number).toBe('DEMO-BRACKET');
     expect(partForOperation(file, { routing_id: 'nope' })).toBeNull();
   });
 });
@@ -157,7 +157,7 @@ describe('rev lives on the routing, not the part', () => {
     // Two routings, two revs, ONE part.
     const revs = routingsForPart(file, 'pt1').map(r => r.rev);
     expect(revs).toEqual(['A', 'B']);
-    expect(partsOf(file).filter(p => p.part_number === 'HINGE-COVER')).toHaveLength(1);
+    expect(partsOf(file).filter(p => p.part_number === 'DEMO-BRACKET')).toHaveLength(1);
   });
 
   it('names a routing by what the user called it, else its rev, else its position', () => {
@@ -228,7 +228,7 @@ describe('search', () => {
   it('puts an exact program number first, then part-number matches', () => {
     const rows = searchPrograms(file, '1218');
     expect(rows[0].operation.id).toBe('op60');
-    expect(rows[0].part.part_number).toBe('HINGE-COVER');
+    expect(rows[0].part.part_number).toBe('DEMO-BRACKET');
     expect(rows[0].routing.name).toBe('Vise');
   });
 
@@ -237,7 +237,7 @@ describe('search', () => {
   });
 
   it('matches on part number', () => {
-    expect(searchPrograms(file, 'hinge').length).toBe(5);
+    expect(searchPrograms(file, 'demo-bracket').length).toBe(5);
     expect(searchPrograms(file, '')).toEqual([]);
   });
 });
@@ -329,7 +329,7 @@ describe('search, filter and sort — one result for both views', () => {
   const materials = { materials: [{ id: 'N_6061', label: '6061-T6', group_id: 'N' }] };
   const f = {
     parts: [
-      { id: 'p1', part_number: 'HINGE-COVER', customer: 'Val', material_id: 'N_6061', created_at: '2026-01-01' },
+      { id: 'p1', part_number: 'DEMO-BRACKET', customer: 'Val', material_id: 'N_6061', created_at: '2026-01-01' },
       { id: 'p2', part_number: 'BRACKET', customer: 'Acme', material_custom: 'Delrin', created_at: '2026-02-01' },
     ],
     routings: [
@@ -352,7 +352,7 @@ describe('search, filter and sort — one result for both views', () => {
   it('finds by part number, customer and material — and keeps the WHOLE part', () => {
     // Searching a part number shows everything under it, not just rows that
     // happen to repeat the number.
-    expect([...filter({ text: 'hinge' }).operationIds].sort()).toEqual(['o1', 'o2']);
+    expect([...filter({ text: 'demo-bracket' }).operationIds].sort()).toEqual(['o1', 'o2']);
     expect([...filter({ text: 'acme' }).operationIds]).toEqual(['o3']);
     expect([...filter({ text: '6061' }).operationIds].sort()).toEqual(['o1', 'o2']);
     expect([...filter({ text: 'delrin' }).operationIds]).toEqual(['o3']);
