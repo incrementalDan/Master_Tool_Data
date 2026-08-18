@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   Plus, ChevronDown, ChevronRight, Pencil, Trash2,
   LayoutGrid, Table2, Package, UploadCloud, ExternalLink, Wrench,
@@ -13,7 +13,7 @@ import {
   updatePartIn, updateOperationIn, deleteOperationIn, deletePartIn,
 } from '../utils/parts.js';
 import {
-  CustomerBadge, TypePill, ProgramNumBadge,
+  CustomerBadge, TypePill, ProgramNumBadge, disclosureProps,
   ProgramEditForm, PartEditForm, InlineConfirm, PartsFilterBar, DEFAULT_PARTS_FILTERS,
   programDraftOf, programFieldsOf, partDraftOf, partFieldsOf,
 } from './partsUi.jsx';
@@ -104,10 +104,21 @@ function PartHeader({ part, routingCount, opCount, detailCount, expanded, onTogg
     );
   }
 
+  // ONE PRIMARY ACTION PER ROW. The part number is the row's identity, so it is
+  // a real <Link> — clicking it opens the part, and cmd/middle-click opens it in
+  // a new tab like any other link. Everything ELSE in the row (chevron, badges,
+  // counts, empty space) is the secondary action: expand. Before this both did
+  // the same thing (expand) and the only way to the page was the small "Open"
+  // button, so the obvious target gave the non-obvious result.
   return (
-    <div className="pn-part-header" onClick={onToggle}>
+    <div className="pn-part-header" {...disclosureProps(expanded, onToggle)}>
       {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-      <span className="pn-part-number">{part.part_number}</span>
+      <Link
+        to={`/parts/${part.id}`}
+        className="pn-part-number pn-part-link"
+        onClick={e => e.stopPropagation()}
+        title="Open this part — routings, tool lists, sequence detail and labels"
+      >{part.part_number}</Link>
       <CustomerBadge customer={part.customer} />
       {(part.material_id || part.material_custom) && (
         <span className="text-xs text-sub">{alloyLabel(materials, part.material_id, part.material_custom)}</span>
@@ -225,7 +236,7 @@ const COLUMNS = [
   { key: 'pallet', label: 'Pallet' },
 ];
 
-function TableView({ rows, materials, machines, canEdit, onUpdateOperation, onDeleteOperation }) {
+function TableView({ rows, materials, machines, canEdit, onOpenPart, onUpdateOperation, onDeleteOperation }) {
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
@@ -262,21 +273,33 @@ function TableView({ rows, materials, machines, canEdit, onUpdateOperation, onDe
                 </td>
               </tr>
             ) : (
-              <tr key={row.id}>
+              // A flat table row has no dropdown to open, so it has no secondary
+              // action competing for the click — the WHOLE row opens the part,
+              // and the part number stays a real link so cmd-click still works.
+              <tr
+                key={row.id}
+                className={row.part ? 'pn-row-link' : undefined}
+                onClick={row.part ? () => onOpenPart?.(row.part.id) : undefined}
+              >
                 <td>
                   {canEdit && (
                     <span className="flex items-center" style={{ gap: 4 }}>
                       <span className="icon-btn" title="Edit row"
-                        onClick={() => { setDraft(programDraftOf(row)); setEditingId(row.id); }}>
+                        onClick={e => { e.stopPropagation(); setDraft(programDraftOf(row)); setEditingId(row.id); }}>
                         <Pencil size={12} />
                       </span>
                       <span className="icon-btn" title="Delete row" style={{ color: 'var(--red)' }}
-                        onClick={() => setDeleteId(row.id)}><Trash2 size={12} /></span>
+                        onClick={e => { e.stopPropagation(); setDeleteId(row.id); }}><Trash2 size={12} /></span>
                     </span>
                   )}
                 </td>
                 <td><ProgramNumBadge n={row.program_number} /></td>
-                <td><span className="pn-part-number">{row.part?.part_number || '—'}</span></td>
+                <td>
+                  {row.part
+                    ? <Link to={`/parts/${row.part.id}`} className="pn-part-number pn-part-link"
+                        onClick={e => e.stopPropagation()}>{row.part.part_number}</Link>
+                    : <span className="pn-part-number">—</span>}
+                </td>
                 <td><CustomerBadge customer={row.part?.customer} /></td>
                 <td className="text-sub">{row.routing ? routingLabel(row.routing) : '—'}</td>
                 <td>{formatOperation(row.op_number)}</td>
@@ -448,6 +471,7 @@ export default function PartsPage() {
       ) : (
         <TableView
           rows={tableRows} materials={materials} machines={machines} canEdit={canEdit}
+          onOpenPart={(id) => navigate(`/parts/${id}`)}
           onUpdateOperation={updateOperation} onDeleteOperation={deleteOperation}
         />
       )}

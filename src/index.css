@@ -141,6 +141,7 @@
   --topbar-h: 54px;
   --rail-w: 72px;          /* library left action rail */
   --content-max: 1400px;   /* page-content max width */
+  --parts-max: 2000px;     /* Parts pages — wide tool tables need the room */
 }
 
 :focus-visible {
@@ -2221,7 +2222,11 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .preset-programs-add-picker .pick-results { max-height: 180px; }
 
 /* ── Program Number Manager (/programs) ─────────────────────────────────── */
-.pn-page { max-width: 1200px; margin: 0 auto; }
+/* The Parts pages carry a wide table (12+ columns), so they get a much larger
+   cap than the app-wide --content-max and trimmed side padding. Still centred:
+   the page just stops fighting the window until it is genuinely very wide. */
+.page-content:has(.pn-page) { max-width: var(--parts-max); padding-left: 24px; padding-right: 24px; }
+.pn-page { max-width: var(--parts-max); margin: 0 auto; }
 .pn-header-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 .pn-next { display: flex; flex-direction: column; align-items: flex-end; }
 .pn-next-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-sub); }
@@ -2317,6 +2322,18 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .pn-part-header:hover { background: var(--surface-2); }
 .pn-part-header > svg { color: var(--blue); flex-shrink: 0; }
 .pn-part-number { font-weight: 600; font-size: 13.5px; }
+/* The row's identity, and its only link. It stays text-coloured so the row
+   doesn't read as a wall of blue, and declares itself on hover — the standard
+   "this is the thing to click" affordance. */
+.pn-part-link { color: var(--text); text-decoration: none; }
+.pn-part-link:hover { color: var(--blue); text-decoration: underline; }
+.pn-part-link:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 3px; }
+/* A whole row that navigates (the flat table, which has nothing to expand). */
+.pn-row-link { cursor: pointer; }
+/* Keyboard parity for the row-sized secondary target. */
+.pn-part-header:focus-visible, .sd-program-head:focus-visible {
+  outline: 2px solid var(--blue); outline-offset: -2px;
+}
 .pn-part-count { margin-left: auto; }
 .pn-part-body { border-top: 1px solid var(--border); }
 .pn-op-group { padding: 8px 14px; border-bottom: 1px solid var(--border); }
@@ -2361,6 +2378,16 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .pn-sort-idle { opacity: 0.35; }
 .pn-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .pn-table tbody tr:last-child td { border-bottom: none; }
+/* The header sits BELOW the body tone, not above it: every section header in
+   this module is a raised --surface-2 band, so a raised column header competed
+   with it. Sunken reads as part of the table it labels. */
+.pn-table thead th {
+  background: color-mix(in srgb, var(--surface) 84%, #000);
+  border-bottom: 1px solid var(--border-strong);
+}
+/* Zebra — deliberately faint. A 14-column row is hard to track across, and the
+   job here is to keep your eye on one row, not to draw stripes. */
+.pn-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--surface-2) 40%, var(--surface)); }
 .pn-table tbody tr:hover { background: var(--surface-2); }
 .pn-row-editing td { background: color-mix(in srgb, var(--amber) 6%, transparent); }
 
@@ -6115,6 +6142,30 @@ input.sf-ref-num { text-align: right; }
 /* Tool list / sequence tables — numeric columns in the mono face, as measured
    data (same rule as every other number in the app). */
 .sd-table td { white-space: nowrap; }
+/* Click-to-select rows (see useRowSelection). user-select:none because a
+   shift-click on a text table otherwise drags a blue text highlight across it,
+   which reads as the selection and isn't. The ProShop link keeps its pointer —
+   it is the one cell that navigates rather than selects. */
+.sd-table tbody tr.sd-row-pick { cursor: default; user-select: none; }
+.sd-table tbody tr.sd-row-pick a { cursor: pointer; user-select: text; }
+.sd-table tbody tr.sd-row-selected,
+.sd-table tbody tr.sd-row-selected:hover {
+  background: color-mix(in srgb, var(--blue) 16%, transparent);
+}
+.sd-table tbody tr.sd-row-selected td { border-bottom-color: color-mix(in srgb, var(--blue) 30%, transparent); }
+/* The counter on Print selected. */
+.sd-sel-count {
+  display: inline-block; min-width: 16px; text-align: center;
+  font-family: var(--font-mono); font-size: 10.5px; line-height: 1.5;
+  padding: 0 4px; margin-left: 4px; border-radius: 999px;
+  background: color-mix(in srgb, #000 22%, transparent);
+}
+/* The header may run to two lines so a long label (H Offset #, Init D Offset)
+   stops dictating its column's width — the cells below stay on one line, so
+   only the heading wraps. Bottom-aligned so a one-line and a two-line heading
+   sit on the same baseline. */
+.sd-table th { white-space: normal; line-height: 1.25; vertical-align: bottom; }
+.sd-table th.sd-th-narrow { max-width: 68px; }
 .sd-table .sd-num { font-family: var(--font-mono); font-size: 12px; }
 .sd-table .sd-op { font-weight: 600; }
 .sd-seq {
@@ -6122,6 +6173,14 @@ input.sf-ref-num { text-align: right; }
 }
 .sd-holder { display: inline-flex; align-items: center; gap: 5px; }
 .sd-holder-unknown { color: var(--text-sub); display: inline-flex; }
+
+/* The footer toggle that reveals the .sd-flag markers below. Default hidden;
+   disabled (and relabelled) when no row disagrees, so the control's state is
+   always an answer rather than an unread switch. */
+.sd-file-foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+.sd-file-toggle { font-size: 11.5px; color: var(--text-sub); }
+.sd-file-toggle:not(:disabled):hover { color: var(--text); }
+.sd-file-toggle:disabled { opacity: 0.45; cursor: default; }
 
 /* A location the CSV and the library disagree about. Shown, never resolved —
    the CSV is what the program was proven with. */
@@ -6153,6 +6212,47 @@ input.sf-ref-num { text-align: right; }
 .sd-blocker-list { margin: 6px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
 .sd-blocker-list li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
 .pn-import-drop.dragging { border-color: var(--blue); border-style: solid; color: var(--text); background: var(--blue-tint); }
+
+/* ── Parts module: making a section read as a section ───────────────────────
+   The page ground (--bg #383838) is LIGHTER than a card (--surface #2a2a2a),
+   so a card is a recessed well rather than a raised tile. Two of those stacked
+   with no header treatment ran together — a section head looked like one more
+   table row until you read it. Four tones now separate them, lightest at the
+   top of the hierarchy:
+
+     routing head   --surface-3   "one way of making this part"
+     section head   --surface-2   a program, or the all-tools list
+     body rows      --surface     + a faint zebra
+     column header  sunken        below the body, so it can't rival a head
+
+   Plus a real edge on the card (a stronger border and a shadow), and more air
+   between siblings — the cheapest separation there is. */
+.pn-part-card, .sd-routing {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+.pn-grouped { gap: 14px; }
+
+/* The head band. Bordered on the bottom only when something is open below it,
+   otherwise a collapsed card shows a hairline against nothing. */
+.pn-part-header, .sd-program-head {
+  background: var(--surface-2);
+}
+.pn-part-header:hover, .sd-program-head:hover {
+  background: color-mix(in srgb, var(--surface-3) 65%, var(--surface-2));
+}
+.pn-part-body { border-top: 1px solid var(--border-strong); }
+
+/* A routing outranks the programs inside it, so it takes the lighter tone. */
+.sd-routing-head { background: var(--surface-3); border-bottom-color: var(--border-strong); }
+
+/* ⚠️ A table nested in a card must NOT carry its own frame — a bordered,
+   rounded panel inside a bordered, rounded panel is most of what made the
+   boundaries mushy. The standalone table on /parts keeps its frame. */
+.pn-part-body .pn-table-wrap {
+  border: none; border-radius: 0; background: transparent;
+}
+.pn-part-body .sd-file-foot { padding: 0 12px 10px; margin-top: 6px; }
 
 /* A routing — one way of making a part. Groups the operations under it. */
 .sd-routing { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
