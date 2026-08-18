@@ -1,0 +1,288 @@
+{
+    "data": [
+        {
+            "BMC": "hss",
+            "description": "Blum TC52/TC62 Styli 3mm x 50mm",
+            "expressions": {
+                "tool_bodyLength": "(50+1.5) mm",
+                "tool_description": "'Blum TC52/TC62 Styli 3mm x 50mm'",
+                "tool_diameter": "3. mm",
+                "tool_number": "99",
+                "tool_shaftDiameter": "2. mm"
+            },
+            "geometry": {
+                "CSP": false,
+                "DC": 3,
+                "HAND": true,
+                "LB": 51.5,
+                "LCF": 6,
+                "NOF": 0,
+                "NT": 1,
+                "OAL": 51.5,
+                "RE": 1.5,
+                "SFDM": 2,
+                "TA": 0,
+                "TP": 0,
+                "assemblyGaugeLength": 136.63,
+                "shoulder-length": 6,
+                "thread-profile-angle": 60,
+                "tip-diameter": 0,
+                "tip-length": 0,
+                "tip-offset": 0
+            },
+            "guid": "fed68c3e-674d-4ea1-8d49-f920c9eb2cbb",
+            "holder": {
+                "description": "Blum TC52/TC62 with BT30 - BTH 25",
+                "gaugeLength": 85.13,
+                "guid": "313010b9-22d3-4df9-94ca-bf0b3b25a48d",
+                "product-id": "TC52 (142174); TC62 (142892)",
+                "product-link": "",
+                "segments": [
+                    {
+                        "height": 0.2,
+                        "lower-diameter": 7.035,
+                        "upper-diameter": 7.435
+                    },
+                    {
+                        "height": 0.2,
+                        "lower-diameter": 7.515,
+                        "upper-diameter": 7.59
+                    },
+                    {
+                        "height": 0.26,
+                        "lower-diameter": 7.59,
+                        "upper-diameter": 7.68
+                    },
+                    {
+                        "height": 0.26,
+                        "lower-diameter": 7.68,
+                        "upper-diameter": 7.68
+                    },
+                    {
+                        "height": 0.07,
+                        "lower-diameter": 7.68,
+                        "upper-diameter": 7.593
+                    },
+                    {
+                        "height": 1.24,
+                        "lower-diameter": 8.535,
+                        "upper-diameter": 11.015
+                    },
+                    {
+                        "height": 0.98,
+                        "lower-diameter": 11.015,
+                        "upper-diameter": 11.02
+                    },
+                    {
+                        "height": 0.22,
+                        "lower-diameter": 25.035,
+                        "upper-diameter": 25.582
+                    },
+                    {
+                        "height": 0.36,
+                        "lower-diameter": 25.582,
+                        "upper-diameter": 25.917
+                    },
+                    {
+                        "height": 0.14,
+                        "lower-diameter": 36.631,
+                        "upper-diameter": 36.871
+                    },
+                    {
+                        "height": 0.12,
+                        "lower-diameter": 36.913,
+                        "upper-diameter": 37.025
+                    },
+                    {
+                        "height": 0.28,
+                        "lower-diameter": 37.025,
+                        "upper-diameter": 37.286
+                    },
+                    {
+                        "height": 0.09,
+                        "lower-diameter": 37.407,
+                        "upper-diameter": 37.491
+                    },
+                    {
+                        "height": 0.16,
+                        "lower-diameter": 37.491,
+                        "upper-diameter": 37.64
+                    },
+                    {
+                        "height": 1.61,
+                        "lower-diameter": 37.64,
+                        "upper-diameter": 39.142
+                    },
+                    {
+                        "height": 0.15,
+                        "lower-diameter": 39.142,
+                        "upper-diameter": 39.282
+                    },
+                    {
+                        "height": 0.45,
+                        "lower-diameter": 39.282,
+                        "upper-diameter": 39.7
+                    },
+                    {
+                        "height": 0.23,
+                        "lower-diameter": 39.7,
+                        "upper-diameter": 39.698
+                    },
+                    {
+                        "height": 0.17,
+                        "lower-diameter": 39.698,
+                        "upper-diameter": 39.584
+                    },
+                    {
+                        "height": 0.43,
+                        "lower-diameter": 39.584,
+                        "upper-diameter": 39.72
+                    },
+                    {
+                        "height": 11.18,
+                        "lower-diameter": 39.72,
+                        "upper-diameter": 39.72
+                    },
+                    {
+                        "height": 1.55,
+                        "lower-diameter": 39.97,
+                        "upper-diameter": 39.97
+                    },
+                    {
+                        "height": 0.14,
+                        "lower-diameter": 39.44,
+                        "upper-diameter": 39.72
+                    },
+                    {
+                        "height": 11.7,
+                        "lower-diameter": 39.72,
+                        "upper-diameter": 39.72
+                    },
+                    {
+                        "height": 0.14,
+                        "lower-diameter": 39.72,
+                        "upper-diameter": 39.44
+                    },
+                    {
+                        "height": 24.65,
+                        "lower-diameter": 40.02,
+                        "upper-diameter": 40.02
+                    },
+                    {
+                        "height": 0.09,
+                        "lower-diameter": 39.99,
+                        "upper-diameter": 40.17
+                    },
+                    {
+                        "height": 0.45,
+                        "lower-diameter": 40.17,
+                        "upper-diameter": 40.17
+                    },
+                    {
+                        "height": 0.52,
+                        "lower-diameter": 40.169,
+                        "upper-diameter": 40.118
+                    },
+                    {
+                        "height": 0.59,
+                        "lower-diameter": 40.115,
+                        "upper-diameter": 40.092
+                    },
+                    {
+                        "height": 0.1,
+                        "lower-diameter": 40.092,
+                        "upper-diameter": 40.092
+                    },
+                    {
+                        "height": 0.34,
+                        "lower-diameter": 40.092,
+                        "upper-diameter": 40.098
+                    },
+                    {
+                        "height": 1.45,
+                        "lower-diameter": 40.102,
+                        "upper-diameter": 40.17
+                    },
+                    {
+                        "height": 0.68,
+                        "lower-diameter": 40.17,
+                        "upper-diameter": 40.17
+                    },
+                    {
+                        "height": 0.14,
+                        "lower-diameter": 40.07,
+                        "upper-diameter": 39.79
+                    },
+                    {
+                        "height": 1.99,
+                        "lower-diameter": 25.02,
+                        "upper-diameter": 25.02
+                    },
+                    {
+                        "height": 2.09,
+                        "lower-diameter": 46.02,
+                        "upper-diameter": 46.02
+                    },
+                    {
+                        "height": 2.26,
+                        "lower-diameter": 46.02,
+                        "upper-diameter": 38.055
+                    },
+                    {
+                        "height": 4,
+                        "lower-diameter": 38.02,
+                        "upper-diameter": 38.02
+                    },
+                    {
+                        "height": 2.17,
+                        "lower-diameter": 38.055,
+                        "upper-diameter": 46.02
+                    },
+                    {
+                        "height": 9.29,
+                        "lower-diameter": 46.02,
+                        "upper-diameter": 46.02
+                    },
+                    {
+                        "height": 1.99,
+                        "lower-diameter": 30.176,
+                        "upper-diameter": 30.176
+                    }
+                ],
+                "type": "holder",
+                "unit": "millimeters",
+                "vendor": "Blum"
+            },
+            "last_modified": 1787069497311,
+            "post-process": {
+                "break-control": false,
+                "comment": "",
+                "diameter-offset": 99,
+                "length-offset": 99,
+                "live": false,
+                "manual-tool-change": false,
+                "number": 99,
+                "turret": 0
+            },
+            "product-id": "TC52 (142174); TC62 (142892)",
+            "product-link": "https://www.blum-novotest.com/in/products/measuring-components/workpiece-probes/tc50-tc60/",
+            "reference_guid": "{00000000-0000-0000-0000-000000000001}",
+            "start-values": {
+                "presets": [
+                    {
+                        "description": "",
+                        "guid": "12d2e99e-d633-47ef-aa20-ef73aaf9fc4d",
+                        "name": "Default preset",
+                        "v_f_leadIn": 1000,
+                        "v_f_link": 3000,
+                        "v_f_measure": 102
+                    }
+                ]
+            },
+            "type": "probe",
+            "unit": "millimeters",
+            "vendor": "Blum"
+        }
+    ],
+    "version": 36
+}
