@@ -264,3 +264,33 @@ describe('OP badges carry the same colour on every screen', () => {
     expect(html).toContain('>OP70<');
   });
 });
+
+// ── The all-tools header names its programs ──────────────────────────────────
+describe('the all-tools list shows which programs it is made of', () => {
+  it('renders a chip per program with a detail, badge and OP together', () => {
+    // The pooled list reads as one thing; without this it hides that half of it
+    // could be from a posted file Drive has already moved on from.
+    const html = render(
+      <Routes><Route path="/parts/:id" element={<PartDetailPage />} /></Routes>, '/parts/pt1');
+    expect(html).toContain('sd-alltools-progs');
+    expect(html).toContain('sd-prog-chip');
+    // op60 is the only operation on this part with a stored sequence detail.
+    const chips = html.match(/class="sd-prog-chip"/g) || [];
+    expect(chips).toHaveLength(1);
+  });
+
+  it('does not render the strip on a part whose programs have no detail', () => {
+    const html = render(
+      <Routes><Route path="/parts/:id" element={<PartDetailPage />} /></Routes>, '/parts/pt2');
+    expect(html).not.toContain('sd-alltools-progs');
+  });
+
+  it('leaves Print all labels unmarked when nothing is out of date', () => {
+    // Drive isn't configured in this fixture, so no program can be stale — the
+    // warning styling must not appear on its own.
+    const html = render(
+      <Routes><Route path="/parts/:id" element={<PartDetailPage />} /></Routes>, '/parts/pt1');
+    expect(html).toContain('Print all labels');
+    expect(html).not.toContain('sd-print-stale');
+  });
+});
