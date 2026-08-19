@@ -191,9 +191,24 @@ export function inchesAutoFit(winDoc, root) {
 // Open a print window holding one page per label and fire the print dialog.
 // Returns false when the browser blocked the popup, so the caller can say so
 // rather than leaving the user staring at nothing.
-export function printToolTags(list, { autoPrint = true } = {}) {
-  if (!list || list.length === 0) return false;
-  const w = window.open('', '_blank');
+// Open the print window NOW, to be filled in later.
+//
+// ⚠️ A popup only opens while the browser still considers itself inside the
+// user's click. Anything awaited first — re-checking Drive, pulling a newer
+// posted file — ends that, and window.open is then blocked. So a caller that
+// has async work to do opens the window here, in the click handler, and hands
+// it to printToolTags once the labels are ready. Without this, guarding against
+// stale labels would just trade one broken print for another.
+export function openTagWindow() {
+  return window.open('', '_blank');
+}
+
+export function printToolTags(list, { autoPrint = true, win = null } = {}) {
+  const empty = !list || list.length === 0;
+  // A window we were handed has nothing to show — close it rather than leaving
+  // a blank tab behind.
+  if (empty) { if (win) win.close(); return false; }
+  const w = win || window.open('', '_blank');
   if (!w) return false;
 
   const css = tagCSS();

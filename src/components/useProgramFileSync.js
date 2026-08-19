@@ -74,30 +74,61 @@ export default function useProgramFileSync({ kind = SEQUENCE_CSV, enabled = true
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
   }, [active, refresh]);
 
-  // The status for one operation, evaluated live against the current listing and
-  // the current stored detail — so pulling a file in updates the indicator with
-  // no re-poll, and correcting something elsewhere is reflected immediately.
-  const statusFor = useCallback((operation) => {
-    if (!configured) return { state: 'no_folders' };
-    if (!googleAuthenticated) return { state: 'no_drive' };
-    if (state.phase === 'idle' || state.phase === 'checking') return { state: 'checking' };
-    if (state.phase === 'error') return { state: 'error', message: state.errors[0]?.message || 'Check failed' };
-
+  // What one listing says about one operation. Shared by the live indicator and
+  // by the print-time re-check, so the two can never disagree about what
+  // "out of date" means.
+  const evaluate = useCallback((operation, listings, errors) => {
     const detail = (programDetails?.details || []).find(d => d.operation_id === operation.id) || null;
     const expected = expectedFolderFor(operation, folders);
     const result = evaluateProgramFile({
       detail,
-      candidates: candidatesFor(operation.program_number, folders, state.listings, kind),
+      candidates: candidatesFor(operation.program_number, folders, listings, kind),
       expectedFolderId: expected?.folderId || null,
       foldersConfigured: folders.length,
     });
     // A folder that failed to list can't say a file isn't there — it can only
     // say it didn't look. Report that rather than "missing".
-    if (result.state === 'missing' && state.errors.length > 0) {
-      return { ...result, state: 'error', message: `Couldn't read ${state.errors.length} folder${state.errors.length !== 1 ? 's' : ''}: ${state.errors[0].message}` };
+    if (result.state === 'missing' && errors.length > 0) {
+      return { ...result, state: 'error', message: `Couldn't read ${errors.length} folder${errors.length !== 1 ? 's' : ''}: ${errors[0].message}` };
     }
     return result;
-  }, [configured, googleAuthenticated, state, programDetails, folders, kind]);
+  }, [programDetails, folders, kind]);
 
-  return { ...state, folders, configured, active, refresh, statusFor };
+  // The status for one operation, evaluated live against the current listing and
+  // the current stored detail — so pulling a file in updates the indicator with
+  // no re-poll, and correcting something elsewhere is reflected immediately.
+  //
+  // ⚠️ A RE-CHECK KEEPS THE LAST KNOWN ANSWER. Reporting `checking` on every
+  // refresh threw the previous result away, and that is not a cosmetic flicker:
+  // the print guard reads these states, so during a background poll every
+  // program briefly looked fine, the amber warning dropped off the print button,
+  // and a click in that window printed labels for a setup Drive had already
+  // moved on from. A file does not become unknown just because we are asking
+  // about it again — `checking` is only honest before the FIRST answer.
+  const statusFor = useCallback((operation) => {
+    if (!configured) return { state: 'no_folders' };
+    if (!googleAuthenticated) return { state: 'no_drive' };
+    if (!state.checkedAt) {
+      if (state.phase === 'error') return { state: 'error', message: state.errors[0]?.message || 'Check failed' };
+      return { state: 'checking' };
+    }
+    return evaluate(operation, state.listings, state.errors);
+  }, [configured, googleAuthenticated, state, evaluate]);
+
+  // Force a check NOW and hand back a status function bound to what it found.
+  //
+  // ⚠️ Deliberately bypasses the in-flight guard and does NOT read component
+  // state: a caller that is about to print needs the answer for the file as it
+  // is at this moment, not whatever a poll left behind minutes ago. Returns null
+  // when there is nothing to check against (no folders, or Drive not connected).
+  const checkNow = useCallback(async () => {
+    if (!active) return null;
+    const { listings, errors } = await listPostedFolders();
+    if (alive.current) {
+      setState({ phase: 'ready', listings, errors, checkedAt: new Date().toISOString() });
+    }
+    return { listings, errors, statusFor: (op) => evaluate(op, listings, errors) };
+  }, [active, listPostedFolders, evaluate]);
+
+  return { ...state, folders, configured, active, refresh, checkNow, statusFor };
 }
