@@ -33,9 +33,19 @@ export default function useProgramFileSync({ kind = SEQUENCE_CSV, enabled = true
 
   // Guards a refresh triggered while one is already in flight (the interval and
   // a visibility change can land together), and a setState after unmount.
+  //
+  // ⚠️ `alive` is set back to TRUE on mount, not just false on unmount. React
+  // StrictMode mounts, unmounts and remounts every component in development —
+  // so a flag only ever cleared stays cleared through the remount, every
+  // setState is skipped, and the indicator sits on its spinner forever. That
+  // reads as a completely broken feature, and only in dev, which is exactly
+  // where it would be seen first.
   const inFlight = useRef(false);
   const alive = useRef(true);
-  useEffect(() => () => { alive.current = false; }, []);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
 
   const refresh = useCallback(async () => {
     if (!active || inFlight.current) return;

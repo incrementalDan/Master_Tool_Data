@@ -47,6 +47,36 @@ describe('machineFolders — folder-scoped, not machine-scoped', () => {
     expect(folders[0].machines).toEqual(['Brother M300X3', 'Second M300']);
   });
 
+  it('⚠️ remembers EVERY machine on a shared folder, not just the first', () => {
+    // Keeping only the first machine's id silently broke the shared-folder case
+    // the shop actually has: an operation on the SECOND machine matched no
+    // folder, so it was treated as having no expected folder and a file sitting
+    // under an unrelated machine could never be flagged as being in the wrong
+    // one — the feature quietly doing nothing rather than failing.
+    const folders = machineFolders({ machines: [M300, R650, SHARED] });
+    expect(folders[0].machineIds).toEqual(['m-300', 'm-2nd']);
+
+    const viaFirst = expectedFolderFor({ machine_id: 'm-300' }, folders);
+    const viaSecond = expectedFolderFor({ machine_id: 'm-2nd' }, folders);
+    expect(viaSecond).toBe(viaFirst);
+    expect(viaSecond.folderId).toBe('fld-300');
+  });
+
+  it('still flags the wrong folder for an op on the second machine of a pair', () => {
+    const folders = machineFolders({ machines: [M300, SHARED, R650] });
+    const listings = new Map([
+      ['fld-300', []],
+      ['fld-650', [file('O1218.csv', '2026-08-10T10:51:00Z')]],
+    ]);
+    const r = evaluateProgramFile({
+      candidates: candidatesFor(1218, folders, listings),
+      expectedFolderId: expectedFolderFor({ machine_id: 'm-2nd' }, folders).folderId,
+      foldersConfigured: folders.length,
+    });
+    expect(r.state).toBe('stale');
+    expect(r.wrongFolder).toBe(true);
+  });
+
   it('skips a machine with no folder configured rather than inventing one', () => {
     expect(machineFolders({ machines: [NOFOLDER] })).toEqual([]);
   });

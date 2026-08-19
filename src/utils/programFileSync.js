@@ -65,26 +65,30 @@ export function fileMatchesProgram(file, programNumber, kind = SEQUENCE_CSV) {
 // the machine only decides SEARCH ORDER and what the indicator says; it never
 // decides whether a file counts.
 export function machineFolders(shopSettings) {
-  const seen = new Set();
-  const out = [];
+  const byFolder = new Map();
   for (const m of shopSettings?.machines || []) {
     const folderId = String(m.program_folder_id || '').trim();
     if (!folderId) continue;
-    if (seen.has(folderId)) {
-      // Two machines, one folder: keep the first, but remember every machine
-      // that points at it so "found in the M300 folder" can name them both.
-      out.find(f => f.folderId === folderId).machines.push(m.model || 'Machine');
+    // ⚠️ EVERY machine pointing at a folder is remembered, not just the first.
+    // Keeping only one machine's id silently broke the shared-folder case the
+    // shop actually has: an operation on the SECOND machine matched no folder,
+    // so it was treated as having no expected folder at all and a file sitting
+    // under an unrelated machine could never be flagged.
+    const existing = byFolder.get(folderId);
+    if (existing) {
+      existing.machineIds.push(m.id);
+      existing.machines.push(m.model || 'Machine');
+      if (!existing.folderName) existing.folderName = String(m.program_folder_name || '').trim();
       continue;
     }
-    seen.add(folderId);
-    out.push({
+    byFolder.set(folderId, {
       folderId,
       folderName: String(m.program_folder_name || '').trim(),
-      machineId: m.id,
+      machineIds: [m.id],
       machines: [m.model || 'Machine'],
     });
   }
-  return out;
+  return [...byFolder.values()];
 }
 
 // The folder we EXPECT this program's file in — its operation's machine's.
@@ -94,7 +98,7 @@ export function machineFolders(shopSettings) {
 export function expectedFolderFor(operation, folders) {
   const id = operation?.machine_id;
   if (!id) return null;
-  return folders.find(f => f.machineId === id) || null;
+  return (folders || []).find(f => f.machineIds.includes(id)) || null;
 }
 
 // Search order: the operation's own machine first, then everything else. The

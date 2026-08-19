@@ -376,7 +376,7 @@ export default function Settings() {
     setDefaultMachineId(shopSettings?.default_machine_id || null);
     setLocDraft(shopSettings?.location_config || null);
     setDefaultUnitState(shopSettings?.default_units || getDefaultUnit());
-    setExpandedMachineId(null); setAddingMachine(false); setMachineDeleteId(null);
+    setExpandedMachineId(null); setAddingMachine(false); setMachineDeleteId(null); setFolderPickMachineId(null);
     setIdlePrompt(false);
   };
 
@@ -427,12 +427,18 @@ export default function Settings() {
   // response it cancels (discards) so an abandoned edit session doesn't sit open.
   const IDLE_MS = 3 * 60 * 1000;   // 3 min of no edits → prompt
   const IDLE_GRACE_MS = 60 * 1000; // then 60s to respond → auto-cancel
+  // ⚠️ The timer resets on a DRAFT CHANGE, so any interaction the page can't see
+  // in `draftSig` looks like an idle user. Browsing Drive in the folder picker is
+  // exactly that: it is a modal over this page whose state lives elsewhere, and
+  // finding the right folder easily takes longer than the grace period. Left
+  // running, the prompt would open BEHIND the picker and silently discard the
+  // whole draft while the user was mid-task.
   useEffect(() => {
-    if (!dirty) { setIdlePrompt(false); return; }
+    if (!dirty || folderPickMachineId) { setIdlePrompt(false); return; }
     setIdlePrompt(false);
     const t = setTimeout(() => setIdlePrompt(true), IDLE_MS);
     return () => clearTimeout(t);
-  }, [draftSig, dirty, idleKick]);
+  }, [draftSig, dirty, idleKick, folderPickMachineId]);
   useEffect(() => {
     if (!idlePrompt) return;
     const t = setTimeout(() => { setIdlePrompt(false); cancelAll(); }, IDLE_GRACE_MS);

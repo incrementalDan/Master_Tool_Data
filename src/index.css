@@ -6203,16 +6203,29 @@ input.sf-ref-num { text-align: right; }
 .sc-chip.removed { color: var(--red);   border-color: color-mix(in srgb, var(--red) 40%, transparent); }
 
 .sc-table-wrap { max-height: 62vh; overflow: auto; margin-top: 12px; }
-.sc-table th { position: sticky; top: 0; z-index: 1; background: var(--surface-2); }
+/* Scoped to `thead th` so `.pn-table thead th`'s opaque background applies —
+   a sticky header over a transparent one shows the rows sliding through it. */
+.sc-table thead th { position: sticky; top: 0; z-index: 1; }
 
 /* A whole-row tint says what happened to the ROW; the cell highlight below says
    what changed inside it. Kept low-contrast so a file with many edits reads as
-   a list rather than a wall of colour. */
-.sc-row.sc-changed { background: color-mix(in srgb, var(--amber) 7%, transparent); }
-.sc-row.sc-added   { background: color-mix(in srgb, var(--green) 8%, transparent); }
+   a list rather than a wall of colour.
+   ⚠️ Written to out-specify `.pn-table tbody tr:nth-child(even)`, which sets its
+   own zebra background — matching that selector's weight would leave the status
+   tint showing on odd rows only, i.e. half the findings invisible. */
+.sc-table tbody tr.sc-row.sc-changed { background: color-mix(in srgb, var(--amber) 9%, transparent); }
+.sc-table tbody tr.sc-row.sc-added   { background: color-mix(in srgb, var(--green) 10%, transparent); }
 /* A removed operation is shown with its OLD values, dimmed — it is not in the
    newer version at all, so it must not read as current. */
-.sc-row.sc-removed { background: color-mix(in srgb, var(--red) 8%, transparent); opacity: 0.72; }
+.sc-table tbody tr.sc-row.sc-removed { background: color-mix(in srgb, var(--red) 10%, transparent); opacity: 0.72; }
+
+/* ⚠️ `.sd-table td` is nowrap, which is right for a single-version table but
+   not here: a changed cell carries BOTH values, so the Sequence Description and
+   Holder columns would push the table into a long horizontal scroll and the
+   changed cell off-screen. Wrapping keeps the finding where it can be seen. */
+.sc-table td, .sc-table th { white-space: normal; }
+.sc-table td { vertical-align: top; }
+.sc-table td:first-child { white-space: nowrap; }
 
 .sc-pair { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .sc-arrow { color: var(--text-sub); flex-shrink: 0; }

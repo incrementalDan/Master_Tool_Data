@@ -3,7 +3,7 @@ import { X, GitCompare, AlertTriangle, CheckCircle2, ArrowRight } from 'lucide-r
 import { useApp } from '../context/AppContext.jsx';
 import { parseSequenceCsv } from '../utils/sequenceDetail.js';
 import { formatProgramNumber } from '../utils/parts.js';
-import { buildVersionList, versionLabel, defaultPair } from '../utils/programVersions.js';
+import { versionLabel, defaultPair, canCompare } from '../utils/programVersions.js';
 import { alignSequenceRows, compareSummary, COMPARE_FIELDS } from '../utils/sequenceCompare.js';
 
 // Compare two posted versions of one program's Sequence Detail.
@@ -63,8 +63,10 @@ export default function SequenceCompareModal({ operation, detail, pendingFile = 
         const pair = defaultPair(list);
         setLeftId(pair.left);
         setRightId(pair.right);
-        setPhase(list.length >= 2 ? 'ready' : 'error');
-        if (list.length < 2) setError('There is only one version of this program stored, so there is nothing to compare it against yet.');
+        setPhase(canCompare(list) ? 'ready' : 'error');
+        if (!canCompare(list)) {
+          setError('There is only one version of this program stored, so there is nothing to compare it against yet. A second version appears once the program is re-posted and a new file is taken in.');
+        }
       } catch (err) {
         if (!cancelled) { setPhase('error'); setError(err.message); }
       }
@@ -122,7 +124,7 @@ export default function SequenceCompareModal({ operation, detail, pendingFile = 
 
   return (
     <div className="modal-backdrop" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="modal sc-modal">
+      <div className="modal pn-modal sc-modal">
         <div className="pn-modal-head">
           <GitCompare size={16} style={{ color: 'var(--blue)' }} />
           <span className="modal-title" style={{ margin: 0 }}>
@@ -132,7 +134,7 @@ export default function SequenceCompareModal({ operation, detail, pendingFile = 
         </div>
 
         <div className="pn-modal-body">
-          {versions && versions.length >= 2 && (
+          {canCompare(versions) && (
             <div className="sc-pickers">
               <div>
                 <label className="field-label">Older</label>
