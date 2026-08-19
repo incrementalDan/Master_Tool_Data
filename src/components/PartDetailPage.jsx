@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, UploadCloud, Download, Printer, ListOrdered, Wrench, Plus, Pencil, Trash2,
-  CheckCircle2, CircleDashed, ChevronDown, ChevronRight, Package,
+  CheckCircle2, CircleDashed, ChevronDown, ChevronRight, Package, GitCompare,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import {
@@ -25,6 +25,7 @@ import SequenceDetailTable from './SequenceDetailTable.jsx';
 import SequenceUploadModal from './SequenceUploadModal.jsx';
 import useProgramFileSync from './useProgramFileSync.js';
 import ProgramFileStatus, { AutoImportedMark } from './ProgramFileStatus.jsx';
+import SequenceCompareModal from './SequenceCompareModal.jsx';
 import { labelRows } from '../utils/toolLabels.js';
 import { printToolTags } from '../utils/labelPrint.js';
 
@@ -67,7 +68,7 @@ function EditControls({ label, onEdit, onDelete }) {
 
 function OperationCard({
   operation, part, detail, machines, materials, canEdit, selection,
-  fileStatus, syncing, onSync,
+  fileStatus, syncing, onSync, onCompare,
   onPrint, onUpload, onProven, onUpdateOperation, onDeleteOperation,
 }) {
   const [open, setOpen] = useState(false);
@@ -170,6 +171,13 @@ function OperationCard({
             <button className="btn btn-ghost btn-sm" onClick={download} title="Download the current posted CSV">
               <Download size={12} />
             </button>
+            {/* Deliberately its own button, never part of the update. Taking an
+                update stays one click that asks nothing; this is the separate
+                "what actually changed?" look, and it only writes nothing. */}
+            <button className="btn btn-ghost btn-sm" onClick={onCompare}
+              title="Compare this version against another posted version — reference only, nothing is changed">
+              <GitCompare size={12} />
+            </button>
             {/* Appears only with a selection, to the LEFT of Print all, so
                 "print all" never quietly changes meaning under the cursor. */}
             {selectedHere.length > 0 && (
@@ -266,6 +274,8 @@ export default function PartDetailPage() {
   const [confirmDeleteRouting, setConfirmDeleteRouting] = useState(null);
   // Which operation is mid-pull, so its indicator spins rather than the page.
   const [syncingOp, setSyncingOp] = useState(null);
+  // The operation whose version compare is open, if any.
+  const [comparing, setComparing] = useState(null);
 
   // ONE listing per posted-files folder, shared by every operation on this page
   // — see useProgramFileSync. Polls only while the tab is visible.
@@ -512,6 +522,7 @@ export default function PartDetailPage() {
                   fileStatus={fileSync.statusFor(op)}
                   syncing={syncingOp === op.id}
                   onSync={() => syncProgram(op, fileSync.statusFor(op))}
+                  onCompare={() => setComparing(op.id)}
                   onPrint={printProgram}
                   onUpload={() => setUploading(true)}
                   onUpdateOperation={updateOperation}
@@ -548,6 +559,23 @@ export default function PartDetailPage() {
         <AddProgramModal partId={part.id} routingId={addRoutingId}
           onClose={() => { setAdding(false); setAddRoutingId(null); }} />
       )}
+
+      {comparing && (() => {
+        const op = allOperations.find(o => o.id === comparing);
+        const status = op ? fileSync.statusFor(op) : null;
+        if (!op) return null;
+        return (
+          <SequenceCompareModal
+            operation={op}
+            detail={detailByOperation.get(op.id) || null}
+            // A newer file sitting in Drive that hasn't been taken yet is
+            // offerable as a side, so "it says it's out of date — what changed?"
+            // is answerable BEFORE the update rather than only after it.
+            pendingFile={status?.state === 'stale' ? status.file : null}
+            onClose={() => setComparing(null)}
+          />
+        );
+      })()}
 
       {uploading && (
         <SequenceUploadModal

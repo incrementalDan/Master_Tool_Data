@@ -1723,6 +1723,9 @@ If you find yourself writing code that "fixes" a CSV value against the library, 
 | `src/utils/toolLabels.js` | `labelFieldsOf`, `labelKey`, `labelRows` — the dedupe rule |
 | `src/utils/labelPrint.js` | `tagCSS` / `tagMarkup` / `inchesAutoFit` / `printToolTags` — the tag layout |
 | `src/utils/programFileSync.js` | Finding a program's posted file in a machine's Drive folder and judging whether ours is stale. Pure — the caller lists, this decides what the listing MEANS |
+| `src/utils/sequenceCompare.js` | Aligning two posted versions row by row — forward-only, bounded lookahead, cell-level changes. Pure |
+| `src/utils/programVersions.js` | Which versions of a program exist, derived from its Drive folder. Inverse of `archiveFileName` |
+| `src/components/SequenceCompareModal.jsx` | The compare dialog: version pickers + one row per aligned operation |
 | `src/components/useProgramFileSync.js` | The poll: one listing per folder, shared by every program on the page; visible-tab only |
 | `src/components/ProgramFileStatus.jsx` | The indicator icon + `AutoImportedMark`. Reusable by file kind |
 | `src/components/DriveFolderPicker.jsx` | The shared Drive folder-browse modal (My Drive + shared drives) |
@@ -1819,6 +1822,24 @@ Each machine carries the Drive folder its posted files land in — `program_fold
 **Reusable by file KIND, because G-code is next.** `SEQUENCE_CSV` is a descriptor (`ext`, `label`, `numberOf`) threaded through `fileMatchesProgram` / `candidatesFor` / `useProgramFileSync`; the G-code sync is a second descriptor, not a second copy of the search-and-compare logic. The shape of the answer is identical — found / not found / ours is older / couldn't look — only the noun changes. Locked by `utils/programFileSync.test.js`.
 
 **Additive to stored data** — `program_folder_id`/`program_folder_name` on a machine and `source_modified`/`source_file_id`/`auto_imported` on a `program_details` record all default cleanly on records that predate them. Nothing to migrate.
+
+### Comparing two posted versions (reference only)
+
+**Compare** on an operation opens `SequenceCompareModal` — pick two versions of that program's posted file and see what moved. ⚠️ **Deliberately OPT-IN and outside the update workflow**: taking an update stays one click that asks nothing, and this button writes nothing, blocks nothing, and corrects nothing. The CSV-always-wins rule is untouched — comparing two of them changes neither.
+
+**The version list is DERIVED from Drive, not stored** (`utils/programVersions.js`). `program_details.json` keeps only the latest version on purpose, so there is no stored history; what there is, is the program's own `ProgramFiles/{O####}/` folder holding the current file plus every retired version already carrying its posted stamp and proven state in its name. `parseArchiveFileName` is the **inverse of `archiveFileName`** — they live in different modules and a change to either silently empties the list rather than failing, so a round-trip test pins them together. `driveService.listProgramFolderFiles` is **read-only** (never creates a folder — opening a compare must be able to answer "nothing to compare" without leaving an empty folder behind for every program anyone glanced at). ⚠️ The **current** version is identified by the stored `raw_file_id`, never by filename: it deliberately keeps its ORIGINAL name, so a folder legitimately holds a current `O1218.csv` alongside archived `O1218_*` copies and name-matching would pick whichever came first. A **pending** file (newer, in a machine's posted folder, not yet imported) is offerable as a side, so "it says it's out of date — what changed?" is answerable BEFORE taking the update; it is labelled by its Drive **modified time**, never dressed up as a posted stamp, because its real POSTED stamp is inside the file and hasn't been read.
+
+**One row per aligned operation, not two files side by side.** With the columns doubled a side-by-side view is twenty across, and the thing worth seeing is the CELL that moved. A row the other version lacks is a blank half — that is the added/removed line. Compared fields (`COMPARE_FIELDS`): Sequence Description, ProShop Tool #, G-Code T#, Description, Holder, OOH. **Not compared**: Cut Dia, Tip, Location, RTA, Gage — the shop doesn't read them on a version compare.
+
+⚠️ **Seq# is DISPLAYED but never COMPARED.** A sequence number is emitted on tool change, so inserting ONE operation renumbers everything after it; keying on Seq# would make a single insertion light up the rest of the program — the exact failure a compare exists to prevent. The number changing is the *symptom* of an added/removed row, which the alignment reports directly. Locked by a real-fixture test asserting a wholly-renumbered re-post reads as identical.
+
+⚠️ **ORDER IS THE POINT — the alignment is strictly forward-only with a bounded lookahead** (`alignSequenceRows`, `MATCH_WINDOW = 8`). A textbook LCS is order-preserving but will pair a row with its twin far down the file, quietly reporting a **moved toolpath as "unchanged"** and everything between it as inserted. The order of operations is what the machine does, so a move IS the change. Past the window, rows are reported as removed and added where they actually are. Locked by a test asserting a moved operation never comes back `same`.
+
+**Identity is `Sequence Description + ProShop Tool #`** — what the operation is plus what runs it. ⚠️ It deliberately **excludes holder and OOH**, because those are the changes most worth SEEING: if they broke the match, the very thing being looked for would render as an unrelated remove + add instead of a highlighted cell. Inside a replace block, rows are paired positionally only while `rowsRelated` holds (sharing a name **or** a tool); once they stop lining up it stops guessing and emits real removes and adds, rather than claiming an edit that never happened.
+
+⚠️ **A number is compared as a NUMBER.** The post writes `0.70` where an older one wrote `0.7` — the same stick-out, and treating it as a difference would light up every row from a formatting change alone. Storage and display still keep the CSV's own string; this is comparison only.
+
+**Known noise, left deliberately:** `t_description` (the tool's own description) is compared, so renaming a tool in the library lights up every row using it. That is a true difference, and it is the natural first candidate for the later "some differences matter more than others" ranking — which is also where a per-column importance weighting would live.
 
 ### TODO — the BULK pass (Function 2), and the matching rules decided for it
 

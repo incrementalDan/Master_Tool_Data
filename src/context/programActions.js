@@ -20,6 +20,7 @@ import { upsertDetail, detailsOf, buildSequenceImport } from '../utils/sequenceI
 import { formatProgramNumber } from '../utils/parts.js';
 import { postedToIso } from '../utils/sequenceDetail.js';
 import { machineFolders } from '../utils/programFileSync.js';
+import { buildVersionList } from '../utils/programVersions.js';
 
 // Archived name: O1218_20260810-1051_proven.csv — sorts chronologically in
 // Drive, and carries the proven state of the version being retired (which
@@ -249,8 +250,51 @@ export function createProgramActions(ctx) {
     return { ok: true, built, stored };
   };
 
+  // ── Version compare (reference only — see utils/sequenceCompare.js) ────────
+  // The versions available to look at, newest first. Derived from the program's
+  // own Drive folder rather than from stored history: program_details.json keeps
+  // only the latest version on purpose, and the retired files already carry
+  // their posted stamp and proven state in their names.
+  //
+  // ⚠️ Read-only — `listProgramFolderFiles` never creates a folder. Opening a
+  // compare on a program that has none must answer "nothing to compare", not
+  // leave an empty folder behind for every program anyone glanced at.
+  const listProgramVersions = async (detail, pendingFile = null) => {
+    if (demoModeRef.current) {
+      // Demo keeps raw text in memory for the session only — there is no folder
+      // to list, so the current version is all there is.
+      return buildVersionList({ detail, folderFiles: [], pendingFile });
+    }
+    let folderFiles = [];
+    if (detail?.program_number != null) {
+      try {
+        folderFiles = await driveService.listProgramFolderFiles(formatProgramNumber(detail.program_number));
+      } catch {
+        // A folder we cannot read is not a folder with nothing in it, but the
+        // current and pending versions are still perfectly comparable — degrade
+        // to those rather than failing the whole dialog.
+        folderFiles = [];
+      }
+    }
+    return buildVersionList({ detail, folderFiles, pendingFile });
+  };
+
+  // The raw text of one entry from that list. The current version in demo mode
+  // is the in-memory copy; everything else is its Drive file.
+  const fetchVersionText = async (version, detail = null) => {
+    if (!version?.fileId) return null;
+    if (demoModeRef.current && detail && version.kind === 'current') return demoRawText.get(detail.id) ?? null;
+    try {
+      return await driveService.fetchFileText(version.fileId);
+    } catch (err) {
+      if (err?.code === 'NOT_FOUND') return null;
+      throw err;
+    }
+  };
+
   return {
     importSequenceDetail, setProgramProven, fetchSequenceCsv,
     listPostedFolders, importProgramFileFromDrive,
+    listProgramVersions, fetchVersionText,
   };
 }

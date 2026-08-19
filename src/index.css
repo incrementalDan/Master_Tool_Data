@@ -6183,6 +6183,47 @@ input.sf-ref-num { text-align: right; }
   border-color: var(--amber);
 }
 
+/* Sequence Detail version compare (SequenceCompareModal). One row per aligned
+   operation — with the columns doubled a side-by-side view would be twenty
+   across, and the thing worth seeing is the CELL that moved. */
+.sc-modal { max-width: min(1180px, 96vw); width: 100%; }
+.sc-pickers {
+  display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap;
+  padding-bottom: 12px; border-bottom: 1px solid var(--border);
+}
+.sc-summary { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 20px 0 0 auto; }
+.sc-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border); color: var(--text-sub);
+}
+.sc-chip.ok      { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+.sc-chip.changed { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 40%, transparent); }
+.sc-chip.added   { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+.sc-chip.removed { color: var(--red);   border-color: color-mix(in srgb, var(--red) 40%, transparent); }
+
+.sc-table-wrap { max-height: 62vh; overflow: auto; margin-top: 12px; }
+.sc-table th { position: sticky; top: 0; z-index: 1; background: var(--surface-2); }
+
+/* A whole-row tint says what happened to the ROW; the cell highlight below says
+   what changed inside it. Kept low-contrast so a file with many edits reads as
+   a list rather than a wall of colour. */
+.sc-row.sc-changed { background: color-mix(in srgb, var(--amber) 7%, transparent); }
+.sc-row.sc-added   { background: color-mix(in srgb, var(--green) 8%, transparent); }
+/* A removed operation is shown with its OLD values, dimmed — it is not in the
+   newer version at all, so it must not read as current. */
+.sc-row.sc-removed { background: color-mix(in srgb, var(--red) 8%, transparent); opacity: 0.72; }
+
+.sc-pair { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.sc-arrow { color: var(--text-sub); flex-shrink: 0; }
+.sc-val.changed {
+  font-weight: 600; color: var(--text);
+  background: color-mix(in srgb, var(--amber) 22%, transparent);
+  border-radius: 3px; padding: 1px 4px;
+}
+.sc-pair .sc-val:not(.changed) { color: var(--text-sub); text-decoration: line-through; }
+.sc-was { margin-left: 6px; font-size: 10.5px; color: var(--text-sub); }
+
 /* Tool list / sequence tables — numeric columns in the mono face, as measured
    data (same rule as every other number in the app). */
 .sd-table td { white-space: nowrap; }

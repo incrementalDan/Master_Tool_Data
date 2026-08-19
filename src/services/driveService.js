@@ -564,6 +564,27 @@ export async function ensureProgramFolder(folderName) {
   return findOrCreateFolder(rootId, folderName);
 }
 
+// List the files already in a program's folder, WITHOUT creating anything.
+//
+// ⚠️ Read-only on purpose — this backs the version compare, which must be able
+// to answer "there is nothing to compare" without leaving an empty folder behind
+// for every program anyone happened to look at. Returns [] when the program (or
+// the ProgramFiles root) has no folder yet: that is the honest answer, not an
+// error. `ensureProgramFolder` stays the write path.
+export async function listProgramFolderFiles(folderName) {
+  const rootId = localStorage.getItem(PROGRAM_FILES_FOLDER_CACHE_KEY);
+  if (!rootId || !(await folderIsUsable(rootId))) {
+    const parentId = await getMetaParentFolderId();
+    const found = await findFolder(parentId, 'ProgramFiles');
+    if (!found) return [];
+    localStorage.setItem(PROGRAM_FILES_FOLDER_CACHE_KEY, found);
+    const sub = await findFolder(found, folderName);
+    return sub ? listFolderChildren(sub) : [];
+  }
+  const sub = await findFolder(rootId, folderName);
+  return sub ? listFolderChildren(sub) : [];
+}
+
 // Rename a Drive file in place — the file ID, and so every reference to it,
 // survives. Used to archive the previous version of a posted file (the current
 // version always keeps its original name, so "download the current file" is
