@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, UploadCloud, Download, Printer, ListOrdered, Wrench, Plus, Pencil, Trash2,
   CheckCircle2, CircleDashed, ChevronDown, ChevronRight, Package, GitCompare,
@@ -68,15 +68,45 @@ function EditControls({ label, onEdit, onDelete }) {
 
 function OperationCard({
   operation, part, detail, machines, materials, canEdit, selection,
-  fileStatus, syncing, onSync, onCompare,
+  fileStatus, syncing, onSync, onCompare, autoOpen = false,
   onPrint, onUpload, onProven, onUpdateOperation, onDeleteOperation,
 }) {
-  const [open, setOpen] = useState(false);
+  // ⚠️ Seeded from `autoOpen` rather than opened in an effect: arriving from a
+  // program row on the parts list, the card must render open on its FIRST paint.
+  // Opening it afterwards shows a collapsed card for a frame and, worse, means
+  // the scroll below measures a card that is still the wrong height.
+  const [open, setOpen] = useState(autoOpen);
   const [tab, setTab] = useState('tools');
+  const cardRef = useRef(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const { fetchSequenceCsv, notify } = useApp();
+
+  // Arrived here by clicking THIS program on the parts list: open it, show the
+  // tool list, and bring it up the page so the table is what you are looking at
+  // — the point of the shortcut is to land on the tools, not at the top of a
+  // part with a dozen operations to scroll past.
+  //
+  // ⚠️ Two frames of delay, not one: the first commits the expanded body, the
+  // second lets it lay out. Measuring before that puts the card wherever it sat
+  // while collapsed, which on a long part is nowhere near right.
+  useEffect(() => {
+    if (!autoOpen) return;
+    setOpen(true);
+    setTab('tools');
+    let raf2 = 0;
+    const raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(() => {
+        const el = cardRef.current;
+        if (!el) return;
+        const target = el.getBoundingClientRect().top + window.scrollY - window.innerHeight * 0.2;
+        const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+        window.scrollTo({ top: Math.max(0, target), behavior: reduce ? 'auto' : 'smooth' });
+      });
+    });
+    return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
+  }, [autoOpen]);
 
   const rows = useMemo(
     () => (detail?.tools || []).map(t => ({ ...t, operation_id: operation.id })),
@@ -124,7 +154,7 @@ function OperationCard({
   const mat = operationMaterial(operation, part);
 
   return (
-    <div className="pn-part-card sd-program" {...selScope(operation.id)}>
+    <div className="pn-part-card sd-program" ref={cardRef} {...selScope(operation.id)}>
       <div className="sd-program-head" {...disclosureProps(open, () => setOpen(o => !o))}>
         {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         <ProgramNumBadge n={operation.program_number} />
@@ -251,6 +281,11 @@ function OperationCard({
 export default function PartDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  // Set by a program row on the parts list — which program to open on arrival.
+  // Read from navigation state rather than the URL: it is a one-off hint about
+  // how you got here, not part of the page's address.
+  const location = useLocation();
+  const focusOperationId = location.state?.focusOperationId || null;
   const {
     parts: partsFile, saveParts, materials, shopSettings, programDetails, tools,
     setProgramProven, googleAuthenticated, demoMode, user, notify,
@@ -519,6 +554,7 @@ export default function PartDetailPage() {
                   materials={materials}
                   canEdit={canEdit}
                   selection={selection}
+                  autoOpen={op.id === focusOperationId}
                   fileStatus={fileSync.statusFor(op)}
                   syncing={syncingOp === op.id}
                   onSync={() => syncProgram(op, fileSync.statusFor(op))}

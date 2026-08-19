@@ -185,3 +185,50 @@ describe('Where Used is derived from the sequence detail', () => {
     expect(html).toContain('Where Used');
   });
 });
+
+// ── Jumping straight to a program's tool list ────────────────────────────────
+// Clicking a program row on the parts list opens its part AND expands that
+// program, so the tools are what you land on rather than the top of a part with
+// a dozen operations under it.
+describe('opening a part focused on one program', () => {
+  const at = (state) => renderToString(
+    <MemoryRouter initialEntries={[{ pathname: '/parts/pt1', state }]}>
+      <Routes><Route path="/parts/:id" element={<PartDetailPage />} /></Routes>
+    </MemoryRouter>,
+  ).replace(/<!--[^>]*-->/g, '');
+
+  // Whether ONE program card is open, read off the aria state it already
+  // publishes — asserting on rendered text would catch the part-level all-tools
+  // table, which is a different card and always open.
+  const expandedOf = (html, opId) => {
+    const m = html.match(new RegExp(`data-sel-scope="${opId}"><div class="sd-program-head"[^>]*aria-expanded="(true|false)"`));
+    return m ? m[1] : null;
+  };
+
+  it('renders the focused program already expanded, on its tool list', () => {
+    // ⚠️ Asserted on the FIRST paint, which is the point: the card is seeded
+    // open rather than opened in an effect, so there is no collapsed frame and
+    // the scroll that follows measures the real height.
+    const html = at({ focusOperationId: 'op60' });
+    expect(expandedOf(html, 'op60')).toBe('true');
+    expect(html).toContain('Sequence Detail</button>');   // its tab strip rendered
+  });
+
+  it('opens only the program that was clicked', () => {
+    const html = at({ focusOperationId: 'op60' });
+    expect(expandedOf(html, 'op50')).toBe('false');
+    expect(expandedOf(html, 'opInsp')).toBe('false');
+    expect(expandedOf(html, 'opB')).toBe('false');
+  });
+
+  it('leaves every program collapsed when nothing was focused', () => {
+    const html = at(undefined);
+    for (const opId of ['op50', 'op60', 'opInsp', 'opB']) {
+      expect(expandedOf(html, opId)).toBe('false');
+    }
+  });
+
+  it('ignores a focus id that is not on this part', () => {
+    expect(() => at({ focusOperationId: 'opC' })).not.toThrow();
+  });
+});
