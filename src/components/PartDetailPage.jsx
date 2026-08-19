@@ -312,6 +312,8 @@ export default function PartDetailPage() {
   const [syncingOp, setSyncingOp] = useState(null);
   // The operation whose version compare is open, if any.
   const [comparing, setComparing] = useState(null);
+  // True while a print is updating stale programs before it prints.
+  const [printUpdating, setPrintUpdating] = useState(false);
 
   // ONE listing per posted-files folder, shared by every operation on this page
   // — see useProgramFileSync. Polls only while the tab is visible.
@@ -321,13 +323,13 @@ export default function PartDetailPage() {
   // upload runs and honours the SAME blockers, so a file with a tool the library
   // doesn't have is reported and skipped rather than half-stored.
   const syncProgram = async (operation, status) => {
-    if (!status?.file) return;
+    if (!status?.file) return null;
     setSyncingOp(operation.id);
     try {
       const res = await importProgramFileFromDrive(status.file);
       if (!res.ok) {
         notify(`${formatProgramNumber(operation.program_number)} not pulled in — ${res.blockers[0].message}`, 'error', 9000);
-        return;
+        return null;
       }
       notify(
         res.unchanged
@@ -338,8 +340,10 @@ export default function PartDetailPage() {
           : `${formatProgramNumber(operation.program_number)} updated from Drive — ${res.stored.tools.length} tools`,
         'success',
       );
+      return res.stored;
     } catch (err) {
       notify(`Couldn't pull in the posted file: ${err.message}`, 'error', 8000);
+      return null;
     } finally {
       setSyncingOp(null);
     }
@@ -367,13 +371,21 @@ export default function PartDetailPage() {
 
   // The part-level all-tools list: every operation's tools across every
   // routing, so a whole part can be pulled and labelled in one pass.
+  //
+  // ⚠️ Takes the detail map as an ARGUMENT rather than closing over state. The
+  // update-then-print path below needs rows built from the details it has just
+  // fetched — reading the rendered `partRows` there would print the very
+  // version it set out to replace, since React has not re-rendered yet.
+  const rowsFrom = (map) => allOperations.flatMap(op => {
+    const d = map.get(op.id);
+    if (!d) return [];
+    const opLabel = formatOperation(op.op_number);
+    return d.tools.map(t => ({ ...t, operation_id: op.id, op_label: opLabel }));
+  });
+
   const partRows = useMemo(
-    () => allOperations.flatMap(op => {
-      const d = detailByOperation.get(op.id);
-      if (!d) return [];
-      const opLabel = formatOperation(op.op_number);
-      return d.tools.map(t => ({ ...t, operation_id: op.id, op_label: opLabel }));
-    }),
+    () => rowsFrom(detailByOperation),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [allOperations, detailByOperation],
   );
 
@@ -392,22 +404,62 @@ export default function PartDetailPage() {
     );
   }
 
-  const print = (keys) => {
-    const wanted = new Set(keys);
-    const rows = partRows.filter(r => wanted.has(rowKeyOf(r)));
-    if (rows.length === 0) { notify('Nothing selected to print', 'error'); return; }
-    const labels = labelRows(rows, part, toolsById);
+  // `keys` null = every row in `rows`. That distinction matters after an update:
+  // the refreshed program may hold different pockets, so filtering by the keys
+  // captured before it would drop the new rows and keep vanished ones.
+  const printRows = (rows, keys) => {
+    const wanted = keys ? new Set(keys) : null;
+    const chosen = wanted ? rows.filter(r => wanted.has(rowKeyOf(r))) : rows;
+    if (chosen.length === 0) { notify('Nothing to print', 'error'); return; }
+    const labels = labelRows(chosen, part, toolsById);
     // Deliberately reported: a blocked popup looks exactly like a broken button.
     if (!printToolTags(labels)) {
       notify('Your browser blocked the print window — allow popups for this site', 'error', 7000);
     }
   };
 
+  const print = (keys) => printRows(partRows, keys);
   const printProgram = (keys) => print(keys);
 
   const partKeys = partRows.map(rowKeyOf);
   const selectedPartRows = selection.keysIn(PART_SCOPE);
-  const withDetail = allOperations.filter(op => detailByOperation.has(op.id)).length;
+  const opsWithDetail = allOperations.filter(op => detailByOperation.has(op.id));
+  const withDetail = opsWithDetail.length;
+
+  // ── Printing a stale program is the hazard this guards ─────────────────────
+  // The all-tools list pools several programs, so it showed no per-program
+  // status at all — you could print a full set of labels for a setup Drive has
+  // already moved on from, with nothing on screen to say so.
+  const statusByOp = new Map(opsWithDetail.map(op => [op.id, fileSync.statusFor(op)]));
+  const staleOps = opsWithDetail.filter(op => statusByOp.get(op.id).state === 'stale');
+  const staleOpIds = new Set(staleOps.map(op => op.id));
+  // A row key is `${operation_id}:${t_num}` — the op id is everything before the
+  // LAST colon, so an id containing one could never split it wrongly.
+  const opIdOfKey = (k) => k.slice(0, k.lastIndexOf(':'));
+  const selectedStale = [...new Set(selectedPartRows.map(opIdOfKey))].filter(id => staleOpIds.has(id));
+
+  // Update every stale program, THEN print — from the details just fetched.
+  const updateThenPrint = async (ops, keys) => {
+    setPrintUpdating(true);
+    try {
+      const fresh = new Map(detailByOperation);
+      for (const op of ops) {
+        const stored = await syncProgram(op, statusByOp.get(op.id));
+        // A program that could not be pulled in (a blocker) keeps its stored
+        // version; it was reported, and printing the rest is still useful.
+        if (stored) fresh.set(op.id, stored);
+      }
+      // A selected print keeps its key filter: the selection is what was asked
+      // for. A pocket that vanished in the new version simply won't print, and a
+      // pocket that appeared isn't selected — printing either would be inventing
+      // a choice the user didn't make.
+      printRows(rowsFrom(fresh), keys);
+    } finally {
+      setPrintUpdating(false);
+    }
+  };
+
+  const staleTip = (n) => `${n} program${n !== 1 ? 's are' : ' is'} out of date — a newer posted file is in Drive. Clicking updates ${n !== 1 ? 'them' : 'it'} first, then prints, so the labels match what the machine will run.`;
 
   return (
     <div className="pn-page">
@@ -478,13 +530,49 @@ export default function PartDetailPage() {
               every tool across all {withDetail} operation{withDetail !== 1 ? 's' : ''} — {partRows.length} rows
             </span>
             <span className="sd-head-right" onClick={e => e.stopPropagation()}>
+              {/* Which programs this pooled list is actually made of, each with
+                  its own posted-file status. Without this the list reads as one
+                  thing and hides that half of it may be out of date. */}
+              {opsWithDetail.length > 0 && (
+                <span className="sd-alltools-progs">
+                  {opsWithDetail.map(op => {
+                    const st = statusByOp.get(op.id);
+                    return (
+                      <span key={op.id} className="sd-prog-group">
+                        <span className="sd-prog-chip">
+                          <ProgramNumBadge n={op.program_number} />
+                          <OpPill op={op.op_number} />
+                        </span>
+                        <ProgramFileStatus status={st} syncing={syncingOp === op.id}
+                          onSync={() => syncProgram(op, st)} />
+                      </span>
+                    );
+                  })}
+                </span>
+              )}
+
               {selectedPartRows.length > 0 && (
-                <button className="btn btn-primary btn-sm" onClick={() => print(selectedPartRows)}>
+                <button
+                  className={`btn btn-primary btn-sm${selectedStale.length ? ' sd-print-stale' : ''}`}
+                  disabled={printUpdating}
+                  title={selectedStale.length ? staleTip(selectedStale.length) : undefined}
+                  onClick={() => (selectedStale.length
+                    ? updateThenPrint(staleOps.filter(op => selectedStale.includes(op.id)), selectedPartRows)
+                    : print(selectedPartRows))}
+                >
                   <Printer size={13} /> Print selected <span className="sd-sel-count">{selectedPartRows.length}</span>
                 </button>
               )}
-              <button className="btn btn-secondary btn-sm" onClick={() => print(partKeys)}>
-                <Printer size={13} /> Print all labels
+              <button
+                className={`btn btn-secondary btn-sm${staleOps.length ? ' sd-print-stale' : ''}`}
+                disabled={printUpdating}
+                title={staleOps.length ? staleTip(staleOps.length) : undefined}
+                // ⚠️ Prints ALL fresh rows (no key filter) after an update — the
+                // refreshed program may hold different pockets, and the keys
+                // captured before it would drop the new ones.
+                onClick={() => (staleOps.length ? updateThenPrint(staleOps, null) : print(partKeys))}
+              >
+                <Printer size={13} /> {printUpdating ? 'Updating…' : 'Print all labels'}
               </button>
             </span>
           </div>

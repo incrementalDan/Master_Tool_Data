@@ -6153,6 +6153,36 @@ input.sf-ref-num { text-align: right; }
   background: color-mix(in srgb, var(--blue) 22%, var(--surface-2));
 }
 .sd-alltools-title { font-size: 14px; font-weight: 600; color: var(--text); letter-spacing: 0.01em; }
+
+/* Which programs the pooled all-tools list is made of, each with its posted-file
+   status. The badge + OP share one bordered chip so they read as ONE program,
+   and the status icon sits outside it — the chip is the identity, the icon is
+   the state. Wraps rather than squeezing: a part with six operations must not
+   crush the print buttons off the row. */
+.sd-alltools-progs {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-right: 4px;
+}
+.sd-prog-group { display: inline-flex; align-items: center; gap: 2px; }
+.sd-prog-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 6px; border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
+}
+
+/* A print button that will label an OUT-OF-DATE setup. Same amber as the sync
+   button it is warning about, so the two read as one condition rather than two
+   unrelated colours. Clicking updates first, then prints — see updateThenPrint. */
+.btn.sd-print-stale {
+  border-color: var(--amber);
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+}
+.btn.sd-print-stale:hover:not(:disabled) {
+  border-color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 22%, transparent);
+}
 .sd-tabs { margin: 0 14px; }
 .sd-tab-meta { margin-left: auto; align-self: center; padding-bottom: 6px; }
 

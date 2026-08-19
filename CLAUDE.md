@@ -1779,6 +1779,18 @@ Lives in the **Parts** tab, **not a new top-level tab**.
 - ⚠️ **Dedupe: never print two labels that are 100% identical, and ANY difference makes it a separate label.** The consequences are deliberate and pull in opposite directions: the same tool in **two pockets** of one program prints **two** labels (two setups, different T#), while one pocket shared by **two OPs** prints **one** (nothing about it differs).
 - A blocked popup is reported — it looks exactly like a broken button otherwise.
 
+### The all-tools list names its programs, and won't quietly print a stale one
+
+⚠️ **The part-level "All tools for this part" list POOLS several programs, so it showed no per-program status at all** — a full set of labels could be printed for a setup Drive had already moved on from, with nothing on screen to say so. The per-program cards were fine (their indicator sits next to their own print buttons); the pooled list was the hole.
+
+Its header now carries one **chip per program with a stored detail** — the program badge and its `OpPill` inside a shared bordered chip (the chip is the program's identity), with that program's `ProgramFileStatus` icon beside it (the icon is its state). Clicking the icon pulls that program in, exactly as on its own card.
+
+**A print button that would label an out-of-date setup turns amber** (`.sd-print-stale`, the same amber as the sync button it is warning about, so the two read as one condition). Clicking it **updates the stale programs first, then prints**. Both buttons carry it: *Print all labels* against every stale program on the part, *Print selected* against only the stale programs the selection actually touches — leaving the second unguarded would be a hole in the thing this exists to close.
+
+⚠️ **The print rebuilds its rows from the details it just fetched, not from the rendered ones.** `rowsFrom(map)` takes the detail map as an argument precisely so `updateThenPrint` can pass the freshly-stored details; reading the rendered `partRows` there would print the very version the update set out to replace, because React has not re-rendered yet. This is the whole bug the feature is meant to prevent, reintroduced one line later.
+
+⚠️ **After an update, *Print all* passes NO key filter.** The refreshed program may hold different pockets, and the keys captured before the update would drop the new rows and keep vanished ones. *Print selected* deliberately keeps its filter — the selection is what was asked for, so a pocket that vanished simply doesn't print and one that appeared isn't selected.
+
 ### Proven / unproven
 
 **Per program**, and the distinction matters: proven means **this program ran on the machine and did not crash**. Uploading a CSV never implies that — a person sets it deliberately, later. It applies to the **currently uploaded version** and **travels with that version**: archiving encodes it in the retired filename. **Phase 1 is display only** — it neither blocks nor alters printing.
