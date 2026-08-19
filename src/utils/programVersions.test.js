@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  parseArchiveFileName, buildVersionList, canCompare, defaultPair, versionLabel,
+  parseArchiveFileName, buildVersionList, canCompare, canOfferCompare, defaultPair, versionLabel,
 } from './programVersions.js';
 import { archiveFileName } from '../context/programActions.js';
 
@@ -109,5 +109,38 @@ describe('labels', () => {
   it('reads a posted stamp, and never invents one', () => {
     expect(versionLabel({ postedIso: '2026-08-10T10:51:00' })).toBe('2026-08-10 10:51');
     expect(versionLabel({ postedIso: '', name: 'O1218.csv' })).toBe('O1218.csv');
+  });
+});
+
+describe('canOfferCompare — decided without touching Drive', () => {
+  const file = { id: 'drv', name: 'O1218.csv', modifiedTime: '2026-09-01T09:00:00Z' };
+
+  it('is off when the program has nothing stored at all', () => {
+    expect(canOfferCompare(null, null)).toBe(false);
+  });
+
+  it('is off once we know this is the only version ever posted', () => {
+    expect(canOfferCompare({ has_prior_versions: false }, { state: 'current' })).toBe(false);
+  });
+
+  it('is on when an older version was archived', () => {
+    expect(canOfferCompare({ has_prior_versions: true }, { state: 'current' })).toBe(true);
+  });
+
+  it('is on when a newer file is waiting in Drive — that IS a second version', () => {
+    // The most valuable compare of all: "it says it's out of date, what
+    // changed?", answerable before taking the update.
+    expect(canOfferCompare({ has_prior_versions: false }, { state: 'stale', file })).toBe(true);
+  });
+
+  it('⚠️ treats a record written before the field existed as UNKNOWN, not none', () => {
+    // Disabling here would hide versions that are sitting in the folder right
+    // now, for every program imported before this shipped.
+    expect(canOfferCompare({ posted: '8-10-2026 10:51' }, { state: 'current' })).toBe(true);
+    expect(canOfferCompare({ has_prior_versions: undefined }, null)).toBe(true);
+  });
+
+  it('does not count a stale status with no file behind it', () => {
+    expect(canOfferCompare({ has_prior_versions: false }, { state: 'stale' })).toBe(false);
   });
 });

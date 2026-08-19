@@ -306,3 +306,40 @@ describe('an automatic pull archives exactly like a manual upload', () => {
     expect(new Uint8Array(await uploaded.arrayBuffer())).toEqual(sourceBytes);
   });
 });
+
+describe('has_prior_versions — the flag the Compare button reads', () => {
+  it('is false on a first import, when nothing was archived', () => {
+    // Written at the one place an archive is created, so it cannot drift from
+    // whether the older file actually exists.
+    drive.fetchFileBlob.mockResolvedValue(new Blob([REAL], { type: 'text/csv' }));
+    const { ctx, programDetailsRef } = makeCtx();
+    return createProgramActions(ctx).importProgramFileFromDrive(csvFile()).then(() => {
+      expect(programDetailsRef.current.details[0].has_prior_versions).toBe(false);
+    });
+  });
+
+  it('becomes true once a version is retired', async () => {
+    drive.fetchFileBlob.mockResolvedValue(new Blob([REAL], { type: 'text/csv' }));
+    const prior = {
+      id: 'det-1', operation_id: 'op-1', program_number: 1218,
+      posted: '8-01-2026 08:00', raw_file_id: 'raw-old', proven: false, tools: [],
+      has_prior_versions: false,
+    };
+    const { ctx, programDetailsRef } = makeCtx({ programDetails: { version: 1, details: [prior] } });
+    await createProgramActions(ctx).importProgramFileFromDrive(csvFile());
+    expect(drive.renameDriveFile).toHaveBeenCalled();
+    expect(programDetailsRef.current.details[0].has_prior_versions).toBe(true);
+  });
+
+  it('is carried forward by a same-version re-stamp, which archives nothing', async () => {
+    drive.fetchFileBlob.mockResolvedValue(new Blob([REAL], { type: 'text/csv' }));
+    const prior = {
+      id: 'det-1', operation_id: 'op-1', program_number: 1218,
+      posted: '8-10-2026 10:51', raw_file_id: 'raw-old', proven: true, tools: [],
+      has_prior_versions: true,
+    };
+    const { ctx, programDetailsRef } = makeCtx({ programDetails: { version: 1, details: [prior] } });
+    await createProgramActions(ctx).importProgramFileFromDrive(csvFile({ modifiedTime: '2026-09-09T09:00:00Z' }));
+    expect(programDetailsRef.current.details[0].has_prior_versions).toBe(true);
+  });
+});

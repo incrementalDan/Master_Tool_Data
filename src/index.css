@@ -6280,6 +6280,18 @@ input.sf-ref-num { text-align: right; }
 .sc-table td { vertical-align: top; }
 .sc-table td:first-child { white-space: nowrap; }
 
+/* The +/- marker in the Seq# cell. ⚠️ Carries the added/removed meaning WITHOUT
+   colour: the row tints are the same hue family for anyone who reads colour
+   differently, and a tint alone can't say which side a row is missing from. */
+.sc-mark {
+  display: inline-block; width: 12px; margin-right: 3px;
+  font-family: var(--font-mono); font-weight: 700; font-size: 13px; line-height: 1;
+  text-align: center;
+}
+.sc-mark.added { color: var(--green); }
+.sc-mark.removed { color: var(--red); }
+.sc-swap { align-self: flex-end; margin-bottom: 6px; }
+
 .sc-pair { display: inline-flex; align-items: center; gap: 5px; flex-wrap: wrap; }
 .sc-arrow { color: var(--text-sub); flex-shrink: 0; }
 .sc-val.changed {

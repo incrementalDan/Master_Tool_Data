@@ -60,6 +60,15 @@ export function createProgramActions(ctx) {
     if (!detail) throw new Error('Nothing to import');
 
     let rawFileId = prior?.raw_file_id || null;
+    // ⚠️ Recorded HERE because this is the one place an archive is created — a
+    // flag set anywhere else could drift from whether the file actually exists.
+    // It exists so the Compare button knows whether there is a second version
+    // WITHOUT a Drive listing per program on every part page. Carried forward on
+    // a same-version re-upload (nothing is archived then), and left `undefined`
+    // on records written before this field: unknown is not "none", so those keep
+    // offering Compare rather than hiding a version that may well be there.
+    let hasPriorVersions = prior?.has_prior_versions;
+    if (!prior?.raw_file_id) hasPriorVersions = hasPriorVersions ?? false;
 
     // Demo mode is an in-memory sandbox — no Drive writes at all. The parsed
     // list still lands in state so the tables and labels can be exercised.
@@ -77,6 +86,7 @@ export function createProgramActions(ctx) {
             prior.raw_file_id,
             archiveFileName(detail.program_number, prior.posted, prior.proven),
           );
+          hasPriorVersions = true;
         } catch (err) {
           // The prior file being ALREADY GONE is not a failure to archive —
           // there was nothing to archive. Warning about it reads as data loss
@@ -100,7 +110,7 @@ export function createProgramActions(ctx) {
       demoRawText.set(detail.id, await file.text());
     }
 
-    const stored = { ...detail, raw_file_id: rawFileId };
+    const stored = { ...detail, raw_file_id: rawFileId, has_prior_versions: hasPriorVersions };
     // ⚠️ Write the file, THEN report success — a toast before a failed write is
     // how a user comes to believe a program is stored when it isn't.
     await saveProgramDetails(upsertDetail(programDetailsRef.current, stored));

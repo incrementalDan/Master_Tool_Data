@@ -27,6 +27,7 @@ import SequenceUploadModal from './SequenceUploadModal.jsx';
 import useProgramFileSync from './useProgramFileSync.js';
 import ProgramFileStatus, { AutoImportedMark } from './ProgramFileStatus.jsx';
 import SequenceCompareModal from './SequenceCompareModal.jsx';
+import { canOfferCompare } from '../utils/programVersions.js';
 import { labelRows } from '../utils/toolLabels.js';
 import { printToolTags, openTagWindow } from '../utils/labelPrint.js';
 
@@ -204,9 +205,14 @@ function OperationCard({
             </button>
             {/* Deliberately its own button, never part of the update. Taking an
                 update stays one click that asks nothing; this is the separate
-                "what actually changed?" look, and it only writes nothing. */}
+                "what actually changed?" look, and it writes nothing. Disabled
+                only when we can say for sure there is no second version — see
+                canOfferCompare, which never spends a Drive call to find out. */}
             <button className="btn btn-ghost btn-sm" onClick={onCompare}
-              title="Compare this version against another posted version — reference only, nothing is changed">
+              disabled={!canOfferCompare(detail, fileStatus)}
+              title={canOfferCompare(detail, fileStatus)
+                ? 'Compare this version against another posted version — reference only, nothing is changed'
+                : 'Only one version of this program has been posted, so there is nothing to compare it against yet'}>
               <GitCompare size={12} />
             </button>
             {/* Appears only with a selection, to the LEFT of Print all, so
