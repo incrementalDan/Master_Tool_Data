@@ -1820,6 +1820,22 @@ Each machine carries the Drive folder its posted files land in — `program_fold
 
 **Additive to stored data** — `program_folder_id`/`program_folder_name` on a machine and `source_modified`/`source_file_id`/`auto_imported` on a `program_details` record all default cleanly on records that predate them. Nothing to migrate.
 
+### TODO — the BULK pass (Function 2), and the matching rules decided for it
+
+Not built. Function 1 (the per-program indicator above) is; the bulk "scan every folder and pull in everything in one pass" is the other half. The reusable pieces it needs already exist — `listPostedFolders`, `candidatesFor`, `importProgramFileFromDrive({ auto: true })` and the `AutoImportedMark` — so the remaining work is the driver, a per-file report, and the two rules below.
+
+**Blocking becomes a per-file report, not an abort.** The two blockers stay (a program ToolDex doesn't have; a ProShop Tool # that resolves to no tool) and still block the FILE, but a run over years of old posted files will hit them often, so the pass reports each skipped file with what was missing rather than stopping. ⚠️ Owner's call, stated: **keep blocking as the function** — if maintaining a second, more permissive flow makes this materially more complicated, show what the CSV gives, link what can be linked, and flag the rest.
+
+**Matching an old ProShop number — match on the NUMBER, tolerate the formatting.** Every ProShop tool is already in the app, so a miss means the number is mis-formatted, was never in ProShop, or was never updated. ProShop increments its counter **across all tool types**, so the number alone is unique and the letter prefix is decoration:
+- Normalize spacing/dashes/case before comparing (`proShopIdKey` already does this).
+- Fall back to matching on the **bare number**, ignoring the letter prefix.
+- ⚠️ **Guard: a value above 999 is not a ProShop number.** The counter hasn't reached four digits, so a large number is almost certainly a manufacturer part number someone typed into the wrong column, and matching it on digits would attach a real program to the wrong tool.
+- The combined-insert form (`I-224 / G-223`) is an unordered SET of halves — already handled; the bare-number fallback must not break that.
+
+**Older posted files have fewer columns** (no fixture line, no Cut Diameter, and others), so `parseSequenceCsv` needs a looser header match for the bulk path. ⚠️ The three columns it genuinely cannot work without stay required — Seq#, Tool #, G-Code Tool # — because a row without them is not a toolpath. Everything else is already optional and renders blank.
+
+⚠️ **Anything the bulk pass loosens must not loosen the MANUAL upload.** A deliberate upload of a current posted file should still be strict — that is where a missing column means the wrong file was picked. Any tolerance added here belongs behind the bulk path's own flag, not in the shared parser's defaults.
+
 ### Explicitly OUT of scope (do not partially build these)
 
 G-code upload/parsing (the versioning scheme already anticipates it) · tool assembly linking and the "CSV assembly" (a metadata-only assembly record with a stable FK, grayed out with a "not in Fusion" icon and a push-to-Fusion button) · real holder matching · Google Drive sync (a manual "is there a newer posted version" button + a per-machine folder picker) · editing imported data in the table · extra header fields (stock size, cycle time, machine, material, fixture) · ProShop CSV export of this data · wiring the placeholder columns · version history UI.

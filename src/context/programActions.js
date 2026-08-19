@@ -192,7 +192,13 @@ export function createProgramActions(ctx) {
   // indicator would re-fire on every poll with no action able to clear it.
   const importProgramFileFromDrive = async (driveFile, { auto = false } = {}) => {
     if (!driveFile?.id) throw new Error('No file to import');
-    const text = await driveService.fetchFileText(driveFile.id);
+    // ⚠️ Fetched as a BLOB and stored as the blob, not as re-encoded text. The
+    // raw posted file is kept byte-for-byte — that is the whole point of storing
+    // it — and `blob.text()` decodes UTF-8, which silently strips a leading BOM.
+    // A hand upload hands us the original bytes; this path must too, or the same
+    // file archives differently depending on how it arrived.
+    const blob = await driveService.fetchFileBlob(driveFile.id);
+    const text = await blob.text();
     const built = buildSequenceImport({
       csvText: text,
       fileName: driveFile.name,
@@ -234,9 +240,11 @@ export function createProgramActions(ctx) {
       auto_imported_at: auto ? new Date().toISOString() : null,
     };
 
-    const file = new File([text], driveFile.name, { type: 'text/csv' });
+    // The blob itself — same bytes Drive holds. importSequenceDetail only needs
+    // arrayBuffer()/text(), which a Blob provides, so this is the manual path's
+    // File in every way that matters.
     const stored = await importSequenceDetail({
-      detail, file, prior: built.prior, sameVersion: built.sameVersion,
+      detail, file: blob, prior: built.prior, sameVersion: built.sameVersion,
     });
     return { ok: true, built, stored };
   };

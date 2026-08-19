@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 const drive = vi.hoisted(() => ({
   listFolderChildren: vi.fn(async () => []),
   fetchFileText: vi.fn(async () => ''),
+  fetchFileBlob: vi.fn(async () => new Blob([''], { type: 'text/csv' })),
   ensureProgramFolder: vi.fn(async () => 'prog-folder'),
   uploadToolFile: vi.fn(async () => ({ id: 'raw-1' })),
   renameDriveFile: vi.fn(async () => {}),
@@ -16,6 +17,7 @@ const drive = vi.hoisted(() => ({
 vi.mock('../services/driveService.js', () => drive);
 
 import { createProgramActions } from './programActions.js';
+import { buildSequenceImport } from '../utils/sequenceImport.js';
 
 const REAL = readFileSync(
   fileURLToPath(new URL('../utils/__fixtures__/O1218.csv', import.meta.url)), 'utf8');
@@ -105,7 +107,7 @@ describe('listPostedFolders — one call per folder, failures reported not throw
 
 describe('importProgramFileFromDrive', () => {
   it('stores the file and stamps the Drive modifiedTime it was taken from', async () => {
-    drive.fetchFileText.mockResolvedValue(REAL);
+    drive.fetchFileBlob.mockResolvedValue(new Blob([REAL], { type: 'text/csv' }));
     const { ctx, programDetailsRef } = makeCtx();
     const res = await createProgramActions(ctx).importProgramFileFromDrive(csvFile());
 
@@ -120,14 +122,14 @@ describe('importProgramFileFromDrive', () => {
   });
 
   it('marks an automatic pull so it is never mistaken for a reviewed upload', async () => {
-    drive.fetchFileText.mockResolvedValue(REAL);
+    drive.fetchFileBlob.mockResolvedValue(new Blob([REAL], { type: 'text/csv' }));
     const { ctx, programDetailsRef } = makeCtx();
     await createProgramActions(ctx).importProgramFileFromDrive(csvFile(), { auto: true });
     expect(programDetailsRef.current.details[0].auto_imported).toBe(true);
   });
 
   it('leaves a hand-picked pull unmarked', async () => {
-    drive.fetchFileText.mockResolvedValue(REAL);
+    drive.fetchFileBlob.mockResolvedValue(new Blob([REAL], { type: 'text/csv' }));
     const { ctx, programDetailsRef } = makeCtx();
     await createProgramActions(ctx).importProgramFileFromDrive(csvFile());
     expect(programDetailsRef.current.details[0].auto_imported).toBe(false);
@@ -137,7 +139,7 @@ describe('importProgramFileFromDrive', () => {
     // A ProShop Tool # the library doesn't have blocks the whole file. An
     // automatic path that relaxed this would store exactly the half-populated
     // tool lists the rule exists to keep out, with nobody watching.
-    drive.fetchFileText.mockResolvedValue(REAL);
+    drive.fetchFileBlob.mockResolvedValue(new Blob([REAL], { type: 'text/csv' }));
     const { ctx, programDetailsRef } = makeCtx({ tools: [tools[0]] });
     const res = await createProgramActions(ctx).importProgramFileFromDrive(csvFile());
 
@@ -148,7 +150,7 @@ describe('importProgramFileFromDrive', () => {
   });
 
   it('blocks a file whose program number is not in ToolDex', async () => {
-    drive.fetchFileText.mockResolvedValue(REAL);
+    drive.fetchFileBlob.mockResolvedValue(new Blob([REAL], { type: 'text/csv' }));
     const { ctx } = makeCtx();
     const res = await createProgramActions(ctx).importProgramFileFromDrive(csvFile({ name: 'O9999.csv' }));
     expect(res.ok).toBe(false);
@@ -167,7 +169,7 @@ describe('⚠️ the nag-loop guard — a same-version pull stamps and stops', (
     // A file re-saved (or merely re-synced) in Drive gets a NEWER modifiedTime
     // with the SAME posted stamp. Re-uploading identical bytes to answer that
     // would churn Drive for every such file — and there is a lot of them.
-    drive.fetchFileText.mockResolvedValue(REAL);
+    drive.fetchFileBlob.mockResolvedValue(new Blob([REAL], { type: 'text/csv' }));
     const { ctx, programDetailsRef } = makeCtx({ programDetails: { version: 1, details: [prior] } });
     const res = await createProgramActions(ctx)
       .importProgramFileFromDrive(csvFile({ modifiedTime: '2026-09-01T09:00:00Z' }));
@@ -181,7 +183,7 @@ describe('⚠️ the nag-loop guard — a same-version pull stamps and stops', (
   });
 
   it('keeps the proven state and the stored version untouched', async () => {
-    drive.fetchFileText.mockResolvedValue(REAL);
+    drive.fetchFileBlob.mockResolvedValue(new Blob([REAL], { type: 'text/csv' }));
     const { ctx, programDetailsRef } = makeCtx({ programDetails: { version: 1, details: [prior] } });
     await createProgramActions(ctx).importProgramFileFromDrive(csvFile({ modifiedTime: '2026-09-01T09:00:00Z' }));
     const stored = programDetailsRef.current.details[0];
@@ -191,7 +193,7 @@ describe('⚠️ the nag-loop guard — a same-version pull stamps and stops', (
   });
 
   it('a same-version pull does not relabel a reviewed upload as automatic', async () => {
-    drive.fetchFileText.mockResolvedValue(REAL);
+    drive.fetchFileBlob.mockResolvedValue(new Blob([REAL], { type: 'text/csv' }));
     const { ctx, programDetailsRef } = makeCtx({ programDetails: { version: 1, details: [prior] } });
     await createProgramActions(ctx)
       .importProgramFileFromDrive(csvFile({ modifiedTime: '2026-09-01T09:00:00Z' }), { auto: true });
@@ -199,7 +201,7 @@ describe('⚠️ the nag-loop guard — a same-version pull stamps and stops', (
   });
 
   it('a genuinely NEW posted version does archive and re-upload', async () => {
-    drive.fetchFileText.mockResolvedValue(REAL);
+    drive.fetchFileBlob.mockResolvedValue(new Blob([REAL], { type: 'text/csv' }));
     const older = { ...prior, posted: '8-01-2026 08:00' };
     const { ctx, programDetailsRef } = makeCtx({ programDetails: { version: 1, details: [older] } });
     const res = await createProgramActions(ctx).importProgramFileFromDrive(csvFile());
@@ -209,5 +211,98 @@ describe('⚠️ the nag-loop guard — a same-version pull stamps and stops', (
     expect(drive.uploadToolFile).toHaveBeenCalled();
     // A new version always lands unproven — a pull never means it ran.
     expect(programDetailsRef.current.details[0].proven).toBe(false);
+  });
+});
+
+// ── The question this suite exists to answer ─────────────────────────────────
+// "Does the automatic pull archive the previous version the same way a manual
+// upload does?" It must, and the only honest way to show it is to run BOTH
+// against the same prior record and compare what Drive actually receives —
+// asserting the auto path in isolation would only prove it does SOMETHING.
+describe('an automatic pull archives exactly like a manual upload', () => {
+  const prior = {
+    id: 'det-1', operation_id: 'op-1', program_number: 1218,
+    posted: '8-01-2026 08:00', raw_file_id: 'raw-old',
+    proven: true, proven_by: 'someone', tools: [],
+  };
+
+  // What Drive was asked to do, in order — the observable behaviour.
+  const driveCalls = () => [
+    ...drive.renameDriveFile.mock.calls.map(c => ['rename', ...c]),
+    ...drive.deleteToolFile.mock.calls.map(c => ['delete', ...c]),
+    ...drive.uploadToolFile.mock.calls.map(c => ['upload', c[0], c[2]]),
+    ...drive.ensureProgramFolder.mock.calls.map(c => ['folder', ...c]),
+  ];
+
+  const runManual = async () => {
+    const { ctx, programDetailsRef } = makeCtx({ programDetails: { version: 1, details: [prior] } });
+    const actions = createProgramActions(ctx);
+    // Exactly what SequenceUploadModal does: build from the file the user
+    // picked, then hand the built detail + the File straight to the action.
+    const built = buildSequenceImport({
+      csvText: REAL, fileName: 'O1218.csv', partsFile, tools,
+      existingDetails: [prior], uploadedBy: 'op@shop.test',
+    });
+    await actions.importSequenceDetail({
+      detail: built.detail, file: new File([REAL], 'O1218.csv', { type: 'text/csv' }),
+      prior: built.prior, sameVersion: built.sameVersion,
+    });
+    return programDetailsRef.current.details[0];
+  };
+
+  const runAuto = async () => {
+    drive.fetchFileBlob.mockResolvedValue(new Blob([REAL], { type: 'text/csv' }));
+    const { ctx, programDetailsRef } = makeCtx({ programDetails: { version: 1, details: [prior] } });
+    await createProgramActions(ctx).importProgramFileFromDrive(csvFile(), { auto: true });
+    return programDetailsRef.current.details[0];
+  };
+
+  it('makes the identical Drive calls — same archive name, same upload', async () => {
+    await runManual();
+    const manual = driveCalls();
+    Object.values(drive).forEach(f => f.mockClear());
+
+    await runAuto();
+    const auto = driveCalls();
+
+    expect(auto).toEqual(manual);
+    // ...and that IS an archive: the old raw file is renamed by its own posted
+    // stamp and proven state, never deleted, so its Drive id survives.
+    expect(manual).toContainEqual(['rename', 'raw-old', 'O1218_20260801-0800_proven.csv']);
+    expect(drive.deleteToolFile).not.toHaveBeenCalled();
+  });
+
+  it('stores the same record either way, apart from how it got here', async () => {
+    const manual = await runManual();
+    Object.values(drive).forEach(f => f.mockClear());
+    const auto = await runAuto();
+
+    // The provenance fields are the ONLY intended difference.
+    const strip = (d) => {
+      const { uploaded_at, source_modified, source_file_id, auto_imported, auto_imported_at, ...rest } = d;
+      return rest;
+    };
+    expect(strip(auto)).toEqual(strip(manual));
+    expect(manual.auto_imported).toBeUndefined();
+    expect(auto.auto_imported).toBe(true);
+  });
+
+  it('uploads the original BYTES, not a re-encoding of them', async () => {
+    // ⚠️ Asserted on bytes, not on text, because `.text()` is the very reader
+    // that loses this: it decodes UTF-8 and silently drops a leading BOM. So
+    // building the upload from `await blob.text()` would archive a file three
+    // bytes shorter than the one in the machine's folder — the same posted file
+    // stored differently depending on whether a person or the sync fetched it,
+    // against the standing rule that the raw file is kept untouched.
+    const source = new Blob(['\ufeff', REAL], { type: 'text/csv' });
+    const sourceBytes = new Uint8Array(await source.arrayBuffer());
+    expect(sourceBytes.slice(0, 3)).toEqual(new Uint8Array([0xef, 0xbb, 0xbf]));
+
+    drive.fetchFileBlob.mockResolvedValue(source);
+    const { ctx } = makeCtx();
+    await createProgramActions(ctx).importProgramFileFromDrive(csvFile());
+
+    const uploaded = drive.uploadToolFile.mock.calls[0][1];
+    expect(new Uint8Array(await uploaded.arrayBuffer())).toEqual(sourceBytes);
   });
 });
