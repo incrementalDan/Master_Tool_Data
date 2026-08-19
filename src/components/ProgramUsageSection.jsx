@@ -4,9 +4,10 @@ import { Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
 import { detailsOf } from '../utils/sequenceImport.js';
 import {
-  operationById, routingById, partById, routingLabel, formatOperation,
+  operationById, routingById, partById, routingLabel,
 } from '../utils/parts.js';
 import { ProgramNumBadge } from './partsUi.jsx';
+import OpPill from './OpPill.jsx';
 
 // "Where Used" — every program this tool actually runs in.
 //
@@ -71,7 +72,7 @@ export default function ProgramUsageSection({ tool }) {
                     ? <Link to={`/parts/${part.id}`} className="pn-part-number">{part.part_number}</Link>
                     : <span className="text-sub">(program removed)</span>}
                   {routing && <span className="text-xs text-sub">{routingLabel(routing)}</span>}
-                  {operation?.op_number && <span className="text-xs text-sub">{formatOperation(operation.op_number)}</span>}
+                  <OpPill op={operation?.op_number} />
                   <span className="where-used-pockets">{pockets.join(', ')}</span>
                   {proven && <span className="where-used-proven">Proven</span>}
                 </div>

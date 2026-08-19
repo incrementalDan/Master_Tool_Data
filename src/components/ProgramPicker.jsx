@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Search, X, Plus } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
-import { searchPrograms, partById, routingById, routingLabel, alloyLabel, formatOperation, machineOptions } from '../utils/parts.js';
+import { searchPrograms, partById, routingById, routingLabel, alloyLabel, machineOptions } from '../utils/parts.js';
 import { CustomerBadge, ProgramNumBadge, TypePill } from './partsUi.jsx';
 import AddProgramModal from './AddProgramModal.jsx';
 import MachinePill from './MachinePill.jsx';
+import OpPill from './OpPill.jsx';
 import { machineColorFor } from '../utils/machineColors.js';
 
 // The one shared control for linking to a program. Type a PROGRAM NUMBER
@@ -63,7 +64,7 @@ export default function ProgramPicker({ onPick, placeholder = 'Program # (exact)
               <ProgramNumBadge n={operation.program_number} />
               <span className="pn-part-number">{part?.part_number || '—'}</span>
               {routing && <span className="text-xs text-sub">{routingLabel(routing)}</span>}
-              <span className="text-xs text-sub">· {formatOperation(operation.op_number) || '—'}</span>
+              <OpPill op={operation.op_number} />
               <TypePill isFixture={operation.is_fixture} internalExternal={operation.internal_external} />
               <MachinePill label={operation.machine_label} color={machineColorFor(operation.machine_id, operation.machine_label, machines)} />
               {operation.is_fixture && (operation.material_id || operation.material_custom) && (
@@ -101,7 +102,7 @@ export function SelectedProgramChip({ value, onClear }) {
       <ProgramNumBadge n={value.program_number} />
       <span className="pn-part-number">{value.part_number || '—'}</span>
       {routing && <span className="text-xs text-sub">{routingLabel(routing)}</span>}
-      {value.op_number && <span className="text-xs text-sub">· {formatOperation(value.op_number)}</span>}
+      <OpPill op={value.op_number} />
       {part && <CustomerBadge customer={part.customer} />}
       {onClear && (
         <button type="button" className="icon-btn" title="Clear program link" style={{ marginLeft: 'auto' }} onClick={onClear}>

@@ -20,6 +20,7 @@ import {
 import AddProgramModal from './AddProgramModal.jsx';
 import SequenceUploadModal from './SequenceUploadModal.jsx';
 import MachinePill from './MachinePill.jsx';
+import OpPill from './OpPill.jsx';
 import { machineColorFor } from '../utils/machineColors.js';
 import { detailsOf } from '../utils/sequenceImport.js';
 
@@ -64,7 +65,7 @@ function OperationRow({ operation, part, materials, machines, canEdit, onUpdate,
       onClick={onOpen ? (e) => { e.stopPropagation(); onOpen(operation.id); } : undefined}
     >
       <ProgramNumBadge n={operation.program_number} />
-      <span className="sd-op-label">{formatOperation(operation.op_number)}</span>
+      <OpPill op={operation.op_number} />
       {operation.machine_label
         ? <MachinePill label={operation.machine_label} color={machineColorFor(operation.machine_id, operation.machine_label, machines)} />
         : <span className="text-sm">—</span>}
@@ -322,7 +323,7 @@ function TableView({ rows, materials, machines, canEdit, onOpenPart, onUpdateOpe
                 </td>
                 <td><CustomerBadge customer={row.part?.customer} /></td>
                 <td className="text-sub">{row.routing ? routingLabel(row.routing) : '—'}</td>
-                <td>{formatOperation(row.op_number)}</td>
+                <td><OpPill op={row.op_number} /></td>
                 <td className="text-sub">{row.description || '—'}</td>
                 <td>
                   {row.machine_label

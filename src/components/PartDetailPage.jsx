@@ -18,6 +18,7 @@ import {
 } from './partsUi.jsx';
 import AddProgramModal from './AddProgramModal.jsx';
 import MachinePill from './MachinePill.jsx';
+import OpPill from './OpPill.jsx';
 import { machineColorFor } from '../utils/machineColors.js';
 import ToolListTable from './ToolListTable.jsx';
 import useRowSelection, { selScope } from './useRowSelection.js';
@@ -158,7 +159,7 @@ function OperationCard({
       <div className="sd-program-head" {...disclosureProps(open, () => setOpen(o => !o))}>
         {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         <ProgramNumBadge n={operation.program_number} />
-        {operation.op_number && <span className="sd-op-label">{formatOperation(operation.op_number)}</span>}
+        <OpPill op={operation.op_number} />
         {operation.machine_label && (
           <MachinePill label={operation.machine_label}
             color={machineColorFor(operation.machine_id, operation.machine_label, machines)} />
