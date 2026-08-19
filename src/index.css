@@ -6213,7 +6213,10 @@ input.sf-ref-num { text-align: right; }
    dozen times is wallpaper. Only the actionable state is a button. */
 .pf-status {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 22px; height: 22px; border-radius: var(--radius-sm);
+  /* Sized to the icon (18px) plus breathing room, and kept in step with the ICON
+     constant in ProgramFileStatus.jsx — the box exists to give the actionable
+     state a real click target, not to shrink the glyph. */
+  width: 26px; height: 26px; border-radius: var(--radius-sm);
   background: transparent; border: 1px solid transparent;
   color: var(--text-sub); flex-shrink: 0;
 }

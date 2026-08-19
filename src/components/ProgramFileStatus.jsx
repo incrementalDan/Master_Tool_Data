@@ -15,6 +15,12 @@ import { CheckCircle2, CloudDownload, CircleSlash, AlertTriangle, FolderInput, Z
 // shop that hasn't set this up should not see a marker on every program), and
 // Drive not connected (already said once, at the top of the app).
 
+// One size for every status, so they can't drift apart — they occupy the same
+// slot and a mismatch reads as a layout fault. Sized to be legible at a glance
+// from across the row rather than to be unobtrusive: this is the thing telling
+// you whether the labels you are about to print match the machine.
+const ICON = 18;
+
 const relative = (iso) => {
   if (!iso) return '';
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -44,7 +50,7 @@ export default function ProgramFileStatus({ status, label = 'Sequence Detail', s
   if (syncing || status.state === 'checking') {
     return (
       <span className="pf-status" title={syncing ? `Pulling in the posted ${label}…` : `Checking for a posted ${label}…`}>
-        <span className="spinner" style={{ width: 13, height: 13, borderWidth: 2 }} />
+        <span className="spinner" style={{ width: ICON, height: ICON, borderWidth: 2 }} />
       </span>
     );
   }
@@ -52,7 +58,7 @@ export default function ProgramFileStatus({ status, label = 'Sequence Detail', s
   if (status.state === 'error') {
     return (
       <span className="pf-status warn" title={`Couldn't check for a posted ${label}. ${status.message || ''}`}>
-        <AlertTriangle size={13} />
+        <AlertTriangle size={ICON} />
       </span>
     );
   }
@@ -60,7 +66,7 @@ export default function ProgramFileStatus({ status, label = 'Sequence Detail', s
   if (status.state === 'missing') {
     return (
       <span className="pf-status muted" title={`No posted ${label} for this program number in any machine's folder. Either it hasn't been posted yet, or it's somewhere the app hasn't been pointed at.`}>
-        <CircleSlash size={13} />
+        <CircleSlash size={ICON} />
       </span>
     );
   }
@@ -69,7 +75,7 @@ export default function ProgramFileStatus({ status, label = 'Sequence Detail', s
     return (
       <span className={`pf-status ok${status.wrongFolder ? ' warn-folder' : ''}`}
         title={`Up to date with the posted ${label}${status.file?.name ? ` (${status.file.name})` : ''}, modified ${relative(status.file?.modifiedTime)}.${foundIn(status)}${dupes(status)}`}>
-        {status.wrongFolder ? <FolderInput size={13} /> : <CheckCircle2 size={13} />}
+        {status.wrongFolder ? <FolderInput size={ICON} /> : <CheckCircle2 size={ICON} />}
       </span>
     );
   }
@@ -85,7 +91,7 @@ export default function ProgramFileStatus({ status, label = 'Sequence Detail', s
         ? `A posted ${label} for this program is in Drive but hasn't been pulled in yet`
         : `Drive has a newer posted ${label} than the one stored here`}${status.file?.name ? ` — ${status.file.name}` : ''}, modified ${relative(status.file?.modifiedTime)}.${foundIn(status)}${dupes(status)} Click to pull it in.`}
     >
-      <CloudDownload size={13} />
+      <CloudDownload size={ICON} />
     </button>
   );
 }
@@ -98,7 +104,7 @@ export function AutoImportedMark({ detail }) {
   if (!detail?.auto_imported) return null;
   return (
     <span className="pf-status muted" title="Pulled in automatically from the machine's posted-files folder — nobody reviewed this one. The tool list is linked and usable; treat the values as whatever the post wrote.">
-      <Zap size={12} />
+      <Zap size={14} />
     </span>
   );
 }
