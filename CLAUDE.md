@@ -1722,7 +1722,14 @@ If you find yourself writing code that "fixes" a CSV value against the library, 
 | `src/utils/sequenceImport.js` | `buildSequenceImport` (preview→commit, mirroring `buildProgramsImport`), `buildToolIndex`/`findToolByProShopId`, `buildHolderIndex`, `locationConflict`, `upsertDetail`/`detailsOf`, and `resolveRowLocation` — the location exception |
 | `src/utils/toolLabels.js` | `labelFieldsOf`, `labelKey`, `labelRows` — the dedupe rule |
 | `src/utils/labelPrint.js` | `tagCSS` / `tagMarkup` / `inchesAutoFit` / `printToolTags` — the tag layout |
-| `src/context/programActions.js` | `importSequenceDetail`, `setProgramProven`, `fetchSequenceCsv`, `archiveFileName` |
+| `src/utils/programFileSync.js` | Finding a program's posted file in a machine's Drive folder and judging whether ours is stale. Pure — the caller lists, this decides what the listing MEANS |
+| `src/utils/sequenceCompare.js` | Aligning two posted versions row by row — forward-only, bounded lookahead, cell-level changes. Pure |
+| `src/utils/programVersions.js` | Which versions of a program exist, derived from its Drive folder. Inverse of `archiveFileName` |
+| `src/components/SequenceCompareModal.jsx` | The compare dialog: version pickers + one row per aligned operation |
+| `src/components/useProgramFileSync.js` | The poll: one listing per folder, shared by every program on the page; visible-tab only |
+| `src/components/ProgramFileStatus.jsx` | The indicator icon + `AutoImportedMark`. Reusable by file kind |
+| `src/components/DriveFolderPicker.jsx` | The shared Drive folder-browse modal (My Drive + shared drives) |
+| `src/context/programActions.js` | `importSequenceDetail`, `setProgramProven`, `fetchSequenceCsv`, `archiveFileName`, `listPostedFolders`, `importProgramFileFromDrive` |
 | `src/components/PartDetailPage.jsx` | `/parts/:id` — the PART page |
 | `src/components/ToolListTable.jsx` / `SequenceDetailTable.jsx` / `SequenceUploadModal.jsx` | the two tables + the upload dialog |
 
@@ -1793,6 +1800,62 @@ The **Tool List** and the **labels** now resolve location from the app (above), 
 - Split it — a "posted" view and a "current" view?
 
 The same question widens later, since **holder and OOH** have the same lazy-Fusion problem in principle; the difference is that those are crash-relevant and location isn't, which is exactly why only location moved. Revisit when the CSV-assembly work lands (below) — that phase is where a row gains a real FK to an assembly and the question of "which value do we show" gets answered properly for every field at once, rather than one field at a time.
+
+### Automatic posted-file sync (per-machine Drive folder)
+
+Each machine carries the Drive folder its posted files land in — `program_folder_id` + a cached `program_folder_name` on the `shop_settings.machines[]` entry, picked with the shared **`DriveFolderPicker`** in Settings → Shop → Machines. A part page then checks those folders and says, per program, whether Drive has something newer than what the app holds.
+
+⚠️ **THE SEARCH IS FOLDER-SCOPED, NOT MACHINE-SCOPED.** Two machines legitimately share one folder, and (per the shop) which machine a posted file sits under doesn't mean anything yet. So every configured folder is searched and a file found anywhere counts; the machine decides only **search order** and what the indicator *says*. A file found outside its own machine's folder is reported via **`wrongFolder`, which rides ALONGSIDE the state rather than replacing it** — it is still stale-or-current, and collapsing the two into one "wrong folder" state would hide whether there is anything to do.
+
+⚠️ **THE VERSION KEY IS THE POSTED STAMP, AND IT LIVES INSIDE THE FILE — so the check is deliberately TWO-TIER.** Drive's `modifiedTime` comes free with a folder listing; reading a POSTED stamp costs a download *per program*. So the **poll** (`utils/programFileSync.js`, metadata only) asks "has the file changed since we took our copy?", and only the **pull** (`programActions.importProgramFileFromDrive`) downloads, reads the real stamp, and runs the same `buildSequenceImport` the manual upload runs. **One listing per FOLDER serves every program on the page** — a part with a dozen operations costs one or two Drive calls, not a dozen, which is the only reason this is cheap enough to sit on a timer (`useProgramFileSync`: on mount, every 5 min while the tab is VISIBLE, and on refocus; a hidden tab polls nothing).
+
+⚠️ **`source_modified` is what stops this becoming a nag loop, and a same-version pull STAMPS AND STOPS.** The gap between the two tiers is real: a file re-saved (or merely re-synced) in Drive gets a newer `modifiedTime` with an unchanged POSTED stamp, and every record imported before this feature has no stamp at all. So `importProgramFileFromDrive` records the `modifiedTime` of the file it took, and when `sameVersion` holds it writes **only that stamp** — no re-upload, no archive rename, proven state and `raw_file_id` untouched. Re-uploading identical bytes to answer that would churn Drive across the whole library. Locked by `context/programFileSync.test.js`.
+
+⚠️ **`uploaded_at` is a FALLBACK BOUND, never the comparison.** `source_modified` compares like for like. `uploaded_at` is when a *person* stored it — always later than the post, so using it as the comparison reads a file as ahead of itself. But one-directionally it is sound: stored *after* the Drive file last changed ⇒ we cannot be behind. That is what keeps a file the user **just uploaded by hand** from immediately showing amber, which is the most visible way this indicator could read as broken. It can only ever say "not stale".
+
+⚠️ **The automatic path honours the SAME blockers as the manual upload.** A ProShop Tool # that resolves to no tool, or a program number ToolDex doesn't have, blocks the whole file — reported and skipped, never half-stored. An automatic path that relaxed that would store exactly the half-populated tool lists the rule exists to keep out, with nobody watching.
+
+**A failed listing is an ERROR, not a missing file.** One unreachable folder (renamed, permissions changed) never blanks out the other folders, and a folder that couldn't be read reports "couldn't look" rather than "nothing there" — those are different answers and only one of them is about the file.
+
+**An icon, never a banner** (`ProgramFileStatus.jsx`, the `.pf-status` token). It renders on every program on the page, so a banner-sized flag repeated a dozen times is wallpaper by day two. Four states — `missing` / `current` / `stale` / `error` — with the detail in the tooltip; only `stale` is a button, because it is the only one with anything to do. Renders **nothing** when no folders are configured or Drive isn't connected. **`AutoImportedMark`** (same file) marks a detail that arrived through an automatic pass rather than a person choosing to upload it: not a warning, just keeping "nobody vouched for these numbers" visible.
+
+**Reusable by file KIND, because G-code is next.** `SEQUENCE_CSV` is a descriptor (`ext`, `label`, `numberOf`) threaded through `fileMatchesProgram` / `candidatesFor` / `useProgramFileSync`; the G-code sync is a second descriptor, not a second copy of the search-and-compare logic. The shape of the answer is identical — found / not found / ours is older / couldn't look — only the noun changes. Locked by `utils/programFileSync.test.js`.
+
+**Additive to stored data** — `program_folder_id`/`program_folder_name` on a machine and `source_modified`/`source_file_id`/`auto_imported` on a `program_details` record all default cleanly on records that predate them. Nothing to migrate.
+
+### Comparing two posted versions (reference only)
+
+**Compare** on an operation opens `SequenceCompareModal` — pick two versions of that program's posted file and see what moved. ⚠️ **Deliberately OPT-IN and outside the update workflow**: taking an update stays one click that asks nothing, and this button writes nothing, blocks nothing, and corrects nothing. The CSV-always-wins rule is untouched — comparing two of them changes neither.
+
+**The version list is DERIVED from Drive, not stored** (`utils/programVersions.js`). `program_details.json` keeps only the latest version on purpose, so there is no stored history; what there is, is the program's own `ProgramFiles/{O####}/` folder holding the current file plus every retired version already carrying its posted stamp and proven state in its name. `parseArchiveFileName` is the **inverse of `archiveFileName`** — they live in different modules and a change to either silently empties the list rather than failing, so a round-trip test pins them together. `driveService.listProgramFolderFiles` is **read-only** (never creates a folder — opening a compare must be able to answer "nothing to compare" without leaving an empty folder behind for every program anyone glanced at). ⚠️ The **current** version is identified by the stored `raw_file_id`, never by filename: it deliberately keeps its ORIGINAL name, so a folder legitimately holds a current `O1218.csv` alongside archived `O1218_*` copies and name-matching would pick whichever came first. A **pending** file (newer, in a machine's posted folder, not yet imported) is offerable as a side, so "it says it's out of date — what changed?" is answerable BEFORE taking the update; it is labelled by its Drive **modified time**, never dressed up as a posted stamp, because its real POSTED stamp is inside the file and hasn't been read.
+
+**One row per aligned operation, not two files side by side.** With the columns doubled a side-by-side view is twenty across, and the thing worth seeing is the CELL that moved. A row the other version lacks is a blank half — that is the added/removed line. Compared fields (`COMPARE_FIELDS`): Sequence Description, ProShop Tool #, G-Code T#, Description, Holder, OOH. **Not compared**: Cut Dia, Tip, Location, RTA, Gage — the shop doesn't read them on a version compare.
+
+⚠️ **Seq# is DISPLAYED but never COMPARED.** A sequence number is emitted on tool change, so inserting ONE operation renumbers everything after it; keying on Seq# would make a single insertion light up the rest of the program — the exact failure a compare exists to prevent. The number changing is the *symptom* of an added/removed row, which the alignment reports directly. Locked by a real-fixture test asserting a wholly-renumbered re-post reads as identical.
+
+⚠️ **ORDER IS THE POINT — the alignment is strictly forward-only with a bounded lookahead** (`alignSequenceRows`, `MATCH_WINDOW = 8`). A textbook LCS is order-preserving but will pair a row with its twin far down the file, quietly reporting a **moved toolpath as "unchanged"** and everything between it as inserted. The order of operations is what the machine does, so a move IS the change. Past the window, rows are reported as removed and added where they actually are. Locked by a test asserting a moved operation never comes back `same`.
+
+**Identity is `Sequence Description + ProShop Tool #`** — what the operation is plus what runs it. ⚠️ It deliberately **excludes holder and OOH**, because those are the changes most worth SEEING: if they broke the match, the very thing being looked for would render as an unrelated remove + add instead of a highlighted cell. Inside a replace block, rows are paired positionally only while `rowsRelated` holds (sharing a name **or** a tool); once they stop lining up it stops guessing and emits real removes and adds, rather than claiming an edit that never happened.
+
+⚠️ **A number is compared as a NUMBER.** The post writes `0.70` where an older one wrote `0.7` — the same stick-out, and treating it as a difference would light up every row from a formatting change alone. Storage and display still keep the CSV's own string; this is comparison only.
+
+**Known noise, left deliberately:** `t_description` (the tool's own description) is compared, so renaming a tool in the library lights up every row using it. That is a true difference, and it is the natural first candidate for the later "some differences matter more than others" ranking — which is also where a per-column importance weighting would live.
+
+### TODO — the BULK pass (Function 2), and the matching rules decided for it
+
+Not built. Function 1 (the per-program indicator above) is; the bulk "scan every folder and pull in everything in one pass" is the other half. The reusable pieces it needs already exist — `listPostedFolders`, `candidatesFor`, `importProgramFileFromDrive({ auto: true })` and the `AutoImportedMark` — so the remaining work is the driver, a per-file report, and the two rules below.
+
+**Blocking becomes a per-file report, not an abort.** The two blockers stay (a program ToolDex doesn't have; a ProShop Tool # that resolves to no tool) and still block the FILE, but a run over years of old posted files will hit them often, so the pass reports each skipped file with what was missing rather than stopping. ⚠️ Owner's call, stated: **keep blocking as the function** — if maintaining a second, more permissive flow makes this materially more complicated, show what the CSV gives, link what can be linked, and flag the rest.
+
+**Matching an old ProShop number — match on the NUMBER, tolerate the formatting.** Every ProShop tool is already in the app, so a miss means the number is mis-formatted, was never in ProShop, or was never updated. ProShop increments its counter **across all tool types**, so the number alone is unique and the letter prefix is decoration:
+- Normalize spacing/dashes/case before comparing (`proShopIdKey` already does this).
+- Fall back to matching on the **bare number**, ignoring the letter prefix.
+- ⚠️ **Guard: a value above 999 is not a ProShop number.** The counter hasn't reached four digits, so a large number is almost certainly a manufacturer part number someone typed into the wrong column, and matching it on digits would attach a real program to the wrong tool.
+- The combined-insert form (`I-224 / G-223`) is an unordered SET of halves — already handled; the bare-number fallback must not break that.
+
+**Older posted files have fewer columns** (no fixture line, no Cut Diameter, and others), so `parseSequenceCsv` needs a looser header match for the bulk path. ⚠️ The three columns it genuinely cannot work without stay required — Seq#, Tool #, G-Code Tool # — because a row without them is not a toolpath. Everything else is already optional and renders blank.
+
+⚠️ **Anything the bulk pass loosens must not loosen the MANUAL upload.** A deliberate upload of a current posted file should still be strict — that is where a missing column means the wrong file was picked. Any tolerance added here belongs behind the bulk path's own flag, not in the shared parser's defaults.
 
 ### Explicitly OUT of scope (do not partially build these)
 

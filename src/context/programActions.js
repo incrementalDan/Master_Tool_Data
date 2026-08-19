@@ -16,9 +16,11 @@
 // proven state. Re-uploading the same stamp is the same version: no new archive
 // copy is made.
 import * as driveService from '../services/driveService.js';
-import { upsertDetail, detailsOf } from '../utils/sequenceImport.js';
+import { upsertDetail, detailsOf, buildSequenceImport } from '../utils/sequenceImport.js';
 import { formatProgramNumber } from '../utils/parts.js';
 import { postedToIso } from '../utils/sequenceDetail.js';
+import { machineFolders } from '../utils/programFileSync.js';
+import { buildVersionList } from '../utils/programVersions.js';
 
 // Archived name: O1218_20260810-1051_proven.csv — sorts chronologically in
 // Drive, and carries the proven state of the version being retired (which
@@ -39,7 +41,10 @@ export function archiveFileName(programNumber, posted, proven) {
 const demoRawText = new Map();   // detail id → the uploaded CSV text
 
 export function createProgramActions(ctx) {
-  const { notify, googleRef, demoModeRef, programDetailsRef, saveProgramDetails } = ctx;
+  const {
+    notify, googleRef, demoModeRef, programDetailsRef, saveProgramDetails,
+    partsRef, toolsRef, holderLibraryRef, shopSettingsRef, userRef,
+  } = ctx;
 
   const requireDrive = () => {
     if (!googleRef.current && !demoModeRef.current) {
@@ -145,5 +150,151 @@ export function createProgramActions(ctx) {
     }
   };
 
-  return { importSequenceDetail, setProgramProven, fetchSequenceCsv };
+  // ── Posted-file sync (see utils/programFileSync.js) ────────────────────────
+  // Each machine carries a Drive folder its posted files land in. This lists
+  // every configured folder ONCE and hands back Map(folderId → files) — the
+  // caller then matches program numbers against that listing in memory. One
+  // call per folder answers "is anything new?" for every program on a part
+  // page; listing per program would be a Drive call per operation, on a timer.
+  //
+  // Listing failures are returned, not thrown: one unreachable folder (renamed,
+  // permissions changed) must not blank out the check for every other folder.
+  const listPostedFolders = async () => {
+    const folders = machineFolders(shopSettingsRef.current);
+    const listings = new Map();
+    const errors = [];
+    if (!googleRef.current || folders.length === 0) return { folders, listings, errors };
+
+    await Promise.all(folders.map(async (f) => {
+      try {
+        const children = await driveService.listFolderChildren(f.folderId);
+        listings.set(f.folderId, children.filter(c => c.mimeType !== 'application/vnd.google-apps.folder'));
+      } catch (err) {
+        listings.set(f.folderId, []);
+        errors.push({ folderId: f.folderId, machines: f.machines, message: err.message });
+      }
+    }));
+
+    return { folders, listings, errors };
+  };
+
+  // Take a file FOUND IN DRIVE into the app — the shared path behind both the
+  // per-program sync button and the bulk pass.
+  //
+  // ⚠️ It runs the SAME buildSequenceImport the manual upload runs, and honours
+  // the SAME blockers. An automatic import that quietly relaxed the "a ProShop
+  // Tool # that resolves to no tool blocks the upload" rule would store exactly
+  // the half-populated tool lists that rule exists to keep out, with nobody
+  // watching. A blocked file is REPORTED and skipped, never partially stored.
+  //
+  // `source_modified` is what settles the indicator: it records the Drive
+  // modifiedTime of the file we actually took, so a file re-saved without being
+  // re-posted stops flagging once it has been pulled in. Without it the
+  // indicator would re-fire on every poll with no action able to clear it.
+  const importProgramFileFromDrive = async (driveFile, { auto = false } = {}) => {
+    if (!driveFile?.id) throw new Error('No file to import');
+    // ⚠️ Fetched as a BLOB and stored as the blob, not as re-encoded text. The
+    // raw posted file is kept byte-for-byte — that is the whole point of storing
+    // it — and `blob.text()` decodes UTF-8, which silently strips a leading BOM.
+    // A hand upload hands us the original bytes; this path must too, or the same
+    // file archives differently depending on how it arrived.
+    const blob = await driveService.fetchFileBlob(driveFile.id);
+    const text = await blob.text();
+    const built = buildSequenceImport({
+      csvText: text,
+      fileName: driveFile.name,
+      partsFile: partsRef.current,
+      tools: toolsRef.current,
+      holderRecords: holderLibraryRef.current?.holders || [],
+      existingDetails: detailsOf(programDetailsRef.current),
+      uploadedBy: userRef.current?.email || userRef.current?.name || '',
+    });
+
+    if (built.blockers.length > 0) return { ok: false, built, blockers: built.blockers };
+
+    const source = {
+      // The Drive metadata of the copy we took — the poll's comparison key.
+      source_modified: String(driveFile.modifiedTime || ''),
+      source_file_id: driveFile.id,
+    };
+
+    // ⚠️ SAME POSTED STAMP = SAME VERSION, so there is nothing to store — stamp
+    // and stop. This is the case that keeps the indicator from becoming a nag
+    // loop, and it is common: a file re-saved (or copied, or synced) in Drive
+    // gets a newer modifiedTime without being re-posted, and every record
+    // imported before this feature existed has no stamp at all. Re-uploading
+    // identical bytes to answer that would churn Drive on every one of them.
+    if (built.sameVersion && built.prior?.raw_file_id) {
+      const stamped = { ...built.prior, ...source };
+      await saveProgramDetails(upsertDetail(programDetailsRef.current, stamped));
+      return { ok: true, built, stored: stamped, unchanged: true };
+    }
+
+    const detail = {
+      ...built.detail,
+      ...source,
+      // ⚠️ Recorded so an automatic import is never mistaken for a deliberate
+      // one. Some of the older posted files are out of date; the point of
+      // pulling them in is the program ↔ ProShop-ID links, not a claim that
+      // anyone reviewed the numbers.
+      auto_imported: !!auto,
+      auto_imported_at: auto ? new Date().toISOString() : null,
+    };
+
+    // The blob itself — same bytes Drive holds. importSequenceDetail only needs
+    // arrayBuffer()/text(), which a Blob provides, so this is the manual path's
+    // File in every way that matters.
+    const stored = await importSequenceDetail({
+      detail, file: blob, prior: built.prior, sameVersion: built.sameVersion,
+    });
+    return { ok: true, built, stored };
+  };
+
+  // ── Version compare (reference only — see utils/sequenceCompare.js) ────────
+  // The versions available to look at, newest first. Derived from the program's
+  // own Drive folder rather than from stored history: program_details.json keeps
+  // only the latest version on purpose, and the retired files already carry
+  // their posted stamp and proven state in their names.
+  //
+  // ⚠️ Read-only — `listProgramFolderFiles` never creates a folder. Opening a
+  // compare on a program that has none must answer "nothing to compare", not
+  // leave an empty folder behind for every program anyone glanced at.
+  const listProgramVersions = async (detail, pendingFile = null) => {
+    if (demoModeRef.current) {
+      // Demo keeps raw text in memory for the session only — there is no folder
+      // to list, so the current version is all there is.
+      return buildVersionList({ detail, folderFiles: [], pendingFile });
+    }
+    let folderFiles = [];
+    if (detail?.program_number != null) {
+      try {
+        folderFiles = await driveService.listProgramFolderFiles(formatProgramNumber(detail.program_number));
+      } catch {
+        // A folder we cannot read is not a folder with nothing in it, but the
+        // current and pending versions are still perfectly comparable — degrade
+        // to those rather than failing the whole dialog.
+        folderFiles = [];
+      }
+    }
+    return buildVersionList({ detail, folderFiles, pendingFile });
+  };
+
+  // The raw text of one entry from that list. The current version in demo mode
+  // is the in-memory copy; everything else is its Drive file.
+  const fetchVersionText = async (version, detail = null) => {
+    if (!version?.fileId) return null;
+    if (demoModeRef.current && detail && version.kind === 'current') return demoRawText.get(detail.id) ?? null;
+    try {
+      return await driveService.fetchFileText(version.fileId);
+    } catch (err) {
+      if (err?.code === 'NOT_FOUND') return null;
+      throw err;
+    }
+  };
+
+  return {
+    importSequenceDetail, setProgramProven, fetchSequenceCsv,
+    listPostedFolders, importProgramFileFromDrive,
+    listProgramVersions, fetchVersionText,
+  };
 }

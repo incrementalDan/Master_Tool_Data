@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, UploadCloud, Download, Printer, ListOrdered, Wrench, Plus, Pencil, Trash2,
-  CheckCircle2, CircleDashed, ChevronDown, ChevronRight, Package,
+  CheckCircle2, CircleDashed, ChevronDown, ChevronRight, Package, GitCompare,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import {
@@ -23,6 +23,9 @@ import ToolListTable from './ToolListTable.jsx';
 import useRowSelection, { selScope } from './useRowSelection.js';
 import SequenceDetailTable from './SequenceDetailTable.jsx';
 import SequenceUploadModal from './SequenceUploadModal.jsx';
+import useProgramFileSync from './useProgramFileSync.js';
+import ProgramFileStatus, { AutoImportedMark } from './ProgramFileStatus.jsx';
+import SequenceCompareModal from './SequenceCompareModal.jsx';
 import { labelRows } from '../utils/toolLabels.js';
 import { printToolTags } from '../utils/labelPrint.js';
 
@@ -65,6 +68,7 @@ function EditControls({ label, onEdit, onDelete }) {
 
 function OperationCard({
   operation, part, detail, machines, materials, canEdit, selection,
+  fileStatus, syncing, onSync, onCompare,
   onPrint, onUpload, onProven, onUpdateOperation, onDeleteOperation,
 }) {
   const [open, setOpen] = useState(false);
@@ -147,6 +151,8 @@ function OperationCard({
           </span>
         ) : detail ? (
           <span className="sd-head-right" onClick={e => e.stopPropagation()}>
+            <ProgramFileStatus status={fileStatus} syncing={syncing} onSync={onSync} />
+            <AutoImportedMark detail={detail} />
             <span className="text-xs text-sub">{detail.tools.length} tools</span>
             {/* Proven = "it ran on the machine and did not crash". Never implied
                 by an upload; a person sets it, and it belongs to this version. */}
@@ -165,6 +171,13 @@ function OperationCard({
             <button className="btn btn-ghost btn-sm" onClick={download} title="Download the current posted CSV">
               <Download size={12} />
             </button>
+            {/* Deliberately its own button, never part of the update. Taking an
+                update stays one click that asks nothing; this is the separate
+                "what actually changed?" look, and it only writes nothing. */}
+            <button className="btn btn-ghost btn-sm" onClick={onCompare}
+              title="Compare this version against another posted version — reference only, nothing is changed">
+              <GitCompare size={12} />
+            </button>
             {/* Appears only with a selection, to the LEFT of Print all, so
                 "print all" never quietly changes meaning under the cursor. */}
             {selectedHere.length > 0 && (
@@ -181,6 +194,7 @@ function OperationCard({
           </span>
         ) : (
           <span className="sd-head-right" onClick={e => e.stopPropagation()}>
+            <ProgramFileStatus status={fileStatus} syncing={syncing} onSync={onSync} />
             <span className="text-xs text-sub">No sequence detail</span>
             {canEdit && (
               <button className="btn btn-ghost btn-sm" onClick={onUpload}>
@@ -240,6 +254,7 @@ export default function PartDetailPage() {
   const {
     parts: partsFile, saveParts, materials, shopSettings, programDetails, tools,
     setProgramProven, googleAuthenticated, demoMode, user, notify,
+    importProgramFileFromDrive,
   } = useApp();
 
   const canEdit = googleAuthenticated || demoMode;
@@ -257,6 +272,42 @@ export default function PartDetailPage() {
   const [editingRoutingId, setEditingRoutingId] = useState(null);
   const [routingDraft, setRoutingDraft] = useState(null);
   const [confirmDeleteRouting, setConfirmDeleteRouting] = useState(null);
+  // Which operation is mid-pull, so its indicator spins rather than the page.
+  const [syncingOp, setSyncingOp] = useState(null);
+  // The operation whose version compare is open, if any.
+  const [comparing, setComparing] = useState(null);
+
+  // ONE listing per posted-files folder, shared by every operation on this page
+  // — see useProgramFileSync. Polls only while the tab is visible.
+  const fileSync = useProgramFileSync();
+
+  // Pull the posted file in. It runs the SAME buildSequenceImport the manual
+  // upload runs and honours the SAME blockers, so a file with a tool the library
+  // doesn't have is reported and skipped rather than half-stored.
+  const syncProgram = async (operation, status) => {
+    if (!status?.file) return;
+    setSyncingOp(operation.id);
+    try {
+      const res = await importProgramFileFromDrive(status.file);
+      if (!res.ok) {
+        notify(`${formatProgramNumber(operation.program_number)} not pulled in — ${res.blockers[0].message}`, 'error', 9000);
+        return;
+      }
+      notify(
+        res.unchanged
+          // Drive's copy was re-saved (or merely synced) without being
+          // re-posted, so the POSTED stamp — the version key — is unchanged.
+          // Saying so is what stops the indicator reading as a nag.
+          ? `${formatProgramNumber(operation.program_number)} was already the current version — nothing changed`
+          : `${formatProgramNumber(operation.program_number)} updated from Drive — ${res.stored.tools.length} tools`,
+        'success',
+      );
+    } catch (err) {
+      notify(`Couldn't pull in the posted file: ${err.message}`, 'error', 8000);
+    } finally {
+      setSyncingOp(null);
+    }
+  };
 
   // The same shared mutations the Parts page uses — see parts.js.
   const updatePart = (pid, patch) => saveParts(updatePartIn(partsFile, pid, patch));
@@ -468,6 +519,10 @@ export default function PartDetailPage() {
                   materials={materials}
                   canEdit={canEdit}
                   selection={selection}
+                  fileStatus={fileSync.statusFor(op)}
+                  syncing={syncingOp === op.id}
+                  onSync={() => syncProgram(op, fileSync.statusFor(op))}
+                  onCompare={() => setComparing(op.id)}
                   onPrint={printProgram}
                   onUpload={() => setUploading(true)}
                   onUpdateOperation={updateOperation}
@@ -504,6 +559,23 @@ export default function PartDetailPage() {
         <AddProgramModal partId={part.id} routingId={addRoutingId}
           onClose={() => { setAdding(false); setAddRoutingId(null); }} />
       )}
+
+      {comparing && (() => {
+        const op = allOperations.find(o => o.id === comparing);
+        const status = op ? fileSync.statusFor(op) : null;
+        if (!op) return null;
+        return (
+          <SequenceCompareModal
+            operation={op}
+            detail={detailByOperation.get(op.id) || null}
+            // A newer file sitting in Drive that hasn't been taken yet is
+            // offerable as a side, so "it says it's out of date — what changed?"
+            // is answerable BEFORE the update rather than only after it.
+            pendingFile={status?.state === 'stale' ? status.file : null}
+            onClose={() => setComparing(null)}
+          />
+        );
+      })()}
 
       {uploading && (
         <SequenceUploadModal

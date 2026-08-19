@@ -564,6 +564,27 @@ export async function ensureProgramFolder(folderName) {
   return findOrCreateFolder(rootId, folderName);
 }
 
+// List the files already in a program's folder, WITHOUT creating anything.
+//
+// ⚠️ Read-only on purpose — this backs the version compare, which must be able
+// to answer "there is nothing to compare" without leaving an empty folder behind
+// for every program anyone happened to look at. Returns [] when the program (or
+// the ProgramFiles root) has no folder yet: that is the honest answer, not an
+// error. `ensureProgramFolder` stays the write path.
+export async function listProgramFolderFiles(folderName) {
+  const rootId = localStorage.getItem(PROGRAM_FILES_FOLDER_CACHE_KEY);
+  if (!rootId || !(await folderIsUsable(rootId))) {
+    const parentId = await getMetaParentFolderId();
+    const found = await findFolder(parentId, 'ProgramFiles');
+    if (!found) return [];
+    localStorage.setItem(PROGRAM_FILES_FOLDER_CACHE_KEY, found);
+    const sub = await findFolder(found, folderName);
+    return sub ? listFolderChildren(sub) : [];
+  }
+  const sub = await findFolder(rootId, folderName);
+  return sub ? listFolderChildren(sub) : [];
+}
+
 // Rename a Drive file in place — the file ID, and so every reference to it,
 // survives. Used to archive the previous version of a posted file (the current
 // version always keeps its original name, so "download the current file" is
@@ -644,12 +665,18 @@ export async function deleteToolFile(fileId) {
 }
 
 // List all non-trashed children (files AND folders) of a Drive folder.
-// Returns [{ id, name, mimeType }]. Used by the one-time ProShop-photo import
-// to scan a source folder's per-tool subfolders and their photo files.
+// Returns [{ id, name, mimeType, modifiedTime }]. Used by the one-time
+// ProShop-photo import to scan a source folder's per-tool subfolders, and by
+// the posted-program sync to find a program's CSV.
+//
+// ⚠️ `modifiedTime` comes free with the listing and is what makes the posted-file
+// poll cheap — one call per FOLDER answers "has anything changed?" for every
+// program on the page, where reading each file's own POSTED stamp would cost a
+// download per program. See utils/programFileSync.js.
 export async function listFolderChildren(parentId) {
   const q = `'${parentId}' in parents and trashed=false`;
   const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=name&fields=files(id,name,mimeType)&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=name&fields=files(id,name,mimeType,modifiedTime)&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true`,
     { headers: { Authorization: `Bearer ${_accessToken}` } }
   );
   if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });

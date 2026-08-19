@@ -66,6 +66,7 @@ export function AppProvider({ children }) {
   const componentsRef = useRef(state.components);
   const programDetailsRef = useRef(state.programDetails);
   const holderLibraryRef = useRef(state.holderLibrary);
+  const userRef = useRef(state.user);
   // Pending debounced shared-Drive-file writes, keyed by file key →
   // { timer, write(keepalive) }. Lets typing coalesce into one write and lets
   // flushSharedWrites fire the latest pending write early on page hide/close.
@@ -107,6 +108,7 @@ export function AppProvider({ children }) {
   componentsRef.current = state.components;
   programDetailsRef.current = state.programDetails;
   holderLibraryRef.current = state.holderLibrary;
+  userRef.current = state.user;
 
   // Guards the once-per-session seeding of an established shop's setup completion
   // (see loadTools). Seeding writes the shop-wide setup_steps timestamps, and only
@@ -1378,6 +1380,7 @@ export function AppProvider({ children }) {
 
   const programActions = useMemo(() => createProgramActions({
     notify, googleRef, demoModeRef, programDetailsRef, saveProgramDetails,
+    partsRef, toolsRef, holderLibraryRef, shopSettingsRef, userRef,
   }), [notify, saveProgramDetails]);
 
   const clearError = useCallback(() => dispatch({ type: 'CLEAR_ERROR' }), []);

@@ -272,7 +272,12 @@ export const DEFAULT_SHOP_SETTINGS = {
     fusion: { enabled: true, authority: 'fusion' },
   },
   // CNC machine models. Each entry: id, model, machine_type, taper, max_rpm,
-  // horsepower, through_coolant, through_coolant_psi, order.
+  // horsepower, through_coolant, through_coolant_psi, order, plus the posted-file
+  // folder: program_folder_id + program_folder_name (a cached Drive folder name,
+  // shown so the setting is readable — the id is the link, per store-the-id).
+  // The folder is where the post drops this machine's {O####}.csv; the posted-file
+  // sync searches every configured folder and only uses the machine to decide
+  // search order (see utils/programFileSync.js).
   // machine_id on presets links to these entries.
   machines: [],
   default_machine_id: null,
