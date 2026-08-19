@@ -6,7 +6,7 @@ import {
   addPartWithRoutingIn, addRoutingIn, addOperationIn,
   partsOf, operationsOf, partById, routingById, routingsForPart,
   routingLabel, alloyLabel,
-  machineOptions, isPalletMachine, customerNames, formatProgramNumber, formatOperation,
+  machineOptions, isPalletMachine, customerNames, formatProgramNumber,
 } from '../utils/parts.js';
 import {
   CustomerBadge, ProgramNumBadge, FixtureSwitch, SelectWithCustom,
@@ -14,6 +14,7 @@ import {
 } from './partsUi.jsx';
 import InfoTip from './InfoTip.jsx';
 import MachinePill from './MachinePill.jsx';
+import OpPill from './OpPill.jsx';
 import { machineColorFor } from '../utils/machineColors.js';
 
 // The "Add program" modal — find or create a part, land on one of its routings,
@@ -302,7 +303,7 @@ export default function AddProgramModal({ onClose, onCreated, partId = null, rou
                     <div key={i} className="pn-session-row">
                       <Check size={13} style={{ color: 'var(--green)' }} />
                       <ProgramNumBadge n={s.program_number} />
-                      <span className="text-sm">{formatOperation(s.operation)}</span>
+                      <OpPill op={s.operation} />
                       <MachinePill label={s.machine_label} color={machineColorFor(s.machine_id, s.machine_label, machines)} />
                       {s.is_fixture && <span className="pn-type-pill fixture">Fixture</span>}
                     </div>

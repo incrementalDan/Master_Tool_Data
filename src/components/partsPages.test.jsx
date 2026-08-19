@@ -66,6 +66,7 @@ vi.mock('../context/AppContext.jsx', () => ({
 const { default: PartsPage } = await import('./PartsPage.jsx');
 const { default: PartDetailPage } = await import('./PartDetailPage.jsx');
 const { default: ProgramUsageSection, toolProgramUsage } = await import('./ProgramUsageSection.jsx');
+const { opColor } = await import('../utils/opColors.js');
 
 // renderToString splits adjacent JSX text into separate nodes (`2 routing<!-- -->s`)
 // and HTML-encodes quotes, so assert against normalized text rather than raw
@@ -230,5 +231,36 @@ describe('opening a part focused on one program', () => {
 
   it('ignores a focus id that is not on this part', () => {
     expect(() => at({ focusOperationId: 'opC' })).not.toThrow();
+  });
+});
+
+// ── OP colours ───────────────────────────────────────────────────────────────
+describe('OP badges carry the same colour on every screen', () => {
+  it('⚠️ renders OP50 and OP60 in the SAME colour on the parts list and the part page', () => {
+    // The entire point of colouring ops is telling them apart at a glance
+    // ACROSS screens. If the colour were derived per page — by list position,
+    // say — the same operation would change colour between these two views and
+    // the cue would mean nothing.
+    const list = render(<PartsPage />);
+    const detail = render(
+      <Routes><Route path="/parts/:id" element={<PartDetailPage />} /></Routes>, '/parts/pt1');
+
+    const pill = (html, label) => {
+      const m = html.match(new RegExp(`<span class="op-pill" style="--badge-color:([^"]+)"[^>]*>${label}<`));
+      return m ? m[1] : null;
+    };
+
+    expect(pill(list, 'OP50')).toBe(opColor('OP50'));
+    expect(pill(detail, 'OP50')).toBe(opColor('OP50'));
+    expect(pill(list, 'OP60')).toBe(opColor('OP60'));
+    expect(pill(detail, 'OP60')).toBe(opColor('OP60'));
+    // ...and the two ops are not the same colour as each other.
+    expect(pill(detail, 'OP50')).not.toBe(pill(detail, 'OP60'));
+  });
+
+  it('still renders the op number itself, prefixed', () => {
+    const html = render(<PartsPage />);
+    expect(html).toContain('>OP50<');
+    expect(html).toContain('>OP70<');
   });
 });

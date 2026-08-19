@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { HelpCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { HolderTag } from './HolderPill.jsx';
+import OpPill from './OpPill.jsx';
 import { offsetOf } from '../utils/sequenceDetail.js';
 import { buildHolderIndex, resolveRowLocation } from '../utils/sequenceImport.js';
 
@@ -118,7 +119,7 @@ export default function ToolListTable({
                   aria-selected={onRowClick ? !!selected?.has(key) : undefined}
                   onClick={onRowClick ? (e) => onRowClick(key, e) : undefined}
                 >
-                  {showOp && <td className="text-sub sd-op">{r.op_label || '—'}</td>}
+                  {showOp && <td className="sd-op">{r.op_label ? <OpPill op={r.op_label} /> : <span className="text-sub">—</span>}</td>}
                   <td><span className="machine-num-badge">{r.t}</span></td>
                   <td className="sd-num">{offsetOf(r.t_num)}</td>
                   <td className="sd-num">{offsetOf(r.t_num)}</td>

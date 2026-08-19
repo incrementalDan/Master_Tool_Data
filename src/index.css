@@ -6118,6 +6118,26 @@ input.sf-ref-num { text-align: right; }
   font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
   color: var(--text-sub); text-transform: uppercase;
 }
+
+/* OP badge — data-field token. Colour follows the OPERATION NUMBER: the host
+   sets --badge-color from opColor() (utils/opColors.js), which is a pure
+   function of the number, so OP50 is this colour on every screen.
+   ⚠️ Deliberately a SOLID fill rather than the tinted treatment machine/customer
+   pills use. Those distinguish one value among many similar ones; this one has
+   to be readable as "the third operation" from across a table, and a tint at
+   this size reads as a shade rather than a colour. */
+.op-pill {
+  --badge-color: var(--text-sub);
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 2px 10px; border-radius: 999px;
+  font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.02em; line-height: 1.5; white-space: nowrap;
+  background: var(--badge-color);
+  /* The palette is chosen dark enough for white to carry; stated explicitly so
+     a theme change can't quietly drop the text to the body colour. */
+  color: #fff;
+  border: 1px solid color-mix(in srgb, var(--badge-color) 70%, #000);
+}
 /* "All tools for this part" is a SUMMARY ACROSS the whole part, not one more
    program — so it is tinted rather than merely another neutral --surface-2 band,
    and carries a left accent bar. Two sections that do different jobs shouldn't
