@@ -644,12 +644,18 @@ export async function deleteToolFile(fileId) {
 }
 
 // List all non-trashed children (files AND folders) of a Drive folder.
-// Returns [{ id, name, mimeType }]. Used by the one-time ProShop-photo import
-// to scan a source folder's per-tool subfolders and their photo files.
+// Returns [{ id, name, mimeType, modifiedTime }]. Used by the one-time
+// ProShop-photo import to scan a source folder's per-tool subfolders, and by
+// the posted-program sync to find a program's CSV.
+//
+// ⚠️ `modifiedTime` comes free with the listing and is what makes the posted-file
+// poll cheap — one call per FOLDER answers "has anything changed?" for every
+// program on the page, where reading each file's own POSTED stamp would cost a
+// download per program. See utils/programFileSync.js.
 export async function listFolderChildren(parentId) {
   const q = `'${parentId}' in parents and trashed=false`;
   const res = await fetch(
-    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=name&fields=files(id,name,mimeType)&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true`,
+    `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=name&fields=files(id,name,mimeType,modifiedTime)&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true`,
     { headers: { Authorization: `Bearer ${_accessToken}` } }
   );
   if (res.status === 401) throw Object.assign(new Error('Google token expired — please reconnect Drive'), { code: 'TOKEN_EXPIRED' });

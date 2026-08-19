@@ -1722,7 +1722,11 @@ If you find yourself writing code that "fixes" a CSV value against the library, 
 | `src/utils/sequenceImport.js` | `buildSequenceImport` (preview→commit, mirroring `buildProgramsImport`), `buildToolIndex`/`findToolByProShopId`, `buildHolderIndex`, `locationConflict`, `upsertDetail`/`detailsOf`, and `resolveRowLocation` — the location exception |
 | `src/utils/toolLabels.js` | `labelFieldsOf`, `labelKey`, `labelRows` — the dedupe rule |
 | `src/utils/labelPrint.js` | `tagCSS` / `tagMarkup` / `inchesAutoFit` / `printToolTags` — the tag layout |
-| `src/context/programActions.js` | `importSequenceDetail`, `setProgramProven`, `fetchSequenceCsv`, `archiveFileName` |
+| `src/utils/programFileSync.js` | Finding a program's posted file in a machine's Drive folder and judging whether ours is stale. Pure — the caller lists, this decides what the listing MEANS |
+| `src/components/useProgramFileSync.js` | The poll: one listing per folder, shared by every program on the page; visible-tab only |
+| `src/components/ProgramFileStatus.jsx` | The indicator icon + `AutoImportedMark`. Reusable by file kind |
+| `src/components/DriveFolderPicker.jsx` | The shared Drive folder-browse modal (My Drive + shared drives) |
+| `src/context/programActions.js` | `importSequenceDetail`, `setProgramProven`, `fetchSequenceCsv`, `archiveFileName`, `listPostedFolders`, `importProgramFileFromDrive` |
 | `src/components/PartDetailPage.jsx` | `/parts/:id` — the PART page |
 | `src/components/ToolListTable.jsx` / `SequenceDetailTable.jsx` / `SequenceUploadModal.jsx` | the two tables + the upload dialog |
 
@@ -1793,6 +1797,28 @@ The **Tool List** and the **labels** now resolve location from the app (above), 
 - Split it — a "posted" view and a "current" view?
 
 The same question widens later, since **holder and OOH** have the same lazy-Fusion problem in principle; the difference is that those are crash-relevant and location isn't, which is exactly why only location moved. Revisit when the CSV-assembly work lands (below) — that phase is where a row gains a real FK to an assembly and the question of "which value do we show" gets answered properly for every field at once, rather than one field at a time.
+
+### Automatic posted-file sync (per-machine Drive folder)
+
+Each machine carries the Drive folder its posted files land in — `program_folder_id` + a cached `program_folder_name` on the `shop_settings.machines[]` entry, picked with the shared **`DriveFolderPicker`** in Settings → Shop → Machines. A part page then checks those folders and says, per program, whether Drive has something newer than what the app holds.
+
+⚠️ **THE SEARCH IS FOLDER-SCOPED, NOT MACHINE-SCOPED.** Two machines legitimately share one folder, and (per the shop) which machine a posted file sits under doesn't mean anything yet. So every configured folder is searched and a file found anywhere counts; the machine decides only **search order** and what the indicator *says*. A file found outside its own machine's folder is reported via **`wrongFolder`, which rides ALONGSIDE the state rather than replacing it** — it is still stale-or-current, and collapsing the two into one "wrong folder" state would hide whether there is anything to do.
+
+⚠️ **THE VERSION KEY IS THE POSTED STAMP, AND IT LIVES INSIDE THE FILE — so the check is deliberately TWO-TIER.** Drive's `modifiedTime` comes free with a folder listing; reading a POSTED stamp costs a download *per program*. So the **poll** (`utils/programFileSync.js`, metadata only) asks "has the file changed since we took our copy?", and only the **pull** (`programActions.importProgramFileFromDrive`) downloads, reads the real stamp, and runs the same `buildSequenceImport` the manual upload runs. **One listing per FOLDER serves every program on the page** — a part with a dozen operations costs one or two Drive calls, not a dozen, which is the only reason this is cheap enough to sit on a timer (`useProgramFileSync`: on mount, every 5 min while the tab is VISIBLE, and on refocus; a hidden tab polls nothing).
+
+⚠️ **`source_modified` is what stops this becoming a nag loop, and a same-version pull STAMPS AND STOPS.** The gap between the two tiers is real: a file re-saved (or merely re-synced) in Drive gets a newer `modifiedTime` with an unchanged POSTED stamp, and every record imported before this feature has no stamp at all. So `importProgramFileFromDrive` records the `modifiedTime` of the file it took, and when `sameVersion` holds it writes **only that stamp** — no re-upload, no archive rename, proven state and `raw_file_id` untouched. Re-uploading identical bytes to answer that would churn Drive across the whole library. Locked by `context/programFileSync.test.js`.
+
+⚠️ **`uploaded_at` is a FALLBACK BOUND, never the comparison.** `source_modified` compares like for like. `uploaded_at` is when a *person* stored it — always later than the post, so using it as the comparison reads a file as ahead of itself. But one-directionally it is sound: stored *after* the Drive file last changed ⇒ we cannot be behind. That is what keeps a file the user **just uploaded by hand** from immediately showing amber, which is the most visible way this indicator could read as broken. It can only ever say "not stale".
+
+⚠️ **The automatic path honours the SAME blockers as the manual upload.** A ProShop Tool # that resolves to no tool, or a program number ToolDex doesn't have, blocks the whole file — reported and skipped, never half-stored. An automatic path that relaxed that would store exactly the half-populated tool lists the rule exists to keep out, with nobody watching.
+
+**A failed listing is an ERROR, not a missing file.** One unreachable folder (renamed, permissions changed) never blanks out the other folders, and a folder that couldn't be read reports "couldn't look" rather than "nothing there" — those are different answers and only one of them is about the file.
+
+**An icon, never a banner** (`ProgramFileStatus.jsx`, the `.pf-status` token). It renders on every program on the page, so a banner-sized flag repeated a dozen times is wallpaper by day two. Four states — `missing` / `current` / `stale` / `error` — with the detail in the tooltip; only `stale` is a button, because it is the only one with anything to do. Renders **nothing** when no folders are configured or Drive isn't connected. **`AutoImportedMark`** (same file) marks a detail that arrived through an automatic pass rather than a person choosing to upload it: not a warning, just keeping "nobody vouched for these numbers" visible.
+
+**Reusable by file KIND, because G-code is next.** `SEQUENCE_CSV` is a descriptor (`ext`, `label`, `numberOf`) threaded through `fileMatchesProgram` / `candidatesFor` / `useProgramFileSync`; the G-code sync is a second descriptor, not a second copy of the search-and-compare logic. The shape of the answer is identical — found / not found / ours is older / couldn't look — only the noun changes. Locked by `utils/programFileSync.test.js`.
+
+**Additive to stored data** — `program_folder_id`/`program_folder_name` on a machine and `source_modified`/`source_file_id`/`auto_imported` on a `program_details` record all default cleanly on records that predate them. Nothing to migrate.
 
 ### Explicitly OUT of scope (do not partially build these)
 

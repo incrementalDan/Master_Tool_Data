@@ -6158,6 +6158,31 @@ input.sf-ref-num { text-align: right; }
   color: var(--blue); background: var(--blue-tint);
 }
 
+/* Posted-file sync indicator (ProgramFileStatus). An ICON, never a banner —
+   it renders on every program on the page, and a banner-sized flag repeated a
+   dozen times is wallpaper. Only the actionable state is a button. */
+.pf-status {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: var(--radius-sm);
+  background: transparent; border: 1px solid transparent;
+  color: var(--text-sub); flex-shrink: 0;
+}
+.pf-status.ok { color: var(--green); }
+.pf-status.muted { color: var(--text-sub); opacity: 0.55; }
+.pf-status.warn { color: var(--amber); }
+/* Up to date, but the file sits under a different machine than this program's.
+   Nothing to do — said in the icon so it isn't only in the tooltip. */
+.pf-status.warn-folder { color: var(--amber); }
+.pf-status.action {
+  color: var(--amber); cursor: pointer;
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  border-color: color-mix(in srgb, var(--amber) 38%, transparent);
+}
+.pf-status.action:hover {
+  background: color-mix(in srgb, var(--amber) 22%, transparent);
+  border-color: var(--amber);
+}
+
 /* Tool list / sequence tables — numeric columns in the mono face, as measured
    data (same rule as every other number in the app). */
 .sd-table td { white-space: nowrap; }

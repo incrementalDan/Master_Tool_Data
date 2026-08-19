@@ -18,6 +18,7 @@ import DescRenameModal from './DescRenameModal.jsx';
 import InfoTip from './InfoTip.jsx';
 import ImportPhotosModal from './ImportPhotosModal.jsx';
 import ProgramsImportModal from './ProgramsImportModal.jsx';
+import DriveFolderPicker from './DriveFolderPicker.jsx';
 import IdSystemMembership, { ExclusionNotice } from './IdSystemMembership.jsx';
 import { exportFullLibrary } from '../utils/proShopExport.js';
 import { HOLDER_LINK_SKIP_TYPES } from '../utils/holderLink.js';
@@ -263,6 +264,7 @@ export default function Settings() {
   const [machines, setMachines] = useState(shopSettings?.machines || []);
   const [defaultMachineId, setDefaultMachineId] = useState(shopSettings?.default_machine_id || null);
   const [expandedMachineId, setExpandedMachineId] = useState(null);
+  const [folderPickMachineId, setFolderPickMachineId] = useState(null);
   const [addingMachine, setAddingMachine] = useState(false);
   const [machineDeleteId, setMachineDeleteId] = useState(null);
 
@@ -288,6 +290,11 @@ export default function Settings() {
     horsepower: null,
     through_coolant: false,
     through_coolant_psi: null,
+    // Where the post drops this machine's {O####}.csv. The id is the link; the
+    // name is a cached label so the setting reads as something (see
+    // utils/programFileSync.js — the search is folder-scoped, not machine-scoped).
+    program_folder_id: null,
+    program_folder_name: '',
     order: machines.length,
   });
 
@@ -1033,6 +1040,25 @@ export default function Settings() {
 
       {showPhotos && <ImportPhotosModal onClose={() => setShowPhotos(false)} />}
 
+      {/* Posted-files folder picker for one machine. Writes into the page draft
+          like every other machine field — it lands on Drive with the page Save. */}
+      {folderPickMachineId && (() => {
+        const m = machines.find(x => x.id === folderPickMachineId);
+        if (!m) return null;
+        return (
+          <DriveFolderPicker
+            title={`Posted files folder — ${m.model || 'machine'}`}
+            hint="Browse to the folder the post drops this machine's Sequence Detail CSVs into. Each file must be named for its program (O1218.csv) — the number inside the file is ignored."
+            current={m.program_folder_id ? { id: m.program_folder_id, name: m.program_folder_name } : null}
+            onPick={(folder) => updateMachine(m.id, {
+              program_folder_id: folder?.id || null,
+              program_folder_name: folder?.name || '',
+            })}
+            onClose={() => setFolderPickMachineId(null)}
+          />
+        );
+      })()}
+
       {/* Shop — name, default unit, and machines (all saved to shop_settings.json) */}
       <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -1212,6 +1238,41 @@ export default function Settings() {
                         />
                       </div>
                     )}
+
+                    {/* Posted-file folder — where this machine's {O####}.csv lands.
+                        Several machines may point at the SAME folder; the sync
+                        searches every configured folder and uses the machine only
+                        to decide search order and what the indicator says. */}
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <label className="field-label" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        Posted files folder (Google Drive)
+                        <InfoTip text="The Drive folder the post drops this machine's Sequence Detail CSVs into, named for their program (O1218.csv). A part page checks this folder for a newer posted file and offers to pull it in. More than one machine can use the same folder — the file is found either way; the machine only decides which folder is checked first, so a file sitting under another machine is flagged rather than missed." />
+                      </label>
+                      {m.program_folder_id ? (
+                        <div className="flex items-center gap-8">
+                          <span className="chip" style={{ fontSize: 12 }}>
+                            <FolderOpen size={12} /> {m.program_folder_name || 'Selected folder'}
+                          </span>
+                          <button className="btn btn-ghost btn-sm" disabled={!googleAuthenticated}
+                            onClick={() => setFolderPickMachineId(m.id)}>Change</button>
+                          <button className="btn btn-ghost btn-sm" style={{ color: 'var(--red)' }}
+                            onClick={() => updateMachine(m.id, { program_folder_id: null, program_folder_name: '' })}>
+                            Clear
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-8">
+                          <button className="btn btn-secondary btn-sm" disabled={!googleAuthenticated}
+                            title={!googleAuthenticated ? 'Connect Google Drive to pick a folder' : undefined}
+                            onClick={() => setFolderPickMachineId(m.id)}>
+                            <FolderOpen size={13} /> Choose folder
+                          </button>
+                          <span className="text-sub text-xs">
+                            Not set — posted files for this machine aren&apos;t checked automatically.
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-8" style={{ marginTop: 14 }}>
                     {isDeleting ? (
