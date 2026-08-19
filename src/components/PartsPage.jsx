@@ -35,7 +35,7 @@ import { detailsOf } from '../utils/sequenceImport.js';
 
 // ── Grouped view ─────────────────────────────────────────────────────────────
 
-function OperationRow({ operation, part, materials, machines, canEdit, onUpdate, onDelete }) {
+function OperationRow({ operation, part, materials, machines, canEdit, onUpdate, onDelete, onOpen }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -56,7 +56,13 @@ function OperationRow({ operation, part, materials, machines, canEdit, onUpdate,
 
   const mat = operationMaterial(operation, part);
   return (
-    <div className="pn-op-row">
+    // The row already opens the part (its container navigates); claiming the
+    // click here just carries WHICH program was clicked, so the part page can
+    // open straight to that program's tool list instead of the top of the page.
+    <div
+      className="pn-op-row"
+      onClick={onOpen ? (e) => { e.stopPropagation(); onOpen(operation.id); } : undefined}
+    >
       <ProgramNumBadge n={operation.program_number} />
       <span className="sd-op-label">{formatOperation(operation.op_number)}</span>
       {operation.machine_label
@@ -213,7 +219,8 @@ function GroupedView({ parts, partsFile, materials, machines, canEdit, customers
                       {ops.map(op => (
                         <OperationRow key={op.id} operation={op} part={part} materials={materials}
                           machines={machines} canEdit={canEdit}
-                          onUpdate={onUpdateOperation} onDelete={onDeleteOperation} />
+                          onUpdate={onUpdateOperation} onDelete={onDeleteOperation}
+                          onOpen={(opId) => onOpenPart(part.id, opId)} />
                       ))}
                       {ops.length === 0 && (
                         <div className="text-xs text-sub" style={{ padding: '4px 0' }}>No operations yet.</div>
@@ -292,7 +299,7 @@ function TableView({ rows, materials, machines, canEdit, onOpenPart, onUpdateOpe
               <tr
                 key={row.id}
                 className={row.part ? 'pn-row-link' : undefined}
-                onClick={row.part ? () => onOpenPart?.(row.part.id) : undefined}
+                onClick={row.part ? () => onOpenPart?.(row.part.id, row.id) : undefined}
               >
                 <td>
                   {canEdit && (
@@ -477,14 +484,14 @@ export default function PartsPage() {
           collapsed={collapsed} onToggle={toggleExpand}
           detailByOperation={detailByOperation}
           visibleOps={operationIds} filtered={isFiltered}
-          onOpenPart={(id) => navigate(`/parts/${id}`)}
+          onOpenPart={(id, opId) => navigate(`/parts/${id}`, opId ? { state: { focusOperationId: opId } } : undefined)}
           onUpdatePart={updatePart} onDeletePart={deletePart}
           onUpdateOperation={updateOperation} onDeleteOperation={deleteOperation}
         />
       ) : (
         <TableView
           rows={tableRows} materials={materials} machines={machines} canEdit={canEdit}
-          onOpenPart={(id) => navigate(`/parts/${id}`)}
+          onOpenPart={(id, opId) => navigate(`/parts/${id}`, opId ? { state: { focusOperationId: opId } } : undefined)}
           onUpdateOperation={updateOperation} onDeleteOperation={deleteOperation}
         />
       )}
