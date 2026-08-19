@@ -28,7 +28,7 @@ import useProgramFileSync from './useProgramFileSync.js';
 import ProgramFileStatus, { AutoImportedMark } from './ProgramFileStatus.jsx';
 import SequenceCompareModal from './SequenceCompareModal.jsx';
 import { labelRows } from '../utils/toolLabels.js';
-import { printToolTags } from '../utils/labelPrint.js';
+import { printToolTags, openTagWindow } from '../utils/labelPrint.js';
 
 // The PART page — one part number and everything about it in one place.
 //
@@ -212,11 +212,21 @@ function OperationCard({
             {/* Appears only with a selection, to the LEFT of Print all, so
                 "print all" never quietly changes meaning under the cursor. */}
             {selectedHere.length > 0 && (
-              <button className="btn btn-primary btn-sm" onClick={() => onPrint(selectedHere)}>
+              <button
+                className={`btn btn-primary btn-sm${fileStatus?.state === 'stale' ? ' sd-print-stale' : ''}`}
+                onClick={() => onPrint(selectedHere, false)}>
                 <Printer size={12} /> Print selected <span className="sd-sel-count">{selectedHere.length}</span>
               </button>
             )}
-            <button className="btn btn-secondary btn-sm" onClick={() => onPrint(keys)}>
+            <button
+              className={`btn btn-secondary btn-sm${fileStatus?.state === 'stale' ? ' sd-print-stale' : ''}`}
+              // `true` = every row of this program, re-derived after an update —
+              // the keys captured before it would drop any new pocket.
+              onClick={() => onPrint(null, true)}
+              title={fileStatus?.state === 'stale'
+                ? 'A newer posted file is in Drive — clicking updates it first, then prints, so the labels match what the machine will run.'
+                : undefined}
+            >
               <Printer size={12} /> Print all
             </button>
             {canEdit && <EditControls label="operation"
@@ -407,19 +417,16 @@ export default function PartDetailPage() {
   // `keys` null = every row in `rows`. That distinction matters after an update:
   // the refreshed program may hold different pockets, so filtering by the keys
   // captured before it would drop the new rows and keep vanished ones.
-  const printRows = (rows, keys) => {
-    const wanted = keys ? new Set(keys) : null;
-    const chosen = wanted ? rows.filter(r => wanted.has(rowKeyOf(r))) : rows;
-    if (chosen.length === 0) { notify('Nothing to print', 'error'); return; }
+  const printRows = (rows, keys, opIds, win) => {
+    let chosen = opIds ? rows.filter(r => opIds.has(r.operation_id)) : rows;
+    if (keys) { const wanted = new Set(keys); chosen = chosen.filter(r => wanted.has(rowKeyOf(r))); }
+    if (chosen.length === 0) { notify('Nothing to print', 'error'); win?.close(); return; }
     const labels = labelRows(chosen, part, toolsById);
     // Deliberately reported: a blocked popup looks exactly like a broken button.
-    if (!printToolTags(labels)) {
+    if (!printToolTags(labels, { win })) {
       notify('Your browser blocked the print window — allow popups for this site', 'error', 7000);
     }
   };
-
-  const print = (keys) => printRows(partRows, keys);
-  const printProgram = (keys) => print(keys);
 
   const partKeys = partRows.map(rowKeyOf);
   const selectedPartRows = selection.keysIn(PART_SCOPE);
@@ -438,22 +445,54 @@ export default function PartDetailPage() {
   const opIdOfKey = (k) => k.slice(0, k.lastIndexOf(':'));
   const selectedStale = [...new Set(selectedPartRows.map(opIdOfKey))].filter(id => staleOpIds.has(id));
 
-  // Update every stale program, THEN print — from the details just fetched.
-  const updateThenPrint = async (ops, keys) => {
+  // ── THE one print path ─────────────────────────────────────────────────────
+  // Re-check Drive, pull in anything out of date, then print from the details it
+  // just fetched.
+  //
+  // ⚠️ IT RE-CHECKS AT CLICK TIME RATHER THAN TRUSTING THE INDICATOR. The
+  // indicator is a poll — it can be minutes old, mid-refresh, or never have run
+  // — and labels that don't match what the machine will run is the one outcome
+  // this whole feature exists to prevent. The cost is one folder listing per
+  // print, which is nothing next to carrying a wrong tag to the machine.
+  //
+  // ⚠️ The window is opened HERE, synchronously inside the click. A popup opened
+  // after an await has lost the user gesture and the browser blocks it — so
+  // without this, guarding against stale labels would only trade a stale-label
+  // bug for a print that silently never appears.
+  const guardedPrint = async (ops, keys) => {
+    const opIds = new Set(ops.map(o => o.id));
+    const win = openTagWindow();
+    if (!win) {
+      notify('Your browser blocked the print window — allow popups for this site', 'error', 7000);
+      return;
+    }
     setPrintUpdating(true);
     try {
+      let check = null;
+      try {
+        check = await fileSync.checkNow();
+      } catch (err) {
+        // Couldn't reach Drive. Print what we hold rather than refusing — the
+        // labels are needed on the floor — but never silently: unverified is
+        // not the same as known-good.
+        notify(`Couldn't check for newer posted files (${err.message}) — printing what's stored`, 'error', 8000);
+      }
       const fresh = new Map(detailByOperation);
-      for (const op of ops) {
-        const stored = await syncProgram(op, statusByOp.get(op.id));
-        // A program that could not be pulled in (a blocker) keeps its stored
-        // version; it was reported, and printing the rest is still useful.
-        if (stored) fresh.set(op.id, stored);
+      if (check) {
+        for (const op of ops) {
+          const st = check.statusFor(op);
+          if (st.state !== 'stale') continue;
+          const stored = await syncProgram(op, st);
+          // A program that could not be pulled in (a blocker) keeps its stored
+          // version; it was reported, and printing the rest is still useful.
+          if (stored) fresh.set(op.id, stored);
+        }
       }
       // A selected print keeps its key filter: the selection is what was asked
       // for. A pocket that vanished in the new version simply won't print, and a
       // pocket that appeared isn't selected — printing either would be inventing
       // a choice the user didn't make.
-      printRows(rowsFrom(fresh), keys);
+      printRows(rowsFrom(fresh), keys, opIds, win);
     } finally {
       setPrintUpdating(false);
     }
@@ -556,9 +595,10 @@ export default function PartDetailPage() {
                   className={`btn btn-primary btn-sm${selectedStale.length ? ' sd-print-stale' : ''}`}
                   disabled={printUpdating}
                   title={selectedStale.length ? staleTip(selectedStale.length) : undefined}
-                  onClick={() => (selectedStale.length
-                    ? updateThenPrint(staleOps.filter(op => selectedStale.includes(op.id)), selectedPartRows)
-                    : print(selectedPartRows))}
+                  onClick={() => guardedPrint(
+                    opsWithDetail.filter(op => selectedPartRows.some(k => opIdOfKey(k) === op.id)),
+                    selectedPartRows,
+                  )}
                 >
                   <Printer size={13} /> Print selected <span className="sd-sel-count">{selectedPartRows.length}</span>
                 </button>
@@ -570,7 +610,7 @@ export default function PartDetailPage() {
                 // ⚠️ Prints ALL fresh rows (no key filter) after an update — the
                 // refreshed program may hold different pockets, and the keys
                 // captured before it would drop the new ones.
-                onClick={() => (staleOps.length ? updateThenPrint(staleOps, null) : print(partKeys))}
+                onClick={() => guardedPrint(opsWithDetail, null)}
               >
                 <Printer size={13} /> {printUpdating ? 'Updating…' : 'Print all labels'}
               </button>
@@ -648,7 +688,7 @@ export default function PartDetailPage() {
                   syncing={syncingOp === op.id}
                   onSync={() => syncProgram(op, fileSync.statusFor(op))}
                   onCompare={() => setComparing(op.id)}
-                  onPrint={printProgram}
+                  onPrint={(keys, all) => guardedPrint([op], all ? null : keys)}
                   onUpload={() => setUploading(true)}
                   onUpdateOperation={updateOperation}
                   onDeleteOperation={deleteOperation}
