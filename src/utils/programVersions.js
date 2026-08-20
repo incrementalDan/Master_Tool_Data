@@ -103,6 +103,24 @@ export function buildVersionList({ detail = null, folderFiles = [], pendingFile 
 // the button is a dead end that says "nothing to do" after a Drive fetch.
 export const canCompare = (versions) => (versions?.length || 0) >= 2;
 
+// Whether the Compare BUTTON should be live, decided without touching Drive.
+//
+// ⚠️ Answered from what is already known, not by listing the program's folder:
+// doing that per program on every part page would cost a handful of Drive calls
+// for a button most people never press. Two free signals:
+//   - a file waiting in Drive that hasn't been taken in is a second version;
+//   - `has_prior_versions`, written by importSequenceDetail at the moment it
+//     archives a file, says whether an older copy was ever retired.
+//
+// ⚠️ `undefined` means UNKNOWN, not none — records written before that field
+// existed must keep offering Compare, or the app would hide versions that are
+// sitting right there. Only an explicit `false` disables the button.
+export function canOfferCompare(detail, status) {
+  if (!detail) return false;
+  if (status?.state === 'stale' && status.file) return true;
+  return detail.has_prior_versions !== false;
+}
+
 // What to open the dialog on: the newest pair, which is the question actually
 // being asked — "what changed since last time?" / "what am I about to take?"
 export function defaultPair(versions = []) {

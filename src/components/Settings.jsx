@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Settings as SettingsIcon, AlertTriangle, Hash, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
+import { Settings as SettingsIcon, AlertTriangle, Hash, Zap, Package, Trash2, Wand2, Ruler, HardDrive, ExternalLink, FileJson, Download, X, FolderOpen, LogOut, User, CheckCircle2, Circle, AlertCircle, Image as ImageIcon, Cpu, GripVertical, Plus, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import { useApp, SETUP_STEPS } from '../context/AppContext.jsx';
 import { generateMachineNumbers, generateId, duplicateIdClusters, findMachineNumbersToFix, validateGeometry } from '../schema/toolSchema.js';
 import { isExcludedFrom, MACHINE_NUMBER_LOCKED_TYPES } from '../utils/idSystems.js';
@@ -18,6 +18,7 @@ import DescRenameModal from './DescRenameModal.jsx';
 import InfoTip from './InfoTip.jsx';
 import ImportPhotosModal from './ImportPhotosModal.jsx';
 import ProgramsImportModal from './ProgramsImportModal.jsx';
+import BulkSequenceImportModal from './BulkSequenceImportModal.jsx';
 import DriveFolderPicker from './DriveFolderPicker.jsx';
 import IdSystemMembership, { ExclusionNotice } from './IdSystemMembership.jsx';
 import { exportFullLibrary } from '../utils/proShopExport.js';
@@ -95,6 +96,7 @@ export default function Settings() {
   const [showHolderPicker, setShowHolderPicker] = useState(false);
   const [showDescRename, setShowDescRename] = useState(false);
   const [showProgramsImport, setShowProgramsImport] = useState(false);
+  const [showBulkSeq, setShowBulkSeq] = useState(false);
   const [showPhotos, setShowPhotos] = useState(false);
   const [defaultUnit, setDefaultUnitState] = useState(getDefaultUnit());
 
@@ -265,6 +267,10 @@ export default function Settings() {
   const [defaultMachineId, setDefaultMachineId] = useState(shopSettings?.default_machine_id || null);
   const [expandedMachineId, setExpandedMachineId] = useState(null);
   const [folderPickMachineId, setFolderPickMachineId] = useState(null);
+  // ⚠️ Read straight from saved settings, never from the page draft: it is a LOG
+  // of a run that already happened, so it must not be editable or revertable by
+  // Cancel — and it is written by the run itself, not by Save.
+  const bulkRun = shopSettings?.sequence_bulk_import || null;
   const [addingMachine, setAddingMachine] = useState(false);
   const [machineDeleteId, setMachineDeleteId] = useState(null);
 
@@ -1415,6 +1421,40 @@ export default function Settings() {
           <Hash size={13} /> Import program list CSV…
         </button>
         {showProgramsImport && <ProgramsImportModal onClose={() => setShowProgramsImport(false)} />}
+      </div>
+
+      {/* Bulk import of posted Sequence Detail files — the run lives here
+          because it is shop-wide and occasional, not part of any one part. */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Zap size={16} style={{ color: 'var(--amber)' }} />
+          <h3 style={{ margin: 0 }}>Bulk Import Sequence Details</h3>
+          <InfoTip text="Scans every machine's posted-files folder and takes in each program's Sequence Detail in one pass. Programs whose file the app already holds are left alone, so it is safe to re-run. Everything it takes in is marked 'Bulk import' wherever it appears — nobody reviews these, and old posted files are often out of date. The point is linking programs to ProShop numbers so you can see which tools run in which programs." alignRight />
+        </div>
+        <p className="text-sub text-sm mb-16">
+          Take in every posted Sequence Detail across all machine folders at once. Unlike a
+          deliberate upload, a ProShop number that isn&apos;t in the library doesn&apos;t stop the file —
+          that row is stored unlinked and flagged.
+        </p>
+        {bulkRun?.last_run_at && (
+          <div className="sd-note" style={{ marginBottom: 12 }}>
+            <div>
+              Last run <strong>{String(bulkRun.last_run_at).slice(0, 16).replace('T', ' ')}</strong>
+              {bulkRun.by ? ` by ${bulkRun.by}` : ''} — {bulkRun.imported} taken in,
+              {' '}{bulkRun.up_to_date} already current, {bulkRun.skipped} skipped
+              {' '}of {bulkRun.scanned} scanned.
+            </div>
+          </div>
+        )}
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => setShowBulkSeq(true)}
+          disabled={(!googleAuthenticated && !demoMode) || dirty}
+          title={dirty ? 'Save or cancel your changes first' : (!googleAuthenticated && !demoMode ? 'Connect Google Drive first' : undefined)}
+        >
+          <Zap size={13} /> Run bulk import…
+        </button>
+        {showBulkSeq && <BulkSequenceImportModal onClose={() => setShowBulkSeq(false)} />}
       </div>
 
       {/* Tool ID System — how each tool's displayed ID is generated/labelled.

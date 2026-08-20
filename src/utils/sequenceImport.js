@@ -20,6 +20,7 @@ import { generateId } from '../schema/identity.js';
 import { operationByProgramNumber, routingById, partById } from './parts.js';
 import {
   parseSequenceCsv, condenseTools, programNumberFromFileName, proShopIdKey, postedToIso,
+  bareProShopNumber,
 } from './sequenceDetail.js';
 
 // ── Tool lookup ──────────────────────────────────────────────────────────────
@@ -35,22 +36,50 @@ import {
 export function buildToolIndex(tools) {
   const current = new Map();
   const legacy = new Map();
+  // Bare-number indexes for the LOOSE match (bulk import of old files only).
+  // ⚠️ A number claimed by two different tools is recorded as AMBIGUOUS and
+  // matches nothing. ProShop's counter is shop-wide so this shouldn't happen,
+  // but a loose match that guesses between two real tools would attach a program
+  // to the wrong one — silently, and in bulk.
+  const byNumber = new Map();
+  const byNumberLegacy = new Map();
+  const ambiguous = new Set();
+
+  const addNumber = (map, num, tool) => {
+    if (!num) return;
+    const held = map.get(num);
+    if (held && held.id !== tool.id) { ambiguous.add(num); return; }
+    if (!held) map.set(num, tool);
+  };
+
   for (const t of tools || []) {
     const key = proShopIdKey(t.tool_id);
     if (key && !current.has(key)) current.set(key, t);
+    addNumber(byNumber, bareProShopNumber(t.tool_id), t);
     for (const old of t.legacy_ids || []) {
       const lk = proShopIdKey(old);
       if (lk && !legacy.has(lk)) legacy.set(lk, t);
+      addNumber(byNumberLegacy, bareProShopNumber(old), t);
     }
   }
-  return { current, legacy };
+  return { current, legacy, byNumber, byNumberLegacy, ambiguous };
 }
 
-export function findToolByProShopId(index, raw) {
+// `loose` widens the match to the bare NUMBER, ignoring the letter prefix — for
+// the bulk import of old posted files, where a number was often mis-typed or
+// pre-dates a re-lettering. Deliberately OFF for a deliberate upload: there, a
+// miss means something is wrong and the person is right there to fix it.
+export function findToolByProShopId(index, raw, { loose = false } = {}) {
   const key = proShopIdKey(raw);
   if (!key) return { tool: null, via: null };
   if (index.current.has(key)) return { tool: index.current.get(key), via: 'tool_id' };
   if (index.legacy.has(key)) return { tool: index.legacy.get(key), via: 'legacy_id' };
+  if (!loose) return { tool: null, via: null };
+
+  const num = bareProShopNumber(raw);
+  if (!num || index.ambiguous?.has(num)) return { tool: null, via: null };
+  if (index.byNumber?.has(num)) return { tool: index.byNumber.get(num), via: 'number' };
+  if (index.byNumberLegacy?.has(num)) return { tool: index.byNumberLegacy.get(num), via: 'legacy_number' };
   return { tool: null, via: null };
 }
 
@@ -124,6 +153,15 @@ export function buildSequenceImport({
   holderRecords = [],
   existingDetails = [],
   uploadedBy = '',
+  // ── Bulk-pass options. Both OFF for a deliberate upload. ──
+  // ⚠️ `allowUnmatchedTools` is the ONE blocker that is a policy choice rather
+  // than a structural limit. A deliberate upload of a current posted file stays
+  // strict — a Tool # resolving to nothing means something is wrong and the
+  // person is right there. A run over years of old files must not throw away a
+  // whole program because one number was mis-typed years ago, so the row is
+  // stored with `tool_ref: null` and flagged instead.
+  allowUnmatchedTools = false,
+  looseToolMatch = false,
 } = {}) {
   const blockers = [];
   const parsed = parseSequenceCsv(csvText);
@@ -165,12 +203,14 @@ export function buildSequenceImport({
   const lcConflicts = [];
   const unmatchedHolders = [];
   const legacyMatches = [];
+  const looseMatches = [];
   const missingTools = [];
 
   const toolRows = condensed.map(row => {
-    const { tool, via } = findToolByProShopId(toolIndex, row.tool_id);
+    const { tool, via } = findToolByProShopId(toolIndex, row.tool_id, { loose: looseToolMatch });
     if (!tool) missingTools.push({ t: row.t, tool_id: row.tool_id, description: row.description });
-    else if (via === 'legacy_id') legacyMatches.push({ t: row.t, tool_id: row.tool_id, current: tool.tool_id });
+    else if (via === 'legacy_id' || via === 'legacy_number') legacyMatches.push({ t: row.t, tool_id: row.tool_id, current: tool.tool_id });
+    else if (via === 'number') looseMatches.push({ t: row.t, tool_id: row.tool_id, current: tool.tool_id });
 
     const holder = holderIndex.get(holderKey(row.holder)) || null;
     if (row.holder && !holder) unmatchedHolders.push({ t: row.t, holder: row.holder });
@@ -202,7 +242,7 @@ export function buildSequenceImport({
     blockers.push({ type: 'empty', message: 'No tool rows found in this file.' });
   }
 
-  if (missingTools.length > 0) {
+  if (missingTools.length > 0 && !allowUnmatchedTools) {
     blockers.push({
       type: 'no_tool',
       message: `${missingTools.length} ProShop Tool #${missingTools.length !== 1 ? 's are' : ' is'} not in the tool library. Add ${missingTools.length !== 1 ? 'them' : 'it'} first — the sequence detail can't be stored with a tool it can't look up.`,
@@ -254,6 +294,13 @@ export function buildSequenceImport({
       lc: lcConflicts,
       holders: unmatchedHolders,
       legacy: legacyMatches,
+      // Matched on the bare number with the letter prefix ignored — a real
+      // match, but a looser one than an exact id, so it is reported.
+      loose: looseMatches,
+      // Stored with `tool_ref: null`. Only ever non-blocking in the bulk pass;
+      // these rows are the worklist of ProShop numbers to go correct, and they
+      // contribute nothing to Where Used until they are.
+      unmatched: missingTools,
     },
   };
 }
@@ -268,3 +315,49 @@ export function upsertDetail(detailsFile, detail) {
 }
 
 export const detailsOf = (file) => file?.details || [];
+
+// ── Re-linking stored rows ───────────────────────────────────────────────────
+// ⚠️ THIS IS WHAT MAKES THE "unlinked row" FLAG CLEARABLE. `tool_ref` is
+// resolved once, at import, and stored — so correcting a tool's ProShop number
+// afterwards does NOT re-link the rows that missed it. And a re-import can't
+// fix it either: the file isn't stale, so the bulk pass skips it, and a
+// same-version re-stamp keeps the prior record untouched. Without this pass the
+// flag would name a problem the user has already fixed, forever.
+//
+// Metadata-only and Drive-free: it re-resolves ONLY rows that currently have no
+// tool, and never overwrites a link that already resolved.
+//
+// ⚠️ Returns the SAME file reference when nothing changed, so a caller can tell
+// whether there is anything to persist without diffing.
+export function relinkStoredDetails(detailsFile, tools, { loose = true } = {}) {
+  const list = detailsOf(detailsFile);
+  if (list.length === 0) return { file: detailsFile, relinked: [] };
+
+  const index = buildToolIndex(tools);
+  const relinked = [];
+  let changed = false;
+
+  const next = list.map(detail => {
+    let touched = false;
+    const rows = (detail.tools || []).map(row => {
+      if (row.tool_ref) return row;
+      const { tool, via } = findToolByProShopId(index, row.tool_id, { loose });
+      if (!tool) return row;
+      touched = true;
+      relinked.push({
+        operation_id: detail.operation_id,
+        program_number: detail.program_number,
+        t: row.t,
+        tool_id: row.tool_id,
+        matched: tool.tool_id,
+      });
+      return { ...row, tool_ref: tool.id, matched_via: via };
+    });
+    if (!touched) return detail;
+    changed = true;
+    return { ...detail, tools: rows };
+  });
+
+  if (!changed) return { file: detailsFile, relinked: [] };
+  return { file: { ...(detailsFile || {}), version: 1, details: next }, relinked };
+}

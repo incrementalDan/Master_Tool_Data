@@ -113,6 +113,16 @@ export default function SequenceCompareModal({ operation, detail, pendingFile = 
 
   const swap = () => { setLeftId(rightId); setRightId(leftId); };
 
+  // What a chosen side is, in words — so the caption below the table can name
+  // the direction rather than leaving it to be inferred from the pickers.
+  const sideLabel = (id) => {
+    const v = (versions || []).find(x => x.id === id);
+    if (!v) return 'that version';
+    if (v.kind === 'pending') return 'the file waiting in Drive';
+    if (v.kind === 'current') return `the version stored now${v.postedIso ? ` (posted ${versionLabel(v)})` : ''}`;
+    return `the version posted ${versionLabel(v)}`;
+  };
+
   const picker = (value, onChange, exclude) => (
     <select className="field-input" style={{ maxWidth: 300 }} value={value || ''}
       onChange={e => onChange(e.target.value)}>
@@ -137,14 +147,16 @@ export default function SequenceCompareModal({ operation, detail, pendingFile = 
           {canCompare(versions) && (
             <div className="sc-pickers">
               <div>
-                <label className="field-label">Older</label>
+                <label className="field-label">From (older)</label>
                 {picker(leftId, setLeftId, rightId)}
               </div>
-              <button className="icon-btn" title="Swap sides" onClick={swap} style={{ marginTop: 18 }}>
+              {/* Points FROM the older side TO the newer one, so the direction is
+                  legible without reading the two labels. */}
+              <button className="icon-btn sc-swap" title="Swap the two sides" onClick={swap}>
                 <ArrowRight size={15} />
               </button>
               <div>
-                <label className="field-label">Newer</label>
+                <label className="field-label">To (newer)</label>
                 {picker(rightId, setRightId, leftId)}
               </div>
               {phase === 'ready' && (
@@ -192,6 +204,8 @@ export default function SequenceCompareModal({ operation, detail, pendingFile = 
                       return (
                         <tr key={i} className={`sc-row sc-${p.status}`}>
                           <td>
+                            {p.status === 'added' && <span className="sc-mark added" title="Added in the newer version">+</span>}
+                            {p.status === 'removed' && <span className="sc-mark removed" title="Not in the newer version">−</span>}
                             <span className="sd-seq">{shown.seq}</span>
                             {/* Seq# is shown but never compared — when it moved,
                                 the reason is the added/removed row, not the
@@ -220,6 +234,12 @@ export default function SequenceCompareModal({ operation, detail, pendingFile = 
                 </table>
               </div>
               <div className="text-sub text-xs" style={{ marginTop: 10 }}>
+                Showing what changed going <strong>from {sideLabel(leftId)}</strong> to{' '}
+                <strong>{sideLabel(rightId)}</strong> — a <span className="sc-mark added">+</span> row is in the
+                newer version only, a <span className="sc-mark removed">−</span> row is in the older one only, and
+                a changed cell reads <span className="sc-val" style={{ textDecoration: 'line-through' }}>old</span>
+                {' → '}<span className="sc-val changed">new</span>.
+                <br />
                 Reference only — nothing here changes what&apos;s stored. Sequence numbers shift whenever an
                 operation is added or removed, so they aren&apos;t treated as a difference. Cut Dia, Tip and
                 Location aren&apos;t compared.

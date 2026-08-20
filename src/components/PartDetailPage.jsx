@@ -25,8 +25,9 @@ import useRowSelection, { selScope } from './useRowSelection.js';
 import SequenceDetailTable from './SequenceDetailTable.jsx';
 import SequenceUploadModal from './SequenceUploadModal.jsx';
 import useProgramFileSync from './useProgramFileSync.js';
-import ProgramFileStatus, { AutoImportedMark } from './ProgramFileStatus.jsx';
+import ProgramFileStatus, { AutoImportedMark, BulkImportMark } from './ProgramFileStatus.jsx';
 import SequenceCompareModal from './SequenceCompareModal.jsx';
+import { canOfferCompare } from '../utils/programVersions.js';
 import { labelRows } from '../utils/toolLabels.js';
 import { printToolTags, openTagWindow } from '../utils/labelPrint.js';
 
@@ -184,6 +185,7 @@ function OperationCard({
           <span className="sd-head-right" onClick={e => e.stopPropagation()}>
             <ProgramFileStatus status={fileStatus} syncing={syncing} onSync={onSync} />
             <AutoImportedMark detail={detail} />
+            <BulkImportMark detail={detail} />
             <span className="text-xs text-sub">{detail.tools.length} tools</span>
             {/* Proven = "it ran on the machine and did not crash". Never implied
                 by an upload; a person sets it, and it belongs to this version. */}
@@ -204,9 +206,14 @@ function OperationCard({
             </button>
             {/* Deliberately its own button, never part of the update. Taking an
                 update stays one click that asks nothing; this is the separate
-                "what actually changed?" look, and it only writes nothing. */}
+                "what actually changed?" look, and it writes nothing. Disabled
+                only when we can say for sure there is no second version — see
+                canOfferCompare, which never spends a Drive call to find out. */}
             <button className="btn btn-ghost btn-sm" onClick={onCompare}
-              title="Compare this version against another posted version — reference only, nothing is changed">
+              disabled={!canOfferCompare(detail, fileStatus)}
+              title={canOfferCompare(detail, fileStatus)
+                ? 'Compare this version against another posted version — reference only, nothing is changed'
+                : 'Only one version of this program has been posted, so there is nothing to compare it against yet'}>
               <GitCompare size={12} />
             </button>
             {/* Appears only with a selection, to the LEFT of Print all, so
@@ -437,6 +444,7 @@ export default function PartDetailPage() {
   // The all-tools list pools several programs, so it showed no per-program
   // status at all — you could print a full set of labels for a setup Drive has
   // already moved on from, with nothing on screen to say so.
+  const bulkImported = opsWithDetail.filter(op => detailByOperation.get(op.id)?.import_batch);
   const statusByOp = new Map(opsWithDetail.map(op => [op.id, fileSync.statusFor(op)]));
   const staleOps = opsWithDetail.filter(op => statusByOp.get(op.id).state === 'stale');
   const staleOpIds = new Set(staleOps.map(op => op.id));
@@ -565,6 +573,12 @@ export default function PartDetailPage() {
             {showJobList ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
             <Wrench size={14} style={{ color: 'var(--blue)' }} />
             <span className="sd-alltools-title">All tools for this part</span>
+            {/* The pooled list hides which program a row came from, so a single
+                bulk-imported program taints the whole set for review purposes —
+                say so once here rather than per row. */}
+            {bulkImported.length > 0 && (
+              <BulkImportMark title={`${bulkImported.length} of these program${bulkImported.length !== 1 ? 's were' : ' was'} taken in by the bulk import — nobody reviewed ${bulkImported.length !== 1 ? 'them' : 'it'}. The tools are usable; treat the values as whatever the post wrote.`} />
+            )}
             <span className="text-xs text-sub">
               every tool across all {withDetail} operation{withDetail !== 1 ? 's' : ''} — {partRows.length} rows
             </span>

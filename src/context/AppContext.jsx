@@ -1380,8 +1380,8 @@ export function AppProvider({ children }) {
 
   const programActions = useMemo(() => createProgramActions({
     notify, googleRef, demoModeRef, programDetailsRef, saveProgramDetails,
-    partsRef, toolsRef, holderLibraryRef, shopSettingsRef, userRef,
-  }), [notify, saveProgramDetails]);
+    partsRef, toolsRef, holderLibraryRef, shopSettingsRef, userRef, saveShopSettings,
+  }), [notify, saveProgramDetails, saveShopSettings]);
 
   const clearError = useCallback(() => dispatch({ type: 'CLEAR_ERROR' }), []);
 

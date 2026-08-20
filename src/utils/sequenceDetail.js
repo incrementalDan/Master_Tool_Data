@@ -91,6 +91,30 @@ export function proShopIdKey(raw) {
     .join('/');
 }
 
+// ProShop's counter increments across ALL tool types, so the number alone is
+// unique and the letter prefix is decoration. That is what lets an old file's
+// mis-formatted id still resolve — see `bareProShopNumber`.
+//
+// ⚠️ ANYTHING ABOVE THIS IS NOT A ProShop NUMBER. The counter has not reached
+// four digits, so a larger value is almost certainly a manufacturer part number
+// typed into the wrong column; matching it on digits would attach a real program
+// to the wrong tool, which is worse than not matching at all.
+export const PROSHOP_MAX = 999;
+
+// The bare number a ProShop id carries, for LOOSE matching only — never for
+// storage or display. Null when there isn't one to trust:
+//   - a combined insert id (`I-224 / G-223`) holds two numbers, not one;
+//   - a value above PROSHOP_MAX isn't a ProShop number at all.
+export function bareProShopNumber(raw) {
+  const s = String(raw ?? '').trim();
+  if (!s || s.includes('/')) return null;
+  const digits = s.replace(/\D/g, '');
+  if (!digits) return null;
+  const n = Number(digits);
+  if (!Number.isFinite(n) || n <= 0 || n > PROSHOP_MAX) return null;
+  return String(n);            // normalized, so 0265 and 265 agree
+}
+
 // ── Header row (Seq# 0) ──────────────────────────────────────────────────────
 // "NC PRG: OO1218 | FILE NAME: CAM - … | POSTED: 8-10-2026 10:51 | …"
 // The POSTED stamp is the VERSION KEY: it's written by post logic into both the
@@ -124,8 +148,12 @@ export function programNumberFromFileName(name) {
 // Every row value is the CSV's own trimmed string.
 export function parseSequenceCsv(text) {
   const all = parseCsvRows(text);
+  // ⚠️ Found via the ALIAS TABLE, not two literal strings. An older export that
+  // writes "Seq" instead of "Seq#" would otherwise fail to parse at all — and
+  // the failure looks like "this isn't a Sequence Detail export", which is
+  // exactly the wrong thing to tell someone about their own posted file.
   const headerIdx = all.findIndex(r =>
-    r.cells.some(c => normHeader(c) === 'seq#') || normHeader(r.cells[1]) === 'sequence description');
+    r.cells.some(c => headerToField(c) === 'seq') || headerToField(r.cells[1]) === 'description');
 
   if (headerIdx < 0) {
     return { headerRaw: '', fixtureRaw: '', posted: '', rows: [], missingColumns: ['seq', 'tool_id', 't'] };

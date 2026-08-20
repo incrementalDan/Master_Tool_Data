@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { HelpCircle } from 'lucide-react';
+import { HelpCircle, Unlink } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { HolderTag } from './HolderPill.jsx';
 import OpPill from './OpPill.jsx';
@@ -131,7 +131,21 @@ export default function ToolListTable({
                       ? <Link to={`/tool/${r.tool_ref}`} className="tool-id-pill" target="_blank" rel="noreferrer"
                           onClick={e => e.stopPropagation()}
                           title="Open this tool in a new tab">{r.tool_id}</Link>
-                      : <span className="tool-id-pill">{r.tool_id || '—'}</span>}
+                      : <>
+                          <span className="tool-id-pill">{r.tool_id || '—'}</span>
+                          {/* The bulk pass stores a row whose ProShop number
+                              resolved to no tool rather than throwing the whole
+                              program away. The number is the CSV's own and is
+                              kept — this marks that it links to nothing, which
+                              also means the row contributes nothing to Where
+                              Used until the number is corrected. */}
+                          {r.tool_id && (
+                            <span className="sd-tool-unmatched"
+                              title="This ProShop number isn't in the tool library — either it's mis-formatted, was never in ProShop, or the tool was never updated. The posted file's value is shown as-is.">
+                              <Unlink size={12} />
+                            </span>
+                          )}
+                        </>}
                   </td>
                   <td>
                     {loc.value ? <span className="location-tag">{loc.value}</span> : DASH}
