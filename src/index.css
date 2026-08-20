@@ -6236,6 +6236,27 @@ input.sf-ref-num { text-align: right; }
   border-color: var(--amber);
 }
 
+/* Progress bar for the bulk import pass. */
+.pn-progress { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.pn-progress-bar { height: 100%; background: var(--blue); transition: width 0.2s ease; }
+
+/* "Bulk import" marker — a warning-shaped box, not an icon, because unlike the
+   sync states this is about the PROVENANCE of everything below it: nobody
+   reviewed these numbers. Amber rather than red: the data is usable, it just
+   hasn't been vouched for. */
+.bulk-mark {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em;
+  padding: 2px 8px; border-radius: 6px; white-space: nowrap;
+  color: var(--amber);
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--amber) 38%, transparent);
+}
+
+/* A tool row whose ProShop number resolved to nothing. The number is still
+   shown — it is the CSV's own value and the worklist of what to go correct. */
+.sd-tool-unmatched { color: var(--amber); display: inline-flex; vertical-align: middle; }
+
 /* Sequence Detail version compare (SequenceCompareModal). One row per aligned
    operation — with the columns doubled a side-by-side view would be twenty
    across, and the thing worth seeing is the CELL that moved. */

@@ -295,6 +295,11 @@ export const DEFAULT_SHOP_SETTINGS = {
   // All types remain visible in the Add Tool form. Off in demo mode (small sample set).
   hide_unused_tool_types: true,
   import: { last_proshop_import: null, last_photo_import_folder_id: null },
+  // The last bulk Sequence Detail run — a LOG of an event, written by the run
+  // itself, never edited in Settings. ⚠️ It is display only: what actually marks
+  // a record as bulk-imported is that record's own `import_batch`, stamped at
+  // import time, so the badge can never be a guess based on timestamp proximity.
+  sequence_bulk_import: null,
   aps: { last_used_hub_id: null, last_used_project_id: null },
   // ISO timestamps set when each step of the initial setup workflow completes.
   // null = not done. This is the SINGLE SOURCE OF TRUTH for setup completion —

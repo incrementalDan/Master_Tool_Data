@@ -96,12 +96,36 @@ export default function ProgramFileStatus({ status, label = 'Sequence Detail', s
   );
 }
 
-// Marks a detail that arrived through the automatic pass rather than a person
-// choosing to upload it. Not a warning — the older posted files it pulls in are
+// Marks a detail that arrived through the BULK pass rather than a person
+// choosing to upload it. Not an error — the old posted files it takes in are
 // genuinely a bit out of date, and the point of having them is the program ↔
-// ProShop-ID links. This just keeps "nobody vouched for these numbers" visible.
+// ProShop-ID links. It exists so "nobody vouched for these numbers" stays
+// visible wherever the data is read.
+//
+// ⚠️ Reads the record's OWN `import_batch`, stamped at import time. It is
+// deliberately not inferred by comparing the record's timestamp against when
+// the run happened: a window gets it wrong in both directions — a manual upload
+// made during a run would be falsely marked (exactly backwards, that one was
+// reviewed), and a run over hundreds of files outlasts any window, so its later
+// files would not be marked at all.
+export function BulkImportMark({ detail, compact = false }) {
+  if (!detail?.import_batch) return null;
+  const when = String(detail.import_batch).slice(0, 16).replace('T', ' ');
+  const title = `Taken in by the bulk import on ${when} — nobody reviewed this one. The tool list is usable; treat the values as whatever the post wrote.`;
+  if (compact) {
+    return <span className="pf-status muted" title={title}><Zap size={14} /></span>;
+  }
+  return (
+    <span className="bulk-mark" title={title}>
+      <Zap size={12} /> Bulk import
+    </span>
+  );
+}
+
+// Kept for the per-program automatic pull (not the bulk pass), which marks the
+// record `auto_imported` without a batch.
 export function AutoImportedMark({ detail }) {
-  if (!detail?.auto_imported) return null;
+  if (!detail?.auto_imported || detail?.import_batch) return null;
   return (
     <span className="pf-status muted" title="Pulled in automatically from the machine's posted-files folder — nobody reviewed this one. The tool list is linked and usable; treat the values as whatever the post wrote.">
       <Zap size={14} />

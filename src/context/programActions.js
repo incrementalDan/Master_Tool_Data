@@ -17,9 +17,9 @@
 // copy is made.
 import * as driveService from '../services/driveService.js';
 import { upsertDetail, detailsOf, buildSequenceImport } from '../utils/sequenceImport.js';
-import { formatProgramNumber } from '../utils/parts.js';
-import { postedToIso } from '../utils/sequenceDetail.js';
-import { machineFolders } from '../utils/programFileSync.js';
+import { formatProgramNumber, operationByProgramNumber } from '../utils/parts.js';
+import { postedToIso, programNumberFromFileName } from '../utils/sequenceDetail.js';
+import { machineFolders, candidatesFor, pickLatest, isStale, SEQUENCE_CSV } from '../utils/programFileSync.js';
 import { buildVersionList } from '../utils/programVersions.js';
 
 // Archived name: O1218_20260810-1051_proven.csv — sorts chronologically in
@@ -43,7 +43,7 @@ const demoRawText = new Map();   // detail id → the uploaded CSV text
 export function createProgramActions(ctx) {
   const {
     notify, googleRef, demoModeRef, programDetailsRef, saveProgramDetails,
-    partsRef, toolsRef, holderLibraryRef, shopSettingsRef, userRef,
+    partsRef, toolsRef, holderLibraryRef, shopSettingsRef, userRef, saveShopSettings,
   } = ctx;
 
   const requireDrive = () => {
@@ -201,7 +201,7 @@ export function createProgramActions(ctx) {
   // modifiedTime of the file we actually took, so a file re-saved without being
   // re-posted stops flagging once it has been pulled in. Without it the
   // indicator would re-fire on every poll with no action able to clear it.
-  const importProgramFileFromDrive = async (driveFile, { auto = false } = {}) => {
+  const importProgramFileFromDrive = async (driveFile, { auto = false, bulk = false, batch = null } = {}) => {
     if (!driveFile?.id) throw new Error('No file to import');
     // ⚠️ Fetched as a BLOB and stored as the blob, not as re-encoded text. The
     // raw posted file is kept byte-for-byte — that is the whole point of storing
@@ -218,6 +218,9 @@ export function createProgramActions(ctx) {
       holderRecords: holderLibraryRef.current?.holders || [],
       existingDetails: detailsOf(programDetailsRef.current),
       uploadedBy: userRef.current?.email || userRef.current?.name || '',
+      // ⚠️ Only the bulk pass relaxes these. See buildSequenceImport.
+      allowUnmatchedTools: bulk,
+      looseToolMatch: bulk,
     });
 
     if (built.blockers.length > 0) return { ok: false, built, blockers: built.blockers };
@@ -249,6 +252,13 @@ export function createProgramActions(ctx) {
       // anyone reviewed the numbers.
       auto_imported: !!auto,
       auto_imported_at: auto ? new Date().toISOString() : null,
+      // ⚠️ The batch is stamped ON THE RECORD at import time, not inferred later
+      // by comparing timestamps against when the run happened. A time window
+      // gets it wrong in both directions: a manual upload made during a run
+      // would be falsely marked bulk (exactly backwards — that one was
+      // reviewed), and a run over hundreds of files easily outlasts any window,
+      // so its later files would not be marked at all.
+      import_batch: bulk ? batch : null,
     };
 
     // The blob itself — same bytes Drive holds. importSequenceDetail only needs
@@ -302,9 +312,133 @@ export function createProgramActions(ctx) {
     }
   };
 
+  // ── The BULK pass ──────────────────────────────────────────────────────────
+  // Scan every configured posted-files folder and take in everything it can, in
+  // one run. The point is the program ↔ ProShop-ID links: once they exist, "which
+  // programs use this tool" is answerable across years of old jobs.
+  //
+  // ⚠️ It is DELIBERATELY more permissive than a single import, in exactly one
+  // way: an unmatched ProShop number does not throw the file away. Everything
+  // else that blocks still blocks, because those are structural — a detail is
+  // keyed on `operation_id`, so a file whose program ToolDex doesn't have has
+  // nothing to attach to at all.
+  //
+  // ⚠️ Files we already hold are SKIPPED, not re-imported. That makes a re-run
+  // cheap and idempotent, and stops the pass rewriting proven records for
+  // nothing.
+  const bulkImportPostedFiles = async ({ onProgress } = {}) => {
+    requireDrive();
+    const batch = new Date().toISOString();
+    const { folders, listings, errors } = await listPostedFolders();
+
+    if (folders.length === 0) {
+      throw new Error('No machine has a posted-files folder configured yet — set one in Settings → Shop → Machines.');
+    }
+
+    // One candidate per PROGRAM NUMBER across every folder. The shop used to
+    // reuse numbers between machines, so the same number can appear twice —
+    // the most recently modified copy wins, exactly as the per-program check does.
+    const numbers = new Set();
+    for (const f of folders) {
+      for (const file of listings.get(f.folderId) || []) {
+        const n = programNumberFromFileName(file.name);
+        if (n != null && SEQUENCE_CSV.ext.includes((file.name.match(/(\.[^.]+)$/)?.[1] || '').toLowerCase())) {
+          numbers.add(n);
+        }
+      }
+    }
+
+    const jobs = [];
+    for (const n of numbers) {
+      const picked = pickLatest(candidatesFor(n, folders, listings, SEQUENCE_CSV));
+      if (picked) jobs.push({ programNumber: n, file: picked.file, folder: picked.folder });
+    }
+    jobs.sort((a, b) => a.programNumber - b.programNumber);
+
+    const report = {
+      batch,
+      started_at: batch,
+      finished_at: null,
+      scanned: jobs.length,
+      imported: [],
+      skipped: [],
+      upToDate: [],
+      folderErrors: errors,
+    };
+
+    let done = 0;
+    for (const job of jobs) {
+      onProgress?.({ done, total: jobs.length, current: formatProgramNumber(job.programNumber) });
+      done++;
+
+      // Nothing to do when we already hold this exact file.
+      const op = operationByProgramNumber(partsRef.current, job.programNumber);
+      const prior = op ? detailsOf(programDetailsRef.current).find(d => d.operation_id === op.id) : null;
+      if (prior && !isStale(prior, job.file)) {
+        report.upToDate.push({ programNumber: job.programNumber, fileName: job.file.name });
+        continue;
+      }
+
+      try {
+        const res = await importProgramFileFromDrive(job.file, { auto: true, bulk: true, batch });
+        if (!res.ok) {
+          report.skipped.push({
+            programNumber: job.programNumber,
+            fileName: job.file.name,
+            reason: res.blockers[0].type,
+            message: res.blockers[0].message,
+          });
+          continue;
+        }
+        report.imported.push({
+          programNumber: job.programNumber,
+          fileName: job.file.name,
+          tools: res.stored.tools.length,
+          // The worklist this run produces: numbers that resolved to no tool,
+          // and ones that only resolved on the bare number.
+          unmatched: res.built.flags.unmatched.length,
+          loose: res.built.flags.loose.length,
+          unchanged: !!res.unchanged,
+        });
+      } catch (err) {
+        report.skipped.push({
+          programNumber: job.programNumber,
+          fileName: job.file.name,
+          reason: 'error',
+          message: err.message,
+        });
+      }
+    }
+
+    report.finished_at = new Date().toISOString();
+    onProgress?.({ done: jobs.length, total: jobs.length, current: '' });
+
+    // Record the run shop-wide so Settings can show when it last happened. This
+    // is a LOG of the event — the per-record `import_batch` is what any badge
+    // actually reads, so the two can never disagree.
+    if (saveShopSettings && !demoModeRef.current) {
+      const ss = shopSettingsRef.current || {};
+      await saveShopSettings({
+        ...ss,
+        sequence_bulk_import: {
+          last_run_at: report.finished_at,
+          batch,
+          scanned: report.scanned,
+          imported: report.imported.length,
+          skipped: report.skipped.length,
+          up_to_date: report.upToDate.length,
+          by: userRef.current?.email || userRef.current?.name || '',
+        },
+      });
+    }
+
+    return report;
+  };
+
   return {
     importSequenceDetail, setProgramProven, fetchSequenceCsv,
     listPostedFolders, importProgramFileFromDrive,
     listProgramVersions, fetchVersionText,
+    bulkImportPostedFiles,
   };
 }

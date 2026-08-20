@@ -1863,11 +1863,30 @@ Each machine carries the Drive folder its posted files land in — `program_fold
 
 **Known noise, left deliberately:** `t_description` (the tool's own description) is compared, so renaming a tool in the library lights up every row using it. That is a true difference, and it is the natural first candidate for the later "some differences matter more than others" ranking — which is also where a per-column importance weighting would live.
 
-### TODO — the BULK pass (Function 2), and the matching rules decided for it
+### The BULK pass — one run over every posted-files folder
 
-Not built. Function 1 (the per-program indicator above) is; the bulk "scan every folder and pull in everything in one pass" is the other half. The reusable pieces it needs already exist — `listPostedFolders`, `candidatesFor`, `importProgramFileFromDrive({ auto: true })` and the `AutoImportedMark` — so the remaining work is the driver, a per-file report, and the two rules below.
+`AppContext.bulkImportPostedFiles({ onProgress })` (`programActions.js`), driven by **Settings → Bulk Import Sequence Details** (`BulkSequenceImportModal`). It scans every configured folder, takes the newest copy of each program number, and imports everything it can in one pass. The point is the **program ↔ ProShop-ID links** across years of old jobs — once they exist, "which tools run in which programs" is answerable historically.
 
-**⚠️ THE BULK PASS DOES NOT BLOCK ON AN UNMATCHED ProShop NUMBER — the manual/auto single import still does.** Owner's call, decided: a deliberate upload of a current posted file stays strict (a Tool # that resolves to nothing means something is wrong and the person is right there to fix it); a run over years of old posted files must not throw away a whole program because one number was mis-typed years ago. In bulk the row is **stored with `tool_ref: null` and flagged**, and the file lands.
+⚠️ **A file the app already holds is SKIPPED, not re-imported** (`isStale` against the stored `source_modified`). That makes a re-run cheap and idempotent and stops the pass rewriting proven records for nothing.
+
+⚠️ **IT RELAXES EXACTLY ONE BLOCKER, and that one is a policy choice.** `buildSequenceImport({ allowUnmatchedTools, looseToolMatch })` — both **off** for a deliberate upload. An unmatched ProShop number stores the row with `tool_ref: null` and flags it instead of throwing the whole program away, because losing a program to one number mis-typed years ago defeats the point of the run. **The other blockers are structural and still block**: a detail is keyed on `operation_id`, so a file whose program ToolDex doesn't have has nothing to attach to; likewise a file that isn't a Sequence Detail export, or has no tool rows. Do not "fix" those by inventing a placeholder operation.
+
+**Loose ProShop matching — the NUMBER, with the formatting tolerated.** ProShop's counter increments across all tool types, so the number alone is unique and the letter prefix is decoration. `bareProShopNumber` (`sequenceDetail.js`) + the `byNumber` indexes in `buildToolIndex`. Three guards, each of which a looser rule gets wrong:
+- ⚠️ **Above `PROSHOP_MAX` (999) is not a ProShop number.** The counter hasn't reached four digits, so a bigger value is almost certainly a manufacturer part number typed into the wrong column — matching it on digits would attach a real program to the wrong tool.
+- ⚠️ **A combined insert id holds TWO numbers**, so it never loose-matches; it still matches exactly, as an unordered set of halves.
+- ⚠️ **A number claimed by two tools is AMBIGUOUS and matches nothing.** Shop-wide numbering means it shouldn't happen, but a loose match that picked one would attach a program to the wrong tool silently, in bulk.
+
+A loose match is reported separately (`flags.loose`) from an exact one — it is a real match, just a looser one.
+
+**Older exports parse without special-casing.** Only Seq#, Tool # and G-Code Tool # are required; every other column was already optional and renders blank. ⚠️ The header ROW is now found via the alias table rather than two literal strings — an old file writing `Seq` instead of `Seq#` used to fail to parse entirely, and the failure reads as "this isn't a Sequence Detail export" about the shop's own posted file.
+
+**Provenance is stamped, never inferred.** Each record gets **`import_batch`** (the run's ISO stamp) at import time, and `BulkImportMark` reads that field. ⚠️ Deliberately NOT correlated by comparing a record's timestamp against when the run happened: a window gets it wrong in both directions — a manual upload made during a run would be falsely marked (exactly backwards; that one was reviewed), and a run over hundreds of files outlasts any window, so its later files wouldn't be marked at all. The marker appears on each program's header and once on the pooled all-tools header (a single bulk program taints the set for review purposes). `shop_settings.sequence_bulk_import` is a **log of the event** for the Settings card only — the badge never reads it, so the two cannot disagree.
+
+**An unmatched row is visible where it matters.** `ToolListTable` renders the CSV's own ProShop number with an unlink marker. ⚠️ The consequence that makes it matter: an unmatched row contributes nothing to **Where Used**, which is derived from `tool_ref`. Those rows are the worklist of numbers to correct, and the run's report lists them per program.
+
+### Deferred from the bulk pass
+
+(Implemented — kept for the reasoning.) **⚠️ THE BULK PASS DOES NOT BLOCK ON AN UNMATCHED ProShop NUMBER — the manual/auto single import still does.** Owner's call, decided: a deliberate upload of a current posted file stays strict (a Tool # that resolves to nothing means something is wrong and the person is right there to fix it); a run over years of old posted files must not throw away a whole program because one number was mis-typed years ago. In bulk the row is **stored with `tool_ref: null` and flagged**, and the file lands.
 
 ⚠️ **That is the ONLY blocker that can be relaxed, and it is a policy choice; the other three are structural.** A stored detail is keyed on `operation_id`, so `buildSequenceImport` cannot produce a record at all without a program to attach it to — a file whose program number ToolDex doesn't have is still skipped and reported, in bulk as everywhere. Same for a file that isn't a Sequence Detail export (no core columns to parse) and one with no tool rows (nothing to store). Do not "fix" those by inventing a placeholder operation.
 

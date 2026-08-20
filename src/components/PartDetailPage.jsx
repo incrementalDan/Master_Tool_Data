@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, UploadCloud, Download, Printer, ListOrdered, Wrench, Plus, Pencil, Trash2,
-  CheckCircle2, CircleDashed, ChevronDown, ChevronRight, Package, GitCompare,
+  CheckCircle2, CircleDashed, ChevronDown, ChevronRight, Package, GitCompare, Zap,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import {
@@ -25,7 +25,7 @@ import useRowSelection, { selScope } from './useRowSelection.js';
 import SequenceDetailTable from './SequenceDetailTable.jsx';
 import SequenceUploadModal from './SequenceUploadModal.jsx';
 import useProgramFileSync from './useProgramFileSync.js';
-import ProgramFileStatus, { AutoImportedMark } from './ProgramFileStatus.jsx';
+import ProgramFileStatus, { AutoImportedMark, BulkImportMark } from './ProgramFileStatus.jsx';
 import SequenceCompareModal from './SequenceCompareModal.jsx';
 import { canOfferCompare } from '../utils/programVersions.js';
 import { labelRows } from '../utils/toolLabels.js';
@@ -185,6 +185,7 @@ function OperationCard({
           <span className="sd-head-right" onClick={e => e.stopPropagation()}>
             <ProgramFileStatus status={fileStatus} syncing={syncing} onSync={onSync} />
             <AutoImportedMark detail={detail} />
+            <BulkImportMark detail={detail} />
             <span className="text-xs text-sub">{detail.tools.length} tools</span>
             {/* Proven = "it ran on the machine and did not crash". Never implied
                 by an upload; a person sets it, and it belongs to this version. */}
@@ -443,6 +444,7 @@ export default function PartDetailPage() {
   // The all-tools list pools several programs, so it showed no per-program
   // status at all — you could print a full set of labels for a setup Drive has
   // already moved on from, with nothing on screen to say so.
+  const bulkImported = opsWithDetail.filter(op => detailByOperation.get(op.id)?.import_batch);
   const statusByOp = new Map(opsWithDetail.map(op => [op.id, fileSync.statusFor(op)]));
   const staleOps = opsWithDetail.filter(op => statusByOp.get(op.id).state === 'stale');
   const staleOpIds = new Set(staleOps.map(op => op.id));
@@ -571,6 +573,14 @@ export default function PartDetailPage() {
             {showJobList ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
             <Wrench size={14} style={{ color: 'var(--blue)' }} />
             <span className="sd-alltools-title">All tools for this part</span>
+            {/* The pooled list hides which program a row came from, so a single
+                bulk-imported program taints the whole set for review purposes —
+                say so once here rather than per row. */}
+            {bulkImported.length > 0 && (
+              <span className="bulk-mark" title={`${bulkImported.length} of these program${bulkImported.length !== 1 ? 's were' : ' was'} taken in by the bulk import — nobody reviewed ${bulkImported.length !== 1 ? 'them' : 'it'}. The tools are usable; treat the values as whatever the post wrote.`}>
+                <Zap size={12} /> Bulk import
+              </span>
+            )}
             <span className="text-xs text-sub">
               every tool across all {withDetail} operation{withDetail !== 1 ? 's' : ''} — {partRows.length} rows
             </span>

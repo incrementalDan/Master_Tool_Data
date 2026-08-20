@@ -279,7 +279,7 @@ describe('an automatic pull archives exactly like a manual upload', () => {
 
     // The provenance fields are the ONLY intended difference.
     const strip = (d) => {
-      const { uploaded_at, source_modified, source_file_id, auto_imported, auto_imported_at, ...rest } = d;
+      const { uploaded_at, source_modified, source_file_id, auto_imported, auto_imported_at, import_batch, ...rest } = d;
       return rest;
     };
     expect(strip(auto)).toEqual(strip(manual));
