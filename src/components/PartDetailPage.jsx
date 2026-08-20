@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, Link } from 'react-router-dom';
 import {
   ArrowLeft, UploadCloud, Download, Printer, ListOrdered, Wrench, Plus, Pencil, Trash2,
-  CheckCircle2, CircleDashed, ChevronDown, ChevronRight, Package, GitCompare, Zap,
+  CheckCircle2, CircleDashed, ChevronDown, ChevronRight, Package, GitCompare,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import {
@@ -577,9 +577,7 @@ export default function PartDetailPage() {
                 bulk-imported program taints the whole set for review purposes —
                 say so once here rather than per row. */}
             {bulkImported.length > 0 && (
-              <span className="bulk-mark" title={`${bulkImported.length} of these program${bulkImported.length !== 1 ? 's were' : ' was'} taken in by the bulk import — nobody reviewed ${bulkImported.length !== 1 ? 'them' : 'it'}. The tools are usable; treat the values as whatever the post wrote.`}>
-                <Zap size={12} /> Bulk import
-              </span>
+              <BulkImportMark title={`${bulkImported.length} of these program${bulkImported.length !== 1 ? 's were' : ' was'} taken in by the bulk import — nobody reviewed ${bulkImported.length !== 1 ? 'them' : 'it'}. The tools are usable; treat the values as whatever the post wrote.`} />
             )}
             <span className="text-xs text-sub">
               every tool across all {withDetail} operation{withDetail !== 1 ? 's' : ''} — {partRows.length} rows

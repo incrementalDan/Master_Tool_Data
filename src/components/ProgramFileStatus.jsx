@@ -108,15 +108,15 @@ export default function ProgramFileStatus({ status, label = 'Sequence Detail', s
 // made during a run would be falsely marked (exactly backwards, that one was
 // reviewed), and a run over hundreds of files outlasts any window, so its later
 // files would not be marked at all.
-export function BulkImportMark({ detail, compact = false }) {
-  if (!detail?.import_batch) return null;
-  const when = String(detail.import_batch).slice(0, 16).replace('T', ' ');
-  const title = `Taken in by the bulk import on ${when} — nobody reviewed this one. The tool list is usable; treat the values as whatever the post wrote.`;
-  if (compact) {
-    return <span className="pf-status muted" title={title}><Zap size={14} /></span>;
-  }
+export function BulkImportMark({ detail, title }) {
+  // A title with no detail is the AGGREGATE form — the pooled all-tools list,
+  // where several programs share one badge. One implementation either way, so
+  // the badge can't drift between the two places it appears.
+  if (!title && !detail?.import_batch) return null;
+  const when = String(detail?.import_batch || '').slice(0, 16).replace('T', ' ');
   return (
-    <span className="bulk-mark" title={title}>
+    <span className="bulk-mark" title={title
+      || `Taken in by the bulk import on ${when} — nobody reviewed this one. The tool list is usable; treat the values as whatever the post wrote.`}>
       <Zap size={12} /> Bulk import
     </span>
   );

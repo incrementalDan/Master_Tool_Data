@@ -16,10 +16,12 @@
 // proven state. Re-uploading the same stamp is the same version: no new archive
 // copy is made.
 import * as driveService from '../services/driveService.js';
-import { upsertDetail, detailsOf, buildSequenceImport } from '../utils/sequenceImport.js';
+import { upsertDetail, detailsOf, buildSequenceImport, relinkStoredDetails } from '../utils/sequenceImport.js';
 import { formatProgramNumber, operationByProgramNumber } from '../utils/parts.js';
 import { postedToIso, programNumberFromFileName } from '../utils/sequenceDetail.js';
-import { machineFolders, candidatesFor, pickLatest, isStale, SEQUENCE_CSV } from '../utils/programFileSync.js';
+import {
+  machineFolders, candidatesFor, pickLatest, isStale, fileMatchesProgram, SEQUENCE_CSV,
+} from '../utils/programFileSync.js';
 import { buildVersionList } from '../utils/programVersions.js';
 
 // Archived name: O1218_20260810-1051_proven.csv — sorts chronologically in
@@ -342,9 +344,10 @@ export function createProgramActions(ctx) {
     for (const f of folders) {
       for (const file of listings.get(f.folderId) || []) {
         const n = programNumberFromFileName(file.name);
-        if (n != null && SEQUENCE_CSV.ext.includes((file.name.match(/(\.[^.]+)$/)?.[1] || '').toLowerCase())) {
-          numbers.add(n);
-        }
+        // Reuses the ONE matcher rather than re-deriving the extension test —
+        // a second copy is how the scan and the pick come to disagree about
+        // which files count.
+        if (n != null && fileMatchesProgram(file, n, SEQUENCE_CSV)) numbers.add(n);
       }
     }
 
@@ -363,17 +366,40 @@ export function createProgramActions(ctx) {
       imported: [],
       skipped: [],
       upToDate: [],
+      relinked: [],
       folderErrors: errors,
     };
+
+    // ⚠️ FIRST, and without touching Drive: re-resolve rows that were stored
+    // unlinked. `tool_ref` is fixed at import, so correcting a tool's ProShop
+    // number afterwards leaves those rows unlinked — and nothing else would fix
+    // them, because the file isn't stale so the scan below skips it. Without
+    // this the unlinked flag would keep naming a problem already fixed.
+    const relink = relinkStoredDetails(programDetailsRef.current, toolsRef.current);
+    if (relink.relinked.length > 0) {
+      await saveProgramDetails(relink.file);
+      report.relinked = relink.relinked;
+    }
 
     let done = 0;
     for (const job of jobs) {
       onProgress?.({ done, total: jobs.length, current: formatProgramNumber(job.programNumber) });
       done++;
 
-      // Nothing to do when we already hold this exact file.
+      // ⚠️ Both of these are checked BEFORE downloading. A posted folder holds
+      // other CSVs, and every one of them parses to some number — fetching each
+      // just to be told there is no such program is a Drive call per stray file.
       const op = operationByProgramNumber(partsRef.current, job.programNumber);
-      const prior = op ? detailsOf(programDetailsRef.current).find(d => d.operation_id === op.id) : null;
+      if (!op) {
+        report.skipped.push({
+          programNumber: job.programNumber,
+          fileName: job.file.name,
+          reason: 'no_program',
+          message: `No program ${formatProgramNumber(job.programNumber)} in ToolDex — a sequence detail is stored against an operation, so there is nothing to attach this to.`,
+        });
+        continue;
+      }
+      const prior = detailsOf(programDetailsRef.current).find(d => d.operation_id === op.id);
       if (prior && !isStale(prior, job.file)) {
         report.upToDate.push({ programNumber: job.programNumber, fileName: job.file.name });
         continue;
@@ -390,6 +416,13 @@ export function createProgramActions(ctx) {
           });
           continue;
         }
+        // ⚠️ A same POSTED stamp means the file was only re-stamped — nothing
+        // was stored. Counting that as "taken in" overstates the run, and its
+        // unmatched count would describe a file that was never imported.
+        if (res.unchanged) {
+          report.upToDate.push({ programNumber: job.programNumber, fileName: job.file.name });
+          continue;
+        }
         report.imported.push({
           programNumber: job.programNumber,
           fileName: job.file.name,
@@ -398,7 +431,6 @@ export function createProgramActions(ctx) {
           // and ones that only resolved on the bare number.
           unmatched: res.built.flags.unmatched.length,
           loose: res.built.flags.loose.length,
-          unchanged: !!res.unchanged,
         });
       } catch (err) {
         report.skipped.push({
@@ -417,19 +449,25 @@ export function createProgramActions(ctx) {
     // is a LOG of the event — the per-record `import_batch` is what any badge
     // actually reads, so the two can never disagree.
     if (saveShopSettings && !demoModeRef.current) {
-      const ss = shopSettingsRef.current || {};
-      await saveShopSettings({
-        ...ss,
-        sequence_bulk_import: {
-          last_run_at: report.finished_at,
-          batch,
-          scanned: report.scanned,
-          imported: report.imported.length,
-          skipped: report.skipped.length,
-          up_to_date: report.upToDate.length,
-          by: userRef.current?.email || userRef.current?.name || '',
-        },
-      });
+      try {
+        const ss = shopSettingsRef.current || {};
+        await saveShopSettings({
+          ...ss,
+          sequence_bulk_import: {
+            last_run_at: report.finished_at,
+            batch,
+            scanned: report.scanned,
+            imported: report.imported.length,
+            skipped: report.skipped.length,
+            up_to_date: report.upToDate.length,
+            by: userRef.current?.email || userRef.current?.name || '',
+          },
+        });
+      } catch (err) {
+        // The import already happened and every record is stamped; losing the
+        // Settings line is not worth discarding the report of the run.
+        notify(`Imported, but the run couldn't be recorded in Settings: ${err.message}`, 'error', 7000);
+      }
     }
 
     return report;

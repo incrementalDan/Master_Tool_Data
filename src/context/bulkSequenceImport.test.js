@@ -119,6 +119,17 @@ describe('bulkImportPostedFiles', () => {
     expect(programDetailsRef.current.details).toHaveLength(0);
   });
 
+  it('⚠️ does not DOWNLOAD a file it already knows it cannot store', async () => {
+    // A posted folder holds other CSVs and every one parses to some number —
+    // fetching each just to be told there is no such program is a Drive call
+    // per stray file.
+    drive.listFolderChildren.mockResolvedValue([csv('O9999.csv'), csv('2026 backup.csv')]);
+    const { ctx } = makeCtx();
+    const report = await createProgramActions(ctx).bulkImportPostedFiles();
+    expect(report.skipped).toHaveLength(2);
+    expect(drive.fetchFileBlob).not.toHaveBeenCalled();
+  });
+
   it('⚠️ leaves a program it already holds alone, so a re-run is cheap', async () => {
     drive.listFolderChildren.mockResolvedValue([csv('O1218.csv')]);
     const { ctx, programDetailsRef } = makeCtx();
@@ -170,5 +181,121 @@ describe('bulkImportPostedFiles', () => {
     await createProgramActions(ctx).bulkImportPostedFiles({ onProgress: p => seen.push(p.done) });
     expect(seen[0]).toBe(0);
     expect(seen[seen.length - 1]).toBe(2);
+  });
+});
+
+describe('⚠️ a re-stamp is not an import', () => {
+  it('counts a same-POSTED-stamp file as already current, not as taken in', async () => {
+    // Drive re-saved the file (newer modifiedTime) without it being re-posted.
+    // Nothing is stored — counting it as "taken in" overstates the run, and its
+    // unmatched count would describe a file that was never imported.
+    const prior = {
+      id: 'det-1', operation_id: 'op-1', program_number: 1218,
+      posted: '8-10-2026 10:51', raw_file_id: 'raw-old', proven: true, tools: [],
+      source_modified: '2026-08-10T10:51:00Z',
+    };
+    drive.listFolderChildren.mockResolvedValue([csv('O1218.csv', '2026-09-01T09:00:00Z')]);
+    const { ctx, programDetailsRef } = makeCtx({ programDetails: { version: 1, details: [prior] } });
+    const report = await createProgramActions(ctx).bulkImportPostedFiles();
+
+    expect(report.imported).toEqual([]);
+    expect(report.upToDate).toHaveLength(1);
+    expect(drive.uploadToolFile).not.toHaveBeenCalled();
+    // ...and the proven state it already had is untouched.
+    expect(programDetailsRef.current.details[0].proven).toBe(true);
+  });
+
+  it('a genuinely newer POSTED version is taken in and starts unproven', async () => {
+    const prior = {
+      id: 'det-1', operation_id: 'op-1', program_number: 1218,
+      posted: '8-01-2026 08:00', raw_file_id: 'raw-old', proven: true, tools: [],
+      source_modified: '2026-08-01T08:00:00Z',
+    };
+    drive.listFolderChildren.mockResolvedValue([csv('O1218.csv', '2026-09-01T09:00:00Z')]);
+    const { ctx, programDetailsRef } = makeCtx({ programDetails: { version: 1, details: [prior] } });
+    const report = await createProgramActions(ctx).bulkImportPostedFiles();
+
+    expect(report.imported).toHaveLength(1);
+    expect(drive.renameDriveFile).toHaveBeenCalled();          // the old one archived
+    expect(programDetailsRef.current.details[0].proven).toBe(false);
+  });
+
+  it('ignores a non-CSV sitting in the posted folder', async () => {
+    drive.listFolderChildren.mockResolvedValue([
+      csv('O1218.csv'),
+      { id: 'nc', name: 'O1218.NC', mimeType: 'text/plain', modifiedTime: '2026-08-10T10:51:00Z' },
+      { id: 'sub', name: 'Archive', mimeType: 'application/vnd.google-apps.folder', modifiedTime: '' },
+    ]);
+    const { ctx } = makeCtx();
+    const report = await createProgramActions(ctx).bulkImportPostedFiles();
+    expect(report.scanned).toBe(1);
+    expect(report.imported).toHaveLength(1);
+  });
+});
+
+describe('⚠️ correcting a ProShop number can actually clear the flag', () => {
+  // The dead end this closes: tool_ref is resolved once at import and stored, so
+  // fixing a tool's number afterwards leaves the row unlinked — and re-running
+  // wouldn't help, because the file isn't stale so the scan skips it.
+  const detailWithOrphan = {
+    id: 'det-1', operation_id: 'op-1', program_number: 1218,
+    posted: '8-10-2026 10:51', raw_file_id: 'raw-1', proven: false,
+    source_modified: '2026-08-10T10:51:00Z',
+    import_batch: '2026-08-10T12:00:00Z',
+    tools: [
+      { t: 'T38', t_num: 38, tool_id: 'B-261', tool_ref: 'FTL-B261' },
+      { t: 'T56', t_num: 56, tool_id: 'A-265', tool_ref: null },
+    ],
+  };
+
+  it('re-links a stored row once the tool exists, without touching Drive', async () => {
+    drive.listFolderChildren.mockResolvedValue([csv('O1218.csv')]);
+    const { ctx, programDetailsRef } = makeCtx({ programDetails: { version: 1, details: [detailWithOrphan] } });
+    const report = await createProgramActions(ctx).bulkImportPostedFiles();
+
+    expect(report.relinked).toHaveLength(1);
+    expect(report.relinked[0].tool_id).toBe('A-265');
+    expect(programDetailsRef.current.details[0].tools[1].tool_ref).toBe('FTL-A265');
+    // The file itself was already current — nothing was downloaded for this.
+    expect(report.upToDate).toHaveLength(1);
+    expect(drive.fetchFileBlob).not.toHaveBeenCalled();
+  });
+
+  it('never overwrites a link that already resolved', async () => {
+    drive.listFolderChildren.mockResolvedValue([csv('O1218.csv')]);
+    const { ctx, programDetailsRef } = makeCtx({ programDetails: { version: 1, details: [detailWithOrphan] } });
+    await createProgramActions(ctx).bulkImportPostedFiles();
+    expect(programDetailsRef.current.details[0].tools[0].tool_ref).toBe('FTL-B261');
+  });
+
+  it('reports nothing to re-link on a second run — the flag stays cleared', async () => {
+    drive.listFolderChildren.mockResolvedValue([csv('O1218.csv')]);
+    const { ctx } = makeCtx({ programDetails: { version: 1, details: [detailWithOrphan] } });
+    const actions = createProgramActions(ctx);
+    await actions.bulkImportPostedFiles();
+    const second = await actions.bulkImportPostedFiles();
+    expect(second.relinked).toEqual([]);
+  });
+
+  it('leaves a genuinely unknown number unlinked rather than guessing', async () => {
+    const unknown = { ...detailWithOrphan, tools: [{ t: 'T9', t_num: 9, tool_id: 'Z-777', tool_ref: null }] };
+    drive.listFolderChildren.mockResolvedValue([csv('O1218.csv')]);
+    const { ctx, programDetailsRef } = makeCtx({ programDetails: { version: 1, details: [unknown] } });
+    const report = await createProgramActions(ctx).bulkImportPostedFiles();
+    expect(report.relinked).toEqual([]);
+    expect(programDetailsRef.current.details[0].tools[0].tool_ref).toBe(null);
+  });
+});
+
+describe('the Settings log is a convenience, not the run', () => {
+  it('⚠️ a failed log write does not discard the report of work that happened', async () => {
+    drive.listFolderChildren.mockResolvedValue([csv('O1218.csv')]);
+    const { ctx, programDetailsRef } = makeCtx();
+    ctx.saveShopSettings = vi.fn(async () => { throw new Error('Drive down'); });
+
+    const report = await createProgramActions(ctx).bulkImportPostedFiles();
+    expect(report.imported).toHaveLength(1);
+    expect(programDetailsRef.current.details).toHaveLength(1);
+    expect(ctx.notify).toHaveBeenCalled();
   });
 });

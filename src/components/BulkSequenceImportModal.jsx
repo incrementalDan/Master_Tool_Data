@@ -66,6 +66,14 @@ export default function BulkSequenceImportModal({ onClose }) {
                   numbers, not vouching for the values.
                 </div>
               </div>
+              <div className="sd-note warn">
+                <AlertTriangle size={14} style={{ color: 'var(--amber)', flexShrink: 0 }} />
+                <div>
+                  Where Drive has a <strong>newer posted version</strong> than the app holds, this replaces it —
+                  the old one is archived and, as with any new version, the program goes back to
+                  <strong> unproven</strong>. Programs already up to date are untouched.
+                </div>
+              </div>
               <div className="sd-note">
                 <div>
                   A ProShop number that isn&apos;t in the library <strong>won&apos;t stop the file</strong> — that row is
@@ -94,6 +102,12 @@ export default function BulkSequenceImportModal({ onClose }) {
                 <div>
                   <div><strong>{report.imported.length}</strong> taken in · {report.upToDate.length} already
                     current · {report.skipped.length} skipped · {report.scanned} scanned</div>
+                  {report.relinked.length > 0 && (
+                    <div className="text-xs text-sub">
+                      {report.relinked.length} previously unlinked row{report.relinked.length !== 1 ? 's' : ''} now
+                      {' '}resolve{report.relinked.length === 1 ? 's' : ''} to a tool.
+                    </div>
+                  )}
                   {(totalUnmatched > 0 || totalLoose > 0) && (
                     <div className="text-xs text-sub">
                       {totalUnmatched > 0 && <>{totalUnmatched} tool row{totalUnmatched !== 1 ? 's' : ''} couldn&apos;t be linked. </>}
@@ -119,7 +133,7 @@ export default function BulkSequenceImportModal({ onClose }) {
                   <div className="section-header mb-8">Skipped</div>
                   <ul className="sd-blocker-list">
                     {report.skipped.map(r => (
-                      <li key={r.fileName}>
+                      <li key={r.programNumber}>
                         <span className="program-num-badge">{formatProgramNumber(r.programNumber)}</span>
                         <span className="text-sub">{r.message}</span>
                       </li>
@@ -135,7 +149,7 @@ export default function BulkSequenceImportModal({ onClose }) {
                   </div>
                   <ul className="sd-blocker-list">
                     {report.imported.filter(r => r.unmatched > 0).map(r => (
-                      <li key={r.fileName}>
+                      <li key={r.programNumber}>
                         <span className="program-num-badge">{formatProgramNumber(r.programNumber)}</span>
                         <span className="text-sub">{r.unmatched} of {r.tools} rows link to no tool</span>
                       </li>

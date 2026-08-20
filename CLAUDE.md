@@ -1884,6 +1884,14 @@ A loose match is reported separately (`flags.loose`) from an exact one — it is
 
 **An unmatched row is visible where it matters.** `ToolListTable` renders the CSV's own ProShop number with an unlink marker. ⚠️ The consequence that makes it matter: an unmatched row contributes nothing to **Where Used**, which is derived from `tool_ref`. Those rows are the worklist of numbers to correct, and the run's report lists them per program.
 
+⚠️ **`relinkStoredDetails` is what makes that flag CLEARABLE, and the run does it first.** `tool_ref` is resolved once at import and stored, so correcting a tool's ProShop number afterwards does **not** re-link the rows that missed it — and nothing else would: the file isn't stale, so the scan skips the program, and a same-version re-stamp keeps the prior record untouched. The flag would name a problem the user had already fixed, forever. The pass is metadata-only and Drive-free, only fills rows that currently have **no** tool, never overwrites a link that resolved, and returns the **same file reference** when nothing changed so a caller can tell there is nothing to persist.
+
+**Two things are deliberately best-effort, for the same reason the archive rename is:** the `shop_settings.sequence_bulk_import` log (the import already happened and every record is stamped — losing the Settings line is not worth discarding the report) and a folder that couldn't be listed (reported, never treated as empty).
+
+⚠️ **A same POSTED stamp counts as "already current", not as imported.** It reaches the same-version branch, stores nothing, and keeps its proven state — counting it as taken in would overstate the run and attach an unmatched-row count to a file that was never stored.
+
+**Files that cannot be stored are skipped BEFORE downloading.** A posted folder holds other CSVs and every one parses to some number; fetching each just to be told there is no such program is a Drive call per stray file.
+
 ### Deferred from the bulk pass
 
 (Implemented — kept for the reasoning.) **⚠️ THE BULK PASS DOES NOT BLOCK ON AN UNMATCHED ProShop NUMBER — the manual/auto single import still does.** Owner's call, decided: a deliberate upload of a current posted file stays strict (a Tool # that resolves to nothing means something is wrong and the person is right there to fix it); a run over years of old posted files must not throw away a whole program because one number was mis-typed years ago. In bulk the row is **stored with `tool_ref: null` and flagged**, and the file lands.

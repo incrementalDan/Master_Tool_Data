@@ -315,3 +315,49 @@ export function upsertDetail(detailsFile, detail) {
 }
 
 export const detailsOf = (file) => file?.details || [];
+
+// ── Re-linking stored rows ───────────────────────────────────────────────────
+// ⚠️ THIS IS WHAT MAKES THE "unlinked row" FLAG CLEARABLE. `tool_ref` is
+// resolved once, at import, and stored — so correcting a tool's ProShop number
+// afterwards does NOT re-link the rows that missed it. And a re-import can't
+// fix it either: the file isn't stale, so the bulk pass skips it, and a
+// same-version re-stamp keeps the prior record untouched. Without this pass the
+// flag would name a problem the user has already fixed, forever.
+//
+// Metadata-only and Drive-free: it re-resolves ONLY rows that currently have no
+// tool, and never overwrites a link that already resolved.
+//
+// ⚠️ Returns the SAME file reference when nothing changed, so a caller can tell
+// whether there is anything to persist without diffing.
+export function relinkStoredDetails(detailsFile, tools, { loose = true } = {}) {
+  const list = detailsOf(detailsFile);
+  if (list.length === 0) return { file: detailsFile, relinked: [] };
+
+  const index = buildToolIndex(tools);
+  const relinked = [];
+  let changed = false;
+
+  const next = list.map(detail => {
+    let touched = false;
+    const rows = (detail.tools || []).map(row => {
+      if (row.tool_ref) return row;
+      const { tool, via } = findToolByProShopId(index, row.tool_id, { loose });
+      if (!tool) return row;
+      touched = true;
+      relinked.push({
+        operation_id: detail.operation_id,
+        program_number: detail.program_number,
+        t: row.t,
+        tool_id: row.tool_id,
+        matched: tool.tool_id,
+      });
+      return { ...row, tool_ref: tool.id, matched_via: via };
+    });
+    if (!touched) return detail;
+    changed = true;
+    return { ...detail, tools: rows };
+  });
+
+  if (!changed) return { file: detailsFile, relinked: [] };
+  return { file: { ...(detailsFile || {}), version: 1, details: next }, relinked };
+}
