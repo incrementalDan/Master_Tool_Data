@@ -281,3 +281,23 @@ To restore one file later: Drive → right-click the file → **Manage versions*
 version* → pick the copy from the zip. The file ID stays the same, so the app keeps
 pointing at it and nothing needs relinking. **Do not delete and re-upload** — that mints a
 new file ID and the app will 404 and fork (hole #2).
+
+-----
+
+## Note — `npm run build` proves nothing from a cloud session
+
+There is **no `.env`** in the Claude Code cloud sandbox (correctly — the real
+keys live in GitHub Actions Secrets). Without `VITE_APS_CLIENT_ID`, `App.jsx`
+short-circuits at module level to the `ConfigError` screen, so the entire real
+application is unreachable and the bundler correctly strips it. The build exits
+0 and emits ~178 kB of React and dependencies plus a "Configuration Required"
+page.
+
+Everything about that is working as designed — it is the same guard `CLAUDE.md`
+describes under Deployment ("it will publish a credential-less build and break
+the live site"). **It is not a build bug.**
+
+The only practical consequence: **from a cloud session, "the build passed" says
+nothing about whether the app compiles correctly.** Use `npm run lint` and the
+test suite as the real checks, and let the GitHub Actions run — which injects the
+secrets — be the first real build of anything written here.

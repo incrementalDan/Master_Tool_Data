@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { isDevBuild, isDevUnlocked, unlockDevWrites, lockDevWrites, writeLockReason, datasetLabel, METADATA_FILE_ID_KEY } from './utils/devWriteGuard.js';
+import * as driveSvc from './services/driveService.js';
+import * as apsSvc from './services/apsService.js';
 import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useGoogleLogin } from '@react-oauth/google';
@@ -161,7 +164,9 @@ function AppShell() {
           <NormalizeBanner />
           <CombineConflictBanner />
           <GoogleReconnectBanner />
+          <DevWriteLockBanner />
           <MetadataFileBanner />
+          <SharedFileBanner />
           <SetupGuideBanner />
         </div>
         <SetupCompleteModal />
@@ -311,6 +316,133 @@ function MetadataFileBanner() {
       <span style={{ flex: 1, minWidth: 220 }}>{msg}</span>
       <button className="btn btn-secondary btn-sm" onClick={() => navigate('/settings')}>Open Settings</button>
       <button className="icon-btn" onClick={dismissMetadataWarning} title="Dismiss"><X size={15} /></button>
+    </div>
+  );
+}
+
+// Shared Drive files that did not load cleanly this session.
+//
+// ⚠️ TWO DIFFERENT SEVERITIES, deliberately not merged into one message. A file
+// that FAILED to read has its writes blocked — that is a hard stop the user must
+// be able to act on, so it gets Retry and no dismiss. A file that was merely
+// absent and seeded is writable and only wants saying once, so it dismisses.
+// Showing them with the same weight would either understate the first or nag
+// about the second.
+function SharedFileBanner() {
+  const { sharedFileWarning, retryFailedSharedFiles, dismissSharedFileWarning } = useApp();
+  const [retrying, setRetrying] = useState(false);
+  if (!sharedFileWarning) return null;
+  const { failed = [], created = [] } = sharedFileWarning;
+  const names = (keys) => keys.map(k => FILE_LABELS[k] || k).join(', ');
+
+  if (failed.length) {
+    return (
+      <div role="alert" style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        padding: '10px 16px', background: 'rgba(239,68,68,0.1)',
+        borderBottom: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5', fontSize: 13,
+      }}>
+        <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+        <span style={{ flex: 1, minWidth: 220 }}>
+          Couldn't read {names(failed)} from Drive, so {failed.length === 1 ? 'it is' : 'they are'} showing
+          blank. <strong>Saving {failed.length === 1 ? 'it is' : 'them'} is disabled</strong> — otherwise the blank
+          would overwrite your real data. Everything else works normally.
+        </span>
+        <button
+          className="btn btn-secondary btn-sm"
+          disabled={retrying}
+          onClick={async () => { setRetrying(true); try { await retryFailedSharedFiles(); } finally { setRetrying(false); } }}
+        >{retrying ? 'Retrying…' : 'Retry'}</button>
+      </div>
+    );
+  }
+
+  return (
+    <div role="alert" style={{
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      padding: '10px 16px', background: 'rgba(245,158,11,0.1)',
+      borderBottom: '1px solid rgba(245,158,11,0.35)', color: '#fcd34d', fontSize: 13,
+    }}>
+      <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 220 }}>
+        {names(created)} {created.length === 1 ? 'was' : 'were'} missing from Drive, so a new empty
+        {created.length === 1 ? ' one was' : ' set was'} created. If you expected data there, restore it from a
+        backup <strong>before</strong> editing — saving now will write over the blank.
+      </span>
+      <button className="icon-btn" onClick={dismissSharedFileWarning} title="Dismiss"><X size={15} /></button>
+    </div>
+  );
+}
+
+// Plain-English names — the banner is read by someone who did not choose the
+// filenames and should not have to map them back.
+const FILE_LABELS = {
+  materials: 'your materials list',
+  vendorRegistry: 'your vendor list',
+  shopSettings: 'your shop settings',
+  parts: 'your parts & programs',
+  components: 'your insert components',
+  holderLibrary: 'your holder library',
+  programDetails: 'your program tool lists',
+};
+
+// A dev build pointed at the shop's real data — locked, with the way out on screen.
+//
+// ⚠️ Applies the lock in a layout effect BEFORE first paint, and unconditionally
+// on every render pass, because the automatic writes (registry seed, metadata
+// backfill) fire during the initial load. A lock applied after them is a lock
+// applied too late.
+function DevWriteLockBanner() {
+  const { shopSettings } = useApp();
+  const [unlocked, setUnlocked] = useState(isDevUnlocked());
+
+  useEffect(() => {
+    const reason = writeLockReason({ dev: isDevBuild(), unlocked });
+    driveSvc.setWriteLock(reason);
+    apsSvc.setWriteLock(reason);
+  }, [unlocked]);
+
+  if (!isDevBuild()) return null;
+
+  const label = datasetLabel(shopSettings?.shop_name, localStorage.getItem(METADATA_FILE_ID_KEY) || '');
+
+  if (unlocked) {
+    return (
+      <div role="alert" style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        padding: '8px 16px', background: 'rgba(239,68,68,0.16)',
+        borderBottom: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5',
+        fontSize: 13, fontWeight: 600,
+      }}>
+        <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+        <span style={{ flex: 1, minWidth: 220 }}>
+          DEV BUILD — writes are UNLOCKED against <strong>{label}</strong>. Anything you change here changes the real shop data.
+        </span>
+        <button className="btn btn-secondary btn-sm" onClick={() => { lockDevWrites(); setUnlocked(false); }}>Re-lock</button>
+      </div>
+    );
+  }
+
+  return (
+    <div role="alert" style={{
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      padding: '8px 16px', background: 'rgba(245,158,11,0.12)',
+      borderBottom: '1px solid rgba(245,158,11,0.4)', color: '#fcd34d', fontSize: 13,
+    }}>
+      <FlaskConical size={15} style={{ flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 220 }}>
+        DEV BUILD — read-only. Connected to <strong>{label}</strong>, which is your live data, so saving is
+        turned off. Browsing, search and previews all work.
+      </span>
+      <button
+        className="btn btn-secondary btn-sm"
+        onClick={() => {
+          if (window.confirm(`Allow this dev build to WRITE to ${label}?\n\nThis is your live shop data. The unlock lasts until you close the tab.`)) {
+            unlockDevWrites();
+            setUnlocked(true);
+          }
+        }}
+      >Unlock writes</button>
     </div>
   );
 }

@@ -62,6 +62,31 @@ function getMetaFileId() {
   return localStorage.getItem(CACHED_FILE_ID_KEY) || import.meta.env.VITE_METADATA_FILE_ID || '';
 }
 
+// ─── The global write lock ───────────────────────────────────────────────────
+//
+// Hard-stops EVERY Drive write. Distinct from the per-file block above: that one
+// says "we couldn't read this particular file", this one says "this build must
+// not write to this dataset at all" — the dev-build-pointed-at-live-data case.
+//
+// ⚠️ The policy is set from OUTSIDE (App decides, from the build mode + the
+// user's explicit unlock); this module only enforces it. Reading import.meta.env
+// in here would make every test run take the policy too, and would scatter the
+// decision across two layers.
+//
+// ⚠️ It must sit at the LOWEST level, because the app writes to Drive with no
+// user action at all — the load-time registry seed and the metadata backfill
+// both fire on open. A guard on the save buttons would not have caught either.
+let _writeLock = null;
+
+export function setWriteLock(reason) { _writeLock = reason || null; }
+export function getWriteLock() { return _writeLock; }
+
+function assertWritable() {
+  if (_writeLock) {
+    throw Object.assign(new Error(_writeLock), { code: 'WRITES_LOCKED' });
+  }
+}
+
 async function driveGet(fileId) {
   if (!fileId) return null;
   const res = await fetch(
@@ -82,6 +107,7 @@ async function driveGet(fileId) {
 
 // Create tool_metadata.json from scratch and cache the new file ID.
 async function driveCreate(content, folderId = null) {
+  assertWritable();
   const meta = { name: 'tool_metadata.json', mimeType: 'application/json' };
   if (folderId) meta.parents = [folderId];
 
@@ -120,6 +146,7 @@ async function driveCreate(content, folderId = null) {
 
 async function driveUpdate(fileId, content) {
   if (!fileId) return driveCreate(content);
+  assertWritable();
   const res = await fetch(
     `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&supportsAllDrives=true`,
     {
@@ -199,6 +226,7 @@ async function findFileInFolder(parentId, name) {
 }
 
 async function createSharedJson(name, parentId, content) {
+  assertWritable();
   const meta = { name, mimeType: 'application/json', parents: [parentId] };
   const boundary = 'drive_shared_json_boundary';
   const body = [
@@ -220,11 +248,27 @@ async function createSharedJson(name, parentId, content) {
 
 // Load a shared JSON file by name; create it with `defaultContent` if it doesn't
 // exist yet. Caches the file ID under `cacheKey`. Returns the parsed content.
+// Returns { data, status } — NOT the bare content.
+//
+// ⚠️ The caller MUST be able to tell "this file loaded" from "this file wasn't
+// there, so here is a blank one". They look identical in the data (both are a
+// valid object) and they mean opposite things: writing over a file that loaded
+// is normal, writing over one we merely failed to read destroys it. The old
+// bare-content signature made that distinction impossible to express, which is
+// how a load failure could end up saved back as the seed.
+//
+//   'loaded'  — read from Drive. Safe to write back.
+//   'created' — genuinely absent, so a fresh file was created from the seed.
+//               Safe to write, but suspicious on an established shop (the file
+//               should have been there) — the caller warns.
+//
+// A read ERROR is not handled here at all: it throws, and the caller decides.
+// Never turn an error into a seed inside this function.
 export async function loadOrCreateSharedJson(name, cacheKey, defaultContent) {
   let id = localStorage.getItem(cacheKey);
   if (id) {
     const data = await driveGet(id);
-    if (data !== null) return data;
+    if (data !== null) return { data, status: 'loaded' };
     localStorage.removeItem(cacheKey); // stale/deleted — fall through to find/create
   }
   const parentId = await getMetaParentFolderId();
@@ -232,17 +276,47 @@ export async function loadOrCreateSharedJson(name, cacheKey, defaultContent) {
   if (id) {
     localStorage.setItem(cacheKey, id);
     const data = await driveGet(id);
-    if (data !== null) return data;
+    if (data !== null) return { data, status: 'loaded' };
   }
   const file = await createSharedJson(name, parentId, defaultContent);
   localStorage.setItem(cacheKey, file.id);
-  return defaultContent;
+  return { data: defaultContent, status: 'created' };
+}
+
+// ─── The shared-file write block ─────────────────────────────────────────────
+//
+// A file whose read FAILED holds a seed placeholder in memory, not data. Writing
+// that back replaces the real file with blanks. AppContext decides WHICH files
+// are in that state; this is the choke point that makes the decision impossible
+// to bypass.
+//
+// ⚠️ It lives HERE, not only in AppContext, because two callers already write
+// shop_settings.json directly (persistRegistry and the load-time registry seed)
+// without going through the debounced writer's gate — and the seed's own trigger
+// condition ("no tool_libraries") is exactly what a failed shopSettings load
+// looks like from the inside. A gate every caller has to remember is a gate that
+// gets bypassed; keyed by file NAME so a new caller inherits it for free.
+let _blockedSharedFiles = new Set();
+
+export function setBlockedSharedFiles(names) {
+  _blockedSharedFiles = new Set(names || []);
+}
+
+export function isSharedFileBlocked(name) {
+  return _blockedSharedFiles.has(name);
 }
 
 // Save a shared JSON file by name (re-find/create if the cached ID is stale).
 // `keepalive` lets the PATCH outlive a page unload (used by the flush-on-hide
 // path) — safe here because these files are small (well under the 64KB cap).
 export async function saveSharedJson(name, cacheKey, content, { keepalive = false } = {}) {
+  assertWritable();
+  if (_blockedSharedFiles.has(name)) {
+    throw Object.assign(
+      new Error(`${name} did not load this session — refusing to overwrite it with defaults`),
+      { code: 'WRITE_BLOCKED' }
+    );
+  }
   let id = localStorage.getItem(cacheKey);
   if (!id) {
     const parentId = await getMetaParentFolderId();
@@ -372,6 +446,7 @@ export async function listSharedDrives() {
 
 // Create an empty tool_metadata.json in the specified folder and cache its ID.
 export async function createMetadataInFolder(folderId) {
+  assertWritable();
   return driveCreate([], folderId);
 }
 
@@ -458,6 +533,7 @@ async function findFolder(parentId, name) {
 async function findOrCreateFolder(parentId, name) {
   const existing = await findFolder(parentId, name);
   if (existing) return existing;
+  assertWritable();
   const cr = await fetch(
     'https://www.googleapis.com/drive/v3/files?supportsAllDrives=true',
     {
@@ -590,6 +666,7 @@ export async function listProgramFolderFiles(folderName) {
 // version always keeps its original name, so "download the current file" is
 // unambiguous).
 export async function renameDriveFile(fileId, name) {
+  assertWritable();
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true&fields=id,name`,
     {
@@ -620,6 +697,7 @@ export async function fetchFileText(fileId) {
 
 // Upload a File object into the given Drive folder. Returns { id, name }.
 export async function uploadToolFile(folderId, file, fileName) {
+  assertWritable();
   const meta = { name: fileName, parents: [folderId] };
   const boundary = 'tms_file_upload_boundary';
   const fileBuffer = await file.arrayBuffer();
@@ -654,6 +732,7 @@ export async function uploadToolFile(folderId, file, fileName) {
 
 // Delete a file from Drive. 404 is treated as success (already gone).
 export async function deleteToolFile(fileId) {
+  assertWritable();
   if (!fileId) return;
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`,
@@ -691,6 +770,7 @@ export async function listFolderChildren(parentId) {
 // Server-side copy a Drive file into a target folder (no byte transfer through
 // the browser). Returns { id, name }. The source file is never modified.
 export async function copyDriveFile(fileId, name, parentFolderId) {
+  assertWritable();
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}/copy?supportsAllDrives=true&fields=id,name`,
     {
