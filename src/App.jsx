@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { isDevBuild, isDevUnlocked, unlockDevWrites, lockDevWrites, writeLockReason, datasetLabel, METADATA_FILE_ID_KEY } from './utils/devWriteGuard.js';
+import * as driveSvc from './services/driveService.js';
+import * as apsSvc from './services/apsService.js';
 import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useGoogleLogin } from '@react-oauth/google';
@@ -161,6 +164,7 @@ function AppShell() {
           <NormalizeBanner />
           <CombineConflictBanner />
           <GoogleReconnectBanner />
+          <DevWriteLockBanner />
           <MetadataFileBanner />
           <SharedFileBanner />
           <SetupGuideBanner />
@@ -381,6 +385,67 @@ const FILE_LABELS = {
   holderLibrary: 'your holder library',
   programDetails: 'your program tool lists',
 };
+
+// A dev build pointed at the shop's real data — locked, with the way out on screen.
+//
+// ⚠️ Applies the lock in a layout effect BEFORE first paint, and unconditionally
+// on every render pass, because the automatic writes (registry seed, metadata
+// backfill) fire during the initial load. A lock applied after them is a lock
+// applied too late.
+function DevWriteLockBanner() {
+  const { shopSettings } = useApp();
+  const [unlocked, setUnlocked] = useState(isDevUnlocked());
+
+  useEffect(() => {
+    const reason = writeLockReason({ dev: isDevBuild(), unlocked });
+    driveSvc.setWriteLock(reason);
+    apsSvc.setWriteLock(reason);
+  }, [unlocked]);
+
+  if (!isDevBuild()) return null;
+
+  const label = datasetLabel(shopSettings?.shop_name, localStorage.getItem(METADATA_FILE_ID_KEY) || '');
+
+  if (unlocked) {
+    return (
+      <div role="alert" style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        padding: '8px 16px', background: 'rgba(239,68,68,0.16)',
+        borderBottom: '1px solid rgba(239,68,68,0.5)', color: '#fca5a5',
+        fontSize: 13, fontWeight: 600,
+      }}>
+        <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+        <span style={{ flex: 1, minWidth: 220 }}>
+          DEV BUILD — writes are UNLOCKED against <strong>{label}</strong>. Anything you change here changes the real shop data.
+        </span>
+        <button className="btn btn-secondary btn-sm" onClick={() => { lockDevWrites(); setUnlocked(false); }}>Re-lock</button>
+      </div>
+    );
+  }
+
+  return (
+    <div role="alert" style={{
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      padding: '8px 16px', background: 'rgba(245,158,11,0.12)',
+      borderBottom: '1px solid rgba(245,158,11,0.4)', color: '#fcd34d', fontSize: 13,
+    }}>
+      <FlaskConical size={15} style={{ flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 220 }}>
+        DEV BUILD — read-only. Connected to <strong>{label}</strong>, which is your live data, so saving is
+        turned off. Browsing, search and previews all work.
+      </span>
+      <button
+        className="btn btn-secondary btn-sm"
+        onClick={() => {
+          if (window.confirm(`Allow this dev build to WRITE to ${label}?\n\nThis is your live shop data. The unlock lasts until you close the tab.`)) {
+            unlockDevWrites();
+            setUnlocked(true);
+          }
+        }}
+      >Unlock writes</button>
+    </div>
+  );
+}
 
 const GOOGLE_KEEPER_SCOPE = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
 

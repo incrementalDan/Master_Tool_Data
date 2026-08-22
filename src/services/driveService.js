@@ -62,6 +62,31 @@ function getMetaFileId() {
   return localStorage.getItem(CACHED_FILE_ID_KEY) || import.meta.env.VITE_METADATA_FILE_ID || '';
 }
 
+// ─── The global write lock ───────────────────────────────────────────────────
+//
+// Hard-stops EVERY Drive write. Distinct from the per-file block above: that one
+// says "we couldn't read this particular file", this one says "this build must
+// not write to this dataset at all" — the dev-build-pointed-at-live-data case.
+//
+// ⚠️ The policy is set from OUTSIDE (App decides, from the build mode + the
+// user's explicit unlock); this module only enforces it. Reading import.meta.env
+// in here would make every test run take the policy too, and would scatter the
+// decision across two layers.
+//
+// ⚠️ It must sit at the LOWEST level, because the app writes to Drive with no
+// user action at all — the load-time registry seed and the metadata backfill
+// both fire on open. A guard on the save buttons would not have caught either.
+let _writeLock = null;
+
+export function setWriteLock(reason) { _writeLock = reason || null; }
+export function getWriteLock() { return _writeLock; }
+
+function assertWritable() {
+  if (_writeLock) {
+    throw Object.assign(new Error(_writeLock), { code: 'WRITES_LOCKED' });
+  }
+}
+
 async function driveGet(fileId) {
   if (!fileId) return null;
   const res = await fetch(
@@ -82,6 +107,7 @@ async function driveGet(fileId) {
 
 // Create tool_metadata.json from scratch and cache the new file ID.
 async function driveCreate(content, folderId = null) {
+  assertWritable();
   const meta = { name: 'tool_metadata.json', mimeType: 'application/json' };
   if (folderId) meta.parents = [folderId];
 
@@ -120,6 +146,7 @@ async function driveCreate(content, folderId = null) {
 
 async function driveUpdate(fileId, content) {
   if (!fileId) return driveCreate(content);
+  assertWritable();
   const res = await fetch(
     `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&supportsAllDrives=true`,
     {
@@ -199,6 +226,7 @@ async function findFileInFolder(parentId, name) {
 }
 
 async function createSharedJson(name, parentId, content) {
+  assertWritable();
   const meta = { name, mimeType: 'application/json', parents: [parentId] };
   const boundary = 'drive_shared_json_boundary';
   const body = [
@@ -282,6 +310,7 @@ export function isSharedFileBlocked(name) {
 // `keepalive` lets the PATCH outlive a page unload (used by the flush-on-hide
 // path) — safe here because these files are small (well under the 64KB cap).
 export async function saveSharedJson(name, cacheKey, content, { keepalive = false } = {}) {
+  assertWritable();
   if (_blockedSharedFiles.has(name)) {
     throw Object.assign(
       new Error(`${name} did not load this session — refusing to overwrite it with defaults`),
@@ -417,6 +446,7 @@ export async function listSharedDrives() {
 
 // Create an empty tool_metadata.json in the specified folder and cache its ID.
 export async function createMetadataInFolder(folderId) {
+  assertWritable();
   return driveCreate([], folderId);
 }
 
@@ -503,6 +533,7 @@ async function findFolder(parentId, name) {
 async function findOrCreateFolder(parentId, name) {
   const existing = await findFolder(parentId, name);
   if (existing) return existing;
+  assertWritable();
   const cr = await fetch(
     'https://www.googleapis.com/drive/v3/files?supportsAllDrives=true',
     {
@@ -635,6 +666,7 @@ export async function listProgramFolderFiles(folderName) {
 // version always keeps its original name, so "download the current file" is
 // unambiguous).
 export async function renameDriveFile(fileId, name) {
+  assertWritable();
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true&fields=id,name`,
     {
@@ -665,6 +697,7 @@ export async function fetchFileText(fileId) {
 
 // Upload a File object into the given Drive folder. Returns { id, name }.
 export async function uploadToolFile(folderId, file, fileName) {
+  assertWritable();
   const meta = { name: fileName, parents: [folderId] };
   const boundary = 'tms_file_upload_boundary';
   const fileBuffer = await file.arrayBuffer();
@@ -699,6 +732,7 @@ export async function uploadToolFile(folderId, file, fileName) {
 
 // Delete a file from Drive. 404 is treated as success (already gone).
 export async function deleteToolFile(fileId) {
+  assertWritable();
   if (!fileId) return;
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`,
@@ -736,6 +770,7 @@ export async function listFolderChildren(parentId) {
 // Server-side copy a Drive file into a target folder (no byte transfer through
 // the browser). Returns { id, name }. The source file is never modified.
 export async function copyDriveFile(fileId, name, parentFolderId) {
+  assertWritable();
   const res = await fetch(
     `https://www.googleapis.com/drive/v3/files/${fileId}/copy?supportsAllDrives=true&fields=id,name`,
     {

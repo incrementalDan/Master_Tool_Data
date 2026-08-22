@@ -97,3 +97,49 @@ describe('the write block at the choke point', () => {
     await expect(drive.saveSharedJson('shop_settings.json', 'ss', { ok: 1 })).resolves.toBeUndefined();
   });
 });
+
+describe('the global write lock (dev build pointed at live data)', () => {
+  beforeEach(() => {
+    store.clear();
+    drive.setAccessToken('test-token', 3600);
+    drive.setBlockedSharedFiles([]);
+    drive.setWriteLock(null);
+  });
+  afterEach(() => { drive.setWriteLock(null); vi.restoreAllMocks(); });
+
+  it('stops every kind of Drive write, without reaching the network', async () => {
+    const fetchSpy = vi.fn(async () => OK({}));
+    vi.stubGlobal('fetch', fetchSpy);
+    drive.setWriteLock('dev build — read only');
+    localStorage.setItem('mk', 'file-2');
+
+    // The point is coverage: it is not enough to guard the save buttons, because
+    // the app writes on load with no user action. Each of these is a real path.
+    await expect(drive.saveSharedJson('materials.json', 'mk', {})).rejects.toMatchObject({ code: 'WRITES_LOCKED' });
+    await expect(drive.saveAllMetadata([{ id: 'a' }])).rejects.toMatchObject({ code: 'WRITES_LOCKED' });
+    await expect(drive.uploadToolFile('folder', new Blob(['x']), 'x.png')).rejects.toMatchObject({ code: 'WRITES_LOCKED' });
+    await expect(drive.deleteToolFile('f1')).rejects.toMatchObject({ code: 'WRITES_LOCKED' });
+    await expect(drive.copyDriveFile('f1', 'copy', 'folder')).rejects.toMatchObject({ code: 'WRITES_LOCKED' });
+    await expect(drive.renameDriveFile('f1', 'new')).rejects.toMatchObject({ code: 'WRITES_LOCKED' });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('leaves READS working — a locked build must still be usable', async () => {
+    // The guard is about not writing, not about being useless. If browsing broke
+    // too, it would just get unlocked permanently and protect nothing.
+    vi.stubGlobal('fetch', vi.fn(async () => OK([{ id: 'tool-1' }])));
+    drive.setWriteLock('dev build — read only');
+    localStorage.setItem('drive_metadata_file_id', 'meta-1');
+    await expect(drive.loadMetadata()).resolves.toEqual([{ id: 'tool-1' }]);
+  });
+
+  it('clearing the lock restores writing', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => OK({})));
+    localStorage.setItem('mk', 'file-2');
+    drive.setWriteLock('locked');
+    await expect(drive.saveSharedJson('materials.json', 'mk', {})).rejects.toMatchObject({ code: 'WRITES_LOCKED' });
+    drive.setWriteLock(null);
+    await expect(drive.saveSharedJson('materials.json', 'mk', {})).resolves.toBeUndefined();
+  });
+});

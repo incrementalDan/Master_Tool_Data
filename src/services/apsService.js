@@ -205,8 +205,23 @@ export async function loadToolLibrary(projectId, itemId) {
   return res.json();
 }
 
+// ─── The global write lock ───────────────────────────────────────────────────
+//
+// The Autodesk-side twin of driveService's lock. Set from outside (App decides);
+// this module only enforces it. Covers the dev-build-pointed-at-live-data case —
+// a Fusion library write is the single most expensive thing to get wrong here,
+// because it replaces the whole file for the whole shop.
+let _writeLock = null;
+
+export function setWriteLock(reason) { _writeLock = reason || null; }
+
+function assertWritable() {
+  if (_writeLock) throw Object.assign(new Error(_writeLock), { code: 'WRITES_LOCKED' });
+}
+
 // ─── Save tool library JSON as a new version ─────────────────────────────────
 export async function saveToolLibrary(projectId, folderId, itemId, fileName, toolsJson) {
+  assertWritable();
   const jsonString = JSON.stringify(toolsJson, null, 2);
 
   // Step 1: request a storage location for the new file content
