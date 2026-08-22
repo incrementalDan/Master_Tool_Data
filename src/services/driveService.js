@@ -220,11 +220,27 @@ async function createSharedJson(name, parentId, content) {
 
 // Load a shared JSON file by name; create it with `defaultContent` if it doesn't
 // exist yet. Caches the file ID under `cacheKey`. Returns the parsed content.
+// Returns { data, status } — NOT the bare content.
+//
+// ⚠️ The caller MUST be able to tell "this file loaded" from "this file wasn't
+// there, so here is a blank one". They look identical in the data (both are a
+// valid object) and they mean opposite things: writing over a file that loaded
+// is normal, writing over one we merely failed to read destroys it. The old
+// bare-content signature made that distinction impossible to express, which is
+// how a load failure could end up saved back as the seed.
+//
+//   'loaded'  — read from Drive. Safe to write back.
+//   'created' — genuinely absent, so a fresh file was created from the seed.
+//               Safe to write, but suspicious on an established shop (the file
+//               should have been there) — the caller warns.
+//
+// A read ERROR is not handled here at all: it throws, and the caller decides.
+// Never turn an error into a seed inside this function.
 export async function loadOrCreateSharedJson(name, cacheKey, defaultContent) {
   let id = localStorage.getItem(cacheKey);
   if (id) {
     const data = await driveGet(id);
-    if (data !== null) return data;
+    if (data !== null) return { data, status: 'loaded' };
     localStorage.removeItem(cacheKey); // stale/deleted — fall through to find/create
   }
   const parentId = await getMetaParentFolderId();
@@ -232,17 +248,46 @@ export async function loadOrCreateSharedJson(name, cacheKey, defaultContent) {
   if (id) {
     localStorage.setItem(cacheKey, id);
     const data = await driveGet(id);
-    if (data !== null) return data;
+    if (data !== null) return { data, status: 'loaded' };
   }
   const file = await createSharedJson(name, parentId, defaultContent);
   localStorage.setItem(cacheKey, file.id);
-  return defaultContent;
+  return { data: defaultContent, status: 'created' };
+}
+
+// ─── The shared-file write block ─────────────────────────────────────────────
+//
+// A file whose read FAILED holds a seed placeholder in memory, not data. Writing
+// that back replaces the real file with blanks. AppContext decides WHICH files
+// are in that state; this is the choke point that makes the decision impossible
+// to bypass.
+//
+// ⚠️ It lives HERE, not only in AppContext, because two callers already write
+// shop_settings.json directly (persistRegistry and the load-time registry seed)
+// without going through the debounced writer's gate — and the seed's own trigger
+// condition ("no tool_libraries") is exactly what a failed shopSettings load
+// looks like from the inside. A gate every caller has to remember is a gate that
+// gets bypassed; keyed by file NAME so a new caller inherits it for free.
+let _blockedSharedFiles = new Set();
+
+export function setBlockedSharedFiles(names) {
+  _blockedSharedFiles = new Set(names || []);
+}
+
+export function isSharedFileBlocked(name) {
+  return _blockedSharedFiles.has(name);
 }
 
 // Save a shared JSON file by name (re-find/create if the cached ID is stale).
 // `keepalive` lets the PATCH outlive a page unload (used by the flush-on-hide
 // path) — safe here because these files are small (well under the 64KB cap).
 export async function saveSharedJson(name, cacheKey, content, { keepalive = false } = {}) {
+  if (_blockedSharedFiles.has(name)) {
+    throw Object.assign(
+      new Error(`${name} did not load this session — refusing to overwrite it with defaults`),
+      { code: 'WRITE_BLOCKED' }
+    );
+  }
   let id = localStorage.getItem(cacheKey);
   if (!id) {
     const parentId = await getMetaParentFolderId();

@@ -184,6 +184,14 @@ export const initialState = {
   needsNormalize: false,      // true when any tool lacks a tracking ID (pre-migration)
   normalizeCount: 0,          // number of un-migrated tools (for banner/modal copy)
   metadataFileWarning: null,  // null | 'missing' | 'trashed' — linked metadata file is gone
+  // Shared Drive files that did not load cleanly this session.
+  //   failed[]  — the read errored, so the in-memory value is the SEED, not data.
+  //               Writes to these are blocked (driveService.setBlockedSharedFiles)
+  //               until a retry succeeds. This is a hard stop, not a nag.
+  //   created[] — the file was absent and seeded. Writes are allowed (the new file
+  //               is real), but on a shop that already has tools it means a file
+  //               went missing, so the user is told before they type into a blank.
+  sharedFileWarning: null,    // null | { failed: string[], created: string[] }
   // ── Mode-2 two-stage load (metadata-first paint, Fusion confirms) ──────────
   // fusionSyncing: the library painted from the app's own records (Drive) and the
   // Fusion download is still confirming in the background — a UI hint only.
@@ -277,6 +285,7 @@ export function reducer(state, action) {
         holderLibrary: action.holderLibrary || DEFAULT_HOLDER_LIBRARY,
         needsNormalize: false,
         metadataFileWarning: null,
+        sharedFileWarning: null,
         isLoading: false,
         error: null,
       };
@@ -308,6 +317,10 @@ export function reducer(state, action) {
       return { ...state, tools: state.tools.filter(t => t.id !== action.id) };
     case 'SET_TOOLS': return { ...state, tools: action.tools, ...(action.needsNormalize !== undefined ? { needsNormalize: action.needsNormalize } : {}), ...(action.normalizeCount !== undefined ? { normalizeCount: action.normalizeCount } : {}) };
     case 'METADATA_FILE_WARNING': return { ...state, metadataFileWarning: action.warning };
+    case 'SHARED_FILE_WARNING':
+      return { ...state, sharedFileWarning: (action.failed?.length || action.created?.length)
+        ? { failed: action.failed || [], created: action.created || [] }
+        : null };
     case 'SET_SHARED_FILES':
       return { ...state, materials: action.materials, vendorRegistry: action.vendorRegistry, shopSettings: action.shopSettings, parts: action.parts, components: action.components || state.components, programDetails: action.programDetails || state.programDetails, holderLibrary: action.holderLibrary || state.holderLibrary };
     case 'SET_MATERIALS': return { ...state, materials: action.materials };

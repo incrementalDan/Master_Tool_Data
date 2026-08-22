@@ -162,6 +162,7 @@ function AppShell() {
           <CombineConflictBanner />
           <GoogleReconnectBanner />
           <MetadataFileBanner />
+          <SharedFileBanner />
           <SetupGuideBanner />
         </div>
         <SetupCompleteModal />
@@ -314,6 +315,72 @@ function MetadataFileBanner() {
     </div>
   );
 }
+
+// Shared Drive files that did not load cleanly this session.
+//
+// ⚠️ TWO DIFFERENT SEVERITIES, deliberately not merged into one message. A file
+// that FAILED to read has its writes blocked — that is a hard stop the user must
+// be able to act on, so it gets Retry and no dismiss. A file that was merely
+// absent and seeded is writable and only wants saying once, so it dismisses.
+// Showing them with the same weight would either understate the first or nag
+// about the second.
+function SharedFileBanner() {
+  const { sharedFileWarning, retryFailedSharedFiles, dismissSharedFileWarning } = useApp();
+  const [retrying, setRetrying] = useState(false);
+  if (!sharedFileWarning) return null;
+  const { failed = [], created = [] } = sharedFileWarning;
+  const names = (keys) => keys.map(k => FILE_LABELS[k] || k).join(', ');
+
+  if (failed.length) {
+    return (
+      <div role="alert" style={{
+        display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        padding: '10px 16px', background: 'rgba(239,68,68,0.1)',
+        borderBottom: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5', fontSize: 13,
+      }}>
+        <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+        <span style={{ flex: 1, minWidth: 220 }}>
+          Couldn't read {names(failed)} from Drive, so {failed.length === 1 ? 'it is' : 'they are'} showing
+          blank. <strong>Saving {failed.length === 1 ? 'it is' : 'them'} is disabled</strong> — otherwise the blank
+          would overwrite your real data. Everything else works normally.
+        </span>
+        <button
+          className="btn btn-secondary btn-sm"
+          disabled={retrying}
+          onClick={async () => { setRetrying(true); try { await retryFailedSharedFiles(); } finally { setRetrying(false); } }}
+        >{retrying ? 'Retrying…' : 'Retry'}</button>
+      </div>
+    );
+  }
+
+  return (
+    <div role="alert" style={{
+      display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+      padding: '10px 16px', background: 'rgba(245,158,11,0.1)',
+      borderBottom: '1px solid rgba(245,158,11,0.35)', color: '#fcd34d', fontSize: 13,
+    }}>
+      <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 220 }}>
+        {names(created)} {created.length === 1 ? 'was' : 'were'} missing from Drive, so a new empty
+        {created.length === 1 ? ' one was' : ' set was'} created. If you expected data there, restore it from a
+        backup <strong>before</strong> editing — saving now will write over the blank.
+      </span>
+      <button className="icon-btn" onClick={dismissSharedFileWarning} title="Dismiss"><X size={15} /></button>
+    </div>
+  );
+}
+
+// Plain-English names — the banner is read by someone who did not choose the
+// filenames and should not have to map them back.
+const FILE_LABELS = {
+  materials: 'your materials list',
+  vendorRegistry: 'your vendor list',
+  shopSettings: 'your shop settings',
+  parts: 'your parts & programs',
+  components: 'your insert components',
+  holderLibrary: 'your holder library',
+  programDetails: 'your program tool lists',
+};
 
 const GOOGLE_KEEPER_SCOPE = 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
 

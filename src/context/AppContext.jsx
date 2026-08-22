@@ -83,6 +83,10 @@ export function AppProvider({ children }) {
   // auth resolves — before the multi-second library download completes) persist the
   // default shop_settings over the user's saved shop name / machines / etc.
   const sharedLoadedRef = useRef(false);
+  // Shared files whose read FAILED this session — their in-memory value is the
+  // seed placeholder, not data, so every write to them is refused until a retry
+  // succeeds. Populated in loadTools; cleared per-key by retryFailedSharedFiles.
+  const unloadedSharedRef = useRef(new Set());
   // In-app navigation guard. A page (e.g. Settings, while editing) registers
   // { shouldBlock(), onBlocked(proceed) }; nav sources call maybeBlockNav(proceed)
   // and skip their own navigation when it returns true (blocked). HashRouter isn't
@@ -259,7 +263,70 @@ export function AppProvider({ children }) {
 
   // Resolves the linked metadata file's name + folder/drive location for display in Settings.
   const fetchMetadataLocation = useCallback(() => driveService.getMetadataFileLocation(), []);
+  // The seed each shared file falls back to — the same objects loadTools uses, so
+  // a retry can rebuild the exact call it made without duplicating the list.
+  const SHARED_DEFAULTS = {
+    materials: DEFAULT_MATERIALS,
+    vendorRegistry: DEFAULT_VENDOR_REGISTRY,
+    shopSettings: DEFAULT_SHOP_SETTINGS,
+    parts: DEFAULT_PARTS,
+    components: DEFAULT_COMPONENTS,
+    holderLibrary: DEFAULT_HOLDER_LIBRARY,
+    programDetails: DEFAULT_PROGRAM_DETAILS,
+  };
+
   const dismissMetadataWarning = useCallback(() => dispatch({ type: 'METADATA_FILE_WARNING', warning: null }), []);
+
+  // Retry the shared files whose read failed this session.
+  //
+  // ⚠️ This is the ONLY way out of the write block short of a reload, so it has
+  // to actually clear it — a block the user cannot lift is a bricked app, and a
+  // flag that survives the fix is the nag loop this codebase keeps warning about.
+  // Per-file: one file still failing must not keep the others locked.
+  const retryFailedSharedFiles = useCallback(async () => {
+    const failed = [...unloadedSharedRef.current];
+    if (!failed.length) return { recovered: [], stillFailing: [] };
+    const { SHARED_FILES } = driveService;
+    const DISPATCH = {
+      materials:      ['SET_MATERIALS', 'materials'],
+      vendorRegistry: ['SET_VENDOR_REGISTRY', 'vendorRegistry'],
+      shopSettings:   ['SET_SHOP_SETTINGS', 'shopSettings'],
+      parts:          ['SET_PARTS', 'parts'],
+      components:     ['SET_COMPONENTS', 'components'],
+      holderLibrary:  ['SET_HOLDER_LIBRARY', 'holderLibrary'],
+      programDetails: ['SET_PROGRAM_DETAILS', 'programDetails'],
+    };
+    const recovered = [], stillFailing = [];
+    for (const key of failed) {
+      const def = SHARED_DEFAULTS[key];
+      try {
+        const { data } = await driveService.loadOrCreateSharedJson(
+          SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, def);
+        const [type, stateKey] = DISPATCH[key];
+        dispatch({ type, [stateKey]: data });
+        if (key === 'vendorRegistry') setActiveVendorRegistry(data);
+        if (key === 'shopSettings' && data?.default_units) setDefaultUnit(data.default_units);
+        recovered.push(key);
+      } catch {
+        stillFailing.push(key);
+      }
+    }
+    // Lift the block only for what actually came back.
+    const next = new Set(stillFailing);
+    unloadedSharedRef.current = next;
+    driveService.setBlockedSharedFiles([...next].map(k => SHARED_FILES[k].name));
+    dispatch({ type: 'SHARED_FILE_WARNING', failed: stillFailing, created: [] });
+    if (recovered.length) {
+      notify(`Recovered ${recovered.length} file${recovered.length === 1 ? '' : 's'} — saving is enabled again`, 'success');
+    }
+    if (stillFailing.length) {
+      notify(`Still can't read ${stillFailing.map(k => SHARED_FILES[k].name).join(', ')} — saving stays disabled for ${stillFailing.length === 1 ? 'it' : 'those'}`, 'error', 9000);
+    }
+    return { recovered, stillFailing };
+  }, [notify]);
+
+  const dismissSharedFileWarning = useCallback(
+    () => dispatch({ type: 'SHARED_FILE_WARNING', failed: [], created: [] }), []);
 
   // ─── Shared Drive files (materials / vendor registry / shop settings) ─────
   // Save back to Drive and update in-memory state. Foundation: no UI yet, but
@@ -305,6 +372,12 @@ export function AppProvider({ children }) {
     // shop settings). The setup-step effects re-fire after SET_SHARED_FILES lands
     // and persist correctly against the loaded settings then.
     if (!sharedLoadedRef.current) return;
+    // Never write a file whose read FAILED — the in-memory value is the seed
+    // placeholder, so this write would replace the real file's contents with
+    // blanks. Silent by design at this layer (this is the autosave debounce, and
+    // the banner is already up saying which files are affected); the manual save
+    // path below rejects out loud.
+    if (unloadedSharedRef.current.has(key)) return;
     const { SHARED_FILES } = driveService;
     const pending = sharedSaveTimersRef.current;
     // The write closure reads the latest settled state at call time (refs are
@@ -380,6 +453,13 @@ export function AppProvider({ children }) {
     if (!sharedLoadedRef.current) {
       notify('Still loading your saved data — try again in a moment', 'error');
       return Promise.reject(new Error('Shared files not loaded yet'));
+    }
+    // Same rule as the debounced path, but this one was asked for explicitly, so
+    // say why rather than dropping it. Saving here would overwrite a file we
+    // never managed to read with the blank seed we opened the app on.
+    if (unloadedSharedRef.current.has(key)) {
+      notify(`Can't save — ${driveService.SHARED_FILES[key]?.name || key} didn't load this session, so saving would overwrite it. Reload, or use Retry on the banner.`, 'error', 9000);
+      return Promise.reject(new Error(`Shared file ${key} failed to load — writes blocked`));
     }
     // Optimistic, synchronous state update — controlled inputs in the editors
     // (Location / Materials / Vendors) read their value from this state, so they
@@ -1104,9 +1184,26 @@ export function AppProvider({ children }) {
         // its default content if it doesn't exist yet. A shared-file error never
         // blocks the library load — it falls back to the default.
         const { SHARED_FILES } = driveService;
+        //
+        // ⚠️ THREE OUTCOMES, and conflating any two of them loses data.
+        //   loaded  → the real file. Writing back is normal.
+        //   created → genuinely absent, seeded. Writing back is fine (it IS the
+        //             new file), but suspicious on an established shop — warned
+        //             about below rather than blocked, so a legitimate first run
+        //             on a new device still auto-joins the shared files.
+        //   FAILED  → the read errored (network, 5xx, permissions, bad JSON). We
+        //             do NOT know what is in that file. The seed is a placeholder
+        //             so the app can still open — it is NOT data, and writing it
+        //             back would overwrite the real file with blanks. Every write
+        //             to that file is BLOCKED for the session until a retry
+        //             succeeds. Fail safe: refusing to save is recoverable,
+        //             saving a blank over the shop's settings is not.
+        const failedKeys = new Set();
+        const createdKeys = new Set();
         const sharedSafe = (key, def) =>
           driveService.loadOrCreateSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, def)
-            .catch(e => { if (e.code === 'TOKEN_EXPIRED') throw e; return def; });
+            .then(({ data, status }) => { if (status === 'created') createdKeys.add(key); return data; })
+            .catch(e => { if (e.code === 'TOKEN_EXPIRED') throw e; failedKeys.add(key); return def; });
         try {
           const [meta, materials, vendorRegistry, shopSettings, parts, components, holderLibrary, programDetails] = await Promise.all([
             toolStore.loadAll(),
@@ -1131,7 +1228,13 @@ export function AppProvider({ children }) {
           // does (legacy single-location / mirror), keep the local set and migrate
           // it up to Drive once, so an existing shop isn't emptied by the upgrade.
           let ss = shopSettings;
-          if (!(ss.tool_libraries || []).length) {
+          // ⚠️ Never migrate off a shopSettings we failed to read. "No
+          // tool_libraries" is both the genuine legacy case AND exactly what the
+          // seed placeholder looks like after a failed load — so without this
+          // check a network blip makes the app helpfully write a near-empty
+          // settings file over the real one, bypassing every other gate because
+          // this branch writes Drive directly.
+          if (!failedKeys.has('shopSettings') && !(ss.tool_libraries || []).length) {
             const seeded = seedShopSettingsRegistry(ss);
             if ((seeded.tool_libraries || []).length) {
               ss = seeded;
@@ -1145,7 +1248,27 @@ export function AppProvider({ children }) {
           // Shared files are now loaded — Drive writes are safe. Set synchronously
           // (it's a ref) so the setup-step effects that re-fire on this dispatch,
           // and the established-shop seed below, all persist against real settings.
+          //
+          // ⚠️ This flag alone is NOT sufficient, and that was the bug: it went
+          // true even for a file whose read had FAILED and been replaced by its
+          // seed, so the gate opened on exactly the files that must not be
+          // written. It answers "has the load run?"; `unloadedSharedRef` answers
+          // the per-file question "do we actually know what is in this one?".
+          // Both are checked before any shared write.
+          unloadedSharedRef.current = failedKeys;
+          // Arm the choke-point block too, so the direct writers (persistRegistry,
+          // the registry seed below) are covered without each remembering to ask.
+          driveService.setBlockedSharedFiles([...failedKeys].map(k => SHARED_FILES[k].name));
           sharedLoadedRef.current = true;
+          if (failedKeys.size) {
+            dispatch({ type: 'SHARED_FILE_WARNING', failed: [...failedKeys], created: [] });
+          } else if (createdKeys.size && (metaList?.length || 0) > 0) {
+            // Created from the seed on a shop that plainly already has data: the
+            // file should have been there. Not blocked (the new file is real and
+            // writable), but the user must hear it before they start typing into
+            // a blank materials list that used to have their alloys in it.
+            dispatch({ type: 'SHARED_FILE_WARNING', failed: [], created: [...createdKeys] });
+          }
         } catch (err) {
           if (err.code === 'TOKEN_EXPIRED') {
             dispatch({ type: 'GOOGLE_EXPIRED' });
@@ -1404,6 +1527,8 @@ export function AppProvider({ children }) {
       disconnectMetadata,
       fetchMetadataLocation,
       dismissMetadataWarning,
+      retryFailedSharedFiles,
+      dismissSharedFileWarning,
       saveMaterials,
       saveVendorRegistry,
       saveShopSettings,
