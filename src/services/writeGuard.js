@@ -37,19 +37,39 @@ export const MIN_MEANINGFUL = 8;
 // "half the data vanished" is a job for the audit log, not a hard block.
 export const SHRINK_LIMIT = 0.5;
 
-// How big is this thing? A metadata table is an array of records; a shared file
-// is a document whose principal collection is what actually holds the data.
-// Falls back to null (= "no opinion") rather than guessing, so an unrecognised
-// shape can never trip the guard.
-export function sizeOf(content) {
-  if (Array.isArray(content)) return content.length;
+// How big is this thing, and in what unit?
+//
+// Two shapes exist and they must not be measured the same way:
+//
+//   COLLECTION — a metadata table, or a file whose principal array is the data
+//     (materials' 65 alloys, parts' 226 operations, 24 holders). Size = the
+//     longest top-level array, since a file can carry several (holder_library
+//     has holders AND parts) and a collapse shows in the primary one.
+//
+//   DOCUMENT — configuration, where the VALUE is the set of keys, not any list
+//     inside it. shop_settings.json is the case that proved this: measured as a
+//     collection it came out as 3 (its machines array), which is both a
+//     nonsense thing to report in a backup summary AND below MIN_MEANINGFUL —
+//     so the tripwire silently stood down on the single most catastrophic file
+//     in the set, the one holding all three ID systems, the location systems
+//     and the machine list. Measured by its 19 top-level keys it is protected.
+//
+// The test is which number is bigger. A config file has more keys than its
+// largest list; a collection has the reverse, by a wide margin. Returns null
+// ("no opinion") for anything unrecognised, so an odd shape can never trip the
+// guard.
+export function measure(content) {
+  if (Array.isArray(content)) return { kind: 'records', n: content.length };
   if (!content || typeof content !== 'object') return null;
-  // The principal collection of each shared file, longest first — one file can
-  // carry several arrays (holder_library has holders AND parts) and the primary
-  // one is what a collapse would show up in.
   const arrays = Object.values(content).filter(Array.isArray);
-  if (!arrays.length) return null;
-  return Math.max(...arrays.map(a => a.length));
+  const biggest = arrays.length ? Math.max(...arrays.map(a => a.length)) : 0;
+  const keys = Object.keys(content).length;
+  if (!arrays.length && !keys) return null;
+  return biggest >= keys ? { kind: 'records', n: biggest } : { kind: 'keys', n: keys };
+}
+
+export function sizeOf(content) {
+  return measure(content)?.n ?? null;
 }
 
 function read(key) {

@@ -5,7 +5,7 @@
 // protects nothing.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
-  sizeOf, shrinkCheck, assertNotShrinking, recordSize, clearHighWater,
+  sizeOf, measure, shrinkCheck, assertNotShrinking, recordSize, clearHighWater,
   MIN_MEANINGFUL, SHRINK_LIMIT, recordSizeFromLoad, recordSizeFromWrite,
 } from './writeGuard.js';
 
@@ -28,11 +28,38 @@ describe('sizeOf', () => {
     expect(sizeOf({ version: 1, holders: rows(22), parts: rows(3) })).toBe(22);
   });
 
+  it('measures a CONFIG DOCUMENT by its keys, not by some list inside it', () => {
+    // ⚠️ Found against the real backup. shop_settings.json measured as a
+    // collection came out as 3 — the length of its `machines` array — which is
+    // both meaningless to report and below MIN_MEANINGFUL, so the tripwire
+    // stood down on the most catastrophic file in the set: all three ID
+    // systems, the location systems and the machine list. By keys it is 19,
+    // and protected.
+    const shopSettings = {
+      version: 1, shop_name: 'APW', default_units: 'inches', machine_number: {},
+      tool_id_system: {}, location_config: { systems: [{}, {}] }, assembly_id_system: {},
+      presetter: {}, integrations: {}, machines: [{}, {}, {}], default_machine_id: null,
+      tool_libraries: [{}], holder_libraries: [], default_tool_library_id: null,
+      setup_steps: {}, import: {}, aps: {}, holder_config: {}, sequence_bulk_import: {},
+    };
+    expect(measure(shopSettings)).toEqual({ kind: 'keys', n: 19 });
+    expect(sizeOf(shopSettings)).toBe(19);
+  });
+
+  it('still measures a COLLECTION by its principal array', () => {
+    // The counts from the real backup — each must stay a record count.
+    expect(measure({ groups: rows(7), presets: rows(30), materials: rows(65) }))
+      .toEqual({ kind: 'records', n: 65 });
+    expect(measure({ parts: rows(89), routings: rows(96), operations: rows(226) }))
+      .toEqual({ kind: 'records', n: 226 });
+    expect(measure({ version: 1, holders: rows(24), parts: rows(2) }))
+      .toEqual({ kind: 'records', n: 24 });
+  });
+
   it('has NO OPINION on a shape it does not recognise', () => {
-    // Returning 0 here would make the guard fire on every settings save.
-    expect(sizeOf({ shop_name: 'Acme', default_units: 'inches' })).toBeNull();
     expect(sizeOf('nonsense')).toBeNull();
     expect(sizeOf(null)).toBeNull();
+    expect(sizeOf({})).toBeNull();
   });
 });
 

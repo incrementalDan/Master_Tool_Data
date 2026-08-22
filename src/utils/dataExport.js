@@ -23,7 +23,7 @@
 // hand-edited bundle is detectable rather than merely wrong.
 import * as toolStore from '../services/toolStore.js';
 import * as sharedStore from '../services/sharedStore.js';
-import { sizeOf } from '../services/writeGuard.js';
+import { sizeOf, measure } from '../services/writeGuard.js';
 
 export const EXPORT_FORMAT = 'tooldex-export/1';
 
@@ -62,6 +62,35 @@ export async function buildExportBundle(defaults, { shopSettings } = {}) {
     incomplete: failed.length ? failed : undefined,
     data: { tool_metadata: tools, ...shared },
   };
+}
+
+// Plain-English names for the summary. ⚠️ The raw key names leak the storage
+// layout into a sentence a person reads while deciding whether their backup
+// worked — "3 shopSettings" reads like three settings, and is unverifiable at a
+// glance. Say what each number counts.
+const COUNT_LABELS = {
+  tool_metadata: 'tools',
+  materials: 'material alloys',
+  vendorRegistry: 'vendors & manufacturers',
+  shopSettings: 'shop settings',
+  parts: 'part operations',
+  components: 'insert components',
+  holderLibrary: 'holders',
+  programDetails: 'program tool lists',
+};
+
+// One readable line: "273 tools, 65 material alloys, …". A config document is
+// counted in keys rather than records, so it is phrased so the number cannot be
+// mistaken for a record count.
+export function describeCounts(bundle) {
+  return Object.entries(bundle?.counts || {})
+    .filter(([, n]) => n != null)
+    .map(([k, n]) => {
+      const label = COUNT_LABELS[k] || k;
+      const kind = measure(bundle?.data?.[k])?.kind;
+      return kind === 'keys' ? `${label} (${n} entries)` : `${n} ${label}`;
+    })
+    .join(', ');
 }
 
 export function exportFilename(bundle) {

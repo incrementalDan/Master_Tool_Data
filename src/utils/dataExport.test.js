@@ -5,7 +5,7 @@
 // moment anyone opens it. So the manifest, and the check of the manifest against
 // the payload, are the parts worth locking down.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildExportBundle, verifyBundle, exportFilename, EXPORT_FORMAT } from './dataExport.js';
+import { buildExportBundle, verifyBundle, exportFilename, describeCounts, EXPORT_FORMAT } from './dataExport.js';
 import * as toolStore from '../services/toolStore.js';
 import * as sharedStore from '../services/sharedStore.js';
 
@@ -95,5 +95,30 @@ describe('exportFilename', () => {
     const name = exportFilename({ exported_at: '2026-08-22T14:35:09.123Z' });
     expect(name).toBe('tooldex-backup-2026-08-22-14-35.json');
     expect(name).not.toContain(':');
+  });
+});
+
+describe('describeCounts', () => {
+  it('says what each number counts, in words a person can check', () => {
+    // The line the user reads to decide whether their backup worked. Raw keys
+    // leaked the storage layout into it — "3 shopSettings" reads like three
+    // settings and is unverifiable at a glance.
+    const line = describeCounts({
+      counts: { tool_metadata: 273, materials: 65, holderLibrary: 24 },
+      data: {
+        tool_metadata: rows(273), materials: { materials: rows(65) },
+        holderLibrary: { holders: rows(24) },
+      },
+    });
+    expect(line).toBe('273 tools, 65 material alloys, 24 holders');
+  });
+
+  it('phrases a config document so its number is not read as records', () => {
+    const line = describeCounts({
+      counts: { shopSettings: 19 },
+      data: { shopSettings: Object.fromEntries(Array.from({ length: 19 }, (_, i) => [`k${i}`, 1])) },
+    });
+    expect(line).toBe('shop settings (19 entries)');
+    expect(line).not.toMatch(/^19 shopSettings/);
   });
 });
