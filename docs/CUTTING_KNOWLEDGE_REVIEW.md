@@ -143,7 +143,7 @@ three are pure client-side math over data already in memory.
 - Sync Job requires: open ToolDex → re-login (token is memory-only; every page
   refresh = full OAuth round-trip) → copy from Fusion → paste → step through the
   queue. Every point of friction is knowledge that doesn't get captured. The
-  **Phase A backend plan (docs/PHASE_A_PLAN.md)** directly fixes the login half and
+  **Phase A backend plan (PHASE_A_PLAN.md)** directly fixes the login half and
   is correctly scoped — it should be prioritized as *capture infrastructure*, not
   just security polish.
 - Capture is **opt-in per job**. Nothing nudges: no "this tool was in job 1042's
@@ -239,7 +239,7 @@ capture loop (§3) closes end-to-end for *this* shop.
    machine, revision note — add job #, strategy, engagement, and an outcome rating
    at commit time. The Fusion add-in later *automates* filling it; the entity
    shouldn't wait for the add-in.
-4. **Phase A backend** (already planned in `docs/PHASE_A_PLAN.md`). Reframe it as
+4. **Phase A backend** (already planned in `PHASE_A_PLAN.md`). Reframe it as
    capture infrastructure: all-day login kills the biggest capture friction, and the
    Worker becomes the ingestion endpoint for everything in §7.
 5. **Manufacturer chart ingestion via the existing AI extractor.** The extractor

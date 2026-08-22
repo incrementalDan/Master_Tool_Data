@@ -38,7 +38,7 @@ Bigger than that one file, and all of it predates the sanitization:
 | `8-10-26 POST CLEAN UP PM FIX/` | 4.0 MB | A real `tool_metadata.json` snapshot |
 | `Material REF Docs/` | — | Material reference documents |
 | `src/demo/demo_parts.json` | — | Real-looking part numbers (`CAD1-114P4344-1`, `GSE1-08D1404`) and customer names (Cadrex, GS Enterprises) |
-| `docs/ProgramNumberManager.tsx` | — | Same customer names |
+| `docs/archive/ProgramNumberManager.tsx` | — | Same customer names |
 
 **Decisions needed, in rough priority order:**
 

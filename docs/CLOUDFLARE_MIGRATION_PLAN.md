@@ -1,9 +1,9 @@
 # Storage Migration Plan — getting off whole-file JSON
 
 **Date:** 2026-08-22 · **Status:** plan, not started
-**Companion to:** `DATA_LOSS_AUDIT.md` · **Detail for Phase C of:** `docs/PHASE_A_PLAN.md`
+**Companion to:** `DATA_LOSS_AUDIT.md` · **Detail for Phase C of:** `PHASE_A_PLAN.md`
 
-> ⚠️ **This is not a competing plan.** `docs/PHASE_A_PLAN.md` already lays out a
+> ⚠️ **This is not a competing plan.** `PHASE_A_PLAN.md` already lays out a
 > three-phase Cloudflare roadmap — A: private hosting + server-side login, B:
 > blobs to R2, C: the JSON into a database. **This document is Phase C in
 > detail.** Read that one first for the shape; this one for what actually moves
@@ -11,7 +11,7 @@
 
 -----
 
-## 0. Reconciling with `docs/PHASE_A_PLAN.md`
+## 0. Reconciling with `PHASE_A_PLAN.md`
 
 Three things the older plan settles or changes:
 
@@ -176,7 +176,7 @@ a second thing that can be down. Accept that deliberately. Supabase is the
 credible alternative specifically because it avoids it — worth ten minutes of
 thought, not a week.
 
-**Auth: already solved, if Phase A runs first.** `docs/PHASE_A_PLAN.md` moves the
+**Auth: already solved, if Phase A runs first.** `PHASE_A_PLAN.md` moves the
 Autodesk and Google OAuth flows into the Worker, which holds the refresh token
 server-side and hands the browser an httpOnly cookie. Phase C then rides that
 existing session — no new auth work at all.
@@ -266,7 +266,7 @@ working.
 
 1. `sharedStore.js` seam + write tripwire + Export Everything *(pre-migration,
    durable — see §7)*
-2. **Phase A** (`docs/PHASE_A_PLAN.md`) — private hosting + the Worker +
+2. **Phase A** (`PHASE_A_PLAN.md`) — private hosting + the Worker +
    server-side login. Standalone value; also removes most of Phase C's cost.
 3. D1 with the two tables from §4, behind the Worker Phase A already built
 3. A `storageBackend` switch behind `toolStore` / `sharedStore`; D1 adapter
