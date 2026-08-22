@@ -17,7 +17,7 @@
 // (Deletion is explicit and record-scoped: deleteById. There is deliberately NO
 // destructive bulk-replace primitive.)
 import * as driveService from './driveService.js';
-import { assertNotShrinking, recordSize } from './writeGuard.js';
+import { assertNotShrinking, recordSizeFromLoad, recordSizeFromWrite } from './writeGuard.js';
 
 // One key for the metadata table's high-water mark.
 const TOOLS = 'tool_metadata';
@@ -25,8 +25,9 @@ const TOOLS = 'tool_metadata';
 // Read the whole metadata table.
 export async function loadAll() {
   const list = await driveService.loadMetadata();
-  // A successful read is the moment we learn how big this table legitimately is.
-  recordSize(TOOLS, list);
+  // An observation, not an assertion — see recordSizeFromLoad. An empty read
+  // must not be allowed to reset the baseline and stand the guard down.
+  recordSizeFromLoad(TOOLS, list);
   return list;
 }
 
@@ -47,7 +48,7 @@ export async function upsertMany(records) {
   // is the outside reference that can. See writeGuard.js.
   assertNotShrinking(TOOLS, merged);
   await driveService.saveAllMetadata(merged);
-  recordSize(TOOLS, merged);
+  recordSizeFromWrite(TOOLS, merged);
   return merged;
 }
 

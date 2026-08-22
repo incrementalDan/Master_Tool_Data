@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   sizeOf, shrinkCheck, assertNotShrinking, recordSize, clearHighWater,
-  MIN_MEANINGFUL, SHRINK_LIMIT,
+  MIN_MEANINGFUL, SHRINK_LIMIT, recordSizeFromLoad, recordSizeFromWrite,
 } from './writeGuard.js';
 
 const store = new Map();
@@ -127,5 +127,45 @@ describe('clearHighWater', () => {
     expect(shrinkCheck('t', rows(1))).not.toBeNull();
     clearHighWater('t');
     expect(shrinkCheck('t', rows(1))).toBeNull();
+  });
+});
+
+describe('⚠️ the bad read must not disarm the guard', () => {
+  beforeEach(() => { store.clear(); });
+
+  it('an EMPTY load does not reset a meaningful baseline to zero', () => {
+    // THE BUG THIS EXISTS FOR: the guard defends against a read that came back
+    // empty. But the load path also records the size it read — so an empty read
+    // wrote a baseline of 0, `from < MIN_MEANINGFUL` short-circuited, and the
+    // guard stood down for exactly the write it was built to stop. The bad read
+    // disarmed its own alarm.
+    recordSizeFromLoad('tool_metadata', rows(268));   // a good load, yesterday
+    recordSizeFromLoad('tool_metadata', []);          // today's read comes back empty
+    // The write that follows is the 268 -> 3 catastrophe. It must still be caught.
+    expect(shrinkCheck('tool_metadata', rows(3))).toMatchObject({ from: 268, to: 3 });
+  });
+
+  it('but a genuine shrink still rebaselines, so the guard is not a ratchet', () => {
+    // The tension: loads must be able to lower the mark (tools really do get
+    // deleted, one at a time, and deleteById never records) or the guard
+    // eventually blocks ordinary saves. Only a drop to ZERO is treated as
+    // "no information" — a real, partial shrink is believed.
+    recordSizeFromLoad('t', rows(268));
+    recordSizeFromLoad('t', rows(68));
+    expect(shrinkCheck('t', rows(60))).toBeNull();
+  });
+
+  it('a real first run still arms from zero', () => {
+    // An empty table on a brand-new shop is genuinely empty, and must not be
+    // permanently stuck at a baseline it never had.
+    recordSizeFromLoad('fresh', []);
+    recordSizeFromLoad('fresh', rows(12));
+    expect(shrinkCheck('fresh', rows(1))).not.toBeNull();
+  });
+
+  it('a deliberate WRITE of zero is believed — it was asked for', () => {
+    recordSizeFromLoad('t', rows(268));
+    recordSizeFromWrite('t', []);
+    expect(shrinkCheck('t', [])).toBeNull();
   });
 });

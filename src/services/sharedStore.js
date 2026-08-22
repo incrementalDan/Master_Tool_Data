@@ -17,7 +17,7 @@
 // Rule: outside this module, do not call driveService.{loadOrCreateSharedJson,
 // saveSharedJson} directly — use the seam.
 import * as driveService from './driveService.js';
-import { assertNotShrinking, recordSize } from './writeGuard.js';
+import { assertNotShrinking, recordSizeFromLoad, recordSizeFromWrite } from './writeGuard.js';
 
 // The app's key → the file it lives in. Callers name the KEY ('materials'); the
 // filename and its localStorage cache key stay in here.
@@ -46,7 +46,7 @@ export async function load(key, defaultContent) {
   const f = fileFor(key);
   const res = await driveService.loadOrCreateSharedJson(f.name, f.cacheKey, defaultContent);
   // A successful read is the moment we know how big this file legitimately is.
-  if (res.status === 'loaded') recordSize(key, res.data);
+  if (res.status === 'loaded') recordSizeFromLoad(key, res.data);
   return res;
 }
 
@@ -60,5 +60,5 @@ export async function save(key, content, { keepalive = false, force = false } = 
   const f = fileFor(key);
   if (!force) assertNotShrinking(key, content);
   await driveService.saveSharedJson(f.name, f.cacheKey, content, { keepalive });
-  recordSize(key, content);
+  recordSizeFromWrite(key, content);
 }

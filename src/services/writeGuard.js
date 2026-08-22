@@ -64,14 +64,45 @@ function write(key, n) {
   try { localStorage.setItem(KEY_PREFIX + key, String(n)); } catch { /* guard degrades to off */ }
 }
 
-// Record how big this dataset legitimately is. Call after a successful LOAD and
-// after a successful WRITE — a write is a new legitimate size, including a
-// deliberate shrink, so the mark follows the data down and the guard does not
-// become a ratchet that eventually blocks everything.
-export function recordSize(key, content) {
+// ⚠️ A LOAD AND A WRITE ARE NOT THE SAME KIND OF EVIDENCE, and treating them
+// alike is how the guard disarms itself.
+//
+// A write is an assertion: someone asked for this size, so believe it, including
+// a deliberate shrink to nothing. That is what stops the guard becoming a
+// ratchet that eventually blocks ordinary saves.
+//
+// A load is an observation, and the whole premise here is that a load can come
+// back wrong. Recording an empty read as "this dataset is now 0" set the
+// baseline below MIN_MEANINGFUL, which short-circuits the check — so the bad
+// read switched off the alarm built to catch it, and the 268 -> 3 write sailed
+// through. Only a drop to EXACTLY ZERO is refused, and only when the previous
+// mark was meaningful: a real partial shrink (tools deleted one at a time, which
+// deleteById never records) is believed, so the guard still rebaselines.
+//
+// Zero is singled out because it is the one value a failed read produces —
+// loadMetadata turns a 404 or an empty file into `[]`, and JSON is all-or-
+// nothing, so a corrupt read cannot come back merely short.
+
+// After a successful WRITE. Always believed.
+export function recordSizeFromWrite(key, content) {
   const n = sizeOf(content);
   if (n != null) write(key, n);
 }
+
+// After a successful LOAD. Believed except for an unexplained collapse to zero.
+export function recordSizeFromLoad(key, content) {
+  const n = sizeOf(content);
+  if (n == null) return;
+  if (n === 0) {
+    const prev = read(key);
+    if (prev != null && prev >= MIN_MEANINGFUL) return; // keep the baseline
+  }
+  write(key, n);
+}
+
+// Deprecated alias — kept so no caller silently records the wrong KIND of
+// evidence by picking the old name out of habit.
+export const recordSize = recordSizeFromWrite;
 
 // Would this write collapse the dataset? Returns null when fine, or a
 // { key, from, to } description of the collapse.
