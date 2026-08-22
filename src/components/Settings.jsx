@@ -15,7 +15,7 @@ import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
 import { FilePicker } from './LibrarySetup.jsx';
 import LocationSystemSettings from './LocationSystemSettings.jsx';
 import DescRenameModal from './DescRenameModal.jsx';
-import { buildExportBundle, downloadBundle, verifyBundle } from '../utils/dataExport.js';
+import { buildExportBundle, downloadBundle, verifyBundle, describeCounts } from '../utils/dataExport.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_PARTS, DEFAULT_COMPONENTS, DEFAULT_PROGRAM_DETAILS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY } from '../schema/vendorRegistry.js';
 import InfoTip from './InfoTip.jsx';
@@ -120,10 +120,7 @@ export default function Settings() {
       }, { shopSettings });
       const check = verifyBundle(bundle);
       downloadBundle(bundle);
-      const counts = Object.entries(bundle.counts)
-        .filter(([, n]) => n != null)
-        .map(([k, n]) => `${n} ${k.replace(/_/g, ' ')}`)
-        .join(', ');
+      const counts = describeCounts(bundle);
       setBackupResult(check.ok
         ? `Downloaded — ${counts}. Move it somewhere that isn't Drive.`
         : `Downloaded, but INCOMPLETE: ${check.problems.join('; ')}. Fix the problem and take another before relying on this one.`);
