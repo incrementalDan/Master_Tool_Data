@@ -11,6 +11,7 @@
 import { createContext, useContext, useReducer, useCallback, useEffect, useMemo, useRef } from 'react';
 import * as driveService from '../services/driveService.js';
 import * as toolStore from '../services/toolStore.js';
+import * as sharedStore from '../services/sharedStore.js';
 import * as aps from '../services/apsService.js';
 import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeUnlinkedTools, buildUnlinkedTool, isCompleteRecord, recordsNeedingBackfill, buildMetadataTool } from '../schema/toolSchema.js';
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
@@ -300,8 +301,7 @@ export function AppProvider({ children }) {
     for (const key of failed) {
       const def = SHARED_DEFAULTS[key];
       try {
-        const { data } = await driveService.loadOrCreateSharedJson(
-          SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, def);
+        const { data } = await sharedStore.load(key, def);
         const [type, stateKey] = DISPATCH[key];
         dispatch({ type, [stateKey]: data });
         if (key === 'vendorRegistry') setActiveVendorRegistry(data);
@@ -314,13 +314,13 @@ export function AppProvider({ children }) {
     // Lift the block only for what actually came back.
     const next = new Set(stillFailing);
     unloadedSharedRef.current = next;
-    driveService.setBlockedSharedFiles([...next].map(k => SHARED_FILES[k].name));
+    driveService.setBlockedSharedFiles([...next].map(sharedStore.fileNameFor));
     dispatch({ type: 'SHARED_FILE_WARNING', failed: stillFailing, created: [] });
     if (recovered.length) {
       notify(`Recovered ${recovered.length} file${recovered.length === 1 ? '' : 's'} — saving is enabled again`, 'success');
     }
     if (stillFailing.length) {
-      notify(`Still can't read ${stillFailing.map(k => SHARED_FILES[k].name).join(', ')} — saving stays disabled for ${stillFailing.length === 1 ? 'it' : 'those'}`, 'error', 9000);
+      notify(`Still can't read ${stillFailing.map(sharedStore.fileNameFor).join(', ')} — saving stays disabled for ${stillFailing.length === 1 ? 'it' : 'those'}`, 'error', 9000);
     }
     return { recovered, stillFailing };
   }, [notify]);
@@ -390,7 +390,7 @@ export function AppProvider({ children }) {
         : key === 'programDetails' ? programDetailsRef.current
         : key === 'holderLibrary' ? holderLibraryRef.current
         : fallbackData;
-      return driveService.saveSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, payload, { keepalive })
+      return sharedStore.save(key, payload, { keepalive })
         .catch(err => {
           if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
           notify(`Save failed: ${err.message}`, 'error', 7000);
@@ -458,7 +458,7 @@ export function AppProvider({ children }) {
     // say why rather than dropping it. Saving here would overwrite a file we
     // never managed to read with the blank seed we opened the app on.
     if (unloadedSharedRef.current.has(key)) {
-      notify(`Can't save — ${driveService.SHARED_FILES[key]?.name || key} didn't load this session, so saving would overwrite it. Reload, or use Retry on the banner.`, 'error', 9000);
+      notify(`Can't save — ${sharedStore.fileNameFor(key)} didn't load this session, so saving would overwrite it. Reload, or use Retry on the banner.`, 'error', 9000);
       return Promise.reject(new Error(`Shared file ${key} failed to load — writes blocked`));
     }
     // Optimistic, synchronous state update — controlled inputs in the editors
@@ -966,7 +966,7 @@ export function AppProvider({ children }) {
     saveRegistryMirror(nextSS);
     if (googleRef.current) {
       const { SHARED_FILES } = driveService;
-      driveService.saveSharedJson(SHARED_FILES.shopSettings.name, SHARED_FILES.shopSettings.cacheKey, nextSS)
+      sharedStore.save('shopSettings', nextSS)
         .catch(err => {
           // The registry also lives in the localStorage mirror + in-memory, so the
           // change survives reload even if Drive is down — but an EXPIRED session
@@ -1201,7 +1201,7 @@ export function AppProvider({ children }) {
         const failedKeys = new Set();
         const createdKeys = new Set();
         const sharedSafe = (key, def) =>
-          driveService.loadOrCreateSharedJson(SHARED_FILES[key].name, SHARED_FILES[key].cacheKey, def)
+          sharedStore.load(key, def)
             .then(({ data, status }) => { if (status === 'created') createdKeys.add(key); return data; })
             .catch(e => { if (e.code === 'TOKEN_EXPIRED') throw e; failedKeys.add(key); return def; });
         try {
@@ -1238,7 +1238,7 @@ export function AppProvider({ children }) {
             const seeded = seedShopSettingsRegistry(ss);
             if ((seeded.tool_libraries || []).length) {
               ss = seeded;
-              driveService.saveSharedJson(SHARED_FILES.shopSettings.name, SHARED_FILES.shopSettings.cacheKey, ss).catch(() => {});
+              sharedStore.save('shopSettings', ss).catch(() => {});
             }
           }
           effectiveShop = ss;
@@ -1258,7 +1258,7 @@ export function AppProvider({ children }) {
           unloadedSharedRef.current = failedKeys;
           // Arm the choke-point block too, so the direct writers (persistRegistry,
           // the registry seed below) are covered without each remembering to ask.
-          driveService.setBlockedSharedFiles([...failedKeys].map(k => SHARED_FILES[k].name));
+          driveService.setBlockedSharedFiles([...failedKeys].map(sharedStore.fileNameFor));
           sharedLoadedRef.current = true;
           if (failedKeys.size) {
             dispatch({ type: 'SHARED_FILE_WARNING', failed: [...failedKeys], created: [] });

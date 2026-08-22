@@ -1,6 +1,46 @@
 # Storage Migration Plan — getting off whole-file JSON
 
-**Date:** 2026-08-22 · **Status:** plan, not started · **Companion to:** `DATA_LOSS_AUDIT.md`
+**Date:** 2026-08-22 · **Status:** plan, not started
+**Companion to:** `DATA_LOSS_AUDIT.md` · **Detail for Phase C of:** `docs/PHASE_A_PLAN.md`
+
+> ⚠️ **This is not a competing plan.** `docs/PHASE_A_PLAN.md` already lays out a
+> three-phase Cloudflare roadmap — A: private hosting + server-side login, B:
+> blobs to R2, C: the JSON into a database. **This document is Phase C in
+> detail.** Read that one first for the shape; this one for what actually moves
+> and why. Where they differ, the reconciliation is in §0.
+
+-----
+
+## 0. Reconciling with `docs/PHASE_A_PLAN.md`
+
+Three things the older plan settles or changes:
+
+**Phase A answers the auth question, and answers it better than §5 does.**
+This document proposed the cheapest possible auth — the Worker verifies the
+caller's APS token. Phase A instead moves the whole OAuth dance server-side:
+the Worker holds the refresh token, the browser gets an httpOnly cookie it
+cannot read. That is strictly better (no token in the browser at all, and login
+survives refresh, new tabs, and the whole day), and it means **the Worker and its
+session already exist before Phase C starts.** Phase C then adds a database
+endpoint to a backend that is already there and already authenticated, rather
+than standing one up. **Do Phase A first** — it removes most of what §8 lists as
+the real cost of D1.
+
+**Phase A has value independent of data safety**, which the audit did not weigh:
+it makes the repo private (GitHub Pages forces it public today) and fixes
+mid-session token expiry. Those are worth having regardless of storage.
+
+**⚠️ Phase B (blobs → R2) is NOT required, and should not be treated as a
+prerequisite for C.** Measured: every blob call site is upload / download / copy
+/ rename — write-once, read-many, **no read-modify-write cycle**, so blobs have
+none of the corruption problem this whole effort is about. Moving them fixes no
+data-loss issue and is the riskiest bulk move available. Do it if and when
+consolidating off Drive is wanted for its own sake; **B does not block C**, and
+C is the one that matters. See §2 Track B.
+
+**Revised order:** A → C → (B, optional, whenever).
+
+-----
 
 The audit found a class of bug, not a list of bugs. This is the plan to remove
 the class instead of patching instances of it.
@@ -136,11 +176,16 @@ a second thing that can be down. Accept that deliberately. Supabase is the
 credible alternative specifically because it avoids it — worth ten minutes of
 thought, not a week.
 
-**Auth, cheapest first:** the Worker verifies the caller's **APS access token**
-against Autodesk's `userinfo` endpoint and checks the account belongs to the
-shop's hub. That keeps today's security model exactly ("access to the Autodesk
-hub is access to the app"), needs no new accounts, and is ~30 lines. Cloudflare
-Access in front is the alternative if a second gate is wanted.
+**Auth: already solved, if Phase A runs first.** `docs/PHASE_A_PLAN.md` moves the
+Autodesk and Google OAuth flows into the Worker, which holds the refresh token
+server-side and hands the browser an httpOnly cookie. Phase C then rides that
+existing session — no new auth work at all.
+
+Only if Phase C somehow runs first: the Worker verifies the caller's **APS access
+token** against Autodesk's `userinfo` endpoint and checks the account belongs to
+the shop's hub — ~30 lines, keeps today's model ("access to the Autodesk hub is
+access to the app"). Strictly worse than the Phase A cookie (the token still
+lives in the browser), so treat it as the fallback, not the plan.
 
 -----
 
@@ -221,7 +266,9 @@ working.
 
 1. `sharedStore.js` seam + write tripwire + Export Everything *(pre-migration,
    durable — see §7)*
-2. Worker skeleton + APS token verification + D1 with the two tables from §4
+2. **Phase A** (`docs/PHASE_A_PLAN.md`) — private hosting + the Worker +
+   server-side login. Standalone value; also removes most of Phase C's cost.
+3. D1 with the two tables from §4, behind the Worker Phase A already built
 3. A `storageBackend` switch behind `toolStore` / `sharedStore`; D1 adapter
    alongside the Drive one
 4. Import script that reads the export zip; verification by counts

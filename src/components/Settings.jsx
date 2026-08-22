@@ -15,6 +15,9 @@ import { getDefaultUnit, setDefaultUnit } from '../utils/units.js';
 import { FilePicker } from './LibrarySetup.jsx';
 import LocationSystemSettings from './LocationSystemSettings.jsx';
 import DescRenameModal from './DescRenameModal.jsx';
+import { buildExportBundle, downloadBundle, verifyBundle } from '../utils/dataExport.js';
+import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_PARTS, DEFAULT_COMPONENTS, DEFAULT_PROGRAM_DETAILS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
+import { DEFAULT_VENDOR_REGISTRY } from '../schema/vendorRegistry.js';
 import InfoTip from './InfoTip.jsx';
 import ImportPhotosModal from './ImportPhotosModal.jsx';
 import ProgramsImportModal from './ProgramsImportModal.jsx';
@@ -95,6 +98,41 @@ export default function Settings() {
   const [showToolPicker, setShowToolPicker] = useState(false);
   const [showHolderPicker, setShowHolderPicker] = useState(false);
   const [showDescRename, setShowDescRename] = useState(false);
+  const [backingUp, setBackingUp] = useState(false);
+  const [backupResult, setBackupResult] = useState(null);
+
+  // ⚠️ The bundle is VERIFIED before it downloads. An export that quietly came
+  // back short is worse than a failed one: it looks like a backup, sits on a
+  // drive for months, and is discovered to be incomplete at the only moment it
+  // matters. The manifest exists to be checked, so it is checked here.
+  const handleBackupEverything = async () => {
+    setBackingUp(true);
+    setBackupResult(null);
+    try {
+      const bundle = await buildExportBundle({
+        materials: DEFAULT_MATERIALS,
+        vendorRegistry: DEFAULT_VENDOR_REGISTRY,
+        shopSettings: DEFAULT_SHOP_SETTINGS,
+        parts: DEFAULT_PARTS,
+        components: DEFAULT_COMPONENTS,
+        holderLibrary: DEFAULT_HOLDER_LIBRARY,
+        programDetails: DEFAULT_PROGRAM_DETAILS,
+      }, { shopSettings });
+      const check = verifyBundle(bundle);
+      downloadBundle(bundle);
+      const counts = Object.entries(bundle.counts)
+        .filter(([, n]) => n != null)
+        .map(([k, n]) => `${n} ${k.replace(/_/g, ' ')}`)
+        .join(', ');
+      setBackupResult(check.ok
+        ? `Downloaded — ${counts}. Move it somewhere that isn't Drive.`
+        : `Downloaded, but INCOMPLETE: ${check.problems.join('; ')}. Fix the problem and take another before relying on this one.`);
+    } catch (e) {
+      setBackupResult(`Backup failed: ${e.message} — nothing was downloaded.`);
+    } finally {
+      setBackingUp(false);
+    }
+  };
   const [showProgramsImport, setShowProgramsImport] = useState(false);
   const [showBulkSeq, setShowBulkSeq] = useState(false);
   const [showPhotos, setShowPhotos] = useState(false);
@@ -1354,6 +1392,39 @@ export default function Settings() {
           Machine Number / Location bulk actions. */}
       <div style={{ maxWidth: 760, marginBottom: 16 }}>
         <IdSystemMembership />
+      </div>
+
+      {/* Back up everything — the interim recovery mechanism, and step 2 of the
+          storage cutover (see CLOUDFLARE_MIGRATION_PLAN.md). Deliberately reads
+          FRESH from Drive rather than from app state: in-memory tools have been
+          through the load-time backfills, so a backup taken from state would
+          quietly bake in changes nobody asked for. */}
+      <div className="card" style={{ maxWidth: 760, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+          <Download size={16} style={{ color: 'var(--blue)' }} />
+          <h3 style={{ margin: 0 }}>Back Up Everything</h3>
+        </div>
+        <p className="text-sub text-sm mb-16">
+          Downloads one file containing every record the app owns — tools, holders, materials,
+          vendors, parts &amp; programs, components and shop settings — read fresh from Drive.
+          Keep it somewhere that isn&apos;t Google Drive. Run it before any bulk action or risky change.
+          <br /><br />
+          <strong>Not included:</strong> your Fusion libraries (Autodesk keeps a full version
+          history — restore a prior version there) and tool photos/attachments (those stay in Drive).
+        </p>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={handleBackupEverything}
+          disabled={backingUp || !googleAuthenticated}
+          title={!googleAuthenticated ? 'Connect Google Drive first' : undefined}
+        >
+          {backingUp ? 'Reading from Drive…' : '↓ Download a full backup'}
+        </button>
+        {backupResult && (
+          <div className="text-sub text-sm" style={{ marginTop: 10 }}>
+            {backupResult}
+          </div>
+        )}
       </div>
 
       {/* ProShop export */}

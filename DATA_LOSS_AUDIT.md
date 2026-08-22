@@ -281,3 +281,48 @@ To restore one file later: Drive → right-click the file → **Manage versions*
 version* → pick the copy from the zip. The file ID stays the same, so the app keeps
 pointing at it and nothing needs relinking. **Do not delete and re-upload** — that mints a
 new file ID and the app will 404 and fork (hole #2).
+
+-----
+
+## ⚠️ Unrelated finding — `npm run build` in the cloud sandbox omits app code
+
+Found while verifying the fixes above, on 2026-08-22. **Recorded here because it
+undermines "the build passed" as a verification signal, not because it is a
+data-loss issue.**
+
+In the Claude Code cloud sandbox, `npm run build` exits 0 and reports
+`✓ 1763 modules transformed`, but the emitted bundle contains React, react-dom,
+react-router and lucide — and **essentially none of the application's component
+code**. Evidence:
+
+- No JSX text from any component reaches the bundle: `btn-secondary` (used on
+  hundreds of elements) appears **0** times; so do `ProShop Export`,
+  `Rename Tool Descriptions`, `ToolDex`.
+- A module-scope `console.log` marker added to `App.jsx` or `Settings.jsx` DOES
+  appear, and changes the output hash — so those modules are transformed and
+  reachable. Only the component bodies are missing.
+- Not minification: `vite build --minify false` gives 282 kB with the same
+  absence.
+- **Pre-existing, not caused by these changes** — building from a clean stash
+  produced a byte-identical bundle (`index-DUXEY9nG.js`, 178,676 bytes).
+
+Vite is 5.4.21 as declared, `vite.config.js` is three lines, and `index.html` is
+correct. The sandbox's `node_modules` does contain `@rolldown/*` (pulled in by
+vitest 4), and vitest emits `Both esbuild and oxc options were set` warnings —
+the most likely culprit is a build toolchain in this install that differs from a
+clean `npm ci`.
+
+**Why it probably is not affecting production:** the deployed site works, and CI
+runs `npm ci` (a clean install) before `npm run build`. Local dev (`npm run dev`)
+is unaffected — it does not use this path.
+
+**What it means practically:**
+
+- ⚠️ **`npm run build` is NOT a valid verification step from a cloud session.**
+  Treat lint + the test suite as the real checks. Commits in this branch that say
+  "build clean" mean only that the command exited 0.
+- **Watch the GitHub Actions run** after merging anything from a cloud session,
+  since that is the first place the real build is exercised.
+- Worth reproducing on a developer machine with a clean `npm ci`. If it happens
+  there too, it is a genuine build bug and a much bigger deal than anything in
+  this document.
