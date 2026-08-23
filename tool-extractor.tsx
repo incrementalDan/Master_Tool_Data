@@ -219,8 +219,9 @@ const PS_MAIN_COLS=[
   // GENERATOR (specs → a suggested name) for the extractor/Add flow, where nothing
   // is stored yet; it must never override a real tool's description on export.
   ["description",f=>f.description||buildDesc(f)],["cutDiameter",f=>f.diameter||""],["lengthOfCut",f=>f.loc||""],
-  ["overallLength",f=>f.oal||""],["No. of Flutes",f=>f.flutes||""],["shankDiameter",f=>f.shankDia||f.diameter||""],
-  ["bodyDiameter",f=>f.shankDia||f.diameter||""],["cornerRadius",f=>f.cornerRadius||""],["tipAngle",f=>f.tipAngle||""],
+  ["overallLength",f=>f.oal||""],["No. of Flutes",f=>f.flutes||""],// Blank when unknown — never the cutting diameter. See toolToExtractor.
+  ["shankDiameter",f=>f.shankDia||""],
+  ["bodyDiameter",f=>f.shankDia||""],["cornerRadius",f=>f.cornerRadius||""],["tipAngle",f=>f.tipAngle||""],
   ["helixAngle",f=>f.helixAngle||""],["coating",f=>f.coating||""],["toolMaterial",f=>f.material||""],
   ["recommendedWorkpieceMaterial",f=>(f.workpieceMats&&f.workpieceMats.length?f.workpieceMats.join(", "):f.workpieceMat||"")],
   // ⚠️ ProShop's boolean-ish columns are NOT one format. Measured across the

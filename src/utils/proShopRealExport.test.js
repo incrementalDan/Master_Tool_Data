@@ -105,13 +105,15 @@ describe('every real tool survives a ProShop round-trip', () => {
     'double_ended', 'full_profile', 'backside_capable', 'material_suitability',
     'tap_sub_type', 'tpi_min', 'tpi_max',
   ];
-  // ⚠️ Two columns the export FILLS IN rather than leaves blank, so a value the
-  // app never held comes back on re-import. Both are long-standing and are an
-  // open question, not a regression — pinned here with their measured counts so
-  // the strict check above still covers everything else:
-  //   corner_radius  null → 0             (toolToExtractor's `?? '0'`)
-  //   shank_diameter null → the CUT DIA   (`f.shankDia || f.diameter`)
-  const SUBSTITUTED = ['corner_radius', 'shank_diameter'];
+  // ⚠️ One column the export still FILLS IN rather than leaves blank: a tool with
+  // no corner radius exports `0` (toolToExtractor's `?? '0'`), so re-import
+  // stamps corner_radius: 0 on it. Deliberately kept — Fusion writes RE only when
+  // non-zero, so 0 and unset behave identically downstream. Pinned so the strict
+  // check above still covers everything else, and so it can only ever fill a
+  // missing value, never rewrite a real one.
+  // (shank_diameter used to be here too, substituting the CUT diameter. It now
+  // exports blank when unknown and round-trips exactly.)
+  const SUBSTITUTED = ['corner_radius'];
 
   it('loses nothing on export → re-import', () => {
     const drift = [];

@@ -160,7 +160,7 @@ describe('ProShop export: continuation rows keep the Tool #', () => {
   const tool = {
     id: 'FTL-MULTI1', tool_type: 'flat end mill', tool_id: 'A-1', unit: 'inches',
     description: '3/8 3FL EM 1.000LOC', diameter: 0.375, number_of_flutes: 3,
-    flute_length: 1, overall_length: 3, location: 'LC-8', assemblies: [],
+    flute_length: 1, overall_length: 3, shank_diameter: 0.375, location: 'LC-8', assemblies: [],
     purchasing: {
       manufacturers: [{ id: 'm1', name: 'Helical', edp: '48261', order: 0 }],
       vendors: [
