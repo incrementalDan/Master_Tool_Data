@@ -337,7 +337,9 @@ function ComponentGroup({
               />
             </SubSection>
 
-            <SubSection title="Location" icon={MapPin} defaultOpen={false}>
+            {/* Same rule as the tool page: a component with no structured
+                location opens on the one panel that can assign it. */}
+            <SubSection title="Location" icon={MapPin} defaultOpen={!comp.tool_location}>
               <LocationPicker
                 record={comp}
                 onAssign={(loc, binSizeId) => assignComponentLocation(comp, loc, binSizeId)}

@@ -50,6 +50,13 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
   const { tools, shopSettings, googleAuthenticated } = useApp();
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
   const [data, setData] = useState({ ...tool });
+  // The location field is only an INPUT when there is no better place to set
+  // it: no location system configured at all, or an existing free-text value
+  // that the picker can't currently edit. A structured location, or a blank
+  // one in a shop that has systems, is read-only here — see the field below.
+  const hasLocSystems = (shopSettings?.location_config?.systems || []).length > 0;
+  const locEditable = !data.tool_location
+    && (!hasLocSystems || !!(data.location || '').trim());
   const [errors, setErrors] = useState([]);
   const [tagInput, setTagInput] = useState('');
 
@@ -520,18 +527,39 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
             </div>
             <div className="form-grid">
               <FieldInput field="tool_id" label={toolIdLabel(idMode)} data={data} setField={setField} placeholder="e.g. A-3" />
+              {/* Location is owned by the Location System, not this form — a
+                  blank editable box here read as "you need to type something"
+                  and there is nothing useful to type. So the only case that
+                  still gets an input is a shop with no location system at all
+                  (free text is then the only route) or a legacy free-text
+                  value that would otherwise become uneditable. Everything else
+                  is told where the location actually gets set. */}
               <div className="field-group">
                 <label className="field-label">
                   Location
-                  <InfoTip text={'Free-text location (Fusion’s "Vendor" field). To assign a structured Location System slot — and get an auto-suggested bin number — use Assign Location on the tool page. A structured location overrides this text on save.'} />
+                  <InfoTip text={locEditable
+                    ? 'Free-text location (Fusion’s "Vendor" field). Once a Location System is configured, locations are assigned with Assign Location on the tool page instead, and a structured location overrides this text on save.'
+                    : 'Locations are assigned with Assign Location on the tool page — that’s where you pick the system and get an auto-suggested bin number. It is not edited here.'} />
                 </label>
-                <input
-                  className="field-input"
-                  value={data.tool_location ? '(structured — set via Assign Location)' : (data.location || '')}
-                  placeholder="LC-140"
-                  disabled={!!data.tool_location}
-                  onChange={e => setField('location', e.target.value)}
-                />
+                {locEditable ? (
+                  <input
+                    className="field-input"
+                    value={data.location || ''}
+                    placeholder="LC-140"
+                    onChange={e => setField('location', e.target.value)}
+                  />
+                ) : (
+                  <div className="flex items-center gap-8 flex-wrap" style={{ minHeight: 34 }}>
+                    {data.location
+                      ? <span className="location-tag">{data.location}</span>
+                      : <span className="text-sm text-sub">Not set</span>}
+                    <span className="text-xs text-sub">
+                      — {isNew
+                        ? 'assign it with Assign Location on the tool page after saving'
+                        : 'use Assign Location on the tool page'}
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </Section>
