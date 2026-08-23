@@ -26,6 +26,9 @@
 
 import { TT, MA, WM, BLANK, COOLANT_OPTS } from '../../tool-extractor.tsx';
 import { FLUTE_DESIGN_OPTIONS } from '../schema/fieldRegistry.js';
+// threads.js is a leaf (no imports of its own), so this can't deepen the
+// extractionService <-> tool-extractor cycle.
+import { resolveThreadSize } from '../schema/threads.js';
 import { getVendorNames, getManufacturerNames, resolveVendorName } from '../schema/vendorRegistry.js';
 
 // Optional-chained so this module can be imported in plain Node (the round-trip
@@ -42,7 +45,7 @@ export const EXTRACTED_KEYS = [
   'productLink', 'edpNumber', 'approvedBrand', 'vendor', 'vendorStockNum',
   'coolant', 'centerCutting', 'fluteType', 'fluteDesign', 'cost', 'tapClass', 'pointType',
   'shoulderLen', 'ooh', 'taperAngle', 'minThreadPitch', 'maxThreadPitch',
-  'tapSubType', 'isSTI', 'tpiMin', 'tpiMax', 'threadProfileAngle',
+  'tapSubType', 'isSTI', 'threadUnit', 'tpiMin', 'tpiMax', 'threadProfileAngle',
   'fullProfile', 'stubJobber', 'backsideCapable', 'doubleEnded',
   'cuttingDirection',
 ];
@@ -119,7 +122,7 @@ export function sanitizeExtraction(p) {
   // Plain string passthroughs (always inches for the numeric ones).
   for (const k of [
     'diameter', 'loc', 'oal', 'flutes', 'shankDia', 'coating', 'tipAngle', 'tipDiameter',
-    'helixAngle', 'pitch', 'productLink', 'edpNumber', 'vendorStockNum',
+    'helixAngle', 'productLink', 'edpNumber', 'vendorStockNum',
     'fluteType', 'cost', 'tapClass', 'pointType', 'shoulderLen', 'ooh',
     'taperAngle', 'minThreadPitch', 'maxThreadPitch', 'tpiMin', 'tpiMax',
     'threadProfileAngle', 'stubJobber',
@@ -172,6 +175,23 @@ export function sanitizeExtraction(p) {
     const want = String(p.fluteDesign).trim().toLowerCase().replace(/\s+/g, ' ');
     const hit = FLUTE_DESIGN_OPTIONS.find(o => o.toLowerCase() === want);
     if (hit) put('fluteDesign', hit);
+  }
+
+  // ⚠️ The thread UNIT is DERIVED from the designation, never taken on trust.
+  // The model is asked for `threadUnit` but routinely omits it, and the answer
+  // was being dropped here anyway — so a metric tap arrived with no unit, the
+  // form showed the INCH thread list, and a perfectly-read "M6x1" fell through
+  // to a hand-typed "custom" thread. resolveThreadSize reads the unit out of the
+  // designation itself and canonicalizes the spelling onto the list entry, which
+  // is the same seam the ProShop import already goes through — it cannot be
+  // forgotten and does not depend on the model answering a second question.
+  if (has(p.pitch)) {
+    const t = resolveThreadSize(p.pitch);
+    put('pitch', t.pitch);
+    if (t.thread_unit) put('threadUnit', t.thread_unit);
+    // The designation itself can carry STI; the model has its own flag, and
+    // either saying so is enough. (Booleans are still emitted only when true.)
+    if (t.is_sti) put('isSTI', true);
   }
 
   if (p.tapSubType === 'cut' || p.tapSubType === 'form') put('tapSubType', p.tapSubType);

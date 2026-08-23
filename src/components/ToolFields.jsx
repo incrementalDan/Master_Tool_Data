@@ -17,7 +17,7 @@ import {
   INCH_THREAD_SIZES, METRIC_THREAD_SIZES,
   TAP_LIMIT_TOLERANCE_OPTIONS_INCH, TAP_LIMIT_TOLERANCE_DEFAULT_INCH,
   TAP_LIMIT_TOLERANCE_OPTIONS_METRIC, TAP_LIMIT_TOLERANCE_DEFAULT_METRIC,
-  CLASS_OF_FIT_OPTIONS, CLASS_OF_FIT_DEFAULT,
+  CLASS_OF_FIT_OPTIONS, CLASS_OF_FIT_DEFAULT, threadUnitOf,
 } from '../schema/toolSchema.js';
 import { unitAbbr } from '../utils/units.js';
 import InfoTip from './InfoTip.jsx';
@@ -327,7 +327,8 @@ export default function ToolFields({
 function ThreadBlock({ tool, mode, setField, fields, strip = () => null }) {
   const edit = mode === 'edit';
   const isTap = tool.tool_type === 'tap';
-  const isMetricThread = tool.tap_thread_unit === 'metric';
+  const threadUnit = threadUnitOf(tool);
+  const isMetricThread = threadUnit === 'metric';
   const threadSizes = (isMetricThread ? METRIC_THREAD_SIZES : INCH_THREAD_SIZES).filter(s => s !== 'Custom...');
   const tolOptions = isMetricThread ? TAP_LIMIT_TOLERANCE_OPTIONS_METRIC : TAP_LIMIT_TOLERANCE_OPTIONS_INCH;
   const tolDefault = isMetricThread ? TAP_LIMIT_TOLERANCE_DEFAULT_METRIC : TAP_LIMIT_TOLERANCE_DEFAULT_INCH;
@@ -396,7 +397,7 @@ function ThreadBlock({ tool, mode, setField, fields, strip = () => null }) {
               {edit ? (
                 <div className="btn-toggle">
                   {[['inch', 'Inch'], ['metric', 'Metric']].map(([v, l]) => (
-                    <button key={v} type="button" className={(tool.tap_thread_unit || 'inch') === v ? 'active' : ''}
+                    <button key={v} type="button" className={threadUnit === v ? 'active' : ''}
                       onClick={() => setField('tap_thread_unit', v)}>{l}</button>
                   ))}
                 </div>

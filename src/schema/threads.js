@@ -52,6 +52,35 @@ export function threadKey(s) {
     .replace(/[#\s]/g, '');
 }
 
+// Canonical comparison key for a METRIC designation. The same thread is spelled
+// a dozen ways — "M6x1", "M6 x 1.0", "M6-1.0", "M6X1.00", "M6 x 1 mm" — and
+// threadKey (built for inch) can't collapse them: it keeps the separator and the
+// trailing decimal zeros, so "M6x1" never matched the list's "M6 x 1.0" and the
+// tap fell through to a hand-typed "custom" thread with the INCH list showing.
+// Reduces to "m6x1": diameter, 'x', pitch, each with trailing decimal zeros
+// trimmed. Returns null for anything that isn't a metric designation.
+export function metricThreadKey(s) {
+  const m = String(s || '').trim().match(/^m\s*(\d+(?:\.\d+)?)\s*(?:[x×*-]\s*(\d*\.?\d+))?/i);
+  if (!m) return null;
+  const trim = (n) => String(parseFloat(n));
+  return m[2] ? `m${trim(m[1])}x${trim(m[2])}` : `m${trim(m[1])}`;
+}
+
+// Match a metric designation to its entry in METRIC_THREAD_SIZES.
+// ⚠️ A designation with NO pitch ("M6 Tap" on a spec sheet) means ISO metric
+// COARSE — that is what the omission conveys, not "unknown". METRIC_THREAD_SIZES
+// is ordered coarse-first per diameter, so the first entry with that diameter is
+// the coarse one. The trailing 'x' in the prefix is what keeps M1 from matching
+// M12.
+function findMetricThread(cleaned, list) {
+  const key = metricThreadKey(cleaned);
+  if (!key) return null;
+  const exact = list.find(x => metricThreadKey(x) === key);
+  if (exact) return exact;
+  if (key.includes('x')) return null;
+  return list.find(x => (metricThreadKey(x) || '').startsWith(`${key}x`)) || null;
+}
+
 // Resolve a raw ProShop "Thread" value to our internal thread fields. ProShop
 // stores the bare designation ("5/16-24") with no UN-series suffix, and encodes
 // STI/Helicoil taps by appending "STI" to the same field ("5/16-24 STI"). This
@@ -70,9 +99,24 @@ export function resolveThreadSize(raw) {
   const thread_unit = metric ? 'metric' : 'inch';
   const list = (metric ? METRIC_THREAD_SIZES : INCH_THREAD_SIZES).filter(x => x !== 'Custom...');
 
-  const key = threadKey(cleaned);
-  const canonical = list.find(x => threadKey(x) === key);
+  const canonical = metric
+    ? findMetricThread(cleaned, list)
+    : list.find(x => threadKey(x) === threadKey(cleaned));
   return { pitch: canonical || cleaned, is_sti, thread_unit };
+}
+
+// Which thread list a tool uses. The stored `tap_thread_unit` wins; when it was
+// never set, DERIVE it from the designation rather than defaulting to inch.
+// ⚠️ A record can legitimately carry a metric `pitch` with no unit — a ProShop
+// import that only filled the pitch, an extraction before the unit was wired, a
+// hand-entered tool. Defaulting those to inch showed the INCH size list, so a
+// perfectly good "M6 x 1.0" wasn't in it and read as a hand-typed custom thread.
+// Read-time derivation, not a migration: nothing is written, and an explicit
+// stored value always wins.
+export function threadUnitOf(tool) {
+  const stored = tool?.tap_thread_unit;
+  if (stored === 'metric' || stored === 'inch') return stored;
+  return /^m\s*\d/i.test(String(tool?.pitch || '').trim()) ? 'metric' : 'inch';
 }
 
 // Tap LIMIT TOLERANCE ("tap_class") option lists — H1-H6 / 4H-7G are pitch-diameter

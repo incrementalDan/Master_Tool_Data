@@ -911,7 +911,15 @@ export function psRowToTool(group, psUnit = 'inches', locationSystems = [], locC
     // ProShop EXPORT still emits the column — this is the read direction only.
     coating: r['Coating'] || '',
     material: psMaterial(r['Tool Material']),
-    ...resolveThreadSize(r['Thread'] || r['Pitch'] || ''),
+    // ⚠️ resolveThreadSize returns `thread_unit`; the tool field is
+    // `tap_thread_unit`. Spreading it raw dropped the unit on the floor and left
+    // a stray key behind — so a NEW tool created from a ProShop metric tap row
+    // got the right designation with no unit, which shows the INCH size list and
+    // reads as a hand-typed custom thread. (The fill-gap path below already
+    // mapped it correctly; this one didn't.)
+    ...(({ thread_unit, ...rest }) => ({ ...rest, tap_thread_unit: thread_unit || '' }))(
+      resolveThreadSize(r['Thread'] || r['Pitch'] || '')
+    ),
     tap_class: r['Tap class'] || '',
     point_type: r['Point Type'] || '',
     // Both are declared in fieldRegistry with a proShopColumn and are EXPORTED,

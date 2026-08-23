@@ -59,6 +59,7 @@ export const EXTRACTED_TO_FIELD = {
   tapClass: 'tap_class',
   tapSubType: 'tap_sub_type',
   isSTI: 'is_sti',
+  threadUnit: 'tap_thread_unit',
   pointType: 'point_type',
   minThreadPitch: 'min_thread_pitch',
   maxThreadPitch: 'max_thread_pitch',
