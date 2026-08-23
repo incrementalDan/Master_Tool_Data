@@ -1,3 +1,4 @@
+import { withBetaSuffix } from './toolStatus.js';
 /**
  * toolNaming.js — Shop-specific tool description generation
  *
@@ -120,7 +121,19 @@ export function smartDiam(inches, inputWasMm, isDrillType = false, tol = SNAP_TO
   return descDec(inches);
 }
 
+// ⚠️ A BETA tool's generated name CARRIES THE MARKER. Every tool is created in
+// the app, so its first description is generated — that is the moment the marker
+// has to be there. Nothing ever rewrites a STORED description on its own (see
+// "descriptions are never silently renamed"): switching a tool to Active
+// surfaces a prompt to drop the suffix, it does not drop it.
+// Wrapped rather than folded into the switch below — that switch has 36 return
+// sites and the suffix rule belongs in exactly one of them.
 export function buildDesc(f, inputWasMm = !!(f && f.inputWasMm)) {
+  const base = buildBaseDesc(f, inputWasMm);
+  return f?.status === 'beta' ? withBetaSuffix(base) : base;
+}
+
+function buildBaseDesc(f, inputWasMm = !!(f && f.inputWasMm)) {
   const d = parseFloat(f.diameter) || 0,
     loc = parseFloat(f.loc) || 0,
     fl = f.flutes || "",

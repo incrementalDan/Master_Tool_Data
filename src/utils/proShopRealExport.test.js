@@ -86,6 +86,16 @@ describe('the real ProShop export parses into tools', () => {
     expect(tools.find(t => t.tool_id === 'R-81').tpi_min).toBeNull();
   });
 
+  // ProShop's Status: Active (270) / blank (40) / Archived (1). Blank is ACTIVE.
+  it('reads Status, with blank meaning active', () => {
+    const tools = groupRows(rows()).map(g => psRowToTool(g));
+    const retired = tools.filter(t => t.tool_status === 'retired');
+    expect(retired.map(t => t.tool_id)).toEqual(['A-6 (Ar)']);
+    // Everything else — including the 40 blank rows — is active, not unknown.
+    expect(tools.every(t => t.tool_status === 'active' || t.tool_status === 'retired')).toBe(true);
+    expect(tools.filter(t => t.tool_status === 'active').length).toBe(tools.length - 1);
+  });
+
   it('reads Through Coolant off the real file', () => {
     const tools = groupRows(rows()).map(g => psRowToTool(g));
     expect(tools.filter(t => t.tsc_capable).length).toBe(11);
@@ -103,7 +113,7 @@ describe('every real tool survives a ProShop round-trip', () => {
     'tap_class', 'point_type', 'stub_jobber', 'pitch',
     'center_cutting', 'flute_type', 'tsc_capable', 'custom_grind',
     'double_ended', 'full_profile', 'backside_capable', 'material_suitability',
-    'tap_sub_type', 'tpi_min', 'tpi_max',
+    'tap_sub_type', 'tpi_min', 'tpi_max', 'tool_status',
   ];
   // ⚠️ One column the export still FILLS IN rather than leaves blank: a tool with
   // no corner radius exports `0` (toolToExtractor's `?? '0'`), so re-import

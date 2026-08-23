@@ -658,6 +658,36 @@ export const FIELD_REGISTRY = {
     precision: 4,
   },
 
+  tool_status: {
+    // Lifecycle: active | retired | beta. See utils/toolStatus.js.
+    label: 'Status',
+    type: 'string',
+    unit: null,
+    fusionPath: null,             // Fusion has nowhere to put it
+    proShopColumn: 'status',      // ProShop's `Status` — Active / Archived / blank
+    metadataOnly: true,
+    appliesToTypes: 'all',
+    required: false,
+    precision: null,
+  },
+
+  replaced_by: {
+    // The tracking id of the tool that replaced this one. ⚠️ An ID, never a
+    // ProShop number or a description — see "Relational integrity". ProShop has
+    // no equivalent attribute (its only Tools foreign keys are Made Of,
+    // Recommended Pre-drill Size and Insert), so this is app-only in both
+    // directions.
+    label: 'Replaced by',
+    type: 'string',
+    unit: null,
+    fusionPath: null,
+    proShopColumn: null,
+    metadataOnly: true,
+    appliesToTypes: 'all',
+    required: false,
+    precision: null,
+  },
+
   center_cutting: {
     label: 'Center Cutting',
     type: 'boolean',

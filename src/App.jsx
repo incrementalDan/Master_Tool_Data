@@ -9,7 +9,7 @@ import { FolderOpen, LogOut, Library, Settings, RefreshCw, AlertTriangle, Downlo
 import { AppProvider, useApp } from './context/AppContext.jsx';
 import BrandLogo from './components/BrandLogo.jsx';
 import { setAccessToken, fetchUserInfo, tokenSecondsRemaining } from './services/driveService.js';
-import { exportFullLibrary } from './utils/proShopExport.js';
+import { exportFullLibrary, proShopExportMessage } from './utils/proShopExport.js';
 import { toolNeedsAttention } from './utils/toolConflicts.js';
 import ToastStack from './components/Toast.jsx';
 import LoginScreen from './components/LoginScreen.jsx';
@@ -637,8 +637,8 @@ function LocalModeTopBar({ tools, onExit }) {
   const { notify } = useApp();
 
   const handleExport = () => {
-    exportFullLibrary(tools);
-    notify(`Exported ${tools.length} tool${tools.length === 1 ? '' : 's'} to ProShop CSV`, 'success');
+    const { skipped } = exportFullLibrary(tools) || { skipped: 0 };
+    notify(proShopExportMessage(tools.length, skipped), 'success');
   };
 
   return (

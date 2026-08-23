@@ -10,12 +10,13 @@ import { insertComponentIndex, newComponent, normProShopId } from '../schema/ins
 import { vendorHasOwnCatalogNumber, resolveVendorName, registryIdForName } from '../schema/vendorRegistry.js';
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
+import { statusFromProShop, isBeta } from '../utils/toolStatus.js';
 import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel, isProShopSummaryRow } from '../utils/proShopHeaders.js';
 import {
   locationNumber, composeLocationString, claimSystemForNumber,
   isBinOnlySystem, countLocationNumbers,
 } from '../utils/locationSystem.js';
-import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
+import { exportFullLibrary as exportProShop, proShopExportMessage } from '../utils/proShopExport.js';
 import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
 
 // Merge an uploaded Fusion JSON's tools into the already-loaded library —
@@ -549,7 +550,11 @@ export default function ImportFlow() {
           )}
 
           <div className="flex gap-8 mb-20" style={{ flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary" onClick={() => { markSetupStepInSettings('proshopExported'); exportProShop(fusionTools); }}>
+            <button className="btn btn-secondary" onClick={() => {
+              markSetupStepInSettings('proshopExported');
+              const { skipped } = exportProShop(fusionTools) || { skipped: 0 };
+              if (skipped) setMismatchWarn(proShopExportMessage(fusionTools.length, skipped));
+            }}>
               ↓ Export Full ProShop CSV
             </button>
             <button className="btn btn-secondary" onClick={() => exportFusion(fusionTools)}>
@@ -925,6 +930,8 @@ export function psRowToTool(group, psUnit = 'inches', locationSystems = [], locC
     // Both are declared in fieldRegistry with a proShopColumn and are EXPORTED,
     // but were never read back — so a tool round-tripped through ProShop lost
     // them silently. ProShop writes CenterCut as Y/N (psBool handles both).
+    // Blank is ACTIVE, not unknown — 40 of the shop's 310 real rows are blank.
+    tool_status: statusFromProShop(r['Status']),
     center_cutting: psBool(r['CenterCut']) === true,
     flute_type: r['FluteType/Chipbreaker'] || '',
     ...(toolType === 'tap' ? { tap_sub_type: psTapSubType(r['Thread Type']) } : {}),
@@ -1161,6 +1168,13 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
       // shop's real export. Same class (and same rule) as tsc_capable.
       const psCenterCut = psBool(r['CenterCut']);
       if (psCenterCut != null) additions.center_cutting = psCenterCut;
+      // Lifecycle: ProShop wins, for the same reason as center_cutting — the app
+      // defaults to 'active', so "nobody answered" and "answered Active" are the
+      // same stored value and flagging would fire on every tool.
+      // ⚠️ EXCEPT over BETA. Beta is an app-only state ProShop cannot express (a
+      // beta tool is deliberately never exported), so a ProShop row saying Active
+      // is not evidence against it — it is just ProShop not having the concept.
+      if (!isBeta(tool)) additions.tool_status = statusFromProShop(r['Status']);
       // min_ooh: ProShop is authoritative — always overwrite when present, after
       // converting from the ProShop file unit into the matched tool's own unit.
       const psMinOoh = psNum(r['Length Below Holder - MIN OOH']);

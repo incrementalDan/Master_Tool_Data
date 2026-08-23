@@ -222,11 +222,20 @@ const LINK_SHAPED_KEYS = new Set([
   'holder_component_id', 'insert_component_id', 'holder_proshop_id', 'insert_proshop_id',
   'registry_id', 'manufacturer_id',
   'linked_tools',
+  'replaced_by',                                          // the replacement tool's TRACKING id
+  // NOT links — a person's name/email on an audit field. Surfaced by widening
+  // the shape to `_by`, and stated here rather than narrowed away: the guard's
+  // job is that every link-shaped key is ACCOUNTED FOR, and "this one is a
+  // person, not a foreign key" is a real answer.
+  'updated_by', 'measured_by',
   'file_id', 'primary_photo_id',                         // Google Drive file handles
   'library_id',
 ]);
 
-const LINK_SHAPE = /(_id|_ids|_guid|_guids)$/;
+// `_by` is in here because `replaced_by` is a real FK that none of the other
+// suffixes would have caught — the coverage guard only works if the shape list
+// keeps up with the shapes people actually use.
+const LINK_SHAPE = /(_id|_ids|_guid|_guids|_by)$/;
 const isLinkShaped = (key) => LINK_SHAPE.test(key) || key.startsWith('linked_') || key === 'id';
 
 // Walk every leaf, remembering the path we reached it by.

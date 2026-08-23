@@ -144,6 +144,11 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     tap_sub_type: meta.tap_sub_type || '',
     is_sti: meta.is_sti || false,
     tap_thread_unit: meta.tap_thread_unit || '',
+    // Lifecycle — metadata-only, and ACTIVE is both the default and the absence
+    // of an answer, so every pre-existing record reads correctly with nothing to
+    // migrate. See utils/toolStatus.js.
+    tool_status: meta.tool_status || 'active',
+    replaced_by: meta.replaced_by || null,
     // class_of_fit (1B/2B/3B) is distinct from tap_class/tap_class limit tolerance —
     // tracked nowhere else (not ProShop, not Fusion), metadata-only.
     class_of_fit: meta.class_of_fit || '',
@@ -340,6 +345,8 @@ export function buildMetadataTool(tool) {
     tap_sub_type: tool.tap_sub_type || '',
     is_sti: tool.is_sti || false,
     tap_thread_unit: tool.tap_thread_unit || '',
+    tool_status: tool.tool_status || 'active',
+    replaced_by: tool.replaced_by || null,
     class_of_fit: tool.class_of_fit || '',
     min_thread_pitch: tool.min_thread_pitch ?? null,
     max_thread_pitch: tool.max_thread_pitch ?? null,

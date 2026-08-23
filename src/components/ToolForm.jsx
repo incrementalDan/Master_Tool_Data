@@ -13,6 +13,11 @@ import { fieldLabel } from '../schema/fieldRegistry.js';
 import { unitAbbr } from '../utils/units.js';
 import { toolIdLabel } from '../utils/toolIdSystem.js';
 import InfoTip from './InfoTip.jsx';
+import StatusBadge from './StatusBadge.jsx';
+import ToolLinkPicker from './ToolLinkPicker.jsx';
+import {
+  TOOL_STATUSES, statusOf, betaSuffixStale, stripBetaSuffix, withBetaSuffix, hasBetaSuffix,
+} from '../utils/toolStatus.js';
 import { buildDesc } from '../utils/toolNaming.js';
 import { useApp } from '../context/AppContext.jsx';
 import ToolTypeDropdown from './ToolTypeDropdown.jsx';
@@ -72,6 +77,27 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
       .map(Number);
     return getNextMachineNumber(existing);
   }, [isNew, tools]);
+
+  const [pickReplacement, setPickReplacement] = useState(false);
+  const replacementTool = data.replaced_by ? tools.find(t => t.id === data.replaced_by) : null;
+
+  // Changing the status. Two things ride along, and both are deliberate:
+  //  • Leaving `retired` CLEARS the replacement — "replaced by X" is only
+  //    meaningful for a tool that is actually out of service, and a stale one
+  //    left behind would sit on a tool nobody retired.
+  //  • Turning Beta ON adds the marker to a description this form GENERATED
+  //    (i.e. one that still equals what buildDesc would produce). A description
+  //    the USER typed is never touched; turning Beta OFF only ever raises the
+  //    prompt below, it never edits anything.
+  const setStatus = (next) => setData(d => {
+    const patch = { ...d, tool_status: next };
+    if (next !== 'retired') patch.replaced_by = null;
+    if (next === 'beta' && d.description && !hasBetaSuffix(d.description)
+        && d.description === buildDesc(toolToExtractor(d))) {
+      patch.description = withBetaSuffix(d.description);
+    }
+    return patch;
+  });
 
   const setField = (field, value) => setData(d => {
     const next = { ...d, [field]: value };
@@ -468,6 +494,62 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
           )}
 
           <Section title="Identity" icon={Tag}>
+            {/* ── Lifecycle ─────────────────────────────────────────────────
+                Active is the default and the normal state; the other two are
+                what the badge and the header wash exist to make obvious. */}
+            <div className="flex items-center gap-8 mb-12 flex-wrap">
+              <span className="text-xs text-sub">Status</span>
+              <div className="btn-toggle">
+                {TOOL_STATUSES.map(st => (
+                  <button key={st.id} type="button" title={st.tip}
+                    className={statusOf(data) === st.id ? 'active' : ''}
+                    onClick={() => setStatus(st.id)}>{st.label}</button>
+                ))}
+              </div>
+              <StatusBadge status={statusOf(data)} showActive />
+              <InfoTip alignRight text={'Active is the normal state. Beta = being trialled in CAM, not bought — a beta tool is deliberately NOT exported to ProShop, and its generated description carries a BETA marker. Retired = out of service; name the tool that replaced it and the tool page links straight to it.'} />
+            </div>
+
+            {/* Retired → which tool took over. Stored as the replacement's
+                tracking id; the name shown is resolved live from it. */}
+            {statusOf(data) === 'retired' && (
+              <div className="flex items-center gap-8 mb-12 flex-wrap">
+                <span className="text-xs text-sub">Replaced by</span>
+                {replacementTool ? (
+                  <>
+                    <span className="tool-id-pill">{replacementTool.tool_id || '—'}</span>
+                    <span className="text-sm truncate" style={{ maxWidth: '32ch' }}>{replacementTool.description}</span>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setField('replaced_by', null)}>Clear</button>
+                  </>
+                ) : data.replaced_by ? (
+                  // A stored id whose tool is gone. Shown, never silently
+                  // dropped — it is the only remaining record that this tool
+                  // was replaced by something.
+                  <>
+                    <span className="text-sm text-sub" style={{ fontStyle: 'italic' }}>replacement no longer in the library</span>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setField('replaced_by', null)}>Clear</button>
+                  </>
+                ) : (
+                  <span className="text-sm text-sub">Not set</span>
+                )}
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPickReplacement(true)}>
+                  {data.replaced_by ? 'Change…' : 'Pick a tool…'}
+                </button>
+              </div>
+            )}
+
+            {/* ⚠️ OFFERED, NEVER APPLIED. The BETA marker rides along with the
+                GENERATED description (a tool's first name is generated here), but
+                a stored description is never rewritten on the app's say-so — so
+                switching to Active surfaces this and waits. */}
+            {betaSuffixStale(data) && (
+              <p className="spec-desc-hint" style={{ marginBottom: 12 }}>
+                <AlertTriangle size={11} /> The description still ends with “BETA”, but this tool is no longer a beta tool.
+                <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }}
+                  onClick={() => setField('description', stripBetaSuffix(data.description))}>Remove it</button>
+              </p>
+            )}
+
             {/* Machine tool number — read-only, managed by the app */}
             {hasMachineNum && (
               <div className="flex items-center gap-8 mb-12 flex-wrap">
@@ -701,6 +783,17 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
         onClose={() => setScanOpen(false)}
         onProposals={receiveProposals}
       />
+
+      {/* Reuses the linked-tools picker — the same search the landing page runs,
+          so a ProShop #, EDP# or retired ID finds the replacement exactly as it
+          would anywhere else. Stores the tool's tracking id, never its name. */}
+      {pickReplacement && (
+        <ToolLinkPicker
+          tool={data}
+          onPick={(t) => { setField('replaced_by', t.id); setPickReplacement(false); }}
+          onClose={() => setPickReplacement(false)}
+        />
+      )}
     </div>
   );
 }

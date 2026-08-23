@@ -180,6 +180,7 @@ export function extractorToTool(f) {
     tap_sub_type: f.tapSubType || '',   // no default — cut/form must be set explicitly (form taps differ)
     is_sti: f.isSTI || false,
     tap_thread_unit: f.threadUnit || '',
+    tool_status: f.status || 'active',
     min_thread_pitch: parseFloat(f.minThreadPitch) || null,
     max_thread_pitch: parseFloat(f.maxThreadPitch) || null,
     tpi_min: parseInt(f.tpiMin) || null,
@@ -276,6 +277,7 @@ export function toolToExtractor(tool) {
     profileRadius: String(tool.profile_radius ?? ''),
     axialDistance: String(tool.axial_distance ?? ''),
     psToolId: tool.tool_id || '',
+    status: tool.tool_status || 'active',
     // ProShop Location column. A structured-location tool carries a
     // `proshop_location` resolved per its system's export rule (number_only /
     // full / fixed); legacy free-text tools fall back to the raw location.

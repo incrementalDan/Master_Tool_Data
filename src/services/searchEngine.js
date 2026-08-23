@@ -1,5 +1,6 @@
 // Pure search/filter functions — no React imports
 import { toolNeedsAttention } from '../utils/toolConflicts.js';
+import { statusOf } from '../utils/toolStatus.js';
 
 const TEXT_FIELDS = ['description', 'vendor', 'material', 'coating', 'notes', 'location', 'tool_id', 'preferred_machine'];
 
@@ -296,6 +297,15 @@ export function applyFilters(tools, activeFilters, machineFilter = null, toleran
   // above (see toolAttentionCount).
   if (activeFilters.noFusionOnly) {
     result = result.filter(t => t.no_fusion_link === true);
+  }
+
+  // Lifecycle. ⚠️ An ABSENT `statuses` means no filtering at all — every caller
+  // that doesn't know about status (the link picker, the merge flow, anything
+  // that searches to FIND a specific tool) must keep seeing the whole library.
+  // Hiding a retired tool from a lookup would read as the tool being gone.
+  if (Array.isArray(activeFilters.statuses) && activeFilters.statuses.length) {
+    const want = new Set(activeFilters.statuses);
+    result = result.filter(t => want.has(statusOf(t)));
   }
 
   if (activeFilters.textQuery) {

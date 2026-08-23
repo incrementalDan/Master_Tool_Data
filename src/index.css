@@ -3469,7 +3469,41 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /*  .machine-num-badge  — Machine Tool #    — green rect (monospace, square)  */
 /*  .location-tag       — Location/Cabinet  — indigo rounded-rect (monospace)  */
 /*  .preset-tag         — Preset Name       — colored by ISO group (--badge-color) */
-/*  .machine-pill       — Machine (model)   — colored per MACHINE (--badge-color) */
+/*  
+/* Tool lifecycle status — Active / Retired / Beta. One --badge-color token,
+   set per instance from TOOL_STATUSES (utils/toolStatus.js), so the same status
+   can never render two ways on two screens. Active is normally not rendered at
+   all — see StatusBadge. */
+.status-replaced {
+  font-size: 11px; font-weight: 600; font-family: var(--font-mono);
+  color: var(--blue); text-decoration: none; white-space: nowrap; flex-shrink: 0;
+}
+.status-replaced:hover { text-decoration: underline; }
+.status-replaced.is-missing { color: var(--text-sub); font-style: italic; font-family: var(--font-sans); }
+
+.status-badge {
+  --badge-color: var(--text-sub);
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  white-space: nowrap; flex-shrink: 0;
+  color: var(--badge-color);
+  background: color-mix(in srgb, var(--badge-color) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--badge-color) 42%, transparent);
+}
+
+/* The tool page header takes a wash of the status colour for a tool that is NOT
+   active — a badge alone is easy to scroll past, and the point is to notice
+   before reading anything else. An active tool's header is untouched. */
+.tool-sticky-header[data-status="retired"],
+.tool-sticky-header[data-status="beta"] {
+  background: linear-gradient(to right,
+    color-mix(in srgb, var(--status-wash) 16%, var(--surface)) 0%,
+    var(--surface) 55%);
+  border-left: 3px solid var(--status-wash);
+}
+
+.machine-pill       — Machine (model)   — colored per MACHINE (--badge-color) */
 /*                                                                            */
 /* Holder + preset badges carry a per-instance --badge-color set by the host: */
 /* the holder's size color (holderColor) / the material's ISO-group color     */

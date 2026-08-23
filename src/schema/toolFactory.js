@@ -34,6 +34,9 @@ export function newTool(toolType = 'flat end mill') {
     coating: '',
     material_suitability: [],
     helix_angle: null,
+    // A new tool is Active — see utils/toolStatus.js.
+    tool_status: 'active',
+    replaced_by: null,
     center_cutting: false,
     flute_type: '',
     flute_design: '',

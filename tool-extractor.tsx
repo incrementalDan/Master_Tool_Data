@@ -14,6 +14,7 @@
 // modules import from this path; renaming it is a mechanical change worth doing
 // on its own, not folded into a feature.
 import { THROUGH_COOLANT_VALUES, smartDiam, buildDesc } from "./src/utils/toolNaming.js";
+import { proShopStatusValue, exportsToProShop } from "./src/utils/toolStatus.js";
 
 const COOLANT_OPTS = [
   ["flood","Flood"],["disabled","Disabled"],["mist","Mist"],
@@ -253,6 +254,9 @@ const PS_MAIN_COLS=[
   // ids per ProShop: `location`, `pointType`.
   ["location",f=>f.location||""],
   ["pointType",f=>f.pointType||""],
+  // Lifecycle. Active / Archived — a BETA tool never reaches here, its whole row
+  // is omitted (see buildProShopRows).
+  ["status",f=>proShopStatusValue({tool_status:f.status})||""],
 ];
 
 // Each purchasing entry ("Approved Brands" sub-table row in ProShop) becomes one
@@ -321,6 +325,12 @@ const PS_FIRST_ROW_ONLY=new Set([
 // sharing the same Tool #. Returns string[][] (data rows only, no header) so the
 // single-tool and full-library exports share ONE implementation of the shape.
 function buildProShopRows(f){
+  // ⚠️ A BETA TOOL IS NOT EXPORTED AT ALL — it is a tool the shop is trying in
+  // CAM and may never buy, so it has no place in ProShop's inventory. Emitting
+  // it with a blank Status would be worse than useless: blank reads back as
+  // ACTIVE on import, so the next ProShop round-trip would quietly promote every
+  // beta tool. Returning no rows is the only honest answer.
+  if(!exportsToProShop({tool_status:f.status})) return [];
   const brandRows=buildBrandRows(f);
   const firstVals=PS_MAIN_COLS.map(([,fn])=>fn(f));
   const contVals=PS_MAIN_COLS.map(([h,fn])=>PS_FIRST_ROW_ONLY.has(h)?"":fn(f));
@@ -346,6 +356,7 @@ const BLANK={
   psToolId:"",    // ProShop Tool # → Fusion tool_productId (col 126)
   location:"",    // e.g. LC-140 → Fusion tool_vendor (col 165)
   tapSubType:"",isSTI:false,tpiMin:"",tpiMax:"",threadProfileAngle:"",tipToFirstFullThread:"",
+  status:"active",   // lifecycle — see src/utils/toolStatus.js
   purchasing:{manufacturers:[],vendors:[]},  // { manufacturers: [{id,name,edp,edp_url,mfg_num,mfg_num_url,order}], vendors: [{id,manufacturer_id,name,vendor_num,vendor_num_url,price,order}] }
 };
 const TT=[

@@ -24,7 +24,7 @@ import ProgramsImportModal from './ProgramsImportModal.jsx';
 import BulkSequenceImportModal from './BulkSequenceImportModal.jsx';
 import DriveFolderPicker from './DriveFolderPicker.jsx';
 import IdSystemMembership, { ExclusionNotice } from './IdSystemMembership.jsx';
-import { exportFullLibrary } from '../utils/proShopExport.js';
+import { exportFullLibrary, proShopExportMessage } from '../utils/proShopExport.js';
 import { HOLDER_LINK_SKIP_TYPES } from '../utils/holderLink.js';
 
 const ID_MODES = [
@@ -590,9 +590,9 @@ export default function Settings() {
   };
 
   const handleExportProShop = () => {
-    exportFullLibrary(tools);
+    const { skipped } = exportFullLibrary(tools) || { skipped: 0 };
     markSetupStepInSettings('proshopExported');
-    notify(`Exported ${tools.length} tools to ProShop CSV`, 'success');
+    notify(proShopExportMessage(tools.length, skipped), 'success');
   };
 
   // ── Setup step derivation (live-data warnings) ─────────────────────────────

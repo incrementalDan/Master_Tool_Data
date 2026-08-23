@@ -61,6 +61,7 @@ const HEADER_ALIASES = [
   ['Round Shank', ['roundShank']],
   ['Threads Per Inch', ['threadsPerInch']],
   ['Cutting Direction', ['cuttingDirection']],
+  ['Status', ['status']],
   // Purchasing / Approved-Brand sub-table columns
   ['Approved Brand', ['approvedBrand']],
   ['Vendor', ['vendor']],
