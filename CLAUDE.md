@@ -503,6 +503,48 @@ All metadata-only, added to the assembly record (`buildMetadataTool` / `buildLog
 
 -----
 
+## Tool Status — Active / Retired / Beta
+
+A tool's lifecycle, in `tool_status` (metadata-only, `'active' | 'retired' | 'beta'`). Pure helpers in **`src/utils/toolStatus.js`** (framework-free, mirroring `toolIdSystem.js`), rendered by the one **`StatusBadge.jsx`**.
+
+⚠️ **ACTIVE IS THE DEFAULT *AND* THE ABSENCE OF AN ANSWER.** `statusOf()` returns `'active'` for a missing field, a null, and an unrecognised value — so every record that predates this field reads correctly and **nothing has to be migrated**. Two consequences follow directly:
+- The app **cannot tell "nobody said" from "somebody said Active"**, so the ProShop import treats `Status` as **authoritative** rather than fill-gap-else-flag. Same reasoning as `center_cutting`; flagging would fire on the whole library.
+- A status word nobody understands (`"On Order"`) reads as **active**, never retired — an unknown value is not evidence a tool is out of service.
+
+| Status | ProShop `Status` | In the app |
+|---|---|---|
+| **Active** | `Active` | The normal state. No badge (see below); header untouched. |
+| **Beta** | ⚠️ **not exported at all** | Being trialled in CAM, not bought. Blue badge; the generated description carries a `BETA` marker. |
+| **Retired** | `Archived` | Out of service. Grey badge + the replacement, resolved live from `replaced_by`. |
+
+**ProShop's column is `Status`** (Id + API both `status`), an indexed String. Measured on the shop's real export: `Active` 270 / **blank 40** / `Archived` 1 (`A-6 (Ar)`, "NOT USED …"). **Blank is ACTIVE**, not unknown.
+
+⚠️ **A BETA TOOL IS OMITTED FROM THE ProShop EXPORT ENTIRELY — `buildProShopRows` returns NO rows for it.** It is a tool the shop may never buy, so it has no place in ProShop's inventory. Exporting it with a **blank Status cell would be actively harmful**, not merely useless: blank reads back as **Active**, so the next round-trip would quietly promote every beta tool. `exportSingleTool` returns **`false`** and `exportFullLibrary` returns **`{ skipped }`** — every caller reports it via `proShopExportMessage`, because "Exported 245 tools" when 3 were left out is a true-sounding number that isn't true.
+
+⚠️ **The ProShop import never overwrites `beta`.** Status is otherwise PS-wins, but beta is an app-only state ProShop cannot express — a row saying Active is ProShop lacking the concept, not evidence against it.
+
+### `replaced_by` — its own field, not a typed link
+
+**`replaced_by`** holds the replacement tool's **tracking id** (metadata-only; ProShop has no equivalent attribute — its only Tools foreign keys are Made Of, Recommended Pre-drill Size and Insert). It is deliberately **NOT** part of `linked_tools`: that relationship is **symmetric and role-free** by design ("these go together", stored on both sides), and "A was replaced by B" is **directional**. Folding a direction into it would break the invariant that panel is built on. A future "categorize the type of connection" can absorb this as one type; until then it stays a plain FK.
+- ⚠️ **A dangling `replaced_by` is SHOWN, never silently dropped** — it is the only remaining record that this tool was replaced at all. The header reads "(replacement removed)"; the edit form offers Clear.
+- Leaving `retired` **clears** it (`setStatus`): "replaced by X" on a tool nobody retired is a stale claim.
+- The picker is **`ToolLinkPicker`** — the same search the landing page runs, so a ProShop #, EDP# or retired ID finds the replacement exactly as it would anywhere else.
+
+### The BETA description marker
+
+⚠️ **OFFERED, NEVER APPLIED — "descriptions are never silently renamed" still holds.** Every tool is created in this app, so its FIRST description is *generated*, and that is where the marker belongs: `buildDesc` appends ` BETA` when `f.status === 'beta'` (wrapped around the switch — it has 36 return sites and the rule belongs in exactly one place). Turning Beta **on** in `ToolForm` adds the marker only to a description that still equals what `buildDesc` would produce (one the form generated); a **hand-typed** name is never touched. Turning Beta **off** raises a prompt (`betaSuffixStale` → "Remove it"), it does not edit anything. `hasBetaSuffix` matches only at the END, so a tool genuinely named `BETA GRADE EM` survives.
+
+### Display + filtering
+
+- **`StatusBadge` renders NOTHING for an Active tool** unless `showActive` is passed. Active is the great majority of the library, so a badge on every card is wallpaper by day two — the point is that a tool which *isn't* active stands out. Uses the `--badge-color` token pattern, so a status can't render two ways on two screens.
+- **The tool page header takes a colour wash** for a non-active tool (`.tool-sticky-header[data-status]` + `--status-wash`), on **both** the view and edit headers so it doesn't vanish mid-edit. An active tool's header is untouched.
+- **Landing-page chip row**, always shown (unlike the machine row it needs no configuration). **Active + Beta on by default; Retired off** (`DEFAULT_VISIBLE_STATUSES`) — a retired tool is still in the library and still findable, it just isn't in the way. The row names what is hidden, and warns when every status is off, so a tool you can't see is never mistaken for a tool that isn't there.
+- ⚠️ **`applyFilters` does NOT filter when `statuses` is absent or empty.** Every caller that doesn't know about status — the link picker, the merge flow, anything searching to FIND a specific tool — must keep seeing the whole library; hiding a retired tool from a lookup reads as the tool being gone.
+
+Locked by `src/utils/toolStatus.test.js` + the `Status` column in `proShopRealExport.test.js`. Backwards-compatible/additive: nothing to re-enter.
+
+-----
+
 ## Insert-Style Tools (holder body + insert pairings)
 
 ⚠️ **A COMPONENT IS A TOOL EVERYWHERE EXCEPT FUSION AND PROSHOP.** This is the rule to apply first when touching anything that walks the library. A holder body or an insert is a **real physical object** the shop buys, stores in a drawer, and looks up — so on the app's own side it must be treated **exactly like a tool**: same structured `tool_location`, same location systems, same bins, same duplicate/gap detection, same ID handling, same search. The two files (`tool_metadata.json` vs `tool_components.json`) exist for **one reason only** — a component must never reach Fusion, and separate storage makes that structurally impossible rather than something every writer has to remember. That is a storage detail; it is **never** a user-facing distinction and **never** a reason to treat the record differently in app logic.
@@ -2447,6 +2489,7 @@ Every entity link in the app. When you add a relationship, add a row. When you t
 | preset → machine | `preset_meta[guid].machine_id` | metadata | ✅ |
 | **preset → operation** | `preset_meta[guid].operation_ids[]` | metadata → `parts.operations[]` | ✅ the program a preset was proven on |
 | tool → program | — | **derived** from `program_details` rows' `tool_ref` | ✅ never stored — see The Parts module |
+| **tool → its replacement** | `replaced_by` | metadata | ✅ the replacement's tracking id; DIRECTIONAL, so deliberately not part of the symmetric `linked_tools` |
 | **tool ↔ tool** (tap/drill, reamer/drill) | `linked_tools[]` | metadata | ✅ symmetric — stored BOTH sides, one write; `symmetrizeToolLinks` heals a half-link at load |
 | tool → preferred machine | `preferred_machine_id` | metadata | ✅ |
 | tool → location | `location.{system_id,zone_id,station_id,drawer_id}` | metadata → `shop_settings.location_config` | ✅ |
