@@ -304,10 +304,12 @@ export default function ToolDetail() {
   // tool-level data stays visible during setup, not the instant the paired
   // view appears.
   const hasComponents = !!(pairing && (pairing.holder_component_id || pairing.insert_component_id));
-  const sectionSave = async (updatedTool) => {
-    try { await saveTool(updatedTool); }
-    catch { /* toast handled in context */ }
-  };
+  // ⚠️ PROPAGATES the failure. It used to swallow it, which meant a section
+  // could not tell a save that worked from one that didn't — so a panel that
+  // closes its editor "when the save finishes" closed it on failure too and
+  // silently threw the edit away. The context already toasts the reason; this
+  // just lets the caller keep the user's data on screen.
+  const sectionSave = async (updatedTool) => saveTool(updatedTool);
 
   // Delete confirmation modal — shared by the edit-mode Delete button ('normal')
   // and the reverse-sync banner ('missing'). Rendered in both the edit and view
@@ -995,7 +997,9 @@ function AssembliesSection({ tool, holders, onSave }) {
 
   const handleEdit = (assembly) => { setEditingAssembly(assembly); setShowForm(true); };
   const handleDelete = async (assemblyId) => {
-    await onSave({ ...tool, assemblies: assemblies.filter(a => a.assembly_id !== assemblyId) });
+    // sectionSave propagates now — the context has already toasted the reason.
+    try { await onSave({ ...tool, assemblies: assemblies.filter(a => a.assembly_id !== assemblyId) }); }
+    catch { /* toast handled in context */ }
   };
 
   // Clear pendingAssembly once the real data lands in the tool prop
@@ -1097,7 +1101,8 @@ function AssembliesSection({ tool, holders, onSave }) {
               const added = updatedTool.assemblies?.at(-1) ?? null;
               setPendingAssembly(added);
             }
-            await onSave(updatedTool);
+            try { await onSave(updatedTool); }
+            catch { setPendingAssembly(null); /* toast handled in context */ }
           }}
           onClose={() => { setShowForm(false); setEditingAssembly(null); }}
         />

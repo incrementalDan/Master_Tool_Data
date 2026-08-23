@@ -55,6 +55,33 @@ export function normalizePurchasing(data) {
   return { manufacturers, vendors };
 }
 
+// ⚠️ LEAVE EDIT MODE ONLY AFTER THE SAVE LANDS — never before awaiting it.
+// View mode renders `tool.purchasing` (the prop), and the prop is still the
+// PRE-save tool for the whole duration of the write. Dropping out of edit mode
+// first therefore made the rows the user had just typed VISIBLY DISAPPEAR while
+// the save was in flight — a Fusion round-trip downloads and re-uploads the
+// whole library, so that window is seconds, not a frame — and it took the
+// "Saving…" button away with it, leaving nothing on screen to say anything was
+// happening. It also meant a FAILED save silently discarded the edit: the panel
+// was already showing the old value and the draft was gone.
+//
+// Exported for testing: the ordering is the whole point, and it is invisible in
+// a rendered snapshot.
+export async function commitPurchasing({ data, tool, onSave, setData, setEditing, setSaving }) {
+  const normalized = normalizePurchasing(backfillUrls(data));
+  setData(normalized);
+  setSaving(true);
+  try {
+    await onSave({ ...tool, purchasing: normalized });
+    setEditing(false);          // saved — the prop now carries what we just wrote
+    return true;
+  } catch {
+    return false;               // stay in the editor, data intact; context toasts
+  } finally {
+    setSaving(false);
+  }
+}
+
 function shouldShowVendorNum(vendor, revealedVendorNums) {
   return vendorHasOwnCatalogNumber(vendor.name) || !!vendor.vendor_num || revealedVendorNums.has(vendor.id);
 }
@@ -309,6 +336,9 @@ export default function PurchasingSection({ tool, onSave, isSaving, value, onCha
   const setData = controlled
     ? (updater) => onChange(typeof updater === 'function' ? updater(value || emptyPurchasing()) : updater)
     : setOwnData;
+  // Local, not the global isSaving: that one is true during ANY save in the app,
+  // so it would put this panel in a saving state for an unrelated write.
+  const [saving, setSaving] = useState(false);
   const [revealedVendorNums, setRevealedVendorNums] = useState(new Set());
   const [dragOverKey, setDragOverKey] = useState(null);
   const dragSrc = useRef(null);
@@ -351,12 +381,9 @@ export default function PurchasingSection({ tool, onSave, isSaving, value, onCha
     setRevealedVendorNums(new Set());
     setEditing(false);
   };
-  const handleSave = async () => {
-    const normalized = normalizePurchasing(backfillUrls(data));
-    setData(normalized);
-    setEditing(false);
-    await onSave({ ...tool, purchasing: normalized });
-  };
+  const handleSave = () => commitPurchasing({
+    data, tool, onSave, setData, setEditing, setSaving,
+  });
 
   // Auto-fill a generated URL when the field is currently empty and a
   // generator matches the (possibly just-updated) manufacturer/vendor name.
@@ -598,9 +625,9 @@ export default function PurchasingSection({ tool, onSave, isSaving, value, onCha
               Save commits this along with everything else in the draft. */}
           {editing && !controlled && (
             <div className="purchasing-actions">
-              <button type="button" className="btn btn-secondary btn-sm" onClick={handleCancel} disabled={isSaving}>Cancel</button>
-              <button type="button" className="btn btn-primary btn-sm" onClick={handleSave} disabled={isSaving}>
-                {isSaving ? 'Saving…' : 'Save'}
+              <button type="button" className="btn btn-secondary btn-sm" onClick={handleCancel} disabled={saving || isSaving}>Cancel</button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving || isSaving}>
+                {saving ? <><span className="spinner" /> Saving…</> : (isSaving ? 'Saving…' : 'Save')}
               </button>
             </div>
           )}
