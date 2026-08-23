@@ -58,6 +58,34 @@ describe('the real ProShop export parses into tools', () => {
     expect(tools.filter(t => t.flute_type).length).toBeGreaterThan(10);
   });
 
+  // ProShop's Thread Type is the app's tap_sub_type — but the column also
+  // appears on thread MILLS (N-48, N-78 "Single Profile TM"), where a tap
+  // sub-type has no meaning. "Spiral Cut" is a cut tap; the spiral detail has
+  // nowhere to live today and is dropped rather than invented as a third value.
+  it('reads Thread Type onto taps, and only taps', () => {
+    const tools = groupRows(rows()).map(g => psRowToTool(g));
+    const taps = tools.filter(t => t.tool_type === 'tap' && t.tap_sub_type);
+    expect(taps.length).toBe(23);
+    expect(new Set(taps.map(t => t.tap_sub_type))).toEqual(new Set(['form', 'cut']));
+    // R-70/R-71/R-72/R-105/R-214 are "Spiral Cut" in ProShop.
+    expect(tools.find(t => t.tool_id === 'R-70 (CG)').tap_sub_type).toBe('cut');
+    // No non-tap picks one up, even though the column is populated on some.
+    expect(tools.filter(t => t.tool_type !== 'tap' && t.tap_sub_type)).toEqual([]);
+  });
+
+  // "Threads Per Inch" is a RANGE on a thread mill — the tool's TPI capability,
+  // which the app stores as tpi_min/tpi_max. A lone number is the tap case and
+  // is already implied by the thread designation, so it is not a one-ended range.
+  it('reads a thread mill\'s TPI range, and ignores a tap\'s single TPI', () => {
+    const tools = groupRows(rows()).map(g => psRowToTool(g));
+    const ranged = tools.filter(t => t.tpi_min != null);
+    expect(ranged.map(t => `${t.tool_id} ${t.tpi_min}-${t.tpi_max}`).sort())
+      .toEqual(['N-122 18-56', 'N-239 32-64', 'N-78 11-32']);
+    expect(ranged.every(t => t.tool_type === 'thread mill')).toBe(true);
+    // R-81 carries "11" and R-231 "32" — taps, not ranges.
+    expect(tools.find(t => t.tool_id === 'R-81').tpi_min).toBeNull();
+  });
+
   it('reads Through Coolant off the real file', () => {
     const tools = groupRows(rows()).map(g => psRowToTool(g));
     expect(tools.filter(t => t.tsc_capable).length).toBe(11);
@@ -75,6 +103,7 @@ describe('every real tool survives a ProShop round-trip', () => {
     'tap_class', 'point_type', 'stub_jobber', 'pitch',
     'center_cutting', 'flute_type', 'tsc_capable', 'custom_grind',
     'double_ended', 'full_profile', 'backside_capable', 'material_suitability',
+    'tap_sub_type', 'tpi_min', 'tpi_max',
   ];
   // ⚠️ Two columns the export FILLS IN rather than leaves blank, so a value the
   // app never held comes back on re-import. Both are long-standing and are an

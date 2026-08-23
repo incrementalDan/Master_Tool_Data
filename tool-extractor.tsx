@@ -125,6 +125,17 @@ function calcTPI(s){
   return m?m[1]:"";
 }
 
+// The "Threads Per Inch" cell. A thread mill publishes the RANGE it can cut
+// (tpi_min/tpi_max, e.g. "11-32"); everything else gets the single TPI implied
+// by its thread designation. A range with only one end filled emits that end
+// alone rather than a half-written "11-".
+function tpiCell(f){
+  const lo=String(f.tpiMin??"").trim(), hi=String(f.tpiMax??"").trim();
+  if(lo&&hi) return lo===hi?lo:`${lo}-${hi}`;
+  if(lo||hi) return lo||hi;
+  return calcTPI(f.pitch)||"";
+}
+
 // Build Adion/ProShop product link from psToolId
 // e.g. 'F-225' → 'https://americanprecisionworks.adionsystems.com/procnc/tools/F/F-225$'
 function buildAdionUrl(psToolId){
@@ -223,7 +234,11 @@ const PS_MAIN_COLS=[
   ["customgrindtool",f=>f.customGrind?"true":"false"],
   ["roundShank",f=>ROUND_SHANK_TYPES.has(f.toolType)?"true":"false"],["toolGroupLetter",f=>f.grouping||AUTO_GROUP[f.toolType]||"M"],
   ["pitch",f=>f.pitch||""],["fluteType",f=>f.fluteType||""],["lengthBelowShankDiameter",f=>f.minOoh?String(parseFloat(f.minOoh)):""],
-  ["tapClass",f=>f.tapClass||""],["threadsPerInch",f=>calcTPI(f.pitch)||""],["thread",f=>f.pitch||""],
+  // ⚠️ ProShop's "Threads Per Inch" holds a RANGE for a thread mill ("11-32" on
+  // N-78, matching its own description "11 to 32 TPI") — that is the tool's TPI
+  // CAPABILITY, which the app stores as tpi_min/tpi_max. For a tap it is the one
+  // TPI of the thread it cuts, derived from the pitch designation.
+  ["tapClass",f=>f.tapClass||""],["threadsPerInch",f=>tpiCell(f)],["thread",f=>f.pitch||""],
   ["threadType",f=>f.toolType!=="tap"?"":f.tapSubType==="form"?"Form":f.tapSubType==="cut"?"Cut":""],
   // A blank cell means "nobody answered"; these are plain booleans in the app,
   // so an explicit false is the honest value — and it is what ProShop's own

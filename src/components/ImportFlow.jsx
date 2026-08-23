@@ -815,6 +815,32 @@ const psNumEq = (a, b) => Math.abs(Number(a) - Number(b)) <= 1e-4;
 // but an exact `=== 'true'` compare turns any other spelling ("TRUE", "Yes")
 // into a silent FALSE — a wrong answer that looks like a real one. Returns null
 // for "not answered" so a fill-gap caller can tell blank from false.
+// ProShop's "Threads Per Inch" is a RANGE on a thread mill ("11-32" on N-78,
+// matching its description "11 to 32 TPI") and a single number on a tap. Returns
+// { tpi_min, tpi_max } for a range, null when there is nothing usable — a lone
+// number is the tap case and is already implied by the thread designation, so it
+// is not read as a one-ended range.
+const psTpiRange = (v) => {
+  const m = String(v ?? '').trim().match(/^(\d+)\s*(?:-|to|–)\s*(\d+)$/i);
+  if (!m) return null;
+  const lo = parseInt(m[1], 10), hi = parseInt(m[2], 10);
+  if (!lo || !hi) return null;
+  return { tpi_min: Math.min(lo, hi), tpi_max: Math.max(lo, hi) };
+};
+
+// ProShop's "Thread Type" (Form / Cut / Spiral Cut) is the app's tap_sub_type.
+// ⚠️ TAPS ONLY — the column also appears on thread mills (N-48, N-78 "Single
+// Profile TM"), where tap_sub_type has no meaning. "Spiral Cut" is a cut tap;
+// the spiral detail has nowhere to live today and is deliberately dropped rather
+// than invented as a third sub-type.
+const psTapSubType = (v) => {
+  const t = String(v ?? '').trim().toLowerCase();
+  if (!t) return '';
+  if (t.includes('form')) return 'form';
+  if (t.includes('cut')) return 'cut';
+  return '';
+};
+
 const psBool = (v) => {
   const s = String(v ?? '').trim().toLowerCase();
   if (s === 'true' || s === 'yes' || s === 'y' || s === '1') return true;
@@ -893,6 +919,8 @@ export function psRowToTool(group, psUnit = 'inches', locationSystems = [], locC
     // them silently. ProShop writes CenterCut as Y/N (psBool handles both).
     center_cutting: psBool(r['CenterCut']) === true,
     flute_type: r['FluteType/Chipbreaker'] || '',
+    ...(toolType === 'tap' ? { tap_sub_type: psTapSubType(r['Thread Type']) } : {}),
+    ...(toolType === 'thread mill' ? (psTpiRange(r['Threads Per Inch']) || {}) : {}),
     stub_jobber: r['(S)tub / (J)obber'] || '',
     full_profile: psBool(r['Full Profile']) === true,
     backside_capable: psBool(r['Backside Capable']) === true,
@@ -1145,6 +1173,16 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
       fillOrFlag('coating', tool.coating, r['Coating']);
       fillOrFlag('point_type', tool.point_type, r['Point Type']);
       fillOrFlag('flute_type', tool.flute_type, r['FluteType/Chipbreaker']);
+      if (tool.tool_type === 'tap') {
+        fillOrFlag('tap_sub_type', tool.tap_sub_type, psTapSubType(r['Thread Type']));
+      }
+      if (tool.tool_type === 'thread mill') {
+        const range = psTpiRange(r['Threads Per Inch']);
+        if (range) {
+          fillOrFlag('tpi_min', tool.tpi_min, range.tpi_min, psNumEq);
+          fillOrFlag('tpi_max', tool.tpi_max, range.tpi_max, psNumEq);
+        }
+      }
       // Location. ProShop's Location is a bare bin NUMBER (no "LC-" prefix); the
       // app's location string carries the Location System prefix (e.g. "LC-1405").
       // Compare on the NUMBER only so "LC-1405" and "1405" are the same bin. Same
