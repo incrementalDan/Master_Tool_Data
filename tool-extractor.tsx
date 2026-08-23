@@ -265,18 +265,48 @@ function buildBrandRows(f){
   return [{approvedBrand,vendor,edp,cost,leadTime:""}];
 }
 function csvCell(v){const s=String(v===null||v===undefined?"":v);return(s.includes(",")||s.includes('"')||s.includes("\n"))?`"${s.replace(/"/g,'""')}"`:s;}
+
+// The purchasing / "Approved Brands" sub-table columns, in ProShop's order.
+const PURCHASING_COLS=["approvedBrand","vendor","EDP#","cost","leadTime"];
+
+// Columns a continuation row LEAVES BLANK. Measured against a real ProShop
+// export (see FUSION TOOL Library REF/ProShop Reference Data): a second
+// Approved-Brand row repeats the tool's IDENTITY and descriptive attributes and
+// omits only its MEASUREMENTS. Anything not listed here therefore repeats.
+//
+// ⚠️ EVERY ROW CARRIES THE TOOL # — that is the only thing tying a second
+// Approved-Brand row back to its tool. Blanking the whole main block (the old
+// behaviour) left row 2 with a brand and a price and NOTHING to attach them to:
+// ProShop can't group it, and this app's own importer groups by `Tool #`, so
+// re-importing our export silently dropped every vendor after the first. A
+// second vendor going missing on a round-trip is invisible until someone goes
+// looking for the cheaper price.
+//
+// `cost` is deliberately NOT first-row-only even though the reference export
+// happens to carry it once: price is per VENDOR in this app's model, so
+// dropping it on continuation rows would lose the second vendor's price.
+const PS_FIRST_ROW_ONLY=new Set([
+  "cutDiameter","lengthOfCut","overallLength","shankDiameter","bodyDiameter",
+  "cornerRadius","tipAngle","helixAngle","taper","tipDiameter",
+  "No. of Flutes","lengthBelowShankDiameter","tipTo1stFullThread","threadsPerInch",
+]);
+
 // Real ProShop exports use one row per purchasing/Approved-Brand option, all
-// sharing the same Tool # — geometry/spec columns are populated only on the first row.
-function buildProShopCSV(f){
+// sharing the same Tool #. Returns string[][] (data rows only, no header) so the
+// single-tool and full-library exports share ONE implementation of the shape.
+function buildProShopRows(f){
   const brandRows=buildBrandRows(f);
-  const purchCols=["approvedBrand","vendor","EDP#","cost","leadTime"];
-  const hdr=[...PS_MAIN_COLS.map(([h])=>h),...purchCols].map(csvCell).join(",");
-  const mainVals=PS_MAIN_COLS.map(([,fn])=>fn(f));
-  const blankMain=mainVals.map(()=>"");
-  const rows=(brandRows.length?brandRows:[{}]).map((b,i)=>{
-    const main=i===0?mainVals:blankMain;
-    return [...main,b.approvedBrand||"",b.vendor||"",b.edp||"",b.cost||"",b.leadTime||""].map(csvCell).join(",");
-  });
+  const firstVals=PS_MAIN_COLS.map(([,fn])=>fn(f));
+  const contVals=PS_MAIN_COLS.map(([h,fn])=>PS_FIRST_ROW_ONLY.has(h)?"":fn(f));
+  return (brandRows.length?brandRows:[{}]).map((b,i)=>[
+    ...(i===0?firstVals:contVals),
+    b.approvedBrand||"",b.vendor||"",b.edp||"",b.cost||"",b.leadTime||"",
+  ]);
+}
+
+function buildProShopCSV(f){
+  const hdr=[...PS_MAIN_COLS.map(([h])=>h),...PURCHASING_COLS].map(csvCell).join(",");
+  const rows=buildProShopRows(f).map(r=>r.map(csvCell).join(","));
   return [hdr,...rows].join("\n");
 }
 
@@ -359,6 +389,6 @@ export {
   MA, CO, WM,
   PS_GROUPS, AUTO_GROUP, typeFromProShopGroup, PS_MAIN_COLS,
   COOLANT_OPTS, THROUGH_COOLANT_VALUES, ROUND_SHANK_TYPES,
-  buildFusionRow, buildProShopCSV, buildDesc, buildBrandRows, buildAdionUrl,
+  buildFusionRow, buildProShopCSV, buildProShopRows, PURCHASING_COLS, buildDesc, buildBrandRows, buildAdionUrl,
   getVisibleFields, downloadCSV, smartDiam,
 };

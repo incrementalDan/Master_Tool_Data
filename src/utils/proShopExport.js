@@ -1,4 +1,4 @@
-import { buildProShopCSV, PS_MAIN_COLS, buildBrandRows } from '../../tool-extractor.tsx';
+import { buildProShopCSV, buildProShopRows, PS_MAIN_COLS, PURCHASING_COLS } from '../../tool-extractor.tsx';
 import { toolToExtractor } from '../schema/toolSchema.js';
 import { downloadCSV } from '../../tool-extractor.tsx';
 
@@ -18,11 +18,10 @@ export function exportSingleTool(tool) {
   downloadCSV(csv, `${tool.tool_id || tool.id}_proshop.csv`);
 }
 
-// Purchasing/Approved-Brand columns — one CSV row per `tool.purchasing[]` entry,
-// matching ProShop's real multi-row export. Geometry/spec columns are populated
-// only on each tool's first row.
-const PURCHASING_COLS = ['approvedBrand', 'vendor', 'EDP#', 'cost', 'leadTime'];
-
+// One CSV row per purchasing/Approved-Brand entry, matching ProShop's real
+// multi-row export — the row SHAPE (which columns a continuation row repeats,
+// and that every row carries the Tool #) lives in buildProShopRows so the
+// single-tool and full-library exports cannot drift apart.
 export function exportFullLibrary(tools) {
   if (tools.length === 0) return;
 
@@ -30,15 +29,9 @@ export function exportFullLibrary(tools) {
   const rows = [headerCols.map(csvCell).join(',')];
 
   for (const tool of tools) {
-    const extFmt = toolToExtractor(tool);
-    const brandRows = buildBrandRows(extFmt);
-    const mainVals = PS_MAIN_COLS.map(([, fn]) => fn(extFmt));
-    const blankMain = mainVals.map(() => '');
-    const toolRows = brandRows.length ? brandRows : [{}];
-    toolRows.forEach((b, i) => {
-      const main = i === 0 ? mainVals : blankMain;
-      rows.push([...main, b.approvedBrand || '', b.vendor || '', b.edp || '', b.cost || '', b.leadTime || ''].map(csvCell).join(','));
-    });
+    for (const row of buildProShopRows(toolToExtractor(tool))) {
+      rows.push(row.map(csvCell).join(','));
+    }
   }
 
   downloadCSV(rows.join('\n'), 'proshop_library_export.csv');

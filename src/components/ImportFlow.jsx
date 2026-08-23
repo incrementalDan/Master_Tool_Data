@@ -807,6 +807,17 @@ function psNum(v) {
 const psStrEq = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
 const psNumEq = (a, b) => Math.abs(Number(a) - Number(b)) <= 1e-4;
 
+// A ProShop boolean cell. The shop's real export writes lowercase true/false,
+// but an exact `=== 'true'` compare turns any other spelling ("TRUE", "Yes")
+// into a silent FALSE — a wrong answer that looks like a real one. Returns null
+// for "not answered" so a fill-gap caller can tell blank from false.
+const psBool = (v) => {
+  const s = String(v ?? '').trim().toLowerCase();
+  if (s === 'true' || s === 'yes' || s === 'y' || s === '1') return true;
+  if (s === 'false' || s === 'no' || s === 'n' || s === '0') return false;
+  return null;
+};
+
 // Map a bare ProShop bin number to a STRUCTURED tool_location so the app owns the
 // location: it composes to "LC-140" via the Location System AND persists in
 // metadata (the only place a no-Fusion tool can keep a location — a free-text
@@ -874,11 +885,11 @@ export function psRowToTool(group, psUnit = 'inches', locationSystems = [], locC
     tap_class: r['Tap class'] || '',
     point_type: r['Point Type'] || '',
     stub_jobber: r['(S)tub / (J)obber'] || '',
-    full_profile: r['Full Profile'] === 'true',
-    backside_capable: r['Backside Capable'] === 'true',
-    double_ended: r['Double Ended'] === 'Y',
-    tsc_capable: r['Through Coolant'] === 'true',
-    custom_grind: r['Custom Grind'] === 'true',
+    full_profile: psBool(r['Full Profile']) === true,
+    backside_capable: psBool(r['Backside Capable']) === true,
+    double_ended: psBool(r['Double Ended']) === true,
+    tsc_capable: psBool(r['Through Coolant']) === true,
+    custom_grind: psBool(r['Custom Grind']) === true,
     material_suitability: r['Recommended Workpiece Material']
       ? r['Recommended Workpiece Material'].split(',').map(s => s.trim()).filter(Boolean)
       : [],
@@ -1094,12 +1105,10 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
       if (r['Approved Brand']) additions.vendor = resolveVendorName(r['Approved Brand']);
       const purchasing = buildPurchasingFromGroup(group);
       if (purchasing.manufacturers.length || purchasing.vendors.length) additions.purchasing = purchasing;
-      if (r['Through Coolant'] === 'true' || r['Through Coolant'] === 'false') {
-        additions.tsc_capable = r['Through Coolant'] === 'true';
-      }
-      if (r['Custom Grind'] === 'true' || r['Custom Grind'] === 'false') {
-        additions.custom_grind = r['Custom Grind'] === 'true';
-      }
+      const psTsc = psBool(r['Through Coolant']);
+      if (psTsc != null) additions.tsc_capable = psTsc;
+      const psCustomGrind = psBool(r['Custom Grind']);
+      if (psCustomGrind != null) additions.custom_grind = psCustomGrind;
       // min_ooh: ProShop is authoritative — always overwrite when present, after
       // converting from the ProShop file unit into the matched tool's own unit.
       const psMinOoh = psNum(r['Length Below Holder - MIN OOH']);
