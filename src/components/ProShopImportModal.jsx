@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { X, UploadCloud, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { parseCSV, matchProShopToTools } from './ImportFlow.jsx';
-import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel } from '../utils/proShopHeaders.js';
+import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel, isProShopSummaryRow } from '../utils/proShopHeaders.js';
 import { getDefaultUnit, unitAbbr } from '../utils/units.js';
 
 // Single-tool ProShop data import. Upload a ProShop CSV export (the whole
@@ -70,7 +70,15 @@ export default function ProShopImportModal({ tool, onClose, onApply }) {
         // Accept both header conventions (real ProShop export + this app's own
         // ProShop export) via header canonicalization — see proShopHeaders.js.
         setPsFormat(detectProShopFormat(rows[0]));
-        const data = proShopRowsToObjects(rows);
+        const all = proShopRowsToObjects(rows);
+        // Drop the trailing TOTALS footer — on a per-tool export (no "Tool #"
+        // column) every row is folded into ONE group, so the summary row's
+        // library-wide Cost would land on this tool as a purchasing row.
+        // ⚠️ Keep the rows as-is if the filter would empty the file: a per-tool
+        // export may legitimately carry no Description/Tool Group column at all,
+        // and every row would then read as a summary.
+        const kept = all.filter(r => !isProShopSummaryRow(r));
+        const data = kept.length ? kept : all;
         // A per-tool ProShop export often has NO "Tool #" column (this whole file
         // is one tool). In that case every row belongs to the tool the user is
         // importing into — group them together and force the match. Otherwise

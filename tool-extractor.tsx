@@ -212,14 +212,24 @@ const PS_MAIN_COLS=[
   ["bodyDiameter",f=>f.shankDia||f.diameter||""],["cornerRadius",f=>f.cornerRadius||""],["tipAngle",f=>f.tipAngle||""],
   ["helixAngle",f=>f.helixAngle||""],["coating",f=>f.coating||""],["toolMaterial",f=>f.material||""],
   ["recommendedWorkpieceMaterial",f=>(f.workpieceMats&&f.workpieceMats.length?f.workpieceMats.join(", "):f.workpieceMat||"")],
-  ["centerCutting",f=>f.centerCutting?"true":"false"],["throughCoolant",f=>THROUGH_COOLANT_VALUES.has(f.coolant||"")?"true":"false"],
+  // ⚠️ ProShop's boolean-ish columns are NOT one format. Measured across the
+  // shop's real export: the Boolean-TYPED attributes (Through Coolant, Custom
+  // Grind, Full Profile, Backside Capable, Round Shank) hold "true"/"false",
+  // while Center Cut and Double Ended are UNTYPED and hold "Y"/"N" (97/60 and
+  // 6/123 rows; "true" never appears in Double Ended at all). Write each column
+  // the way ProShop stores it. Import reads them all through psBool, which is
+  // tolerant either way.
+  ["centerCutting",f=>f.centerCutting?"Y":"N"],["throughCoolant",f=>THROUGH_COOLANT_VALUES.has(f.coolant||"")?"true":"false"],
   ["customgrindtool",f=>f.customGrind?"true":"false"],
   ["roundShank",f=>ROUND_SHANK_TYPES.has(f.toolType)?"true":"false"],["toolGroupLetter",f=>f.grouping||AUTO_GROUP[f.toolType]||"M"],
   ["pitch",f=>f.pitch||""],["fluteType",f=>f.fluteType||""],["lengthBelowShankDiameter",f=>f.minOoh?String(parseFloat(f.minOoh)):""],
   ["tapClass",f=>f.tapClass||""],["threadsPerInch",f=>calcTPI(f.pitch)||""],["thread",f=>f.pitch||""],
   ["threadType",f=>f.toolType!=="tap"?"":f.tapSubType==="form"?"Form":f.tapSubType==="cut"?"Cut":""],
-  ["fullProfile",f=>f.fullProfile?"true":""],["stubJobber",f=>f.stubJobber||""],["backsideCapable",f=>f.backsideCapable?"true":""],
-  ["doubleEnded",f=>f.doubleEnded?"true":""],["cuttingDirection",f=>f.cuttingDirection||"Right Hand"],
+  // A blank cell means "nobody answered"; these are plain booleans in the app,
+  // so an explicit false is the honest value — and it is what ProShop's own
+  // export writes (309/310 of its rows).
+  ["fullProfile",f=>f.fullProfile?"true":"false"],["stubJobber",f=>f.stubJobber||""],["backsideCapable",f=>f.backsideCapable?"true":"false"],
+  ["doubleEnded",f=>f.doubleEnded?"Y":"N"],["cuttingDirection",f=>f.cuttingDirection||"Right Hand"],
   ["taper",f=>f.taperAngle||""],["tipDiameter",f=>f.tipDiameter||""],
   ["tipTo1stFullThread",f=>f.tipToFirstFullThread||""],
   // Location (cabinet) + tap Point Type — added so both round-trip through the

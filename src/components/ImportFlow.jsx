@@ -10,7 +10,7 @@ import { insertComponentIndex, newComponent, normProShopId } from '../schema/ins
 import { vendorHasOwnCatalogNumber, resolveVendorName, registryIdForName } from '../schema/vendorRegistry.js';
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
-import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel } from '../utils/proShopHeaders.js';
+import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel, isProShopSummaryRow } from '../utils/proShopHeaders.js';
 import {
   locationNumber, composeLocationString, claimSystemForNumber,
   isBinOnlySystem, countLocationNumbers,
@@ -145,6 +145,10 @@ export default function ImportFlow() {
         // Approved Brand options — group them before matching.
         const groupMap = new Map();
         for (const row of data) {
+          // Skip the trailing TOTALS footer — it is a spreadsheet sum, not a
+          // tool, and it otherwise imports as one (with the whole library's
+          // value as its price).
+          if (isProShopSummaryRow(row)) continue;
           const key = row['Tool #'] || `__row_${groupMap.size}`;
           if (!groupMap.has(key)) groupMap.set(key, []);
           groupMap.get(key).push(row);
@@ -884,6 +888,11 @@ export function psRowToTool(group, psUnit = 'inches', locationSystems = [], locC
     ...resolveThreadSize(r['Thread'] || r['Pitch'] || ''),
     tap_class: r['Tap class'] || '',
     point_type: r['Point Type'] || '',
+    // Both are declared in fieldRegistry with a proShopColumn and are EXPORTED,
+    // but were never read back — so a tool round-tripped through ProShop lost
+    // them silently. ProShop writes CenterCut as Y/N (psBool handles both).
+    center_cutting: psBool(r['CenterCut']) === true,
+    flute_type: r['FluteType/Chipbreaker'] || '',
     stub_jobber: r['(S)tub / (J)obber'] || '',
     full_profile: psBool(r['Full Profile']) === true,
     backside_capable: psBool(r['Backside Capable']) === true,
@@ -1109,6 +1118,13 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
       if (psTsc != null) additions.tsc_capable = psTsc;
       const psCustomGrind = psBool(r['Custom Grind']);
       if (psCustomGrind != null) additions.custom_grind = psCustomGrind;
+      // ⚠️ center_cutting is PS-wins, NOT fill-gap-else-flag: the app defaults it
+      // to `false`, so "nobody has answered" and "answered no" are the same
+      // stored value. Flagging on a difference would raise a conflict on every
+      // centre-cutting tool that still carries the default — 97 of them in the
+      // shop's real export. Same class (and same rule) as tsc_capable.
+      const psCenterCut = psBool(r['CenterCut']);
+      if (psCenterCut != null) additions.center_cutting = psCenterCut;
       // min_ooh: ProShop is authoritative — always overwrite when present, after
       // converting from the ProShop file unit into the matched tool's own unit.
       const psMinOoh = psNum(r['Length Below Holder - MIN OOH']);
@@ -1128,6 +1144,7 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
       }
       fillOrFlag('coating', tool.coating, r['Coating']);
       fillOrFlag('point_type', tool.point_type, r['Point Type']);
+      fillOrFlag('flute_type', tool.flute_type, r['FluteType/Chipbreaker']);
       // Location. ProShop's Location is a bare bin NUMBER (no "LC-" prefix); the
       // app's location string carries the Location System prefix (e.g. "LC-1405").
       // Compare on the NUMBER only so "LC-1405" and "1405" are the same bin. Same
