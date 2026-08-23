@@ -786,7 +786,12 @@ export default function ToolDetail() {
                   )}
                 </Section>
 
-                <Section title="Location" icon={MapPin} defaultOpen={false}>
+                {/* Open by default when the tool has no structured location:
+                    the panel IS the only place a location gets assigned, and
+                    collapsing it hid the one action a new tool still needs.
+                    Already located → stays collapsed, since the composed value
+                    is already on the identity row above. */}
+                <Section title="Location" icon={MapPin} defaultOpen={!tool.tool_location}>
                   <LocationPicker tool={tool} />
                 </Section>
 
