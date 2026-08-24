@@ -3,6 +3,8 @@ import {
   TOOL_STATUSES, DEFAULT_TOOL_STATUS, DEFAULT_VISIBLE_STATUSES, statusOf, statusMeta,
   isBeta, isRetired, exportsToProShop, proShopStatusValue, statusFromProShop,
   hasBetaSuffix, withBetaSuffix, stripBetaSuffix, betaSuffixStale,
+  hasRetiredSuffix, withRetiredSuffix, stripRetiredSuffix,
+  applyStatusSuffix, stripStatusSuffixes, withRetiredMarker,
 } from './toolStatus.js';
 import { buildProShopRows, buildProShopCSV } from '../../tool-extractor.tsx';
 import { toolToExtractor } from '../schema/toolSchema.js';
@@ -191,5 +193,83 @@ describe('the bulk-export message', () => {
 
   it('gets the singulars right', () => {
     expect(proShopExportMessage(2, 1)).toBe('Exported 1 tool to ProShop CSV — 1 beta tool skipped (not exported to ProShop)');
+  });
+});
+
+// ⚠️ The RETIRED marker is a DELIBERATE, granted exception to "descriptions are
+// never silently renamed". Fusion has nowhere to store a status, and the
+// description is the one field a programmer reads when picking tools for a new
+// job — the shop keeps running retired tools on already-programmed jobs, so the
+// marker is what stops one being picked for a NEW one. It only ever appends to
+// the END, and it is a pure function of tool_status, so it can never go stale.
+describe('the RETIRED description marker', () => {
+  const f = { toolType: 'flat end mill', diameter: 0.5, flutes: 4, loc: 1, unit: 'inches' };
+
+  it('rides along with the generated name', () => {
+    expect(buildDesc({ ...f, status: 'retired' })).toMatch(/ RETIRED$/);
+    expect(buildDesc({ ...f, status: 'active' })).not.toMatch(/RETIRED/);
+  });
+
+  it('appends once, and to the end', () => {
+    expect(withRetiredSuffix('1/2 EM')).toBe('1/2 EM RETIRED');
+    expect(withRetiredSuffix('1/2 EM RETIRED')).toBe('1/2 EM RETIRED');
+    expect(withRetiredSuffix(withRetiredSuffix('1/2 EM'))).toBe('1/2 EM RETIRED');
+  });
+
+  it('strips cleanly, whatever the spacing or case', () => {
+    for (const d of ['1/2 EM RETIRED', '1/2 EM retired', '1/2 EM   Retired']) {
+      expect(stripRetiredSuffix(d)).toBe('1/2 EM');
+    }
+  });
+
+  it('only matches the END — a tool named "RETIRED SERIES ROUGHER" survives', () => {
+    expect(hasRetiredSuffix('RETIRED SERIES ROUGHER')).toBe(false);
+    expect(stripRetiredSuffix('RETIRED SERIES ROUGHER')).toBe('RETIRED SERIES ROUGHER');
+  });
+
+  // A tool is in exactly one state, so at most one marker is ever right.
+  it('a status change swaps the marker rather than stacking them', () => {
+    expect(applyStatusSuffix('1/2 EM BETA', 'retired')).toBe('1/2 EM RETIRED');
+    expect(applyStatusSuffix('1/2 EM RETIRED', 'beta')).toBe('1/2 EM BETA');
+    expect(applyStatusSuffix('1/2 EM RETIRED', 'active')).toBe('1/2 EM');
+    expect(stripStatusSuffixes('1/2 EM BETA RETIRED')).toBe('1/2 EM');
+  });
+});
+
+// The write-time invariant: every save enforces it, which is what makes the
+// marker reach Fusion by itself rather than when someone remembers.
+describe('withRetiredMarker — the write-time invariant', () => {
+  it('adds the marker to a retired tool', () => {
+    expect(withRetiredMarker({ tool_status: 'retired', description: '1/2 EM' }).description)
+      .toBe('1/2 EM RETIRED');
+  });
+
+  it('takes it away again when the tool is no longer retired', () => {
+    expect(withRetiredMarker({ tool_status: 'active', description: '1/2 EM RETIRED' }).description)
+      .toBe('1/2 EM');
+  });
+
+  it('leaves the BETA marker alone — that one is offered, not enforced', () => {
+    expect(withRetiredMarker({ tool_status: 'beta', description: '1/2 EM BETA' }).description)
+      .toBe('1/2 EM BETA');
+  });
+
+  // ⚠️ Same reference when nothing changes — callers use identity to decide
+  // whether there is anything to persist (the syncPresetMaterialName rule).
+  it('returns the SAME object when the description already agrees', () => {
+    const ok = { tool_status: 'retired', description: '1/2 EM RETIRED' };
+    expect(withRetiredMarker(ok)).toBe(ok);
+    const active = { tool_status: 'active', description: '1/2 EM' };
+    expect(withRetiredMarker(active)).toBe(active);
+  });
+
+  it('is idempotent — a second save changes nothing', () => {
+    const once = withRetiredMarker({ tool_status: 'retired', description: '1/2 EM' });
+    expect(withRetiredMarker(once)).toBe(once);
+  });
+
+  it('tolerates a tool with no description', () => {
+    expect(withRetiredMarker({ tool_status: 'retired' })).toEqual({ tool_status: 'retired' });
+    expect(withRetiredMarker(null)).toBeNull();
   });
 });

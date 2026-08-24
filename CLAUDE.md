@@ -517,6 +517,8 @@ A tool's lifecycle, in `tool_status` (metadata-only, `'active' | 'retired' | 'be
 | **Beta** | ⚠️ **not exported at all** | Being trialled in CAM, not bought. Blue badge; the generated description carries a `BETA` marker. |
 | **Retired** | `Archived` | Out of service. Grey badge + the replacement, resolved live from `replaced_by`. |
 
+⚠️ **RETIRING IS NOT DELETING.** The shop keeps running a retired tool on jobs that are already programmed, and may even buy more of one to finish an old job. So a retired tool stays in Fusion, stays in ProShop (as `Archived`), stays searchable, and keeps its presets and assemblies. What retiring changes is what someone reaches for when programming a **new** job — hence the badge, the header wash, the `RETIRED` marker in the description (the only thing Fusion can show), and the replacement link.
+
 **ProShop's column is `Status`** (Id + API both `status`), an indexed String. Measured on the shop's real export: `Active` 270 / **blank 40** / `Archived` 1 (`A-6 (Ar)`, "NOT USED …"). **Blank is ACTIVE**, not unknown.
 
 ⚠️ **A BETA TOOL IS OMITTED FROM THE ProShop EXPORT ENTIRELY — `buildProShopRows` returns NO rows for it.** It is a tool the shop may never buy, so it has no place in ProShop's inventory. Exporting it with a **blank Status cell would be actively harmful**, not merely useless: blank reads back as **Active**, so the next round-trip would quietly promote every beta tool. `exportSingleTool` returns **`false`** and `exportFullLibrary` returns **`{ skipped }`** — every caller reports it via `proShopExportMessage`, because "Exported 245 tools" when 3 were left out is a true-sounding number that isn't true.
@@ -530,9 +532,17 @@ A tool's lifecycle, in `tool_status` (metadata-only, `'active' | 'retired' | 'be
 - Leaving `retired` **clears** it (`setStatus`): "replaced by X" on a tool nobody retired is a stale claim.
 - The picker is **`ToolLinkPicker`** — the same search the landing page runs, so a ProShop #, EDP# or retired ID finds the replacement exactly as it would anywhere else.
 
-### The BETA description marker
+### Status markers in the description — BETA and RETIRED
 
-⚠️ **OFFERED, NEVER APPLIED — "descriptions are never silently renamed" still holds.** Every tool is created in this app, so its FIRST description is *generated*, and that is where the marker belongs: `buildDesc` appends ` BETA` when `f.status === 'beta'` (wrapped around the switch — it has 36 return sites and the rule belongs in exactly one place). Turning Beta **on** in `ToolForm` adds the marker only to a description that still equals what `buildDesc` would produce (one the form generated); a **hand-typed** name is never touched. Turning Beta **off** raises a prompt (`betaSuffixStale` → "Remove it"), it does not edit anything. `hasBetaSuffix` matches only at the END, so a tool genuinely named `BETA GRADE EM` survives.
+Fusion has nowhere to store a status, and the description is the **one field a programmer reads when picking tools for a new job**. So the status rides in the description, always at the END. ⚠️ **The two markers follow DIFFERENT rules, on purpose** — see `applyStatusSuffix` / `withRetiredMarker` in `toolStatus.js`.
+
+**`RETIRED` — ENFORCED, and auto-pushed to Fusion.** A deliberate, granted exception to "descriptions are never silently renamed". ⚠️ **The shop keeps running retired tools on already-programmed jobs** — they may even buy more of one to finish an old job — so retiring is *not* deleting. The marker exists precisely so that a programmer in **Fusion**, who cannot see this app, doesn't pick it for a **NEW** job. Applied by **`withRetiredMarker`** at both write paths (`writeLogicalTool` and `saveFullLibrary`), so every save carries it to Fusion by itself; un-retiring takes it off again. It only ever appends to the end, and it is a pure function of `tool_status`, so it can never go stale.
+- ⚠️ **Re-applied AFTER the 3-way Fusion merge, not just at entry.** The merge can *adopt* Fusion's description (someone renamed the tool there and the app didn't), and an adopted value arrives without the marker — quietly breaking the invariant until somebody toggled the status. Enforcing it last means "a retired tool's description says RETIRED" holds whatever the merge decided. Locked by `retiredMarkerPush.test.js`, which asserts on the entry actually **uploaded to Fusion** rather than on the helper.
+- ⚠️ **The replacement is NOT baked into the description.** It stays the `replaced_by` id, resolved live. A Tool ID renumber would otherwise strand a stale ProShop number inside every retired tool's name — the "store the id, render the name" rule.
+
+**`BETA` — OFFERED, never applied.**
+
+Every tool is created in this app, so its FIRST description is *generated*, and that is where the marker belongs: `buildDesc` appends ` BETA` when `f.status === 'beta'` (wrapped around the switch — it has 36 return sites and the rule belongs in exactly one place). Turning Beta **on** in `ToolForm` adds the marker only to a description that still equals what `buildDesc` would produce (one the form generated); a **hand-typed** name is never touched. Turning Beta **off** raises a prompt (`betaSuffixStale` → "Remove it"), it does not edit anything. `hasBetaSuffix` matches only at the END, so a tool genuinely named `BETA GRADE EM` survives.
 
 ### Display + filtering
 

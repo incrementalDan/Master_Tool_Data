@@ -13,6 +13,7 @@ import {
 } from '../schema/toolSchema.js';
 import { normProShopId } from '../schema/insertFamilies.js';
 import { linkPatch } from '../utils/toolLinks.js';
+import { withRetiredMarker } from '../utils/toolStatus.js';
 import { holderForGuid } from '../utils/holderDuplicates.js';
 import { holderTokensMatch } from '../utils/holderNaming.js';
 import { composeAsmNumber, autoAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
@@ -60,7 +61,17 @@ export function createToolActions(ctx) {
   // (per the re-download-before-write invariant) and refreshes each instance's
   // raw Fusion data so a teammate's untouched fields survive. Returns the
   // normalized tool with stable assembly ids and refreshed _instancesRaw.
-  const writeLogicalTool = async (tool) => {
+  const writeLogicalTool = async (originalTool) => {
+    // ⚠️ AUTO-PUSHED, not remembered. Fusion has nowhere to store a status, and
+    // the description is the one field a programmer reads when picking tools for
+    // a new job — so a retired tool's description carries RETIRED, and a tool
+    // that is no longer retired doesn't. Applied HERE, at the write, so it
+    // reaches Fusion on every save by itself: the shop keeps running retired
+    // tools on already-programmed jobs, and this marker is what stops one being
+    // picked for a NEW one. A deliberate, granted exception to "descriptions are
+    // never silently renamed" — it only ever appends to the END, and it is a
+    // pure function of tool_status, so it can never go stale.
+    const tool = withRetiredMarker(originalTool);
     const holders = holdersRef.current || [];
     const tracking_id = tool.tracking_id || generateTrackingId();
     // A tool is written metadata-only when it's a per-tool no-Fusion tool OR the
@@ -243,7 +254,13 @@ export function createToolActions(ctx) {
       .filter(c => c.kind)
       .map(c => ({ kind: c.kind, label: c.preset || c.assembly || '' }));
 
-    const toWrite = {
+    // ⚠️ Re-applied AFTER the 3-way merge, not just at entry. The merge can adopt
+    // Fusion's description (someone renamed the tool there and the app didn't) —
+    // and that adopted value would come back WITHOUT the marker, quietly
+    // breaking the invariant until somebody toggled the status. Enforcing it
+    // last means "a retired tool's description says RETIRED" holds whatever the
+    // merge decided.
+    const toWrite = withRetiredMarker({
       ...sharedMerged,
       tracking_id,
       library_id,
@@ -254,7 +271,7 @@ export function createToolActions(ctx) {
       _fusionRaw: refreshedRaws[0] || tool._fusionRaw || null,
       _drift: [...fieldConflicts, ...infoConflicts],
       ...locExtra,
-    };
+    });
 
     // The app-owned holder records are the source of truth for holder geometry;
     // `holders` (the read-only Fusion holder library) is the fallback for holders

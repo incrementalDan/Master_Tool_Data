@@ -82,29 +82,91 @@ export function statusFromProShop(raw) {
   return DEFAULT_TOOL_STATUS;
 }
 
-// ── The BETA description suffix ──────────────────────────────────────────────
-// Every tool is created in the app, so its FIRST description is generated — and
-// for a beta tool that generated name carries the marker. Nothing ever rewrites
-// a stored description on its own (see "never silently renamed"): switching to
-// Active surfaces a prompt to drop the suffix, it does not drop it.
+// ── Status markers in the description ────────────────────────────────────────
+// Fusion has nowhere to put a status, and the description is the ONE field a
+// programmer reads when picking tools for a new job. So the status rides in the
+// description — deliberately at the END, so it never disturbs the name itself.
+//
+// ⚠️ The two markers follow DIFFERENT rules, on purpose:
+//
+//   BETA     — OFFERED. It rides along with the GENERATED name (every tool is
+//              created in this app, so its first description is generated) and
+//              with an explicit Beta toggle. Nothing ever strips it on the app's
+//              say-so; switching off Beta raises a prompt.
+//   RETIRED  — ENFORCED, and pushed to Fusion automatically. An explicit
+//              exception to "descriptions are never silently renamed", granted
+//              because the whole point is that a programmer in FUSION — who
+//              cannot see this app — must know not to pick the tool. The shop
+//              keeps running retired tools on already-programmed jobs, so the
+//              marker is what stops one being chosen for a NEW job.
+//
+// Both are pure functions of `tool_status`, so both are re-derivable and
+// therefore safe to add and remove — a stale marker is impossible by
+// construction rather than by discipline.
 export const BETA_SUFFIX = 'BETA';
+export const RETIRED_SUFFIX = 'RETIRED';
 
-const BETA_RE = /\s*\bBETA\b\s*$/i;
+const SUFFIX_BY_STATUS = { beta: BETA_SUFFIX, retired: RETIRED_SUFFIX };
+
+// Matches ONLY at the end, so a tool genuinely named "BETA GRADE EM" or
+// "RETIRED SERIES ROUGHER" is never mangled.
+const endRe = (word) => new RegExp(`\\s*\\b${word}\\b\\s*$`, 'i');
+const BETA_RE = endRe(BETA_SUFFIX);
+const RETIRED_RE = endRe(RETIRED_SUFFIX);
 
 export const hasBetaSuffix = (desc) => BETA_RE.test(String(desc || ''));
+export const hasRetiredSuffix = (desc) => RETIRED_RE.test(String(desc || ''));
 
-export function withBetaSuffix(desc) {
+const addSuffix = (desc, word) => {
   const d = String(desc || '').trim();
-  if (!d || hasBetaSuffix(d)) return d;
-  return `${d} ${BETA_SUFFIX}`;
+  if (!d || endRe(word).test(d)) return d;
+  return `${d} ${word}`;
+};
+
+export const withBetaSuffix = (desc) => addSuffix(desc, BETA_SUFFIX);
+export const withRetiredSuffix = (desc) => addSuffix(desc, RETIRED_SUFFIX);
+
+export const stripBetaSuffix = (desc) => String(desc || '').replace(BETA_RE, '').trim();
+export const stripRetiredSuffix = (desc) => String(desc || '').replace(RETIRED_RE, '').trim();
+
+// Every status marker off the end. Repeated so "1/2 EM BETA RETIRED" reduces
+// cleanly — a tool can only be in one state, so at most one marker is right.
+export function stripStatusSuffixes(desc) {
+  let out = String(desc || '').trim();
+  for (let i = 0; i < 3; i += 1) {
+    const next = stripRetiredSuffix(stripBetaSuffix(out));
+    if (next === out) break;
+    out = next;
+  }
+  return out;
 }
 
-export function stripBetaSuffix(desc) {
-  return String(desc || '').replace(BETA_RE, '').trim();
+// The description a tool of this status should carry: exactly its own marker,
+// and no other. Used by buildDesc (generated names) and by the status toggle.
+export function applyStatusSuffix(desc, status) {
+  const word = SUFFIX_BY_STATUS[status];
+  const bare = stripStatusSuffixes(desc);
+  return word ? addSuffix(bare, word) : bare;
 }
 
-// The description is stale w.r.t. the status when it says BETA and the tool
-// isn't beta any more. The opposite case (beta with no marker) is NOT flagged:
-// a hand-typed name is the user's, and the marker is only ever offered.
+// ⚠️ THE WRITE-TIME INVARIANT — retired only. A retired tool's description
+// carries RETIRED, and a tool that is NOT retired does not. Enforced on every
+// save (see splitToFusionInstances' callers) so the marker reaches Fusion by
+// itself, and so un-retiring takes it away again without anyone remembering to.
+// BETA is deliberately NOT enforced here: it is offered, and removing it is the
+// user's call (see the prompt in ToolForm).
+export function withRetiredMarker(tool) {
+  if (!tool || typeof tool.description !== 'string') return tool;
+  const want = isRetired(tool)
+    ? withRetiredSuffix(tool.description)
+    : stripRetiredSuffix(tool.description);
+  // Same reference when nothing changes — callers use identity to decide
+  // whether there is anything to persist (the syncPresetMaterialName rule).
+  return want === tool.description ? tool : { ...tool, description: want };
+}
+
+// The BETA marker outlived the status. The opposite case (beta with no marker)
+// is NOT flagged: a hand-typed name is the user's, and the marker is only ever
+// offered. Retired needs no equivalent — it is enforced, not prompted.
 export const betaSuffixStale = (tool) =>
   !isBeta(tool) && hasBetaSuffix(tool?.description);

@@ -17,6 +17,7 @@ import StatusBadge from './StatusBadge.jsx';
 import ToolLinkPicker from './ToolLinkPicker.jsx';
 import {
   TOOL_STATUSES, statusOf, betaSuffixStale, stripBetaSuffix, withBetaSuffix, hasBetaSuffix,
+  withRetiredSuffix, stripRetiredSuffix, stripStatusSuffixes,
 } from '../utils/toolStatus.js';
 import { buildDesc } from '../utils/toolNaming.js';
 import { useApp } from '../context/AppContext.jsx';
@@ -92,9 +93,29 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
   const setStatus = (next) => setData(d => {
     const patch = { ...d, tool_status: next };
     if (next !== 'retired') patch.replaced_by = null;
-    if (next === 'beta' && d.description && !hasBetaSuffix(d.description)
-        && d.description === buildDesc(toolToExtractor(d))) {
-      patch.description = withBetaSuffix(d.description);
+    // RETIRED is applied and removed outright — the write path enforces the same
+    // rule, so doing it here just means the form SHOWS what will be saved rather
+    // than the marker appearing out of nowhere on the next load. Explicitly
+    // granted exception to "descriptions are never silently renamed": Fusion has
+    // nowhere else to carry the status, and a programmer picking tools for a new
+    // job has to see it there.
+    const desc = next === 'retired'
+      ? withRetiredSuffix(d.description)
+      : stripRetiredSuffix(d.description);
+    if (desc !== d.description) patch.description = desc;
+    // BETA stays OFFERED, not enforced: it rides along with a description this
+    // form generated, and is never stripped on the app's say-so (the prompt
+    // below asks). Different rule, deliberately — see utils/toolStatus.js.
+    if (next === 'beta') {
+      const base = patch.description ?? d.description;
+      // ⚠️ Compare against the name with EVERY marker off both sides —
+      // toolToExtractor carries the tool's CURRENT status, so buildDesc would
+      // otherwise re-append the marker we are in the middle of changing and the
+      // "did this form generate it?" test would never be true.
+      const generated = stripStatusSuffixes(buildDesc(toolToExtractor(d)));
+      if (base && !hasBetaSuffix(base) && stripStatusSuffixes(base) === generated) {
+        patch.description = withBetaSuffix(base);
+      }
     }
     return patch;
   });

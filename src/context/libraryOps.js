@@ -17,6 +17,7 @@ import {
 import { normProShopId } from '../schema/insertFamilies.js';
 import { mergeToolConflicts } from '../utils/toolConflicts.js';
 import { composeToolId, nextSequential, isCounterMode } from '../utils/toolIdSystem.js';
+import { withRetiredMarker } from '../utils/toolStatus.js';
 import { isExcludedFrom } from '../utils/idSystems.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
 import { composePresetName, opTypeWord, parsePresetName, materialNameCode, materialCategory, findMaterialInLibrary, syncPresetMaterialName, findCamPresetById, HOLE_MAKING_TYPES } from '../utils/presetNaming.js';
@@ -151,7 +152,12 @@ export function createLibraryOps(ctx) {
       const libById = new Map((shopSettingsRef.current?.tool_libraries || []).map(l => [l.id, l]));
       // Auto-combine any same-ProShop-number duplicates before writing the full
       // library (covers bulk import, which routes through here).
-      const combinedTools = combineToolsByToolId(tools);
+      // Same write-time invariant as writeLogicalTool: a retired tool's
+      // description carries RETIRED, and one that isn't retired doesn't. This
+      // path (bulk import, normalize, renumber) writes Fusion too, so the
+      // marker has to be applied here as well or a tool retired by a ProShop
+      // import would never reach Fusion with it. See utils/toolStatus.js.
+      const combinedTools = combineToolsByToolId(tools).map(withRetiredMarker);
 
       // No-Fusion tools live ONLY in metadata — without Drive there is nowhere to
       // persist them. Fail loudly before any partial Fusion write instead of
