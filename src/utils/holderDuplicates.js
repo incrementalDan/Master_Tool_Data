@@ -76,7 +76,7 @@ function cmp(a, b) {
 // on any of these, they are different holders and the pair is dropped outright
 // — never offered as a merge. The rest (nominal length, has-extension) are
 // labels that can be wrong on one record of the same object.
-const DISQUALIFYING = new Set(['Taper', 'Type', 'Collet family', 'Collet', 'Ext collet']);
+const DISQUALIFYING = new Set(['Taper', 'Type', 'Collet family', 'Collet', 'Ext collet', 'Tap collet']);
 
 // Score a pair. Returns null when they clearly aren't the same holder.
 export function compareHolders(a, b, config, tol = HOLDER_GAUGE_TOL_IN) {
@@ -92,6 +92,16 @@ export function compareHolders(a, b, config, tol = HOLDER_GAUGE_TOL_IN) {
     { name: 'Type', v: cmp(a.type_id, b.type_id) },
     { name: 'Collet family', v: cmp(a.collet_family_id, b.collet_family_id) },
     { name: 'Collet', v: cmp(a.collet_size_id, b.collet_size_id) },
+    // ⚠️ A TAP-COLLET RECORD IS A DELIBERATE TWIN, NOT A DUPLICATE. The shop
+    // keeps a second record of the same body with a tap collet fitted: the
+    // geometry is identical and only the description differs, because the
+    // description is the ONLY thing that reaches the operator through Fusion
+    // and ProShop. It is the same kind of difference as the collet size — a
+    // fitted component — so it disqualifies for the same reason, and without
+    // it the pair scored as a perfect `duplicate` and was offered for merge
+    // on every visit, forever. Merging them would destroy one of two records
+    // the shop created on purpose.
+    { name: 'Tap collet', v: cmp(!!a.is_tap_collet, !!b.is_tap_collet) },
     { name: 'Length', v: cmp(a.length, b.length) },
     { name: 'Extension', v: cmp(!!a.has_extension, !!b.has_extension) },
     { name: 'Ext collet', v: cmp(a.extension?.collet_size_id, b.extension?.collet_size_id) },
@@ -112,7 +122,8 @@ export function compareHolders(a, b, config, tol = HOLDER_GAUGE_TOL_IN) {
   // A collet size is a BORE: an SK13 and an SK20 cannot be the same physical
   // holder however well the gauge length and the description line up. Same for
   // the collet family (SK vs ER), the holder type (collet holder vs drill
-  // chuck), the extension's collet, and the taper AFTER normalization —
+  // chuck), the extension's collet, whether a TAP collet is fitted, and the
+  // taper AFTER normalization —
   // taperBase already folds NBT30/BBT30 into BT30, so a surviving conflict is
   // BT30 vs BT40, a different spindle interface.
   //

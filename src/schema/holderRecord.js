@@ -186,8 +186,14 @@ export function archiveHolderRecord(record, reason = 'removed', mergedIntoId = n
 // archive exists to retire: tools still carrying the old guid would silently
 // re-attach to geometry the shop already decided was wrong. The retired ref and
 // guids are deliberately NOT inherited for the same reason.
-export function restoreArchivedHolder(record) {
-  if (!record) return null;
+// A record with a BRAND-NEW identity and nothing of the old one's links left.
+// ⚠️ Every id-shaped field has to go, not just the app's own: `fusion_guid` and
+// `legacy_fusion_guids` are what tools resolve a holder through, so carrying
+// either would silently point some tool at this new record, and `holder_ref`
+// left as-is would put one app ID on two Fusion holders — a pair the library
+// could never tell apart again. `last_pushed` is the shape Fusion agreed to for
+// the OTHER record, and `nominal_check` was a verdict about it.
+function freshHolderIdentity(record) {
   const now = new Date().toISOString();
   return {
     ...record,
@@ -204,6 +210,46 @@ export function restoreArchivedHolder(record) {
     nominal_check: null,      // the old confirmation described the old record
     created_at: now,
     updated_at: now,
+  };
+}
+
+export function restoreArchivedHolder(record) {
+  if (!record) return null;
+  return freshHolderIdentity(record);
+}
+
+// ─── Duplicate ──────────────────────────────────────────────────────────────
+// "Another one like this, a bit different" — the everyday case (a -120 becoming
+// a -150), and until now it meant copying the holder in FUSION, where the guid
+// it comes back with is unpredictable and the copy arrives wearing the
+// original's product-id (see isFusionSideCopy). Doing it here instead means the
+// copy has our ID from the start and pushes as a plain new holder.
+//
+// ⚠️ NO TOOL FOLLOWS THE COPY. A tool points at a holder through
+// `assembly.holder_id` / the baked Fusion guid, so a new record id + no guids
+// is exactly what makes the copy start with zero assemblies on it. That falls
+// out of freshHolderIdentity — it is not a separate step to remember.
+//
+// ⚠️ THE PHOTO AND ATTACHMENTS ARE DROPPED, not copied. They are Drive file
+// ids: sharing one between two live records means deleting it from either
+// breaks the other. Duplicating the FILES is a different feature.
+//
+// Everything else rides along on purpose — geometry, classification,
+// manufacturer, purchasing, location, notes. The point of a duplicate is to
+// start from this holder, and every one of those is editable on the new record.
+export function duplicateHolderRecord(record) {
+  if (!record) return null;
+  const copy = freshHolderIdentity(record);
+  return {
+    ...copy,
+    // A holder description is load-bearing — it goes verbatim into preset names
+    // and assembly numbers — so two holders must never share one. Marked manual
+    // so nothing rewrites it before the user does.
+    description: `${record.description || 'Holder'} (copy)`,
+    description_manual: true,
+    primary_photo_id: null,
+    primary_photo_name: null,
+    attachments: [],
   };
 }
 

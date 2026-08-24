@@ -24,7 +24,7 @@ import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_PARTS, DEFAULT_COMPONENTS, DEFAULT_PROGRAM_DETAILS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
 import { DEFAULT_VENDOR_REGISTRY, setActiveVendorRegistry, getActiveVendorRegistry, backfillPurchasingRegistryIds } from '../schema/vendorRegistry.js';
-import { fusionHolderToRecord, holderRecordToFusion, archiveHolderRecord, restoreArchivedHolder, isActiveHolder } from '../schema/holderRecord.js';
+import { fusionHolderToRecord, holderRecordToFusion, archiveHolderRecord, restoreArchivedHolder, duplicateHolderRecord, isActiveHolder } from '../schema/holderRecord.js';
 import { setDefaultUnit } from '../utils/units.js';
 import { getDemoData, isDemoRequested } from '../demo/index.js';
 import {
@@ -591,6 +591,19 @@ export function AppProvider({ children }) {
     const src = (file.holders || []).find(h => h.id === id);
     if (!src) return Promise.reject(new Error('That holder is not in the archive'));
     const copy = restoreArchivedHolder(src);
+    return saveHolderLibrary({ ...file, holders: [...(file.holders || []), copy] })
+      .then(() => copy);
+  }, [saveHolderLibrary]);
+
+  // ⚠️ TAKES THE RECORD, NOT AN ID. The holder page autosaves a DRAFT, so the
+  // copy has to be made from what is on screen — looking the source up by id
+  // here would duplicate the version before the last few seconds of typing.
+  // Nothing is written to Fusion: the copy has our new ref and no Fusion link,
+  // so the ordinary Push creates it as a new holder.
+  const duplicateHolder = useCallback((record) => {
+    const file = holderLibraryRef.current || DEFAULT_HOLDER_LIBRARY;
+    const copy = duplicateHolderRecord(record);
+    if (!copy) return Promise.reject(new Error('Nothing to duplicate'));
     return saveHolderLibrary({ ...file, holders: [...(file.holders || []), copy] })
       .then(() => copy);
   }, [saveHolderLibrary]);
@@ -1582,6 +1595,7 @@ export function AppProvider({ children }) {
       deleteHolderPart,
       deleteHolderRecord,
       restoreHolderRecord,
+      duplicateHolder,
       relinkHolders,
       importHoldersFromFusion,
       pushHoldersToFusion,

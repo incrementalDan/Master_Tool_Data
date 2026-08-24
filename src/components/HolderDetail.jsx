@@ -4,7 +4,7 @@
 // the comments call out the ones that were deliberate.
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, Check, Plus, X, RotateCcw, Trash2, AlertTriangle, RefreshCw, Undo2, History, Pencil } from 'lucide-react';
+import { ArrowLeft, Check, Plus, X, RotateCcw, Trash2, AlertTriangle, RefreshCw, Undo2, History, Pencil, Copy } from 'lucide-react';
 import HolderPill from './HolderPill.jsx';
 import ProfileView from './ProfileView.jsx';
 import {
@@ -409,7 +409,7 @@ const sig = (o) => JSON.stringify(o, (_k, v) => (
 export default function HolderDetail({
   holder, config, usage = 0, allLocations = [], readOnly, updatedBy = '', siblings = [],
   holderFile, onSavePart, onMergeWith, onRestamp, restampPreview, staleCount = 0,
-  fusionConflict = null, onResolveFusion,
+  fusionConflict = null, onResolveFusion, onDuplicate,
   onBack, onSave, onDelete, onAddOption, onViewTools,
 }) {
   const [h, setH] = useState(holder);
@@ -653,6 +653,18 @@ export default function HolderDetail({
         >
           used by {usage} tool{usage === 1 ? '' : 's'}{usage > 0 ? ' →' : ''}
         </button>
+        {/* ⚠️ COPIES THE DRAFT, NOT THE SAVED RECORD. The page autosaves, so
+            `h` is what is on screen and the stored copy can be a few seconds
+            behind — duplicating the latter silently drops the last thing typed.
+            Doing this here rather than in Fusion is the whole point: a Fusion
+            copy comes back with an unpredictable guid AND wearing the
+            original's product-id, which lands as a `fusion-copy` flag. */}
+        {!readOnly && !h.archived && onDuplicate && (
+          <button className="btn btn-ghost btn-sm" onClick={() => onDuplicate(h)}
+            title="Create another holder from this one — same geometry and specs, its own ID, no tools on it. Push to Fusion adds it there.">
+            <Copy size={14} /> Duplicate
+          </button>
+        )}
         {/* ⚠️ Autosave means every edit is already written, so Undo is the only
             way back from a slip — a deleted segment row above all, since the
             geometry is what every tool takes its holder from. Session-only. */}

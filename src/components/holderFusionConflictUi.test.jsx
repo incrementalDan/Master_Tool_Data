@@ -136,4 +136,13 @@ describe('editing the segment structure', () => {
     expect(detail({ holder: { ...record, archived: true }, readOnly: true }))
       .not.toContain('Edit segments');
   });
+
+  it('offers Duplicate on a live holder but not an archived one', () => {
+    // ⚠️ Match the button's own title, not the word "Duplicate" — the
+    // "Duplicates & cleanup" section heading contains it on every render.
+    const btn = 'its own ID, no tools on it';
+    expect(detail({ onDuplicate: vi.fn() })).toContain(btn);
+    expect(detail({ holder: { ...record, archived: true }, readOnly: true, onDuplicate: vi.fn() }))
+      .not.toContain(btn);
+  });
 });

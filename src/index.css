@@ -5260,14 +5260,17 @@ input.sf-ref-num { text-align: right; }
   position: absolute; left: 12px; transform: translate(-50%, -50%);
   z-index: 4; display: flex; align-items: center; justify-content: center;
   width: 15px; height: 15px; padding: 0; border-radius: 50%; cursor: pointer;
-  border: 1px solid color-mix(in srgb, var(--blue) 55%, transparent);
-  background: var(--surface); color: var(--blue);
-  opacity: .6; transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+  /* Green, not the app's blue: this is the one control on the page that ADDS
+     something, and it sits a few pixels from a red delete. Colour is what tells
+     them apart at 15px, where the glyphs barely can. */
+  border: 1px solid var(--green);
+  background: var(--surface); color: var(--green);
+  opacity: .85; transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
 }
 .holder-seg-ins[data-edge="top"] { top: 0; }
 .holder-seg-ins[data-edge="bottom"] { top: 100%; }
 .holder-seg-ins:hover {
-  opacity: 1; background: var(--blue); color: #fff; border-color: var(--blue);
+  opacity: 1; background: var(--green); color: #fff; border-color: var(--green);
   transform: translate(-50%, -50%) scale(1.15);
 }
 /* The delete column keeps its width whether or not editing is on — removing
