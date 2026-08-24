@@ -63,7 +63,7 @@ vi.mock('../context/AppContext.jsx', () => ({
 
 const { default: HoldersPage } = await import('./HoldersPage.jsx');
 const { default: HolderDetail } = await import('./HolderDetail.jsx');
-const { fusionHolderConflicts } = await import('../schema/holderIdentity.js');
+const { fusionHolderConflicts, adoptFusionHolderGeometry, keepAppHolderGeometry } = await import('../schema/holderIdentity.js');
 
 const render = (ui) => renderToString(<MemoryRouter>{ui}</MemoryRouter>)
   .replace(/<!--[^>]*-->/g, '')
@@ -106,6 +106,14 @@ describe('a holder edited in Fusion is visible again', () => {
       />,
     );
     expect(html).not.toContain("Use Fusion's geometry");
+  });
+
+  it('reports only what happened — a no-op resolution never toasts', () => {
+    // Both resolvers return the SAME reference when there is nothing to do, and
+    // the button only calls onResolveFusion when the draft actually changed.
+    const already = adoptFusionHolderGeometry(record, fusionEntry);
+    expect(adoptFusionHolderGeometry(already, fusionEntry)).toBe(already);
+    expect(keepAppHolderGeometry(already, fusionEntry)).toBe(already);
   });
 
   it('says nothing when the two libraries agree', () => {

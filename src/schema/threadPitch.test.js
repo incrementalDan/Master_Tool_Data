@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { threadPitchValue, resolveThreadPitch } from './threads.js';
 import { mergeFusionAndMetadata } from './metadataModel.js';
 import { extractorToTool } from './extractorConvert.js';
+import { buildMetadataTool, detectFusionDrift } from './metadataModel.js';
 
 describe('threadPitchValue', () => {
   it('reads inch TPI from the designation', () => {
@@ -95,5 +96,35 @@ describe('a tap that never passed through the form still gets a pitch', () => {
   it('extractorToTool stamps it, so a scanned tap has it on its first save', () => {
     const t = extractorToTool({ toolType: 'tap', unit: 'inches', pitch: '1/4-20 UNC', diameter: '0.25' });
     expect(t.thread_pitch).toBeCloseTo(0.05, 8);
+  });
+});
+
+describe('the derived pitch never reads as a Fusion-side edit', () => {
+  // ⚠️ Found in the sweep. thread_pitch was in DRIFT_FIELDS, so once a
+  // metadata-only write stored the derived value (the record backfill, a
+  // location import, a preset relink) while Fusion still had no geometry.TP,
+  // EVERY tap reported "Fusion changed this" — and it could not be cleared:
+  // "Keep Fusion" adopts the empty value and the next load derives it back.
+  const fusionInternal = {
+    id: 'guid-1', tracking_id: 'FTL-000001', tool_type: 'tap', unit: 'inches',
+    description: '#4-40 CUT TAP', diameter: 0.112, thread_pitch: null, presets: [],
+  };
+
+  it('does not raise drift when only the app has derived it', () => {
+    const merged = mergeFusionAndMetadata(fusionInternal, { id: 'FTL-000001', pitch: '#4-40 UNC' });
+    const stored = buildMetadataTool({ ...merged, tracking_id: 'FTL-000001' });
+    expect(stored.thread_pitch).toBeCloseTo(0.025, 8);
+    expect(detectFusionDrift([fusionInternal], stored)
+      .filter(d => d.field === 'thread_pitch')).toHaveLength(0);
+  });
+
+  it('still reports a real Fusion-side edit of a field that ISN\'T derived', () => {
+    const stored = buildMetadataTool({
+      ...mergeFusionAndMetadata(fusionInternal, { id: 'FTL-000001', pitch: '#4-40 UNC' }),
+      tracking_id: 'FTL-000001',
+    });
+    const edited = { ...fusionInternal, flute_length: 0.9 };
+    expect(detectFusionDrift([edited], { ...stored, flute_length: 0.688 })
+      .filter(d => d.field === 'flute_length')).toHaveLength(1);
   });
 });

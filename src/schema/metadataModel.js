@@ -13,9 +13,23 @@ import { resolveThreadPitch } from './threads.js';
 // linked tool's live Fusion value differs from the app's stored copy, someone
 // edited the tool directly in Fusion 360 (or the app, in app-authority mode) —
 // that difference is surfaced for confirmation, never silently overwritten.
+//
+// ⚠️ A DERIVED FIELD DOES NOT BELONG HERE — `thread_pitch` is deliberately out.
+// Drift means "someone edited this in Fusion", and you cannot meaningfully edit
+// a value the app recomputes from the thread designation on every load. The
+// difference it produced was the derivation not having reached Fusion YET: any
+// metadata-only write (the record backfill, a location import, a preset relink)
+// stores the derived pitch while Fusion still has no geometry.TP, so every tap
+// in the library then reported that Fusion had changed it. And it could not be
+// cleared — "Keep Fusion" adopts the empty value, the next load derives it
+// straight back, and the banner returns. Same shape as the cobalt/hss case in
+// driftEqual below: a difference the user has no way to resolve is a nag loop,
+// not a warning. Fusion still WINS on read for a tool whose designation derives
+// nothing (mergeFusionAndMetadata's `fusionInternal ?? meta`), which is the only
+// case where a Fusion-side pitch is real information.
 export const DRIFT_FIELDS = [
   'tool_type', 'description', 'unit', 'diameter', 'flute_length', 'overall_length',
-  'number_of_flutes', 'shank_diameter', 'corner_radius', 'taper_angle', 'thread_pitch',
+  'number_of_flutes', 'shank_diameter', 'corner_radius', 'taper_angle',
   'material', 'tip_angle', 'tip_diameter', 'shoulder_length', 'cutting_direction',
 ];
 

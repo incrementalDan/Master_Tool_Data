@@ -484,8 +484,31 @@ export default function HolderDetail({
     gauge: `${trimHolderLen(deriveGaugeLength(segments), unit)} ${unitAbbr(unit)}`,
   });
   const appShape = shapeOf(h.segments, h.unit);
+  // ⚠️ THE BANNER MUST GO THE MOMENT IT IS ANSWERED. `fusionConflict` is
+  // computed by the parent from the STORED record, and the resolution only
+  // touches this page's draft — so between the click and the autosave landing
+  // (up to ~1.5s) the banner would still be sitting there with both buttons
+  // live, reading as if nothing had happened. Keyed by the entry so a genuinely
+  // new disagreement on the same holder still shows.
+  const [resolvedEntry, setResolvedEntry] = useState(null);
+  const conflict = (fusionConflict && fusionConflict.entry !== resolvedEntry)
+    ? fusionConflict : null;
+  // ⚠️ Only reports what actually happened. Both resolvers return the SAME
+  // reference when there is nothing to do, so a second click on a stale banner
+  // used to toast "Took Fusion's geometry" over a no-op.
+  const resolveFusion = (choice) => {
+    const entry = conflict?.entry;
+    if (!entry) return;
+    const next = choice === 'fusion'
+      ? adoptFusionHolderGeometry(hRef.current, entry)
+      : keepAppHolderGeometry(hRef.current, entry);
+    setResolvedEntry(entry);
+    if (next === hRef.current) return;
+    apply(next);
+    onResolveFusion?.(choice);
+  };
   const fusionShape = useMemo(() => {
-    const e = fusionConflict?.entry;
+    const e = fusionConflict?.entry;   // the raw prop: only read for its shape
     return e ? shapeOf(fusionHolderSegments(e), normalizeUnit(e.unit) || h.unit) : { count: 0, gauge: '—' };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fusionConflict, h.unit]);
@@ -753,16 +776,16 @@ export default function HolderDetail({
           seen Fusion's shape, which is what makes the next push overwrite it
           instead of skipping it again. Applied through `apply`, so accepting a
           shape is as undoable as any other segment edit. */}
-      {fusionConflict && !readOnly && (
+      {conflict && !readOnly && (
         <div className="holder-conflict-banner">
           <AlertTriangle size={15} />
           <div className="holder-conflict-body">
             <strong>
-              {fusionConflict.direction === 'fusion'
+              {conflict.direction === 'fusion'
                 ? 'This holder was edited in Fusion.'
                 : 'Fusion has a different shape for this holder.'}
             </strong>{' '}
-            {fusionConflict.direction === 'fusion'
+            {conflict.direction === 'fusion'
               ? 'Fusion is no longer holding the geometry this app last gave it.'
               /* ⚠️ Never blame Fusion for what may be the user's own edit. With
                  no record of what Fusion was last given, which side moved is
@@ -782,10 +805,10 @@ export default function HolderDetail({
             </div>
             {/* The description is app-owned and is deliberately NOT adopted —
                 say so, or a Fusion-side rename looks like it was ignored. */}
-            {fusionConflict.entry?.description
-              && norm(fusionConflict.entry.description) !== norm(h.description) && (
+            {conflict.entry?.description
+              && norm(conflict.entry.description) !== norm(h.description) && (
               <div className="holder-conflict-note">
-                Fusion also calls it “{fusionConflict.entry.description}”. Only the geometry is
+                Fusion also calls it “{conflict.entry.description}”. Only the geometry is
                 taken — the name here stays, and the next push writes it to Fusion.
               </div>
             )}
@@ -794,12 +817,12 @@ export default function HolderDetail({
             <button
               className="btn btn-primary btn-sm"
               title="Replace this record's segments with Fusion's — undoable, and its tools can then be re-stamped"
-              onClick={() => { apply(p => adoptFusionHolderGeometry(p, fusionConflict.entry)); onResolveFusion?.('fusion'); }}
+              onClick={() => resolveFusion('fusion')}
             >Use Fusion’s geometry</button>
             <button
               className="btn btn-secondary btn-sm"
               title="Keep this record's segments — the next Push to Fusion overwrites Fusion's copy"
-              onClick={() => { apply(p => keepAppHolderGeometry(p, fusionConflict.entry)); onResolveFusion?.('app'); }}
+              onClick={() => resolveFusion('app')}
             >Keep mine</button>
           </div>
         </div>
