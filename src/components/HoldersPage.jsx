@@ -3,7 +3,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy, Upload, Link2, Info, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Download, Wand2, X, ArrowLeft, Boxes, Copy, Upload, Link2, Info, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import HolderPill from './HolderPill.jsx';
 import HolderDetail from './HolderDetail.jsx';
@@ -16,7 +16,9 @@ import { healHolderDescription, applyHealToRecord } from '../utils/holderDescrip
 import { recordsWithBodyDivergence } from '../utils/holderBody.js';
 import { proposeHolderParts, applyPartProposals, holdersWithPartDrift, holderPartsOf } from '../utils/holderParts.js';
 import { findHolderDuplicates, holdersInDuplicates, applyHolderMerge, compareHolders, holderGuidsOf, toolsFollowingMerge } from '../utils/holderDuplicates.js';
-import { auditFusionHolders, holdersOutOfSync } from '../schema/holderIdentity.js';
+import {
+  auditFusionHolders, holdersOutOfSync, fusionHolderConflicts, fusionConflictFor,
+} from '../schema/holderIdentity.js';
 import { assemblyCountUsingHolder, assemblyUsesHolder, staleHolderTools } from '../schema/holderResolve.js';
 import HolderMergeModal from './HolderMergeModal.jsx';
 import RetireHolderModal from './RetireHolderModal.jsx';
@@ -259,7 +261,7 @@ function HolderList({
   holders, config, usageOf, onOpen, onNew, onHeal, onImport, onLinkParts, onDuplicates, onPush, unlinked, canPush,
   onLinkTools, unlinkedTools, showWorkflow, onShowWorkflow, onDismissWorkflow,
   importable, googleAuthenticated, driftIds, partCount, duplicateIds,
-  archived, onRestore, staleTools, staleByHolder = [],
+  archived, onRestore, staleTools, staleByHolder = [], fusionConflicts = [],
 }) {
   // Archived holders are hidden by default and live below the list — they are a
   // reference, not part of the library.
@@ -510,6 +512,36 @@ function HolderList({
                 <button key={holder.id} className="holder-stale-chip" onClick={() => onOpen(holder)}>
                   {holder.description || holder.holder_ref}
                   <span className="holder-stale-chip-n">{count}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚠️ A HOLDER EDITED IN FUSION USED TO BE SILENT. The push skips these,
+          so `unlinked` (which counts what a push would fix) stays at 0 and the
+          page looked settled while the two libraries held different geometry.
+          It is a separate banner from the two above because it is a different
+          kind of job: not "press the button", but "decide which one is right". */}
+      {fusionConflicts.length > 0 && (
+        <div className="holder-sync-banner holder-conflict-banner">
+          <AlertTriangle size={15} />
+          <div>
+            <b>
+              {fusionConflicts.length} holder{fusionConflicts.length === 1 ? '' : 's'}
+              {fusionConflicts.length === 1 ? ' has' : ' have'} a different shape in Fusion.
+            </b>
+            <div>
+              Fusion is carrying this app’s ID on a holder whose segments don’t match the record
+              here, so neither side can be applied automatically — one of them was edited and
+              only you know which is right. Open it below to compare and choose; a push won’t
+              touch it until you do.
+            </div>
+            <div className="holder-stale-list">
+              {fusionConflicts.map(c => (
+                <button key={c.record.id} className="holder-stale-chip" onClick={() => onOpen(c.record)}>
+                  {c.record.description || c.record.holder_ref}
                 </button>
               ))}
             </div>
@@ -982,6 +1014,33 @@ export default function HoldersPage() {
       ? staleHolderTools(tools, { records, fusionHolders: fusionHolders || [], record: open }).length
       : 0),
     [tools, records, fusionHolders, open]);
+  // ─── Holders Fusion and the app disagree about ───────────────────────────
+  // ⚠️ NOT the same question as `unlinked` above, and it must not be folded
+  // into it. That number counts what a PUSH would settle; these are entries the
+  // push deliberately REFUSES to write, because our ID is on a Fusion holder
+  // whose shape has changed and only a person can say which shape is right.
+  // They were invisible: not in the badge, not on the holder's own page, and
+  // the push dialog's only advice was "sort them out on the holder page first"
+  // — which had nothing to sort them out with. This is that missing worklist.
+  const fusionConflicts = useMemo(
+    () => fusionHolderConflicts(fusionHolders || [], allRecords),
+    [fusionHolders, allRecords]);
+  const openConflict = useMemo(
+    () => fusionConflictFor(fusionConflicts, open), [fusionConflicts, open]);
+
+  // ⚠️ THE EDIT ITSELF BELONGS TO THE OPEN HOLDER'S DRAFT, NOT TO THIS RECORD.
+  // HolderDetail keeps a local draft and autosaves it, so resolving from `open`
+  // here would write a record that predates whatever the user has typed in the
+  // last second and silently discard it. HolderDetail applies the change
+  // through its own `apply()` — which also makes accepting a Fusion shape
+  // UNDOABLE, exactly like any other segment edit. This is only the message.
+  const onResolveFusion = (choice) => {
+    notify(choice === 'fusion'
+      ? 'Took Fusion’s geometry for this holder — its tools may now need a Re-stamp'
+      : 'Kept this holder’s geometry — Push to Fusion will now overwrite Fusion’s copy',
+    'success');
+  };
+
   // Nowhere to push to unless a Fusion holder library is actually linked (demo
   // has holders but no registry entry) — better a disabled button that says why
   // than one that opens and immediately errors.
@@ -1084,6 +1143,8 @@ export default function HoldersPage() {
           onMergeWith={(other) => setMerging({ a: open, b: other, match: compareHolders(open, other, config) })}
           restampPreview={restampPreview}
           staleCount={openStaleCount}
+          fusionConflict={openConflict}
+          onResolveFusion={onResolveFusion}
           onRestamp={onRestamp}
           allLocations={allLocations}
           // An archived holder is a reference: editing one would be writing to
@@ -1129,6 +1190,7 @@ export default function HoldersPage() {
           driftIds={driftIds} partCount={parts.length} duplicateIds={duplicateIds}
           archived={archived} onRestore={onRestore}
           staleTools={staleTools} staleByHolder={staleByHolder}
+          fusionConflicts={fusionConflicts}
         />
         </>
       )}

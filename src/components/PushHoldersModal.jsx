@@ -175,9 +175,16 @@ export default function PushHoldersModal({ preview, onCommit, onClose }) {
               </div>
               {/* Not written, deliberately. The app's ID and the segments
                   disagree, so which record this entry is, is a person's call. */}
+              {/* ⚠️ "ref only" is not the same problem as the rest, and the
+                  blanket wording sent the user looking for something to fix on
+                  a page that had nothing to offer. There it IS known which
+                  holder this is — only which SHAPE is right is unknown, and
+                  that holder's own page now asks. */}
               <p className="modal-sub" style={{ margin: '0 0 8px' }}>
-                The ID and the shape disagree on these, so the app can’t tell which holder each
-                one is. Nothing is written to them — sort them out on the holder page first.
+                Nothing is written to these. A <b>ref only</b> row is a holder edited on one side
+                or the other — open it from the Holders list and choose whose geometry wins.
+                The rest are cases where the ID and the shape point at different records, so
+                the app can’t tell which holder the Fusion entry even is.
               </p>
               {flagged.map((f, i) => (
                 <div key={i} className="holder-import-flag">

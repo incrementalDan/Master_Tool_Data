@@ -235,16 +235,28 @@ export const vendorLooksLikeManufacturer = (v) =>
 // the healer's job, and the healer is a preview→commit action the user
 // accepts — never a silent rewrite (holder descriptions are load-bearing; see
 // holderDescription.js).
-export function fusionHolderToRecord(fusionHolder, extra = {}) {
+// A Fusion entry's segments in the RECORD's shape. ⚠️ `above_gauge` is app-only
+// and is not a field on the Fusion side at all — it is DERIVED from the gauge
+// expression (readAboveGaugeFlags), so copying the raw segments across loses
+// which of them sit inside the spindle and the gauge length then comes out
+// wrong. Exported because the import is no longer the only thing that reads a
+// Fusion entry's geometry into a record — accepting a Fusion-side edit does too
+// (see adoptFusionHolderGeometry), and the two must not drift.
+export function fusionHolderSegments(fusionHolder) {
   const f = fusionHolder || {};
-  const unit = normalizeUnit(f.unit);
   const aboveFlags = readAboveGaugeFlags(f);
-  const segments = (Array.isArray(f.segments) ? f.segments : []).map((s, i) => ({
+  return (Array.isArray(f.segments) ? f.segments : []).map((s, i) => ({
     [SEG_HEIGHT]: Number(s?.[SEG_HEIGHT]) || 0,
     [SEG_UPPER]: Number(s?.[SEG_UPPER]) || 0,
     [SEG_LOWER]: Number(s?.[SEG_LOWER]) || 0,
     above_gauge: !!aboveFlags[i],
   }));
+}
+
+export function fusionHolderToRecord(fusionHolder, extra = {}) {
+  const f = fusionHolder || {};
+  const unit = normalizeUnit(f.unit);
+  const segments = fusionHolderSegments(f);
 
   const pid = triageProductId(f['product-id']);
   const vendor = String(f.vendor ?? '').trim();

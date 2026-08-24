@@ -29,9 +29,9 @@
 // holderDuplicates.js). That runs once, to get the data under control. THIS
 // runs forever after, to keep it there, and is deliberately strict.
 
-import { convertLength } from '../utils/units.js';
+import { convertLength, normalizeUnit } from '../utils/units.js';
 import { segHeight, segUpper, segLower } from '../utils/holderGeometry.js';
-import { HOLDER_REF_RE } from './holderRecord.js';
+import { HOLDER_REF_RE, fusionHolderSegments } from './holderRecord.js';
 
 // Rounding only. Segment values cross unit conversions and JSON round-trips;
 // this absorbs that and NOTHING else. A real edit to a holder is orders of
@@ -90,10 +90,14 @@ export function matchesLastPush(entry, record, tolIn = SEGMENT_MATCH_TOL_IN) {
   return segmentsMatch(entry?.segments, entry?.unit, lp.segments, lp.unit, tolIn);
 }
 
-// The snapshot stamped onto a record once its write lands.
-export const lastPushedFrom = (record) => ({
-  segments: (record?.segments || []).map(s => ({ ...s })),
-  unit: record?.unit,
+// The snapshot of the shape the app and Fusion last AGREED on. A push is the
+// usual way that agreement is established (hence the name), but not the only
+// one — accepting or overruling a Fusion-side edit settles it too, and both
+// stamp this from the Fusion ENTRY. Takes anything carrying { segments, unit },
+// so a record and a Fusion entry are both valid arguments.
+export const lastPushedFrom = (shape) => ({
+  segments: (shape?.segments || []).map(s => ({ ...s })),
+  unit: shape?.unit,
   at: new Date().toISOString(),
 });
 
@@ -640,4 +644,94 @@ export function holdersOutOfSync(fusionEntries, records, toFusion, tolIn = SEGME
   // thing Fusion does not yet agree with.
   return plan.creates.length + plan.deletes.length
     + plan.updates.filter(u => u.stale).length;
+}
+
+// ─── Accepting a Fusion-side edit (the missing half of the link) ─────────────
+//
+// ⚠️ THE DEAD END THIS CLOSES. `ref-only` is BOTH directions of the same
+// disagreement: our ID is on a Fusion entry whose shape differs. When Fusion is
+// still holding what we last gave it, the app moved and the push writes it
+// (that branch is in holderPushPlan). Every other ref-only case was flagged
+// "it was edited in Fusion", refused a write, and offered NOTHING — the push
+// dialog said "sort them out on the holder page first" and the holder page had
+// no way to sort anything out. So a holder edited in Fusion could never come
+// back, the two libraries stayed permanently different, and because
+// holdersOutOfSync counts only what a PUSH would fix, nothing on screen said so.
+//
+// There are exactly two resolutions, and both are the user's call:
+//   · adoptFusionHolderGeometry — Fusion is right, take its shape.
+//   · keepAppHolderGeometry     — we are right, overrule it and push ours.
+// Both are plain record edits (metadata-only): nothing is written to Fusion
+// here, and adopting needs no Fusion write at all because the two then agree.
+
+// The divergences a person can actually resolve. Deliberately NARROW: only
+// `ref-only`, which is the one status where both sides claim to be the same
+// holder and the only question is which shape is right. `conflict` (the ID says
+// one record, the shape says another), `ambiguous`, `geometry-only` and
+// `fusion-copy` each have more than two possible answers and stay flagged —
+// guessing between them is how a tool ends up on the wrong holder.
+//
+// Derived from holderPushPlan's own flagged bucket rather than re-deriving the
+// rules, so what this offers to resolve is exactly what the push refuses to
+// write. `fusion-copy` is re-labelled by the plan, so it drops out by itself.
+export function fusionHolderConflicts(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL_IN) {
+  const { flagged } = holderPushPlan(fusionEntries, records, tolIn, null);
+  return flagged
+    .filter(f => f.status === 'ref-only' && f.refRecord)
+    .map(f => ({
+      record: f.refRecord,
+      entry: f.entry,
+      // Which side moved, when it can be known. `last_pushed` is the only thing
+      // that can say: Fusion differs from the shape we handed it, so Fusion
+      // moved. Without it (a record that predates the field, or was never
+      // pushed) the honest answer is that we cannot tell — and the UI must say
+      // that rather than blame Fusion for what may be the user's own edit.
+      direction: f.refRecord.last_pushed?.segments?.length ? 'fusion' : 'unknown',
+      reason: f.reason,
+    }));
+}
+
+// The one open holder's conflict, or null.
+export const fusionConflictFor = (conflicts, record) =>
+  (conflicts || []).find(c => c.record?.id === record?.id) || null;
+
+// FUSION IS RIGHT — take its geometry into the record.
+// ⚠️ Geometry ONLY. The app owns the description, classification, vendor and
+// everything else about a holder (the shop rule is "edit here, not in Fusion"),
+// so adopting a shape must not quietly drag a Fusion-side rename in with it.
+// The segments go through fusionHolderSegments, the same conversion the import
+// uses, because `above_gauge` is derived from the gauge expression and is not a
+// field on the Fusion side — copying the raw segments would lose which of them
+// sit inside the spindle and the gauge length would come out wrong.
+// Returns the SAME reference when the shapes already agree (callers use
+// identity to decide whether there is anything to persist).
+export function adoptFusionHolderGeometry(record, entry) {
+  if (!record || !entry) return record;
+  const segments = fusionHolderSegments(entry);
+  if (!segments.length) return record;
+  const unit = normalizeUnit(entry.unit) || record.unit;
+  if (segmentsMatch(record.segments, record.unit, segments, unit)) return record;
+  return {
+    ...record,
+    segments,
+    unit,
+    // The two now agree, so this IS the acknowledged shape — which is what
+    // stops the push from immediately offering to write our old geometry back.
+    last_pushed: lastPushedFrom({ segments, unit }),
+    // A hint only, never an identity (Fusion re-issues these) — but keeping it
+    // fresh costs nothing and it is the last-resort fallback for a tool whose
+    // baked holder has no usable geometry.
+    fusion_guid: entry.guid || record.fusion_guid || null,
+  };
+}
+
+// WE ARE RIGHT — keep the record's geometry and let the next push overwrite
+// Fusion's edit. Nothing about the holder changes: the ONLY thing written is
+// the acknowledgement that Fusion currently holds that other shape, which is
+// precisely what holderPushPlan's ref-only branch tests before it will write.
+// Without it the entry stays flagged forever and the push keeps skipping it.
+export function keepAppHolderGeometry(record, entry) {
+  if (!record || !entry) return record;
+  if (matchesLastPush(entry, record)) return record;   // already acknowledged
+  return { ...record, last_pushed: lastPushedFrom(entry) };
 }
