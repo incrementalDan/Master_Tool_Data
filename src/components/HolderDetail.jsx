@@ -4,7 +4,7 @@
 // the comments call out the ones that were deliberate.
 
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { ArrowLeft, Check, Plus, X, RotateCcw, Trash2, AlertTriangle, RefreshCw, Undo2, History } from 'lucide-react';
+import { ArrowLeft, Check, Plus, X, RotateCcw, Trash2, AlertTriangle, RefreshCw, Undo2, History, Pencil } from 'lucide-react';
 import HolderPill from './HolderPill.jsx';
 import ProfileView from './ProfileView.jsx';
 import {
@@ -14,6 +14,7 @@ import {
   deriveGaugeLength, deriveExtensionOoh, deriveExtensionShankDia, extensionFlagMismatch,
   convertHolderUnits, formatHolderLen, trimHolderLen, holderLenIn, holderLenMm,
   nominalLengthCheck, confirmHolderNominal, newSegment, displaySegments, realSegmentIndex,
+  insertSegmentAt,
   SEG_HEIGHT, SEG_UPPER, SEG_LOWER, segHeight,
 } from '../utils/holderGeometry.js';
 import { composeHolderDescription, HOLDER_DESC_LIMIT } from '../utils/holderDescription.js';
@@ -123,8 +124,14 @@ function OptionSelect({ config, list, value, onChange, onAddOption, placeholder 
 //
 // New rows are added at the TIP (visually the bottom row) — that's where an
 // extension actually attaches — which makes "add" a prepend, not an append.
-function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setActiveSeg }) {
+function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setActiveSeg, readOnly }) {
   const n = segments.length;
+  // ⚠️ STRUCTURE EDITING IS OFF BY DEFAULT, AND THAT IS THE POINT. Typing a
+  // dimension is the everyday job; adding and deleting rows is occasional and
+  // one stray click on a delete X rewrites the geometry every tool takes its
+  // holder from. Behind a toggle, the row affordances are only live when the
+  // user has said that is what they are doing.
+  const [editing, setEditing] = useState(false);
   const [focusedCell, setFocusedCell] = useState(null);
   const [hoverSeg, setHoverSeg] = useState(null);
   const [selAnchor, setSelAnchor] = useState(null);
@@ -148,7 +155,20 @@ function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setAc
   };
   // Both of these change the row COUNT, so any live selection's indices would
   // point at the wrong rows afterwards — clear rather than let it go stale.
-  const addRow = () => { onChange([newSegment(), ...segments]); clearSelection(); setActiveSeg(null); };
+  //
+  // ⚠️ INSERT ANYWHERE, NOT JUST AT THE TIP. Adding was a prepend, so the only
+  // way to get a segment at the SPINDLE end — the retention-knob step that
+  // brings the gauge up to the engraved nominal — was to go and do it in
+  // Fusion, which is exactly the round trip the app is meant to remove.
+  //
+  // The visual→stored mapping is in insertSegmentAt (holderGeometry.js), where
+  // it is test-locked — the display is the stored array reversed, so getting it
+  // wrong puts the segment on the wrong end of the holder.
+  const insertAt = (vi) => {
+    onChange(insertSegmentAt(segments, vi, newSegment()));
+    clearSelection();
+    setActiveSeg(null);
+  };
   const delRow = (vi) => { onChange(segments.filter((_, k) => k !== ri(vi))); clearSelection(); setActiveSeg(null); };
 
   // Cells show the rounded value at rest but the raw stored number while that
@@ -190,7 +210,7 @@ function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setAc
         />
         <div className="holder-geo-tablecol">
           <div className="holder-seg-scroll">
-            <table className="holder-seg-table">
+            <table className={`holder-seg-table${editing ? ' editing' : ''}`}>
               <thead>
                 <tr>
                   <th className="num">#</th>
@@ -224,7 +244,30 @@ function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setAc
                         className="holder-seg-num"
                         onClick={e => onRowNumberClick(vi, e.shiftKey)}
                         title="Click to clear · shift-click to select a range and see the total"
-                      >{vi + 1}</td>
+                      >
+                        {vi + 1}
+                        {/* ⚠️ ABSOLUTELY POSITIONED, ON THE ROW BORDER. An
+                            insert row of its own would push the table taller
+                            the moment edit mode is switched on — every row
+                            jumping to make room for buttons nobody has pressed.
+                            Out of flow, the table does not move at all.
+                            stopPropagation because the cell underneath is the
+                            range-select handle. */}
+                        {editing && (
+                          <button
+                            type="button" className="holder-seg-ins" data-edge="top"
+                            title={`Insert a segment above row ${vi + 1}`}
+                            onClick={e => { e.stopPropagation(); insertAt(vi); }}
+                          ><Plus size={11} /></button>
+                        )}
+                        {editing && vi === display.length - 1 && (
+                          <button
+                            type="button" className="holder-seg-ins" data-edge="bottom"
+                            title="Insert a segment at the tip"
+                            onClick={e => { e.stopPropagation(); insertAt(vi + 1); }}
+                          ><Plus size={11} /></button>
+                        )}
+                      </td>
                       {[SEG_HEIGHT, SEG_UPPER, SEG_LOWER].map(key => (
                         <td key={key}>
                           <input
@@ -256,8 +299,17 @@ function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setAc
                           />
                         </td>
                       )}
+                      {/* ⚠️ HIDDEN, NOT REMOVED. Dropping the button would let
+                          the column collapse and the whole table would change
+                          width on toggle — visibility:hidden also takes it out
+                          of the tab order, so it cannot be reached by keyboard
+                          while it is off. */}
                       <td className="ctr">
-                        <button className="icon-btn danger" title="Delete segment" onClick={() => delRow(vi)}>
+                        <button
+                          className="icon-btn danger holder-seg-del" title="Delete segment"
+                          tabIndex={editing ? 0 : -1} aria-hidden={!editing}
+                          onClick={() => delRow(vi)}
+                        >
                           <X size={13} />
                         </button>
                       </td>
@@ -283,11 +335,21 @@ function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setAc
 
           <div className="holder-seg-note">
             Row 1 = gauge line / spindle end · last row = tool tip — matches Fusion's own editor.
-            New segments are added at the tip. Shift-click row numbers to total a range · click a number to clear.
+            {editing
+              ? ' Click a + between two rows to add a segment there.'
+              : ' Shift-click row numbers to total a range · click a number to clear.'}
           </div>
-          <button className="btn btn-secondary btn-sm holder-add-seg" onClick={addRow}>
-            <Plus size={13} /> Add segment at tip
-          </button>
+          {!readOnly && (
+            <button
+              className={`btn btn-sm holder-add-seg ${editing ? 'btn-primary' : 'btn-secondary'}`}
+              onClick={() => { setEditing(v => !v); clearSelection(); }}
+              title={editing
+                ? 'Hide the add and delete controls'
+                : 'Show a + between each row to insert a segment, and the delete buttons'}
+            >
+              {editing ? <><Check size={13} /> Done editing segments</> : <><Pencil size={13} /> Edit segments</>}
+            </button>
+          )}
         </div>
       </div>
 
@@ -1072,6 +1134,7 @@ export default function HolderDetail({
           onChange={v => set('segments', v)}
           hasExtension={!!h.has_extension}
           activeSeg={activeSeg} setActiveSeg={setActiveSeg}
+          readOnly={readOnly}
         />
       </Section>
 

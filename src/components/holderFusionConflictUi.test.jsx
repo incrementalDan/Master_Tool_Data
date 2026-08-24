@@ -113,3 +113,27 @@ describe('a holder edited in Fusion is visible again', () => {
     expect(fusionHolderConflicts([holderRecordToFusion(agreed, fusionEntry)], [agreed])).toHaveLength(0);
   });
 });
+
+describe('editing the segment structure', () => {
+  const detail = (props = {}) => render(
+    <HolderDetail
+      holder={record} config={{}} onBack={vi.fn()} onSave={vi.fn()}
+      holderFile={ctx.holderLibrary} {...props}
+    />,
+  );
+
+  it('is off by default — no insert markers, and the delete buttons are hidden', () => {
+    const html = detail();
+    expect(html).toContain('Edit segments');
+    expect(html).not.toContain('holder-seg-ins');
+    // ⚠️ Hidden, not removed: dropping the button would collapse the column and
+    // resize the whole table on toggle.
+    expect(html).toContain('holder-seg-del');
+    expect(html).not.toContain('holder-seg-table editing');
+  });
+
+  it('an archived holder is never offered the toggle', () => {
+    expect(detail({ holder: { ...record, archived: true }, readOnly: true }))
+      .not.toContain('Edit segments');
+  });
+});
