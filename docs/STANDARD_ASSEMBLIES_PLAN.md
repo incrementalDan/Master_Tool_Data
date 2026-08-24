@@ -314,3 +314,58 @@ Steps 1–3 are the part worth getting exactly right; 4–7 are ordinary UI.
 2. Re-flagging an assembly standard after un-flagging: mint a **new** number (my lean, and the
    old one stays searchable in legacy), or re-adopt the retired one?
 3. RTA format — is `RTA-1001` right, or does ProShop expect a bare number / a different prefix?
+
+-----
+
+## 📌 NOTED FOR LATER — the exact collet in the assembly
+
+**Not designed yet. Placeholder so it isn't lost.** Raised while planning standard assemblies:
+a standard RTA is *"one tool, one holder, one OOH"* — and it is not fully specified until it
+also says **which collet**. Two collets in the same holder are two different assemblies.
+
+### The gap, precisely
+
+What we model today is the holder's **collet SERIES**, not the collet:
+
+| Thing | Where it lives now |
+|---|---|
+| Collet **family** (SK / ER / TG) | `holder.collet_family_id` → `shop_settings.holder_config` |
+| Collet **series / nut size** (SK13, ER16) | `holder.collet_size_id` → same |
+| **The actual collet** (SK13 × 1/4", 0.240–0.250 range) | ⚠️ **nowhere** |
+
+An SK13 holder accepts many collets. Which one is in it depends on the tool's shank — so this
+is a property of the **assembly**, not of the holder.
+
+### Why it is not one parameter
+
+At minimum: **series** (SK13) · **nominal bore** (1/4" / 6mm) · **clamping range** (min/max —
+a collet grips a *band*, not a size) · its **own unit** (an inch collet on a metric tool is
+normal) · **sealed / coolant-through** · **manufacturer + part number** · and the
+**gauge-length consequence** — CLAUDE.md's `target_gauge_length` note already says *"SK collets
+shift actual gauge by shank-vs-range"*, with the formula marked TBD. That formula almost
+certainly needs the collet's range and the tool's actual shank diameter, which means this note
+and `target_gauge_length` are the same piece of work.
+
+### The structural question to answer first
+
+**Is a collet a `tool_components.json` component record?** It fits that shape exactly — a real
+physical object the shop buys, stores in a drawer, and looks up, that Fusion must never see
+(Fusion has no collet concept; the holder geometry is already baked). That would give it a
+location, purchasing, and a photo for free via the existing component machinery, and the
+assembly would hold a plain `collet_component_id` FK.
+
+The alternative — a `collet_id` into a new shared list in `holder_config`, like the option
+lookups — is lighter but gives a collet no location or purchasing, which is probably wrong for
+something you physically own dozens of.
+
+**Lean: component record.** Decide before writing anything.
+
+### Interactions to check when this is picked up
+
+- **Standard assemblies** (this doc): the collet belongs in the RTA's definition, and probably
+  on the printed label — an operator building from a tag needs to know which collet.
+- **`target_gauge_length`**: likely unblocked by this. Same work.
+- **Validation**: warn when the tool's shank diameter falls outside the collet's clamping range.
+- **Insert pairings**: `holdsOwnLocation` — a collet is another thing whose location lives on
+  the component, not the tool.
+- **Holder retire/replace flows**: swapping a holder may invalidate the collet choice.
