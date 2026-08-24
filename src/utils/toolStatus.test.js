@@ -5,6 +5,7 @@ import {
   hasBetaSuffix, withBetaSuffix, stripBetaSuffix, betaSuffixStale,
   hasRetiredSuffix, withRetiredSuffix, stripRetiredSuffix,
   applyStatusSuffix, stripStatusSuffixes, withRetiredMarker,
+  ALL_TOOL_STATUSES, isDefaultStatusSelection,
 } from './toolStatus.js';
 import { buildProShopRows, buildProShopCSV } from '../../tool-extractor.tsx';
 import { toolToExtractor } from '../schema/toolSchema.js';
@@ -271,5 +272,33 @@ describe('withRetiredMarker — the write-time invariant', () => {
   it('tolerates a tool with no description', () => {
     expect(withRetiredMarker({ tool_status: 'retired' })).toEqual({ tool_status: 'retired' });
     expect(withRetiredMarker(null)).toBeNull();
+  });
+});
+
+// ⚠️ Compared as a SET, never by length. Turning Beta off and Retired on leaves
+// the length at 2 while being a completely different filter — a length check
+// called that "no filters set", so the Reset button never appeared.
+describe('isDefaultStatusSelection', () => {
+  it('recognises the default, in any order', () => {
+    expect(isDefaultStatusSelection(['active', 'beta'])).toBe(true);
+    expect(isDefaultStatusSelection(['beta', 'active'])).toBe(true);
+  });
+
+  it('is false for a DIFFERENT selection of the same size', () => {
+    expect(isDefaultStatusSelection(['active', 'retired'])).toBe(false);
+    expect(isDefaultStatusSelection(['beta', 'retired'])).toBe(false);
+  });
+
+  it('is false for more, fewer, or none', () => {
+    expect(isDefaultStatusSelection(ALL_TOOL_STATUSES)).toBe(false);
+    expect(isDefaultStatusSelection(['active'])).toBe(false);
+    expect(isDefaultStatusSelection([])).toBe(false);
+    expect(isDefaultStatusSelection(undefined)).toBe(false);
+  });
+
+  it('ALL_TOOL_STATUSES covers every status, so it filters nothing', () => {
+    expect(new Set(ALL_TOOL_STATUSES)).toEqual(new Set(TOOL_STATUSES.map(s => s.id)));
+    const all = [{ id: 'a' }, { id: 'b', tool_status: 'beta' }, { id: 'r', tool_status: 'retired' }];
+    expect(applyFilters(all, { statuses: ALL_TOOL_STATUSES })).toHaveLength(3);
   });
 });

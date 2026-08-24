@@ -6,7 +6,9 @@ import { applyFilters, matchedLegacyId, matchedComponent, matchedPurchasing, sor
 import { toolNeedsAttention } from '../utils/toolConflicts.js';
 import { getDefaultUnit } from '../utils/units.js';
 import { machineColor } from '../utils/machineColors.js';
-import { TOOL_STATUSES, DEFAULT_VISIBLE_STATUSES } from '../utils/toolStatus.js';
+import {
+  TOOL_STATUSES, DEFAULT_VISIBLE_STATUSES, ALL_TOOL_STATUSES, isDefaultStatusSelection,
+} from '../utils/toolStatus.js';
 import { toolIdSequence } from '../utils/toolIdSystem.js';
 import { HolderRailIcon } from './icons/ToolTypeIcon.jsx';
 import ToolTypeGrid from './ToolTypeGrid.jsx';
@@ -138,6 +140,12 @@ export default function LandingPage() {
     setDisplayQuery('');
     setMachineFilter({ machineId: null, strict: false });
     setLibraryFilter({ libraryId: null });
+    // ⚠️ Statuses go to ALL, not to the default. The banner promises an exact
+    // count taken over the WHOLE library, so leaving Retired hidden would show
+    // fewer tools than the number that was just clicked — the precise failure
+    // the rest of this reset exists to prevent. All three chips light up, so it
+    // is visible rather than a silent widening.
+    setStatuses(ALL_TOOL_STATUSES);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete('reset');
@@ -233,7 +241,7 @@ export default function LandingPage() {
     setFacets(newFilters.facets || {});
   };
 
-  const hasFilters = statuses.length !== DEFAULT_VISIBLE_STATUSES.length || selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0 || !!machineFilter.machineId || !!libraryFilter.libraryId || flaggedOnly || noFusionOnly;
+  const hasFilters = !isDefaultStatusSelection(statuses) || selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0 || !!machineFilter.machineId || !!libraryFilter.libraryId || flaggedOnly || noFusionOnly;
 
   // When hide_unused_tool_types is on (default) and not in demo mode, only show
   // tool type tiles for types that have at least one tool in the library.
@@ -491,7 +499,7 @@ export default function LandingPage() {
         {hasFilters && (
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); setMachineFilter({ machineId: null, strict: false }); setLibraryFilter({ libraryId: null }); clearStatusFilters(); }}
+            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); setMachineFilter({ machineId: null, strict: false }); setLibraryFilter({ libraryId: null }); setStatuses(DEFAULT_VISIBLE_STATUSES); clearStatusFilters(); }}
           >
             Reset
           </button>

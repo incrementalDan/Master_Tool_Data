@@ -50,6 +50,20 @@ export const DEFAULT_TOOL_STATUS = 'active';
 // actively working with.
 export const DEFAULT_VISIBLE_STATUSES = ['active', 'beta'];
 
+// Every status — i.e. "filter nothing". Used where a count has been ADVERTISED
+// and the list has to match it exactly (the library-wide flagged banner), so a
+// hidden retired tool can't make the page show fewer than the number clicked.
+export const ALL_TOOL_STATUSES = TOOL_STATUSES.map(s => s.id);
+
+// Is the chip selection the default one? ⚠️ Compared as a SET, never by length —
+// turning Beta off and Retired on leaves the length at 2 while being a very
+// different filter, and a length check would call that "no filters set".
+export function isDefaultStatusSelection(statuses) {
+  const a = new Set(statuses || []);
+  return a.size === DEFAULT_VISIBLE_STATUSES.length
+    && DEFAULT_VISIBLE_STATUSES.every(id => a.has(id));
+}
+
 // The status of a tool. Anything unrecognised — including absent — is Active.
 export function statusOf(tool) {
   const s = tool?.tool_status;

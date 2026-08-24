@@ -810,7 +810,11 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
           would anywhere else. Stores the tool's tracking id, never its name. */}
       {pickReplacement && (
         <ToolLinkPicker
-          tool={data}
+          // ⚠️ Only the tool ITSELF is off-limits. The picker normally also hides
+          // anything in `linked_tools` — right for that relationship, wrong for
+          // this one: a tool related to this one (you link the old and the new,
+          // then retire the old) is exactly the replacement you want to pick.
+          tool={{ id: data.id }}
           onPick={(t) => { setField('replaced_by', t.id); setPickReplacement(false); }}
           onClose={() => setPickReplacement(false)}
         />

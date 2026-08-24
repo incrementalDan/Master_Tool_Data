@@ -136,6 +136,12 @@ function tpiCell(f){
   if(lo||hi) return lo||hi;
   return calcTPI(f.pitch)||"";
 }
+// ⚠️ Known, accepted asymmetry: a range whose ends are EQUAL (or only half
+// filled) exports as a single number, which the import deliberately does NOT
+// read back as a range — a lone number is the tap case (see psTpiRange). The
+// true value is still written rather than a made-up "32-32", and tpi_min/tpi_max
+// are metadata-owned, so nothing is lost: only a brand-new tool created from
+// that ProShop row would miss them, and such a tool is a placeholder anyway.
 
 // Build Adion/ProShop product link from psToolId
 // e.g. 'F-225' → 'https://americanprecisionworks.adionsystems.com/procnc/tools/F/F-225$'
@@ -355,7 +361,7 @@ const BLANK={
   cuttingDirection:"Right Hand",tipDiameter:"",lowerRadius:"",upperRadius:"",profileRadius:"",axialDistance:"",
   psToolId:"",    // ProShop Tool # → Fusion tool_productId (col 126)
   location:"",    // e.g. LC-140 → Fusion tool_vendor (col 165)
-  tapSubType:"",isSTI:false,tpiMin:"",tpiMax:"",threadProfileAngle:"",tipToFirstFullThread:"",
+  tapSubType:"",isSTI:false,threadUnit:"",tpiMin:"",tpiMax:"",threadProfileAngle:"",tipToFirstFullThread:"",
   status:"active",   // lifecycle — see src/utils/toolStatus.js
   purchasing:{manufacturers:[],vendors:[]},  // { manufacturers: [{id,name,edp,edp_url,mfg_num,mfg_num_url,order}], vendors: [{id,manufacturer_id,name,vendor_num,vendor_num_url,price,order}] }
 };
