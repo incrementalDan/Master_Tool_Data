@@ -308,11 +308,28 @@ export function matchBakedHolder(baked, holderGuid, records) {
   const live = (records || []).filter(r => r && r.archived !== true);
   const ref = String(baked?.['product-id'] || '').trim();
   const byRef = ref ? recordForRef(live, ref) : null;
-  const shapes = baked ? recordsForGeometry(live, baked) : [];
+  const allShapes = baked ? recordsForGeometry(live, baked) : [];
+  // ⚠️ A RECORD THAT HAS NEVER BEEN IN FUSION CANNOT BE WHAT A TOOL BAKED.
+  // The holder copy inside a tool came OUT of Fusion, so a record with no
+  // Fusion entry — a holder just created here, most often the tap-collet twin
+  // of one that is already out there — is not a candidate however well its
+  // shape matches. Without this, creating that twin instantly made the shape
+  // ambiguous for every tool on the original and dropped the lot into the
+  // "needs a look" list, for a record none of them could possibly have come
+  // from. Narrow the field first, then judge.
+  const inFusion = allShapes.filter(r => r.fusion_guid || r.last_pushed);
+  const shapes = (inFusion.length && inFusion.length < allShapes.length) ? inFusion : allShapes;
   const byShape = shapes.length === 1 ? shapes[0] : null;
 
-  // Both signals, one record — the only certain answer.
-  if (byRef && byShape && byRef.id === byShape.id) {
+  // ⚠️ BOTH SIGNALS ON ONE RECORD — and a sibling that happens to share the
+  // shape does not take that away. The shop keeps deliberate same-shape twins
+  // (a tap-collet version of a holder is identical geometry with a different
+  // description), so requiring the shape to be UNIQUE would have made every
+  // one of those tools uncertain. If our ref names a record and that record's
+  // shape is what the tool is carrying, the two signals agree — and between
+  // records of identical geometry there is nothing to choose anyway. Kept in
+  // step with matchFusionHolder, which settles a shared shape the same way.
+  if (byRef && shapes.some(r => r.id === byRef.id)) {
     return { record: byRef, via: 'exact', confident: true };
   }
   // ⚠️ SHAPE BEFORE REF when they disagree, and before the guid always.
