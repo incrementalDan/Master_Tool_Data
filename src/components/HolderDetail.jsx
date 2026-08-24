@@ -17,6 +17,8 @@ import {
   SEG_HEIGHT, SEG_UPPER, SEG_LOWER, segHeight,
 } from '../utils/holderGeometry.js';
 import { composeHolderDescription, HOLDER_DESC_LIMIT } from '../utils/holderDescription.js';
+import { fusionHolderSegments } from '../schema/holderRecord.js';
+import { adoptFusionHolderGeometry, keepAppHolderGeometry } from '../schema/holderIdentity.js';
 import { bodyDivergenceFor, roleSegments } from '../utils/holderBody.js';
 import HolderPartsSection from './HolderPartsSection.jsx';
 import { newHolderPart, holderPartFor, adoptHolderGeometryIntoPart } from '../utils/holderParts.js';
@@ -345,6 +347,7 @@ const sig = (o) => JSON.stringify(o, (_k, v) => (
 export default function HolderDetail({
   holder, config, usage = 0, allLocations = [], readOnly, updatedBy = '', siblings = [],
   holderFile, onSavePart, onMergeWith, onRestamp, restampPreview, staleCount = 0,
+  fusionConflict = null, onResolveFusion,
   onBack, onSave, onDelete, onAddOption, onViewTools,
 }) {
   const [h, setH] = useState(holder);
@@ -411,6 +414,20 @@ export default function HolderDetail({
     && !norm(h.description).startsWith(norm(suggested));
   const overLimit = (h.description || '').length > HOLDER_DESC_LIMIT;
   const taperOpt = holderOption(config, 'tapers', h.taper_id);
+  // The two shapes, side by side. Segment COUNT and gauge length are what a
+  // person can actually judge from — a full segment table twice over is not a
+  // comparison, it is two tables.
+  const shapeOf = (segments, unit) => ({
+    count: (segments || []).length,
+    gauge: `${trimHolderLen(deriveGaugeLength(segments), unit)} ${unitAbbr(unit)}`,
+  });
+  const appShape = shapeOf(h.segments, h.unit);
+  const fusionShape = useMemo(() => {
+    const e = fusionConflict?.entry;
+    return e ? shapeOf(fusionHolderSegments(e), normalizeUnit(e.unit) || h.unit) : { count: 0, gauge: '—' };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fusionConflict, h.unit]);
+
   const extOoh = deriveExtensionOoh(h.segments);
   const shankDia = deriveExtensionShankDia(h.segments);
   const mismatch = extensionFlagMismatch(h);
@@ -650,6 +667,70 @@ export default function HolderDetail({
         </div>
       )}
 
+      {/* ─── Fusion disagrees about this holder's shape ─────────────────────
+          ⚠️ THE CASE THAT USED TO BE A DEAD END. Fusion is carrying this
+          record's ID on a holder whose segments differ. The push refuses to
+          write it (correctly — it can't know which side is right), the Holders
+          page counted only what a push WOULD write, and this page said nothing
+          at all. So a holder edited in Fusion could never be accepted, and the
+          two libraries stayed different with no sign of it anywhere.
+          Both buttons write only to THIS record: taking Fusion's shape needs no
+          Fusion write (they then agree), and keeping ours records that we have
+          seen Fusion's shape, which is what makes the next push overwrite it
+          instead of skipping it again. Applied through `apply`, so accepting a
+          shape is as undoable as any other segment edit. */}
+      {fusionConflict && !readOnly && (
+        <div className="holder-conflict-banner">
+          <AlertTriangle size={15} />
+          <div className="holder-conflict-body">
+            <strong>
+              {fusionConflict.direction === 'fusion'
+                ? 'This holder was edited in Fusion.'
+                : 'Fusion has a different shape for this holder.'}
+            </strong>{' '}
+            {fusionConflict.direction === 'fusion'
+              ? 'Fusion is no longer holding the geometry this app last gave it.'
+              /* ⚠️ Never blame Fusion for what may be the user's own edit. With
+                 no record of what Fusion was last given, which side moved is
+                 genuinely unknown, and saying otherwise sends them looking for
+                 a change nobody made. */
+              : 'There is no record of what Fusion was last given, so which side changed can’t be told from here.'}
+            {' '}Nothing is written either way until you choose.
+            <div className="holder-conflict-compare">
+              <div>
+                <span className="holder-conflict-side">THIS APP</span>
+                {appShape.count} segment{appShape.count === 1 ? '' : 's'} · gauge {appShape.gauge}
+              </div>
+              <div>
+                <span className="holder-conflict-side">FUSION</span>
+                {fusionShape.count} segment{fusionShape.count === 1 ? '' : 's'} · gauge {fusionShape.gauge}
+              </div>
+            </div>
+            {/* The description is app-owned and is deliberately NOT adopted —
+                say so, or a Fusion-side rename looks like it was ignored. */}
+            {fusionConflict.entry?.description
+              && norm(fusionConflict.entry.description) !== norm(h.description) && (
+              <div className="holder-conflict-note">
+                Fusion also calls it “{fusionConflict.entry.description}”. Only the geometry is
+                taken — the name here stays, and the next push writes it to Fusion.
+              </div>
+            )}
+          </div>
+          <div className="holder-conflict-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              title="Replace this record's segments with Fusion's — undoable, and its tools can then be re-stamped"
+              onClick={() => { apply(p => adoptFusionHolderGeometry(p, fusionConflict.entry)); onResolveFusion?.('fusion'); }}
+            >Use Fusion’s geometry</button>
+            <button
+              className="btn btn-secondary btn-sm"
+              title="Keep this record's segments — the next Push to Fusion overwrites Fusion's copy"
+              onClick={() => { apply(p => keepAppHolderGeometry(p, fusionConflict.entry)); onResolveFusion?.('app'); }}
+            >Keep mine</button>
+          </div>
+        </div>
+      )}
+
       {/* Propagation. Fusion BAKES holder geometry into every tool, so a
           corrected holder only reaches an existing tool when that tool is
           written. That happens by itself on each tool's next save; this is the
@@ -712,9 +793,12 @@ export default function HolderDetail({
         <div className="holder-note-banner">
           <AlertTriangle size={14} />
           <span>
+            {/* ⚠️ This said pushing "isn't wired up yet" long after it was, so a
+                holder page could tell you nothing would reach Fusion while the
+                Push button sat on the Holders page doing exactly that. */}
             Holder records are app-owned. No tool references this holder yet, so there is nothing
-            to propagate. Pushing the record back to the Fusion holder library is a separate step
-            that isn’t wired up yet.
+            to re-stamp. Fusion’s own holder library is updated separately — <b>Push to Fusion</b>
+            {' '}on the Holders page.
           </span>
         </div>
       )}
