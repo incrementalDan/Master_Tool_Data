@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
 import LocationPicker from './LocationPicker.jsx';
+import StatusBadge from './StatusBadge.jsx';
 import AssemblyCard from './AssemblyCard.jsx';
 import { HolderTag, holderForDisplay } from './HolderPill.jsx';
 import { holderDisplayColor } from '../utils/holderColors.js';
@@ -33,6 +34,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS, validateGeometry, fusionToolToInternal, readOohFromFusion } from '../schema/toolSchema.js';
 import { convertLength, unitAbbr } from '../utils/units.js';
 import { showsProShopUrl, toolIdLabel } from '../utils/toolIdSystem.js';
+import { statusOf, statusMeta } from '../utils/toolStatus.js';
 import ToolFields from './ToolFields.jsx';
 import { hasReconcileWork } from '../services/reconcile.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
@@ -85,6 +87,8 @@ export default function ToolDetail() {
   };
 
   const tool = tools.find(t => t.id === id);
+  // Store the id, render the name — see "Relational integrity".
+  const replacement = tool?.replaced_by ? tools.find(t => t.id === tool.replaced_by) : null;
 
   // Land at the top of the page when opening a tool (navigating in keeps the
   // window's previous scroll position otherwise).
@@ -304,10 +308,12 @@ export default function ToolDetail() {
   // tool-level data stays visible during setup, not the instant the paired
   // view appears.
   const hasComponents = !!(pairing && (pairing.holder_component_id || pairing.insert_component_id));
-  const sectionSave = async (updatedTool) => {
-    try { await saveTool(updatedTool); }
-    catch { /* toast handled in context */ }
-  };
+  // ⚠️ PROPAGATES the failure. It used to swallow it, which meant a section
+  // could not tell a save that worked from one that didn't — so a panel that
+  // closes its editor "when the save finishes" closed it on failure too and
+  // silently threw the edit away. The context already toasts the reason; this
+  // just lets the caller keep the user's data on screen.
+  const sectionSave = async (updatedTool) => saveTool(updatedTool);
 
   // Delete confirmation modal — shared by the edit-mode Delete button ('normal')
   // and the reverse-sync banner ('missing'). Rendered in both the edit and view
@@ -352,7 +358,9 @@ export default function ToolDetail() {
       <div>
         {/* Same sticky identity header as view mode, so the tool you're editing
             stays visible while scrolling a long form. */}
-        <div className="tool-sticky-header">
+        <div className="tool-sticky-header"
+          data-status={statusOf(tool)}
+          style={{ '--status-wash': statusMeta(statusOf(tool)).color }}>
           <span className="tool-sticky-header-icon">
             <ToolTypeIcon type={tool.tool_type} size={30} />
           </span>
@@ -442,7 +450,13 @@ export default function ToolDetail() {
           label="ProShop"
           tip="Export ProShop CSV"
           style={{ color: 'var(--orange)' }}
-          onClick={() => { exportProShop(tool); notify('Exported ProShop CSV', 'success'); }}
+          onClick={() => {
+            // A beta tool is deliberately kept out of ProShop — say so rather
+            // than reporting an export that didn't happen.
+            const ok = exportProShop(tool);
+            notify(ok ? 'Exported ProShop CSV'
+              : 'Beta tool — deliberately not exported to ProShop.', ok ? 'success' : 'info');
+          }}
         />
         <SidebarBtn
           icon={FileUp}
@@ -458,7 +472,9 @@ export default function ToolDetail() {
       {/* Main content */}
       <div className="tool-detail-main">
         {/* Sticky header — type icon + description left, identity (cabinet/machine#) right */}
-        <div className="tool-sticky-header">
+        <div className="tool-sticky-header"
+          data-status={statusOf(tool)}
+          style={{ '--status-wash': statusMeta(statusOf(tool)).color }}>
           <span className="tool-sticky-header-icon">
             <ToolTypeIcon type={tool.tool_type} size={30} />
           </span>
@@ -482,6 +498,22 @@ export default function ToolDetail() {
               </h1>
               {tool.tool_type === 'tap' && tool.is_sti && (
                 <span className="sti-pill" title="STI / Helicoil — thread insert tap">STI / Helicoil</span>
+              )}
+              <StatusBadge tool={tool} />
+              {/* The replacement, resolved LIVE from the stored tracking id —
+                  never a stored name, so renaming or re-numbering the new tool
+                  can't leave a stale label behind. A dangling id is SHOWN as
+                  such rather than hidden: silently dropping it would erase the
+                  fact that this tool was replaced at all. */}
+              {statusOf(tool) === 'retired' && tool.replaced_by && (
+                replacement
+                  ? (
+                    <a className="status-replaced" href={`#/tool/${replacement.id}`}
+                      title={`Replaced by ${replacement.description || replacement.tool_id}`}>
+                      → {replacement.tool_id || replacement.description}
+                    </a>
+                  )
+                  : <span className="status-replaced is-missing" title="The replacement tool is no longer in the library">→ (replacement removed)</span>
               )}
               {tool.no_fusion_link && (
                 <span className="no-fusion-pill">
@@ -995,7 +1027,9 @@ function AssembliesSection({ tool, holders, onSave }) {
 
   const handleEdit = (assembly) => { setEditingAssembly(assembly); setShowForm(true); };
   const handleDelete = async (assemblyId) => {
-    await onSave({ ...tool, assemblies: assemblies.filter(a => a.assembly_id !== assemblyId) });
+    // sectionSave propagates now — the context has already toasted the reason.
+    try { await onSave({ ...tool, assemblies: assemblies.filter(a => a.assembly_id !== assemblyId) }); }
+    catch { /* toast handled in context */ }
   };
 
   // Clear pendingAssembly once the real data lands in the tool prop
@@ -1097,7 +1131,8 @@ function AssembliesSection({ tool, holders, onSave }) {
               const added = updatedTool.assemblies?.at(-1) ?? null;
               setPendingAssembly(added);
             }
-            await onSave(updatedTool);
+            try { await onSave(updatedTool); }
+            catch { setPendingAssembly(null); /* toast handled in context */ }
           }}
           onClose={() => { setShowForm(false); setEditingAssembly(null); }}
         />

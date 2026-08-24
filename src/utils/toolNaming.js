@@ -1,3 +1,4 @@
+import { applyStatusSuffix } from './toolStatus.js';
 /**
  * toolNaming.js — Shop-specific tool description generation
  *
@@ -5,7 +6,19 @@
  * without touching core app logic. All functions are pure.
  */
 
-export const THROUGH_COOLANT_VALUES = new Set(["through tool", "air through tool", "flood and through tool"]);
+// Coolant values that mean the tool runs THROUGH-SPINDLE coolant.
+// ⚠️ Must carry the values Fusion actually stores, not just the extractor's
+// legacy picker labels. Fusion accepts exactly flood / tool / disabled / air /
+// "flood tool" (see CLAUDE.md → Valid Fusion coolant values), and
+// normalizePreset rewrites the old "flood and through tool" to "flood tool" on
+// every write — so a tsc_capable tool reaches here as "flood tool" and matched
+// NOTHING. That silently exported Through Coolant = false for every TSC tool
+// and dropped the " TSC" suffix from generated descriptions. The retired
+// spellings stay for anything still holding one.
+export const THROUGH_COOLANT_VALUES = new Set([
+  "tool", "flood tool",                                              // Fusion-native
+  "through tool", "air through tool", "flood and through tool",      // retired spellings
+]);
 
 export const FRACS = {
   0.015625:"1/64",0.046875:"3/64",0.078125:"5/64",0.109375:"7/64",0.140625:"9/64",0.171875:"11/64",0.203125:"13/64",0.234375:"15/64",
@@ -108,7 +121,18 @@ export function smartDiam(inches, inputWasMm, isDrillType = false, tol = SNAP_TO
   return descDec(inches);
 }
 
+// ⚠️ A BETA or RETIRED tool's generated name CARRIES ITS MARKER. Every tool is created in
+// the app, so its first description is generated — that is the moment the marker
+// has to be there. Nothing ever rewrites a STORED description on its own (see
+// "descriptions are never silently renamed"): switching a tool to Active
+// surfaces a prompt to drop the suffix, it does not drop it.
+// Wrapped rather than folded into the switch below — that switch has 36 return
+// sites and the suffix rule belongs in exactly one of them.
 export function buildDesc(f, inputWasMm = !!(f && f.inputWasMm)) {
+  return applyStatusSuffix(buildBaseDesc(f, inputWasMm), f?.status);
+}
+
+function buildBaseDesc(f, inputWasMm = !!(f && f.inputWasMm)) {
   const d = parseFloat(f.diameter) || 0,
     loc = parseFloat(f.loc) || 0,
     fl = f.flutes || "",

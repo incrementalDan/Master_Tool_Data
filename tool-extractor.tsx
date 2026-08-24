@@ -14,6 +14,7 @@
 // modules import from this path; renaming it is a mechanical change worth doing
 // on its own, not folded into a feature.
 import { THROUGH_COOLANT_VALUES, smartDiam, buildDesc } from "./src/utils/toolNaming.js";
+import { proShopStatusValue, exportsToProShop } from "./src/utils/toolStatus.js";
 
 const COOLANT_OPTS = [
   ["flood","Flood"],["disabled","Disabled"],["mist","Mist"],
@@ -125,6 +126,23 @@ function calcTPI(s){
   return m?m[1]:"";
 }
 
+// The "Threads Per Inch" cell. A thread mill publishes the RANGE it can cut
+// (tpi_min/tpi_max, e.g. "11-32"); everything else gets the single TPI implied
+// by its thread designation. A range with only one end filled emits that end
+// alone rather than a half-written "11-".
+function tpiCell(f){
+  const lo=String(f.tpiMin??"").trim(), hi=String(f.tpiMax??"").trim();
+  if(lo&&hi) return lo===hi?lo:`${lo}-${hi}`;
+  if(lo||hi) return lo||hi;
+  return calcTPI(f.pitch)||"";
+}
+// ⚠️ Known, accepted asymmetry: a range whose ends are EQUAL (or only half
+// filled) exports as a single number, which the import deliberately does NOT
+// read back as a range — a lone number is the tap case (see psTpiRange). The
+// true value is still written rather than a made-up "32-32", and tpi_min/tpi_max
+// are metadata-owned, so nothing is lost: only a brand-new tool created from
+// that ProShop row would miss them, and such a tool is a placeholder anyway.
+
 // Build Adion/ProShop product link from psToolId
 // e.g. 'F-225' → 'https://americanprecisionworks.adionsystems.com/procnc/tools/F/F-225$'
 function buildAdionUrl(psToolId){
@@ -208,18 +226,33 @@ const PS_MAIN_COLS=[
   // GENERATOR (specs → a suggested name) for the extractor/Add flow, where nothing
   // is stored yet; it must never override a real tool's description on export.
   ["description",f=>f.description||buildDesc(f)],["cutDiameter",f=>f.diameter||""],["lengthOfCut",f=>f.loc||""],
-  ["overallLength",f=>f.oal||""],["No. of Flutes",f=>f.flutes||""],["shankDiameter",f=>f.shankDia||f.diameter||""],
-  ["bodyDiameter",f=>f.shankDia||f.diameter||""],["cornerRadius",f=>f.cornerRadius||""],["tipAngle",f=>f.tipAngle||""],
+  ["overallLength",f=>f.oal||""],["No. of Flutes",f=>f.flutes||""],// Blank when unknown — never the cutting diameter. See toolToExtractor.
+  ["shankDiameter",f=>f.shankDia||""],
+  ["bodyDiameter",f=>f.shankDia||""],["cornerRadius",f=>f.cornerRadius||""],["tipAngle",f=>f.tipAngle||""],
   ["helixAngle",f=>f.helixAngle||""],["coating",f=>f.coating||""],["toolMaterial",f=>f.material||""],
   ["recommendedWorkpieceMaterial",f=>(f.workpieceMats&&f.workpieceMats.length?f.workpieceMats.join(", "):f.workpieceMat||"")],
-  ["centerCutting",f=>f.centerCutting?"true":"false"],["throughCoolant",f=>THROUGH_COOLANT_VALUES.has(f.coolant||"")?"true":"false"],
+  // ⚠️ ProShop's boolean-ish columns are NOT one format. Measured across the
+  // shop's real export: the Boolean-TYPED attributes (Through Coolant, Custom
+  // Grind, Full Profile, Backside Capable, Round Shank) hold "true"/"false",
+  // while Center Cut and Double Ended are UNTYPED and hold "Y"/"N" (97/60 and
+  // 6/123 rows; "true" never appears in Double Ended at all). Write each column
+  // the way ProShop stores it. Import reads them all through psBool, which is
+  // tolerant either way.
+  ["centerCutting",f=>f.centerCutting?"Y":"N"],["throughCoolant",f=>THROUGH_COOLANT_VALUES.has(f.coolant||"")?"true":"false"],
   ["customgrindtool",f=>f.customGrind?"true":"false"],
   ["roundShank",f=>ROUND_SHANK_TYPES.has(f.toolType)?"true":"false"],["toolGroupLetter",f=>f.grouping||AUTO_GROUP[f.toolType]||"M"],
   ["pitch",f=>f.pitch||""],["fluteType",f=>f.fluteType||""],["lengthBelowShankDiameter",f=>f.minOoh?String(parseFloat(f.minOoh)):""],
-  ["tapClass",f=>f.tapClass||""],["threadsPerInch",f=>calcTPI(f.pitch)||""],["thread",f=>f.pitch||""],
+  // ⚠️ ProShop's "Threads Per Inch" holds a RANGE for a thread mill ("11-32" on
+  // N-78, matching its own description "11 to 32 TPI") — that is the tool's TPI
+  // CAPABILITY, which the app stores as tpi_min/tpi_max. For a tap it is the one
+  // TPI of the thread it cuts, derived from the pitch designation.
+  ["tapClass",f=>f.tapClass||""],["threadsPerInch",f=>tpiCell(f)],["thread",f=>f.pitch||""],
   ["threadType",f=>f.toolType!=="tap"?"":f.tapSubType==="form"?"Form":f.tapSubType==="cut"?"Cut":""],
-  ["fullProfile",f=>f.fullProfile?"true":""],["stubJobber",f=>f.stubJobber||""],["backsideCapable",f=>f.backsideCapable?"true":""],
-  ["doubleEnded",f=>f.doubleEnded?"true":""],["cuttingDirection",f=>f.cuttingDirection||"Right Hand"],
+  // A blank cell means "nobody answered"; these are plain booleans in the app,
+  // so an explicit false is the honest value — and it is what ProShop's own
+  // export writes (309/310 of its rows).
+  ["fullProfile",f=>f.fullProfile?"true":"false"],["stubJobber",f=>f.stubJobber||""],["backsideCapable",f=>f.backsideCapable?"true":"false"],
+  ["doubleEnded",f=>f.doubleEnded?"Y":"N"],["cuttingDirection",f=>f.cuttingDirection||"Right Hand"],
   ["taper",f=>f.taperAngle||""],["tipDiameter",f=>f.tipDiameter||""],
   ["tipTo1stFullThread",f=>f.tipToFirstFullThread||""],
   // Location (cabinet) + tap Point Type — added so both round-trip through the
@@ -227,6 +260,9 @@ const PS_MAIN_COLS=[
   // ids per ProShop: `location`, `pointType`.
   ["location",f=>f.location||""],
   ["pointType",f=>f.pointType||""],
+  // Lifecycle. Active / Archived — a BETA tool never reaches here, its whole row
+  // is omitted (see buildProShopRows).
+  ["status",f=>proShopStatusValue({tool_status:f.status})||""],
 ];
 
 // Each purchasing entry ("Approved Brands" sub-table row in ProShop) becomes one
@@ -265,18 +301,54 @@ function buildBrandRows(f){
   return [{approvedBrand,vendor,edp,cost,leadTime:""}];
 }
 function csvCell(v){const s=String(v===null||v===undefined?"":v);return(s.includes(",")||s.includes('"')||s.includes("\n"))?`"${s.replace(/"/g,'""')}"`:s;}
+
+// The purchasing / "Approved Brands" sub-table columns, in ProShop's order.
+const PURCHASING_COLS=["approvedBrand","vendor","EDP#","cost","leadTime"];
+
+// Columns a continuation row LEAVES BLANK. Measured against a real ProShop
+// export (see FUSION TOOL Library REF/ProShop Reference Data): a second
+// Approved-Brand row repeats the tool's IDENTITY and descriptive attributes and
+// omits only its MEASUREMENTS. Anything not listed here therefore repeats.
+//
+// ⚠️ EVERY ROW CARRIES THE TOOL # — that is the only thing tying a second
+// Approved-Brand row back to its tool. Blanking the whole main block (the old
+// behaviour) left row 2 with a brand and a price and NOTHING to attach them to:
+// ProShop can't group it, and this app's own importer groups by `Tool #`, so
+// re-importing our export silently dropped every vendor after the first. A
+// second vendor going missing on a round-trip is invisible until someone goes
+// looking for the cheaper price.
+//
+// `cost` is deliberately NOT first-row-only even though the reference export
+// happens to carry it once: price is per VENDOR in this app's model, so
+// dropping it on continuation rows would lose the second vendor's price.
+const PS_FIRST_ROW_ONLY=new Set([
+  "cutDiameter","lengthOfCut","overallLength","shankDiameter","bodyDiameter",
+  "cornerRadius","tipAngle","helixAngle","taper","tipDiameter",
+  "No. of Flutes","lengthBelowShankDiameter","tipTo1stFullThread","threadsPerInch",
+]);
+
 // Real ProShop exports use one row per purchasing/Approved-Brand option, all
-// sharing the same Tool # — geometry/spec columns are populated only on the first row.
-function buildProShopCSV(f){
+// sharing the same Tool #. Returns string[][] (data rows only, no header) so the
+// single-tool and full-library exports share ONE implementation of the shape.
+function buildProShopRows(f){
+  // ⚠️ A BETA TOOL IS NOT EXPORTED AT ALL — it is a tool the shop is trying in
+  // CAM and may never buy, so it has no place in ProShop's inventory. Emitting
+  // it with a blank Status would be worse than useless: blank reads back as
+  // ACTIVE on import, so the next ProShop round-trip would quietly promote every
+  // beta tool. Returning no rows is the only honest answer.
+  if(!exportsToProShop({tool_status:f.status})) return [];
   const brandRows=buildBrandRows(f);
-  const purchCols=["approvedBrand","vendor","EDP#","cost","leadTime"];
-  const hdr=[...PS_MAIN_COLS.map(([h])=>h),...purchCols].map(csvCell).join(",");
-  const mainVals=PS_MAIN_COLS.map(([,fn])=>fn(f));
-  const blankMain=mainVals.map(()=>"");
-  const rows=(brandRows.length?brandRows:[{}]).map((b,i)=>{
-    const main=i===0?mainVals:blankMain;
-    return [...main,b.approvedBrand||"",b.vendor||"",b.edp||"",b.cost||"",b.leadTime||""].map(csvCell).join(",");
-  });
+  const firstVals=PS_MAIN_COLS.map(([,fn])=>fn(f));
+  const contVals=PS_MAIN_COLS.map(([h,fn])=>PS_FIRST_ROW_ONLY.has(h)?"":fn(f));
+  return (brandRows.length?brandRows:[{}]).map((b,i)=>[
+    ...(i===0?firstVals:contVals),
+    b.approvedBrand||"",b.vendor||"",b.edp||"",b.cost||"",b.leadTime||"",
+  ]);
+}
+
+function buildProShopCSV(f){
+  const hdr=[...PS_MAIN_COLS.map(([h])=>h),...PURCHASING_COLS].map(csvCell).join(",");
+  const rows=buildProShopRows(f).map(r=>r.map(csvCell).join(","));
   return [hdr,...rows].join("\n");
 }
 
@@ -289,7 +361,8 @@ const BLANK={
   cuttingDirection:"Right Hand",tipDiameter:"",lowerRadius:"",upperRadius:"",profileRadius:"",axialDistance:"",
   psToolId:"",    // ProShop Tool # → Fusion tool_productId (col 126)
   location:"",    // e.g. LC-140 → Fusion tool_vendor (col 165)
-  tapSubType:"",isSTI:false,tpiMin:"",tpiMax:"",threadProfileAngle:"",tipToFirstFullThread:"",
+  tapSubType:"",isSTI:false,threadUnit:"",tpiMin:"",tpiMax:"",threadProfileAngle:"",tipToFirstFullThread:"",
+  status:"active",   // lifecycle — see src/utils/toolStatus.js
   purchasing:{manufacturers:[],vendors:[]},  // { manufacturers: [{id,name,edp,edp_url,mfg_num,mfg_num_url,order}], vendors: [{id,manufacturer_id,name,vendor_num,vendor_num_url,price,order}] }
 };
 const TT=[
@@ -359,6 +432,6 @@ export {
   MA, CO, WM,
   PS_GROUPS, AUTO_GROUP, typeFromProShopGroup, PS_MAIN_COLS,
   COOLANT_OPTS, THROUGH_COOLANT_VALUES, ROUND_SHANK_TYPES,
-  buildFusionRow, buildProShopCSV, buildDesc, buildBrandRows, buildAdionUrl,
+  buildFusionRow, buildProShopCSV, buildProShopRows, PURCHASING_COLS, buildDesc, buildBrandRows, buildAdionUrl,
   getVisibleFields, downloadCSV, smartDiam,
 };

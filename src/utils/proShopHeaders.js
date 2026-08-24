@@ -50,6 +50,18 @@ const HEADER_ALIASES = [
   ['Tip to 1st Full Thread', ['tipTo1stFullThread', 'Tip to 1st Thread']],
   ['Location', ['location']],
   ['Point Type', ['pointType']],
+  // Columns THIS app exports whose real ProShop display name differs — without
+  // these, re-importing our own export can't see them at all. Names taken from
+  // ProShop's own attribute list (Id / API / display), see
+  // FUSION TOOL Library REF/ProShop Reference Data.
+  ['CenterCut', ['centerCutting', 'Center Cut', 'Center Cutting']],
+  ['FluteType/Chipbreaker', ['fluteType', 'Flute Type/Chipbreaker', 'Flute Type']],
+  ['Thread Type', ['threadType']],
+  ['BodyDia', ['bodyDiameter', 'Body Dia']],
+  ['Round Shank', ['roundShank']],
+  ['Threads Per Inch', ['threadsPerInch']],
+  ['Cutting Direction', ['cuttingDirection']],
+  ['Status', ['status']],
   // Purchasing / Approved-Brand sub-table columns
   ['Approved Brand', ['approvedBrand']],
   ['Vendor', ['vendor']],
@@ -106,4 +118,16 @@ export function proShopFormatLabel(format) {
   if (format === 'tooldex') return 'ToolDex export format';
   if (format === 'proshop') return 'ProShop export format';
   return 'Unrecognized format';
+}
+
+// A ProShop export ends with a TOTALS summary row: a "Tool #" of TOTALS, no
+// description, no tool group, and every numeric column holding the library-wide
+// sum (Cost = the whole library's value). It is a spreadsheet footer, not a tool
+// — left in, the bulk importer mints a phantom "TOTALS" tool with a $13,982.79
+// vendor, and the location importer lists it as a tool the library is missing.
+// Both import paths share this one rule.
+export function isProShopSummaryRow(row) {
+  if (!row) return true;
+  return !String(row['Description'] || '').trim()
+    && !String(row['Tool Group'] || '').trim();
 }

@@ -5,6 +5,7 @@ import { unitAbbr } from '../utils/units.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { exportSingleTool as exportProShop } from '../utils/proShopExport.js';
+import StatusBadge from './StatusBadge.jsx';
 import { showsProShopUrl, toolIdLabel } from '../utils/toolIdSystem.js';
 import { conflictCount } from '../utils/toolConflicts.js';
 import { preferredMachineName } from '../utils/machines.js';
@@ -46,7 +47,12 @@ export default function ToolCard({ tool, variant = 'grid', matchedLegacyId = nul
       <button className="icon-btn" title="Duplicate" onClick={e => stop(e, handleClone)}>
         <Copy size={14} />
       </button>
-      <button className="icon-btn" title="Export ProShop CSV" onClick={e => stop(e, () => { exportProShop(tool); notify('Exported ProShop CSV', 'success'); })}>
+      <button className="icon-btn" title="Export ProShop CSV" onClick={e => stop(e, () => {
+        // ⚠️ ONE call — it downloads. A beta tool exports nothing by design.
+        const ok = exportProShop(tool);
+        notify(ok ? 'Exported ProShop CSV'
+          : 'Beta tool — deliberately not exported to ProShop.', ok ? 'success' : 'info');
+      })}>
         <FileDown size={14} />
       </button>
     </div>
@@ -58,6 +64,8 @@ export default function ToolCard({ tool, variant = 'grid', matchedLegacyId = nul
   const typeRow = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0, flexWrap: 'wrap' }}>
       <span className="tool-card-type">{label}</span>
+      {/* Renders nothing for an Active tool — see StatusBadge. */}
+      <StatusBadge tool={tool} size={10} />
       {tool.location && (
         <span className="location-tag" title="Location" style={{ fontSize: 10, padding: '1px 6px' }}>{tool.location}</span>
       )}

@@ -10,12 +10,13 @@ import { insertComponentIndex, newComponent, normProShopId } from '../schema/ins
 import { vendorHasOwnCatalogNumber, resolveVendorName, registryIdForName } from '../schema/vendorRegistry.js';
 import { generateManufacturerUrl, generateVendorUrl } from '../utils/urlGenerators.js';
 import { convertLength, getDefaultUnit, unitAbbr } from '../utils/units.js';
-import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel } from '../utils/proShopHeaders.js';
+import { statusFromProShop, isBeta } from '../utils/toolStatus.js';
+import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel, isProShopSummaryRow } from '../utils/proShopHeaders.js';
 import {
   locationNumber, composeLocationString, claimSystemForNumber,
   isBinOnlySystem, countLocationNumbers,
 } from '../utils/locationSystem.js';
-import { exportFullLibrary as exportProShop } from '../utils/proShopExport.js';
+import { exportFullLibrary as exportProShop, proShopExportMessage } from '../utils/proShopExport.js';
 import { exportFullLibrary as exportFusion } from '../utils/fusionExport.js';
 
 // Merge an uploaded Fusion JSON's tools into the already-loaded library —
@@ -145,6 +146,10 @@ export default function ImportFlow() {
         // Approved Brand options — group them before matching.
         const groupMap = new Map();
         for (const row of data) {
+          // Skip the trailing TOTALS footer — it is a spreadsheet sum, not a
+          // tool, and it otherwise imports as one (with the whole library's
+          // value as its price).
+          if (isProShopSummaryRow(row)) continue;
           const key = row['Tool #'] || `__row_${groupMap.size}`;
           if (!groupMap.has(key)) groupMap.set(key, []);
           groupMap.get(key).push(row);
@@ -545,7 +550,11 @@ export default function ImportFlow() {
           )}
 
           <div className="flex gap-8 mb-20" style={{ flexWrap: 'wrap' }}>
-            <button className="btn btn-secondary" onClick={() => { markSetupStepInSettings('proshopExported'); exportProShop(fusionTools); }}>
+            <button className="btn btn-secondary" onClick={() => {
+              markSetupStepInSettings('proshopExported');
+              const { skipped } = exportProShop(fusionTools) || { skipped: 0 };
+              if (skipped) setMismatchWarn(proShopExportMessage(fusionTools.length, skipped));
+            }}>
               ↓ Export Full ProShop CSV
             </button>
             <button className="btn btn-secondary" onClick={() => exportFusion(fusionTools)}>
@@ -807,6 +816,43 @@ function psNum(v) {
 const psStrEq = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();
 const psNumEq = (a, b) => Math.abs(Number(a) - Number(b)) <= 1e-4;
 
+// A ProShop boolean cell. The shop's real export writes lowercase true/false,
+// but an exact `=== 'true'` compare turns any other spelling ("TRUE", "Yes")
+// into a silent FALSE — a wrong answer that looks like a real one. Returns null
+// for "not answered" so a fill-gap caller can tell blank from false.
+// ProShop's "Threads Per Inch" is a RANGE on a thread mill ("11-32" on N-78,
+// matching its description "11 to 32 TPI") and a single number on a tap. Returns
+// { tpi_min, tpi_max } for a range, null when there is nothing usable — a lone
+// number is the tap case and is already implied by the thread designation, so it
+// is not read as a one-ended range.
+const psTpiRange = (v) => {
+  const m = String(v ?? '').trim().match(/^(\d+)\s*(?:-|to|–)\s*(\d+)$/i);
+  if (!m) return null;
+  const lo = parseInt(m[1], 10), hi = parseInt(m[2], 10);
+  if (!lo || !hi) return null;
+  return { tpi_min: Math.min(lo, hi), tpi_max: Math.max(lo, hi) };
+};
+
+// ProShop's "Thread Type" (Form / Cut / Spiral Cut) is the app's tap_sub_type.
+// ⚠️ TAPS ONLY — the column also appears on thread mills (N-48, N-78 "Single
+// Profile TM"), where tap_sub_type has no meaning. "Spiral Cut" is a cut tap;
+// the spiral detail has nowhere to live today and is deliberately dropped rather
+// than invented as a third sub-type.
+const psTapSubType = (v) => {
+  const t = String(v ?? '').trim().toLowerCase();
+  if (!t) return '';
+  if (t.includes('form')) return 'form';
+  if (t.includes('cut')) return 'cut';
+  return '';
+};
+
+const psBool = (v) => {
+  const s = String(v ?? '').trim().toLowerCase();
+  if (s === 'true' || s === 'yes' || s === 'y' || s === '1') return true;
+  if (s === 'false' || s === 'no' || s === 'n' || s === '0') return false;
+  return null;
+};
+
 // Map a bare ProShop bin number to a STRUCTURED tool_location so the app owns the
 // location: it composes to "LC-140" via the Location System AND persists in
 // metadata (the only place a no-Fusion tool can keep a location — a free-text
@@ -870,15 +916,32 @@ export function psRowToTool(group, psUnit = 'inches', locationSystems = [], locC
     // ProShop EXPORT still emits the column — this is the read direction only.
     coating: r['Coating'] || '',
     material: psMaterial(r['Tool Material']),
-    ...resolveThreadSize(r['Thread'] || r['Pitch'] || ''),
+    // ⚠️ resolveThreadSize returns `thread_unit`; the tool field is
+    // `tap_thread_unit`. Spreading it raw dropped the unit on the floor and left
+    // a stray key behind — so a NEW tool created from a ProShop metric tap row
+    // got the right designation with no unit, which shows the INCH size list and
+    // reads as a hand-typed custom thread. (The fill-gap path below already
+    // mapped it correctly; this one didn't.)
+    ...(({ thread_unit, ...rest }) => ({ ...rest, tap_thread_unit: thread_unit || '' }))(
+      resolveThreadSize(r['Thread'] || r['Pitch'] || '')
+    ),
     tap_class: r['Tap class'] || '',
     point_type: r['Point Type'] || '',
+    // Both are declared in fieldRegistry with a proShopColumn and are EXPORTED,
+    // but were never read back — so a tool round-tripped through ProShop lost
+    // them silently. ProShop writes CenterCut as Y/N (psBool handles both).
+    // Blank is ACTIVE, not unknown — 40 of the shop's 310 real rows are blank.
+    tool_status: statusFromProShop(r['Status']),
+    center_cutting: psBool(r['CenterCut']) === true,
+    flute_type: r['FluteType/Chipbreaker'] || '',
+    ...(toolType === 'tap' ? { tap_sub_type: psTapSubType(r['Thread Type']) } : {}),
+    ...(toolType === 'thread mill' ? (psTpiRange(r['Threads Per Inch']) || {}) : {}),
     stub_jobber: r['(S)tub / (J)obber'] || '',
-    full_profile: r['Full Profile'] === 'true',
-    backside_capable: r['Backside Capable'] === 'true',
-    double_ended: r['Double Ended'] === 'Y',
-    tsc_capable: r['Through Coolant'] === 'true',
-    custom_grind: r['Custom Grind'] === 'true',
+    full_profile: psBool(r['Full Profile']) === true,
+    backside_capable: psBool(r['Backside Capable']) === true,
+    double_ended: psBool(r['Double Ended']) === true,
+    tsc_capable: psBool(r['Through Coolant']) === true,
+    custom_grind: psBool(r['Custom Grind']) === true,
     material_suitability: r['Recommended Workpiece Material']
       ? r['Recommended Workpiece Material'].split(',').map(s => s.trim()).filter(Boolean)
       : [],
@@ -1094,12 +1157,24 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
       if (r['Approved Brand']) additions.vendor = resolveVendorName(r['Approved Brand']);
       const purchasing = buildPurchasingFromGroup(group);
       if (purchasing.manufacturers.length || purchasing.vendors.length) additions.purchasing = purchasing;
-      if (r['Through Coolant'] === 'true' || r['Through Coolant'] === 'false') {
-        additions.tsc_capable = r['Through Coolant'] === 'true';
-      }
-      if (r['Custom Grind'] === 'true' || r['Custom Grind'] === 'false') {
-        additions.custom_grind = r['Custom Grind'] === 'true';
-      }
+      const psTsc = psBool(r['Through Coolant']);
+      if (psTsc != null) additions.tsc_capable = psTsc;
+      const psCustomGrind = psBool(r['Custom Grind']);
+      if (psCustomGrind != null) additions.custom_grind = psCustomGrind;
+      // ⚠️ center_cutting is PS-wins, NOT fill-gap-else-flag: the app defaults it
+      // to `false`, so "nobody has answered" and "answered no" are the same
+      // stored value. Flagging on a difference would raise a conflict on every
+      // centre-cutting tool that still carries the default — 97 of them in the
+      // shop's real export. Same class (and same rule) as tsc_capable.
+      const psCenterCut = psBool(r['CenterCut']);
+      if (psCenterCut != null) additions.center_cutting = psCenterCut;
+      // Lifecycle: ProShop wins, for the same reason as center_cutting — the app
+      // defaults to 'active', so "nobody answered" and "answered Active" are the
+      // same stored value and flagging would fire on every tool.
+      // ⚠️ EXCEPT over BETA. Beta is an app-only state ProShop cannot express (a
+      // beta tool is deliberately never exported), so a ProShop row saying Active
+      // is not evidence against it — it is just ProShop not having the concept.
+      if (!isBeta(tool)) additions.tool_status = statusFromProShop(r['Status']);
       // min_ooh: ProShop is authoritative — always overwrite when present, after
       // converting from the ProShop file unit into the matched tool's own unit.
       const psMinOoh = psNum(r['Length Below Holder - MIN OOH']);
@@ -1119,6 +1194,17 @@ export function matchProShopToTools(groups, tools, psUnit = 'inches', existingCo
       }
       fillOrFlag('coating', tool.coating, r['Coating']);
       fillOrFlag('point_type', tool.point_type, r['Point Type']);
+      fillOrFlag('flute_type', tool.flute_type, r['FluteType/Chipbreaker']);
+      if (tool.tool_type === 'tap') {
+        fillOrFlag('tap_sub_type', tool.tap_sub_type, psTapSubType(r['Thread Type']));
+      }
+      if (tool.tool_type === 'thread mill') {
+        const range = psTpiRange(r['Threads Per Inch']);
+        if (range) {
+          fillOrFlag('tpi_min', tool.tpi_min, range.tpi_min, psNumEq);
+          fillOrFlag('tpi_max', tool.tpi_max, range.tpi_max, psNumEq);
+        }
+      }
       // Location. ProShop's Location is a bare bin NUMBER (no "LC-" prefix); the
       // app's location string carries the Location System prefix (e.g. "LC-1405").
       // Compare on the NUMBER only so "LC-1405" and "1405" are the same bin. Same

@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import { UploadCloud, AlertTriangle, MapPin, X } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { parseCSV } from './ImportFlow.jsx';
-import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel } from '../utils/proShopHeaders.js';
+import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel, isProShopSummaryRow } from '../utils/proShopHeaders.js';
 import { normProShopId } from '../schema/insertFamilies.js';
 import {
   routeProShopLocations, resolveLocationString, hasConfiguredImportRules, systemImportRule,
@@ -81,10 +81,7 @@ export default function LocationImportModal({ onClose }) {
         for (const r of data) {
           const key = (r['Tool #'] || '').trim();
           if (!key || seen.has(key)) continue;
-          // ProShop exports end with a TOTALS summary row — no description, no
-          // group, not a tool. Left in, it shows up in the worklist as a tool
-          // the library is missing.
-          if (!(r['Description'] || '').trim() && !(r['Tool Group'] || '').trim()) continue;
+          if (isProShopSummaryRow(r)) continue;   // the trailing TOTALS footer
           seen.set(key, { key, value: (r['Location'] || '').trim() });
         }
         setRows([...seen.values()]);

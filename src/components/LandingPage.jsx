@@ -6,6 +6,9 @@ import { applyFilters, matchedLegacyId, matchedComponent, matchedPurchasing, sor
 import { toolNeedsAttention } from '../utils/toolConflicts.js';
 import { getDefaultUnit } from '../utils/units.js';
 import { machineColor } from '../utils/machineColors.js';
+import {
+  TOOL_STATUSES, DEFAULT_VISIBLE_STATUSES, ALL_TOOL_STATUSES, isDefaultStatusSelection,
+} from '../utils/toolStatus.js';
 import { toolIdSequence } from '../utils/toolIdSystem.js';
 import { HolderRailIcon } from './icons/ToolTypeIcon.jsx';
 import ToolTypeGrid from './ToolTypeGrid.jsx';
@@ -85,6 +88,11 @@ export default function LandingPage() {
   // stays as the user sets it for the session.
   const machines = shopSettings?.machines || [];
   const defaultMachineId = shopSettings?.default_machine_id || null;
+  // ⚠️ Retired is OFF by default, Active + Beta ON. A retired tool is still in
+  // the library and still findable — it just isn't in the way of everyday work.
+  // The chip row says so plainly, and the result count names what is hidden, so
+  // a tool you can't see is never mistaken for a tool that isn't there.
+  const [statuses, setStatuses] = useState(DEFAULT_VISIBLE_STATUSES);
   const [machineFilter, setMachineFilter] = useState({ machineId: null, strict: false });
   const machineInitialised = useRef(false);
   useEffect(() => {
@@ -132,6 +140,12 @@ export default function LandingPage() {
     setDisplayQuery('');
     setMachineFilter({ machineId: null, strict: false });
     setLibraryFilter({ libraryId: null });
+    // ⚠️ Statuses go to ALL, not to the default. The banner promises an exact
+    // count taken over the WHOLE library, so leaving Retired hidden would show
+    // fewer tools than the number that was just clicked — the precise failure
+    // the rest of this reset exists to prevent. All three chips light up, so it
+    // is visible rather than a silent widening.
+    setStatuses(ALL_TOOL_STATUSES);
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete('reset');
@@ -181,7 +195,7 @@ export default function LandingPage() {
   // `components` rides along so a search can match an insert tool by its parts —
   // see componentTextIndex. Reference data, not a filter (same as `materials`).
   const componentList = components?.components || [];
-  const activeFilters = { toolTypes: selectedTypes, textQuery, facets, flaggedOnly, noFusionOnly, materials, components: componentList };
+  const activeFilters = { toolTypes: selectedTypes, textQuery, facets, flaggedOnly, noFusionOnly, materials, components: componentList, statuses };
   const filtered = useMemo(() => {
     const unit = getDefaultUnit();
     const tols = exactMode ? null : {
@@ -196,7 +210,7 @@ export default function LandingPage() {
     // Relevance first, the chosen sort within each tier — so an exact ID match
     // reaches the top without overriding the sort the user picked.
     return sortResults(result, textQuery, SORTS[sort]?.fn || SORTS.added.fn);
-  }, [tools, selectedTypes, textQuery, facets, flaggedOnly, noFusionOnly, materials, components, sort, machineFilter, machines.length, exactMode, libraryFilter, toolLibraries.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tools, selectedTypes, textQuery, facets, flaggedOnly, noFusionOnly, materials, components, sort, machineFilter, machines.length, exactMode, libraryFilter, toolLibraries.length, statuses]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleQueryChange = useCallback((val) => {
     setDisplayQuery(val);
@@ -227,7 +241,7 @@ export default function LandingPage() {
     setFacets(newFilters.facets || {});
   };
 
-  const hasFilters = selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0 || !!machineFilter.machineId || !!libraryFilter.libraryId || flaggedOnly || noFusionOnly;
+  const hasFilters = !isDefaultStatusSelection(statuses) || selectedTypes.length > 0 || textQuery || Object.keys(facets).length > 0 || !!machineFilter.machineId || !!libraryFilter.libraryId || flaggedOnly || noFusionOnly;
 
   // When hide_unused_tool_types is on (default) and not in demo mode, only show
   // tool type tiles for types that have at least one tool in the library.
@@ -368,6 +382,43 @@ export default function LandingPage() {
         </div>
       )}
 
+      {/* Lifecycle filter. Always shown — unlike the machine row it needs no
+          configuration, and it is the only thing explaining why a retired tool
+          isn't in the results. */}
+      <div className="mb-16">
+        <div className="section-header">Status</div>
+        <div className="flex items-center gap-8 flex-wrap">
+          {TOOL_STATUSES.map(st => {
+            const on = statuses.includes(st.id);
+            return (
+              <button
+                key={st.id}
+                className={`chip machine-chip ${on ? 'active' : ''}`}
+                style={{ '--badge-color': st.color }}
+                title={st.tip}
+                onClick={() => setStatuses(cur => (
+                  cur.includes(st.id) ? cur.filter(x => x !== st.id) : [...cur, st.id]
+                ))}
+              >
+                {st.label}
+              </button>
+            );
+          })}
+          {/* ⚠️ Turning every status off would show NOTHING while looking like
+              a filter problem. Say what is hidden instead. */}
+          {statuses.length === 0 && (
+            <span className="text-xs" style={{ color: 'var(--orange)' }}>
+              No statuses selected — nothing can match. Pick at least one.
+            </span>
+          )}
+          {statuses.length > 0 && TOOL_STATUSES.some(st => !statuses.includes(st.id)) && (
+            <span className="text-xs text-sub">
+              Hiding {TOOL_STATUSES.filter(st => !statuses.includes(st.id)).map(st => st.label).join(' + ')}
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* Machine filter — only when machines are configured in shop settings */}
       {machines.length > 0 && (
         <div className="mb-16">
@@ -448,7 +499,7 @@ export default function LandingPage() {
         {hasFilters && (
           <button
             className="btn btn-ghost btn-sm"
-            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); setMachineFilter({ machineId: null, strict: false }); setLibraryFilter({ libraryId: null }); clearStatusFilters(); }}
+            onClick={() => { setSelectedTypes([]); setFacets({}); setTextQuery(''); setDisplayQuery(''); setMachineFilter({ machineId: null, strict: false }); setLibraryFilter({ libraryId: null }); setStatuses(DEFAULT_VISIBLE_STATUSES); clearStatusFilters(); }}
           >
             Reset
           </button>

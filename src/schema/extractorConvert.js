@@ -180,6 +180,7 @@ export function extractorToTool(f) {
     tap_sub_type: f.tapSubType || '',   // no default — cut/form must be set explicitly (form taps differ)
     is_sti: f.isSTI || false,
     tap_thread_unit: f.threadUnit || '',
+    tool_status: f.status || 'active',
     min_thread_pitch: parseFloat(f.minThreadPitch) || null,
     max_thread_pitch: parseFloat(f.maxThreadPitch) || null,
     tpi_min: parseInt(f.tpiMin) || null,
@@ -218,7 +219,16 @@ export function toolToExtractor(tool) {
     loc: String(tool.flute_length ?? ''),
     oal: String(tool.overall_length ?? ''),
     flutes: String(tool.number_of_flutes ?? ''),
-    shankDia: String(tool.shank_diameter ?? tool.diameter ?? ''),
+    // ⚠️ NO fallback to the cutting diameter. A tool with no recorded shank
+    // diameter has none — substituting the cut dia asserts a straight shank,
+    // which is wrong for every reduced-shank tool. Measured on the shop's real
+    // ProShop export: of the 143 tools that DO carry a shank diameter, 62 (43%)
+    // differ from the cut diameter — so on the tools where the app would have to
+    // guess, the guess is wrong roughly four times in ten. The ProShop cell is
+    // now left empty instead, and re-importing our export no longer stamps the
+    // guess on as fact. (`buildFusionRow` still falls back to the diameter for
+    // Fusion's own TSV, where a shank diameter is required.)
+    shankDia: String(tool.shank_diameter ?? ''),
     cornerRadius: String(tool.corner_radius ?? '0'),
     material: tool.material || 'carbide',
     coating: tool.coating || '',
@@ -267,6 +277,7 @@ export function toolToExtractor(tool) {
     profileRadius: String(tool.profile_radius ?? ''),
     axialDistance: String(tool.axial_distance ?? ''),
     psToolId: tool.tool_id || '',
+    status: tool.tool_status || 'active',
     // ProShop Location column. A structured-location tool carries a
     // `proshop_location` resolved per its system's export rule (number_only /
     // full / fixed); legacy free-text tools fall back to the raw location.

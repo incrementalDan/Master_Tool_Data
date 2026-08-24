@@ -2,8 +2,9 @@ import { useState, useRef } from 'react';
 import { X, UploadCloud, AlertTriangle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { parseCSV, matchProShopToTools } from './ImportFlow.jsx';
-import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel } from '../utils/proShopHeaders.js';
+import { proShopRowsToObjects, detectProShopFormat, proShopFormatLabel, isProShopSummaryRow } from '../utils/proShopHeaders.js';
 import { getDefaultUnit, unitAbbr } from '../utils/units.js';
+import { statusMeta } from '../utils/toolStatus.js';
 
 // Single-tool ProShop data import. Upload a ProShop CSV export (the whole
 // library is fine) and this finds the row that matches THIS tool, previews the
@@ -27,6 +28,15 @@ const FIELD_LABELS = {
   is_sti: 'STI tap',
   tap_thread_unit: 'Thread unit',
   tip_to_first_thread: 'Tip to 1st full thread',
+  // Added with the ProShop audit — without a label these preview as the raw
+  // field key, which reads like a bug in the very screen meant to show the user
+  // exactly what an import will change.
+  tool_status: 'Status',
+  center_cutting: 'Centre cutting',
+  flute_type: 'Flute type',
+  tap_sub_type: 'Tap type',
+  tpi_min: 'TPI min',
+  tpi_max: 'TPI max',
 };
 
 // Render one addition value for the preview.
@@ -40,6 +50,8 @@ function displayValue(key, val, unit) {
     return `${Math.round(val * 10000) / 10000} ${unitAbbr(unit)}`;
   }
   if (typeof val === 'boolean') return val ? 'Yes' : 'No';
+  // Lifecycle reads as a word, not the stored slug.
+  if (key === 'tool_status') return statusMeta(val).label;
   return String(val);
 }
 
@@ -70,7 +82,15 @@ export default function ProShopImportModal({ tool, onClose, onApply }) {
         // Accept both header conventions (real ProShop export + this app's own
         // ProShop export) via header canonicalization — see proShopHeaders.js.
         setPsFormat(detectProShopFormat(rows[0]));
-        const data = proShopRowsToObjects(rows);
+        const all = proShopRowsToObjects(rows);
+        // Drop the trailing TOTALS footer — on a per-tool export (no "Tool #"
+        // column) every row is folded into ONE group, so the summary row's
+        // library-wide Cost would land on this tool as a purchasing row.
+        // ⚠️ Keep the rows as-is if the filter would empty the file: a per-tool
+        // export may legitimately carry no Description/Tool Group column at all,
+        // and every row would then read as a summary.
+        const kept = all.filter(r => !isProShopSummaryRow(r));
+        const data = kept.length ? kept : all;
         // A per-tool ProShop export often has NO "Tool #" column (this whole file
         // is one tool). In that case every row belongs to the tool the user is
         // importing into — group them together and force the match. Otherwise
