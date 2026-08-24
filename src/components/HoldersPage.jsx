@@ -770,7 +770,7 @@ export default function HoldersPage() {
     holderLibrary, holders: fusionHolders, shopSettings, tools,
     saveHolderRecord, deleteHolderRecord, saveHolderLibrary, saveShopSettings, saveHolderPart,
     importHoldersFromFusion, pushHoldersToFusion, restampHolderTools, linkToolsToHolders,
-    restoreHolderRecord, relinkHolders, googleAuthenticated, googleUser, demoMode, notify,
+    restoreHolderRecord, duplicateHolder, relinkHolders, googleAuthenticated, googleUser, demoMode, notify,
     needsNormalize,
   } = useApp();
   const navigate = useNavigate();
@@ -831,6 +831,16 @@ export default function HoldersPage() {
   // / Saved), which is where you're already looking, and a failure surfaces
   // there too.
   const onSave = (record) => saveHolderRecord(record);
+
+  // Duplicating opens the COPY — the point of it is "another one like this,
+  // a bit different", so the next thing you do is edit the new one.
+  const onDuplicate = async (record) => {
+    try {
+      const copy = await duplicateHolder(record);
+      setOpenId(copy.id);
+      notify('Duplicated — this copy has its own ID and no tools on it. Push to Fusion adds it there.', 'success');
+    } catch { /* toasted */ }
+  };
 
   // ─── Retire (archive) ────────────────────────────────────────────────────
   // Opens RetireHolderModal rather than confirming inline: when a holder is in
@@ -1145,6 +1155,7 @@ export default function HoldersPage() {
           staleCount={openStaleCount}
           fusionConflict={openConflict}
           onResolveFusion={onResolveFusion}
+          onDuplicate={onDuplicate}
           onRestamp={onRestamp}
           allLocations={allLocations}
           // An archived holder is a reference: editing one would be writing to

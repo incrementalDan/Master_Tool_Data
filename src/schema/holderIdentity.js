@@ -121,6 +121,19 @@ export function matchFusionHolder(entry, records, tolIn = SEGMENT_MATCH_TOL_IN) 
   const refRecord = recordForRef(records, entry?.['product-id']);
   const geoRecords = recordsForGeometry(records, entry, tolIn);
 
+  // ⚠️ THE REF SETTLES A SHARED SHAPE — check it BEFORE calling this ambiguous.
+  // Both signals agreeing on one record IS an exact match; a sibling that
+  // happens to have the same shape does not contradict it, and with identical
+  // geometry there is nothing to choose between them anyway. Ambiguity is only
+  // "we cannot tell WHICH record", which is the case where our id isn't on the
+  // entry at all (the geometry-only bootstrap, where a wrong guess would adopt
+  // the wrong holder).
+  // Duplicating a holder here makes exactly this state, deliberately: the copy
+  // starts as the same shape, so without this a push straight after would flag
+  // the ORIGINAL as ambiguous and write neither of them.
+  if (refRecord && geoRecords.some(r => r.id === refRecord.id)) {
+    return { status: 'exact', record: refRecord, refRecord, geoRecords, reason: null };
+  }
   if (geoRecords.length > 1) {
     return {
       status: 'ambiguous', record: null, refRecord, geoRecords,
@@ -129,9 +142,6 @@ export function matchFusionHolder(entry, records, tolIn = SEGMENT_MATCH_TOL_IN) 
   }
   const geoRecord = geoRecords[0] || null;
 
-  if (refRecord && geoRecord && refRecord.id === geoRecord.id) {
-    return { status: 'exact', record: refRecord, refRecord, geoRecords, reason: null };
-  }
   if (refRecord && geoRecord) {
     return {
       status: 'conflict', record: null, refRecord, geoRecords,
