@@ -6,6 +6,7 @@ import { normalizeBin } from '../utils/locationSystem.js';
 import { normalizeLinkIds } from '../utils/toolLinks.js';
 import { generateId, generateAssemblyId } from './identity.js';
 import { mergeToolConflicts } from '../utils/toolConflicts.js';
+import { resolveThreadPitch } from './threads.js';
 
 // ─── Fusion drift detection (Fusion-decoupling Phase B — D3) ───────────────
 // The shared, Fusion-native fields the app now ALSO stores in metadata. When a
@@ -114,7 +115,16 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     shank_diameter: fusionInternal.shank_diameter ?? meta.shank_diameter ?? null,
     corner_radius: fusionInternal.corner_radius ?? meta.corner_radius ?? null,
     taper_angle: fusionInternal.taper_angle ?? meta.taper_angle ?? null,
-    thread_pitch: fusionInternal.thread_pitch ?? meta.thread_pitch ?? null,
+    // ⚠️ DERIVED from the thread designation, not merely merged — see
+    // resolveThreadPitch. A tap's pitch has no other source (the field is
+    // read-only in the UI), so a designation that parses always wins and a
+    // tool that never passed through the form still reaches Fusion with a TP.
+    thread_pitch: resolveThreadPitch({
+      tool_type: fusionInternal.tool_type ?? meta.tool_type,
+      unit: fusionInternal.unit ?? meta.unit,
+      pitch: meta.pitch || '',
+      thread_pitch: fusionInternal.thread_pitch ?? meta.thread_pitch ?? null,
+    }),
     material: resolveMaterial(fusionInternal.material, meta.material),
     vendor: meta.vendor || '',
     coating: meta.coating || '',

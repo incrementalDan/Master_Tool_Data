@@ -135,3 +135,63 @@ export const TAP_LIMIT_TOLERANCE_DEFAULT_METRIC = '6H'; // standard
 // TODO: no auto-derivation — per spec, the 2B/3B selection formula isn't understood yet.
 export const CLASS_OF_FIT_OPTIONS = ['1B', '2B', '3B'];
 export const CLASS_OF_FIT_DEFAULT = '2B';
+
+// The numeric thread pitch (distance per thread, in the TOOL's own unit) DERIVED
+// from the thread designation. `thread_pitch` (Fusion's geometry.TP) is a pure
+// function of `pitch` + the tool's unit — it is read-only in the UI and has no
+// other source — so this is the ONE place it is computed.
+//
+// ⚠️ It lives here, not in a form handler. It used to be a local function in
+// ToolForm fired only by an onChange, so a tap whose designation arrived any
+// other way — a ProShop import, a spec-sheet extraction, the Add-Tool flow, or
+// simply an existing library tool — never got a pitch at all, and Fusion got a
+// tap with no TP.
+//
+// Two parsing rules that a simpler regex gets wrong:
+//  • Inch TPI is the LAST dash-group, and may be fractional. `-(\d+)` on
+//    "1-1/4-12 UNF" matches the leading "1" (→ 1 TPI, off by 12×), and on
+//    "1-11.5 NPT" / "2-4.5 UNC" it truncates the half.
+//  • A metric designation is matched via metricThreadKey, so every spelling
+//    ("M6x1", "M6 x 1.0", "M6-1.0") collapses to one pitch — and is never fed
+//    to the inch branch, where "M6-1.0" would read as 1 TPI.
+// Returns null when the designation carries no pitch (an unparseable custom
+// thread): no value beats a wrong one, and a stale one is a wrong one.
+export function threadPitchValue(designation, toolUnit = 'inches') {
+  const raw = String(designation || '').trim();
+  if (!raw) return null;
+  // Canonicalize first, so a bare "M6" resolves to its coarse pitch and STI /
+  // Helicoil tokens are stripped (the pitch is the PARENT thread's).
+  const str = resolveThreadSize(raw).pitch || raw;
+
+  const metricKey = metricThreadKey(str);
+  if (metricKey) {
+    const mm = parseFloat(metricKey.split('x')[1]);
+    if (!mm) return null;                       // "M6" with no list match — unknown
+    return round8(toolUnit === 'millimeters' ? mm : mm / 25.4);
+  }
+
+  const dashGroups = str.match(/-\d+(?:\.\d+)?/g);
+  if (!dashGroups) return null;
+  const tpi = parseFloat(dashGroups[dashGroups.length - 1].slice(1));
+  if (!tpi) return null;
+  const pitchIn = 1 / tpi;
+  return round8(toolUnit === 'millimeters' ? pitchIn * 25.4 : pitchIn);
+}
+
+const round8 = (n) => Number(n.toFixed(8));
+
+// Tool types whose thread_pitch is derived from the designation.
+const THREAD_PITCH_DERIVED_TYPES = new Set(['tap', 'thread mill']);
+
+// The derived pitch for a tool, or its stored value when nothing can be derived.
+// ⚠️ A derivable designation WINS over the stored number rather than only
+// filling a blank: the designation is the source of truth, so a stored value
+// that disagrees is stale (the thread size was changed somewhere that didn't
+// recompute it), not an independent edit. Idempotent — a tool that already
+// agrees comes back byte-for-byte, so a second pass has nothing to do.
+export function resolveThreadPitch(tool) {
+  const stored = tool?.thread_pitch ?? null;
+  if (!THREAD_PITCH_DERIVED_TYPES.has(tool?.tool_type)) return stored;
+  const derived = threadPitchValue(tool?.pitch, tool?.unit);
+  return derived ?? stored;
+}
