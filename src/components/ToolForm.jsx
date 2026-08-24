@@ -9,6 +9,7 @@ import {
   TAP_LIMIT_TOLERANCE_OPTIONS_INCH, TAP_LIMIT_TOLERANCE_OPTIONS_METRIC,
   TAP_LIMIT_TOLERANCE_DEFAULT_INCH, TAP_LIMIT_TOLERANCE_DEFAULT_METRIC,
 } from '../schema/toolSchema.js';
+import { threadPitchValue } from '../schema/threads.js';
 import { fieldLabel } from '../schema/fieldRegistry.js';
 import { unitAbbr } from '../utils/units.js';
 import { toolIdLabel } from '../utils/toolIdSystem.js';
@@ -31,26 +32,6 @@ import {
   INSERT_FAMILIES, INSERT_FAMILY_BY_ID, ALWAYS_INSERT_TYPES,
   defaultActivationFamily, newPairing, isCombinedProShopId,
 } from '../schema/insertFamilies.js';
-
-function derivePitchFromThreadSize(pitchStr, toolUnit = 'inches') {
-  const str = (pitchStr || '').trim();
-  // Metric: "M5 x 0.8", "M6 x 1.0"
-  const mm = str.match(/^M[\d.]+\s*[xX×]\s*([\d.]+)/i);
-  if (mm) {
-    const p = parseFloat(mm[1]);
-    if (isNaN(p)) return null;
-    return toolUnit === 'millimeters' ? p : p / 25.4;
-  }
-  // Inch: "1/4-20 UNC", "#10-32"  — TPI is after the dash
-  const tpi = str.match(/-(\d+)/);
-  if (tpi) {
-    const n = parseFloat(tpi[1]);
-    if (!n) return null;
-    const pitchIn = 1 / n;
-    return toolUnit === 'millimeters' ? pitchIn * 25.4 : pitchIn;
-  }
-  return null;
-}
 
 export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDelete }) {
   const { tools, shopSettings, googleAuthenticated } = useApp();
@@ -122,10 +103,13 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
 
   const setField = (field, value) => setData(d => {
     const next = { ...d, [field]: value };
-    // Auto-derive thread_pitch from thread size string for tap/thread mill.
+    // thread_pitch is DERIVED from the thread designation (the field is
+    // read-only in the UI, so there is no hand-entered value to protect) —
+    // recomputed here so a live edit updates it without waiting for a reload.
+    // ⚠️ A designation that no longer parses CLEARS it: the old number belonged
+    // to the old thread, and a stale pitch is a wrong one.
     if (field === 'pitch' && (d.tool_type === 'tap' || d.tool_type === 'thread mill') && typeof value === 'string') {
-      const tp = derivePitchFromThreadSize(value, d.unit);
-      if (tp !== null) next.thread_pitch = Number(tp.toFixed(8));
+      next.thread_pitch = threadPitchValue(value, d.unit);
     }
     return next;
   });

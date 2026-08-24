@@ -8,6 +8,7 @@ import { generateId } from './identity.js';
 import { getDefaultUnit } from '../utils/units.js';
 import { buildDesc } from '../utils/toolNaming.js';
 import { registryIdForName } from './vendorRegistry.js';
+import { threadPitchValue } from './threads.js';
 
 // ─── Facet fields per tool type (search filter order) ─────────────────────
 const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'custom_grind', 'flute_design', 'material_suitability', 'tags', 'no_fusion_link'];
@@ -176,6 +177,11 @@ export function extractorToTool(f) {
     tsc_capable: THROUGH_COOLANT_VALUES.has(f.coolant || '') || false,
     cutting_direction: f.cuttingDirection || 'Right Hand',
     pitch: f.pitch || '',
+    // thread_pitch (Fusion's geometry.TP) is DERIVED from the designation — the
+    // one derivation, shared with the form and the load seam. Stamped here so a
+    // tool created by extraction reaches Fusion with a TP on its FIRST save,
+    // rather than only after someone re-touches the thread-size field.
+    thread_pitch: threadPitchValue(f.pitch, f.unit || getDefaultUnit()),
     tap_class: f.tapClass || '',
     tap_sub_type: f.tapSubType || '',   // no default — cut/form must be set explicitly (form taps differ)
     is_sti: f.isSTI || false,
