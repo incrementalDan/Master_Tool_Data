@@ -5248,6 +5248,32 @@ input.sf-ref-num { text-align: right; }
 .holder-seg-table td:last-child, .holder-seg-table th:last-child { width: 28px; }
 .holder-seg-note { font-size: 9.5px; color: var(--text-faint); margin-top: 5px; line-height: var(--lh-normal); }
 .holder-add-seg { margin-top: 8px; }
+
+/* ─── Editing the segment STRUCTURE (add / delete rows) ───────────────────
+   ⚠️ THE + IS OUT OF FLOW, ON PURPOSE. An insert row of its own would push
+   every segment down the moment edit mode came on — the table growing by a
+   third for buttons nobody has pressed. Absolutely positioned on the row
+   border, the table does not move at all: switching edit mode changes what is
+   drawn over it, never its height. */
+.holder-seg-num { position: relative; }
+.holder-seg-ins {
+  position: absolute; left: 12px; transform: translate(-50%, -50%);
+  z-index: 4; display: flex; align-items: center; justify-content: center;
+  width: 15px; height: 15px; padding: 0; border-radius: 50%; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--blue) 55%, transparent);
+  background: var(--surface); color: var(--blue);
+  opacity: .6; transition: opacity var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.holder-seg-ins[data-edge="top"] { top: 0; }
+.holder-seg-ins[data-edge="bottom"] { top: 100%; }
+.holder-seg-ins:hover {
+  opacity: 1; background: var(--blue); color: #fff; border-color: var(--blue);
+  transform: translate(-50%, -50%) scale(1.15);
+}
+/* The delete column keeps its width whether or not editing is on — removing
+   the button would resize the whole table on toggle. visibility also takes it
+   out of the tab order, so it can't be reached while it's off. */
+.holder-seg-table:not(.editing) .holder-seg-del { visibility: hidden; }
 /* Floating range total — pointer-events off so it never blocks the row under it. */
 .holder-seg-total {
   position: absolute; left: 38px; z-index: 5; pointer-events: none;

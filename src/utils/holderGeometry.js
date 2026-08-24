@@ -46,6 +46,25 @@ export function displaySegments(segments) {
   return Array.isArray(segments) ? segments.slice().reverse() : [];
 }
 
+// Insert a segment so it becomes VISUAL row `visualIndex` (0 = above the top
+// row / spindle end, count = below the bottom row / tool tip).
+//
+// ⚠️ THE MIRROR MAKES THIS NON-OBVIOUS, AND GETTING IT WRONG PUTS THE SEGMENT
+// ON THE WRONG END OF THE HOLDER. The display is the stored array reversed, so
+// a new visual index vi in a list of count+1 is stored index
+// (count+1-1-vi) = count-vi. Both ends check out: inserting above the TOP row
+// (vi 0) appends at `count`, because the top row is the LAST stored element;
+// inserting below the BOTTOM row (vi = count) prepends at 0, which is exactly
+// what "add at tip" always did. Pure, and locked by holderGeometry.test.js —
+// the whole reason a segment could only be added at the tip was that there was
+// no mapping for anywhere else, which sent the user to Fusion to do it.
+export function insertSegmentAt(segments, visualIndex, segment) {
+  const list = Array.isArray(segments) ? segments.slice() : [];
+  const at = Math.max(0, Math.min(list.length, list.length - visualIndex));
+  list.splice(at, 0, segment);
+  return list;
+}
+
 // ─── Derived geometry ───────────────────────────────────────────────────────
 
 // Total physical height of every segment, in the holder's unit.
