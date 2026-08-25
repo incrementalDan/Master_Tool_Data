@@ -8,8 +8,9 @@
 //           "AL 1.500 30-SK20-90 - Finish"
 //           "TI 0.875 30-SK13-60 w/ER16 EXT 2.2OOH - Small Bore"
 //
-//   - Material code: AL / SS / STEEL / MILD / BRONZE / BRASS / TI / CI / PLASTIC
-//     (Fusion's preset material.query). Unknown/blank -> "GEN".
+//   - Material code: the short token from the Materials library (alloy / CAM
+//     preset / group `code`, resolved from Fusion's preset material.query by
+//     materialNameCode). Unknown/blank -> omitted, never a placeholder.
 //   - OOH: stick-out in inches, fixed 3 decimals, no inch mark.
 //   - Holder name: the holder's DESCRIPTION (holderNaming.holderNameToken).
 //     There is no short name any more — see holderNaming.js.
@@ -24,14 +25,23 @@ import {
 } from '../schema/camStrategies.js';
 import { lengthEps } from './units.js';
 
-// Material query code -> the token used in preset names. The query value Fusion
-// stores already matches these codes, so the code IS the query (uppercased).
+// ⚠️ RECOGNITION ONLY — these are NOT the short names used in preset names.
+// The name token comes from the Materials library (group / CAM preset / alloy
+// `code`, edited in the Materials module) via materialNameCode. This table is
+// the legacy keyword matcher kept for three jobs a library lookup can't do:
+// inferring a material from an imported preset NAME, colouring a pre-library
+// string, and reducing a bare shop code for the normalize backlog. Never use it
+// to compose a name.
 export const MATERIAL_CODES = ['AL', 'SS', 'STEEL', 'MILD', 'BRONZE', 'BRASS', 'TI', 'CI', 'PLASTIC'];
 
+// ⚠️ A material with no code is a BLANK token, never a placeholder. The name
+// used to read "GEN 2.125 NBT30-SK13C-60 - Rough" when nothing resolved, which
+// asserts a material ("general") that nobody chose — the same rule buildDesc
+// follows for tool descriptions: omit an absent field, never invent a value.
+// composePresetName filters blanks before joining, so the name simply starts at
+// the OOH. MaterialLinkBanner is what surfaces the missing link.
 export function materialToCode(query) {
-  const q = String(query || '').toUpperCase().trim();
-  if (!q) return 'GEN';
-  return q;
+  return String(query || '').toUpperCase().trim();
 }
 
 // Human-readable label per canonical material code.
@@ -552,16 +562,26 @@ export function backfillMaterialPresetIds(tools, materials) {
 }
 
 // Short code for a preset name token, most-specific first: alloy code → CAM
-// preset code → group code → group id. Falls back to the legacy keyword code
-// (matchMaterial) for material strings not in the library (e.g. imported
-// "AL FIN"). '' when blank.
+// preset code → group code → group id. '' when blank OR when the string doesn't
+// resolve in the library.
+//
+// ⚠️ THE SHORT NAME IS LIBRARY DATA — there is no hardcoded fallback. It used to
+// fall through to matchMaterial's built-in code table (AL/SS/STEEL/BRASS/…),
+// which pre-dated the Materials library and could not be edited: a brass preset
+// named itself "AL" because group N's code is AL and nothing below it could say
+// otherwise. Every code now lives on a group / CAM preset / alloy record and is
+// edited in the Materials module, so the shop owns its own vocabulary. A string
+// that resolves to nothing yields no token (the name just starts at the OOH) —
+// true rather than tidy, and MaterialLinkBanner already flags it as unlinked.
+// matchMaterial survives only as a RECOGNITION heuristic (colour fallback,
+// import inference, bareMaterialCode) — never as a name source.
 export function materialNameCode(query, materials) {
   const { group, preset, alloy } = findMaterialInLibrary(query, materials);
   if (alloy?.code) return alloy.code;
   if (preset?.code) return preset.code;
   if (group?.code) return group.code;
   if (group?.id) return group.id;
-  return matchMaterial(query) || '';
+  return '';
 }
 
 // Legacy material code -> a name hint identifying the shop's single default CAM
