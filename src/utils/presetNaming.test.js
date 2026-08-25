@@ -136,8 +136,25 @@ describe('Materials library resolution', () => {
     expect(materialNameCode('', MATS)).toBe('');
   });
 
-  it('materialNameCode falls back to the legacy keyword code for non-library strings', () => {
-    expect(materialNameCode('AL FIN', MATS)).toBe('AL'); // imported name → matchMaterial
+  // The short name is library data, full stop — no hardcoded fallback. A string
+  // that resolves to nothing yields no token (the name reads "GEN") rather than
+  // a code nobody can edit; MaterialLinkBanner already flags it as unlinked.
+  it('materialNameCode has NO hardcoded fallback for non-library strings', () => {
+    expect(materialNameCode('AL FIN', MATS)).toBe('');
+    expect(materialNameCode('BRZ ROUGH', MATS)).toBe('');
+    // ...but colour recognition still works, so the preset doesn't go grey too.
+    expect(presetMaterialColor('AL FIN', MATS)).toBeTruthy();
+  });
+
+  // The reason the fallback had to go: group N's code covers aluminium, so a
+  // brass CAM preset could only ever name itself "AL". Its own code now wins.
+  it('a CAM preset code overrides its group for the name token', () => {
+    const mats = {
+      ...MATS,
+      presets: [...MATS.presets, { id: 'pn_brass', group_id: 'N', name: 'Brass / Cu Alloy', code: 'BRASS' }],
+    };
+    expect(materialNameCode('Brass / Cu Alloy', mats)).toBe('BRASS');
+    expect(materialNameCode('Non-Ferrous', mats)).toBe('AL');   // group code, unchanged
   });
 
   it('presetMaterialColor resolves the group color via the library, then legacy', () => {

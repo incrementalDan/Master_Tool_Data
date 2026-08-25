@@ -541,16 +541,25 @@ describe('updateAssembly — OOH/holder change re-derives everything built from 
       ooh: 2.125, asm_number: '30-SK13-60-1001-2.125', linked_preset_guids: [],
     }],
     presets: [
-      { guid: 'p1', name: 'AL 2.125 30-SK13-60 - Rough', material: { query: 'AL' },
+      { guid: 'p1', name: 'AL 2.125 30-SK13-60 - Rough', material: { query: 'Al Wrought' },
         strategies: { roughing: ['adaptive2d', 'adaptive'], finishing: [] } },
-      { guid: 'p2', name: 'AL 2.125 30-SK13-60 - Rough Job 1042', material: { query: 'AL' },
+      { guid: 'p2', name: 'AL 2.125 30-SK13-60 - Rough Job 1042', material: { query: 'Al Wrought' },
         strategies: { roughing: ['adaptive2d', 'adaptive'], finishing: [] } },
     ],
   });
 
+  // The "AL" in a composed name is LIBRARY data — a CAM preset's own Name code.
+  // There is no hardcoded code table behind it any more, so a re-derived name
+  // needs a real library to read the token from.
+  const MATS = {
+    groups: [{ id: 'N', label: 'Non-Ferrous', code: 'ALU' }],
+    presets: [{ id: 'pn_alw', group_id: 'N', name: 'Al Wrought', code: 'AL' }],
+    materials: [],
+  };
+
   it('updates the Auto asm_number and the auto preset name; leaves a custom name alone', async () => {
     const tool = makeTool();
-    const ctx = makeCtx({ toolsRef: { current: [tool] }, materialsRef: { current: null } });
+    const ctx = makeCtx({ toolsRef: { current: [tool] }, materialsRef: { current: MATS } });
     const { updateAssembly } = createToolActions(ctx);
     const out = await updateAssembly('FTL-AAA', 'as1', { ooh: 3.0 });
 
@@ -572,7 +581,7 @@ describe('updateAssembly — OOH/holder change re-derives everything built from 
 
   it('leaves names alone when neither OOH nor holder changed', async () => {
     const tool = makeTool();
-    const ctx = makeCtx({ toolsRef: { current: [tool] }, materialsRef: { current: null } });
+    const ctx = makeCtx({ toolsRef: { current: [tool] }, materialsRef: { current: MATS } });
     const { updateAssembly } = createToolActions(ctx);
     const out = await updateAssembly('FTL-AAA', 'as1', { notes: 'tweaked' });
     expect(out.assemblies[0].asm_number).toBe('30-SK13-60-1001-2.125');

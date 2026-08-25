@@ -24,8 +24,13 @@ import {
 } from '../schema/camStrategies.js';
 import { lengthEps } from './units.js';
 
-// Material query code -> the token used in preset names. The query value Fusion
-// stores already matches these codes, so the code IS the query (uppercased).
+// ⚠️ RECOGNITION ONLY — these are NOT the short names used in preset names.
+// The name token comes from the Materials library (group / CAM preset / alloy
+// `code`, edited in the Materials module) via materialNameCode. This table is
+// the legacy keyword matcher kept for three jobs a library lookup can't do:
+// inferring a material from an imported preset NAME, colouring a pre-library
+// string, and reducing a bare shop code for the normalize backlog. Never use it
+// to compose a name.
 export const MATERIAL_CODES = ['AL', 'SS', 'STEEL', 'MILD', 'BRONZE', 'BRASS', 'TI', 'CI', 'PLASTIC'];
 
 export function materialToCode(query) {
@@ -552,16 +557,26 @@ export function backfillMaterialPresetIds(tools, materials) {
 }
 
 // Short code for a preset name token, most-specific first: alloy code → CAM
-// preset code → group code → group id. Falls back to the legacy keyword code
-// (matchMaterial) for material strings not in the library (e.g. imported
-// "AL FIN"). '' when blank.
+// preset code → group code → group id. '' when blank OR when the string doesn't
+// resolve in the library.
+//
+// ⚠️ THE SHORT NAME IS LIBRARY DATA — there is no hardcoded fallback. It used to
+// fall through to matchMaterial's built-in code table (AL/SS/STEEL/BRASS/…),
+// which pre-dated the Materials library and could not be edited: a brass preset
+// named itself "AL" because group N's code is AL and nothing below it could say
+// otherwise. Every code now lives on a group / CAM preset / alloy record and is
+// edited in the Materials module, so the shop owns its own vocabulary. A string
+// that resolves to nothing yields no token (the name reads "GEN") — which is
+// true, and is already surfaced by MaterialLinkBanner as an unlinked preset.
+// matchMaterial survives only as a RECOGNITION heuristic (colour fallback,
+// import inference, bareMaterialCode) — never as a name source.
 export function materialNameCode(query, materials) {
   const { group, preset, alloy } = findMaterialInLibrary(query, materials);
   if (alloy?.code) return alloy.code;
   if (preset?.code) return preset.code;
   if (group?.code) return group.code;
   if (group?.id) return group.id;
-  return matchMaterial(query) || '';
+  return '';
 }
 
 // Legacy material code -> a name hint identifying the shop's single default CAM
