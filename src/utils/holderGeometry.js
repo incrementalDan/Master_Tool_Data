@@ -58,6 +58,30 @@ export function displaySegments(segments) {
 // what "add at tip" always did. Pure, and locked by holderGeometry.test.js —
 // the whole reason a segment could only be added at the tip was that there was
 // no mapping for anywhere else, which sent the user to Fusion to do it.
+// A new segment's height, fixed at 2mm (or the inch equivalent) rather than
+// copied from its neighbour. ⚠️ IT MUST NOT MATCH THE ROW IT CAME FROM: seeding
+// the height too made the new row identical to the one next to it, and there
+// was then nothing on screen saying which of the two was the one just added.
+// A distinct small number is the marker.
+export const NEW_SEGMENT_HEIGHT_MM = 2;
+export const newSegmentHeight = (unit) => Number(
+  convertLength(NEW_SEGMENT_HEIGHT_MM, 'millimeters', unit).toFixed(unitPrecision(unit)));
+
+// The segment to insert at VISUAL row `visualIndex`, seeded from the face it
+// attaches to so the profile stays continuous instead of jumping to a default
+// 20-unit diameter (absurd on an inch holder, and it rescales the whole
+// drawing). Inserting ABOVE a row meets that row's upper end, so the new
+// segment is a plain cylinder at its upper diameter; inserting at the TIP meets
+// the last row's lower end. Diameters are copied — only the height is not.
+export function seedSegmentAt(segments, visualIndex, unit) {
+  const height = newSegmentHeight(unit);
+  const shown = displaySegments(segments);
+  if (!shown.length) return newSegment(height);
+  const below = shown[visualIndex];                    // the row it sits above
+  const dia = below ? segUpper(below) : segLower(shown[shown.length - 1]);
+  return newSegment(height, dia);
+}
+
 export function insertSegmentAt(segments, visualIndex, segment) {
   const list = Array.isArray(segments) ? segments.slice() : [];
   const at = Math.max(0, Math.min(list.length, list.length - visualIndex));

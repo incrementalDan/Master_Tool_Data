@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   insertSegmentAt, displaySegments, realSegmentIndex, deriveGaugeLength, newSegment,
+  seedSegmentAt, segUpper, segLower, segHeight,
 } from './holderGeometry.js';
 
 // The display is the STORED array reversed, so every visual index is a mirror
@@ -66,5 +67,60 @@ describe('insertSegmentAt', () => {
     const before = deriveGaugeLength(stored);
     const after = deriveGaugeLength(insertSegmentAt(stored, 0, seg(1.02)));
     expect(after - before).toBeCloseTo(1.02, 6);
+  });
+});
+
+describe('seedSegmentAt', () => {
+  // Stored bottom-first: [tip … spindle]. Displayed top-down: [spindle … tip].
+  const stored = [
+    { height: 10, 'upper-diameter': 20, 'lower-diameter': 18 },   // visual row 3 (tip)
+    { height: 20, 'upper-diameter': 30, 'lower-diameter': 20 },   // visual row 2
+    { height: 30, 'upper-diameter': 45, 'lower-diameter': 30 },   // visual row 1 (spindle)
+  ];
+
+  it('is 2mm tall, not the height of the row next to it', () => {
+    // ⚠️ Seeding the height too made the new row identical to its neighbour,
+    // and nothing then said which of the two was the one just added.
+    const seg = seedSegmentAt(stored, 1, 'millimeters');
+    expect(segHeight(seg)).toBe(2);
+    expect(segHeight(seg)).not.toBe(30);
+  });
+
+  it('uses the inch equivalent on an inch holder', () => {
+    expect(segHeight(seedSegmentAt(stored, 1, 'inches'))).toBeCloseTo(2 / 25.4, 4);
+  });
+
+  it('meets the face it attaches to, so the profile stays continuous', () => {
+    // Inserting above visual row 1 meets that row's UPPER end (45).
+    const top = seedSegmentAt(stored, 0, 'millimeters');
+    expect(segUpper(top)).toBe(45);
+    expect(segLower(top)).toBe(45);
+    // Above visual row 2 meets row 2's upper end (30).
+    expect(segUpper(seedSegmentAt(stored, 1, 'millimeters'))).toBe(30);
+  });
+
+  it('at the TIP it meets the last row\'s lower end', () => {
+    const tip = seedSegmentAt(stored, stored.length, 'millimeters');
+    expect(segUpper(tip)).toBe(18);
+    expect(segLower(tip)).toBe(18);
+  });
+
+  it('never seeds the absurd 20-unit default onto a real holder', () => {
+    // The old add-at-tip default put a 20-INCH diameter on an inch holder,
+    // which rescales the whole profile drawing.
+    const inchHolder = [{ height: 1, 'upper-diameter': 0.75, 'lower-diameter': 0.75 }];
+    expect(segUpper(seedSegmentAt(inchHolder, 0, 'inches'))).toBe(0.75);
+  });
+
+  it('falls back to the plain default on an empty holder', () => {
+    expect(segUpper(seedSegmentAt([], 0, 'millimeters'))).toBe(segUpper(newSegment()));
+  });
+
+  it('inserts where it was asked to, with the seeded values intact', () => {
+    const next = insertSegmentAt(stored, 1, seedSegmentAt(stored, 1, 'millimeters'));
+    const shown = displaySegments(next);
+    expect(segHeight(shown[1])).toBe(2);
+    expect(segUpper(shown[1])).toBe(30);
+    expect(shown).toHaveLength(4);
   });
 });
