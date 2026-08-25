@@ -9,7 +9,7 @@
 ProShop assumes **every** tool assembly is an RTA. That is not how the shop works.
 
 - An **RTA is a STANDARD (core) tool assembly** — one tool ID, one fixed holder, one fixed
-  OOH, built once and left assembled, ready to drop into whatever machine needs it.
+  OOH, one fixed collet size and type, built once and left assembled, ready to drop into whatever machine needs it.
 - Most assemblies in the library are **not** standard. They are job-specific stick-outs that
   happened to get proven once. They are real, they keep their `asm_number`, and they must
   keep working exactly as they do now.
