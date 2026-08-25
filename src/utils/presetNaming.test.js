@@ -39,9 +39,11 @@ describe('materialToCode', () => {
     expect(materialToCode('ss')).toBe('SS');
   });
 
-  it('falls back to GEN for blank/unknown', () => {
-    expect(materialToCode('')).toBe('GEN');
-    expect(materialToCode(null)).toBe('GEN');
+  // A blank material is a blank token, not a "GEN" placeholder — the name must
+  // not assert a material nobody chose (same rule buildDesc follows).
+  it('yields nothing for blank/unknown', () => {
+    expect(materialToCode('')).toBe('');
+    expect(materialToCode(null)).toBe('');
   });
 });
 
@@ -137,8 +139,8 @@ describe('Materials library resolution', () => {
   });
 
   // The short name is library data, full stop — no hardcoded fallback. A string
-  // that resolves to nothing yields no token (the name reads "GEN") rather than
-  // a code nobody can edit; MaterialLinkBanner already flags it as unlinked.
+  // that resolves to nothing yields no token (the name starts at the OOH)
+  // rather than a code nobody can edit; MaterialLinkBanner flags it as unlinked.
   it('materialNameCode has NO hardcoded fallback for non-library strings', () => {
     expect(materialNameCode('AL FIN', MATS)).toBe('');
     expect(materialNameCode('BRZ ROUGH', MATS)).toBe('');
@@ -444,10 +446,13 @@ describe('composePresetName', () => {
     // no opType -> no " - Operation" suffix
     expect(composePresetName({ materialQuery: 'SS', ooh: 2.125, holderShort: '30-SK13-60' }))
       .toBe('SS 2.125 30-SK13-60');
-    // only a material -> GEN-free single token
+    // only a material -> a single token
     expect(composePresetName({ materialQuery: 'TI' })).toBe('TI');
-    // nothing filled -> GEN fallback
-    expect(composePresetName({})).toBe('GEN');
+    // no material -> the name simply starts at the OOH; no placeholder token
+    expect(composePresetName({ ooh: 2.125, holderShort: '30-SK13-60', opType: 'rough' }))
+      .toBe('2.125 30-SK13-60 - Rough');
+    // nothing filled -> nothing
+    expect(composePresetName({})).toBe('');
   });
 });
 

@@ -8,8 +8,9 @@
 //           "AL 1.500 30-SK20-90 - Finish"
 //           "TI 0.875 30-SK13-60 w/ER16 EXT 2.2OOH - Small Bore"
 //
-//   - Material code: AL / SS / STEEL / MILD / BRONZE / BRASS / TI / CI / PLASTIC
-//     (Fusion's preset material.query). Unknown/blank -> "GEN".
+//   - Material code: the short token from the Materials library (alloy / CAM
+//     preset / group `code`, resolved from Fusion's preset material.query by
+//     materialNameCode). Unknown/blank -> omitted, never a placeholder.
 //   - OOH: stick-out in inches, fixed 3 decimals, no inch mark.
 //   - Holder name: the holder's DESCRIPTION (holderNaming.holderNameToken).
 //     There is no short name any more — see holderNaming.js.
@@ -33,10 +34,14 @@ import { lengthEps } from './units.js';
 // to compose a name.
 export const MATERIAL_CODES = ['AL', 'SS', 'STEEL', 'MILD', 'BRONZE', 'BRASS', 'TI', 'CI', 'PLASTIC'];
 
+// ⚠️ A material with no code is a BLANK token, never a placeholder. The name
+// used to read "GEN 2.125 NBT30-SK13C-60 - Rough" when nothing resolved, which
+// asserts a material ("general") that nobody chose — the same rule buildDesc
+// follows for tool descriptions: omit an absent field, never invent a value.
+// composePresetName filters blanks before joining, so the name simply starts at
+// the OOH. MaterialLinkBanner is what surfaces the missing link.
 export function materialToCode(query) {
-  const q = String(query || '').toUpperCase().trim();
-  if (!q) return 'GEN';
-  return q;
+  return String(query || '').toUpperCase().trim();
 }
 
 // Human-readable label per canonical material code.
@@ -566,8 +571,8 @@ export function backfillMaterialPresetIds(tools, materials) {
 // named itself "AL" because group N's code is AL and nothing below it could say
 // otherwise. Every code now lives on a group / CAM preset / alloy record and is
 // edited in the Materials module, so the shop owns its own vocabulary. A string
-// that resolves to nothing yields no token (the name reads "GEN") — which is
-// true, and is already surfaced by MaterialLinkBanner as an unlinked preset.
+// that resolves to nothing yields no token (the name just starts at the OOH) —
+// true rather than tidy, and MaterialLinkBanner already flags it as unlinked.
 // matchMaterial survives only as a RECOGNITION heuristic (colour fallback,
 // import inference, bareMaterialCode) — never as a name source.
 export function materialNameCode(query, materials) {
