@@ -13,8 +13,8 @@ import {
 import {
   deriveGaugeLength, deriveExtensionOoh, deriveExtensionShankDia, extensionFlagMismatch,
   convertHolderUnits, formatHolderLen, trimHolderLen, holderLenIn, holderLenMm,
-  nominalLengthCheck, confirmHolderNominal, newSegment, displaySegments, realSegmentIndex,
-  insertSegmentAt,
+  nominalLengthCheck, confirmHolderNominal, displaySegments, realSegmentIndex,
+  insertSegmentAt, seedSegmentAt,
   SEG_HEIGHT, SEG_UPPER, SEG_LOWER, segHeight,
 } from '../utils/holderGeometry.js';
 import { composeHolderDescription, HOLDER_DESC_LIMIT } from '../utils/holderDescription.js';
@@ -165,7 +165,7 @@ function SegmentTable({ segments, unit, onChange, hasExtension, activeSeg, setAc
   // it is test-locked — the display is the stored array reversed, so getting it
   // wrong puts the segment on the wrong end of the holder.
   const insertAt = (vi) => {
-    onChange(insertSegmentAt(segments, vi, newSegment()));
+    onChange(insertSegmentAt(segments, vi, seedSegmentAt(segments, vi, unit)));
     clearSelection();
     setActiveSeg(null);
   };
