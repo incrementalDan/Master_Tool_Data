@@ -31,20 +31,20 @@ export function proShopUrlPointsAt(url, toolId) {
   return u === stem || u.startsWith(`${stem}$`);
 }
 
-const isProShopToolsUrl = (url) =>
-  typeof url === 'string' && url.trim().startsWith(`${PROSHOP_TOOL_URL_BASE}/`);
-
 // What `product-link` should hold for this tool, or null for "leave it alone".
-// Fills a blank, and corrects a link left pointing at the tool's OLD number after
-// a Tool ID renumber. It never touches anything else: an already-correct link
-// (however it is spelled), a ProShop RTA link, or a manufacturer product page
-// pulled off a scanned spec sheet — which lives in this same Fusion field.
+// ⚠️ In `proshop` ID mode the ProShop page WINS — it is the shop's own record of
+// the tool, so it overwrites whatever else is in the field (most often a
+// manufacturer product page pulled off a scanned spec sheet). The only no-op is a
+// link that already points at this tool, however it is spelled: 11 real ones carry
+// a pasted browser session tail and one has no trailing "$" — same page, not
+// wrong, and rewriting them would be churn nobody asked for.
+//
+// Nothing is written at all when the URL can't be composed (a blank id, or a
+// combined insert id whose page is an RTA), so an insert tool's real RTA link
+// survives untouched. The caller gates this on the ID mode.
 export function proShopLinkForWrite(toolId, currentLink) {
   const next = proShopToolUrl(toolId);
   if (!next) return null;
-  const cur = (currentLink || '').trim();
-  if (!cur) return next;
-  if (proShopUrlPointsAt(cur, toolId)) return null;   // already this tool's page
-  if (!isProShopToolsUrl(cur)) return null;           // theirs — never overwrite
-  return next;                                         // stale: points at another id
+  if (proShopUrlPointsAt(currentLink, toolId)) return null;
+  return next;
 }

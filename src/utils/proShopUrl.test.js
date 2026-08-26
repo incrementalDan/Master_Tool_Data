@@ -45,11 +45,21 @@ describe('proShopLinkForWrite', () => {
     expect(proShopLinkForWrite('R-145', `${PROSHOP_TOOL_URL_BASE}/R/R-145`)).toBeNull();
   });
 
-  it('NEVER overwrites a link the app didn’t compose', () => {
+  // In proshop mode the ProShop page is the shop's own record of the tool, so it
+  // wins over whatever else the field holds.
+  it('OVERWRITES a link that isn’t this tool’s ProShop page', () => {
     // A scanned spec sheet puts the MANUFACTURER's product page in this same field.
-    expect(proShopLinkForWrite('A-25', 'https://www.helicaltool.com/products/12345')).toBeNull();
-    // An insert tool's RTA page is a real ProShop link we can't re-derive.
+    expect(proShopLinkForWrite('A-25', 'https://www.helicaltool.com/products/12345'))
+      .toBe(`${PROSHOP_TOOL_URL_BASE}/A/A-25$`);
     expect(proShopLinkForWrite('A-25',
+      'https://americanprecisionworks.adionsystems.com/procnc/rtas/2026/22$'))
+      .toBe(`${PROSHOP_TOOL_URL_BASE}/A/A-25$`);
+  });
+
+  // An insert tool's page IS an RTA page, and its year+number can't be composed —
+  // so nothing is written and the real link survives.
+  it('writes nothing for an insert tool, leaving its RTA link intact', () => {
+    expect(proShopLinkForWrite('I-167/ G-168',
       'https://americanprecisionworks.adionsystems.com/procnc/rtas/2026/22$')).toBeNull();
   });
 
