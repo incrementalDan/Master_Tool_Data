@@ -262,6 +262,47 @@ describe('purchasing URLs — the registry pattern wins, the scan only fills a g
     expect(next.vendors[0].price).toBe(34.76);
   });
 
+  // ⚠️ Learning the SHAPE is what makes a link mass-updatable later. Offered,
+  // never auto-accepted — it changes every tool of that manufacturer.
+  it('offers to learn the link format for a manufacturer with no pattern', () => {
+    const { rows } = buildPurchasingProposals(endMill(), {
+      approvedBrand: 'Fraisa USA', edpNumber: 'X-1',
+      productLink: 'https://fraisa.example/tools/X-1',
+    });
+    const row = rows.find(r => r.key === 'mfg:url_pattern');
+    expect(row.kind).toBe('change');                       // never auto-accepted
+    expect(row.proposed).toBe('https://fraisa.example/tools/{edp}');
+    expect(row.patternField).toBe('edp_url_pattern');
+    expect(row.registryId).toBeTruthy();                   // targets a real entity
+  });
+
+  it('offers no pattern row when the manufacturer already has one', () => {
+    const { rows } = buildPurchasingProposals(endMill(), {
+      approvedBrand: 'GARR Tool', edpNumber: '12345',
+      productLink: 'https://www.garrtool.com/product-details/?EDP=12345',
+    });
+    expect(rows.some(r => r.key === 'mfg:url_pattern')).toBe(false);
+  });
+
+  it('offers no pattern row when the shape can’t be derived with certainty', () => {
+    const { rows } = buildPurchasingProposals(endMill(), {
+      approvedBrand: 'Fraisa USA', edpNumber: 'X-1',
+      productLink: 'https://fraisa.example/p/X-1?sid=ABC123&node=99',
+    });
+    expect(rows.some(r => r.key === 'mfg:url_pattern')).toBe(false);
+  });
+
+  // A manufacturer that isn't in the registry has nothing to hang a pattern on.
+  it('offers no pattern row for a manufacturer the registry doesn’t know', () => {
+    const { rows } = buildPurchasingProposals(endMill(), {
+      approvedBrand: 'Some Unknown Toolworks', edpNumber: 'X-1',
+      productLink: 'https://unknown.example/tools/X-1',
+    });
+    expect(rows.some(r => r.key === 'mfg:url_pattern')).toBe(false);
+    // …but the scraped link is still offered, since there's no pattern to derive.
+    expect(rows.some(r => r.key === 'mfg:edp_url')).toBe(true);
+  });
+
   // The vendor link is never a row — it is derived from the registry pattern on
   // read and on save (syncPurchasingFromRegistry / backfillUrls).
   it('proposes NO vendor link row', () => {

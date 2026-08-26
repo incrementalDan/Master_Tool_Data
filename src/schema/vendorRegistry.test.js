@@ -9,6 +9,8 @@ import {
   entityById,
   registryIdForName,
   syncPurchasingFromRegistry,
+  learnUrlPattern,
+  applyUrlPattern,
   backfillPurchasingRegistryIds,
 } from './vendorRegistry.js';
 import {
@@ -215,5 +217,69 @@ describe('registry foreign key (store the id, render the name)', () => {
     const out = backfillPurchasingRegistryIds(tools, REG);
     expect(out[0].purchasing.manufacturers[0].registry_id).toBe('e_hel');
     expect(out[1]).toBe(tools[1]); // untouched
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Learning a pattern from one real product link. The registry can only
+// mass-update a URL whose SHAPE it knows, so a manufacturer with no pattern is a
+// permanent blind spot — but a scanned sheet usually hands us a link and the
+// part number it points at, which is the shape.
+describe('learnUrlPattern', () => {
+  // Every pattern the app ships, re-derived from one link it would produce.
+  const SEEDED = [
+    ['https://www.harveytool.com/products/tool-details-xy12', 'XY12', 'edp_lower'],
+    ['https://www.helicaltool.com/products/tool-details-H99', 'H99', 'edp'],
+    ['https://www.garrtool.com/product-details/?EDP=12345', '12345', 'edp'],
+    ['https://osgtool.com/abc/', 'ABC', 'edp_lower'],
+    ['https://www.haastooling.com/p/12345', '12345', 'edp'],
+  ];
+
+  it('re-derives every pattern the app already ships', () => {
+    for (const [url, num, token] of SEEDED) {
+      const got = learnUrlPattern(url, num, 'edp');
+      expect(got, url).not.toBeNull();
+      expect(got.token).toBe(token);
+      // The proof that matters: it rebuilds the link it was taught from.
+      expect(applyUrlPattern(got.pattern, { edp: num, edp_lower: num.toLowerCase() })).toBe(url);
+    }
+  });
+
+  it('learns a vendor catalog pattern (exact case only)', () => {
+    const got = learnUrlPattern('https://www.mcmaster.com/91290A115/', '91290A115', 'vendor_num');
+    expect(got.pattern).toBe('https://www.mcmaster.com/{vendor_num}/');
+    // No lowercase vendor token exists, so a case-shifted link is NOT learned.
+    expect(learnUrlPattern('https://x.example/91290a115', '91290A115', 'vendor_num')).toBeNull();
+  });
+
+  // ⚠️ Each of these would produce a pattern that silently overwrites the right
+  // link on every tool of that make. Skipping is the correct answer.
+  it('refuses the ambiguous and the un-shaped', () => {
+    // The number appears twice — which one is the id?
+    expect(learnUrlPattern('https://x.example/12345/p/12345', '12345')).toBeNull();
+    // A coincidental substring of a longer id, not the part number.
+    expect(learnUrlPattern('https://x.example/p/912345678', '12345')).toBeNull();
+    // The number isn't in the link at all.
+    expect(learnUrlPattern('https://x.example/p/other', '12345')).toBeNull();
+    // "Lots of embedded data" — a session/tracking blob we can't reverse.
+    expect(learnUrlPattern('https://x.example/p/12345?sid=A1B2&node=99', '12345')).toBeNull();
+    // Not a link.
+    expect(learnUrlPattern('call for pricing', '12345')).toBeNull();
+    // Too short to be distinctive.
+    expect(learnUrlPattern('https://x.example/p/7', '7')).toBeNull();
+    expect(learnUrlPattern('', '')).toBeNull();
+  });
+
+  it('keeps a query string that carries only the part number', () => {
+    const got = learnUrlPattern('https://x.example/details?EDP=12345', '12345');
+    expect(got.pattern).toBe('https://x.example/details?EDP={edp}');
+  });
+
+  it('round-trips: a learned pattern feeds syncPurchasingFromRegistry', () => {
+    const { pattern } = learnUrlPattern('https://bob.example/tool-X1', 'X1');
+    const reg = { entities: [{ id: 'e_bob', name: 'Bob Tools', aliases: [], is_manufacturer: true, edp_url_pattern: pattern }] };
+    const out = syncPurchasingFromRegistry(
+      { manufacturers: [{ id: 'm1', registry_id: 'e_bob', name: 'Bob Tools', edp: 'X2' }], vendors: [] }, reg);
+    expect(out.manufacturers[0].edp_url).toBe('https://bob.example/tool-X2');
   });
 });

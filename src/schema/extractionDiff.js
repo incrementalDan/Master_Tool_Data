@@ -29,7 +29,7 @@ import { FIELD_REGISTRY, fieldsForType, fieldLabel } from './fieldRegistry.js';
 import { convertLength } from '../utils/units.js';
 import { THROUGH_COOLANT_VALUES } from '../../tool-extractor.tsx';
 import { generateId } from './identity.js';
-import { registryIdForName, entityByName } from './vendorRegistry.js';
+import { registryIdForName, entityByName, learnUrlPattern } from './vendorRegistry.js';
 import {
   manufacturerHasUrlGenerator,
 } from '../utils/urlGenerators.js';
@@ -306,8 +306,8 @@ export function buildPurchasingProposals(tool, extracted) {
   // is proposed ONLY where there is no pattern to compose from, and only into a
   // blank — the one case where a pasted URL is the best answer available.
   const effectiveEdp = edp || existingMfg?.edp || '';
-  if (mfgName && effectiveEdp && !existingMfg?.edp_url
-      && !manufacturerHasUrlGenerator(mfgName) && productLink) {
+  const noGenerator = mfgName && !manufacturerHasUrlGenerator(mfgName);
+  if (mfgName && effectiveEdp && !existingMfg?.edp_url && noGenerator && productLink) {
     rows.push({
       key: 'mfg:edp_url',
       label: 'Manufacturer link',
@@ -317,6 +317,31 @@ export function buildPurchasingProposals(tool, extracted) {
       target: 'manufacturer',
       generated: false,
     });
+  }
+
+  // ⚠️ LEARN THE SHAPE, not just the link. A manufacturer with no pattern is a
+  // permanent blind spot — every one of its links is a static value the shop can
+  // never mass-update. The scanned sheet just handed us a link AND the number it
+  // points at, which is the shape; learnUrlPattern only returns one when
+  // re-substituting rebuilds that exact link, so this can never store a guess.
+  // Offered, NEVER auto-accepted: it changes every tool of that make, so it is
+  // the one purchasing row that is always a decision (kind: 'change').
+  const mfgEntity = noGenerator ? entityByName(mfgName) : null;
+  if (mfgEntity && effectiveEdp && productLink) {
+    const learned = learnUrlPattern(productLink, effectiveEdp, 'edp');
+    if (learned) {
+      rows.push({
+        key: 'mfg:url_pattern',
+        label: `Learn ${mfgEntity.name}'s link format`,
+        current: null,
+        proposed: learned.pattern,
+        kind: 'change',
+        target: 'registry',
+        registryId: mfgEntity.id,
+        patternField: 'edp_url_pattern',
+        note: 'Saved on the manufacturer, so every tool of theirs gets a live link — and one edit fixes them all if their site moves.',
+      });
+    }
   }
 
   // ── Vendor ──

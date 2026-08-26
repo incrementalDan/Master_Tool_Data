@@ -232,6 +232,66 @@ export function applyUrlPattern(pattern, tokens) {
   return pattern.replace(/\{(edp|edp_lower|vendor_num)\}/g, (_, t) => tokens[t] ?? '') || null;
 }
 
+// ── Learning a pattern from one real link ────────────────────────────────────
+// The registry can only mass-update a URL it knows the shape of, so a
+// manufacturer with no pattern is a permanent blind spot. When a scanned spec
+// sheet gives us a product link AND the part number that link is for, the shape
+// is usually sitting right there — so derive it and OFFER it, rather than
+// storing another static URL nobody can update.
+//
+// ⚠️ IT MUST BE ABLE TO PROVE ITSELF. The pattern is only returned when
+// re-substituting the number reproduces the original URL byte-for-byte, so a
+// guess can never be stored. Everything ambiguous is skipped, deliberately —
+// a wrong pattern is worse than no pattern, because it silently overwrites the
+// right link on every tool of that make.
+const LEARN_TOKENS = { edp: ['edp', 'edp_lower'], vendor_num: ['vendor_num'] };
+
+// Is the match at `i` a standalone run, not a fragment of a longer id?
+// "12345" inside "/p/912345678" is a coincidence, not the part number.
+const boundedAt = (url, i, len) => {
+  const before = url[i - 1], after = url[i + len];
+  const alnum = (ch) => ch != null && /[A-Za-z0-9]/.test(ch);
+  return !alnum(before) && !alnum(after);
+};
+
+/**
+ * Derive a URL pattern from one real product link + the number it points at.
+ * Returns { pattern, token } or null when it cannot be derived with certainty.
+ *
+ * `kind` is 'edp' (manufacturer part number, may match case-insensitively via
+ * {edp_lower}) or 'vendor_num' (vendor catalog number — exact only, since
+ * applyUrlPattern has no lowercase vendor token).
+ */
+export function learnUrlPattern(url, num, kind = 'edp') {
+  const u = (url || '').trim();
+  const n = (num || '').trim();
+  if (!u || !n || n.length < 2) return null;
+  if (!/^https?:\/\//i.test(u)) return null;
+  // A URL carrying anything BESIDES the part number in its query or fragment is
+  // the "lots of embedded data" case — session ids, tracking blobs, a catalog
+  // node id. There is no reliable shape to learn, so pass over it.
+  const extras = u.split(/[?#]/).slice(1).join('&');
+  if (extras && !extras.split(/[&;]/).every(kv => kv.includes(n) || kv.toLowerCase().includes(n.toLowerCase()))) {
+    return null;
+  }
+
+  for (const token of LEARN_TOKENS[kind] || []) {
+    const needle = token === 'edp_lower' ? n.toLowerCase() : n;
+    // Exactly ONE standalone occurrence, or we cannot say which one is the id.
+    const hits = [];
+    for (let i = u.indexOf(needle); i !== -1; i = u.indexOf(needle, i + 1)) {
+      if (boundedAt(u, i, needle.length)) hits.push(i);
+    }
+    if (hits.length !== 1) continue;
+    const pattern = u.slice(0, hits[0]) + `{${token}}` + u.slice(hits[0] + needle.length);
+    // The proof: it must rebuild the link we were given, exactly.
+    if (applyUrlPattern(pattern, { edp: n, edp_lower: n.toLowerCase(), vendor_num: n }) === u) {
+      return { pattern, token };
+    }
+  }
+  return null;
+}
+
 // ⚠️ A URL THE REGISTRY CAN COMPOSE IS DERIVED, NOT STORED DATA — the pattern
 // WINS over whatever is in the record (a scanned spec sheet's product link, an
 // older generated URL, a hand-typed one). That is the whole point of holding the
