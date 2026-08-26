@@ -34,6 +34,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS, validateGeometry, fusionToolToInternal, readOohFromFusion } from '../schema/toolSchema.js';
 import { convertLength, unitAbbr } from '../utils/units.js';
 import { showsProShopUrl, toolIdLabel } from '../utils/toolIdSystem.js';
+import { proShopToolUrl as proshotUrl } from '../utils/proShopUrl.js';
 import { statusOf, statusMeta } from '../utils/toolStatus.js';
 import ToolFields from './ToolFields.jsx';
 import { hasReconcileWork } from '../services/reconcile.js';
@@ -41,12 +42,6 @@ import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 import ToolForm from './ToolForm.jsx';
 import { exportSingleTool as exportFusion, copyToolToClipboard } from '../utils/fusionExport.js';
 import { exportSingleTool as exportProShop } from '../utils/proShopExport.js';
-
-function proshotUrl(id) {
-  if (!id) return null;
-  const prefix = id.split('-')[0];
-  return `https://americanprecisionworks.adionsystems.com/procnc/tools/${prefix}/${id}$`;
-}
 
 export default function ToolDetail() {
   const { id } = useParams();

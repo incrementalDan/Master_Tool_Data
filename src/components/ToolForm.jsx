@@ -34,7 +34,7 @@ import {
 } from '../schema/insertFamilies.js';
 
 export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDelete }) {
-  const { tools, shopSettings, googleAuthenticated } = useApp();
+  const { tools, shopSettings, googleAuthenticated, vendorRegistry, saveVendorRegistry } = useApp();
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
   const [data, setData] = useState({ ...tool });
   // The location field is only an INPUT when there is no better place to set
@@ -300,10 +300,31 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.tool_type]);
 
+  // A learned URL pattern is the one accepted row that doesn't land on the tool —
+  // it belongs to the manufacturer, in the shared vendor registry. ⚠️ Written
+  // BEFORE the tool: saveVendorRegistry refreshes the active registry
+  // synchronously, so backfillUrls below then composes this tool's link from the
+  // pattern it just learned instead of a stale one. A failed registry write must
+  // not cost the user their tool edit, so it is reported and stepped over.
+  const savePatternRows = async () => {
+    const rows = purchRows.filter(r => r.status === 'accepted' && r.key === 'mfg:url_pattern' && r.registryId);
+    if (!rows.length) return;
+    const entities = (vendorRegistry?.entities || []).map(e => {
+      const row = rows.find(r => r.registryId === e.id);
+      return row ? { ...e, [row.patternField]: row.proposed } : e;
+    });
+    try {
+      await saveVendorRegistry({ ...vendorRegistry, entities });
+    } catch (err) {
+      setErrors([`Saved the tool, but the manufacturer's link format wasn't stored: ${err.message}`]);
+    }
+  };
+
   const handleSave = async () => {
     const { valid, errors: errs } = validateTool(data);
     if (!valid) { setErrors(errs); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     setErrors([]);
+    await savePatternRows();
     // Purchasing is edited in place in the draft, so the re-sequencing and
     // generated-link backfill the standalone panel does on its own Save has to
     // happen here instead. Only when the tool actually has purchasing — a tool
@@ -963,7 +984,7 @@ function SpecPurchasingPanel({ rows, homeless, unit, newMfgAck, onAck, onResolve
             current={r.current}
             proposed={r.proposed}
             status={r.status}
-            note={r.generated ? 'auto-generated link' : null}
+            note={r.note || (r.generated ? 'auto-generated link' : null)}
             disabled={r.requiresAck && !newMfgAck}
             onAccept={() => onResolveRow(r.key, 'accept')}
             onReject={() => onResolveRow(r.key, 'reject')}

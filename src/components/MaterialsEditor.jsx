@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import {
   FlaskConical, Layers, GripVertical, Plus, X, Trash2, ChevronDown, ChevronRight,
-  Search, RotateCcw, ArrowRight, Pencil, Download,
+  Search, RotateCcw, ArrowRight, Pencil, Download, AlertTriangle,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
 import { useDragReorder } from './useDragReorder.js';
@@ -103,6 +103,27 @@ export default function MaterialsEditor() {
     commit({ ...doc, materials: [...doc.materials, { id, group_id, preset_id: null, label: '', aliases: [], category: '', condition: '', code: '', iso_513: '', kennametal: '', notes: '', order: doc.materials.length }] });
     setExpanded(`alloy:${id}`);
   };
+
+  // ── CAM preset ↔ alloy linking (from the CAM preset editor) ───────────────
+  // A part picks an ALLOY, not a CAM preset — so a preset with no alloy under it
+  // is invisible everywhere except the tool-preset material picker. That is the
+  // confusion this exists to remove: create the alloy from here, named after the
+  // preset, instead of having to remember to go and make one.
+  const addAlloyForPreset = (p) => {
+    const label = (p.name || '').trim();
+    if (!label) return;
+    const id = uid('mat');
+    commit({
+      ...doc,
+      materials: [...doc.materials, {
+        id, group_id: p.group_id, preset_id: p.id, label, aliases: [],
+        category: '', condition: '', code: '', iso_513: p.iso_513 || '',
+        kennametal: p.kennametal || '', notes: '', order: doc.materials.length,
+      }],
+    });
+  };
+  const linkAlloyToPreset = (alloyId, p) =>
+    setAlloy(alloyId, { preset_id: p.id, group_id: p.group_id });
 
   // ── Reset to bundled reference data (one-off; e.g. migrating a v1 file) ───
   const resetToReference = () => {
@@ -223,8 +244,11 @@ export default function MaterialsEditor() {
                 const open = expanded === `preset:${p.id}`;
                 const warn = (p.kennametal || '').startsWith('P') && p.group_id === 'M';
                 const alloys = alloysOfPreset(p.id);
+                const noAlloy = alloys.length === 0;
+                // Alloys this preset could adopt: same group, not already spoken for.
+                const linkable = doc.materials.filter(m => m.group_id === p.group_id && !m.preset_id);
                 return (
-                  <div key={p.id} className="cam-card" style={{ borderLeftColor: c }}>
+                  <div key={p.id} className={`cam-card${noAlloy ? ' cam-card--noalloy' : ''}`} style={{ borderLeftColor: c }}>
                     <div className="cam-card-head" onClick={() => setExpanded(open ? null : `preset:${p.id}`)}>
                       <div className="cam-card-id">
                         <GroupBadge id={p.group_id} />
@@ -243,15 +267,18 @@ export default function MaterialsEditor() {
                       <Pencil size={13} className="cam-edit-hint" />
                     </div>
 
-                    {alloys.length > 0 && (
-                      <div className="cam-chips">
-                        {alloys.map(a => (
-                          <span key={a.id} className="cam-chip" style={{ background: tint(c, '22'), color: c, borderColor: tint(c, '44') }}>
-                            {a.label}
-                          </span>
-                        ))}
-                      </div>
-                    )}
+                    <div className="cam-chips">
+                      {alloys.map(a => (
+                        <span key={a.id} className="cam-chip" style={{ background: tint(c, '22'), color: c, borderColor: tint(c, '44') }}>
+                          {a.label}
+                        </span>
+                      ))}
+                      {noAlloy && (
+                        <span className="cam-chip cam-chip--warn" title="A part picks an alloy, so this preset can't be chosen on a part until an alloy is linked to it.">
+                          <AlertTriangle size={11} /> no alloy linked
+                        </span>
+                      )}
+                    </div>
 
                     {open && (
                       <div className="cam-edit">
@@ -265,6 +292,52 @@ export default function MaterialsEditor() {
                           </Field>
                         </div>
                         <Field label="Description"><input className="field-input" style={{ width: '100%' }} value={p.description || ''} onChange={e => setPreset(p.id, { description: e.target.value })} /></Field>
+
+                        {/* Alloys — a part picks an ALLOY, so a preset with none can't be
+                            chosen there. Make the alloy from here rather than remembering to. */}
+                        <div className={`cam-alloys${noAlloy ? ' cam-alloys--warn' : ''}`}>
+                          <div className="text-sub text-xs" style={{ marginBottom: 6 }}>
+                            Alloys in this preset
+                            {noAlloy
+                              ? <span className="cam-alloys-note"> — none yet. A part is given an <b>alloy</b>, not a CAM preset, so this preset won&apos;t show up when picking a part&apos;s material until one is linked.</span>
+                              : <span style={{ opacity: 0.7 }}> — the real materials this preset covers</span>}
+                          </div>
+                          {alloys.length > 0 && (
+                            <div className="cam-chips" style={{ marginTop: 0, marginBottom: 8 }}>
+                              {alloys.map(a => (
+                                <span key={a.id} className="cam-chip" style={{ background: tint(c, '22'), color: c, borderColor: tint(c, '44') }}>
+                                  {a.label || '(unnamed)'}
+                                  <button className="cam-chip-x" title="Unlink this alloy from the preset (the alloy is kept)"
+                                    onClick={() => setAlloy(a.id, { preset_id: null })}><X size={10} /></button>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <div className="flex gap-8 flex-wrap items-center">
+                            <button
+                              className={`btn btn-sm ${noAlloy ? 'btn-primary' : 'btn-secondary'}`}
+                              disabled={!(p.name || '').trim()}
+                              title={(p.name || '').trim()
+                                ? `Create an alloy called “${p.name.trim()}” and link it to this preset`
+                                : 'Name the CAM preset first — the alloy is named after it'}
+                              onClick={() => addAlloyForPreset(p)}
+                            >
+                              <Plus size={14} /> {(p.name || '').trim() ? `Add alloy “${p.name.trim()}”` : 'Add alloy'}
+                            </button>
+                            {linkable.length > 0 && (
+                              <select
+                                className={`field-input${noAlloy ? ' cam-input-warn' : ''}`}
+                                style={{ width: 190 }}
+                                value=""
+                                title="Link an existing alloy in this group that isn't in a preset yet"
+                                onChange={e => { if (e.target.value) linkAlloyToPreset(e.target.value, p); }}
+                              >
+                                <option value="">— or link an existing alloy —</option>
+                                {linkable.map(m => <option key={m.id} value={m.id}>{m.label || '(unnamed)'}</option>)}
+                              </select>
+                            )}
+                          </div>
+                        </div>
                         <div className="flex gap-10 flex-wrap" style={{ alignItems: 'flex-end' }}>
                           <Field label="ISO 513"><input className="field-input" style={{ width: 90 }} value={p.iso_513 || ''} onChange={e => setPreset(p.id, { iso_513: e.target.value })} /></Field>
                           <Field label="Kennametal"><input className="field-input" style={{ width: 90 }} value={p.kennametal || ''} onChange={e => setPreset(p.id, { kennametal: e.target.value })} /></Field>

@@ -224,28 +224,131 @@ export function registryIdForName(name, reg) {
   return entityByName(trimmed, reg)?.id || null;
 }
 
-// Refresh one purchasing entry's `name` from its `registry_id` — the id is the
-// source of truth, the name is derived live. Also adopts the id from a
-// name-matched entry (so existing name-only links become rename-proof), and
-// tolerates a dangling id (keeps the stored name). Returns the entry unchanged
-// when it has no id AND no name match. Mirrors syncPresetMaterialName.
-function syncEntryName(entry, reg) {
+// Substitute the tokens in a registry URL pattern. Supported: {edp},
+// {edp_lower}, {vendor_num}. Lives here (not urlGenerators.js) so the FK
+// resolver below can use it without importing back the other way.
+export function applyUrlPattern(pattern, tokens) {
+  if (!pattern) return null;
+  return pattern.replace(/\{(edp|edp_lower|vendor_num)\}/g, (_, t) => tokens[t] ?? '') || null;
+}
+
+// ── Learning a pattern from one real link ────────────────────────────────────
+// The registry can only mass-update a URL it knows the shape of, so a
+// manufacturer with no pattern is a permanent blind spot. When a scanned spec
+// sheet gives us a product link AND the part number that link is for, the shape
+// is usually sitting right there — so derive it and OFFER it, rather than
+// storing another static URL nobody can update.
+//
+// ⚠️ IT MUST BE ABLE TO PROVE ITSELF. The pattern is only returned when
+// re-substituting the number reproduces the original URL byte-for-byte, so a
+// guess can never be stored. Everything ambiguous is skipped, deliberately —
+// a wrong pattern is worse than no pattern, because it silently overwrites the
+// right link on every tool of that make.
+const LEARN_TOKENS = { edp: ['edp', 'edp_lower'], vendor_num: ['vendor_num'] };
+
+// Is the match at `i` a standalone run, not a fragment of a longer id?
+// "12345" inside "/p/912345678" is a coincidence, not the part number.
+const boundedAt = (url, i, len) => {
+  const before = url[i - 1], after = url[i + len];
+  const alnum = (ch) => ch != null && /[A-Za-z0-9]/.test(ch);
+  return !alnum(before) && !alnum(after);
+};
+
+/**
+ * Derive a URL pattern from one real product link + the number it points at.
+ * Returns { pattern, token } or null when it cannot be derived with certainty.
+ *
+ * `kind` is 'edp' (manufacturer part number, may match case-insensitively via
+ * {edp_lower}) or 'vendor_num' (vendor catalog number — exact only, since
+ * applyUrlPattern has no lowercase vendor token).
+ */
+export function learnUrlPattern(url, num, kind = 'edp') {
+  const u = (url || '').trim();
+  const n = (num || '').trim();
+  if (!u || !n || n.length < 2) return null;
+  if (!/^https?:\/\//i.test(u)) return null;
+  // A URL carrying anything BESIDES the part number in its query or fragment is
+  // the "lots of embedded data" case — session ids, tracking blobs, a catalog
+  // node id. There is no reliable shape to learn, so pass over it.
+  const extras = u.split(/[?#]/).slice(1).join('&');
+  if (extras && !extras.split(/[&;]/).every(kv => kv.includes(n) || kv.toLowerCase().includes(n.toLowerCase()))) {
+    return null;
+  }
+
+  for (const token of LEARN_TOKENS[kind] || []) {
+    const needle = token === 'edp_lower' ? n.toLowerCase() : n;
+    // Exactly ONE standalone occurrence, or we cannot say which one is the id.
+    const hits = [];
+    for (let i = u.indexOf(needle); i !== -1; i = u.indexOf(needle, i + 1)) {
+      if (boundedAt(u, i, needle.length)) hits.push(i);
+    }
+    if (hits.length !== 1) continue;
+    const pattern = u.slice(0, hits[0]) + `{${token}}` + u.slice(hits[0] + needle.length);
+    // The proof: it must rebuild the link we were given, exactly.
+    if (applyUrlPattern(pattern, { edp: n, edp_lower: n.toLowerCase(), vendor_num: n }) === u) {
+      return { pattern, token };
+    }
+  }
+  return null;
+}
+
+// ⚠️ A URL THE REGISTRY CAN COMPOSE IS DERIVED, NOT STORED DATA — the pattern
+// WINS over whatever is in the record (a scanned spec sheet's product link, an
+// older generated URL, a hand-typed one). That is the whole point of holding the
+// pattern centrally: when a manufacturer reorganises their site, editing the one
+// pattern in /vendors corrects every tool at once. A URL pasted into the record
+// is a static value nothing can mass-update, so it may not be allowed to win.
+// An entity with NO pattern (or an entry with no part number to substitute) has
+// nothing to derive — there the stored value IS the answer and is left alone.
+function urlFor(pattern, num) {
+  const n = (num || '').trim();
+  if (!pattern || !n) return null;
+  return applyUrlPattern(pattern, { edp: n, edp_lower: n.toLowerCase(), vendor_num: n });
+}
+
+// Which of an entry's number→URL pairs this entity can compose. Keyed off the
+// fields the ENTRY carries, not the entity's role flags — an entity can be both
+// a manufacturer and a vendor, and the entry says which one it is being used as.
+function syncEntryUrls(entry, ent) {
+  const patch = {};
+  const put = (urlKey, pattern, num) => {
+    const next = urlFor(pattern, num);
+    if (next && next !== entry[urlKey]) patch[urlKey] = next;
+  };
+  if ('edp' in entry || 'mfg_num' in entry) {
+    put('edp_url', ent.edp_url_pattern, entry.edp);
+    put('mfg_num_url', ent.edp_url_pattern, entry.mfg_num);
+  }
+  if ('vendor_num' in entry) put('vendor_num_url', ent.vendor_num_url_pattern, entry.vendor_num);
+  return patch;
+}
+
+// Refresh one purchasing entry from its `registry_id` — the id is the source of
+// truth; the name AND any URL the entity has a pattern for are derived live. Also
+// adopts the id from a name-matched entry (so existing name-only links become
+// rename-proof), and tolerates a dangling id (keeps everything stored). Returns
+// the entry unchanged when it has no id AND no name match. Mirrors
+// syncPresetMaterialName.
+function syncEntry(entry, reg) {
   if (!entry) return entry;
   const id = entry.registry_id || registryIdForName(entry.name, reg);
   if (!id) return entry;
   const ent = entityById(id, reg);
-  if (!ent) return entry;                       // dangling id — keep stored name
-  if (entry.registry_id === id && entry.name === ent.name) return entry; // no change
-  return { ...entry, registry_id: id, name: ent.name };
+  if (!ent) return entry;                       // dangling id — keep what's stored
+  const patch = syncEntryUrls(entry, ent);
+  if (entry.registry_id !== id) patch.registry_id = id;
+  if (entry.name !== ent.name) patch.name = ent.name;
+  if (Object.keys(patch).length === 0) return entry;   // no change
+  return { ...entry, ...patch };
 }
 
-// Refresh every manufacturer/vendor name in a purchasing object from its FK id.
+// Refresh every manufacturer/vendor entry in a purchasing object from its FK id.
 // Returns the same object when nothing changed (stable identity for memoization).
-export function syncPurchasingNames(purchasing, reg) {
+export function syncPurchasingFromRegistry(purchasing, reg) {
   if (!purchasing) return purchasing;
   let changed = false;
   const mapList = (list) => (list || []).map(e => {
-    const ne = syncEntryName(e, reg);
+    const ne = syncEntry(e, reg);
     if (ne !== e) changed = true;
     return ne;
   });
@@ -261,7 +364,7 @@ export function backfillPurchasingRegistryIds(tools, reg) {
   if (!entitiesOf(reg).length) return tools;
   return (tools || []).map(t => {
     if (!t.purchasing) return t;
-    const np = syncPurchasingNames(t.purchasing, reg);
+    const np = syncPurchasingFromRegistry(t.purchasing, reg);
     return np === t.purchasing ? t : { ...t, purchasing: np };
   });
 }

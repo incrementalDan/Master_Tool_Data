@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { ShoppingCart, Plus, GripVertical, X, ExternalLink, Pencil, RefreshCw } from 'lucide-react';
 import { generateId } from '../schema/toolSchema.js';
-import { getManufacturerNames, getVendorNames, vendorHasOwnCatalogNumber, entityById, registryIdForName, syncPurchasingNames } from '../schema/vendorRegistry.js';
+import { getManufacturerNames, getVendorNames, vendorHasOwnCatalogNumber, entityById, registryIdForName, syncPurchasingFromRegistry } from '../schema/vendorRegistry.js';
 import { useApp } from '../context/AppContext.jsx';
 import {
   generateManufacturerUrl, generateVendorUrl,
@@ -22,19 +22,20 @@ function emptyPurchasing() {
 
 // Persist any links that were only shown as a display-time fallback (no
 // stored URL, but a generator matches the part number) — so they become real
-// stored values the user can see/override afterward. Never overwrites a URL
-// the user already set.
+// stored values the user can see afterward. ⚠️ A generated URL WINS over a
+// stored one (see urlGenerators.js): a pattern is mass-updatable, a pasted URL
+// isn't. A stored URL stands only where the registry has no pattern to compose.
 export function backfillUrls(data) {
   return {
     ...data,
     manufacturers: (data.manufacturers || []).map(m => ({
       ...m,
-      mfg_num_url: m.mfg_num_url || generateManufacturerUrl(m.name, m.mfg_num) || m.mfg_num_url || '',
-      edp_url: m.edp_url || generateManufacturerUrl(m.name, m.edp) || m.edp_url || '',
+      mfg_num_url: generateManufacturerUrl(m.name, m.mfg_num) || m.mfg_num_url || '',
+      edp_url: generateManufacturerUrl(m.name, m.edp) || m.edp_url || '',
     })),
     vendors: (data.vendors || []).map(v => ({
       ...v,
-      vendor_num_url: v.vendor_num_url || generateVendorUrl(v.name, v.vendor_num) || v.vendor_num_url || '',
+      vendor_num_url: generateVendorUrl(v.name, v.vendor_num) || v.vendor_num_url || '',
     })),
   };
 }
@@ -199,11 +200,11 @@ function RowGrip({ editing, onRemove, deleteOnly = false }) {
 
 function MfgRow({ mfg, editing, onChange, onRemove, onRegenerateUrl }) {
   const hasGenerator = manufacturerHasUrlGenerator(mfg.name);
-  // Display-time fallback: if no URL is stored but a generator matches this
-  // manufacturer + part number, show the generated link immediately — even
-  // for tools whose purchasing data predates the URL-generation feature.
-  const mfgNumUrl = mfg.mfg_num_url || generateManufacturerUrl(mfg.name, mfg.mfg_num);
-  const edpUrl = mfg.edp_url || generateManufacturerUrl(mfg.name, mfg.edp);
+  // Display-time resolve: the registry's pattern WINS (it is the one place a
+  // manufacturer's URL logic can be corrected for every tool at once), falling
+  // back to the stored URL only where there is no pattern to compose from.
+  const mfgNumUrl = generateManufacturerUrl(mfg.name, mfg.mfg_num) || mfg.mfg_num_url;
+  const edpUrl = generateManufacturerUrl(mfg.name, mfg.edp) || mfg.edp_url;
   return (
     <>
       <div className="purchasing-row">
@@ -258,8 +259,8 @@ function MfgRow({ mfg, editing, onChange, onRemove, onRegenerateUrl }) {
 
 function VendorRow({ vendor, editing, isDragOver, revealed, onChange, onRemove, onReveal, onRegenerateUrl, dragHandlers }) {
   const showNum = shouldShowVendorNum(vendor, revealed);
-  // Display-time fallback — see MfgRow.
-  const vendorNumUrl = vendor.vendor_num_url || generateVendorUrl(vendor.name, vendor.vendor_num);
+  // Display-time resolve — see MfgRow.
+  const vendorNumUrl = generateVendorUrl(vendor.name, vendor.vendor_num) || vendor.vendor_num_url;
   return (
     <>
       <div className={`purchasing-row purchasing-row--vendor${isDragOver ? ' purchasing-row--drop' : ''}`} {...dragHandlers}>
@@ -358,7 +359,7 @@ export default function PurchasingSection({ tool, onSave, isSaving, value, onCha
   // editing, `data` is the working buffer; in view mode we resolve the saved
   // purchasing against the current registry so a rename in /vendors shows here
   // without a reload.
-  const source = editing ? data : syncPurchasingNames(tool.purchasing || emptyPurchasing(), vendorRegistry);
+  const source = editing ? data : syncPurchasingFromRegistry(tool.purchasing || emptyPurchasing(), vendorRegistry);
 
   const manufacturers = [...(source.manufacturers || [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   // Order-based — used for drag-reorder bookkeeping (must match handleVendorDrop's view of the group).
