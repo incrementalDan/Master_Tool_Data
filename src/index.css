@@ -4538,6 +4538,31 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .cam-chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 9px; }
 .cam-chip { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; border: 1px solid; }
 .cam-edit { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.cam-chip { display: inline-flex; align-items: center; gap: 4px; }
+.cam-chip--warn {
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  color: var(--amber);
+  border-color: color-mix(in srgb, var(--amber) 40%, transparent);
+}
+.cam-chip-x {
+  background: none; border: none; padding: 0; cursor: pointer;
+  color: inherit; opacity: 0.55; display: inline-flex; align-items: center;
+}
+.cam-chip-x:hover { opacity: 1; }
+/* A CAM preset with no alloy under it can't be picked on a part — say so on the card */
+.cam-card--noalloy { border-color: color-mix(in srgb, var(--amber) 35%, var(--border)); }
+.cam-alloys {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+}
+.cam-alloys--warn {
+  border-color: color-mix(in srgb, var(--amber) 45%, transparent);
+  background: color-mix(in srgb, var(--amber) 7%, transparent);
+}
+.cam-alloys-note { color: var(--amber); }
+.cam-input-warn { border-color: color-mix(in srgb, var(--amber) 55%, transparent); }
 .cam-del { color: var(--red); }
 @media (max-width: 560px) {
   .cam-card-head { flex-wrap: wrap; }
