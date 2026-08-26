@@ -215,14 +215,17 @@ describe('purchasing — entity matching, not string matching', () => {
   });
 });
 
-describe('purchasing URLs — generated where a pattern exists, filled only when blank', () => {
-  it('generates a manufacturer link from the EDP', () => {
+describe('purchasing URLs — the registry pattern wins, the scan only fills a gap', () => {
+  // ⚠️ A manufacturer the registry can compose a URL for has NOTHING to decide:
+  // the link is derived from the pattern and the pattern always wins, so that one
+  // edit in /vendors corrects every tool. Offering the scraped link here would be
+  // offering to store a static URL that is then ignored.
+  it('proposes NO link row when the registry has a pattern for the manufacturer', () => {
     const { rows } = buildPurchasingProposals(endMill(), {
       approvedBrand: 'GARR Tool', edpNumber: '12345',
+      productLink: 'https://example.com/scanned',
     });
-    const url = rows.find(r => r.key === 'mfg:edp_url');
-    expect(url.generated).toBe(true);
-    expect(url.proposed).toContain('12345');
+    expect(rows.some(r => r.key === 'mfg:edp_url')).toBe(false);
   });
 
   it('falls back to the scraped product link when there is no generator', () => {
@@ -257,7 +260,15 @@ describe('purchasing URLs — generated where a pattern exists, filled only when
     expect(next.vendors).toHaveLength(1);
     expect(next.vendors[0].manufacturer_id).toBe(next.manufacturers[0].id);
     expect(next.vendors[0].price).toBe(34.76);
-    expect(next.vendors[0].vendor_num_url).toContain('99377473');
+  });
+
+  // The vendor link is never a row — it is derived from the registry pattern on
+  // read and on save (syncPurchasingFromRegistry / backfillUrls).
+  it('proposes NO vendor link row', () => {
+    const { rows } = buildPurchasingProposals(endMill(), {
+      vendor: 'MSC Industrial', vendorStockNum: '99377473',
+    });
+    expect(rows.some(r => r.key === 'vendor:num_url')).toBe(false);
   });
 });
 

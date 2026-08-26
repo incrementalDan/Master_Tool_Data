@@ -8,7 +8,7 @@ import {
   entityByName,
   entityById,
   registryIdForName,
-  syncPurchasingNames,
+  syncPurchasingFromRegistry,
   backfillPurchasingRegistryIds,
 } from './vendorRegistry.js';
 import {
@@ -108,12 +108,12 @@ describe('registry foreign key (store the id, render the name)', () => {
     expect(entityById('gone', REG)).toBe(null);
   });
 
-  it('syncPurchasingNames renders the CURRENT name from the id after a rename', () => {
+  it('syncPurchasingFromRegistry renders the CURRENT name from the id after a rename', () => {
     const purchasing = {
       manufacturers: [{ id: 'm1', registry_id: 'e_hel', name: 'Helical Solutions' }],
       vendors: [{ id: 'v1', manufacturer_id: 'm1', registry_id: 'e_msc', name: 'MSC Industrial' }],
     };
-    const out = syncPurchasingNames(purchasing, RENAMED);
+    const out = syncPurchasingFromRegistry(purchasing, RENAMED);
     expect(out.manufacturers[0].name).toBe('Helical (renamed)'); // follows the rename
     expect(out.manufacturers[0].registry_id).toBe('e_hel');      // id is stable
     expect(out.vendors[0].name).toBe('MSC Industrial');          // unchanged entity
@@ -121,22 +121,90 @@ describe('registry foreign key (store the id, render the name)', () => {
 
   it('adopts the id from a name-matched entry (existing name-only links become rename-proof)', () => {
     const purchasing = { manufacturers: [{ id: 'm1', name: 'Helical' }], vendors: [] }; // alias, no id
-    const out = syncPurchasingNames(purchasing, REG);
+    const out = syncPurchasingFromRegistry(purchasing, REG);
     expect(out.manufacturers[0].registry_id).toBe('e_hel');
     expect(out.manufacturers[0].name).toBe('Helical Solutions'); // canonicalized
   });
 
   it('leaves genuinely free-text names untouched (no id)', () => {
     const purchasing = { manufacturers: [{ id: 'm1', name: 'Bob’s Custom Tools' }], vendors: [] };
-    const out = syncPurchasingNames(purchasing, REG);
+    const out = syncPurchasingFromRegistry(purchasing, REG);
     expect(out).toBe(purchasing); // unchanged reference
     expect('registry_id' in out.manufacturers[0]).toBe(false);
   });
 
   it('tolerates a dangling id — keeps the stored name', () => {
     const purchasing = { manufacturers: [{ id: 'm1', registry_id: 'deleted', name: 'Old Vendor' }], vendors: [] };
-    const out = syncPurchasingNames(purchasing, REG);
+    const out = syncPurchasingFromRegistry(purchasing, REG);
     expect(out.manufacturers[0].name).toBe('Old Vendor');
+  });
+
+  // ── URLs: the registry's PATTERN is the source of truth ──────────────────
+  // The whole reason the pattern lives centrally is that it can be corrected
+  // once for every tool. A URL pasted into a record is a static value nothing
+  // can mass-update, so it must not be allowed to win where a pattern exists.
+  const URLREG = {
+    entities: [
+      { id: 'e_hel', name: 'Helical Solutions', aliases: ['Helical'], is_manufacturer: true,
+        edp_url_pattern: 'https://helical.example/tool-{edp}' },
+      { id: 'e_msc', name: 'MSC Industrial', aliases: [], is_vendor: true,
+        vendor_num_url_pattern: 'https://msc.example/p/{vendor_num}' },
+      { id: 'e_bob', name: 'Bob Tools', aliases: [], is_manufacturer: true },   // no pattern
+    ],
+  };
+
+  it('OVERWRITES a scanned URL where the entity has a pattern', () => {
+    const purchasing = {
+      manufacturers: [{ id: 'm1', registry_id: 'e_hel', name: 'Helical Solutions', edp: '12345',
+        edp_url: 'https://scanned.example/whatever' }],
+      vendors: [{ id: 'v1', registry_id: 'e_msc', name: 'MSC Industrial', vendor_num: '999',
+        vendor_num_url: 'https://scanned.example/other' }],
+    };
+    const out = syncPurchasingFromRegistry(purchasing, URLREG);
+    expect(out.manufacturers[0].edp_url).toBe('https://helical.example/tool-12345');
+    expect(out.vendors[0].vendor_num_url).toBe('https://msc.example/p/999');
+  });
+
+  it('one edit to the pattern moves every tool — that is the point', () => {
+    const purchasing = {
+      manufacturers: [{ id: 'm1', registry_id: 'e_hel', name: 'Helical Solutions', edp: '12345' }],
+      vendors: [],
+    };
+    const first = syncPurchasingFromRegistry(purchasing, URLREG);
+    const MOVED = { entities: URLREG.entities.map(e =>
+      e.id === 'e_hel' ? { ...e, edp_url_pattern: 'https://helical.example/catalog/{edp_lower}' } : e) };
+    const after = syncPurchasingFromRegistry(first, MOVED);
+    expect(after.manufacturers[0].edp_url).toBe('https://helical.example/catalog/12345');
+  });
+
+  it('KEEPS a stored URL where the entity has no pattern — nothing to derive', () => {
+    const purchasing = {
+      manufacturers: [{ id: 'm1', registry_id: 'e_bob', name: 'Bob Tools', edp: 'X-1',
+        edp_url: 'https://bob.example/x1' }],
+      vendors: [],
+    };
+    const out = syncPurchasingFromRegistry(purchasing, URLREG);
+    expect(out).toBe(purchasing);                                   // unchanged reference
+    expect(out.manufacturers[0].edp_url).toBe('https://bob.example/x1');
+  });
+
+  it('derives nothing when there is no part number to substitute', () => {
+    const purchasing = {
+      manufacturers: [{ id: 'm1', registry_id: 'e_hel', name: 'Helical Solutions', edp: '',
+        edp_url: 'https://scanned.example/whatever' }],
+      vendors: [],
+    };
+    const out = syncPurchasingFromRegistry(purchasing, URLREG);
+    expect(out.manufacturers[0].edp_url).toBe('https://scanned.example/whatever');
+  });
+
+  it('is idempotent — a second run has nothing to do', () => {
+    const purchasing = {
+      manufacturers: [{ id: 'm1', registry_id: 'e_hel', name: 'Helical Solutions', edp: '12345' }],
+      vendors: [{ id: 'v1', registry_id: 'e_msc', name: 'MSC Industrial', vendor_num: '999' }],
+    };
+    const once = syncPurchasingFromRegistry(purchasing, URLREG);
+    expect(syncPurchasingFromRegistry(once, URLREG)).toBe(once);    // same reference
   });
 
   it('backfillPurchasingRegistryIds walks tools, skips those without purchasing', () => {

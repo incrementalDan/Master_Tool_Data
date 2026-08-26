@@ -7,15 +7,15 @@
 //
 // Supported tokens: {edp}, {edp_lower}, {vendor_num}.
 //
-// Generated URLs are stored in the data (not computed on the fly) so users can
-// override them manually. The generator is advisory, not authoritative.
+// ⚠️ A generated URL is AUTHORITATIVE, not advisory: where an entity has a
+// pattern, the composed URL wins over whatever is stored on the tool — so
+// editing the one pattern in /vendors corrects every tool at once. A URL pasted
+// into a record is static and can never be mass-updated, so it only stands where
+// the registry has no pattern to compose from. The FK resolver that applies this
+// on read and on save is syncPurchasingFromRegistry (schema/vendorRegistry.js);
+// these helpers are the same composition for a single name + number.
 
-import { entityByName } from '../schema/vendorRegistry.js';
-
-function applyPattern(pattern, tokens) {
-  if (!pattern) return null;
-  return pattern.replace(/\{(edp|edp_lower|vendor_num)\}/g, (_, t) => tokens[t] ?? '');
-}
+import { entityByName, applyUrlPattern as applyPattern } from '../schema/vendorRegistry.js';
 
 /**
  * Generate a URL for a manufacturer's EDP#/MFG#.

@@ -31,8 +31,7 @@ import { THROUGH_COOLANT_VALUES } from '../../tool-extractor.tsx';
 import { generateId } from './identity.js';
 import { registryIdForName, entityByName } from './vendorRegistry.js';
 import {
-  generateManufacturerUrl, generateVendorUrl,
-  manufacturerHasUrlGenerator, vendorHasUrlGenerator,
+  manufacturerHasUrlGenerator,
 } from '../utils/urlGenerators.js';
 
 // ── Extracted key → app field ────────────────────────────────────────────────
@@ -299,25 +298,25 @@ export function buildPurchasingProposals(tool, extracted) {
     }
   }
 
-  // URL: the generator wins where a pattern exists (it is canonical and
-  // survives a catalog redesign); otherwise fall back to the scraped product
-  // link. Filled ONLY when blank, so a hand-corrected URL is never overwritten.
+  // URL: ⚠️ there is NOTHING to decide when the registry has a pattern for this
+  // manufacturer — the link is DERIVED from it (syncPurchasingFromRegistry /
+  // backfillUrls) and the pattern always wins, precisely so that one edit in
+  // /vendors corrects every tool at once. Offering the scraped link there would
+  // be offering to store a static URL that is then ignored. So the scraped link
+  // is proposed ONLY where there is no pattern to compose from, and only into a
+  // blank — the one case where a pasted URL is the best answer available.
   const effectiveEdp = edp || existingMfg?.edp || '';
-  if (mfgName && effectiveEdp && !existingMfg?.edp_url) {
-    const url = manufacturerHasUrlGenerator(mfgName)
-      ? generateManufacturerUrl(mfgName, effectiveEdp)
-      : (productLink || null);
-    if (url) {
-      rows.push({
-        key: 'mfg:edp_url',
-        label: 'Manufacturer link',
-        current: null,
-        proposed: url,
-        kind: 'fill',
-        target: 'manufacturer',
-        generated: manufacturerHasUrlGenerator(mfgName),
-      });
-    }
+  if (mfgName && effectiveEdp && !existingMfg?.edp_url
+      && !manufacturerHasUrlGenerator(mfgName) && productLink) {
+    rows.push({
+      key: 'mfg:edp_url',
+      label: 'Manufacturer link',
+      current: null,
+      proposed: productLink,
+      kind: 'fill',
+      target: 'manufacturer',
+      generated: false,
+    });
   }
 
   // ── Vendor ──
@@ -367,21 +366,9 @@ export function buildPurchasingProposals(tool, extracted) {
       }
     }
 
-    const effectiveNum = vendorNum || existingVendor?.vendor_num || '';
-    if (vName && effectiveNum && !existingVendor?.vendor_num_url && vendorHasUrlGenerator(vName)) {
-      const url = generateVendorUrl(vName, effectiveNum);
-      if (url) {
-        rows.push({
-          key: 'vendor:num_url',
-          label: 'Vendor link',
-          current: null,
-          proposed: url,
-          kind: 'fill',
-          target: 'vendor',
-          generated: true,
-        });
-      }
-    }
+    // A vendor link has no scraped fallback — it only ever comes from the
+    // registry pattern, which is derived and always wins. So there is never a
+    // vendor-link row to accept; see the manufacturer note above.
   }
 
   return { rows, newManufacturer: isNewMfg ? brand : null };
@@ -420,18 +407,15 @@ export function applyPurchasingRows(purchasing, extracted, acceptedKeys) {
 
   if (mfg) {
     if (accepted.has('mfg:edp') && extracted.edpNumber) mfg.edp = extracted.edpNumber;
-    if (accepted.has('mfg:edp_url')) {
-      const url = manufacturerHasUrlGenerator(mfg.name)
-        ? generateManufacturerUrl(mfg.name, mfg.edp)
-        : (extracted.productLink || '');
-      if (url) mfg.edp_url = url;
-    }
+    // Only ever the scraped link — a manufacturer with a registry pattern has
+    // its URL derived, and never produced a row to accept.
+    if (accepted.has('mfg:edp_url') && extracted.productLink) mfg.edp_url = extracted.productLink;
   }
 
   const vendorName = extracted.vendor || '';
   let vendor = vendorName ? vendors.find(v => sameEntity(v.name, vendorName)) : vendors[0];
 
-  const wantsVendorRow = ['vendor:new', 'vendor:num', 'vendor:price', 'vendor:num_url']
+  const wantsVendorRow = ['vendor:new', 'vendor:num', 'vendor:price']
     .some(k => accepted.has(k));
   if (!vendor && wantsVendorRow && vendorName) {
     vendor = {
@@ -452,10 +436,6 @@ export function applyPurchasingRows(purchasing, extracted, acceptedKeys) {
     if (accepted.has('vendor:price') && extracted.cost) {
       const p = parseFloat(extracted.cost);
       if (!isNaN(p)) vendor.price = p;
-    }
-    if (accepted.has('vendor:num_url')) {
-      const url = generateVendorUrl(vendor.name, vendor.vendor_num);
-      if (url) vendor.vendor_num_url = url;
     }
   }
 

@@ -1025,19 +1025,17 @@ function buildPurchasingFromGroup(group) {
       }
     });
 
-  // ProShop doesn't export links — backfill from EDP#/Vendor# using known
-  // URL patterns wherever a generator matches.
+  // ProShop doesn't export links — compose them from EDP#/Vendor# wherever the
+  // registry has a pattern. The pattern WINS over a stored URL (it is the one
+  // place the shop can correct a manufacturer's URL logic for every tool at
+  // once); a stored URL stands only where there is no pattern to compose from.
   manufacturers.forEach(mfg => {
-    if (!mfg.edp_url && mfg.edp) {
-      const generated = generateManufacturerUrl(mfg.name, mfg.edp);
-      if (generated) mfg.edp_url = generated;
-    }
+    const generated = generateManufacturerUrl(mfg.name, mfg.edp);
+    if (generated) mfg.edp_url = generated;
   });
   vendors.forEach(vendor => {
-    if (!vendor.vendor_num_url && vendor.vendor_num) {
-      const generated = generateVendorUrl(vendor.name, vendor.vendor_num);
-      if (generated) vendor.vendor_num_url = generated;
-    }
+    const generated = generateVendorUrl(vendor.name, vendor.vendor_num);
+    if (generated) vendor.vendor_num_url = generated;
   });
 
   return { manufacturers, vendors };
