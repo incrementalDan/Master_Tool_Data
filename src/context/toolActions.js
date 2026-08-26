@@ -14,6 +14,8 @@ import {
 import { normProShopId } from '../schema/insertFamilies.js';
 import { linkPatch } from '../utils/toolLinks.js';
 import { withRetiredMarker } from '../utils/toolStatus.js';
+import { proShopLinkForWrite } from '../utils/proShopUrl.js';
+import { showsProShopUrl } from '../utils/toolIdSystem.js';
 import { holderForGuid } from '../utils/holderDuplicates.js';
 import { holderTokensMatch } from '../utils/holderNaming.js';
 import { composeAsmNumber, autoAsmNumber, nextAsmSerial, usedAsmSerials } from '../utils/assemblyIdSystem.js';
@@ -170,6 +172,19 @@ export function createToolActions(ctx) {
       ? { location: composedLoc, proshop_location: proShopLocationValue(locSys, composedLoc) }
       : {};
 
+    // ProShop tool-page link → Fusion's native `product-link`. Every pre-TMS tool
+    // in the library carries one, so a tool the app creates must too. It is a pure
+    // function of the ProShop Tool #, so it is composed here rather than stored —
+    // which also corrects it after a Tool ID renumber. Only in `proshop` ID mode
+    // (in any other mode the Tool ID is not a ProShop number and the URL would be
+    // a dead link), and never over a link the app didn't compose — an extracted
+    // manufacturer product page lives in this same field.
+    const linkExtra = {};
+    if (showsProShopUrl(idCfg.mode || 'proshop')) {
+      const nextLink = proShopLinkForWrite(tool.tool_id, tool.product_link);
+      if (nextLink) linkExtra.product_link = nextLink;
+    }
+
     // No-Fusion tool (Fusion-decoupling Phase B): write metadata ONLY — no Fusion
     // library round-trip, no placeholder minted. The tool intentionally has no
     // Fusion entry (no_fusion_link — set by ProShop import for unmatched rows, or
@@ -178,7 +193,7 @@ export function createToolActions(ctx) {
     if (isUnlinked) {
       const toWrite = {
         ...tool, tracking_id, library_id: null, library_name: null,
-        assemblies, ...locExtra,
+        assemblies, ...locExtra, ...linkExtra,
         // Keep the flat speed/feed mirror = preset 0 (O1) — it isn't stored in
         // metadata, so a stale in-memory value would otherwise linger on cards /
         // search / ProShop export until the next reload rebuilds it.
@@ -271,6 +286,7 @@ export function createToolActions(ctx) {
       _fusionRaw: refreshedRaws[0] || tool._fusionRaw || null,
       _drift: [...fieldConflicts, ...infoConflicts],
       ...locExtra,
+      ...linkExtra,
     });
 
     // The app-owned holder records are the source of truth for holder geometry;

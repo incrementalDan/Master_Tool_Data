@@ -7,6 +7,7 @@ import { useApp } from '../context/AppContext.jsx';
 import { exportSingleTool as exportProShop } from '../utils/proShopExport.js';
 import StatusBadge from './StatusBadge.jsx';
 import { showsProShopUrl, toolIdLabel } from '../utils/toolIdSystem.js';
+import { proShopToolUrl as proshotUrl } from '../utils/proShopUrl.js';
 import { conflictCount } from '../utils/toolConflicts.js';
 import { preferredMachineName } from '../utils/machines.js';
 
@@ -14,12 +15,6 @@ function formatDim(v) {
   if (v === null || v === undefined || v === '') return null;
   const n = parseFloat(v);
   return isNaN(n) ? null : n.toFixed(4).replace(/\.?0+$/, '');
-}
-
-function proshotUrl(id) {
-  if (!id) return null;
-  const prefix = id.split('-')[0];
-  return `https://americanprecisionworks.adionsystems.com/procnc/tools/${prefix}/${id}$`;
 }
 
 export default function ToolCard({ tool, variant = 'grid', matchedLegacyId = null, matchedComponent = null, matchedPurchasing = null }) {
