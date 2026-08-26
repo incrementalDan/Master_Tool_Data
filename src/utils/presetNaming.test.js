@@ -148,6 +148,34 @@ describe('Materials library resolution', () => {
     expect(presetMaterialColor('AL FIN', MATS)).toBeTruthy();
   });
 
+  // ⚠️ A composed name is read back POSITIONALLY, so a code with a space in it
+  // shifts the OOH and holder fields and silently breaks presetMatchesAssembly.
+  // The code is free text the shop types, so materialNameCode enforces one word.
+  it('a multi-word code is collapsed so the name still round-trips', () => {
+    const mats = {
+      ...MATS,
+      presets: [...MATS.presets, { id: 'pn_alc', group_id: 'N', name: 'Al Cast', code: 'AL CAST' }],
+    };
+    expect(materialNameCode('Al Cast', mats)).toBe('ALCAST');
+    const name = composePresetName({
+      materialQuery: materialNameCode('Al Cast', mats),
+      ooh: 2.125, holderShort: 'NBT30-SK13C-60', opType: 'rough',
+    });
+    expect(name).toBe('ALCAST 2.125 NBT30-SK13C-60 - Rough');
+    const parsed = parsePresetName(name);
+    expect(parsed.ooh).toBe(2.125);
+    expect(parsed.holderShortName).toBe('NBT30-SK13C-60');
+  });
+
+  // With no material token the name starts at the OOH — the holder must NOT be
+  // mistaken for the material code.
+  it('a name with no material token still parses its OOH and holder', () => {
+    const parsed = parsePresetName('2.125 NBT30-SK13C-60 - Rough');
+    expect(parsed.materialCode).toBeNull();
+    expect(parsed.ooh).toBe(2.125);
+    expect(parsed.holderShortName).toBe('NBT30-SK13C-60');
+  });
+
   // The reason the fallback had to go: group N's code covers aluminium, so a
   // brass CAM preset could only ever name itself "AL". Its own code now wins.
   it('a CAM preset code overrides its group for the name token', () => {

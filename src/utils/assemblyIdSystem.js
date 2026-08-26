@@ -178,15 +178,20 @@ export function backfillAsmNumbers(tools, shopSettings, components = null, holde
           || (holders || []).find(h => h.guid === a.holder_guid)?.description || '',
         tool_id: idToken, ooh: a.ooh, assembly_id: a.assembly_id,
       });
-      // ⚠️ Same tolerance, and here it is what keeps the change quiet. Every
-      // stored number spells the holder the old way, so a strict compare would
-      // call all ~283 of them stale and raise the "assembly numbers corrected"
-      // banner on every tool at once — churn over a value that is a reference,
-      // not a link. An old-spelling number is left exactly as it is; only a
-      // number that is stale for a REAL reason (the OOH moved, the tool was
-      // renumbered) still gets corrected.
-      if (!asm_number || holderTokensMatch(asm_number, a.asm_number)) return a;
+      // ⚠️ The COMPARE is strict; only the BANNER is tolerant. A number spelling
+      // the holder the retired short way ("30-SK13-60-1001-2.125") IS stale —
+      // the holder has one name, its description — so it is corrected like any
+      // other stale value and persists on the tool's next write (an ordinary
+      // save, or the holder re-stamp pass, which writes metadata too). What the
+      // tolerance still does is keep that correction QUIET: every stored number
+      // spells the holder the old way, so counting them all would raise the
+      // "assembly numbers corrected" banner on the whole library at once — a
+      // flag nobody can act on, over a value that is a reference, not a link.
+      // Silent when unambiguous, surfaced when it's news: the same rule the rest
+      // of the self-healing passes follow.
+      if (!asm_number || asm_number === a.asm_number) return a;
       touched = true;
+      const spellingOnly = holderTokensMatch(asm_number, a.asm_number);
       // An Auto number is a PURE product of holder + tool_id + OOH and has no
       // edit UI in this mode (AssemblyForm only exposes it for proshop_rta), so
       // there is no custom value to protect: a stored value that differs is
@@ -195,7 +200,7 @@ export function backfillAsmNumbers(tools, shopSettings, components = null, holde
       // of staleness the edit path can't catch: OOH edited in Fusion, a Tool ID
       // renumber, a holder description change, or assemblies created before
       // Auto mode was configured.
-      if (a.asm_number) corrected.push({ from: a.asm_number, to: asm_number });
+      if (a.asm_number && !spellingOnly) corrected.push({ from: a.asm_number, to: asm_number });
       return { ...a, asm_number };
     });
     if (!touched) return t;

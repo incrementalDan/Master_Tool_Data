@@ -131,7 +131,7 @@ A **logical tool** maps to **N Fusion library entries ("instances")** — one in
 
 ⚠️ **A holder has ONE name: its DESCRIPTION.** There is no short name any more — the abbreviated form (`30-SK13-60` for `NBT30-SK13C-60`) is retired, along with the strip-`NBT` / drop-the-`C` regexes and the override map that produced it. The app owns the holder library, so the description IS the holder's identity, and deriving a second spelling meant the same holder appeared two ways depending on where you looked. `holderNameToken(description)` (`src/utils/holderNaming.js`) is the seam every composed name goes through; it returns the description verbatim.
 
-⚠️ **Names ALREADY STORED keep the old spelling and are deliberately NOT rewritten** — a preset name and an `asm_number` are a *reference*, not a link (the real links are `preset_meta.assembly_id` and `assembly.holder_id`), so stale spelling costs nothing and a mass rename would have re-derived 283 of 302 assembly numbers and 69 of 335 preset names at once. `holderTokensMatch(a, b)` normalises the retired form on BOTH sides so the two spellings compare equal; it is a **comparison tolerance, never a name generator** — nothing composes from it. Three places depend on it, and each would misbehave loudly without it: `presetMatchesAssembly` (seeds `assembly_id` for a preset with no FK — every legacy preset would stop matching), `backfillAsmNumbers` (would call all ~283 stored numbers stale and raise the "assembly numbers corrected" banner on every tool at once — measured: 55 tools flag before AND after, i.e. zero new churn), and `shouldRetireAsmNumber` / `updateAssembly` (would retire every old-spelling Auto number into `legacy_asm_numbers`, the searchable list meant for real ProShop RTA numbers). `operation_type` is stored on the in-memory preset and cached in metadata (`preset_meta`), but is **never written into the Fusion JSON** (Fusion validates strictly) — it lives in the name. On import, operation_type is parsed from the name; the name wins on conflict.
+⚠️ **Names ALREADY STORED keep the old spelling and are deliberately NOT rewritten** — a preset name and an `asm_number` are a *reference*, not a link (the real links are `preset_meta.assembly_id` and `assembly.holder_id`), so stale spelling costs nothing and a mass rename would have re-derived 283 of 302 assembly numbers and 69 of 335 preset names at once. `holderTokensMatch(a, b)` normalises the retired form on BOTH sides so the two spellings compare equal; it is a **comparison tolerance, never a name generator** — nothing composes from it. Three places depend on it, and each would misbehave loudly without it: `presetMatchesAssembly` (seeds `assembly_id` for a preset with no FK — every legacy preset would stop matching), `backfillAsmNumbers` (where it now gates only the BANNER, not the compare — see below), and `shouldRetireAsmNumber` / `updateAssembly` (would retire every old-spelling Auto number into `legacy_asm_numbers`, the searchable list meant for real ProShop RTA numbers). `operation_type` is stored on the in-memory preset and cached in metadata (`preset_meta`), but is **never written into the Fusion JSON** (Fusion validates strictly) — it lives in the name. On import, operation_type is parsed from the name; the name wins on conflict.
 
 **Auto-name builds incrementally**: `composePresetName` tolerates missing pieces — `materialQuery`, `ooh`, `holderShort`, and `opType` can each be `null`/absent, and the name is composed from whatever is filled in (blank pieces are filtered before joining — including the material, which contributes **no token at all** when it resolves to nothing, so the name simply starts at the OOH). `EditCard.composeName` (`PresetPanel.jsx`) no longer early-returns when there's no linked assembly or no operation type selected — the live preview updates as soon as *any* relevant field is set, instead of waiting until everything (incl. a holder) is filled in.
 
@@ -166,6 +166,8 @@ So what remains flagged is: **`unresolvedMaterialPresets(presets, materials)` re
 **Flagged, never auto-corrected — but ALWAYS one click from clearable.** `stockMaterialIssues(presets, materials)` returns each offending preset with what Fusion holds (`unknown[]`) and what its own CAM-preset FK implies (`expected`); **`MaterialLinkBanner`** shows them on the tool page with a **Use \<CAM preset\>** action per row (plus Fix-all). ⚠️ The action is not a convenience — without it this flag is a **nag loop**: `stock-materials` has no field in the preset editor, and the material shown there is already CORRECT, so the tool page looks fine and the only way to clear it is to re-pick a material that appears unchanged. Applying is not a guess either: it writes the CAM preset the preset is **already linked to**, and only `stock-materials` moves. A row with no FK (`expected == null`) gets no button — there is nothing to apply, so the user picks a material in the editor. Locked by `presetNaming.test.js` ("stops firing once the row's own `expected` is applied", and a second case asserting the load backfill doesn't undo the fix). ⚠️ **Both writers must PRESERVE a non-matching `stock-materials`, or the flag can never fire**: `syncPresetMaterialName` and `FUSION_PRESET_PATCHERS.material` apply the identical rule (rewrite only when it's absent, equals the new name, or equals the OLD query — i.e. plainly derived from the name being corrected). They are the two places that touch this one field and they must not drift; clobbering it in either would destroy the only evidence the reference was ever stale. Locked by `presetNaming.test.js` + `presetMaterialPush.test.js`.
 
 Three resolver helpers (`src/utils/presetNaming.js`) read a stored `material.query` back against the library — `findMaterialInLibrary(query, materials)` (→ `{group, preset, alloy}`, matching most-specific first: alloy label/alias → CAM preset name → group label/id, with each level filling in the levels above it), `materialNameCode(query, materials)` (the **preset-name token**: alloy `code` → CAM preset `code` → group `code` → group id, and **nothing else** — see the rule below), and `presetMaterialColor(query, materials)` (group color, library first). The codes (edited in the Materials editor) are what appear in the convention name, e.g. `SS 2.125 NBT30-SK13C-60 - Rough` (a CAM preset with a blank `code` inherits its group's — the editor shows the inherited value as the field's placeholder). All three name-composition call sites resolve the code this way: `PresetPanel.composeName`, `normalizeLibrary` (via `materialsRef`), and `DiffStep` conflict naming.
+
+⚠️ **A name code is ONE TOKEN.** `parsePresetName` reads a composed name back **positionally** (material → OOH → holder), so a code containing a space shifts every field after it: `AL CAST 2.125 NBT30-SK13C-60 - Rough` parses as material `AL`, **no OOH**, and a holder of `CAST 2.125 NBT30-SK13C-60` — which silently stops `presetMatchesAssembly` seeding that preset's `assembly_id`. The code is free text the shop types, so `materialNameCode` **strips whitespace** at the one seam every composed name goes through, and the seed ships single tokens (`ALC`, `SSDUP`, `STLPH`, …). Locked by `presetNaming.test.js` (a round-trip) + `sharedDefaults.test.js` (the seed). ⚠️ Known remaining edge, deliberately not guarded: a **purely numeric** code (an alloy coded `316`) is read back as the OOH. Rejecting a code the shop chose is worse than the narrow failure; the field's tooltip says one word.
 
 ⚠️ **THE SHORT NAME IS LIBRARY DATA — there is NO hardcoded fallback, and re-adding one is a regression.** `materialNameCode` used to fall through to `matchMaterial`'s built-in code table (`AL`/`SS`/`STEEL`/`MILD`/`BRONZE`/`BRASS`/`TI`/`CI`/`PLASTIC`), written before the Materials library existed. Two things were wrong with it: the shop couldn't edit its own vocabulary, and it was **coarser than the library it shadowed** — every non-ferrous CAM preset resolves to group N whose code is `AL`, so a **brass** preset could only ever name itself `AL 2.125 …`. The fix is the tier that was already there: a CAM preset's own `code` beats its group's, and an alloy's beats both. A string that resolves to **nothing** now yields **no token at all** — the name simply starts at the OOH (`2.125 NBT30-SK13C-60 - Rough`) instead of asserting an uneditable guess. ⚠️ It is **not** replaced by a `GEN` placeholder either: `materialToCode` returns `''` for a blank, because a placeholder claims a material nobody chose — the same rule `buildDesc` follows for tool descriptions. That — that is true rather than tidy, and `MaterialLinkBanner` already flags exactly those presets as unlinked. `matchMaterial` survives as a **recognition** heuristic only (colour fallback, import inference, `bareMaterialCode`), never as a name source. Locked by `presetNaming.test.js`.
 
@@ -489,6 +491,8 @@ So `updateAssembly` (`toolActions.js`) also re-derives on any OOH/holder change 
 - **Preset names** — every preset linked to that assembly (by `linked_preset_guids` **or** `presetMatchesAssembly` against the OLD values) is recomposed via the shared **`autoPresetName(preset, assembly, materials)`** (`presetNaming.js`), which derives format/operation/intensity/strategy/small-bore from the preset itself so it can't drift from what the editor shows live. A **hand-typed name is never rewritten** — the same `isAutoPresetName` structural check the editor uses gates it (see Auto-name vs. hand-typed name).
 
 Self-healing in miniature: unambiguous → repaired silently; the user's own name → left alone. Locked by `toolActions.test.js`.
+
+⚠️ **A number spelling the holder the RETIRED short way is stale, and is corrected — silently.** `backfillAsmNumbers` used to run its compare through `holderTokensMatch`, so `30-SK13-60-1001-2.125` was judged EQUAL to the freshly-composed `NBT30-SK13C-60-1001-2.125` and never recomputed — no save, re-stamp, or bulk write could ever fix it. The compare is now **strict**; the tolerance moved to the `_asmNumbersFixed` **flag** instead. So the number self-heals on the tool's next write (an ordinary save, or `writeToolsToFusion` — the holder re-stamp pass, which persists metadata too), while the "N assembly numbers corrected" banner stays quiet for a spelling-only change. Every stored number spells the holder the old way, so counting them would raise that banner on the whole library at once — a flag nobody can act on. A number stale for a **real** reason (the OOH moved, the tool was renumbered) still flags, even when the spelling is corrected in the same step. Silent when unambiguous, surfaced when it's news. Locked by `assemblyIdSystem.test.js`.
 
 **Load-time correction of a stale Auto `asm_number`** (`backfillAsmNumbers`). The edit path above can't catch every source of staleness — the OOH can change in Fusion, a Tool ID renumber changes the id token, a holder description can change, and assemblies may pre-date Auto mode being configured. Because an Auto number is a **pure product** of holder + tool_id + OOH **and has no edit UI** (`AssemblyForm` exposes the field only in `proshop_rta` mode), a stored value that differs from the composed one is always **stale, never custom** — so `backfillAsmNumbers` **re-derives** it (it previously only filled a missing one) and reports each change on the tool via a runtime **`_asmNumbersFixed`** array (`[{from, to}]`), surfaced as a blue "N assembly numbers … corrected — Save" banner in `ToolDetail` that lists **old → new** so a flag is always diagnosable. ⚠️ **The checker MUST compose exactly like the stamper** (`writeLogicalTool`) — same holder resolution (cached `holder_description`, then the holder library by `holder_guid`) and the same `trimOoh` rounding. If the two ever disagree, the flag fires on every load and *cannot be saved away*, because each side keeps recomputing its own value: a permanent false positive. Both causes are regression-tested. Only **corrections** are counted (a first-time fill is normal stamping, not news). This is **strictly `auto`-mode**: the function already early-returns for every other mode, so `proshop_rta` / `erp_external` / `sequential` numbers — which are NOT derived from these fields — are never touched and never flag. In-memory at load, persisted on the next save (which clears the flag); idempotent, so a correct library is a no-op. ⚠️ Corollary: switching an existing shop **from `proshop_rta` to `auto`** means those RTA numbers get re-derived at load — the Auto value is the source of truth in that mode.
 
@@ -2295,6 +2299,8 @@ The explicit, user-initiated batch flow — see the **Phase 2** section above. T
 
 ## Holder Management System
 
+> **Matching a holder? Read "Holder matching — the four questions" below first.** There are four different "which holder is this" resolvers with different rules; picking the wrong one fails silently.
+
 **The goal, in the shop's words.** There is a cutting-tool library where every tool has a holder, and a holder library that most of those tools were originally built against — but **in Fusion there is no real connection between the two**: a tool carries a frozen copy of the holder's geometry and nothing more. So: (1) match the existing cutting tools to the existing holders **once**, using description + gauge length + whatever else the app can score; (2) from then on, freely change anything about a holder — including replacing one wholesale with a more accurately drawn one — and have it **push to every tool that references it**. The app's holder library becomes the source of truth for holder geometry, and the cutting tools follow it.
 
 **⚠️ Two matching jobs, deliberately different. Do not merge them.**
@@ -2376,6 +2382,78 @@ Three questions came up while auditing the holder system against the app's own p
 **Fusion's `product-id` on a holder belongs to the app.** The push overwrites whatever was there — often a vendor SKU. Confirmed acceptable: the old value is preserved in the record's `legacy_ids` (and `part_number` when it parsed as a SKU) and still resolves via `recordForRef`.
 
 -----
+
+## Holder matching — the four questions (QUICK REFERENCE)
+
+**Read this before touching any holder-matching code.** There are FOUR different
+"which holder is this" questions in the app. They look alike, they are not
+interchangeable, and reaching for the wrong one is silent — you get the wrong
+holder, not an error.
+
+**Everything is built from two signals**, and Fusion's holder **`guid` is not
+one of them** (Fusion re-issues guids; it is a hint, always last):
+
+| Signal | What it is |
+|---|---|
+| **REF** | the app's `holder_ref` (`HLD-XXXXXX`) stamped into Fusion's `product-id`; also matches a value in the record's `legacy_ids` |
+| **SHAPE** | the segments, compared within `SEGMENT_MATCH_TOL_IN` = **0.001″** (rounding only, unit-aware — `segmentsMatch`) |
+
+| # | Question | Function | Order | On a wrong answer |
+|---|---|---|---|---|
+| **1** | Which holder is this tool **carrying**? | `matchBakedHolder` → `backfillHolderIds` (`holderResolve.js`) | REF+SHAPE → SHAPE → REF → guid | links anyway, but **marks** the guess |
+| **2** | Which holder's **geometry does this write use**? | `resolveHolderForWrite` (`holderResolve.js`) | **`holder_id` FK** → guid (follows merges) → Fusion entry | writes wrong geometry to Fusion |
+| **3** | Which record is this **Fusion holder-library entry**? | `matchFusionHolder` (`holderIdentity.js`) | REF+SHAPE only | overwrites the wrong holder |
+| **4** | Which holder should this **unlinked tool** use? | `proposeHolderLink` (`holderLink.js`) | shape, then near+name | the user is asked, so it's cheap |
+
+⚠️ **Q1 reads SHAPE first; Q2 reads the FK first.** That is not an
+inconsistency — Q1 is *establishing* a link from scratch (the FK doesn't exist
+yet, and a baked guid may be stale), Q2 is *honouring* one you already made.
+
+**Q1 — what a tool baked.** Certain only when REF and SHAPE agree. The one
+exception: **SHAPE alone counts as certain when the baked copy carries no ref
+at all** — every tool copied before the first push is in that state, and
+treating them as uncertain would put the whole library on a confirmation list.
+When a ref exists and disagrees with the shape, the **shape wins** (it is what
+the tool is actually carrying) but the link is never certain. A guess still
+links — nothing is left dangling — and is flagged `_linkGuess` / `_linkVia`
+(runtime only), surfaced in the **confirm** tier of *Link tools to holders*, and
+stops appearing once confirmed. Two filters run BEFORE uniqueness is judged:
+archived records are excluded, and **a record that has never been in Fusion
+cannot be what a tool baked** (no `fusion_guid`, no `last_pushed`) — that is
+what stops a tap-collet twin making every tool on the original uncertain.
+
+**Q2 — what geometry a write carries.** Archived records are not a geometry
+source, and a record with **no segments** is not either (it would blank out the
+holder the tool already has). Everything else falls through to the Fusion entry,
+which is why a holder the app hasn't imported yet doesn't vanish on save.
+
+**Q3 — the Fusion boundary.** The strictest. Only `exact` (REF+SHAPE on one
+record) is written, plus the `geometry-only` bootstrap into a **blank**
+`product-id`. `ambiguous` / `conflict` / `ref-only` / `geometry-only` /
+`fusion-copy` / `duplicate-entry` are flagged and the entry is left
+**byte-for-byte alone** — a half-match is the shape of a human edit, and
+overwriting it destroys the only evidence of what changed.
+
+**Q4 — the loose one, and the only one a person confirms.** "One dimension out"
+is the normal shape of a LENGTH FAMILY (`-60/-90/-120/-150` differ by one body
+segment), so nearness alone is a coin flip; the **description must agree** and
+the gap must be under `NEAR_MAX_MM` = 5.
+
+**Display is a fifth thing and matches nothing.** `HolderTag` →
+`holderForDisplay`: `holder_id` → guid → synthesize a stand-in from the
+description. It never resolves by shape; it only decides what to draw.
+
+⚠️ **`holderTokensMatch` is NOT part of any of this.** It is a tolerance for
+stored TEXT (`30-SK13-60` ≡ `NBT30-SK13C-60`, the retired short spelling), used
+in exactly three places — `presetMatchesAssembly`, `shouldRetireAsmNumber` /
+`updateAssembly`, and the `_asmNumbersFixed` **flag** in `backfillAsmNumbers`.
+It never picks a holder.
+
+**Why this is as complicated as it is** (so the next person doesn't try to
+collapse it): Fusion **absorbs** a copy of the holder into every cutting tool
+and **re-issues holder guids**, so the app has to recognise the same physical
+holder from a frozen copy with an unstable id — from four different directions,
+each with a different cost when it's wrong.
 
 ## Holder identity — Fusion's holder GUID is NOT stable (CRITICAL)
 

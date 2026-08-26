@@ -98,6 +98,41 @@ describe('backfillAsmNumbers', () => {
     ]);
   });
 
+  // The retired short holder spelling ("30-SK13-60" for "NBT30-SK13C-60") IS
+  // stale — a holder has one name, its description. It is corrected like any
+  // other stale value, but SILENTLY: every stored number spells it the old way,
+  // so flagging them would raise the banner on the whole library at once.
+  it('corrects the retired holder spelling, without flagging it', () => {
+    const tools = [{
+      tool_id: '1001',
+      assemblies: [{
+        assembly_id: 'a', holder_description: 'NBT30-SK13C-60', ooh: 2.125,
+        asm_number: '30-SK13-60-1001-2.125',
+      }],
+    }];
+    const out = backfillAsmNumbers(tools, shop);
+    expect(out[0].assemblies[0].asm_number).toBe('NBT30-SK13C-60-1001-2.125');
+    expect(out[0]._asmNumbersFixed).toBeUndefined();   // corrected, not announced
+    // Idempotent — a second pass has nothing to do.
+    expect(backfillAsmNumbers(out, shop)).toBe(out);
+  });
+
+  // A number that is stale for a REAL reason still flags, even when the holder
+  // spelling is also being corrected in the same step.
+  it('still flags when more than the spelling changed', () => {
+    const tools = [{
+      tool_id: '1001',
+      assemblies: [{
+        assembly_id: 'a', holder_description: 'NBT30-SK13C-60', ooh: 3,
+        asm_number: '30-SK13-60-1001-2.125',
+      }],
+    }];
+    const out = backfillAsmNumbers(tools, shop);
+    expect(out[0]._asmNumbersFixed).toEqual([
+      { from: '30-SK13-60-1001-2.125', to: 'NBT30-SK13C-60-1001-3' },
+    ]);
+  });
+
   it('is idempotent and raises no flag when every number is already correct', () => {
     const tools = [{
       tool_id: '1001',
