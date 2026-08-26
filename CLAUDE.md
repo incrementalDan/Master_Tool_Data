@@ -2297,6 +2297,8 @@ The explicit, user-initiated batch flow — see the **Phase 2** section above. T
 
 ## Holder Management System
 
+> **Matching a holder? Read "Holder matching — the four questions" below first.** There are four different "which holder is this" resolvers with different rules; picking the wrong one fails silently.
+
 **The goal, in the shop's words.** There is a cutting-tool library where every tool has a holder, and a holder library that most of those tools were originally built against — but **in Fusion there is no real connection between the two**: a tool carries a frozen copy of the holder's geometry and nothing more. So: (1) match the existing cutting tools to the existing holders **once**, using description + gauge length + whatever else the app can score; (2) from then on, freely change anything about a holder — including replacing one wholesale with a more accurately drawn one — and have it **push to every tool that references it**. The app's holder library becomes the source of truth for holder geometry, and the cutting tools follow it.
 
 **⚠️ Two matching jobs, deliberately different. Do not merge them.**
@@ -2378,6 +2380,78 @@ Three questions came up while auditing the holder system against the app's own p
 **Fusion's `product-id` on a holder belongs to the app.** The push overwrites whatever was there — often a vendor SKU. Confirmed acceptable: the old value is preserved in the record's `legacy_ids` (and `part_number` when it parsed as a SKU) and still resolves via `recordForRef`.
 
 -----
+
+## Holder matching — the four questions (QUICK REFERENCE)
+
+**Read this before touching any holder-matching code.** There are FOUR different
+"which holder is this" questions in the app. They look alike, they are not
+interchangeable, and reaching for the wrong one is silent — you get the wrong
+holder, not an error.
+
+**Everything is built from two signals**, and Fusion's holder **`guid` is not
+one of them** (Fusion re-issues guids; it is a hint, always last):
+
+| Signal | What it is |
+|---|---|
+| **REF** | the app's `holder_ref` (`HLD-XXXXXX`) stamped into Fusion's `product-id`; also matches a value in the record's `legacy_ids` |
+| **SHAPE** | the segments, compared within `SEGMENT_MATCH_TOL_IN` = **0.001″** (rounding only, unit-aware — `segmentsMatch`) |
+
+| # | Question | Function | Order | On a wrong answer |
+|---|---|---|---|---|
+| **1** | Which holder is this tool **carrying**? | `matchBakedHolder` → `backfillHolderIds` (`holderResolve.js`) | REF+SHAPE → SHAPE → REF → guid | links anyway, but **marks** the guess |
+| **2** | Which holder's **geometry does this write use**? | `resolveHolderForWrite` (`holderResolve.js`) | **`holder_id` FK** → guid (follows merges) → Fusion entry | writes wrong geometry to Fusion |
+| **3** | Which record is this **Fusion holder-library entry**? | `matchFusionHolder` (`holderIdentity.js`) | REF+SHAPE only | overwrites the wrong holder |
+| **4** | Which holder should this **unlinked tool** use? | `proposeHolderLink` (`holderLink.js`) | shape, then near+name | the user is asked, so it's cheap |
+
+⚠️ **Q1 reads SHAPE first; Q2 reads the FK first.** That is not an
+inconsistency — Q1 is *establishing* a link from scratch (the FK doesn't exist
+yet, and a baked guid may be stale), Q2 is *honouring* one you already made.
+
+**Q1 — what a tool baked.** Certain only when REF and SHAPE agree. The one
+exception: **SHAPE alone counts as certain when the baked copy carries no ref
+at all** — every tool copied before the first push is in that state, and
+treating them as uncertain would put the whole library on a confirmation list.
+When a ref exists and disagrees with the shape, the **shape wins** (it is what
+the tool is actually carrying) but the link is never certain. A guess still
+links — nothing is left dangling — and is flagged `_linkGuess` / `_linkVia`
+(runtime only), surfaced in the **confirm** tier of *Link tools to holders*, and
+stops appearing once confirmed. Two filters run BEFORE uniqueness is judged:
+archived records are excluded, and **a record that has never been in Fusion
+cannot be what a tool baked** (no `fusion_guid`, no `last_pushed`) — that is
+what stops a tap-collet twin making every tool on the original uncertain.
+
+**Q2 — what geometry a write carries.** Archived records are not a geometry
+source, and a record with **no segments** is not either (it would blank out the
+holder the tool already has). Everything else falls through to the Fusion entry,
+which is why a holder the app hasn't imported yet doesn't vanish on save.
+
+**Q3 — the Fusion boundary.** The strictest. Only `exact` (REF+SHAPE on one
+record) is written, plus the `geometry-only` bootstrap into a **blank**
+`product-id`. `ambiguous` / `conflict` / `ref-only` / `geometry-only` /
+`fusion-copy` / `duplicate-entry` are flagged and the entry is left
+**byte-for-byte alone** — a half-match is the shape of a human edit, and
+overwriting it destroys the only evidence of what changed.
+
+**Q4 — the loose one, and the only one a person confirms.** "One dimension out"
+is the normal shape of a LENGTH FAMILY (`-60/-90/-120/-150` differ by one body
+segment), so nearness alone is a coin flip; the **description must agree** and
+the gap must be under `NEAR_MAX_MM` = 5.
+
+**Display is a fifth thing and matches nothing.** `HolderTag` →
+`holderForDisplay`: `holder_id` → guid → synthesize a stand-in from the
+description. It never resolves by shape; it only decides what to draw.
+
+⚠️ **`holderTokensMatch` is NOT part of any of this.** It is a tolerance for
+stored TEXT (`30-SK13-60` ≡ `NBT30-SK13C-60`, the retired short spelling), used
+in exactly three places — `presetMatchesAssembly`, `shouldRetireAsmNumber` /
+`updateAssembly`, and the `_asmNumbersFixed` **flag** in `backfillAsmNumbers`.
+It never picks a holder.
+
+**Why this is as complicated as it is** (so the next person doesn't try to
+collapse it): Fusion **absorbs** a copy of the holder into every cutting tool
+and **re-issues holder guids**, so the app has to recognise the same physical
+holder from a frozen copy with an unstable id — from four different directions,
+each with a different cost when it's wrong.
 
 ## Holder identity — Fusion's holder GUID is NOT stable (CRITICAL)
 
