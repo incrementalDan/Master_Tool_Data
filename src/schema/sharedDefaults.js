@@ -75,8 +75,8 @@ export const DEFAULT_MATERIALS = {
   presets: [
     // N — Non-Ferrous
     { id: 'pre_N_al_wrought',  group_id: 'N', name: 'Al Wrought',             code: 'AL',       description: 'Wrought Al alloys — 1100 through 7075',           iso_513: 'N1.2', kennametal: 'N2', vdi_3323: '22', order: 0 },
-    { id: 'pre_N_al_cast_low', group_id: 'N', name: 'Al Cast',                code: 'AL CAST',  description: 'Cast Al, low-to-mid Si (356, 380)',               iso_513: 'N2.2', kennametal: 'N2', vdi_3323: '23', order: 1 },
-    { id: 'pre_N_al_cast_hi',  group_id: 'N', name: 'Al Cast High-Si',        code: 'AL HI-SI', description: 'Hypereutectic cast Al, Si >12% (390)',            iso_513: 'N2.3', kennametal: 'N3', vdi_3323: '25', order: 2 },
+    { id: 'pre_N_al_cast_low', group_id: 'N', name: 'Al Cast',                code: 'ALC',      description: 'Cast Al, low-to-mid Si (356, 380)',               iso_513: 'N2.2', kennametal: 'N2', vdi_3323: '23', order: 1 },
+    { id: 'pre_N_al_cast_hi',  group_id: 'N', name: 'Al Cast High-Si',        code: 'ALHS',     description: 'Hypereutectic cast Al, Si >12% (390)',            iso_513: 'N2.3', kennametal: 'N3', vdi_3323: '25', order: 2 },
     { id: 'pre_N_brass',       group_id: 'N', name: 'Brass / Cu Alloy',       code: 'BRASS',    description: 'Leaded and non-leaded brass',                    iso_513: 'N3.1', kennametal: 'N4', vdi_3323: '26', order: 3 },
     { id: 'pre_N_copper',      group_id: 'N', name: 'Pure Copper',            code: 'CU',       description: 'Electrolytic and pure copper',                   iso_513: 'N3.3', kennametal: 'N4', vdi_3323: '28', order: 4 },
     // P — Steel
@@ -85,15 +85,15 @@ export const DEFAULT_MATERIALS = {
     { id: 'pre_P_low_c',       group_id: 'P', name: 'Steel Low Carbon',       code: 'MILD',     description: 'Low-C structural and bar steel (A36, 1018)',     iso_513: 'P2.1', kennametal: 'P0', vdi_3323: '1', order: 7 },
     { id: 'pre_P_med_c',       group_id: 'P', name: 'Steel Med/High Carbon',  code: 'STEEL',    description: 'Med/high-C steel (1045, 1060, 1080)',           iso_513: 'P2.2', kennametal: 'P2', vdi_3323: '4', order: 8 },
     { id: 'pre_P_alloy_soft',  group_id: 'P', name: 'Alloy Steel Soft',       code: 'STEEL',    description: 'Alloy/tool steel annealed (4140, 4340, H13, D2)', iso_513: 'P3.1', kennametal: 'P3', vdi_3323: '6', order: 9 },
-    { id: 'pre_P_alloy_28_34', group_id: 'P', name: 'Alloy Steel 28-34 HRC',  code: 'STEEL PH', description: 'Pre-hard alloy & mold steel (4140 PH, P20)',     iso_513: 'P3.2', kennametal: 'P3', vdi_3323: '8', order: 10 },
-    { id: 'pre_P_alloy_36_42', group_id: 'P', name: 'Alloy Steel 36-42 HRC',  code: 'STEEL HT', description: 'Hard alloy steel, Q&T (4140 H&T)',              iso_513: 'P3.3', kennametal: 'P4', vdi_3323: '9', order: 11 },
+    { id: 'pre_P_alloy_28_34', group_id: 'P', name: 'Alloy Steel 28-34 HRC',  code: 'STLPH',    description: 'Pre-hard alloy & mold steel (4140 PH, P20)',     iso_513: 'P3.2', kennametal: 'P3', vdi_3323: '8', order: 10 },
+    { id: 'pre_P_alloy_36_42', group_id: 'P', name: 'Alloy Steel 36-42 HRC',  code: 'STLHT',    description: 'Hard alloy steel, Q&T (4140 H&T)',              iso_513: 'P3.3', kennametal: 'P4', vdi_3323: '9', order: 11 },
     // M — Stainless
     { id: 'pre_M_free',        group_id: 'M', name: 'SS Free Machining',      code: 'SS',       description: 'Resulfurized stainless (303, 416)',              iso_513: 'M3.1', kennametal: 'M1', vdi_3323: '14', order: 12 },
     { id: 'pre_M_aus_304',     group_id: 'M', name: 'SS Austenitic 304',      code: 'SS',       description: '304/321/347 series austenitic',                 iso_513: 'M3.1', kennametal: 'M1', vdi_3323: '14', order: 13 },
     { id: 'pre_M_aus_316',     group_id: 'M', name: 'SS Austenitic 316',      code: 'SS',       description: '316/310 Mo-bearing, harder to machine',         iso_513: 'M3.1', kennametal: 'M2', vdi_3323: '14', order: 14 },
     { id: 'pre_M_ferr_mart',   group_id: 'M', name: 'SS Ferritic/Martensitic', code: 'SS',       description: '400-series straight-Cr (409, 410, 420, 430)',   iso_513: 'M1.1', kennametal: 'P5', vdi_3323: '12', order: 15 },
-    { id: 'pre_M_duplex',      group_id: 'M', name: 'SS Duplex',              code: 'SS DUP',   description: 'Duplex & super-austenitic (2205, 904L)',        iso_513: 'M4.1', kennametal: 'M3', vdi_3323: '14', order: 16 },
-    { id: 'pre_M_PH',          group_id: 'M', name: 'SS Precipitation Hard',  code: 'SS PH',    description: 'PH stainless (17-4 PH, 15-5 PH, 13-8 PH)',      iso_513: 'M4.2', kennametal: 'P5', vdi_3323: '13', order: 17 },
+    { id: 'pre_M_duplex',      group_id: 'M', name: 'SS Duplex',              code: 'SSDUP',    description: 'Duplex & super-austenitic (2205, 904L)',        iso_513: 'M4.1', kennametal: 'M3', vdi_3323: '14', order: 16 },
+    { id: 'pre_M_PH',          group_id: 'M', name: 'SS Precipitation Hard',  code: 'SSPH',     description: 'PH stainless (17-4 PH, 15-5 PH, 13-8 PH)',      iso_513: 'M4.2', kennametal: 'P5', vdi_3323: '13', order: 17 },
     // K — Cast Iron
     { id: 'pre_K_gray',        group_id: 'K', name: 'Gray Iron',              code: 'CI',       description: 'Gray cast iron, all classes',                   iso_513: 'K1.1', kennametal: 'K1', vdi_3323: '15', order: 18 },
     { id: 'pre_K_ductile',     group_id: 'K', name: 'Ductile Iron',          code: 'CI',       description: 'Ductile/nodular iron (60-40-18, 80-55-06)',     iso_513: 'K3.1', kennametal: 'K2', vdi_3323: '17', order: 19 },
@@ -106,7 +106,7 @@ export const DEFAULT_MATERIALS = {
     // H — Hardened Steel
     { id: 'pre_H_44_48',       group_id: 'H', name: 'Hardened 44-48 HRC',     code: 'HARD',     description: 'Lower hard milling',                            iso_513: 'H3.1', kennametal: 'H1', vdi_3323: '38', order: 25 },
     { id: 'pre_H_48_55',       group_id: 'H', name: 'Hardened 48-55 HRC',     code: 'HARD',     description: 'Mid hard milling',                              iso_513: 'H3.2', kennametal: 'H2', vdi_3323: '38', order: 26 },
-    { id: 'pre_H_55_60',       group_id: 'H', name: 'Hardened 55-60 HRC',     code: '',         description: 'High hard milling',                             iso_513: 'H4.1', kennametal: 'H3', vdi_3323: '39', order: 27 },
+    { id: 'pre_H_55_60',       group_id: 'H', name: 'Hardened 55-60 HRC',     code: 'HARD',     description: 'High hard milling',                             iso_513: 'H4.1', kennametal: 'H3', vdi_3323: '39', order: 27 },
     { id: 'pre_H_60plus',      group_id: 'H', name: 'Hardened >60 HRC',       code: 'HARD',     description: 'Extreme hard milling',                          iso_513: 'H4.2', kennametal: 'H4', vdi_3323: '39', order: 28 },
   ],
   // Individual alloy records — linked up to a CAM preset via preset_id.

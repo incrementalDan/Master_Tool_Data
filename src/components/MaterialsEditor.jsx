@@ -257,7 +257,7 @@ export default function MaterialsEditor() {
                       <div className="cam-edit">
                         <div className="flex gap-10 flex-wrap">
                           <Field label="Name" grow><input className="field-input" style={{ width: '100%' }} value={p.name} placeholder="e.g. SS Austenitic 316" onChange={e => setPreset(p.id, { name: e.target.value })} /></Field>
-                          <Field label="Name code"><input className="field-input" style={{ width: 96 }} value={p.code || ''} placeholder={groupCode(p.group_id)} title="Short token used in preset names, e.g. BRASS in &quot;BRASS 2.125 NBT30-SK13C-60 - Rough&quot;. Blank falls back to the group's code." onChange={e => setPreset(p.id, { code: e.target.value })} /></Field>
+                          <Field label="Name code"><input className="field-input" style={{ width: 96 }} value={p.code || ''} placeholder={groupCode(p.group_id)} title="Short token used in preset names, e.g. BRASS in &quot;BRASS 2.125 NBT30-SK13C-60 - Rough&quot;. One word — spaces are removed. Blank falls back to the group's code." onChange={e => setPreset(p.id, { code: e.target.value })} /></Field>
                           <Field label="Group">
                             <select className="field-input" value={p.group_id} onChange={e => setPreset(p.id, { group_id: e.target.value })}>
                               {doc.groups.map(g => <option key={g.id} value={g.id}>{g.id} · {g.label}</option>)}
@@ -341,7 +341,7 @@ export default function MaterialsEditor() {
                         </Field>
                         <div className="flex gap-10 flex-wrap" style={{ alignItems: 'flex-end' }}>
                           <Field label="Condition" grow><input className="field-input" style={{ width: '100%' }} value={m.condition || ''} placeholder="e.g. annealed" onChange={e => setAlloy(m.id, { condition: e.target.value })} /></Field>
-                          <Field label="Name code"><input className="field-input" style={{ width: 96 }} value={m.code || ''} placeholder="opt." title="Short token used in preset names when a preset is linked to THIS alloy. Blank falls back to the CAM preset's code, then the group's." onChange={e => setAlloy(m.id, { code: e.target.value })} /></Field>
+                          <Field label="Name code"><input className="field-input" style={{ width: 96 }} value={m.code || ''} placeholder="opt." title="Short token used in preset names when a preset is linked to THIS alloy. One word — spaces are removed. Blank falls back to the CAM preset's code, then the group's." onChange={e => setAlloy(m.id, { code: e.target.value })} /></Field>
                           <Field label="ISO 513"><input className="field-input" style={{ width: 80 }} value={m.iso_513 || ''} onChange={e => setAlloy(m.id, { iso_513: e.target.value })} /></Field>
                           <Field label="Kennametal"><input className="field-input" style={{ width: 90 }} value={m.kennametal || ''} onChange={e => setAlloy(m.id, { kennametal: e.target.value })} /></Field>
                         </div>
@@ -378,7 +378,7 @@ export default function MaterialsEditor() {
                   style={{ width: 26, height: 24, border: '1px solid var(--border)', borderRadius: 5, background: 'none', cursor: 'pointer', flexShrink: 0 }} title="Group color" />
                 <span className="mat-badge" style={{ background: tint(g.color, '33'), color: g.color, borderColor: tint(g.color, '55'), flexShrink: 0 }}>{g.id}</span>
                 <input className="field-input" style={{ flex: 1, minWidth: 0 }} value={g.label || ''} placeholder={g.iso ? 'ISO label' : 'Custom label'} onChange={e => setGroup(g.id, { label: e.target.value })} />
-                <input className="field-input" style={{ width: 58, flexShrink: 0 }} value={g.code || ''} placeholder="Code" title="Short token used in preset names — the fallback when a CAM preset has none of its own" onChange={e => setGroup(g.id, { code: e.target.value })} />
+                <input className="field-input" style={{ width: 58, flexShrink: 0 }} value={g.code || ''} placeholder="Code" title="Short token used in preset names (one word) — the fallback when a CAM preset has none of its own" onChange={e => setGroup(g.id, { code: e.target.value })} />
                 {g.iso
                   ? <span className="text-sub text-xs" style={{ flexShrink: 0 }}>ISO</span>
                   : <button className="icon-btn" title="Delete group" onClick={() => deleteGroup(g.id)} style={{ flexShrink: 0 }}><Trash2 size={14} /></button>}

@@ -575,12 +575,21 @@ export function backfillMaterialPresetIds(tools, materials) {
 // true rather than tidy, and MaterialLinkBanner already flags it as unlinked.
 // matchMaterial survives only as a RECOGNITION heuristic (colour fallback,
 // import inference, bareMaterialCode) — never as a name source.
+// ⚠️ THE TOKEN MUST BE ONE WORD — parsePresetName reads the composed name back
+// POSITIONALLY (material, then OOH, then holder), so a code with a space in it
+// shifts every field after it: "AL CAST 2.125 NBT30-SK13C-60 - Rough" parses as
+// material "AL", NO OOH, and a holder of "CAST 2.125 NBT30-SK13C-60" — which
+// silently stops presetMatchesAssembly seeding that preset's assembly_id. The
+// code is free text the shop types, so the invariant is enforced here at the one
+// seam every composed name goes through rather than trusted at the keyboard.
+const oneWord = (code) => String(code).replace(/\s+/g, '');
+
 export function materialNameCode(query, materials) {
   const { group, preset, alloy } = findMaterialInLibrary(query, materials);
-  if (alloy?.code) return alloy.code;
-  if (preset?.code) return preset.code;
-  if (group?.code) return group.code;
-  if (group?.id) return group.id;
+  if (alloy?.code) return oneWord(alloy.code);
+  if (preset?.code) return oneWord(preset.code);
+  if (group?.code) return oneWord(group.code);
+  if (group?.id) return oneWord(group.id);
   return '';
 }
 
