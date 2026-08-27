@@ -38,6 +38,37 @@ I'm not an experienced developer. When you do something non-trivial:
 
 -----
 
+## ⚠️ Running the app in an agent / cloud / CI session — READ BEFORE `npm run dev` OR `vite build`
+
+**There is NO `.env` file in an agent session. There never has been, and there never will be.** The keys live on the developer's machine and in GitHub Actions Secrets (see API Keys & Secrets). This is not a broken setup and there is nothing to diagnose.
+
+**What that causes, every time:** `App.jsx` gates on `VITE_APS_CLIENT_ID` / `VITE_APS_CALLBACK_URL`, and Vite substitutes `import.meta.env` at **build time**. With those unset the gate is a compile-time constant, so:
+- `npm run dev` and `vite build` render **"Configuration Required"** and nothing else.
+- The built bundle is React + vendor code with the **entire app tree dead-code-eliminated** — grep it for any app string (`modal-backdrop`, a class name, a component) and you get zero hits, and its byte size does not change when you add a component.
+
+⚠️ **DO NOT INVESTIGATE THIS. It is expected, and it has cost real time more than once.** It means only one thing: `vite build` verifies *that the code compiles*, nothing more. **`npm run lint` and `npm test` are the real gates.**
+
+### To actually SEE the app — demo mode
+
+`?demo=true` runs the whole UI against bundled sample data (`src/demo/`) with no Autodesk or Drive connection. **This is how you look at anything visual** — a new screen, a layout, a drawing, a banner. Do not settle for reasoning about markup you rendered to a string.
+
+Pass the two vars **on the command line**. This satisfies the gate for one process and leaves no file behind — ⛔ never create, modify or recreate `.env`, `.env.local` or any other env file:
+
+```bash
+VITE_APS_CLIENT_ID=demo-local-only \
+VITE_APS_CALLBACK_URL=http://localhost:5173/Master_Tool_Data/ \
+  npx vite --port 5173
+# then open  http://localhost:5173/Master_Tool_Data/?demo=true#/
+```
+
+Chromium + Playwright are available in the cloud container for driving and screenshotting it (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`; Playwright itself is a global install, so import it by absolute path rather than from the project's `node_modules`). Search the library, open a tool, click the thing, screenshot it — that is what caught the tool-profile drawing being 89% empty shank.
+
+⚠️ **If a feature is invisible in demo mode, that is a gap to FIX, not to work around** — add the case to `src/demo/*.json` and assert it in `demo.test.js`, the way `A-265` (the one demo tool with shaft segments) exists so reach, undercut and the Tool Profile can be seen at all.
+
+**Never run `npm run deploy` here** — see Deployment.
+
+-----
+
 ## Before you say "done" — check the diff against these
 
 **Eight questions, run against your own changes before reporting them finished.** Every one is here because it has ALREADY caused a real bug in this repo — none are aspirational, and each names what it caught so it can't be waved off as theory. Keep this list short: a checklist that grows past ~8 stops being run, exactly like a flag that fires too often becomes wallpaper.
@@ -724,6 +755,8 @@ VITE_METADATA_FILE_ID=        # Google Drive file ID for tool_metadata.json (opt
 
 **⛔ Never modify, recreate, or delete the `.env` file.** It contains real API keys that are already configured. If a new environment variable is needed, tell the user exactly what to add and let them add it manually.
 
+⚠️ **`.env` exists ONLY on the developer's machine.** In an agent, cloud or CI session it is absent by design — see "Running the app in an agent / cloud / CI session" above for what that breaks (`vite build`, `npm run dev`) and how to run the app anyway. Do not treat its absence as a problem to solve.
+
 APS setup: create a "Single Page App" at https://aps.autodesk.com — **not** Web App. PKCE requires SPA type. Register the callback URL (GitHub Pages URL for deploy, `http://localhost:5173/Master_Tool_Data/` for dev).
 
 Google setup: authorized JavaScript origins must include `https://incrementaldan.github.io` (no path, no trailing slash).
@@ -733,7 +766,7 @@ Google setup: authorized JavaScript origins must include `https://incrementaldan
 ## API Keys & Secrets
 
 The real API keys are stored in GitHub Actions Secrets — not in the repo.
-A `.env` file exists locally for development only. Do not modify, recreate, or delete it.
+A `.env` file exists **on the developer's machine only** — never in an agent, cloud or CI session (see the section above). Do not modify, recreate, or delete it, and do not create a substitute.
 If a new API key or environment variable is needed:
 - Tell me the variable name needed
 - I will add it to both the local `.env` and GitHub Secrets manually
@@ -753,7 +786,7 @@ Deployment is **fully automated via GitHub Actions** — see `.github/workflows/
 
 **Linting (catches the blank-screen class of bug)**: `npm run lint` runs ESLint (flat config in `eslint.config.js`). It's intentionally **minimal** — only `no-undef` + `react/jsx-no-undef` (used-but-not-imported symbols, e.g. `<X>` without importing `X`, which the Vite build does NOT catch — it's a runtime `ReferenceError` → blank page) plus `react-hooks/rules-of-hooks`. Not a style gate. The **Tests** CI workflow (`.github/workflows/test.yml`) runs `npm run lint` before `npm test`, so a missing import fails the PR check instead of reaching the browser. `.tsx` uses the typescript-eslint parser (with `no-undef` off — TS checks references itself).
 
-**⛔ Do NOT run `npm run deploy` from an agent, cloud, or CI session.** That command bakes env vars from a local `.env`, which does not exist in those environments — it will publish a credential-less build and break the live site (shows "Configuration Required"). `npm run deploy` is only valid as a manual fallback on a developer machine that has a complete local `.env`. The normal, preferred path is always GitHub Actions.
+**⛔ Do NOT run `npm run deploy` from an agent, cloud, or CI session.** That command bakes env vars from a local `.env`, which does not exist in those environments — it will publish a credential-less build and break the live site (shows "Configuration Required"). That same missing `.env` is why a local `vite build` here produces an app-less bundle and `npm run dev` shows the config screen — expected, not a fault; see "Running the app in an agent / cloud / CI session" near the top for how to run the app anyway. `npm run deploy` is only valid as a manual fallback on a developer machine that has a complete local `.env`. The normal, preferred path is always GitHub Actions.
 
 -----
 
