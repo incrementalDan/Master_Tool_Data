@@ -79,11 +79,11 @@ export function writeShaftSegments(segs) {
 
 // True when two segment lists describe the same profile. Rounding only — a
 // value that survived a JSON round trip must not read as an edit.
-export function sameShaftSegments(a, b) {
+export function sameShaftSegments(a, b, tol = 1e-9) {
   const A = a || [], B = b || [];
   if (A.length !== B.length) return false;
   return A.every((s, i) => ['height', 'lower', 'upper']
-    .every(k => Math.abs((Number(s?.[k]) || 0) - (Number(B[i]?.[k]) || 0)) < 1e-9));
+    .every(k => Math.abs((Number(s?.[k]) || 0) - (Number(B[i]?.[k]) || 0)) < tol));
 }
 
 export function fusionToolToInternal(fTool) {

@@ -1067,6 +1067,14 @@ Fusion splits a tool across four tabs (General / Cutter / Shaft / Holder), so no
 
 ⚠️ **AN ORDINARY SAVE MUST ALTER NOTHING.** `shaft` is written only when the app's segments differ from **the profile the app READ** — decided **once per tool** in `splitToFusionInstances` (`shaftEdited`), never per instance. Comparing per instance looks equivalent and is not: two instances of one logical tool *can* disagree in a real library (measured: 2 tools do), and a per-instance compare would "heal" that on any unrelated save by writing whichever profile the app read as canonical over the other — **silently deleting a real segment**. Locked by a whole-library test: 303 instances through the real write path, **0 shafts altered**.
 
+⚠️ **A SHAFT THAT DISAGREES IS FLAGGED AND ASKED, never resolved automatically.** The app cannot know which profile is the real tool, so `shaft_segments` is in **`DRIFT_FIELDS`** and in **`sharedSignature`**, and it goes through the same paths every other shared field does. That covers both ways it goes out of step, because `detectFusionDrift` compares the app's copy against **every** instance:
+- **edited in Fusion and synced back** → the app's stored copy differs from Fusion's → `DriftBanner`, per-field Keep Fusion / Keep app.
+- **ONE instance edited and not the others** → the app's copy matches the canonical instance and differs from the one that moved → same banner. On the real library that is the 2 tools above, and **only** those 2: measured, the shaft key newly splits exactly them and adds no other noise.
+- **a stray entry found on open** → `sharedSignature` now carries the profile, so a stray whose shaft differs classifies as a **conflict** (→ Sync Job diff) instead of a duplicate or new assembly that would be silently adopted or deleted.
+- **write-time** → `mergeSharedFieldsWithFusion` adopts a Fusion-side change the app did not make, and on a both-edited collision keeps the app's value while **recording** the conflict rather than discarding Fusion's.
+
+⚠️ `driftEqual` needs its own branch for it — the profile is an ARRAY, and the default string compare reads every segment as `[object Object]` and never sees a difference. The tolerance matches the numeric one (5e-5): a JSON round trip is not an edit. ⚠️ An established library stays **quiet**: metadata that has never stored a profile is "not populated", not drift, so nothing fires until a tool is next saved.
+
 ⚠️ **AN EDIT REACHES EVERY INSTANCE.** Instances of a logical tool differ **only** by holder and OOH — a hard rule, because these are physical tools held to tight tolerance and a different shaft would be a different tool. So an edited profile fans out to all of them.
 
 **The `!= null` gate** distinguishes "the app has no opinion" (`null` — write nothing) from "the user emptied it" (`[]` — remove the `shaft` object). Without it, ~250 tools that never had a shaft would gain an empty one.

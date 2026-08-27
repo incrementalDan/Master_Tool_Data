@@ -14,9 +14,20 @@ const INFO_KIND_LABEL = { preset: 'preset', ooh: 'assembly stick-out', holder: '
 // See tool._drift (buildLogicalTool / detectFusionDrift) and
 // PHASE_A_TOOL_RECORD_SCHEMA.md §10.
 
+const round = (n) => String(Math.round((Number(n) || 0) * 10000) / 10000);
+
 function fmt(v) {
   if (v === null || v === undefined || v === '') return '—';
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  // The shaft profile is a list of segments. Summarise it — the full numbers
+  // are one click away in the Tool Profile, and "[object Object]" is what a
+  // plain String() gives here.
+  if (Array.isArray(v)) {
+    if (!v.length) return 'none';
+    const seg = (s) => `${round(s?.height)}×⌀${round(s?.lower)}`
+      + (Math.abs(Number(s?.upper) - Number(s?.lower)) > 1e-9 ? `→⌀${round(s.upper)}` : '');
+    return `${v.length} seg: ${v.map(seg).join(', ')}`;
+  }
   const n = Number(v);
   if (!isNaN(n) && v !== '') return String(Math.round(n * 10000) / 10000);
   return String(v);

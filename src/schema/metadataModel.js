@@ -2,6 +2,7 @@
 // source of the full metadata field set (add new metadata fields there first),
 // and mergeFusionAndMetadata reads them back onto the internal tool object.
 import { sameFusionMaterial, resolveMaterial } from './fieldRegistry.js';
+import { sameShaftSegments } from './fusionConvert.js';
 import { normalizeBin } from '../utils/locationSystem.js';
 import { normalizeLinkIds } from '../utils/toolLinks.js';
 import { generateId, generateAssemblyId } from './identity.js';
@@ -31,9 +32,22 @@ export const DRIFT_FIELDS = [
   'tool_type', 'description', 'unit', 'diameter', 'flute_length', 'overall_length',
   'number_of_flutes', 'shank_diameter', 'corner_radius', 'taper_angle',
   'material', 'tip_angle', 'tip_diameter', 'shoulder_length', 'cutting_direction',
+  // ⚠️ THE SHAFT PROFILE IS DRIFT-CHECKED, and it covers TWO cases at once,
+  // because detectFusionDrift compares the app's copy against EVERY instance:
+  //   • someone edited the shaft in Fusion → app's copy differs from Fusion's
+  //   • someone edited ONE instance and not the others → the app's copy matches
+  //     the canonical instance and differs from the one that moved
+  // Neither can be resolved automatically — the app cannot know which profile
+  // is the real tool — so both are flagged and asked, like every other shared
+  // field. Nothing here derives or corrects a segment.
+  'shaft_segments',
 ];
 
 function driftEqual(a, b, field) {
+  // The shaft profile is an ARRAY of segments — a string compare would call
+  // every one of them "[object Object]" and never see a difference. The
+  // tolerance matches the numeric one below: round-trip noise is not an edit.
+  if (field === 'shaft_segments') return sameShaftSegments(a, b, 5e-5);
   // ⚠️ `cobalt` and `hss` are ONE value to Fusion (see toFusionMaterial): Fusion
   // has no Cobalt option, so we write cobalt out as hss. A string compare would
   // call that a difference forever — the drift banner firing on every load and
