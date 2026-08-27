@@ -200,12 +200,15 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     ooh: meta.ooh ?? null,
     min_ooh: meta.min_ooh ?? null,
     // Reach / undercut — metadata-only, seeded at load from the tool's shaft
-    // segments (see backfillReach) and thereafter the user's answer. `null`
-    // means "nobody has said", which is what lets the seed fill it in; `false`
-    // is a real answer and is preserved.
+    // Reach / undercut are DERIVED from the shaft segments on every load (see
+    // toolReach.js); these stored copies exist so the values are searchable and
+    // so a tool whose shaft Fusion never drew can carry a hand-typed number.
     reach: meta.reach ?? null,
     has_undercut: meta.has_undercut ?? null,
     undercut_diameter: meta.undercut_diameter ?? null,
+    // ⚠️ The shop's manual answer, kept SEPARATE from the derived one — a
+    // stored boolean cannot say whether it was chosen or went stale.
+    undercut_override: meta.undercut_override ?? null,
     // Holder selection + proven assemblies live only in metadata.
     selected_holder_guid: meta.selected_holder_guid || null,
     assemblies: meta.assemblies || [],
@@ -374,6 +377,7 @@ export function buildMetadataTool(tool) {
     reach: tool.reach ?? null,
     has_undercut: tool.has_undercut ?? null,
     undercut_diameter: tool.undercut_diameter ?? null,
+    undercut_override: tool.undercut_override ?? null,
     pitch: tool.pitch || '',
     tap_class: tool.tap_class || '',
     tap_sub_type: tool.tap_sub_type || '',

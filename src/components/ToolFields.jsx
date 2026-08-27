@@ -184,9 +184,29 @@ export default function ToolFields({
     // for the diameter of something that isn't there. Hidden in BOTH modes, so
     // turning the pill on is what makes the box appear.
     if (field === 'undercut_diameter' && !tool.has_undercut) return null;
+    // ⚠️ Where the segments show the neck, the diameter IS that number — a fact
+    // from Fusion, like the segments themselves. Rendering it as an input would
+    // let someone type a value that the next load silently re-derives away.
+    if (field === 'undercut_diameter' && edit && undercutDiameterHint(tool) != null) {
+      return (
+        <div className="field-group" key={field}>
+          <label className="field-label">{label}</label>
+          <div className="field-readout">
+            {fmtNum(tool.undercut_diameter, def.precision)} {unitAbbr(tool.unit)}
+            <span className="field-hint"> · from the shaft segments</span>
+          </div>
+        </div>
+      );
+    }
 
     // The undercut pill — Yes/No, not a checkbox, because it reads at a glance
     // on the tool page next to the other geometry badges.
+    //
+    // ⚠️ IT WRITES `undercut_override`, NOT `has_undercut`. The effective value
+    // is DERIVED from the shaft segments on every load (a neck narrower than
+    // the cut IS an undercut); this is the shop overriding that answer, and the
+    // two have to stay distinguishable or a re-derive would look like a manual
+    // choice. `↺ Auto` clears the override and hands the field back to Fusion.
     if (field === 'has_undercut') {
       if (!edit) {
         if (!tool.has_undercut) return null;   // see VIEW_HIDE_WHEN_EMPTY
@@ -198,25 +218,26 @@ export default function ToolFields({
         );
       }
       const prop0 = propFor(field);
+      const overridden = tool.undercut_override != null;
       return (
         <div className={`field-group ${prop0 ? `has-proposal proposal-${prop0.status}` : ''}`} key={field}>
-          <label className="field-label">{label}</label>
+          <label className="field-label">
+            {label}
+            {overridden && (
+              <button type="button" className="btn btn-ghost btn-sm undercut-auto"
+                title="Clear the override and take the answer from the shaft segments again"
+                onClick={() => setField('undercut_override', null)}>↺ Auto</button>
+            )}
+          </label>
           <div className="btn-toggle">
             {[[true, 'Yes'], [false, 'No']].map(([v, l]) => (
               <button key={l} type="button" className={!!tool.has_undercut === v ? 'active' : ''}
-                onClick={() => {
-                  setField('has_undercut', v);
-                  // Turning it ON offers the neck diameter Fusion's shaft
-                  // segments already carry. Reading that number back is a fact;
-                  // deciding the tool IS undercut is the answer just given. It
-                  // is an editable prefill and never overwrites a typed value.
-                  if (v && tool.undercut_diameter == null) {
-                    const hint = undercutDiameterHint(tool);
-                    if (hint != null) setField('undercut_diameter', hint);
-                  }
-                }}>{l}</button>
+                onClick={() => setField('undercut_override', v)}>{l}</button>
             ))}
           </div>
+          {!overridden && (
+            <span className="field-hint">From the shaft segments</span>
+          )}
           {strip(field)}
         </div>
       );

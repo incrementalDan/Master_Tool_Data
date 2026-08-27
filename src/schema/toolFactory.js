@@ -35,6 +35,7 @@ export function newTool(toolType = 'flat end mill') {
     reach: null,
     has_undercut: null,
     undercut_diameter: null,
+    undercut_override: null,
     material: isTapType(toolType) ? 'hss' : 'carbide',
     coating: '',
     material_suitability: [],

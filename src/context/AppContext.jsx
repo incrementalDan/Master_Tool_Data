@@ -17,7 +17,7 @@ import { groupByTrackingId, buildLogicalTool, combineToolsByToolId, materializeU
 import { backfillAsmNumbers } from '../utils/assemblyIdSystem.js';
 import { backfillMaterialPresetIds, backfillPresetAssemblyLinks, autoLinkMaterialByGrade } from '../utils/presetNaming.js';
 import { backfillPreferredMachineIds } from '../utils/machines.js';
-import { backfillReach } from '../utils/toolReach.js';
+import { resolveReachForTools } from '../utils/toolReach.js';
 import { symmetrizeToolLinks } from '../utils/toolLinks.js';
 import { backfillHolderIds } from '../schema/holderResolve.js';
 import { matchFusionHolder, holderPushPlan, applyHolderPushPlan, pushChangeGroup, lastPushedFrom, retiredHolderFor } from '../schema/holderIdentity.js';
@@ -1109,7 +1109,7 @@ export function AppProvider({ children }) {
       for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
       for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
       const tools = derivePairings(
-        backfillReach(combineToolsByToolId(built))
+        resolveReachForTools(combineToolsByToolId(built))
           .map(t => ({ ...t, library_id: 'local', library_name: file.name || 'Local file' })),
         [], // local mode has no component records — pairings derive with empty slots
       );
@@ -1137,7 +1137,7 @@ export function AppProvider({ children }) {
     for (const [, raws] of groups) built.push(buildLogicalTool(raws, metaByTracking));
     for (const raw of untracked) built.push(buildLogicalTool([raw], metaByTracking));
     const tools = symmetrizeToolLinks(backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(derivePairings(
-      backfillReach(combineToolsByToolId(built))
+      resolveReachForTools(combineToolsByToolId(built))
         .map(t => ({ ...t, library_id: 'demo', library_name: 'Demo library' })),
       components?.components || [],
     ), materials), materials), vendorRegistry), shopSettings?.machines)), holderLibrary?.holders || []));
@@ -1317,7 +1317,7 @@ export function AppProvider({ children }) {
               return composed ? { ...t, location: composed, proshop_location: proShopLocationValue(sys, composed) } : t;
             });
             const paired = derivePairings(provisional, componentsFile?.components || []);
-            dispatch({ type: 'LOAD_PROVISIONAL', tools: symmetrizeToolLinks(backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(backfillReach(paired), effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords)) });
+            dispatch({ type: 'LOAD_PROVISIONAL', tools: symmetrizeToolLinks(backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(resolveReachForTools(paired), effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords)) });
           }
         } catch { /* stage 2 below is authoritative */ }
       }
@@ -1356,7 +1356,7 @@ export function AppProvider({ children }) {
       if (!fusionEnabled) {
         const built = metaList.map(m => buildUnlinkedTool(m)).map(composeToolLocation);
         const paired = derivePairings(built, componentsFile?.components || []);
-        const finalTools = symmetrizeToolLinks(backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(backfillReach(paired), effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords));
+        const finalTools = symmetrizeToolLinks(backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(resolveReachForTools(paired), effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords));
         dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize: false, normalizeCount: 0 });
         return;
       }
@@ -1446,7 +1446,7 @@ export function AppProvider({ children }) {
       // backfillMaterialPresetIds: adopt the CAM-preset FK id from a name-matched
       // material.query + refresh each preset's derived material name (same lazy
       // persist-on-next-save pattern).
-      const finalTools = symmetrizeToolLinks(backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(backfillReach(pairedTools), effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords));
+      const finalTools = symmetrizeToolLinks(backfillHolderIds(backfillPresetAssemblyLinks(backfillPreferredMachineIds(backfillPurchasingRegistryIds(autoLinkMaterialByGrade(backfillMaterialPresetIds(backfillAsmNumbers(resolveReachForTools(pairedTools), effectiveShop, componentsFile, holdersRef.current), materialsFile), materialsFile), vendorRegistryFile), effectiveShop.machines)), holderRecords));
 
       dispatch({ type: 'LOAD_SUCCESS', tools: finalTools, needsNormalize, normalizeCount: untrackedCount });
       // Surface the otherwise-invisible load-time auto-combine: entries sharing a

@@ -3558,6 +3558,20 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 /* The neck above the flutes is ground a little under the cutting diameter, so
    the tool clears its own cut. Orange because it is a caution when programming
    (the neck is weaker than the shank), not a fault. */
+/* A value the app derived rather than something you type — reads as data, not
+   as an empty input waiting for input. */
+.field-readout {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text);
+  padding: 6px 0 2px;
+}
+.field-hint { font-size: 10px; color: var(--text-sub); opacity: 0.85; }
+.undercut-auto {
+  font-size: 10px; padding: 0 6px; line-height: 16px; height: 16px;
+  margin-left: 6px; vertical-align: middle;
+}
+
 .undercut-pill {
   display: inline-flex;
   align-items: center;
@@ -6733,6 +6747,9 @@ input.sf-ref-num { text-align: right; }
   padding: 2px 5px;
 }
 .tp-dimbox-input:focus-within { border-color: var(--blue); }
+/* Derived from the shaft segments — Fusion's number, not an input. */
+.tp-dimbox-derived .tp-dimbox-input { border-style: dashed; opacity: 0.85; }
+.tp-dimbox-derived .tp-dimbox-input input { cursor: default; }
 .tp-dimbox-input input {
   width: 52px;
   background: none; border: none; outline: none;

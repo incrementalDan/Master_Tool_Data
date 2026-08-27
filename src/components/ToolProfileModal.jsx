@@ -27,7 +27,7 @@ import { X, Ruler, Info } from 'lucide-react';
 import { buildToolProfile, profileDimensions, shaftSegments } from '../utils/toolProfile.js';
 import { FIELD_REGISTRY, fieldLabel, INCLUSIVE_ANGLE_TYPES } from '../schema/fieldRegistry.js';
 import { unitAbbr } from '../utils/units.js';
-import { undercutDiameterHint } from '../utils/toolReach.js';
+import { undercutDiameterHint, resolveReachFields, deriveReach } from '../utils/toolReach.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 
 // ── drawing constants (px) ──────────────────────────────────────────────────
@@ -72,6 +72,14 @@ const SHORT = {
   diameter: 'Cut dia', shank_diameter: 'Shank', undercut_diameter: 'Undercut',
 };
 
+// The undercut pill writes the OVERRIDE and lets the shared resolver work out
+// the effective values, so the modal cannot drift from what the load-time pass
+// would conclude for the same tool.
+const applyUndercut = (d, v) => {
+  const next = { ...d, undercut_override: v };
+  return { ...next, ...resolveReachFields(next) };
+};
+
 // taper_angle displays doubled for chamfer/tapered mills (stored as the half
 // angle) — the same transform ToolFields applies.
 const doubles = (field, toolType) => field === 'taper_angle' && INCLUSIVE_ANGLE_TYPES.has(toolType);
@@ -91,7 +99,8 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
   const dirty = useMemo(
     () => [...dims.lengths, ...dims.diameters, ...dims.extras]
       .some(f => (draft[f] ?? null) !== (baseRef.current[f] ?? null)) ||
-      (draft.has_undercut ?? null) !== (baseRef.current.has_undercut ?? null),
+      (draft.has_undercut ?? null) !== (baseRef.current.has_undercut ?? null) ||
+      (draft.undercut_override ?? null) !== (baseRef.current.undercut_override ?? null),
     [draft, dims],
   );
 
@@ -238,6 +247,14 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
   };
 
   const fieldOf = (f) => FIELD_REGISTRY[f] || {};
+  // ⚠️ A dimension the SEGMENTS answer is read-only, for the same reason the
+  // segment table is: it is Fusion's number. Rendering it as an input invites
+  // a value that the next load silently re-derives away — the failure this
+  // whole change was made to remove.
+  const derived = deriveReach(draft);
+  const isDerived = (f) =>
+    (f === 'reach' && derived.reach != null) ||
+    (f === 'undercut_diameter' && derived.neckDiameter != null);
   const labelOf = (f) => (doubles(f, draft.tool_type)
     ? 'Incl. Tip Angle (°)'
     : (fieldLabel(f, draft.unit) || f));
@@ -363,13 +380,13 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
               return (
                 <DimBox key={field} x={x} y={yMid} align="center"
                   label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
-                  value={shown(field)} onChange={v => set(field, v)} />
+                  value={shown(field)} onChange={v => set(field, v)} readOnly={isDerived(field)} />
               );
             })}
             {diaTargets.map(({ field, y, lane }) => (
               <DimBox key={field} x={cx + BODY_W / 2 + GAP + lane * LANE + 34} y={y} align="left"
                 label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
-                value={shown(field)} onChange={v => set(field, v)} dia />
+                value={shown(field)} onChange={v => set(field, v)} dia readOnly={isDerived(field)} />
             ))}
 
             <div className="tp-nts" title="X and Y are scaled independently so the tool is legible — a real tool is far longer than it is wide.">NTS</div>
@@ -390,16 +407,18 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
                     </label>
                   ))}
                   <label className="tp-extra">
-                    <span>Undercut</span>
+                    <span>
+                      Undercut
+                      {draft.undercut_override != null && (
+                        <button type="button" className="btn btn-ghost btn-sm undercut-auto"
+                          title="Clear the override and take the answer from the shaft segments again"
+                          onClick={() => setDraft(d => applyUndercut(d, null))}>↺ Auto</button>
+                      )}
+                    </span>
                     <div className="btn-toggle tp-uc-toggle">
                       {[[true, 'Yes'], [false, 'No']].map(([v, l]) => (
                         <button key={l} type="button" className={!!draft.has_undercut === v ? 'active' : ''}
-                          onClick={() => setDraft(d => ({
-                            ...d,
-                            has_undercut: v,
-                            undercut_diameter: v && d.undercut_diameter == null
-                              ? undercutDiameterHint(d) : d.undercut_diameter,
-                          }))}>{l}</button>
+                          onClick={() => setDraft(d => applyUndercut(d, v))}>{l}</button>
                       ))}
                     </div>
                   </label>
@@ -462,21 +481,23 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
 }
 
 // One dimension's value box, sitting on its dimension line.
-function DimBox({ x, y, align, label, unit, value, precision, onChange, dia = false }) {
+function DimBox({ x, y, align, label, unit, value, precision, onChange, dia = false, readOnly = false }) {
   const [focused, setFocused] = useState(false);
   const display = focused
     ? (value ?? '')
     : (value === null || value === undefined || value === ''
       ? '' : Number(Number(value).toFixed(precision ?? 4)));
   return (
-    <div className="tp-dimbox" style={{
+    <div className={`tp-dimbox${readOnly ? ' tp-dimbox-derived' : ''}`}
+      title={readOnly ? 'From the shaft segments' : undefined}
+      style={{
       left: x, top: y,
       transform: align === 'center' ? 'translate(-50%, -50%)' : 'translate(-34px, -50%)',
     }}>
       <span className="tp-dimbox-label">{label}</span>
       <span className="tp-dimbox-input">
         {dia && <span className="dia">⌀</span>}
-        <input type="number" step="0.001" value={display}
+        <input type="number" step="0.001" value={display} readOnly={readOnly}
           onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
           onChange={e => onChange(e.target.value)} placeholder="—" />
         <span className="tp-dimbox-unit">{unit}</span>

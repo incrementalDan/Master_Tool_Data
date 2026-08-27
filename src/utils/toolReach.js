@@ -1,4 +1,4 @@
-// Reach and undercut — derived from the shaft segments Fusion already stores.
+// Reach and undercut — DERIVED from the shaft segments Fusion already stores.
 //
 // A "reach" tool holds its cutting diameter (or a hair under it) for some
 // distance ABOVE the flutes, so it can drop into a deep pocket without the
@@ -17,139 +17,165 @@
 // .059LOC .203 REACH` = LCF 0.059 + one 0.144 neck segment = exactly 0.203, and
 // the same rule reproduces `.5 REACH`, `.312REACH`, `.4 reach` and `12x Reach`
 // across the real library. Interpolating would move every one of them.
-import { lengthEps } from './units.js';
+//
+// ⚠️ THESE ARE ARITHMETIC, NOT RECORDED OPINIONS — so they are RE-DERIVED on
+// every load, not filled in once. Reach IS flute length plus the neck; change
+// either and the reach genuinely changed. Freezing a stored value means the
+// number silently stops describing the tool. Same shape as an Auto
+// `asm_number`: "a pure product of its fields, so a stored value that differs
+// from the composed one is always stale, never custom". The stored copy exists
+// only so the value is searchable and so a tool whose shaft Fusion never drew
+// can still carry a hand-typed number.
 import { fieldAppliesTo } from '../schema/fieldRegistry.js';
 
-// ⚠️ NOTHING HERE DECIDES WHETHER A TOOL HAS AN UNDERCUT. That is a person's
-// answer, not a number the app is entitled to infer.
+// ⚠️ AN UNDERCUT IS A FACT ABOUT THE GEOMETRY: the neck above the flutes is
+// narrower than the cutting diameter. That is all. It is NOT a judgement about
+// why it is narrower, or by how much.
 //
-// An earlier pass auto-flagged it by comparing the neck to the cutting diameter
-// and calling anything within 92% an undercut. That number came from a gap that
-// happens to exist in today's 303 tools — real undercuts clustered at 96-97%,
-// saw arbors and lollipop stems at 61% and below — and it would be wrong the
-// first time a tool landed in between. Worse, it is a judgement about tool
-// GEOMETRY, and how the different tool types relate shaft segments, shoulder
-// length and Fusion's own collision detection is not something the app
-// currently models. Deriving a rule from one dataset and applying it as fact is
-// how the app would start disagreeing with Fusion about tools Fusion has right.
+// An earlier pass gated it at 92% of the cutting diameter, so that a saw arbor
+// or a lollipop stem would not count. That was wrong twice over: the threshold
+// was reverse-engineered from a gap that happens to exist in today's 303 tools,
+// and the question it was trying to answer ("was this deliberately relieved?")
+// is not the question. A key cutter's arbor genuinely IS narrower than its
+// cutter — so it is undercut, and saying so costs nothing. How much of an
+// undercut it is does not change what it is.
 //
-// So the undercut pill is MANUAL. What the app may do is read a number back:
-// once a person says there IS an undercut, the smallest neck diameter in the
-// shaft segments is, by definition, its diameter — that is a fact from Fusion,
-// not an inference, and it is offered as an editable prefill.
+// The only tolerance left is for FLOAT NOISE, which is a different kind of
+// thing entirely — it asks "is this actually narrower, or is it the same number
+// after a JSON round trip", never "is it narrow enough to count". Set far below
+// any real grind (a tenth is 0.0001") and far above the ~1e-15 relative error a
+// double actually carries.
+const NOISE = 1e-6;
+
+const num = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+const round4 = (v) => Math.round(v * 1e4) / 1e4;
 
 /**
  * Read a Fusion `shaft` (either the `{ type, segments }` object or a bare
  * array) into the neck measurements above the flutes.
  *
- * Returns `{ neckLength, minDiameter }` where `neckLength` is 0 and
- * `minDiameter` is null when the tool has no neck — i.e. its first shaft
- * segment is already wider than the cut (an ordinary shank transition), which
- * is the overwhelming majority of tools.
+ * `present` distinguishes "Fusion drew no shaft at all" (we cannot say
+ * anything) from "Fusion drew one and nothing is narrowed" (we can say no).
  *
  * All lengths are in the tool's OWN unit — shaft segments are stored in it, so
  * nothing converts here.
  */
-export function readShaftNeck(shaft, diameter, unit) {
+export function readShaftNeck(shaft, diameter) {
   const segs = Array.isArray(shaft) ? shaft : (shaft?.segments || []);
-  const dia = Number(diameter);
-  if (!Array.isArray(segs) || !segs.length || !(dia > 0)) {
-    return { neckLength: 0, minDiameter: null };
-  }
-  const eps = lengthEps(unit);
+  const dia = num(diameter);
+  const usable = Array.isArray(segs) && segs.some(s => num(s?.height) > 0);
+  if (!usable || !(dia > 0)) return { present: false, neckLength: 0, minDiameter: null };
+
   let neckLength = 0;
   let minDiameter = null;
-
   for (const seg of segs) {
-    const lo = Number(seg?.['lower-diameter']);
-    const hi = Number(seg?.['upper-diameter']);
-    const h = Number(seg?.height);
-    if (!Number.isFinite(lo) || !Number.isFinite(hi) || !Number.isFinite(h)) break;
+    const lo = num(seg?.['lower-diameter']);
+    const hi = num(seg?.['upper-diameter']);
+    const h = num(seg?.height);
+    if (h <= 0) continue;
     // The first segment that rises above the cutting diameter ends the neck.
-    if (Math.max(lo, hi) > dia + eps) break;
+    if (Math.max(lo, hi) > dia + NOISE) break;
     neckLength += h;
     const segMin = Math.min(lo, hi);
     minDiameter = minDiameter === null ? segMin : Math.min(minDiameter, segMin);
   }
-  return { neckLength, minDiameter };
+  return { present: true, neckLength, minDiameter };
 }
 
 /**
- * What a tool's shaft segments say about its reach and undercut.
+ * What a tool's shaft segments say. Every field is `null` when the segments
+ * cannot answer, which is what lets a hand-typed value survive there.
  *
  * `reach` is null when there is no neck — a tool whose cutting diameter stops
  * at the flutes has no extended reach to report, and storing `reach ===
- * flute_length` would put a number on 280 tools that says nothing. Blank stays
- * the honest default, and it is what makes the description rule ("show reach
- * only when it exceeds the flute length") fall out for free.
+ * flute_length` would put a number saying nothing on ~280 tools. It is also
+ * what makes the description rule ("name reach only when it exceeds the flute
+ * length") fall out for free.
  */
 export function deriveReach(tool) {
   // ⚠️ The type gate lives HERE, not only in the UI. The registry says face
-  // mills and boring heads have no reach field; without this the seed would
-  // still stamp a number onto their records, and it would reach the metadata
-  // file even though nothing renders it.
+  // mills and boring heads have no reach field; without this the derivation
+  // would still reach the metadata file even though nothing renders it.
   if (tool?.tool_type && !fieldAppliesTo('reach', tool.tool_type)) {
-    return { reach: null, neckDiameter: null };
+    return { reach: null, neckDiameter: null, hasUndercut: null };
   }
-  const raw = tool?._instancesRaw?.[0] || null;
-  const shaft = raw?.shaft ?? tool?.shaft ?? null;
-  const dia = Number(tool?.diameter);
-  const flute = Number(tool?.flute_length) || 0;
-  const unit = tool?.unit;
+  const shaft = tool?._instancesRaw?.[0]?.shaft ?? tool?.shaft ?? null;
+  const dia = num(tool?.diameter);
+  const flute = num(tool?.flute_length);
 
-  const { neckLength, minDiameter } = readShaftNeck(shaft, dia, unit);
-  if (!(neckLength > 0)) return { reach: null, neckDiameter: null };
+  const { present, neckLength, minDiameter } = readShaftNeck(shaft, dia);
+  if (!present) return { reach: null, neckDiameter: null, hasUndercut: null };
 
-  // The neck's own diameter, reported only when it is actually narrower than
-  // the cut. NOT a claim that the tool is undercut — see the note above.
-  const eps = lengthEps(unit);
-  const narrower = minDiameter !== null && minDiameter < dia - eps;
-
+  const narrowed = minDiameter !== null && minDiameter < dia - NOISE;
   return {
-    reach: round4(flute + neckLength),
-    neckDiameter: narrower ? round4(minDiameter) : null,
+    reach: neckLength > 0 ? round4(flute + neckLength) : null,
+    neckDiameter: narrowed ? round4(minDiameter) : null,
+    // Fusion drew the shaft, so we CAN answer — either way.
+    hasUndercut: narrowed,
   };
 }
 
 /**
- * The diameter to offer when someone turns the undercut pill on — the smallest
- * neck diameter Fusion's shaft segments carry. `null` when the tool has no
- * narrowed neck, in which case the field simply stays empty for them to fill.
+ * The diameter to offer when someone turns the undercut on for a tool whose
+ * segments do not show one. `null` when there is nothing to read back.
  */
 export function undercutDiameterHint(tool) {
   return deriveReach(tool).neckDiameter;
 }
 
-function round4(v) {
-  return Math.round(v * 1e4) / 1e4;
+/**
+ * The effective values for one tool: what the segments say, with the shop's
+ * override on top.
+ *
+ * ⚠️ THE SEGMENTS WIN WHEREVER THEY CAN ANSWER. A typed reach survives only on
+ * a tool whose shaft Fusion never drew — otherwise editing the flute length
+ * would leave a reach that no longer describes the tool.
+ *
+ * ⚠️ `undercut_override` IS A SEPARATE FIELD ON PURPOSE. Comparing a stored
+ * boolean against the derived one cannot tell "the shop said so" from "this is
+ * ours and went stale" — the same reason preset names check their SHAPE rather
+ * than equality. With only two possible values a stored-vs-derived compare is
+ * pure guesswork.
+ */
+export function resolveReachFields(tool) {
+  const d = deriveReach(tool);
+  const override = tool?.undercut_override;
+
+  const reach = d.reach ?? (tool?.reach ?? null);
+  const hasUndercut = override ?? d.hasUndercut ?? (tool?.has_undercut ?? null);
+  // The derived diameter belongs to the derived answer; a typed one stands
+  // where the segments show no narrowing (including an override to Yes).
+  const undercutDiameter = hasUndercut
+    ? (d.neckDiameter ?? (tool?.undercut_diameter ?? null))
+    : null;
+
+  return { reach, has_undercut: hasUndercut, undercut_diameter: undercutDiameter };
 }
 
 /**
- * Load-time seed, mirroring `backfillAsmNumbers` / `backfillMaterialPresetIds`:
- * an in-memory pass that fills REACH from the shaft segments Fusion already
- * carries, persisted lazily on each tool's next save.
+ * Load-time pass over the library, mirroring `backfillAsmNumbers`: in memory,
+ * persisted lazily on each tool's next save.
  *
- * ⚠️ REACH ONLY. The undercut pill is never seeded — see the note at the top of
- * this file. Reach is a number the shop defined ("add the segments from the tip
- * up to where the diameter goes above the cut"); an undercut is a judgement.
- *
- * ⚠️ IT ONLY EVER FILLS A BLANK. A stored answer is the user's.
- * `undefined`/`null` is "nobody has said"; anything else is an answer.
- *
- * ⚠️ RETURNS THE SAME ARRAY AND THE SAME TOOL REFERENCES when nothing is
- * missing, so callers can use identity to tell there is nothing to persist —
- * the `syncPresetMaterialName` invariant. A fresh object per load would make
- * every tool look dirty forever.
+ * ⚠️ RETURNS THE SAME ARRAY AND THE SAME TOOL REFERENCES when every tool
+ * already agrees, so callers can use identity to tell there is nothing to
+ * persist — the `syncPresetMaterialName` invariant. A fresh object per load
+ * would make every tool look dirty forever. Idempotent.
  */
-export function backfillReach(tools) {
+export function resolveReachForTools(tools) {
   if (!Array.isArray(tools) || !tools.length) return tools;
   let changed = false;
   const out = tools.map((tool) => {
-    if (!tool || tool.reach != null) return tool;
-    const { reach } = deriveReach(tool);
-    if (reach == null) return tool;
+    if (!tool) return tool;
+    const next = resolveReachFields(tool);
+    const same = (tool.reach ?? null) === next.reach
+      && (tool.has_undercut ?? null) === next.has_undercut
+      && (tool.undercut_diameter ?? null) === next.undercut_diameter;
+    if (same) return tool;
     changed = true;
-    return { ...tool, reach };
+    return { ...tool, ...next };
   });
   return changed ? out : tools;
 }
