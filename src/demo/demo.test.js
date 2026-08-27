@@ -3,7 +3,7 @@ import { groupByTrackingId, buildLogicalTool, combineToolsByToolId } from '../sc
 import { getDemoData } from './index.js';
 
 describe('demo data', () => {
-  it('builds 12 logical tools with metadata attached', () => {
+  it('builds 13 logical tools with metadata attached', () => {
     const { fusionList, metaList, holders } = getDemoData();
     const metaByTracking = new Map(metaList.map(m => [m.id, m]));
     const { groups, untracked } = groupByTrackingId(fusionList);
@@ -13,7 +13,7 @@ describe('demo data', () => {
     const tools = combineToolsByToolId(built);
 
     expect(untracked.length).toBe(0);          // all demo tools are tracked
-    expect(tools.length).toBe(12);
+    expect(tools.length).toBe(13);
     expect(holders.length).toBeGreaterThan(0);
 
     for (const t of tools) {
@@ -28,6 +28,12 @@ describe('demo data', () => {
     }
     // two tools demonstrate multiple assemblies
     expect(tools.filter(t => t.assemblies.length >= 2).length).toBe(2);
+    // ⚠️ One demo tool carries SHAFT SEGMENTS (A-265, the long-reach micro end
+    // mill). Without it, reach, undercut and the whole Tool Profile drawing are
+    // invisible in demo mode — which is where they get looked at.
+    const segged = tools.filter(t => (t._instancesRaw || []).some(r => r?.shaft?.segments?.length));
+    expect(segged.length).toBeGreaterThanOrEqual(1);
+
     // covers the requested core types
     const types = new Set(tools.map(t => t.tool_type));
     for (const want of ['flat end mill','ball end mill','drill','tap','boring head','thread mill'])

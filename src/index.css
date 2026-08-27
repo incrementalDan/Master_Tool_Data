@@ -4890,6 +4890,20 @@ input.sf-ref-num { text-align: right; }
        features — deriving both from one token is what prevents that.
      · ABOVE-GAUGE dimming = the muted end of the text/border ramp. */
 :root {
+  /* ─── Tool profile drawing ────────────────────────────────────────────
+     Muted by design: three greys for the structural parts so the ONE warm
+     colour — the flutes — is what the eye lands on. The amber matches the
+     colour Fusion itself gives the cutting portion, so the drawing reads as
+     familiar rather than as a second convention. */
+  --tp-flute: #d8a13c;
+  --tp-flute-edge: #f0be62;
+  --tp-shoulder: #4d6f74;
+  --tp-segment: #8590a1;
+  --tp-segment-edge: #9aa4b2;
+  --tp-shank: #4e5763;
+  --tp-shank-edge: #828b98;
+  --tp-dim-line: #98a2b0;
+  --tp-centre: #6f7784;
   --profile-steel: #8b95a3;
   --profile-steel-edge: #b6c0cc;
   --profile-dim: #3f434b;
@@ -6616,3 +6630,190 @@ input.sf-ref-num { text-align: right; }
 .pn-table-filters .pn-search { position: relative; flex: 1; min-width: 220px; }
 .pn-table-filters .pn-search .icon-btn { position: absolute; right: 6px; }
 .pn-sort { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+
+
+/* ═══ Tool Profile modal ═══════════════════════════════════════════════════
+   The whole tool on one screen — see ToolProfileModal.jsx. Deliberately a
+   separate pop-up; it does not replace the Geometry section. */
+.modal.tool-profile-modal {
+  max-width: min(1180px, 96vw);
+  width: auto;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 94vh;
+}
+
+.tp-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tp-head-text { flex: 1; min-width: 0; }
+.tp-title { font-size: 15px; font-weight: 600; }
+.tp-sub {
+  font-size: 12px;
+  color: var(--text-sub);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tp-close {
+  background: none; border: none; color: var(--text-sub);
+  cursor: pointer; padding: 6px; border-radius: var(--radius-sm);
+}
+.tp-close:hover { background: var(--surface-2); color: var(--text); }
+
+.tp-body {
+  display: flex;
+  gap: 20px;
+  padding: 18px 20px;
+  overflow: auto;
+  align-items: flex-start;
+}
+
+/* ── the drawing ── */
+.tp-canvas { position: relative; flex-shrink: 0; }
+.tp-svg { display: block; overflow: visible; }
+
+.tp-centreline {
+  stroke: var(--tp-centre);
+  stroke-width: 1;
+  stroke-dasharray: 9 3 2 3;   /* ISO centreline */
+  opacity: 0.75;
+}
+
+.tp-region { stroke-width: 1.25; transition: filter 0.12s ease; }
+.tp-flute    { fill: var(--tp-flute);   stroke: var(--tp-flute-edge); }
+.tp-segment  { fill: var(--tp-segment); stroke: var(--tp-segment-edge); cursor: default; }
+.tp-shank    { fill: var(--tp-shank);   stroke: var(--tp-shank-edge); }
+.tp-segment[data-active='y'] { filter: brightness(1.28); }
+
+/* The shoulder is a MEASUREMENT that overlaps whatever solid is already there,
+   so it tints on top rather than replacing — and its top edge is drawn, since
+   that line is the thing being dimensioned. */
+.tp-shoulder-band { fill: var(--tp-shoulder); opacity: 0.42; }
+.tp-shoulder-edge { stroke: var(--tp-shoulder); stroke-width: 1.5; opacity: 0.95; }
+
+/* Interrupted view: the page shows through between two zigzags. */
+.tp-break-gap  { fill: var(--surface); }
+.tp-break-line { fill: none; stroke: var(--tp-shank-edge); stroke-width: 1.25; }
+
+.tp-ext     { stroke: var(--tp-dim-line); stroke-width: 0.75; opacity: 0.55; }
+.tp-leader  { stroke: var(--tp-dim-line); stroke-width: 0.75; opacity: 0.75; }
+.tp-dimline { stroke: var(--tp-dim-line); stroke-width: 1; }
+.tp-dim[data-muted='y'] { opacity: 0.55; transition: opacity 0.12s ease; }
+
+.tp-nts {
+  position: absolute; right: 2px; bottom: 0;
+  font-size: 10px; letter-spacing: 0.08em;
+  color: var(--text-dim, var(--text-sub)); opacity: 0.6;
+  font-family: var(--font-mono); cursor: help;
+}
+
+/* ── the editable dimension boxes sitting on the dimension lines ── */
+.tp-dimbox { position: absolute; display: flex; flex-direction: column; gap: 2px; }
+.tp-dimbox-label {
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-sub);
+  text-align: center;
+  white-space: nowrap;
+}
+.tp-dimbox-input {
+  display: flex; align-items: center; gap: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 5px;
+}
+.tp-dimbox-input:focus-within { border-color: var(--blue); }
+.tp-dimbox-input input {
+  width: 52px;
+  background: none; border: none; outline: none;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: right;
+  padding: 0;
+}
+.tp-dimbox-input input::-webkit-outer-spin-button,
+.tp-dimbox-input input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.tp-dimbox-input input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+.tp-dimbox-unit { font-size: 10px; color: var(--text-sub); font-family: var(--font-mono); }
+
+/* ── side panel ── */
+.tp-side { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 14px; }
+.tp-panel {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.tp-panel-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--text-sub);
+  margin: 0 0 10px; display: flex; align-items: center; gap: 8px;
+}
+.tp-readonly {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 9.5px; font-weight: 600; letter-spacing: 0.02em;
+  text-transform: none; color: var(--text-sub); opacity: 0.8;
+  margin-left: auto;
+}
+
+.tp-extras { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
+.tp-extra { display: flex; flex-direction: column; gap: 3px; }
+.tp-extra > span { font-size: 10px; color: var(--text-sub); }
+.tp-extra .field-input { font-size: 12px; padding: 4px 7px; }
+.tp-uc-toggle button { padding: 3px 10px; font-size: 11px; }
+
+.tp-seg-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 11px; }
+.tp-seg-table th {
+  text-align: left; font-weight: 600; color: var(--text-sub);
+  font-family: var(--font-sans); font-size: 10px;
+  padding: 0 6px 5px 0; border-bottom: 1px solid var(--border);
+}
+.tp-seg-table td { padding: 4px 6px 4px 0; color: var(--text-sub); }
+.tp-seg-table tr[data-active='y'] td { background: var(--surface-3); color: var(--text); }
+.tp-seg-idx { color: var(--text); font-weight: 600; }
+.tp-empty { font-size: 11.5px; color: var(--text-sub); margin: 0; line-height: 1.5; }
+
+.tp-legend { display: flex; flex-wrap: wrap; gap: 10px 14px; padding: 0 2px; }
+.tp-legend-item {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-sub);
+}
+.tp-sw { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+.tp-sw-flute    { background: var(--tp-flute);    border: 1px solid var(--tp-flute-edge); }
+.tp-sw-shoulder { background: var(--tp-shoulder); opacity: 0.6; }
+.tp-sw-segment  { background: var(--tp-segment);  border: 1px solid var(--tp-segment-edge); }
+.tp-sw-shank    { background: var(--tp-shank);    border: 1px solid var(--tp-shank-edge); }
+
+.tp-error {
+  margin: 0 20px; padding: 8px 12px;
+  background: var(--red-tint, rgba(220,80,80,0.15));
+  border: 1px solid var(--red, #dc5050);
+  border-radius: var(--radius-sm);
+  font-size: 12px; color: var(--text);
+}
+.tp-actions {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  align-items: center;
+  flex-shrink: 0;
+}
+.tp-hint {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--text-sub); margin-right: auto;
+}
+
+@media (max-width: 900px) {
+  .tp-body { flex-direction: column; align-items: stretch; }
+  .tp-canvas { align-self: center; }
+}

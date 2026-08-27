@@ -2375,11 +2375,11 @@
     {
       "BMC": "unspecified",
       "GRADE": "Mill Generic",
-      "description": "3/16Ø High Feed mill .562LOC",
+      "description": "3/16\u00d8 High Feed mill .562LOC",
       "expressions": {
         "holder_description": "'NBT30-SK13C-120'",
         "tool_bodyLength": ".86 in",
-        "tool_description": "'3/16Ø High Feed mill .562LOC'",
+        "tool_description": "'3/16\u00d8 High Feed mill .562LOC'",
         "tool_diameter": ".1875 in",
         "tool_fluteLength": ".5625 in",
         "tool_lengthOffset": "tool_number",
@@ -2578,6 +2578,239 @@
       "type": "form mill",
       "unit": "inches",
       "vendor": ""
+    },
+    {
+      "BMC": "carbide",
+      "GRADE": "Mill Generic",
+      "description": "1mm (.039) 3FL EM .059LOC .203 REACH",
+      "expressions": {
+        "holder_description": "'NBT30-SK13C-90 (85mm)'",
+        "tool_bodyLength": "0.6 in",
+        "tool_description": "'1mm (.039) 3FL EM .059LOC .203 REACH'",
+        "tool_diameter": "0.039 in",
+        "tool_fluteLength": "0.059 in",
+        "tool_material": "'carbide'",
+        "tool_number": "77",
+        "tool_overallLength": "2.5 in",
+        "tool_productId": "'A-265'",
+        "tool_productLink": "'https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-25$'",
+        "tool_shoulderLength": ".95 in",
+        "tool_vendor": "'LC-14'",
+        "tool_comment": "'FTL-00000D'",
+        "tool_shaftDiameter": "0.125 in"
+      },
+      "geometry": {
+        "CSP": false,
+        "DC": 0.039,
+        "HAND": true,
+        "LB": 0.6,
+        "LCF": 0.059,
+        "NOF": 3,
+        "NT": 1,
+        "OAL": 2.5,
+        "RE": 0,
+        "SFDM": 0.125,
+        "TA": 0,
+        "TP": 0,
+        "assemblyGaugeLength": 4.466417,
+        "shoulder-diameter": 0.039,
+        "shoulder-length": 0.059,
+        "thread-profile-angle": 60,
+        "tip-diameter": 0.039,
+        "tip-length": 0,
+        "tip-offset": 0
+      },
+      "guid": "d7d3e0aa-1111-4c2d-9a11-c4d699a43846",
+      "holder": {
+        "description": "NBT30-SK13C-90 (85mm)",
+        "gaugeLength": 3.346417,
+        "guid": "82b79d9b-5c50-43f9-b35b-354ae2df7bbf",
+        "product-id": "",
+        "product-link": "",
+        "segments": [
+          {
+            "height": 2.5590551181102,
+            "lower-diameter": 1.2992125984252,
+            "upper-diameter": 1.2992125984252
+          },
+          {
+            "height": 0.039370078740157,
+            "lower-diameter": 1.7322834645669,
+            "upper-diameter": 1.8110236220472
+          },
+          {
+            "height": 0.13385826771654,
+            "lower-diameter": 1.8110236220472,
+            "upper-diameter": 1.8110236220472
+          },
+          {
+            "height": 0.090905511811024,
+            "lower-diameter": 1.8110236220472,
+            "upper-diameter": 1.496062992126
+          },
+          {
+            "height": 0.13311023622047,
+            "lower-diameter": 1.496062992126,
+            "upper-diameter": 1.496062992126
+          },
+          {
+            "height": 0.090905511811024,
+            "lower-diameter": 1.496062992126,
+            "upper-diameter": 1.8110236220472
+          },
+          {
+            "height": 0.25984251968504,
+            "lower-diameter": 1.8110236220472,
+            "upper-diameter": 1.8110236220472
+          },
+          {
+            "height": 0.039370078740157,
+            "lower-diameter": 1.8110236220472,
+            "upper-diameter": 1.7322834645669
+          },
+          {
+            "height": 0.078740157480315,
+            "lower-diameter": 1.25,
+            "upper-diameter": 1.25
+          }
+        ],
+        "type": "holder",
+        "unit": "inches",
+        "vendor": ""
+      },
+      "last_modified": 1780673247472,
+      "post-process": {
+        "break-control": false,
+        "comment": "FTL-00000D",
+        "diameter-offset": 77,
+        "length-offset": 77,
+        "live": true,
+        "manual-tool-change": false,
+        "number": 77,
+        "turret": 0
+      },
+      "product-id": "A-265",
+      "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-25$",
+      "reference_guid": "86b21e97-a5e0-4bb2-bf18-06fd58e6576b",
+      "start-values": {
+        "presets": [
+          {
+            "description": "",
+            "expressions": {
+              "tool_feedPerTooth": ".002 in",
+              "tool_feedPlunge": "50 inpm",
+              "tool_feedRamp": "30 inpm",
+              "tool_surfaceSpeed": "525 fpm"
+            },
+            "f_n": 0.009349978135683903,
+            "f_z": 0.002,
+            "guid": "a91e80ea-a826-447e-bad1-5a010253e3a3",
+            "material": {
+              "category": "all",
+              "query": "",
+              "use-hardness": false
+            },
+            "n": 5347.606087887685,
+            "n_ramp": 5347.606087887685,
+            "name": "ST",
+            "ramp-angle": 2,
+            "tool-coolant": "flood",
+            "use-stepdown": false,
+            "use-stepover": false,
+            "v_c": 525,
+            "v_f": 42.78084870310147,
+            "v_f_leadIn": 42.78084870310147,
+            "v_f_leadOut": 42.78084870310147,
+            "v_f_plunge": 50,
+            "v_f_ramp": 30,
+            "v_f_transition": 42.78084870310147
+          },
+          {
+            "description": "",
+            "expressions": {
+              "tool_feedPerTooth": ".001 in",
+              "tool_feedPlunge": "50 inpm",
+              "tool_feedRamp": "20 inpm",
+              "tool_surfaceSpeed": "525 fpm"
+            },
+            "f_n": 0.009349978135683903,
+            "f_z": 0.001,
+            "guid": "71cd26da-f7b2-447d-8c07-107c4953669e",
+            "material": {
+              "category": "all",
+              "query": "",
+              "use-hardness": false
+            },
+            "n": 5347.606087887685,
+            "n_ramp": 5347.606087887685,
+            "name": "ST FIN",
+            "ramp-angle": 2,
+            "tool-coolant": "flood",
+            "use-stepdown": false,
+            "use-stepover": false,
+            "v_c": 525,
+            "v_f": 21.390424351550735,
+            "v_f_leadIn": 21.390424351550735,
+            "v_f_leadOut": 21.390424351550735,
+            "v_f_plunge": 50,
+            "v_f_ramp": 20,
+            "v_f_transition": 21.390424351550735
+          },
+          {
+            "description": "",
+            "expressions": {
+              "tool_feedPerTooth": ".003 in",
+              "tool_feedPlunge": "50 inpm",
+              "tool_feedRamp": "12 inpm",
+              "tool_stepdown": "tool_fluteLength * 0.9",
+              "tool_stepover": "tool_diameter * 0.08",
+              "tool_surfaceSpeed": "240 fpm"
+            },
+            "f_n": 0.020453077171808543,
+            "f_z": 0.003,
+            "guid": "86cd9b47-fd0f-44c2-8208-be121d1e1500",
+            "material": {
+              "category": "all",
+              "query": "",
+              "use-hardness": false
+            },
+            "n": 2444.619925891513,
+            "n_ramp": 2444.619925891513,
+            "name": "SS-316",
+            "ramp-angle": 2,
+            "stepdown": 0.7874999999999998,
+            "stepover": 0.029999999999999992,
+            "tool-coolant": "flood",
+            "use-stepdown": true,
+            "use-stepover": true,
+            "v_c": 240.00000000000009,
+            "v_f": 29.33543911069815,
+            "v_f_leadIn": 29.33543911069815,
+            "v_f_leadOut": 29.33543911069815,
+            "v_f_plunge": 50,
+            "v_f_ramp": 12,
+            "v_f_transition": 29.33543911069815
+          }
+        ]
+      },
+      "type": "flat end mill",
+      "unit": "inches",
+      "vendor": "LC-14",
+      "shaft": {
+        "type": "shaft",
+        "segments": [
+          {
+            "height": 0.144,
+            "lower-diameter": 0.038,
+            "upper-diameter": 0.038
+          },
+          {
+            "height": 0.07534,
+            "lower-diameter": 0.038,
+            "upper-diameter": 0.125
+          }
+        ]
+      }
     }
   ],
   "version": 36

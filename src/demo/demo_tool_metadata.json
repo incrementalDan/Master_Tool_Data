@@ -826,5 +826,87 @@
     "merge_history": [],
     "created_at": "2026-05-01T12:00:00.000Z",
     "updated_at": "2026-05-01T12:00:00.000Z"
+  },
+  {
+    "id": "FTL-00000D",
+    "vendor": "Helical Solutions",
+    "coating": "AlTiN",
+    "cabinet": "1",
+    "drawer": "A",
+    "purchasing": {
+      "manufacturers": [
+        {
+          "id": "667121eb-ac31-4034-8a72-1619266b696c",
+          "name": "Helical Solutions",
+          "edp": "59424",
+          "edp_url": "",
+          "mfg_num": "",
+          "mfg_num_url": "",
+          "order": 0
+        }
+      ],
+      "vendors": [
+        {
+          "id": "0d04f8ee-3cb4-4330-8cf1-d508e11891ae",
+          "manufacturer_id": "667121eb-ac31-4034-8a72-1619266b696c",
+          "name": "MSC Industrial",
+          "vendor_num": "09876543",
+          "vendor_num_url": "",
+          "price": 42.5,
+          "order": 0
+        },
+        {
+          "id": "6a0f28b4-1a11-49b1-a5d6-6f9b29eb773d",
+          "manufacturer_id": "667121eb-ac31-4034-8a72-1619266b696c",
+          "name": "Butler Brothers",
+          "vendor_num": "",
+          "vendor_num_url": "",
+          "price": 38.9,
+          "order": 1
+        }
+      ]
+    },
+    "tsc_capable": false,
+    "custom_grind": false,
+    "min_ooh": 0.5,
+    "shoulder_length": 0.059,
+    "machine_tool_number": 77,
+    "selected_holder_guid": "82b79d9b-5c50-43f9-b35b-354ae2df7bbf",
+    "assemblies": [
+      {
+        "assembly_id": "e1a55d10-0000-4aa1-9f00-2b6d9c0a7711",
+        "instance_guid": "d7d3e0aa-1111-4c2d-9a11-c4d699a43846",
+        "holder_guid": "82b79d9b-5c50-43f9-b35b-354ae2df7bbf",
+        "holder_description": "NBT30-SK13C-90 (85mm)",
+        "ooh": 0.6,
+        "linked_preset_guids": [],
+        "notes": "Deep-pocket setup",
+        "source": "manual",
+        "created_at": "2026-05-01T12:00:00.000Z"
+      }
+    ],
+    "notes": "Long-reach micro end mill. The neck above the flutes is ground to .038 (under the .039 cut) so it clears its own walls in a deep pocket.",
+    "preferred_machine": "M300",
+    "material_suitability": [],
+    "tags": [
+      "reach",
+      "micro"
+    ],
+    "tap_sub_type": "",
+    "point_type": "",
+    "updated_by": "demo",
+    "revision_notes": "",
+    "merge_history": [],
+    "created_at": "2026-05-01T12:00:00.000Z",
+    "updated_at": "2026-05-01T12:00:00.000Z",
+    "preset_meta": {
+      "a91e80ea-a826-447e-bad1-5a010253e3a3": {
+        "operation_ids": [
+          "prg-demo-0001"
+        ]
+      },
+      "71cd26da-f7b2-447d-8c07-107c4953669e": {}
+    },
+    "tool_id": "A-265"
   }
 ]

@@ -1006,6 +1006,34 @@ What the app *may* do is read a number back: once a person answers that there IS
 
 **Deferred to Phase 2** (see TODO): a segment editor, writing segments back to Fusion, extraction of reach from a spec sheet, and reconciling the handful of tools that recorded reach in `shoulder_length` with no usable neck segment.
 
+### Tool Profile — the whole tool on one dimensioned drawing
+
+Fusion splits a tool across four tabs (General / Cutter / Shaft / Holder), so no screen ever shows the tool. **`ToolProfileModal.jsx`** does: one vertical silhouette, tip down as it hangs in the spindle, with the geometry as engineering-print dimensions whose **value boxes ARE the editable fields**. Opened by the **Profile** button in `ToolDetail`'s action sidebar. Pure geometry: `src/utils/toolProfile.js`.
+
+⚠️ **DELIBERATELY A SEPARATE POP-UP.** It does not replace the Geometry section — that keeps working exactly as it did. Additive until the two are merged on purpose.
+
+**The stack it draws** (confirmed against a real export and Fusion's own Shaft tab): `0 → LCF` the flutes at the cutting diameter · `LCF → LCF + Σh` the shaft segments (stored **tip-first**; Fusion's Shaft TAB numbers them top-down, so the table here is the reverse of the array) · `LCF + Σh → OAL` plain shank at the shank diameter.
+
+⚠️ **SHOULDER LENGTH IS A DIMENSION, NOT A SOLID** — the unbroken shoulder measured from the tip, so it *overlaps* whatever the stack already drew. It renders as a band **on top** of the solid, only over the span past the flutes, with its top edge drawn. Drawing it as a region would double-count the flutes; drawing it *underneath* hid it entirely and left only its overhang showing, which read as a second block of a different colour. On a tool whose segments disagree with it, the app still has no opinion (see **Reach & undercut**).
+
+⚠️ **SHAFT SEGMENTS ARE READ-ONLY HERE.** They are Fusion's drawing of the tool and the app must not rewrite them from a screen that cannot yet express what they mean. They are rendered, hover-linked to the table, and labelled "from Fusion". Editing them is the next step and now a **small** one: `shaft.segments` has **no paired `expressions.*` entry** (verified across the real library — only `tool_shaftDiameter`/`tool_shaftAxisAngle` exist, and neither is the profile), so there is no native+expression pair to keep in step.
+
+**NOT TO SCALE, and it says so.** X and Y are scaled independently — a real tool runs 20:1 to 60:1, so a true-proportion drawing is a hairline. Every CAM tool-library screen distorts this the same way; the drawing is marked `NTS` rather than pretending otherwise.
+
+⚠️ **THE LONG SHANK IS BROKEN, and both halves of that rule were learned the hard way.** On a Ø.039 × 2.5" micro end mill the flutes are 2% of the length: drawn linearly the one thing worth seeing got ten pixels and the rest of the canvas went to an empty cylinder. An **interrupted view** (`BREAK_KEEP`, zigzag symbol) is the standard print answer.
+- **The trigger is what the break is FOR** — the part *below* the shank being squeezed (`BREAK_BELOW = 0.30`), not the shank's own share. Testing the shank broke tools that needed no break (a 2"-flute ball mill on a 4" body is half shank and its flutes already have half the canvas). Set well clear of ordinary tools (a bull mill sits at 38%) so the break marks genuinely long-reach micro tools rather than flickering between two tools that look the same.
+- ⚠️ **The magnification is CAPPED (`MAX_MAG = 6`).** Filling the canvas with whatever sits below the shank works until that part is itself tiny: a 1/8" chamfer mill has a .058" cutting length on a 1.5" body, and blowing it up to fill the drawing made a chamfer tip look like a 1" flute.
+
+**Dimensions nest shortest-innermost**, the way a print stacks dimensions sharing a datum — laying them out in registry order put MIN OOH (2.5") outside Shoulder (4.0"), lines crossing for nothing. Lengths go left, diameters right (bumped to a second lane only when two would collide), and the **shank diameter is placed at 78% up the shank, never mid** — mid-shank is exactly where the break symbol goes. ⚠️ Labels use a **short name table (`SHORT`)**, not the registry label: `fieldLabel` carries "(in)", which is both redundant beside the unit in the box and wider than a lane, so neighbouring labels overlapped. This is the one place the registry label is deliberately not used, display-only.
+
+**Which dimensions appear is gated by the SAME `appliesToTypes` the form uses**, so a tap is never asked for a corner radius and a drill never for a taper. Tip shapes are modelled only where the shop actually runs them (ball / drill point / corner radius / chamfer-tapered-to-`tip_diameter`); anything else draws **flat**, and a chamfer mill with no stored tip diameter draws flat rather than being given an invented cone.
+
+**Colour is muted by design** — three greys for the structural parts so the one warm colour, the flutes, is what the eye lands on. The amber matches the colour Fusion gives the cutting portion, so the drawing reads as familiar rather than as a second convention.
+
+⚠️ **Editing follows `commitPurchasing`'s rule**: the modal stays open and keeps the draft until the save resolves, and a failed save says so instead of closing. Locked by `toolProfileUi.test.jsx`, which renders every tool in the real library and asserts **no `NaN`/`Infinity` reaches an SVG path** (a tool with no flute length or a zero diameter divides by zero on the way to a scale, and an SVG with NaN in a path silently draws nothing).
+
+⚠️ **The demo library carries one tool with shaft segments** (`A-265`, the long-reach micro end mill, mirroring the real one). Without it, reach, undercut and this whole drawing are invisible in `?demo=true` — which is where they get looked at. `demo.test.js` asserts at least one segmented demo tool exists.
+
 ### Three length concepts (MIN OOH vs. shoulder length vs. per-assembly OOH)
 
 These are easy to confuse — they are distinct and have a strict ordering:
@@ -1223,6 +1251,13 @@ src/
     labelPrint.js                 # The DK-11201 tool tag: tagCSS / tagMarkup /
                                   # inchesAutoFit / printToolTags. COPIED from the
                                   # shop's Chrome extension — do not redesign
+    toolProfile.js                # The tool's silhouette as a region stack
+                                  # (flutes → shaft segments → shank), tip-first,
+                                  # plus which dimensions each tool type offers.
+                                  # See "Tool Profile"
+    toolReach.js                  # Reach + undercut from the shaft segments.
+                                  # Reach is seeded; the undercut is a person's
+                                  # answer — see "Reach & undercut"
     presetNaming.js               # composePresetName, parsePresetName, presetMatchesAssembly,
                                   # OP_TYPES / opTypeWord / matchOpType
     holderNaming.js               # holderNameToken (a holder's name IS its
@@ -1288,6 +1323,11 @@ src/
                                   # PairingSetupPanel. See Insert-Style Tools section
     ComponentPicker.jsx           # Searchable holder-body/insert picker modal with
                                   # inline create — the only way components are browsed
+    ToolProfileModal.jsx          # The whole tool as one dimensioned drawing —
+                                  # vertical silhouette, print-style dimensions
+                                  # whose value boxes are the editable fields,
+                                  # interrupted view for a long shank. Opened by
+                                  # the Profile sidebar button. See "Tool Profile"
     PhotoSlot.jsx                 # Primary-photo slot (display + add/change/remove),
                                   # shared by ToolDetail and the component groups
     ToolCard.jsx                  # Grid and list card variants with hover actions
