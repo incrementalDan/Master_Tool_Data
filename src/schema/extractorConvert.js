@@ -11,7 +11,7 @@ import { registryIdForName } from './vendorRegistry.js';
 import { threadPitchValue } from './threads.js';
 
 // ─── Facet fields per tool type (search filter order) ─────────────────────
-const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'custom_grind', 'flute_design', 'material_suitability', 'tags', 'no_fusion_link'];
+const COMMON_FACETS = ['diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'reach', 'has_undercut', 'material', 'coating', 'vendor', 'tsc_capable', 'custom_grind', 'flute_design', 'material_suitability', 'tags', 'no_fusion_link'];
 
 // toolTypes: array of selected tool types (0, 1, or many). With multiple types
 // selected, the extra per-type facets are unioned so e.g. picking "bull nose
@@ -90,6 +90,8 @@ function extractorKeyToAppKey(k) {
     shoulderLen: 'shoulder_length',
     ooh: 'ooh',
     minOoh: 'min_ooh',
+    hasUndercut: 'has_undercut',
+    undercutDia: 'undercut_diameter',
   };
   return map[k] || k;
 }
@@ -167,6 +169,11 @@ export function extractorToTool(f) {
     shoulder_length: parseFloat(f.shoulderLen) || null,
     ooh: parseFloat(f.ooh) || null,
     min_ooh: parseFloat(f.minOoh) || null,
+    reach: parseFloat(f.reach) || null,
+    // `null`, not `false` — see the metadata read side: null is "nobody has
+    // said" and is what the shaft-segment seed is allowed to fill.
+    has_undercut: f.hasUndercut == null || f.hasUndercut === '' ? null : !!f.hasUndercut,
+    undercut_diameter: parseFloat(f.undercutDia) || null,
     material: f.material || 'carbide',
     coating: f.coating || '',
     material_suitability: f.workpieceMats || [],
@@ -266,6 +273,9 @@ export function toolToExtractor(tool) {
     shoulderLen: String(tool.shoulder_length ?? ''),
     ooh: String(tool.ooh ?? ''),
     minOoh: String(tool.min_ooh ?? ''),
+    reach: String(tool.reach ?? ''),
+    hasUndercut: tool.has_undercut ?? null,
+    undercutDia: String(tool.undercut_diameter ?? ''),
     taperAngle: String(tool.taper_angle ?? ''),
     minThreadPitch: String(tool.min_thread_pitch ?? ''),
     maxThreadPitch: String(tool.max_thread_pitch ?? ''),

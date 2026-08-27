@@ -177,6 +177,40 @@ export default function ToolFields({
     let raw = tool[field];
     if (showsDoubled(field, tool) && raw != null) raw = raw * 2;
 
+    // ⚠️ THE UNDERCUT DIAMETER ONLY EXISTS WHILE THERE IS AN UNDERCUT. It is
+    // optional even then (the shop often knows the neck is ground back without
+    // having measured it), so an empty box next to a "No" pill would be asking
+    // for the diameter of something that isn't there. Hidden in BOTH modes, so
+    // turning the pill on is what makes the box appear.
+    if (field === 'undercut_diameter' && !tool.has_undercut) return null;
+
+    // The undercut pill — Yes/No, not a checkbox, because it reads at a glance
+    // on the tool page next to the other geometry badges.
+    if (field === 'has_undercut') {
+      if (!edit) {
+        if (!tool.has_undercut) return null;   // see VIEW_HIDE_WHEN_EMPTY
+        return (
+          <div className="detail-field" key={field}>
+            <div className="detail-field-label">{label}</div>
+            <div><span className="undercut-pill">Undercut</span></div>
+          </div>
+        );
+      }
+      const prop0 = propFor(field);
+      return (
+        <div className={`field-group ${prop0 ? `has-proposal proposal-${prop0.status}` : ''}`} key={field}>
+          <label className="field-label">{label}</label>
+          <div className="btn-toggle">
+            {[[true, 'Yes'], [false, 'No']].map(([v, l]) => (
+              <button key={l} type="button" className={!!tool.has_undercut === v ? 'active' : ''}
+                onClick={() => setField('has_undercut', v)}>{l}</button>
+            ))}
+          </div>
+          {strip(field)}
+        </div>
+      );
+    }
+
     // VIEW: hide the few opt-out fields when empty/false.
     if (!edit && VIEW_HIDE_WHEN_EMPTY.has(field)) {
       const empty = control === 'bool' ? !raw : (raw === null || raw === undefined || raw === '');

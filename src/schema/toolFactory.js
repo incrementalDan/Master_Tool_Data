@@ -30,6 +30,11 @@ export function newTool(toolType = 'flat end mill') {
     shoulder_length: null,
     ooh: null,
     min_ooh: null,
+    // Blank by default — most tools have no reach beyond their flutes, and
+    // null (not 0/false) is what lets the shaft-segment seed fill it in later.
+    reach: null,
+    has_undercut: null,
+    undercut_diameter: null,
     material: isTapType(toolType) ? 'hss' : 'carbide',
     coating: '',
     material_suitability: [],

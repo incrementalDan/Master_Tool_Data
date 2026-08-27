@@ -199,6 +199,13 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     legacy_locations: meta.legacy_locations || [],
     ooh: meta.ooh ?? null,
     min_ooh: meta.min_ooh ?? null,
+    // Reach / undercut — metadata-only, seeded at load from the tool's shaft
+    // segments (see backfillReach) and thereafter the user's answer. `null`
+    // means "nobody has said", which is what lets the seed fill it in; `false`
+    // is a real answer and is preserved.
+    reach: meta.reach ?? null,
+    has_undercut: meta.has_undercut ?? null,
+    undercut_diameter: meta.undercut_diameter ?? null,
     // Holder selection + proven assemblies live only in metadata.
     selected_holder_guid: meta.selected_holder_guid || null,
     assemblies: meta.assemblies || [],
@@ -364,6 +371,9 @@ export function buildMetadataTool(tool) {
     shoulder_length: tool.shoulder_length ?? null,
     ooh: tool.ooh ?? null,
     min_ooh: tool.min_ooh ?? null,
+    reach: tool.reach ?? null,
+    has_undercut: tool.has_undercut ?? null,
+    undercut_diameter: tool.undercut_diameter ?? null,
     pitch: tool.pitch || '',
     tap_class: tool.tap_class || '',
     tap_sub_type: tool.tap_sub_type || '',

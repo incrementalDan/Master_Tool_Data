@@ -3555,6 +3555,25 @@ textarea.field-input { resize: vertical; min-height: 70px; }
   flex-shrink: 0;
 }
 
+/* The neck above the flutes is ground a little under the cutting diameter, so
+   the tool clears its own cut. Orange because it is a caution when programming
+   (the neck is weaker than the shank), not a fault. */
+.undercut-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: rgba(251, 146, 60, 0.20);
+  border: 1px solid rgba(251, 146, 60, 0.65);
+  color: var(--orange, #fb923c);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* Flags a tool added from ProShop with no matching Fusion entry — its Fusion
    record is a placeholder that still needs real geometry/presets/holder setup. */
 .no-fusion-pill {

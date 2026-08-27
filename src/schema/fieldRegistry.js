@@ -579,6 +579,58 @@ export const FIELD_REGISTRY = {
     precision: 4,
   },
 
+  // ── Reach & undercut (the necked-down shank above the flutes) ─────────────
+  // A "reach" tool keeps its cutting diameter (or a hair under it) for some
+  // distance ABOVE the flutes, so it can drop into a deep pocket without the
+  // shank rubbing. In Fusion that is drawn as `shaft.segments[]`; the app
+  // stores the resulting number so it is searchable and can reach the
+  // description. See `src/utils/toolReach.js` for the derivation.
+  //
+  // ⚠️ METADATA-ONLY, AND THAT IS NOT A GAP. Fusion has no "reach" field — it
+  // has the segments the number is computed FROM, and those already round-trip
+  // untouched (`shaft` survives the `...existing` spread in
+  // `internalToFusionTool`). So the "if Fusion has a place for it" rule is
+  // satisfied by the segments, not by mirroring a derived scalar into a field
+  // Fusion would reject.
+  reach: {
+    label: 'Reach',
+    type: 'number',
+    unit: 'length',
+    canonicalUnit: 'native',      // stored in the tool's own unit
+    fusionPath: null,             // derived from geometry.LCF + shaft.segments
+    proShopColumn: null,
+    metadataOnly: true,
+    appliesToTypes: NO_BORING_TURN,
+    required: false,
+    precision: 4,
+  },
+
+  has_undercut: {
+    label: 'Undercut',
+    type: 'boolean',
+    unit: null,
+    fusionPath: null,
+    proShopColumn: null,
+    metadataOnly: true,
+    appliesToTypes: NO_BORING_TURN,
+    required: false,
+    precision: null,
+  },
+
+  // Optional — an undercut can be flagged without anyone measuring it.
+  undercut_diameter: {
+    label: 'Undercut Diameter',
+    type: 'number',
+    unit: 'length',
+    canonicalUnit: 'native',
+    fusionPath: null,
+    proShopColumn: null,
+    metadataOnly: true,
+    appliesToTypes: NO_BORING_TURN,
+    required: false,
+    precision: 4,
+  },
+
   custom_grind: {
     label: 'Custom Grind',
     type: 'boolean',
