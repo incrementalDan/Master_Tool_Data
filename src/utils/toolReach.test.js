@@ -6,7 +6,8 @@
 // a fixture would only agree with whatever the code currently does.
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { readShaftNeck, deriveReach, backfillReach, UNDERCUT_MIN_RATIO } from './toolReach.js';
+import { readShaftNeck, deriveReach, backfillReach, undercutDiameterHint } from './toolReach.js';
+import { internalToFusionTool, fusionToolToInternal } from '../schema/fusionConvert.js';
 import { buildDesc } from './toolNaming.js';
 
 const LIB = JSON.parse(readFileSync(
@@ -70,51 +71,55 @@ describe('what counts as a neck', () => {
 
   it('survives a tool with no shaft, no segments, or no diameter', () => {
     for (const t of [{}, { diameter: 0.25 }, { diameter: 0.25, _instancesRaw: [{ shaft: { segments: [] } }] }]) {
-      expect(deriveReach(t)).toEqual({ reach: null, has_undercut: null, undercut_diameter: null });
+      expect(deriveReach(t)).toEqual({ reach: null, neckDiameter: null });
     }
   });
 });
 
-describe('undercut — a neck ground A LITTLE under the cut, not any neck at all', () => {
-  it('flags the 1mm end mill and reports the ground diameter', () => {
-    const d = deriveReach(toolFor(byDesc('1mm (.039) 3FL EM .059LOC .203 REACH')));
-    expect(d.has_undercut).toBe(true);
-    expect(d.undercut_diameter).toBe(0.038);          // .038 of a .039 cut
-  });
-
-  it('does NOT flag a saw, lollipop, dovetail or face-mill body as undercut', () => {
-    // Their necks are structural — that is simply what the tool looks like.
-    // A bare `neck < diameter` test called all of these undercut. The face mill
-    // is the close one: a 1.75" body under a 2" cut is 87.5%, nearer the real
-    // undercuts than anything else that isn't one.
-    for (const desc of [
-      '1.406Ø saw 3mm kerf LONG ',   // note: trailing space in the real library
-      '3/16 Lollipop',
-      '3/8" 45° Dovetail Cutter',
-      '5/16Ø Key Cutter 5/64 Kerf',
-      '2in Face Mill KENN. ST',
-    ]) {
-      const d = deriveReach(toolFor(byDesc(desc)));
-      expect(d.reach).toBeGreaterThan(0);             // they DO have reach
-      expect(d.has_undercut).toBeNull();              // but are not undercut
-    }
-  });
-
-  it('separates the two populations with a wide margin, not a tuned threshold', () => {
-    const ratios = { real: [], structural: [] };
+describe('the app decides NOTHING about undercut', () => {
+  it('never reports an undercut from geometry, however narrow the neck', () => {
+    // The pill is a person's answer. An earlier pass inferred it from a
+    // neck-to-diameter ratio measured on today's library; that rule would be
+    // wrong the first time a tool landed between the clusters it was drawn
+    // around, and it is a claim about geometry the app does not model.
     for (const e of LIB) {
-      const { neckLength, minDiameter } = readShaftNeck(e.shaft, e.geometry?.DC, e.unit);
-      if (!neckLength || minDiameter == null) continue;
-      const r = minDiameter / e.geometry.DC;
-      if (r >= 0.9999) continue;                      // neck at full diameter
-      (r >= UNDERCUT_MIN_RATIO ? ratios.real : ratios.structural).push(r);
+      expect(deriveReach(toolFor(e))).not.toHaveProperty('has_undercut');
     }
-    expect(ratios.real.length).toBeGreaterThan(0);
-    expect(ratios.structural.length).toBeGreaterThan(0);
-    // Measured: real undercuts 96.0-97.4%; the closest non-undercut is a face
-    // mill body at 87.5%. The threshold must sit inside that gap, with room.
-    expect(Math.min(...ratios.real)).toBeGreaterThan(0.95);
-    expect(Math.max(...ratios.structural)).toBeLessThan(0.88);
+  });
+
+  it('offers the neck diameter as a prefill once a person says there is one', () => {
+    // Reading the number back is a fact from Fusion; the judgement was the
+    // answer just given.
+    expect(undercutDiameterHint(toolFor(byDesc('1mm (.039) 3FL EM .059LOC .203 REACH')))).toBe(0.038);
+  });
+
+  it('offers nothing when the neck is not narrower than the cut', () => {
+    // A neck at full cutting diameter is reach, not relief.
+    expect(undercutDiameterHint(toolFor(byDesc('RTA 12  3/16 Bull mill .01 R .285 LOC')))).toBeNull();
+    expect(undercutDiameterHint({ diameter: 0.25, flute_length: 0.5, unit: 'inches' })).toBeNull();
+  });
+});
+
+describe('types the app must keep its hands off', () => {
+  it('gives a face mill no reach — its body steps down because that is its shape', () => {
+    const e = byDesc('2in Face Mill KENN. ST');
+    // The segments are there and would compute to 1.16 by the arithmetic...
+    expect(readShaftNeck(e.shaft, e.geometry.DC, e.unit).neckLength).toBeGreaterThan(0);
+    // ...but a face mill does not reach the way a shanked tool does.
+    expect(deriveReach({ ...toolFor(e), tool_type: 'face mill' }).reach).toBeNull();
+    expect(backfillReach([{ ...toolFor(e), tool_type: 'face mill' }])[0].reach).toBeUndefined();
+  });
+
+  it('gives a boring head or a turning tool no reach either', () => {
+    const e = byDesc('1mm (.039) 3FL EM .059LOC .203 REACH');
+    for (const tool_type of ['boring head', 'turning general']) {
+      expect(deriveReach({ ...toolFor(e), tool_type }).reach).toBeNull();
+    }
+  });
+
+  it('still reaches an ordinary end mill', () => {
+    const e = byDesc('1mm (.039) 3FL EM .059LOC .203 REACH');
+    expect(deriveReach({ ...toolFor(e), tool_type: 'flat end mill' }).reach).toBe(0.203);
   });
 });
 
@@ -125,6 +130,14 @@ describe('backfillReach — seeds a blank, never overrules an answer', () => {
     const withReach = seeded().filter(t => t.reach != null);
     expect(withReach.length).toBeGreaterThan(0);
     for (const t of withReach) expect(t.reach).toBeGreaterThan(t.flute_length);
+  });
+
+  it('seeds nothing at all for a face mill', () => {
+    const faceMills = LIB.filter(e => e.type === 'face mill');
+    expect(faceMills.length).toBeGreaterThan(0);
+    for (const out of backfillReach(faceMills.map(e => ({ ...toolFor(e), tool_type: 'face mill' })))) {
+      expect(out.reach).toBeUndefined();
+    }
   });
 
   it('is idempotent — a second pass has nothing to do', () => {
@@ -140,12 +153,10 @@ describe('backfillReach — seeds a blank, never overrules an answer', () => {
     once.forEach((t, i) => expect(twice[i]).toBe(t));
   });
 
-  it('leaves an explicit "no undercut" alone so the pill can be turned off', () => {
-    // The user unticking a mis-flagged saw must stick — otherwise the seed
-    // re-flags it on the next load and the flag can never be cleared.
+  it('never touches the undercut fields', () => {
     const e = byDesc('1mm (.039) 3FL EM .059LOC .203 REACH');
-    const [out] = backfillReach([{ ...toolFor(e), has_undercut: false }]);
-    expect(out.has_undercut).toBe(false);
+    const [out] = backfillReach([toolFor(e)]);
+    expect(out.has_undercut).toBeUndefined();
     expect(out.undercut_diameter).toBeUndefined();
   });
 
@@ -189,5 +200,36 @@ describe('the description names reach only when it beats the flute length', () =
   it('keeps the status marker last', () => {
     expect(buildDesc({ ...em, reach: '0.203', status: 'retired' }))
       .toBe(`${buildDesc(em)} .203 REACH RETIRED`);
+  });
+});
+
+describe('⚠️ THE APP MUST NOT CHANGE WHAT IS IN FUSION', () => {
+  // Fusion is the more correct source for shaft geometry — the app has no
+  // segment UI and does not model how each tool type relates segments,
+  // shoulder length and collision detection. Reach and undercut are read FROM
+  // Fusion and stored beside it; nothing here may write back.
+  it('alters no shaft segments and leaks no app-only key, across the whole library', () => {
+    const appOnly = new Set(['reach', 'has_undercut', 'undercut_diameter']);
+    const walk = (o) => {
+      const hits = [];
+      if (o && typeof o === 'object') {
+        for (const [k, v] of Object.entries(o)) {
+          if (appOnly.has(k)) hits.push(k);
+          hits.push(...walk(v));
+        }
+      }
+      return hits;
+    };
+    let checked = 0;
+    for (const e of LIB) {
+      const [tool] = backfillReach([{ ...fusionToolToInternal(e), _instancesRaw: [e] }]);
+      // Answer the undercut by hand, the way a person would, and write it out.
+      const withAnswers = { ...tool, has_undercut: true, undercut_diameter: 0.037 };
+      const out = internalToFusionTool(withAnswers, e);
+      expect(walk(out)).toEqual([]);
+      expect(out.shaft).toEqual(e.shaft);
+      checked++;
+    }
+    expect(checked).toBe(LIB.length);
   });
 });

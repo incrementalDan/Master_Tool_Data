@@ -20,6 +20,7 @@ import {
   CLASS_OF_FIT_OPTIONS, CLASS_OF_FIT_DEFAULT, threadUnitOf,
 } from '../schema/toolSchema.js';
 import { unitAbbr } from '../utils/units.js';
+import { undercutDiameterHint } from '../utils/toolReach.js';
 import InfoTip from './InfoTip.jsx';
 
 const STEP = {
@@ -203,7 +204,17 @@ export default function ToolFields({
           <div className="btn-toggle">
             {[[true, 'Yes'], [false, 'No']].map(([v, l]) => (
               <button key={l} type="button" className={!!tool.has_undercut === v ? 'active' : ''}
-                onClick={() => setField('has_undercut', v)}>{l}</button>
+                onClick={() => {
+                  setField('has_undercut', v);
+                  // Turning it ON offers the neck diameter Fusion's shaft
+                  // segments already carry. Reading that number back is a fact;
+                  // deciding the tool IS undercut is the answer just given. It
+                  // is an editable prefill and never overwrites a typed value.
+                  if (v && tool.undercut_diameter == null) {
+                    const hint = undercutDiameterHint(tool);
+                    if (hint != null) setField('undercut_diameter', hint);
+                  }
+                }}>{l}</button>
             ))}
           </div>
           {strip(field)}

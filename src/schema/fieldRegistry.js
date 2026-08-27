@@ -116,6 +116,13 @@ const NO_TURNING      = ALL_TYPES.filter(t => t !== 'turning general');
 const NO_BORING_TURN  = ALL_TYPES.filter(t => t !== 'boring head' && t !== 'turning general');
 const NO_BORING       = ALL_TYPES.filter(t => t !== 'boring head');
 const NO_TAP          = ALL_TYPES.filter(t => t !== 'tap');
+// Reach is the cutting diameter carrying on ABOVE the flutes on a shanked tool.
+// ⚠️ A FACE MILL AND A BORING HEAD DO NOT REACH THAT WAY — their body steps down
+// from the cut because that is simply their shape, not because anything was
+// relieved to clear a pocket wall, so the number would describe something else
+// entirely. Boring head is already out via NO_BORING_TURN; face mill is named
+// here. Turning is out for the same reason it is out of every geometry field.
+const REACH_TYPES     = NO_BORING_TURN.filter(t => t !== 'face mill');
 
 // Tool types where the UI shows taper_angle as "Included/Inclusive Tip Angle (°)"
 // (= 2 × the stored geometry.TA, edited bidirectionally with a ÷2 on input).
@@ -600,7 +607,7 @@ export const FIELD_REGISTRY = {
     fusionPath: null,             // derived from geometry.LCF + shaft.segments
     proShopColumn: null,
     metadataOnly: true,
-    appliesToTypes: NO_BORING_TURN,
+    appliesToTypes: REACH_TYPES,
     required: false,
     precision: 4,
   },
@@ -612,7 +619,7 @@ export const FIELD_REGISTRY = {
     fusionPath: null,
     proShopColumn: null,
     metadataOnly: true,
-    appliesToTypes: NO_BORING_TURN,
+    appliesToTypes: REACH_TYPES,
     required: false,
     precision: null,
   },
@@ -626,7 +633,7 @@ export const FIELD_REGISTRY = {
     fusionPath: null,
     proShopColumn: null,
     metadataOnly: true,
-    appliesToTypes: NO_BORING_TURN,
+    appliesToTypes: REACH_TYPES,
     required: false,
     precision: 4,
   },
