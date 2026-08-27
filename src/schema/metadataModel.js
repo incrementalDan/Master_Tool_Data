@@ -203,6 +203,9 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     // Reach / undercut are DERIVED from the shaft segments on every load (see
     // toolReach.js); these stored copies exist so the values are searchable and
     // so a tool whose shaft Fusion never drew can carry a hand-typed number.
+    // The shaft profile. Fusion-native, so Fusion wins for a linked tool; the
+    // metadata copy is the only store for a no-Fusion tool (complete record).
+    shaft_segments: fusionInternal.shaft_segments ?? meta.shaft_segments ?? null,
     reach: meta.reach ?? null,
     has_undercut: meta.has_undercut ?? null,
     undercut_diameter: meta.undercut_diameter ?? null,
@@ -374,6 +377,7 @@ export function buildMetadataTool(tool) {
     shoulder_length: tool.shoulder_length ?? null,
     ooh: tool.ooh ?? null,
     min_ooh: tool.min_ooh ?? null,
+    shaft_segments: tool.shaft_segments ?? null,
     reach: tool.reach ?? null,
     has_undercut: tool.has_undercut ?? null,
     undercut_diameter: tool.undercut_diameter ?? null,

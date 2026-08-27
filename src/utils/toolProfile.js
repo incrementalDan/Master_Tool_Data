@@ -47,6 +47,14 @@ export function tipKindFor(tool) {
  * Returns [] for a tool with none — the overwhelming majority.
  */
 export function shaftSegments(tool) {
+  // The app's own field first — it is what the editor writes and what
+  // fusionToolToInternal fills. The raw entry is the fallback for a tool built
+  // before that read existed.
+  if (Array.isArray(tool?.shaft_segments)) {
+    return tool.shaft_segments
+      .map((s) => ({ height: num(s?.height), lower: num(s?.lower), upper: num(s?.upper) }))
+      .filter((s) => s.height > 0);
+  }
   const raw = tool?._instancesRaw?.[0]?.shaft ?? tool?.shaft ?? null;
   const segs = Array.isArray(raw) ? raw : (raw?.segments || []);
   if (!Array.isArray(segs)) return [];

@@ -72,6 +72,16 @@ const SHORT = {
   diameter: 'Cut dia', shank_diameter: 'Shank', undercut_diameter: 'Undercut',
 };
 
+// A new segment continues from the face it attaches to — the top of the current
+// stack, or the cutting diameter when there is nothing there yet. Seeding it
+// with an arbitrary size would jump the profile and rescale the whole drawing.
+// (Same reasoning as the holder module's `seedSegmentAt`.)
+function newSegment(segs, profile) {
+  const top = segs.length ? segs[segs.length - 1] : null;
+  const dia = top ? top.upper : (profile.diameter || 0.25);
+  return { height: Math.max(0.05, (profile.total || 1) * 0.1), lower: dia, upper: dia };
+}
+
 // The undercut pill writes the OVERRIDE and lets the shared resolver work out
 // the effective values, so the modal cannot drift from what the load-time pass
 // would conclude for the same tool.
@@ -85,7 +95,11 @@ const applyUndercut = (d, v) => {
 const doubles = (field, toolType) => field === 'taper_angle' && INCLUSIVE_ANGLE_TYPES.has(toolType);
 
 export default function ToolProfileModal({ tool, onSave, onClose }) {
-  const [draft, setDraft] = useState(tool);
+  // ⚠️ Seed through the resolver, not from the tool as handed in. Reach and
+  // undercut are derived from the segments; a tool that has not been through
+  // the load-time pass would otherwise open with them blank — and, once the
+  // segments are editable here, the modal has to agree with what it is drawing.
+  const [draft, setDraft] = useState(() => ({ ...tool, ...resolveReachFields(tool) }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [hoverSeg, setHoverSeg] = useState(null);
@@ -96,11 +110,23 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
   const dims = useMemo(() => profileDimensions(draft.tool_type), [draft.tool_type]);
   const segs = useMemo(() => shaftSegments(draft), [draft]);
 
+  // Editing the shaft writes `shaft_segments` on the draft; the derived reach
+  // and undercut follow from it through the shared resolver, so the drawing and
+  // the dimensions move together as you type.
+  const setSegs = (next, append = false) => {
+    setDraft(d => {
+      const withSegs = { ...d, shaft_segments: next };
+      return { ...withSegs, ...resolveReachFields(withSegs) };
+    });
+    if (append) setHoverSeg(next.length - 1);
+  };
+
   const dirty = useMemo(
     () => [...dims.lengths, ...dims.diameters, ...dims.extras]
       .some(f => (draft[f] ?? null) !== (baseRef.current[f] ?? null)) ||
       (draft.has_undercut ?? null) !== (baseRef.current.has_undercut ?? null) ||
-      (draft.undercut_override ?? null) !== (baseRef.current.undercut_override ?? null),
+      (draft.undercut_override ?? null) !== (baseRef.current.undercut_override ?? null) ||
+      JSON.stringify(draft.shaft_segments ?? null) !== JSON.stringify(baseRef.current.shaft_segments ?? null),
     [draft, dims],
   );
 
@@ -429,33 +455,49 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
             <section className="tp-panel">
               <h4 className="tp-panel-title">
                 Shaft segments
-                <span className="tp-readonly"><Info size={11} /> from Fusion</span>
+                <button type="button" className="btn btn-ghost btn-sm tp-seg-add"
+                  onClick={() => setSegs([...segs, newSegment(segs, profile)], true)}>+ Add</button>
               </h4>
               {segs.length === 0 ? (
-                <p className="tp-empty">No shaft segments — the shank runs straight from the flutes.</p>
+                <p className="tp-empty">
+                  No shaft segments — the shank runs straight from the flutes.
+                  Add one when the tool arrives and gets measured.
+                </p>
               ) : (
                 <table className="tp-seg-table">
                   <thead>
-                    <tr><th>#</th><th>Height</th><th>Ø lower</th><th>Ø upper</th></tr>
+                    <tr><th>#</th><th>Height</th><th>Ø lower</th><th>Ø upper</th><th /></tr>
                   </thead>
                   <tbody>
-                    {/* Listed top-down, the way Fusion's own Shaft tab numbers
-                        them — the stored array is the reverse (tip-first). */}
-                    {segs.map((s, i) => segs.length - 1 - i).map(idx => {
-                      const s = segs[idx];
+                    {/* ⚠️ Listed TOP-DOWN, the way Fusion's own Shaft tab numbers
+                        them — the stored array is the reverse (tip-first). Every
+                        edit maps back through `storedIndex`; getting that wrong
+                        silently puts the segment on the other end of the tool. */}
+                    {segs.map((_, i) => segs.length - 1 - i).map((idx, row) => {
+                      const sg = segs[idx];
                       return (
                         <tr key={idx} data-active={hoverSeg === idx ? 'y' : undefined}
                           onMouseEnter={() => setHoverSeg(idx)} onMouseLeave={() => setHoverSeg(null)}>
-                          <td className="tp-seg-idx">{segs.length - idx}</td>
-                          <td>{s.height} {unit}</td>
-                          <td>{s.lower} {unit}</td>
-                          <td>{s.upper} {unit}</td>
+                          <td className="tp-seg-idx">{row + 1}</td>
+                          {['height', 'lower', 'upper'].map(k => (
+                            <td key={k}>
+                              <input type="number" step="0.001" className="tp-seg-input"
+                                value={sg[k] ?? ''}
+                                onChange={e => setSegs(segs.map((x, j) => j === idx
+                                  ? { ...x, [k]: e.target.value === '' ? 0 : Number(e.target.value) } : x))} />
+                            </td>
+                          ))}
+                          <td>
+                            <button type="button" className="tp-seg-del" title="Remove this segment"
+                              onClick={() => setSegs(segs.filter((_, j) => j !== idx))}>×</button>
+                          </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
               )}
+              <p className="tp-seg-note">{unit} · measured from the flutes upward</p>
             </section>
 
             <div className="tp-legend">

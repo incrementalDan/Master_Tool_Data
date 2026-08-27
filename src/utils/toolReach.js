@@ -102,9 +102,13 @@ export function deriveReach(tool) {
   if (tool?.tool_type && !fieldAppliesTo('reach', tool.tool_type)) {
     return { reach: null, neckDiameter: null, hasUndercut: null };
   }
-  const shaft = tool?._instancesRaw?.[0]?.shaft ?? tool?.shaft ?? null;
   const dia = num(tool?.diameter);
   const flute = num(tool?.flute_length);
+  // The app's own field first (what the editor writes), raw entry as fallback.
+  const shaft = Array.isArray(tool?.shaft_segments)
+    ? tool.shaft_segments.map(s => ({
+        height: s?.height, 'lower-diameter': s?.lower, 'upper-diameter': s?.upper }))
+    : (tool?._instancesRaw?.[0]?.shaft ?? tool?.shaft ?? null);
 
   const { present, neckLength, minDiameter } = readShaftNeck(shaft, dia);
   if (!present) return { reach: null, neckDiameter: null, hasUndercut: null };

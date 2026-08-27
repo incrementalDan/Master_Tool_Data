@@ -57,6 +57,35 @@ function approxEqual(a, b) {
   return Math.abs(a - b) <= Math.max(1e-9, 1e-6 * Math.max(Math.abs(a), Math.abs(b)));
 }
 
+// Fusion's shaft segment shape ↔ the app's. Kept in one place so the hyphenated
+// key names stay at the boundary.
+export function readShaftSegments(shaft) {
+  const segs = shaft?.segments;
+  if (!Array.isArray(segs)) return null;
+  return segs.map(s => ({
+    height: Number(s?.height) || 0,
+    lower: Number(s?.['lower-diameter']) || 0,
+    upper: Number(s?.['upper-diameter']) || 0,
+  }));
+}
+
+export function writeShaftSegments(segs) {
+  return (segs || []).map(s => ({
+    height: Number(s?.height) || 0,
+    'lower-diameter': Number(s?.lower) || 0,
+    'upper-diameter': Number(s?.upper) || 0,
+  }));
+}
+
+// True when two segment lists describe the same profile. Rounding only — a
+// value that survived a JSON round trip must not read as an edit.
+export function sameShaftSegments(a, b) {
+  const A = a || [], B = b || [];
+  if (A.length !== B.length) return false;
+  return A.every((s, i) => ['height', 'lower', 'upper']
+    .every(k => Math.abs((Number(s?.[k]) || 0) - (Number(B[i]?.[k]) || 0)) < 1e-9));
+}
+
 export function fusionToolToInternal(fTool) {
   const geo = fTool.geometry || {};
   const expr = fTool.expressions || {};
@@ -81,6 +110,13 @@ export function fusionToolToInternal(fTool) {
     tip_diameter: geo['tip-diameter'] || null,
     thread_pitch: geo.TP || null,
     shoulder_length: geo['shoulder-length'] || null,
+    // The shaft profile above the flutes, TIP-FIRST, in the tool's own unit.
+    // Read into the app's own shape so nothing downstream has to know Fusion's
+    // hyphenated key names. `null` (not []) when Fusion drew no shaft at all —
+    // that is a different state from "drew one with no segments", and it is
+    // what stops an empty `shaft` object being written onto a tool that never
+    // had one.
+    shaft_segments: readShaftSegments(fTool.shaft),
     material: fTool.BMC || 'carbide',
     tool_id: fTool['product-id'] || stripQuotes(expr.tool_productId) || '',
     product_link: fTool['product-link'] || stripQuotes(expr.tool_productLink) || '',
@@ -796,6 +832,23 @@ export function internalToFusionTool(tool) {
   } else {
     delete fusionObj.expressions.tool_inclusiveAngle;
   }
+  // ── shaft profile ─────────────────────────────────────────────────────────
+  // ⚠️ WRITTEN ONLY WHEN THE APP ACTUALLY CHANGED IT. Fusion's shaft data is
+  // good; there is nothing here for the app to fix, normalize or correct, and
+  // nothing derives it. This is a person having typed a number in our own
+  // editor — the same as diameter or flute length — and it reaches Fusion the
+  // same way. An untouched tool passes through byte-for-byte via ...existing.
+  //
+  // The `!= null` gate is what keeps an empty `shaft` object off the ~250 tools
+  // that never had one: null means "the app has no opinion", [] means "the user
+  // emptied it", and those are different states.
+  if (tool.shaft_segments != null
+      && !sameShaftSegments(tool.shaft_segments, readShaftSegments(existing.shaft))) {
+    const segs = writeShaftSegments(tool.shaft_segments);
+    if (segs.length) fusionObj.shaft = { ...(existing.shaft || {}), type: 'shaft', segments: segs };
+    else delete fusionObj.shaft;      // every segment removed → no shaft at all
+  }
+
   // Fusion writes a literal "<NEW TOOL GUID>" placeholder into reference_guid on
   // freshly-created/duplicated tools that haven't been saved into the library yet —
   // it tells Fusion to mint a brand-new guid for the entry on its next save,

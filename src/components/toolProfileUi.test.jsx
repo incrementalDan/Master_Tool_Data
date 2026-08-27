@@ -79,11 +79,20 @@ describe('the profile modal renders', () => {
     expect(html).not.toMatch(/NaN|Infinity/);
   });
 
-  it('shows the shaft segments as read-only, sourced from Fusion', () => {
+  it('renders the shaft segments as editable rows', () => {
+    // They were read-only in the first pass. Editing them in this app — rather
+    // than only in Fusion's own Shaft tab — is the point of the feature.
     const html = render(toolFor(byDesc('1mm (.039) 3FL EM .059LOC .203 REACH')));
-    expect(html).toContain('from Fusion');
-    // No input inside the segment table — they are Fusion's drawing of the tool.
-    const table = html.slice(html.indexOf('tp-seg-table'), html.indexOf('tp-legend'));
-    expect(table).not.toContain('<input');
+    const table = html.slice(html.indexOf('tp-seg-table'), html.indexOf('tp-seg-note'));
+    expect((table.match(/tp-seg-input/g) || []).length).toBe(6);   // 2 segments x 3 values
+    expect(html).toContain('+ Add');
+  });
+
+  it('opens showing the DERIVED reach and undercut, not a blank', () => {
+    // The modal resolves its own draft, so it agrees with the drawing even for
+    // a tool that has not been through the load-time pass.
+    const html = render(toolFor(byDesc('1mm (.039) 3FL EM .059LOC .203 REACH')));
+    expect(html).toContain('value="0.203"');   // reach
+    expect(html).toContain('value="0.038"');   // undercut diameter
   });
 });

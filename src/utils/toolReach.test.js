@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { readShaftNeck, deriveReach, resolveReachForTools, resolveReachFields, undercutDiameterHint } from './toolReach.js';
 import { internalToFusionTool, fusionToolToInternal } from '../schema/fusionConvert.js';
+import { splitToFusionInstances } from '../schema/logicalTools.js';
 import { buildDesc } from './toolNaming.js';
 import { applyFilters, getAvailableOptions } from '../services/searchEngine.js';
 
@@ -248,6 +249,99 @@ describe('the description names reach only when it beats the flute length', () =
   it('keeps the status marker last', () => {
     expect(buildDesc({ ...em, reach: '0.203', status: 'retired' }))
       .toBe(`${buildDesc(em)} .203 REACH RETIRED`);
+  });
+});
+
+describe('⚠️ SHAFT SEGMENTS: THE APP NEVER CHANGES THEM ON ITS OWN', () => {
+  // Fusion's shaft data is good — nothing in the app fixes, normalizes,
+  // corrects or derives it. The editor writes it because a PERSON typed a
+  // number, and only then. These tests are the guarantee.
+  it('a full load → save round trip alters not one segment, across the library', () => {
+    let checked = 0;
+    for (const e of LIB) {
+      const tool = { ...fusionToolToInternal(e), _fusionRaw: e };
+      const out = internalToFusionTool(tool);
+      expect(out.shaft, e.description).toEqual(e.shaft);
+      checked++;
+    }
+    expect(checked).toBe(LIB.length);
+  });
+
+  it('never puts a shaft on a tool that had none', () => {
+    const bare = LIB.filter(e => !e.shaft);
+    expect(bare.length).toBeGreaterThan(0);
+    for (const e of bare) {
+      const out = internalToFusionTool({ ...fusionToolToInternal(e), _fusionRaw: e });
+      expect('shaft' in out, e.description).toBe(false);
+    }
+  });
+
+  it('writes the profile when — and only when — it actually changed', () => {
+    const e = byDesc('1mm (.039) 3FL EM .059LOC .203 REACH');
+    const tool = { ...fusionToolToInternal(e), _fusionRaw: e };
+    // untouched
+    expect(internalToFusionTool(tool).shaft).toEqual(e.shaft);
+    // edited
+    const edited = { ...tool, shaft_segments: [{ height: 0.25, lower: 0.036, upper: 0.036 }] };
+    const out = internalToFusionTool(edited);
+    expect(out.shaft.segments).toEqual([
+      { height: 0.25, 'lower-diameter': 0.036, 'upper-diameter': 0.036 }]);
+    expect(out.shaft.type).toBe('shaft');
+  });
+
+  it('ADDS a profile to a tool that never had one — the measure-it-later case', () => {
+    // A tool is often created as a reference and the real shaft measured when
+    // it arrives. That has to work.
+    const e = LIB.find(t => !t.shaft && t.geometry?.DC);
+    const tool = { ...fusionToolToInternal(e), _fusionRaw: e,
+      shaft_segments: [{ height: 0.3, lower: 0.1, upper: 0.1 }] };
+    const out = internalToFusionTool(tool);
+    expect(out.shaft.segments).toHaveLength(1);
+  });
+
+  it('removing every segment removes the shaft, rather than writing an empty one', () => {
+    const e = byDesc('1mm (.039) 3FL EM .059LOC .203 REACH');
+    const out = internalToFusionTool({ ...fusionToolToInternal(e), _fusionRaw: e, shaft_segments: [] });
+    expect('shaft' in out).toBe(false);
+  });
+
+  it('float round-trip noise is not an edit', () => {
+    const e = byDesc('1mm (.039) 3FL EM .059LOC .203 REACH');
+    const tool = fusionToolToInternal(e);
+    // the same numbers, having been through JSON
+    const same = JSON.parse(JSON.stringify(tool.shaft_segments));
+    const out = internalToFusionTool({ ...tool, _fusionRaw: e, shaft_segments: same });
+    expect(out.shaft).toEqual(e.shaft);
+  });
+
+  it('⚠️ an edit reaches EVERY instance; an untouched save reaches none', () => {
+    // HARD RULE: instances differ only by holder and OOH. These are physical
+    // tools held to tight tolerance — a different shaft is a different tool.
+    // But two instances CAN disagree in a real library (2 tools do), so an
+    // ordinary save must not "heal" that by pushing one over the other: that
+    // would delete a real segment on a save about something else.
+    const e = byDesc('1mm (.039) 3FL EM .059LOC .203 REACH');
+    const raws = [e, { ...e, guid: 'second-instance' }];
+    const tool = {
+      ...fusionToolToInternal(e), id: 'FTL-TEST', tracking_id: 'FTL-TEST',
+      _instancesRaw: raws, _fusionRaw: e,
+      assemblies: [
+        { assembly_id: 'a1', instance_guid: e.guid, ooh: 0.6 },
+        { assembly_id: 'a2', instance_guid: 'second-instance', ooh: 0.9 },
+      ],
+    };
+
+    const untouched = splitToFusionInstances(tool).fusionInstances;
+    expect(untouched.length).toBe(2);
+    for (const inst of untouched) expect(inst.shaft).toEqual(e.shaft);
+
+    const editedList = splitToFusionInstances({
+      ...tool, shaft_segments: [{ height: 0.4, lower: 0.03, upper: 0.03 }] }).fusionInstances;
+    expect(editedList.length).toBe(2);
+    for (const inst of editedList) {
+      expect(inst.shaft.segments).toEqual([
+        { height: 0.4, 'lower-diameter': 0.03, 'upper-diameter': 0.03 }]);
+    }
   });
 });
 
