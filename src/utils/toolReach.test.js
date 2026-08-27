@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { readShaftNeck, deriveReach, backfillReach, undercutDiameterHint } from './toolReach.js';
 import { internalToFusionTool, fusionToolToInternal } from '../schema/fusionConvert.js';
 import { buildDesc } from './toolNaming.js';
+import { applyFilters, getAvailableOptions } from '../services/searchEngine.js';
 
 const LIB = JSON.parse(readFileSync(
   new URL('../../8-10-26 POST CLEAN UP PM FIX/ToolDEX - MASTER 8-10-26PM.json', import.meta.url), 'utf8',
@@ -231,5 +232,37 @@ describe('⚠️ THE APP MUST NOT CHANGE WHAT IS IN FUSION', () => {
       checked++;
     }
     expect(checked).toBe(LIB.length);
+  });
+});
+
+describe('reach and undercut as search facets', () => {
+  const T = (o) => ({ tool_type: 'flat end mill', unit: 'inches', diameter: 0.25, assemblies: [], presets: [], ...o });
+  const tools = [
+    T({ id: 'a', reach: 0.203, has_undercut: true }),
+    T({ id: 'b', reach: 0.5 }),
+    T({ id: 'c' }),                        // nobody has said
+    T({ id: 'd', has_undercut: false }),   // answered: no
+  ];
+  const F = (facets) => applyFilters(tools, { facets }).map(t => t.id);
+
+  it('matches a reach within tolerance', () => {
+    expect(F({ reach: '0.203' })).toEqual(['a']);
+    expect(F({ reach: '0.2030004' })).toEqual(['a']);   // float noise absorbed
+    expect(F({ reach: '0.25' })).toEqual([]);
+  });
+
+  it('⚠️ leaves the UNANSWERED out of both Yes and No', () => {
+    // `null` is "nobody has looked at this tool", which is not a No — the same
+    // distinction flute_design draws between blank and None.
+    expect(F({ has_undercut: 'Yes' })).toEqual(['a']);
+    expect(F({ has_undercut: 'No' })).toEqual(['d']);
+  });
+
+  it('offers no options at all when nobody has answered', () => {
+    // This is what lets the facet hide itself instead of drawing a dead
+    // "0 available" box on every landing page — see FacetControl.
+    const none = [T({ id: 'x' }), T({ id: 'y' })];
+    expect(getAvailableOptions(none, { facets: {} }, 'has_undercut').options).toEqual([]);
+    expect(getAvailableOptions(tools, { facets: {} }, 'has_undercut').options).toEqual(['No', 'Yes']);
   });
 });

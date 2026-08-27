@@ -147,6 +147,17 @@ function FacetControl({ field, label, tools, activeFilters, value, onChange, tol
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  // ⚠️ A facet with nothing to offer renders NOTHING. Cascading facets narrow as
+  // you filter, and one that reaches zero options was still drawing its label
+  // over an empty "0 available" box — a control that cannot do anything, and the
+  // widest one in the row. Most visible on a field that is empty by design until
+  // somebody answers it (Undercut is never auto-set — see "Reach & undercut"),
+  // but it also cleared two long-standing dead boxes (Flute Design, Cuts).
+  // ⚠️ It must stay visible while it holds an ACTIVE value, or a filter narrow
+  // enough to empty its own facet could never be cleared.
+  const hasValue = Array.isArray(value) ? value.length > 0 : !isFacetEmpty(value);
+  if (options.length === 0 && !hasValue) return null;
+
   // A numeric facet in '=' mode holds an ARRAY of discrete values (multi-select,
   // e.g. show 1/4" AND 1/2" tools); in range mode ('<='/'>=') it holds a single
   // { value, op } bound. matchesFacet ORs the array, so both shapes just work.

@@ -34,6 +34,20 @@ describe('demo data', () => {
     const segged = tools.filter(t => (t._instancesRaw || []).some(r => r?.shaft?.segments?.length));
     expect(segged.length).toBeGreaterThanOrEqual(1);
 
+    // ⚠️ A preset guid may repeat across the INSTANCES of one logical tool —
+    // presets are replicated onto every instance by design — but never across
+    // two different logical tools. `preset_meta` is keyed by guid, so a demo
+    // tool built by copying another one silently shared its presets' identity.
+    const owner = new Map();
+    for (const t of tools) {
+      for (const p of t.presets || []) {
+        if (p?.guid) {
+          expect(owner.get(p.guid) ?? t.id, `preset guid ${p.guid} shared across tools`).toBe(t.id);
+          owner.set(p.guid, t.id);
+        }
+      }
+    }
+
     // covers the requested core types
     const types = new Set(tools.map(t => t.tool_type));
     for (const want of ['flat end mill','ball end mill','drill','tap','boring head','thread mill'])

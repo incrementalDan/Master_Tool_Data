@@ -64,6 +64,21 @@ describe('the profile modal renders', () => {
     }
   });
 
+  it('never draws a dimension leader pointing at an empty box', () => {
+    // An undercut can be flagged without anyone measuring it. Falling back to
+    // the derived hint drew a dimension for a value the record does not hold.
+    const html = render({ ...toolFor(byDesc('1mm (.039) 3FL EM .059LOC .203 REACH')),
+      has_undercut: true, undercut_diameter: null });
+    expect(html.match(/value=""/g)).toBeNull();
+  });
+
+  it('renders a millimetres tool in millimetres', () => {
+    const e = byDesc('1mm (.039) 3FL EM .059LOC .203 REACH');
+    const html = render({ ...toolFor(e), unit: 'millimeters', diameter: 1, flute_length: 1.5, overall_length: 63, shank_diameter: 3 });
+    expect(html).toContain('mm');
+    expect(html).not.toMatch(/NaN|Infinity/);
+  });
+
   it('shows the shaft segments as read-only, sourced from Fusion', () => {
     const html = render(toolFor(byDesc('1mm (.039) 3FL EM .059LOC .203 REACH')));
     expect(html).toContain('from Fusion');

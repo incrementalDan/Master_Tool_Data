@@ -570,7 +570,7 @@ export default function ToolDetail() {
             per-field choices reset when navigating between tools. */}
         {!noFusion && (
           <DriftBanner
-            key={tool.id}
+            key={`drift-${tool.id}`}
             tool={tool}
             authority={fusionAuthority}
             isSaving={isSaving}
@@ -700,7 +700,7 @@ export default function ToolDetail() {
             Purchasing). Everything below stays shared. */}
         {pairing && (
           <PairingSections
-            key={tool.id}
+            key={`pairing-${tool.id}`}
             tool={tool}
             pairing={pairing}
             stored={!!storedPairing}

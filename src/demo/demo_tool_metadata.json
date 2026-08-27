@@ -836,7 +836,7 @@
     "purchasing": {
       "manufacturers": [
         {
-          "id": "667121eb-ac31-4034-8a72-1619266b696c",
+          "id": "63af1de9-0eeb-488e-be53-99908b3f538e",
           "name": "Helical Solutions",
           "edp": "59424",
           "edp_url": "",
@@ -847,8 +847,8 @@
       ],
       "vendors": [
         {
-          "id": "0d04f8ee-3cb4-4330-8cf1-d508e11891ae",
-          "manufacturer_id": "667121eb-ac31-4034-8a72-1619266b696c",
+          "id": "2de255a9-a899-49b8-a33b-52bb42bb818c",
+          "manufacturer_id": "63af1de9-0eeb-488e-be53-99908b3f538e",
           "name": "MSC Industrial",
           "vendor_num": "09876543",
           "vendor_num_url": "",
@@ -856,8 +856,8 @@
           "order": 0
         },
         {
-          "id": "6a0f28b4-1a11-49b1-a5d6-6f9b29eb773d",
-          "manufacturer_id": "667121eb-ac31-4034-8a72-1619266b696c",
+          "id": "c3546b5f-0420-44cb-b0ff-a54cbe486750",
+          "manufacturer_id": "63af1de9-0eeb-488e-be53-99908b3f538e",
           "name": "Butler Brothers",
           "vendor_num": "",
           "vendor_num_url": "",
@@ -900,12 +900,12 @@
     "created_at": "2026-05-01T12:00:00.000Z",
     "updated_at": "2026-05-01T12:00:00.000Z",
     "preset_meta": {
-      "a91e80ea-a826-447e-bad1-5a010253e3a3": {
+      "dbb1520e-8f36-4812-943d-d2cc82644fd8": {
         "operation_ids": [
           "prg-demo-0001"
         ]
       },
-      "71cd26da-f7b2-447d-8c07-107c4953669e": {}
+      "aaa8e95b-c3d0-4c45-92b8-f152ce38b242": {}
     },
     "tool_id": "A-265"
   }

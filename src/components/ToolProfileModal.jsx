@@ -200,7 +200,12 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
     .filter(r => r.kind === 'segment')
     .reduce((m, r) => (m == null || Math.min(r.dBottom, r.dTop) < Math.min(m.dBottom, m.dTop) ? r : m), null);
   if (draft.has_undercut && narrowest && dims.diameters.includes('undercut_diameter')) {
-    pushDia('undercut_diameter', draft.undercut_diameter ?? undercutDiameterHint(draft),
+    // ⚠️ The STORED value only — never the hint. An undercut can be flagged
+    // without anyone measuring it, and falling back to the hint drew a
+    // dimension leader pointing at an empty box: the drawing asserting a
+    // number the record does not hold. No dimension beats a wrong one; the
+    // Cutter panel still says Undercut: Yes.
+    pushDia('undercut_diameter', draft.undercut_diameter,
       (narrowest.y0 + narrowest.y1) / 2, halfAt(Math.min(narrowest.dBottom, narrowest.dTop)));
   }
   const shankRegion = profile.regions.find(r => r.kind === 'shank');
