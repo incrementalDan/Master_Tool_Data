@@ -20,7 +20,7 @@ import {
   CLASS_OF_FIT_OPTIONS, CLASS_OF_FIT_DEFAULT, threadUnitOf,
 } from '../schema/toolSchema.js';
 import { unitAbbr } from '../utils/units.js';
-import { undercutDiameterHint } from '../utils/toolReach.js';
+import { undercutDiameterHint, reachIsDerived } from '../utils/toolReach.js';
 import InfoTip from './InfoTip.jsx';
 
 const STEP = {
@@ -183,6 +183,24 @@ export default function ToolFields({
     // having measured it), so an empty box next to a "No" pill would be asking
     // for the diameter of something that isn't there. Hidden in BOTH modes, so
     // turning the pill on is what makes the box appear.
+    // ⚠️ REACH IS ARITHMETIC — flute length plus the neck — so wherever Fusion
+    // drew a shaft it is a read-out, exactly like the undercut diameter below.
+    // It was an input here while the field beside it was not: typing a reach on
+    // a segmented tool looked like it worked and the next load re-derived it
+    // away. Editable only where there are no segments to derive it from.
+    if (field === 'reach' && edit && reachIsDerived(tool)) {
+      return (
+        <div className="field-group" key={field}>
+          <label className="field-label">{label}</label>
+          <div className="field-readout">
+            {tool.reach != null
+              ? <>{fmtNum(tool.reach, def.precision)} {unitAbbr(tool.unit)}</>
+              : <span className="text-sub">no reach past the flutes</span>}
+            <span className="field-hint"> · from the shaft segments</span>
+          </div>
+        </div>
+      );
+    }
     if (field === 'undercut_diameter' && !tool.has_undercut) return null;
     // ⚠️ Where the segments show the neck, the diameter IS that number — a fact
     // from Fusion, like the segments themselves. Rendering it as an input would
@@ -219,6 +237,7 @@ export default function ToolFields({
       }
       const prop0 = propFor(field);
       const overridden = tool.undercut_override != null;
+      const derived = reachIsDerived(tool);
       return (
         <div className={`field-group ${prop0 ? `has-proposal proposal-${prop0.status}` : ''}`} key={field}>
           <label className="field-label">
@@ -229,14 +248,23 @@ export default function ToolFields({
                 onClick={() => setField('undercut_override', null)}>↺ Auto</button>
             )}
           </label>
+          {/* ⚠️ THREE STATES, NOT TWO. `null` means Fusion drew no shaft, so
+              the app genuinely cannot say — and `!!null === false` lit the "No"
+              button, asserting an answer nobody had gone and got. A strict
+              compare leaves both unlit until someone (or the segments) answers. */}
           <div className="btn-toggle">
             {[[true, 'Yes'], [false, 'No']].map(([v, l]) => (
-              <button key={l} type="button" className={!!tool.has_undercut === v ? 'active' : ''}
+              <button key={l} type="button" className={tool.has_undercut === v ? 'active' : ''}
                 onClick={() => setField('undercut_override', v)}>{l}</button>
             ))}
           </div>
           {!overridden && (
-            <span className="field-hint">From the shaft segments</span>
+            // ⚠️ Only true where there ARE segments. Saying it on a tool with no
+            // drawn shaft points at data that does not exist, and hides the fact
+            // that the question is genuinely open.
+            <span className="field-hint">
+              {derived ? 'From the shaft segments' : 'Fusion drew no shaft — nothing to derive it from'}
+            </span>
           )}
           {strip(field)}
         </div>

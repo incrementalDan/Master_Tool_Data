@@ -249,3 +249,57 @@ describe('every sync path carries the shaft, the same as the diameter', () => {
     expect(fieldLabel('shaft_segments', 'inches')).toBe('Shaft Profile (in)');
   });
 });
+
+// ─── The third checklist question, applied to the shaft: what happens on the
+// SECOND run? An edit has to land on every instance, survive the round trip,
+// and then have nothing left to do.
+
+describe('an edited profile lands once and then stops', () => {
+  const { groups } = groupByTrackingId(LIB);
+  const grp = [...groups.values()].find(raws => raws.some(e => e.guid === SEG.guid));
+  const EDIT = [{ height: 0.20, lower: 0.038, upper: 0.038 },
+                { height: 0.0753, lower: 0.038, upper: 0.125 }];
+  const metaMap = (tool) => new Map([[
+    tool.tracking_id, buildMetadataTool({ ...tool, shaft_segments: EDIT })]]);
+
+  it('reaches EVERY instance — a shaft is shared, like the diameter', async () => {
+    const { buildLogicalTool, splitToFusionInstances } = await import('./logicalTools.js');
+    const tool = buildLogicalTool(grp, new Map());
+    const { fusionInstances: out } = splitToFusionInstances({ ...tool, shaft_segments: EDIT }, [], []);
+    expect(out.length).toBeGreaterThan(0);
+    for (const e of out) expect(e.shaft.segments[0].height).toBe(0.2);
+  });
+
+  it('survives the round trip back in', async () => {
+    const { buildLogicalTool, splitToFusionInstances } = await import('./logicalTools.js');
+    const tool = buildLogicalTool(grp, new Map());
+    const { fusionInstances: written } = splitToFusionInstances({ ...tool, shaft_segments: EDIT }, [], []);
+    const back = buildLogicalTool(written, metaMap(tool));
+    expect(back.shaft_segments).toEqual(EDIT);
+  });
+
+  it('⚠️ the SECOND save writes the same bytes — nothing left to do', async () => {
+    const { buildLogicalTool, splitToFusionInstances } = await import('./logicalTools.js');
+    const tool = buildLogicalTool(grp, new Map());
+    const { fusionInstances: w1 } = splitToFusionInstances({ ...tool, shaft_segments: EDIT }, [], []);
+    const back = buildLogicalTool(w1, metaMap(tool));
+    const { fusionInstances: w2 } = splitToFusionInstances(back, [], []);
+    expect(w2.map(e => e.shaft)).toEqual(w1.map(e => e.shaft));
+  });
+
+  it('and raises no drift against the entries it just wrote', async () => {
+    const { buildLogicalTool, splitToFusionInstances } = await import('./logicalTools.js');
+    const tool = buildLogicalTool(grp, new Map());
+    const { fusionInstances: written } = splitToFusionInstances({ ...tool, shaft_segments: EDIT }, [], []);
+    const back = buildLogicalTool(written, metaMap(tool));
+    const drift = detectFusionDrift(written.map(fusionToolToInternal), buildMetadataTool(back));
+    expect(drift.filter(d => d.field === 'shaft_segments')).toEqual([]);
+  });
+
+  it('emptying the profile removes the shaft object rather than leaving a husk', async () => {
+    const { buildLogicalTool, splitToFusionInstances } = await import('./logicalTools.js');
+    const tool = buildLogicalTool(grp, new Map());
+    const { fusionInstances: out } = splitToFusionInstances({ ...tool, shaft_segments: [] }, [], []);
+    for (const e of out) expect(e.shaft).toBeUndefined();
+  });
+});

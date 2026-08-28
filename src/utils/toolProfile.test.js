@@ -2,7 +2,7 @@
 // Shaft tab (a test tool the shop built with three added segments).
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { buildToolProfile, shaftSegments, canDrawProfile, tipKindFor, profileDimensions } from './toolProfile.js';
+import { buildToolProfile, shaftSegments, shaftRows, canDrawProfile, tipKindFor, profileDimensions } from './toolProfile.js';
 
 const LIB = JSON.parse(readFileSync(
   new URL('../../8-10-26 POST CLEAN UP PM FIX/ToolDEX - MASTER 8-10-26PM.json', import.meta.url), 'utf8',
@@ -35,8 +35,36 @@ describe('the stack Fusion draws', () => {
   it('reads segments tip-first, so the neck sits directly above the flutes', () => {
     // Fusion's Shaft TAB numbers them top-down; the JSON array is the reverse.
     const segs = shaftSegments(toolFor(byDesc('1mm (.039) 3FL EM .059LOC .203 REACH')));
-    expect(segs[0]).toEqual({ height: 0.144, lower: 0.038, upper: 0.038 });
+    expect(segs[0]).toEqual({ height: 0.144, lower: 0.038, upper: 0.038, index: 0 });
     expect(segs[1].upper).toBe(0.125);                   // blends up to the shank
+  });
+
+  // ⚠️ THE EDITOR AND THE DRAWING MUST NOT READ THE SAME LIST TWO WAYS. The
+  // drawing drops a zero-height segment (it has no region); the editor keeps
+  // every stored row, because a height goes momentarily blank on every retype
+  // and dropping the row there deleted the segment. `index` is what keeps the
+  // two pointing at the same thing.
+  it('the editor keeps every row; only the drawing drops a zero-height one', () => {
+    const tool = { tool_type: 'flat end mill', unit: 'inches', diameter: 0.5, flute_length: 1,
+      shaft_segments: [
+        { height: 0.2, lower: 0.4, upper: 0.4 },
+        { height: 0, lower: 0.4, upper: 0.5 },
+        { height: 0.3, lower: 0.5, upper: 0.5 }] };
+    expect(shaftRows(tool)).toHaveLength(3);
+    const drawn = shaftSegments(tool);
+    expect(drawn).toHaveLength(2);
+    expect(drawn.map(s => s.index)).toEqual([0, 2]);      // stored positions, not 0,1
+    expect(buildToolProfile(tool).regions
+      .filter(r => r.kind === 'segment').map(r => r.index)).toEqual([0, 2]);
+  });
+
+  it('the editor read survives a row the drawing cannot use', () => {
+    // Whatever is stored comes back, so an edit writes the whole list back
+    // rather than a filtered copy of it.
+    const tool = { tool_type: 'flat end mill', unit: 'inches', diameter: 0.5,
+      shaft_segments: [{ height: 0, lower: 0, upper: 0 }] };
+    expect(shaftRows(tool)).toEqual([{ height: 0, lower: 0, upper: 0 }]);
+    expect(shaftSegments(tool)).toEqual([]);
   });
 
   it('keeps a taper as a trapezoid, not a step', () => {

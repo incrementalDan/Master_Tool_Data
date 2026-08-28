@@ -43,27 +43,39 @@ export function tipKindFor(tool) {
 }
 
 /**
- * Read the raw Fusion shaft segments off a tool, tip-first, as plain numbers.
- * Returns [] for a tool with none — the overwhelming majority.
+ * EVERY stored shaft segment, tip-first, as plain numbers — nothing dropped.
+ * Returns [] for a tool with none (the overwhelming majority).
+ *
+ * ⚠️ THIS IS THE EDITOR'S READ. `shaftSegments` below drops a zero-height row
+ * because it cannot be DRAWN; using that filtered list as the base a table
+ * edits and writes back is what silently deleted a segment the moment its
+ * height went momentarily blank — which is every retype (a number input reports
+ * `''` for partial text like "."). A read filter for the drawing must never
+ * govern editing.
  */
-export function shaftSegments(tool) {
-  // The app's own field first — it is what the editor writes and what
-  // fusionToolToInternal fills. The raw entry is the fallback for a tool built
-  // before that read existed.
+export function shaftRows(tool) {
   if (Array.isArray(tool?.shaft_segments)) {
     return tool.shaft_segments
-      .map((s) => ({ height: num(s?.height), lower: num(s?.lower), upper: num(s?.upper) }))
-      .filter((s) => s.height > 0);
+      .map((s) => ({ height: num(s?.height), lower: num(s?.lower), upper: num(s?.upper) }));
   }
   const raw = tool?._instancesRaw?.[0]?.shaft ?? tool?.shaft ?? null;
   const segs = Array.isArray(raw) ? raw : (raw?.segments || []);
   if (!Array.isArray(segs)) return [];
-  return segs
-    .map((s) => ({
-      height: num(s?.height),
-      lower: num(s?.['lower-diameter']),
-      upper: num(s?.['upper-diameter']),
-    }))
+  return segs.map((s) => ({
+    height: num(s?.height),
+    lower: num(s?.['lower-diameter']),
+    upper: num(s?.['upper-diameter']),
+  }));
+}
+
+/**
+ * The DRAWABLE shaft segments — `shaftRows` minus anything with no height,
+ * which has no region to draw. Each keeps `index`, its position in the stored
+ * array, so the drawing and the editor's table refer to the same segment.
+ */
+export function shaftSegments(tool) {
+  return shaftRows(tool)
+    .map((s, index) => ({ ...s, index }))
     .filter((s) => s.height > 0);
 }
 
@@ -88,10 +100,13 @@ export function buildToolProfile(tool) {
   }
 
   let y = flute;
-  segs.forEach((s, i) => {
+  segs.forEach((s) => {
     regions.push({
       kind: 'segment',
-      index: i,
+      // ⚠️ The segment's index in the STORED array, not its position among the
+      // drawable ones — it is what the editor's table hovers by, and a
+      // zero-height row between them would otherwise offset every highlight.
+      index: s.index,
       y0: y,
       y1: y + s.height,
       dBottom: s.lower || dia,

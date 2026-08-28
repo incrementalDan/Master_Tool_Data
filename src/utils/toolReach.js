@@ -123,6 +123,25 @@ export function deriveReach(tool) {
 }
 
 /**
+ * Did Fusion draw a shaft this tool's reach can be derived FROM?
+ *
+ * ⚠️ The question is whether there are segments to read, NOT whether a reach
+ * came out of them: a drawn shaft whose first segment is already wider than the
+ * cut has an answer, and the answer is "no reach past the flutes". Either way
+ * the number is arithmetic and re-derived on every load, so the field must be a
+ * READ-OUT — an input there accepts a value the next load silently discards.
+ * It becomes editable only where Fusion drew no shaft at all.
+ */
+export function reachIsDerived(tool) {
+  if (tool?.tool_type && !fieldAppliesTo('reach', tool.tool_type)) return false;
+  const shaft = Array.isArray(tool?.shaft_segments)
+    ? tool.shaft_segments.map(s => ({
+        height: s?.height, 'lower-diameter': s?.lower, 'upper-diameter': s?.upper }))
+    : (tool?._instancesRaw?.[0]?.shaft ?? tool?.shaft ?? null);
+  return readShaftNeck(shaft, tool?.diameter).present;
+}
+
+/**
  * The diameter to offer when someone turns the undercut on for a tool whose
  * segments do not show one. `null` when there is nothing to read back.
  */

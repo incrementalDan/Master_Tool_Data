@@ -24,7 +24,7 @@
 // drawing is labelled NTS rather than pretending otherwise.
 import { useState, useMemo, useRef } from 'react';
 import { X, Ruler, Info } from 'lucide-react';
-import { buildToolProfile, profileDimensions, shaftSegments } from '../utils/toolProfile.js';
+import { buildToolProfile, profileDimensions, shaftRows } from '../utils/toolProfile.js';
 import { FIELD_REGISTRY, fieldLabel, INCLUSIVE_ANGLE_TYPES } from '../schema/fieldRegistry.js';
 import { unitAbbr } from '../utils/units.js';
 import { undercutDiameterHint, resolveReachFields, deriveReach } from '../utils/toolReach.js';
@@ -108,7 +108,14 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
   const unit = unitAbbr(draft.unit);
   const profile = useMemo(() => buildToolProfile(draft), [draft]);
   const dims = useMemo(() => profileDimensions(draft.tool_type), [draft.tool_type]);
-  const segs = useMemo(() => shaftSegments(draft), [draft]);
+  // ⚠️ THE EDITOR READS EVERY STORED ROW (`shaftRows`), never the drawing's
+  // filtered list. See shaftRows — editing off the filtered read deleted a
+  // segment the instant its height went momentarily blank.
+  const segs = useMemo(() => shaftRows(draft), [draft]);
+  // The text being typed into one cell, keyed "storedIndex-field". A number
+  // input reports `''` for partial text (".", "-", "1e"), so the raw string has
+  // to be held somewhere or the field fights every retype.
+  const [cell, setCell] = useState(null);
 
   // Editing the shaft writes `shaft_segments` on the draft; the derived reach
   // and undercut follow from it through the shared resolver, so the drawing and
@@ -479,17 +486,36 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
                         <tr key={idx} data-active={hoverSeg === idx ? 'y' : undefined}
                           onMouseEnter={() => setHoverSeg(idx)} onMouseLeave={() => setHoverSeg(null)}>
                           <td className="tp-seg-idx">{row + 1}</td>
-                          {['height', 'lower', 'upper'].map(k => (
-                            <td key={k}>
-                              <input type="number" step="0.001" className="tp-seg-input"
-                                value={sg[k] ?? ''}
-                                onChange={e => setSegs(segs.map((x, j) => j === idx
-                                  ? { ...x, [k]: e.target.value === '' ? 0 : Number(e.target.value) } : x))} />
-                            </td>
-                          ))}
+                          {['height', 'lower', 'upper'].map(k => {
+                            const id = `${idx}-${k}`;
+                            return (
+                              <td key={k}>
+                                {/* ⚠️ A BLANK CELL IS MID-EDIT, NOT A ZERO. The
+                                    field shows what is being typed; the stored
+                                    number only moves when the text is a real
+                                    one, so "." on the way to ".2" no longer
+                                    writes 0 (which used to delete the row).
+                                    Leaving a cell blank snaps it back to its
+                                    last good value — removing a segment is what
+                                    the × is for. */}
+                                <input type="number" step="0.001" className="tp-seg-input"
+                                  value={cell?.id === id ? cell.text : (sg[k] ?? '')}
+                                  onFocus={() => setCell({ id, text: String(sg[k] ?? '') })}
+                                  onBlur={() => setCell(null)}
+                                  onChange={e => {
+                                    const text = e.target.value;
+                                    setCell({ id, text });
+                                    const n = Number(text);
+                                    if (text !== '' && Number.isFinite(n)) {
+                                      setSegs(segs.map((x, j) => (j === idx ? { ...x, [k]: n } : x)));
+                                    }
+                                  }} />
+                              </td>
+                            );
+                          })}
                           <td>
                             <button type="button" className="tp-seg-del" title="Remove this segment"
-                              onClick={() => setSegs(segs.filter((_, j) => j !== idx))}>×</button>
+                              onClick={() => { setCell(null); setHoverSeg(null); setSegs(segs.filter((_, j) => j !== idx)); }}>×</button>
                           </td>
                         </tr>
                       );
