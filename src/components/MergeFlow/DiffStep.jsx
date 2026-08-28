@@ -9,8 +9,9 @@ import {
 } from '../../utils/presetMerge.js';
 import { useApp } from '../../context/AppContext.jsx';
 import InfoTip from '../InfoTip.jsx';
+import { formatShaftSegments } from '../../utils/toolProfile.js';
 
-const DIFF_SECTIONS = [
+export const DIFF_SECTIONS = [
   {
     title: 'Identity',
     key: 'identity',
@@ -23,6 +24,11 @@ const DIFF_SECTIONS = [
     icon: Ruler,
     fields: [
       'diameter', 'flute_length', 'overall_length', 'number_of_flutes',
+      // The shaft profile is DEFINING GEOMETRY, not an add-on — it is what
+      // makes the CAM model match the real tool, and what Fusion's collision
+      // detection runs on. A job may be where the real shaft finally got
+      // measured, so it belongs in the diff with the diameter and the OAL.
+      'shaft_segments',
       'shank_diameter', 'corner_radius', 'shoulder_length', 'tip_angle',
       'taper_angle', 'tip_diameter', 'lower_radius', 'upper_radius',
       'profile_radius', 'axial_distance',
@@ -76,8 +82,12 @@ const EXCLUDED = new Set([
   'cutting_speed', 'depth_of_cut', 'width_of_cut',
 ]);
 
-function formatValue(v) {
+export function formatValue(v) {
   if (v === null || v === undefined || v === '') return '—';
+  // ⚠️ A list of OBJECTS (the shaft profile) joins to "[object Object]", which
+  // reads as corrupted data on the one screen where the user is deciding which
+  // geometry is right. Same renderer the drift banner uses.
+  if (Array.isArray(v) && v.some(x => x && typeof x === 'object')) return formatShaftSegments(v);
   if (Array.isArray(v)) return v.length ? v.join(', ') : '—';
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
   const n = Number(v);

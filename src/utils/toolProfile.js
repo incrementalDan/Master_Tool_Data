@@ -151,3 +151,18 @@ export function profileDimensions(toolType) {
     extras: forType(EXTRA_DIMS, toolType),
   };
 }
+
+// ⚠️ A SEGMENT LIST HAS TO RENDER SOMEWHERE — `String([{…}])` is "[object
+// Object]", which reads as corrupted data rather than as a profile. Every
+// screen that shows the shaft as a VALUE (the drift banner, the Sync Job diff)
+// goes through this one function, so the two can never describe the same
+// geometry differently. The full numbers stay one click away in the Tool
+// Profile; this is the summary.
+export function formatShaftSegments(segs) {
+  if (!Array.isArray(segs)) return '\u2014';
+  if (!segs.length) return 'none';
+  const r = (n) => String(Math.round((Number(n) || 0) * 10000) / 10000);
+  const one = (s) => `${r(s?.height)}\u00d7\u2300${r(s?.lower)}`
+    + (Math.abs(Number(s?.upper) - Number(s?.lower)) > 1e-9 ? `\u2192\u2300${r(s.upper)}` : '');
+  return `${segs.length} seg: ${segs.map(one).join(', ')}`;
+}

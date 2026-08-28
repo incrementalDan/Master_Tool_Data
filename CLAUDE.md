@@ -1061,6 +1061,31 @@ Fusion splits a tool across four tabs (General / Cutter / Shaft / Holder), so no
 
 ### Editing the shaft segments
 
+⚠️ **THE SHAFT PROFILE IS DEFINING GEOMETRY — the same class of field as the cut diameter or the overall length, not an add-on.** Fusion's UI makes it look optional (its own tab, off to the side, most tools without one), and the app ignored it entirely until now — but a tool whose real shank is narrower than Fusion thinks is a tool that crashes, and the shop used to carry that difference as tribal knowledge because CAM had no collision detection to catch it. Recording it accurately is what moves the surprise from the machine (where it costs money) to CAM (where it costs nothing).
+
+**The practical test, and it is the one to run on any new code touching it:** *every path that carries the diameter must carry the shaft.* Each of these was a real hole found by asking exactly that:
+
+| Path | What was wrong |
+|---|---|
+| `fusionToolToInternal` / `internalToFusionTool` | — (built with the feature) |
+| `splitToFusionInstances` | — (`shaftEdited`, below) |
+| `buildMetadataTool` / `mergeFusionAndMetadata` | — (built with the feature) |
+| **`DRIFT_FIELDS` + `driftEqual`** | an array needs its own compare — see below |
+| **`sharedSignature`** (reconcile) | a stray with a different shaft read as a duplicate |
+| **`DIFF_SECTIONS`** (Sync Job) | absent from the Geometry diff — the one screen where the user decides which geometry wins |
+| **`parseIncoming`** (clipboard TSV) | the column was written but never read, so a pasted job tool arrived with **no** shaft — which then diffs as *deleted* |
+| **`buildFusionTsv`** (clipboard/CSV out) | read the raw Fusion entry, so an app edit exported the OLD profile and a no-Fusion tool exported **none** |
+| **`valuesEqual`** | sorted and stringified arrays — `[object Object]`, and sorting throws away the tip-first order that IS the geometry |
+| **`combineToolsByToolId`** | `isPrim` excluded every array, so two records sharing a ProShop number that disagreed about the shaft merged silently |
+| **`fieldRegistry`** | no entry → `fieldLabel` returned undefined and the banner showed the raw key |
+| ProShop export/import | **correctly absent** — ProShop has no shaft column and never did |
+| Spec-sheet extraction | **correctly absent** — the proposal machinery is scalar; a segment list from a scan is deferred |
+
+⚠️ **A SEGMENT LIST RENDERS THROUGH ONE FUNCTION** — `formatShaftSegments` (`toolProfile.js`), used by both the drift banner and the Sync Job diff, so the two can never describe the same geometry differently. `String([{…}])` is `[object Object]`, which reads as corrupted data on exactly the screens where someone is deciding which profile is right.
+
+⚠️ **THE APP'S PROFILE IS CANONICAL, NOT PER-INSTANCE** — in the TSV export as everywhere else, the same as the diameter (which has always come from the tool, never from each raw entry). Instances that disagree are surfaced by the drift path; they are never silently split across two exports.
+
+
 ⚠️ **FUSION'S SHAFT DATA IS GOOD — THERE IS NOTHING HERE FOR THE APP TO FIX.** Most of this app's features exist to correct or complete Fusion data. This one does not. The app previously ignored shaft segments entirely and they were edited in Fusion only; this is the same capability with a better UI than Fusion's disconnected Shaft tab. **Nothing derives, normalizes, corrects or warns about a segment.** A person types a number and saves, exactly like diameter or flute length.
 
 **Tools get segments LATER, and that has to work** — the shop often creates a tool as a reference and measures the real shaft when it arrives. Adding a profile to a tool that has none is a first-class case, not an edge one.

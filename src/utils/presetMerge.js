@@ -65,7 +65,22 @@ export function presetTolerance(field, a, b, unit) {
 
 export function valuesEqual(a, b) {
   if (a === b) return true;
-  if (Array.isArray(a) && Array.isArray(b)) return JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+  if (Array.isArray(a) && Array.isArray(b)) {
+    // ⚠️ A list of OBJECTS is compared in order and field by field. The generic
+    // branch below sorts and stringifies, which is right for a tag list and
+    // wrong for shaft segments: sorting throws away the tip-first ordering that
+    // IS the geometry, and stringifying objects compares "[object Object]".
+    if (a.some(v => v && typeof v === 'object') || b.some(v => v && typeof v === 'object')) {
+      if (a.length !== b.length) return false;
+      return a.every((x, i) => {
+        const y = b[i];
+        if (!x || !y || typeof x !== 'object' || typeof y !== 'object') return x === y;
+        const keys = new Set([...Object.keys(x), ...Object.keys(y)]);
+        return [...keys].every(k => valuesEqual(x[k], y[k]));
+      });
+    }
+    return JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
+  }
   const isEmpty = v => v === null || v === undefined || v === '' || (Array.isArray(v) && v.length === 0);
   if (isEmpty(a) && isEmpty(b)) return true;
   const na = Number(a), nb = Number(b);

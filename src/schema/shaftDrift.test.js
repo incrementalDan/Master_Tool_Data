@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { detectFusionDrift, mergeSharedFieldsWithFusion, buildMetadataTool } from './metadataModel.js';
-import { fusionToolToInternal } from './fusionConvert.js';
+import { fusionToolToInternal, sameShaftSegments } from './fusionConvert.js';
 import { groupByTrackingId } from './identity.js';
 
 const LIB = JSON.parse(readFileSync(
@@ -129,5 +129,123 @@ describe('reconcile-on-open sees a changed shaft too', () => {
       && new Set(g.map(e => stripShaft(sharedSignature(e)))).size === 1
       && new Set(g.map(sharedSignature)).size > 1);
     expect(newlySplit).toHaveLength(2);
+  });
+});
+
+// ─── The shaft is DEFINING GEOMETRY — every path that carries the diameter
+// carries it too. Each case below was a real hole: the profile silently
+// vanished, or two records that disagreed about it were merged without a word.
+
+describe('every sync path carries the shaft, the same as the diameter', () => {
+  const tsv = (cols, vals) => [cols.join('\t'), vals.join('\t')].join('\n');
+  const HDR = ['"Type (tool_type)"', '"Description (tool_description)"', '"Diameter (tool_diameter)"'];
+
+  it('the Fusion clipboard/TSV paste path parses the segment column', async () => {
+    const { parseIncoming } = await import('../services/mergeQueue.js');
+    const [tool] = parseIncoming(tsv(
+      [...HDR, '"Shaft Segments (shaft_segments)"'],
+      ['flat end mill', '.039 EM', '0.039',
+        'H0.144000 U0.038000 L0.038000; H0.075300 U0.125000 L0.038000'],
+    ));
+    expect(tool.shaft_segments).toEqual([
+      { height: 0.144, lower: 0.038, upper: 0.038 },
+      { height: 0.0753, lower: 0.038, upper: 0.125 },
+    ]);
+  });
+
+  it('a tool with no segment column pastes as "no opinion", not as an empty shaft', async () => {
+    const { parseIncoming } = await import('../services/mergeQueue.js');
+    const [tool] = parseIncoming(tsv(HDR, ['flat end mill', '.5 EM', '0.5']));
+    expect(tool.shaft_segments).toBeNull();
+  });
+
+  it('the TSV round trip is lossless for every segmented tool in the library', async () => {
+    const { parseFusionTsvSegments } = await import('../utils/fusionExport.js');
+    const { readShaftSegments, writeShaftSegments } = await import('./fusionConvert.js');
+    const segmented = LIB.filter(t => t.shaft?.segments?.length);
+    expect(segmented.length).toBeGreaterThan(0);
+    for (const entry of segmented) {
+      const internal = readShaftSegments(entry.shaft);
+      const tsvStr = writeShaftSegments(internal)
+        .map(s => `H${s.height.toFixed(6)} U${s['upper-diameter'].toFixed(6)} L${s['lower-diameter'].toFixed(6)}`)
+        .join('; ');
+      // ⚠️ The TSV writes 6 decimals, so the round trip is lossy BY DESIGN —
+      // compared at the same tolerance a JSON round trip gets, not exactly.
+      expect(sameShaftSegments(parseFusionTsvSegments(tsvStr), internal, 1e-5)).toBe(true);
+    }
+  });
+
+  it('the Sync Job diff shows it in Geometry, beside the diameter', async () => {
+    const { DIFF_SECTIONS } = await import('../components/MergeFlow/DiffStep.jsx');
+    const geo = DIFF_SECTIONS.find(s => /geometry/i.test(s.title));
+    expect(geo.fields).toContain('shaft_segments');
+    expect(geo.fields).toContain('diameter');
+  });
+
+  it('two records sharing a ProShop number that disagree on the shaft are FLAGGED', async () => {
+    const { combineToolsByToolId } = await import('./combine.js');
+    const a = { id: 'A', tool_id: 'A-1', tool_type: 'flat end mill', diameter: 0.5,
+      shaft_segments: [{ height: 0.5, lower: 0.5, upper: 0.5 }], assemblies: [], presets: [] };
+    const b = { ...a, id: 'B',
+      shaft_segments: [{ height: 0.9, lower: 0.3, upper: 0.5 }] };
+    const [merged] = combineToolsByToolId([a, b]);
+    expect(merged._combineConflicts.map(c => c.field)).toContain('shaft_segments');
+  });
+
+  it('⚠️ two records that AGREE raise nothing — the arrays are compared, not their identity', async () => {
+    const { combineToolsByToolId } = await import('./combine.js');
+    const segs = () => [{ height: 0.5, lower: 0.5, upper: 0.5 }];
+    const a = { id: 'A', tool_id: 'A-1', tool_type: 'flat end mill', diameter: 0.5,
+      shaft_segments: segs(), assemblies: [], presets: [] };
+    const b = { ...a, id: 'B', shaft_segments: segs() };   // equal, different array
+    const [merged] = combineToolsByToolId([a, b]);
+    expect(merged._combineConflicts || []).toEqual([]);
+  });
+
+  it('⚠️ renders as a readable profile, never "[object Object]"', async () => {
+    const { formatShaftSegments } = await import('../utils/toolProfile.js');
+    const segs = [{ height: 0.144, lower: 0.038, upper: 0.038 },
+                  { height: 0.0753, lower: 0.038, upper: 0.125 }];
+    const text = formatShaftSegments(segs);
+    expect(text).not.toMatch(/object Object/);
+    expect(text).toContain('2 seg');
+    expect(text).toContain('0.144');
+    expect(text).toContain('0.125');
+    expect(formatShaftSegments([])).toBe('none');
+    expect(formatShaftSegments(null)).toBe('\u2014');
+  });
+
+  it('the Sync Job diff and the drift banner word it identically', async () => {
+    const { formatShaftSegments } = await import('../utils/toolProfile.js');
+    const { formatValue } = await import('../components/MergeFlow/DiffStep.jsx');
+    const segs = [{ height: 0.5, lower: 0.3, upper: 0.5 }];
+    expect(formatValue(segs)).toBe(formatShaftSegments(segs));
+  });
+
+  it('⚠️ the TSV copy carries the APP\u2019s profile, not the stale raw one', async () => {
+    const { buildFusionTsv } = await import('../utils/fusionExport.js');
+    const tsvOut = buildFusionTsv([{
+      ...fusionToolToInternal(SEG),
+      _instancesRaw: [withShaft(SEG, [                       // Fusion still holds the OLD shaft
+        { height: 9.99, 'lower-diameter': 0.5, 'upper-diameter': 0.5 }])],
+      shaft_segments: [{ height: 0.144, lower: 0.038, upper: 0.038 }],     // edited here
+    }]);
+    expect(tsvOut).toContain('H0.144000');
+    expect(tsvOut).not.toContain('H9.990000');
+  });
+
+  it('a tool with NO Fusion entry still exports its shaft', async () => {
+    const { buildFusionTsv } = await import('../utils/fusionExport.js');
+    const tsvOut = buildFusionTsv([{
+      ...fusionToolToInternal(SEG),
+      _instancesRaw: [], _fusionRaw: null, no_fusion_link: true,
+      shaft_segments: [{ height: 0.25, lower: 0.1, upper: 0.2 }],
+    }]);
+    expect(tsvOut).toContain('H0.250000');
+  });
+
+  it('the drift banner has a label for it, not the raw key', async () => {
+    const { fieldLabel } = await import('./fieldRegistry.js');
+    expect(fieldLabel('shaft_segments', 'inches')).toBe('Shaft Profile (in)');
   });
 });

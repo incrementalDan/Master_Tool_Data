@@ -586,6 +586,30 @@ export const FIELD_REGISTRY = {
     precision: 4,
   },
 
+  // ⚠️ THE SHAFT PROFILE IS DEFINING GEOMETRY, not an add-on. Fusion presents it
+  // as a separate tab and the app ignored it for years, but it is what makes the
+  // CAM model match the real tool — and what Fusion's collision detection runs
+  // on. Before it existed, the difference between the model and the real tool
+  // was tribal knowledge carried in a machinist's head, and getting it wrong
+  // crashed the machine. Catching that in CAM costs nothing. So it is synced,
+  // diffed and conflict-flagged exactly like the diameter or the overall length.
+  //
+  // It is registered for its LABEL and its type — it has no place in the scalar
+  // form grids (it is a list, edited in the Tool Profile), so it is deliberately
+  // absent from GEOMETRY_FIELDS.
+  shaft_segments: {
+    label: 'Shaft Profile',
+    type: 'segments',
+    unit: 'length',
+    canonicalUnit: 'native',
+    fusionPath: 'shaft.segments',
+    proShopColumn: null,
+    metadataOnly: false,
+    appliesToTypes: REACH_TYPES,
+    required: false,
+    precision: 4,
+  },
+
   // ── Reach & undercut (the necked-down shank above the flutes) ─────────────
   // A "reach" tool keeps its cutting diameter (or a hair under it) for some
   // distance ABOVE the flutes, so it can drop into a deep pocket without the
