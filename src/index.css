@@ -4920,6 +4920,11 @@ input.sf-ref-num { text-align: right; }
      colour — the flutes — is what the eye lands on. The amber matches the
      colour Fusion itself gives the cutting portion, so the drawing reads as
      familiar rather than as a second convention. */
+  /* The holder-face datum. Burnt orange — distinctly redder than the golden
+     flutes (#d8a13c) so a thin dashed line never reads as part of the cutting
+     portion, and lifted a little because a 1.75px dash needs more luminance to
+     carry on the dark ground than a filled region does. */
+  --tp-holder-line: #d2703a;
   --tp-flute: #d8a13c;
   --tp-flute-edge: #f0be62;
   --tp-shoulder: #4d6f74;
@@ -6733,16 +6738,17 @@ input.sf-ref-num { text-align: right; }
 .tp-dimline { stroke: var(--tp-dim-line); stroke-width: 1; }
 /* ⚠️ THE HOLDER FACE IS A DATUM, NOT A DIMENSION — so it must not read as one.
    In the dimension grey it disappeared over the tool body and its overhang was
-   indistinguishable from a diameter leader crossing at the same height. The
-   holder teal is the app's own word for "holder" (the same token the holder
-   pills use), so the line says what it is without a legend. */
+   indistinguishable from a diameter leader crossing at the same height. Its own
+   burnt-orange token carries it, and the value box wears the same colour so the
+   line and its label read as one thing. Thicker than a dimension line for the
+   same reason: a datum is a plane, not a measurement. */
 .tp-holder-line {
-  stroke: var(--holder-default); stroke-width: 1.25;
-  stroke-dasharray: 5 4; opacity: 0.85;
+  stroke: var(--tp-holder-line); stroke-width: 1.75;
+  stroke-dasharray: 6 4; opacity: 0.95;
 }
-.tp-dimbox-holder .tp-dimbox-label { color: var(--holder-default); }
+.tp-dimbox-holder .tp-dimbox-label { color: var(--tp-holder-line); }
 .tp-dimbox-holder .tp-dimbox-input {
-  border-color: color-mix(in srgb, var(--holder-default) 45%, transparent);
+  border-color: color-mix(in srgb, var(--tp-holder-line) 50%, transparent);
 }
 .tp-dim[data-muted='y'] { opacity: 0.55; transition: opacity 0.12s ease; }
 
