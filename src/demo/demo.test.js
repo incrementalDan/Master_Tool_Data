@@ -3,7 +3,7 @@ import { groupByTrackingId, buildLogicalTool, combineToolsByToolId } from '../sc
 import { getDemoData } from './index.js';
 
 describe('demo data', () => {
-  it('builds 12 logical tools with metadata attached', () => {
+  it('builds 13 logical tools with metadata attached', () => {
     const { fusionList, metaList, holders } = getDemoData();
     const metaByTracking = new Map(metaList.map(m => [m.id, m]));
     const { groups, untracked } = groupByTrackingId(fusionList);
@@ -13,7 +13,7 @@ describe('demo data', () => {
     const tools = combineToolsByToolId(built);
 
     expect(untracked.length).toBe(0);          // all demo tools are tracked
-    expect(tools.length).toBe(12);
+    expect(tools.length).toBe(14);
     expect(holders.length).toBeGreaterThan(0);
 
     for (const t of tools) {
@@ -28,6 +28,36 @@ describe('demo data', () => {
     }
     // two tools demonstrate multiple assemblies
     expect(tools.filter(t => t.assemblies.length >= 2).length).toBe(2);
+    // ⚠️ One demo tool carries SHAFT SEGMENTS (A-265, the long-reach micro end
+    // mill). Without it, reach, undercut and the whole Tool Profile drawing are
+    // invisible in demo mode — which is where they get looked at.
+    const segged = tools.filter(t => (t._instancesRaw || []).some(r => r?.shaft?.segments?.length));
+    expect(segged.length).toBeGreaterThanOrEqual(1);
+    // ⚠️ And one of them is METRIC (B-301). The app must be right for an
+    // mm-default shop, and until this tool existed there was no metric tool in
+    // the demo AT ALL — so every unit-flavoured default, step and display
+    // precision in the profile was unreachable where things get looked at.
+    const metricSegged = segged.filter(t => t.unit === 'millimeters');
+    expect(metricSegged.length).toBeGreaterThanOrEqual(1);
+    for (const t of metricSegged) {
+      // Nothing converts: the segments stay in the tool's own unit.
+      expect(t.shaft_segments.every(s => s.height > 1)).toBe(true);   // mm-sized, not inch numbers
+    }
+
+    // ⚠️ A preset guid may repeat across the INSTANCES of one logical tool —
+    // presets are replicated onto every instance by design — but never across
+    // two different logical tools. `preset_meta` is keyed by guid, so a demo
+    // tool built by copying another one silently shared its presets' identity.
+    const owner = new Map();
+    for (const t of tools) {
+      for (const p of t.presets || []) {
+        if (p?.guid) {
+          expect(owner.get(p.guid) ?? t.id, `preset guid ${p.guid} shared across tools`).toBe(t.id);
+          owner.set(p.guid, t.id);
+        }
+      }
+    }
+
     // covers the requested core types
     const types = new Set(tools.map(t => t.tool_type));
     for (const want of ['flat end mill','ball end mill','drill','tap','boring head','thread mill'])

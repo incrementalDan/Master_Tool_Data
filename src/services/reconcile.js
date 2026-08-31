@@ -51,6 +51,15 @@ export function sharedSignature(raw) {
     ta: r4(geo.TA),
     sig: r4(geo.SIG), tp: r6(geo.TP),
     material: raw.BMC || '',
+    // ⚠️ THE SHAFT PROFILE IS PART OF THE SHARED SIGNATURE. Instances of one
+    // logical tool differ only by holder and OOH — a different shaft is a
+    // different tool. Left out, a stray entry whose shaft had been edited in
+    // Fusion classified as a plain duplicate or a new assembly, and was then
+    // silently adopted or deleted with the difference never shown. In it, the
+    // stray is a CONFLICT and goes to the Sync Job diff to be ruled on, which
+    // is the only honest answer: the app cannot know which profile is right.
+    shaft: (raw.shaft?.segments || []).map(sg => [
+      r4(sg?.height), r4(sg?.['lower-diameter']), r4(sg?.['upper-diameter'])]),
     pid: raw['product-id'] || '', presets,
   });
 }

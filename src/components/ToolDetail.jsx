@@ -3,9 +3,11 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Pencil, Download, FileDown, FileUp, Copy, Trash2, GitMerge,
   Ruler, StickyNote, Clock, Wrench, AlertTriangle, Camera,
-  ChevronDown, ChevronRight, FileJson, MapPin, Link2, Unlink, CloudOff,
+  ChevronDown, ChevronRight, FileJson, MapPin, Link2, Unlink, CloudOff, Shapes,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
+import ToolProfileModal from './ToolProfileModal.jsx';
+import { canDrawProfile } from '../utils/toolProfile.js';
 import LocationPicker from './LocationPicker.jsx';
 import StatusBadge from './StatusBadge.jsx';
 import AssemblyCard from './AssemblyCard.jsx';
@@ -69,6 +71,7 @@ export default function ToolDetail() {
   const [reconcileResults, setReconcileResults] = useState(null);
   const [showPhotoUpload, setShowPhotoUpload] = useState(false);
   const [showProShopImport, setShowProShopImport] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const [promoteLibId, setPromoteLibId] = useState(null); // non-null = target-library picker open
 
   // True while the inline preset editor has unsaved changes — used to warn
@@ -411,6 +414,12 @@ export default function ToolDetail() {
         <div className="tool-sidebar-divider" />
         <SidebarBtn icon={Pencil} label="Edit" tip="Edit this tool" onClick={guardLeave(() => setEditing(true))} />
         <SidebarBtn icon={Copy} label="Duplicate" tip="Duplicate tool" onClick={handleClone} />
+        {/* The whole tool on one drawing. Additive — the Geometry section is
+            untouched. Hidden for the types whose shape this cannot draw. */}
+        {canDrawProfile(tool.tool_type) && (
+          <SidebarBtn icon={Shapes} label="Profile" tip="See and edit the whole tool as a dimensioned drawing"
+            onClick={guardLeave(() => setShowProfile(true))} />
+        )}
         {/* Sync Job is a Fusion-library workflow — hidden for a no-Fusion tool. */}
         {!noFusion && (
           <SidebarBtn icon={GitMerge} label="Sync Job" tip="Sync proven values from a job file" onClick={() => navigate(`/merge/${tool.id}`)} />
@@ -561,7 +570,7 @@ export default function ToolDetail() {
             per-field choices reset when navigating between tools. */}
         {!noFusion && (
           <DriftBanner
-            key={tool.id}
+            key={`drift-${tool.id}`}
             tool={tool}
             authority={fusionAuthority}
             isSaving={isSaving}
@@ -691,7 +700,7 @@ export default function ToolDetail() {
             Purchasing). Everything below stays shared. */}
         {pairing && (
           <PairingSections
-            key={tool.id}
+            key={`pairing-${tool.id}`}
             tool={tool}
             pairing={pairing}
             stored={!!storedPairing}
@@ -712,7 +721,7 @@ export default function ToolDetail() {
                   Holder Body / Insert sections above.
                 </div>
               )}
-              <ToolFields tool={tool} mode="view" />
+              <ToolFields tool={tool} mode="view" onOpenProfile={() => setShowProfile(true)} />
               {geoIssues.length > 0 && (
                 <div className="warn-banner" style={{ marginTop: 8 }}>
                   {geoIssues.map((issue, i) => (
@@ -923,6 +932,17 @@ export default function ToolDetail() {
               }
             }}
             onCancel={() => setShowExportPicker(null)}
+          />
+        )}
+
+        {showProfile && (
+          <ToolProfileModal
+            tool={tool}
+            onClose={() => setShowProfile(false)}
+            onSave={async (updated) => {
+              await saveTool(updated);
+              notify('Geometry saved', 'success');
+            }}
           />
         )}
 

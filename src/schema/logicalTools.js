@@ -5,7 +5,7 @@ import {
   generateId, generateAssemblyId, readTrackingId, readOohFromFusion,
   applyMachineNumberToFusion,
 } from './identity.js';
-import { fusionToolToInternal, internalToFusionTool } from './fusionConvert.js';
+import { fusionToolToInternal, internalToFusionTool, readShaftSegments, sameShaftSegments } from './fusionConvert.js';
 import { mergeFusionAndMetadata, buildMetadataTool, detectFusionDrift } from './metadataModel.js';
 import { buildHolderObject } from './holderGauge.js';
 import { resolveHolderForWrite, assemblyGaugeCheck, gaugeToleranceIn } from './holderResolve.js';
@@ -495,6 +495,23 @@ export function splitToFusionInstances(tool, holders = [], holderRecords = null,
       }];
 
   const rawByGuid = new Map((tool._instancesRaw || []).map(r => [r.guid, r]));
+
+  // ⚠️ DID A PERSON EDIT THE SHAFT? Decided ONCE, against the profile the app
+  // READ — not per instance.
+  //
+  // Fusion's shaft data is good and nothing in the app derives or corrects it,
+  // so an ordinary save must leave every instance exactly as it found it. Two
+  // instances of one logical tool CAN disagree in a real library (measured: 2
+  // tools do), and comparing per instance would quietly resolve that by writing
+  // whichever profile the app read as canonical over the other — deleting a
+  // real segment on a save that was about something else entirely.
+  //
+  // So: unchanged → write nothing, anywhere, and each instance keeps its own.
+  // Edited → the new profile goes to EVERY instance, because instances differ
+  // only by holder and OOH; a different shaft would be a different tool.
+  const shaftEdited = tool.shaft_segments != null
+    && !sameShaftSegments(tool.shaft_segments, readShaftSegments(
+      (tool._instancesRaw || [])[0]?.shaft ?? tool._fusionRaw?.shaft));
   // assembly key → { holder_guid?, holder_id? } corrections the write implies:
   // a merged-away guid re-pointed at the survivor, and/or the app-side FK
   // re-stamped from whatever the holder actually resolved to.
@@ -534,6 +551,12 @@ export function splitToFusionInstances(tool, holders = [], holderRecords = null,
 
     const base = internalToFusionTool({
       ...tool,
+      // ⚠️ THE SHAFT IS DECIDED ONCE, FOR THE WHOLE TOOL — see shaftEdited above.
+      // Comparing per instance would let an ordinary save "heal" two instances
+      // that disagree, by pushing whichever one the app happened to read as
+      // canonical over the other. That is the app changing Fusion on its own,
+      // and it would silently delete a real segment.
+      shaft_segments: shaftEdited ? tool.shaft_segments : null,
       shoulder_length: instShoulder,
       id: instanceGuid,
       tracking_id,

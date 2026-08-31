@@ -1,4 +1,4 @@
-import { internalToFusionTool, buildHolderObject } from '../schema/toolSchema.js';
+import { internalToFusionTool, buildHolderObject, writeShaftSegments } from '../schema/toolSchema.js';
 import { convertLength } from './units.js';
 
 // ─── JSON export (file downloads and library writes) ────────────────────────
@@ -152,6 +152,30 @@ const round6 = (n) => Math.round(n * 1e6) / 1e6;
 // separated list of "H<height> U<upper-diameter> L<lower-diameter>" segments,
 // expressed in the tool's unit — NOT as JSON. Pasting JSON into these columns
 // makes Fusion silently drop the shaft/holder, so the assembly loses its holder.
+// The inverse. Fusion's clipboard carries the profile in this format, and the
+// app wrote it for years without ever reading it back — so a tool pasted from
+// Fusion as TSV arrived with NO shaft, which is worse than invisible once the
+// diff compares it: the tool looks like its profile was deleted.
+export function parseFusionTsvSegments(str) {
+  const text = String(str ?? '').trim();
+  if (!text) return null;
+  const segs = [];
+  for (const part of text.split(';')) {
+    const t = part.trim();
+    if (!t) continue;
+    const h = /H\s*(-?[\d.]+)/i.exec(t);
+    const u = /U\s*(-?[\d.]+)/i.exec(t);
+    const l = /L\s*(-?[\d.]+)/i.exec(t);
+    if (!h && !u && !l) continue;
+    segs.push({
+      height: h ? Number(h[1]) : 0,
+      lower: l ? Number(l[1]) : 0,
+      upper: u ? Number(u[1]) : 0,
+    });
+  }
+  return segs.length ? segs : null;
+}
+
 function segmentsToFusionTsv(segments, factor = 1) {
   return (segments || [])
     .map(s => `H${((Number(s.height) || 0) * factor).toFixed(6)}`
@@ -332,11 +356,20 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
     S(169, tsvBool(useStepover));
 
     // Col 170: shaft (shank) segments — needed for Fusion to show the shank profile.
-    // Use the raw entry for this assembly's instance, falling back to canonical.
-    // Raw shaft segments are already in the tool's unit (factor 1).
+    // ⚠️ THE APP'S OWN PROFILE WINS, exactly as it does for the diameter. Reading
+    // only the raw Fusion entry meant a shaft edited here but not yet written
+    // exported the OLD profile, and a tool with no Fusion entry at all exported
+    // NO shaft — the geometry silently absent from the copy. The raw entry is the
+    // fallback for a tool the app has no opinion on. Segments are already in the
+    // tool's unit (factor 1). ⚠️ The app's profile is CANONICAL, not per-instance —
+    // the same as the diameter, which this export has always taken from the tool
+    // rather than from each raw entry. Instances that disagree are surfaced by the
+    // drift path, never silently split across two exports.
     const instanceRaw = (tool._instancesRaw || []).find(r => r.guid === assembly?.instance_guid) || tool._fusionRaw;
     const shaftRaw = instanceRaw?.shaft;
-    if (shaftRaw) {
+    if (Array.isArray(tool.shaft_segments)) {
+      if (tool.shaft_segments.length) S(170, tsvStr(segmentsToFusionTsv(writeShaftSegments(tool.shaft_segments), 1)));
+    } else if (shaftRaw) {
       const shaftSegs = Array.isArray(shaftRaw) ? shaftRaw : (shaftRaw.segments ?? shaftRaw);
       S(170, tsvStr(segmentsToFusionTsv(shaftSegs, 1)));
     }
@@ -350,7 +383,7 @@ function toolToTsvRows(tool, holders, assembly, toolIndex) {
   });
 }
 
-function buildFusionTsv(tools, holders = [], assembly = null) {
+export function buildFusionTsv(tools, holders = [], assembly = null) {
   const rows = [FUSION_TSV_HDR];
   let idx = 1;
   tools.forEach((tool) => {

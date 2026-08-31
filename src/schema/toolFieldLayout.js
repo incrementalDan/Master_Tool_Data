@@ -56,7 +56,9 @@ export function groupedToolTypes(allTypes) {
 // has bespoke controls), so it is NOT listed in these generic grids.
 export const GEOMETRY_FIELDS = [
   'diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'shank_diameter',
-  'corner_radius', 'shoulder_length', 'tip_angle', 'taper_angle', 'tip_diameter',
+  'shaft_segments',
+  'corner_radius', 'shoulder_length', 'reach', 'has_undercut', 'undercut_diameter',
+  'tip_angle', 'taper_angle', 'tip_diameter',
   'lower_radius', 'upper_radius', 'profile_radius', 'axial_distance',
   'min_ooh', 'cutting_direction', 'custom_grind',
 ];
@@ -101,6 +103,16 @@ export function coatingOptions(tools = []) {
 // Refine this set as needed — it is the one knob for "what may disappear".
 export const VIEW_HIDE_WHEN_EMPTY = new Set([
   'custom_grind',   // a "No" custom grind is the default and just noise
+  // Most tools reach exactly as far as their flutes and have no ground-back
+  // neck, so an empty Reach / "No" Undercut row on every tool in the library is
+  // wallpaper. They appear the moment they carry an answer.
+  'reach',
+  'has_undercut',
+  'undercut_diameter',
+  // Most tools have a plain shank, so a "no profile" row on every one of them
+  // is wallpaper. It appears the moment a tool carries segments — which is the
+  // point: outside the Tool Profile there was nothing saying it had any.
+  'shaft_segments',
 ]);
 
 // Render-control kind for a generic field (the thread cluster is handled apart).

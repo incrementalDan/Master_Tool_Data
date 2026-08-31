@@ -20,6 +20,8 @@ import {
   CLASS_OF_FIT_OPTIONS, CLASS_OF_FIT_DEFAULT, threadUnitOf,
 } from '../schema/toolSchema.js';
 import { unitAbbr } from '../utils/units.js';
+import { undercutDiameterHint, reachIsDerived } from '../utils/toolReach.js';
+import { shaftRows, formatShaftSegments } from '../utils/toolProfile.js';
 import InfoTip from './InfoTip.jsx';
 
 const STEP = {
@@ -159,6 +161,7 @@ const DATALIST_FALLBACK = {
 export default function ToolFields({
   tool, mode, setField, geoIssueFields,
   proposals = null, onResolveProposal = null, listOptions = null,
+  onOpenProfile = null,
 }) {
   const sections = getToolFieldSections(tool.tool_type);
   const edit = mode === 'edit';
@@ -176,6 +179,130 @@ export default function ToolFields({
     const label = labelFor(field, tool);
     let raw = tool[field];
     if (showsDoubled(field, tool) && raw != null) raw = raw * 2;
+
+    // ⚠️ THE UNDERCUT DIAMETER ONLY EXISTS WHILE THERE IS AN UNDERCUT. It is
+    // optional even then (the shop often knows the neck is ground back without
+    // having measured it), so an empty box next to a "No" pill would be asking
+    // for the diameter of something that isn't there. Hidden in BOTH modes, so
+    // turning the pill on is what makes the box appear.
+    // ⚠️ REACH IS ARITHMETIC — flute length plus the neck — so wherever Fusion
+    // drew a shaft it is a read-out, exactly like the undercut diameter below.
+    // It was an input here while the field beside it was not: typing a reach on
+    // a segmented tool looked like it worked and the next load re-derived it
+    // away. Editable only where there are no segments to derive it from.
+    if (field === 'reach' && edit && reachIsDerived(tool)) {
+      return (
+        <div className="field-group" key={field}>
+          <label className="field-label">{label}</label>
+          <div className="field-readout">
+            {tool.reach != null
+              ? <>{fmtNum(tool.reach, def.precision)} {unitAbbr(tool.unit)}</>
+              : <span className="text-sub">no reach past the flutes</span>}
+            <span className="field-hint"> · from the shaft segments</span>
+          </div>
+        </div>
+      );
+    }
+    if (field === 'undercut_diameter' && !tool.has_undercut) return null;
+    // ⚠️ Where the segments show the neck, the diameter IS that number — a fact
+    // from Fusion, like the segments themselves. Rendering it as an input would
+    // let someone type a value that the next load silently re-derives away.
+    if (field === 'undercut_diameter' && edit && undercutDiameterHint(tool) != null) {
+      return (
+        <div className="field-group" key={field}>
+          <label className="field-label">{label}</label>
+          <div className="field-readout">
+            {fmtNum(tool.undercut_diameter, def.precision)} {unitAbbr(tool.unit)}
+            <span className="field-hint"> · from the shaft segments</span>
+          </div>
+        </div>
+      );
+    }
+
+    // The undercut pill — Yes/No, not a checkbox, because it reads at a glance
+    // on the tool page next to the other geometry badges.
+    //
+    // ⚠️ IT WRITES `undercut_override`, NOT `has_undercut`. The effective value
+    // is DERIVED from the shaft segments on every load (a neck narrower than
+    // the cut IS an undercut); this is the shop overriding that answer, and the
+    // two have to stay distinguishable or a re-derive would look like a manual
+    // choice. `↺ Auto` clears the override and hands the field back to Fusion.
+    if (field === 'has_undercut') {
+      if (!edit) {
+        if (!tool.has_undercut) return null;   // see VIEW_HIDE_WHEN_EMPTY
+        return (
+          <div className="detail-field" key={field}>
+            <div className="detail-field-label">{label}</div>
+            <div><span className="undercut-pill">Undercut</span></div>
+          </div>
+        );
+      }
+      const prop0 = propFor(field);
+      const overridden = tool.undercut_override != null;
+      const derived = reachIsDerived(tool);
+      return (
+        <div className={`field-group ${prop0 ? `has-proposal proposal-${prop0.status}` : ''}`} key={field}>
+          <label className="field-label">
+            {label}
+            {overridden && (
+              <button type="button" className="btn btn-ghost btn-sm undercut-auto"
+                title="Clear the override and take the answer from the shaft segments again"
+                onClick={() => setField('undercut_override', null)}>↺ Auto</button>
+            )}
+          </label>
+          {/* ⚠️ THREE STATES, NOT TWO. `null` means Fusion drew no shaft, so
+              the app genuinely cannot say — and `!!null === false` lit the "No"
+              button, asserting an answer nobody had gone and got. A strict
+              compare leaves both unlit until someone (or the segments) answers. */}
+          <div className="btn-toggle">
+            {[[true, 'Yes'], [false, 'No']].map(([v, l]) => (
+              <button key={l} type="button" className={tool.has_undercut === v ? 'active' : ''}
+                onClick={() => setField('undercut_override', v)}>{l}</button>
+            ))}
+          </div>
+          {!overridden && (
+            // ⚠️ Only true where there ARE segments. Saying it on a tool with no
+            // drawn shaft points at data that does not exist, and hides the fact
+            // that the question is genuinely open.
+            <span className="field-hint">
+              {derived ? 'From the shaft segments' : 'Fusion drew no shaft — nothing to derive it from'}
+            </span>
+          )}
+          {strip(field)}
+        </div>
+      );
+    }
+
+    // ⚠️ THE SHAFT PROFILE IS A LIST, EDITED IN THE TOOL PROFILE — so it is a
+    // read-out here in BOTH modes, never a field. It is on this page at all
+    // because outside that modal there was nothing saying a tool had a profile:
+    // its neck is defining geometry, and it was invisible beside the diameter
+    // and the OAL it belongs with. Hidden when there is none (most tools) —
+    // a "no profile" row on the whole library is wallpaper.
+    if (field === 'shaft_segments') {
+      const rows = shaftRows(tool);
+      if (!rows.length) return null;
+      const summary = formatShaftSegments(rows, tool.unit);
+      const hint = <div className="field-hint">edited in the Tool Profile</div>;
+      return edit ? (
+        <div className="field-group" key={field}>
+          <label className="field-label">{label}</label>
+          <div className="field-readout">{summary}</div>
+          {hint}
+        </div>
+      ) : (
+        <div className="detail-field" key={field}>
+          <div className="detail-field-label">{label}</div>
+          <div className="detail-field-value">
+            {onOpenProfile
+              ? <button type="button" className="link-btn" onClick={onOpenProfile}
+                  title="Open the Tool Profile">{summary}</button>
+              : summary}
+          </div>
+          {hint}
+        </div>
+      );
+    }
 
     // VIEW: hide the few opt-out fields when empty/false.
     if (!edit && VIEW_HIDE_WHEN_EMPTY.has(field)) {

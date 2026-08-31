@@ -374,7 +374,7 @@ function matchesFacetSingle(tool, field, value, tolerances = null) {
       === String(materialFacetValue(value) ?? '').toLowerCase().trim();
   }
   // Numeric exact or close match (bare-value path — e.g. chip-selected small option sets)
-  if (['diameter', 'flute_length', 'overall_length', 'number_of_flutes', 'corner_radius'].includes(field)) {
+  if (['diameter', 'flute_length', 'overall_length', 'number_of_flutes', 'corner_radius', 'reach'].includes(field)) {
     const tv = parseFloat(tool[field]);
     const fv = parseFloat(value);
     if (isNaN(tv) || isNaN(fv)) return false;
@@ -432,7 +432,7 @@ export function getAvailableOptions(tools, activeFilters, targetField, tolerance
 
 export function buildIndex(tools) {
   const fieldValues = new Map();
-  const allFacetFields = ['tool_type', 'diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'material', 'coating', 'vendor', 'tsc_capable', 'custom_grind', 'flute_design', 'material_suitability', 'tags', 'corner_radius'];
+  const allFacetFields = ['tool_type', 'diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'reach', 'has_undercut', 'material', 'coating', 'vendor', 'tsc_capable', 'custom_grind', 'flute_design', 'material_suitability', 'tags', 'corner_radius'];
 
   for (const field of allFacetFields) {
     const values = new Set();

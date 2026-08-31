@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronRight, Info } from 'lucide-react';
 import { fieldLabel } from '../schema/fieldRegistry.js';
+import { formatShaftSegments } from '../utils/toolProfile.js';
 
 const INFO_KIND_LABEL = { preset: 'preset', ooh: 'assembly stick-out', holder: 'assembly holder' };
 
@@ -14,9 +15,12 @@ const INFO_KIND_LABEL = { preset: 'preset', ooh: 'assembly stick-out', holder: '
 // See tool._drift (buildLogicalTool / detectFusionDrift) and
 // PHASE_A_TOOL_RECORD_SCHEMA.md §10.
 
-function fmt(v) {
+function fmt(v, unit) {
   if (v === null || v === undefined || v === '') return '—';
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
+  // The shaft profile is a list of segments — summarised by the one shared
+  // renderer, so this banner and the Sync Job diff can never word it differently.
+  if (Array.isArray(v)) return formatShaftSegments(v, unit);
   const n = Number(v);
   if (!isNaN(n) && v !== '') return String(Math.round(n * 10000) / 10000);
   return String(v);
@@ -123,8 +127,8 @@ function DriftRow({ d, unit, choice, onChoose }) {
       <div style={{ minWidth: 0 }}>
         <div className="text-sm" style={{ fontWeight: 600 }}>{fieldLabel(d.field, unit) || d.field}</div>
         <div className="text-xs text-sub">
-          Fusion <span className="font-mono" style={{ color: 'var(--text)' }}>{fmt(d.fusionValue)}</span>
-          {' · '}app <span className="font-mono" style={{ color: 'var(--text)' }}>{fmt(d.appValue)}</span>
+          Fusion <span className="font-mono" style={{ color: 'var(--text)' }}>{fmt(d.fusionValue, unit)}</span>
+          {' · '}app <span className="font-mono" style={{ color: 'var(--text)' }}>{fmt(d.appValue, unit)}</span>
         </div>
       </div>
       <div style={{ textAlign: 'center' }}>

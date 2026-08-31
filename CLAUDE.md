@@ -38,6 +38,37 @@ I'm not an experienced developer. When you do something non-trivial:
 
 -----
 
+## ⚠️ Running the app in an agent / cloud / CI session — READ BEFORE `npm run dev` OR `vite build`
+
+**There is NO `.env` file in an agent session. There never has been, and there never will be.** The keys live on the developer's machine and in GitHub Actions Secrets (see API Keys & Secrets). This is not a broken setup and there is nothing to diagnose.
+
+**What that causes, every time:** `App.jsx` gates on `VITE_APS_CLIENT_ID` / `VITE_APS_CALLBACK_URL`, and Vite substitutes `import.meta.env` at **build time**. With those unset the gate is a compile-time constant, so:
+- `npm run dev` and `vite build` render **"Configuration Required"** and nothing else.
+- The built bundle is React + vendor code with the **entire app tree dead-code-eliminated** — grep it for any app string (`modal-backdrop`, a class name, a component) and you get zero hits, and its byte size does not change when you add a component.
+
+⚠️ **DO NOT INVESTIGATE THIS. It is expected, and it has cost real time more than once.** It means only one thing: `vite build` verifies *that the code compiles*, nothing more. **`npm run lint` and `npm test` are the real gates.**
+
+### To actually SEE the app — demo mode
+
+`?demo=true` runs the whole UI against bundled sample data (`src/demo/`) with no Autodesk or Drive connection. **This is how you look at anything visual** — a new screen, a layout, a drawing, a banner. Do not settle for reasoning about markup you rendered to a string.
+
+Pass the two vars **on the command line**. This satisfies the gate for one process and leaves no file behind — ⛔ never create, modify or recreate `.env`, `.env.local` or any other env file:
+
+```bash
+VITE_APS_CLIENT_ID=demo-local-only \
+VITE_APS_CALLBACK_URL=http://localhost:5173/Master_Tool_Data/ \
+  npx vite --port 5173
+# then open  http://localhost:5173/Master_Tool_Data/?demo=true#/
+```
+
+Chromium + Playwright are available in the cloud container for driving and screenshotting it (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`; Playwright itself is a global install, so import it by absolute path rather than from the project's `node_modules`). Search the library, open a tool, click the thing, screenshot it — that is what caught the tool-profile drawing being 89% empty shank.
+
+⚠️ **If a feature is invisible in demo mode, that is a gap to FIX, not to work around** — add the case to `src/demo/*.json` and assert it in `demo.test.js`, the way `A-265` (the one demo tool with shaft segments) exists so reach, undercut and the Tool Profile can be seen at all.
+
+**Never run `npm run deploy` here** — see Deployment.
+
+-----
+
 ## Before you say "done" — check the diff against these
 
 **Eight questions, run against your own changes before reporting them finished.** Every one is here because it has ALREADY caused a real bug in this repo — none are aspirational, and each names what it caught so it can't be waved off as theory. Keep this list short: a checklist that grows past ~8 stops being run, exactly like a flag that fires too often becomes wallpaper.
@@ -724,6 +755,8 @@ VITE_METADATA_FILE_ID=        # Google Drive file ID for tool_metadata.json (opt
 
 **⛔ Never modify, recreate, or delete the `.env` file.** It contains real API keys that are already configured. If a new environment variable is needed, tell the user exactly what to add and let them add it manually.
 
+⚠️ **`.env` exists ONLY on the developer's machine.** In an agent, cloud or CI session it is absent by design — see "Running the app in an agent / cloud / CI session" above for what that breaks (`vite build`, `npm run dev`) and how to run the app anyway. Do not treat its absence as a problem to solve.
+
 APS setup: create a "Single Page App" at https://aps.autodesk.com — **not** Web App. PKCE requires SPA type. Register the callback URL (GitHub Pages URL for deploy, `http://localhost:5173/Master_Tool_Data/` for dev).
 
 Google setup: authorized JavaScript origins must include `https://incrementaldan.github.io` (no path, no trailing slash).
@@ -733,7 +766,7 @@ Google setup: authorized JavaScript origins must include `https://incrementaldan
 ## API Keys & Secrets
 
 The real API keys are stored in GitHub Actions Secrets — not in the repo.
-A `.env` file exists locally for development only. Do not modify, recreate, or delete it.
+A `.env` file exists **on the developer's machine only** — never in an agent, cloud or CI session (see the section above). Do not modify, recreate, or delete it, and do not create a substitute.
 If a new API key or environment variable is needed:
 - Tell me the variable name needed
 - I will add it to both the local `.env` and GitHub Secrets manually
@@ -753,7 +786,7 @@ Deployment is **fully automated via GitHub Actions** — see `.github/workflows/
 
 **Linting (catches the blank-screen class of bug)**: `npm run lint` runs ESLint (flat config in `eslint.config.js`). It's intentionally **minimal** — only `no-undef` + `react/jsx-no-undef` (used-but-not-imported symbols, e.g. `<X>` without importing `X`, which the Vite build does NOT catch — it's a runtime `ReferenceError` → blank page) plus `react-hooks/rules-of-hooks`. Not a style gate. The **Tests** CI workflow (`.github/workflows/test.yml`) runs `npm run lint` before `npm test`, so a missing import fails the PR check instead of reaching the browser. `.tsx` uses the typescript-eslint parser (with `no-undef` off — TS checks references itself).
 
-**⛔ Do NOT run `npm run deploy` from an agent, cloud, or CI session.** That command bakes env vars from a local `.env`, which does not exist in those environments — it will publish a credential-less build and break the live site (shows "Configuration Required"). `npm run deploy` is only valid as a manual fallback on a developer machine that has a complete local `.env`. The normal, preferred path is always GitHub Actions.
+**⛔ Do NOT run `npm run deploy` from an agent, cloud, or CI session.** That command bakes env vars from a local `.env`, which does not exist in those environments — it will publish a credential-less build and break the live site (shows "Configuration Required"). That same missing `.env` is why a local `vite build` here produces an app-less bundle and `npm run dev` shows the config screen — expected, not a fault; see "Running the app in an agent / cloud / CI session" near the top for how to run the app anyway. `npm run deploy` is only valid as a manual fallback on a developer machine that has a complete local `.env`. The normal, preferred path is always GitHub Actions.
 
 -----
 
@@ -976,6 +1009,137 @@ Current cross-unit boundaries (all handled with `convertLength`):
 
 An **Assembly** records a specific tool + holder + OOH (Out of Holder length) combination that has been proven in a job. Assemblies are stored per-tool in `tool_metadata.json` under `assemblies[]`.
 
+### Reach & undercut — the necked shank above the flutes
+
+A **reach** tool keeps its cutting diameter (or a hair under it) for some distance **above** the flutes, so it can drop into a deep pocket without the shank rubbing. An **undercut** is that neck ground a little *under* the cutting diameter. All three fields are **metadata-only** (`reach`, `has_undercut`, `undercut_diameter`). Pure helpers: `src/utils/toolReach.js`.
+
+⚠️ **THE APP MUST NOT CHANGE WHAT IS IN FUSION HERE, AND THIS IS THE GOVERNING RULE.** Fusion is the more correct source for shaft geometry: the app has no segment UI, and how each tool type relates shaft segments, shoulder length and Fusion's own **collision detection** is not something the app models. So reach is read *from* Fusion and stored beside it — nothing writes back, nothing is corrected, and **no warning fires** on a segment tool whose shoulder looks imperfect. Locked by a whole-library test asserting zero shaft segments altered and zero app-only keys in the Fusion JSON across all 303 tools, with the undercut answered by hand.
+
+⚠️ **`REACH_TYPES` — face mills and boring heads are excluded.** A face mill's body steps down from its cutting diameter because that is its shape, not because anything was relieved to clear a pocket wall, so the arithmetic produces a real number describing something else entirely (a 2" face mill computes to 1.16). Boring head and turning are out via `NO_BORING_TURN`; face mill is named explicitly. ⚠️ The gate is enforced in **`deriveReach` as well as the registry** — a UI-only gate would still let the seed stamp a number into the metadata file that nothing renders.
+
+**The rule, and it is exact:** `reach = flute_length + every leading shaft segment still at or below the cutting diameter`, stopping at the **first** segment that goes above it. Fusion stores `shaft.segments[]` tip-first (same bottom-up ordering holder segments use), in the tool's own unit.
+
+⚠️ **THE STOP IS AT THE START OF THE FIRST OVERSIZE SEGMENT, not partway through it.** That segment is usually a taper (`.038 → .125`) crossing the cutting diameter somewhere in the middle, and interpolating the crossing point is an obvious-looking "improvement" that would move every number in the library. Don't: the whole-segment answer is what the shop wrote by hand. `1mm (.039) 3FL EM .059LOC .203 REACH` = LCF `.059` + one `.144` neck segment = **exactly** `.203`, and the same rule reproduces `.5 REACH`, `.312REACH`, `.4 reach` and `12x Reach` across the real library. Locked by `toolReach.test.js`, which asserts against the real export rather than a fixture.
+
+⚠️ **`reach` is NULL, never `flute_length`, when there is no neck.** Every tool reaches as far as its flutes, so storing that would put a number saying nothing on ~280 records — and it is what makes the description rule fall out for free (see below). Blank is the honest default and the one the seed is allowed to fill.
+
+⚠️ **AN UNDERCUT IS A FACT ABOUT THE GEOMETRY — the neck above the flutes is narrower than the cutting diameter. That is the whole rule.** It is not a judgement about *why* it is narrower, or by *how much*. A key cutter's arbor genuinely is narrower than its cutter, so it is undercut; a saw, a lollipop stem and a dovetail shank likewise. How much of an undercut it is does not change what it is.
+
+⚠️ **DO NOT RE-ADD A PERCENTAGE THRESHOLD.** An earlier pass gated it at 92% of the cutting diameter so those tools would not count — real undercuts clustered at 96–97%, structural necks at 61% and below. It was wrong twice: the number was reverse-engineered from a gap that happens to exist in today's 303 tools (wrong the first time a tool lands in between), and the question it answered — "was this deliberately relieved?" — is not the question being asked.
+
+**The only tolerance left is for FLOAT NOISE** (`NOISE = 1e-6`), which is a different kind of thing: it asks *"is this actually narrower, or the same number after a JSON round trip"*, never *"is it narrow enough to count"*. Set far below any real grind (a tenth is 0.0001") and far above a double's ~1e-15 relative error. A half-thou under **is** an undercut.
+
+**Three answers, not two.** `hasUndercut` is `true` (a narrowed neck), `false` (Fusion drew a shaft and nothing is narrowed — the app *can* say no), or `null` (**Fusion drew no shaft at all**, so it genuinely cannot say; the shank could be reduced and simply undrawn). `null` is what leaves the question open for the shop.
+
+⚠️ **THESE ARE ARITHMETIC, NOT RECORDED OPINIONS — so they are RE-DERIVED on every load, not filled in once.** Reach IS flute length plus the neck; change either and the reach genuinely changed, so freezing a stored value means the number silently stops describing the tool. Same shape as an Auto `asm_number`: *a pure product of its fields, so a stored value that differs from the composed one is always stale, never custom*. The stored copies exist only so the values are **searchable** and so a tool whose shaft Fusion never drew can still carry a **hand-typed** number.
+
+**`resolveReachForTools(tools)`** is that load-time pass (all five `loadTools` build sites, incl. demo and local mode). ⚠️ **The segments win wherever they can answer** — a typed reach survives only on a tool with no drawn shaft. It returns the **same array and the same tool references** when everything already agrees, so callers can use identity to tell there is nothing to persist. Idempotent. Measured on the real library: **20 reach · 18 undercut · 33 explicit "no" · 252 unknown**, second run a no-op.
+
+⚠️ **`undercut_override` IS A SEPARATE FIELD ON PURPOSE.** Comparing a stored boolean against the derived one cannot tell *"the shop said so"* from *"this is ours and went stale"* — the same reason preset names check their SHAPE rather than equality, and with only two possible values a stored-vs-derived compare is pure guesswork. The pill writes the override; **`↺ Auto`** clears it and hands the answer back to the segments. An override to **No** drops the derived diameter, because it then describes nothing.
+
+⚠️ **A DERIVED DIMENSION IS READ-ONLY IN THE UI** — Reach and Undercut Ø render as read-outs ("from the shaft segments") wherever the segments answer them. Rendering them as inputs invites a value the next load silently re-derives away, which is the failure this whole rule exists to remove. They become editable only where Fusion drew no shaft. **`reachIsDerived(tool)`** is the one predicate: it asks whether there are segments to read, **not** whether a reach came out of them — a drawn shaft whose first segment is already wider than the cut has an answer, and the answer is *"no reach past the flutes"*. ⚠️ Reach was an input while the Undercut Ø beside it was not, so on a segmented tool a typed reach looked like it worked and was gone on the next load.
+
+⚠️ **"CANNOT SAY" MUST NOT RENDER AS "NO" — IN BOTH PILLS.** The undercut pill exists TWICE (the tool page's `ToolFields` and the Tool Profile's Cutter panel), and the bug had to be fixed in each; a fix to one is not a fix. `has_undercut` has three states and the pill has two buttons, so the compare has to be strict: `!!null === false` lit **No** on every tool Fusion drew no shaft for — asserting an answer nobody had gone and got, and hiding that the question was open. Neither button is lit for `null`, and the hint under it says which case it is (*"From the shaft segments"* vs *"Fusion drew no shaft — nothing to derive it from"*); the second was previously shown in both cases, pointing at data that did not exist.
+
+**The description names reach ONLY when it exceeds the flute length** — the user's rule, and the reason `reach` stays null otherwise. `applyReachSuffix` wraps `buildDesc` rather than touching its 36 return sites (same precedent as `applyStatusSuffix`, which still lands last): `1mm (.039) 3FL EM .059LOC .203 REACH`. ⚠️ A **thread mill's** reach predates the field — the shop recorded it in the shoulder length — so that legacy read fires **only while `reach` is blank**, otherwise the name would carry REACH twice. One `reachToken` helper spells it for both.
+
+⚠️ **METADATA-ONLY IS NOT A GAP HERE.** Fusion has no "reach" field — it has the **segments the number is computed from**, and those already round-trip untouched (`shaft` survives the `...existing` spread in `internalToFusionTool`; verified across all 303 real tools: zero segments altered, zero app-only keys leaked). So "if Fusion has a place for it, Fusion must have it" is satisfied by the segments, not by mirroring a derived scalar into a field Fusion would reject.
+
+⚠️ **NO VALIDATION, AND THAT IS DELIBERATE.** Reach is not in `validateGeometry`'s length chain and raises no warning, not even on a segment tool whose shoulder disagrees with it. The only things anyone is confident of are the ones already enforced elsewhere (a stick-out cannot exceed the OOH / MIN OOH); everything past that would be a guess about tool types the app does not yet model. Do not add a reach↔shoulder rule without the shop defining one first.
+
+**Searchable from the landing page**: `reach` is a numeric facet (in the tolerance list alongside `diameter`/`flute_length`) and `has_undercut` a Yes/No one. `undercut_diameter` is deliberately **not** a facet — it is optional even when the pill is on. In the UI (`ToolFields`) the undercut is a **Yes/No pill toggle** (`.undercut-pill`, orange), and the diameter box is hidden in **both** modes until the pill is on — an empty box next to a "No" asks for the diameter of something that isn't there. All three are in `VIEW_HIDE_WHEN_EMPTY`, so they appear only on tools that carry an answer.
+
+**Deferred to Phase 2** (see TODO): a segment editor, writing segments back to Fusion, extraction of reach from a spec sheet, and reconciling the handful of tools that recorded reach in `shoulder_length` with no usable neck segment.
+
+### Tool Profile — the whole tool on one dimensioned drawing
+
+Fusion splits a tool across four tabs (General / Cutter / Shaft / Holder), so no screen ever shows the tool. **`ToolProfileModal.jsx`** does: one vertical silhouette, tip down as it hangs in the spindle, with the geometry as engineering-print dimensions whose **value boxes ARE the editable fields**. Opened by the **Profile** button in `ToolDetail`'s action sidebar. Pure geometry: `src/utils/toolProfile.js`.
+
+⚠️ **DELIBERATELY A SEPARATE POP-UP.** It does not replace the Geometry section — that keeps working exactly as it did. Additive until the two are merged on purpose.
+
+**The stack it draws** (confirmed against a real export and Fusion's own Shaft tab): `0 → LCF` the flutes at the cutting diameter · `LCF → LCF + Σh` the shaft segments (stored **tip-first**; Fusion's Shaft TAB numbers them top-down, so the table here is the reverse of the array) · `LCF + Σh → OAL` plain shank at the shank diameter.
+
+⚠️ **SHOULDER LENGTH IS A DIMENSION, NOT A SOLID** — the unbroken shoulder measured from the tip, so it *overlaps* whatever the stack already drew. It renders as a band **on top** of the solid, only over the span past the flutes, with its top edge drawn. Drawing it as a region would double-count the flutes; drawing it *underneath* hid it entirely and left only its overhang showing, which read as a second block of a different colour. On a tool whose segments disagree with it, the app still has no opinion (see **Reach & undercut**).
+
+### Editing the shaft segments
+
+⚠️ **THE SHAFT PROFILE IS DEFINING GEOMETRY — the same class of field as the cut diameter or the overall length, not an add-on.** Fusion's UI makes it look optional (its own tab, off to the side, most tools without one), and the app ignored it entirely until now — but a tool whose real shank is narrower than Fusion thinks is a tool that crashes, and the shop used to carry that difference as tribal knowledge because CAM had no collision detection to catch it. Recording it accurately is what moves the surprise from the machine (where it costs money) to CAM (where it costs nothing).
+
+**The practical test, and it is the one to run on any new code touching it:** *every path that carries the diameter must carry the shaft.* Each of these was a real hole found by asking exactly that:
+
+| Path | What was wrong |
+|---|---|
+| `fusionToolToInternal` / `internalToFusionTool` | — (built with the feature) |
+| `splitToFusionInstances` | — (`shaftEdited`, below) |
+| `buildMetadataTool` / `mergeFusionAndMetadata` | — (built with the feature) |
+| **`DRIFT_FIELDS` + `driftEqual`** | an array needs its own compare — see below |
+| **`sharedSignature`** (reconcile) | a stray with a different shaft read as a duplicate |
+| **`DIFF_SECTIONS`** (Sync Job) | absent from the Geometry diff — the one screen where the user decides which geometry wins |
+| **`parseIncoming`** (clipboard TSV) | the column was written but never read, so a pasted job tool arrived with **no** shaft — which then diffs as *deleted* |
+| **`buildFusionTsv`** (clipboard/CSV out) | read the raw Fusion entry, so an app edit exported the OLD profile and a no-Fusion tool exported **none** |
+| **`valuesEqual`** | sorted and stringified arrays — `[object Object]`, and sorting throws away the tip-first order that IS the geometry |
+| **`combineToolsByToolId`** | `isPrim` excluded every array, so two records sharing a ProShop number that disagreed about the shaft merged silently |
+| **`fieldRegistry`** | no entry → `fieldLabel` returned undefined and the banner showed the raw key |
+| ProShop export/import | **correctly absent** — ProShop has no shaft column and never did |
+| Spec-sheet extraction | **correctly absent** — the proposal machinery is scalar; a segment list from a scan is deferred |
+
+⚠️ **A SEGMENT LIST RENDERS THROUGH ONE FUNCTION** — `formatShaftSegments` (`toolProfile.js`), used by both the drift banner and the Sync Job diff, so the two can never describe the same geometry differently. `String([{…}])` is `[object Object]`, which reads as corrupted data on exactly the screens where someone is deciding which profile is right.
+
+⚠️ **THE APP'S PROFILE IS CANONICAL, NOT PER-INSTANCE** — in the TSV export as everywhere else, the same as the diameter (which has always come from the tool, never from each raw entry). Instances that disagree are surfaced by the drift path; they are never silently split across two exports.
+
+
+⚠️ **FUSION'S SHAFT DATA IS GOOD — THERE IS NOTHING HERE FOR THE APP TO FIX.** Most of this app's features exist to correct or complete Fusion data. This one does not. The app previously ignored shaft segments entirely and they were edited in Fusion only; this is the same capability with a better UI than Fusion's disconnected Shaft tab. **Nothing derives, normalizes, corrects or warns about a segment.** A person types a number and saves, exactly like diameter or flute length.
+
+**Tools get segments LATER, and that has to work** — the shop often creates a tool as a reference and measures the real shaft when it arrives. Adding a profile to a tool that has none is a first-class case, not an edge one.
+
+⚠️ **AN ORDINARY SAVE MUST ALTER NOTHING.** `shaft` is written only when the app's segments differ from **the profile the app READ** — decided **once per tool** in `splitToFusionInstances` (`shaftEdited`), never per instance. Comparing per instance looks equivalent and is not: two instances of one logical tool *can* disagree in a real library (measured: 2 tools do), and a per-instance compare would "heal" that on any unrelated save by writing whichever profile the app read as canonical over the other — **silently deleting a real segment**. Locked by a whole-library test: 303 instances through the real write path, **0 shafts altered**.
+
+⚠️ **A SHAFT THAT DISAGREES IS FLAGGED AND ASKED, never resolved automatically.** The app cannot know which profile is the real tool, so `shaft_segments` is in **`DRIFT_FIELDS`** and in **`sharedSignature`**, and it goes through the same paths every other shared field does. That covers both ways it goes out of step, because `detectFusionDrift` compares the app's copy against **every** instance:
+- **edited in Fusion and synced back** → the app's stored copy differs from Fusion's → `DriftBanner`, per-field Keep Fusion / Keep app.
+- **ONE instance edited and not the others** → the app's copy matches the canonical instance and differs from the one that moved → same banner. On the real library that is the 2 tools above, and **only** those 2: measured, the shaft key newly splits exactly them and adds no other noise.
+- **a stray entry found on open** → `sharedSignature` now carries the profile, so a stray whose shaft differs classifies as a **conflict** (→ Sync Job diff) instead of a duplicate or new assembly that would be silently adopted or deleted.
+- **write-time** → `mergeSharedFieldsWithFusion` adopts a Fusion-side change the app did not make, and on a both-edited collision keeps the app's value while **recording** the conflict rather than discarding Fusion's.
+
+⚠️ `driftEqual` needs its own branch for it — the profile is an ARRAY, and the default string compare reads every segment as `[object Object]` and never sees a difference. The tolerance matches the numeric one (5e-5): a JSON round trip is not an edit. ⚠️ An established library stays **quiet**: metadata that has never stored a profile is "not populated", not drift, so nothing fires until a tool is next saved.
+
+⚠️ **AN EDIT REACHES EVERY INSTANCE.** Instances of a logical tool differ **only** by holder and OOH — a hard rule, because these are physical tools held to tight tolerance and a different shaft would be a different tool. So an edited profile fans out to all of them.
+
+**The `!= null` gate** distinguishes "the app has no opinion" (`null` — write nothing) from "the user emptied it" (`[]` — remove the `shaft` object). Without it, ~250 tools that never had a shaft would gain an empty one.
+
+**mm is a first-class case, and the risk is NOT arithmetic.** Every segment is in its record's own unit and nothing converts — the Fusion write, the TSV export (factor 1, unlike the holder's, which crosses records) and the drift compare all pass the numbers through untouched, so a metric tool needs no conversion anywhere. What did hide were **inch-flavoured constants**: the new-segment seed fell back to `0.05` height and `0.25` diameter (a 0.1mm segment at 0.25mm on a bare metric tool), the input `step` was `0.001` (a thou in inches, sub-micron in mm), and `formatShaftSegments` rounded to 4 places regardless. All three are now derived from the record's unit via `unitPrecision` / `convertLength`, mirroring the holder module's `newSegmentHeight`. ⚠️ The drift tolerance stays a flat `5e-5` — that is what **every** numeric length in `driftEqual` uses, and it absorbs float round-trip noise (relative, ~1e-16) rather than expressing a machining significance, so it is right at mm magnitudes too; changing it here alone would make the shaft drift differently from the diameter.
+
+⚠️ **The demo library carries a METRIC segmented tool** (`B-301`, a 6mm long-reach ball mill) alongside the inch one. Until it existed there was no metric tool in the demo **at all**, so every unit-flavoured default, step and label in this feature was unreachable in the one place things get looked at. `demo.test.js` asserts at least one segmented demo tool is metric.
+
+**No expression pairing to keep in step** — verified across the real library, `shaft.segments` has no `expressions.*` counterpart (only `tool_shaftDiameter`/`tool_shaftAxisAngle` exist, and neither is the profile). A plain array write, which is why this is small.
+
+⚠️ **The table is listed TOP-DOWN, the way Fusion's own Shaft tab numbers them — the stored array is the reverse (tip-first).** Every edit maps back through the reversed index; getting that wrong silently puts the segment on the opposite end of the tool (the same trap `insertSegmentAt` documents for holders). A new segment continues from the face it attaches to rather than jumping the profile.
+
+**The tool page names it** — a **Shaft Profile** row in the Geometry grid, beside the diameter and the OAL it belongs with, summarised by `formatShaftSegments` and opening the Tool Profile on click. A read-out in both modes (it is edited in the modal), and **hidden when there is none** — most tools have a plain shank, so a "no profile" row on the whole library is wallpaper. Outside the modal there was previously nothing saying a tool had a profile at all.
+
+⚠️ **THE EDITOR READS EVERY STORED ROW; THE DRAWING READS ONLY THE DRAWABLE ONES.** Two functions, and mixing them up deleted data. **`shaftRows`** returns the list as stored — that is what the table edits and writes back. **`shaftSegments`** is `shaftRows` minus anything with no height (a zero-height region cannot be drawn) and is the drawing's read only. Editing off the *filtered* list meant a segment vanished the instant its height went momentarily blank — which is **every retype**, because a `type="number"` input reports `''` for partial text like `.` on the way to `.2`. The height field was, in practice, uneditable: clearing it removed the row. Each drawable segment carries **`index`**, its position in the stored array, so the drawing and the table hover the same segment across a zero-height row.
+
+⚠️ **NO INPUT IN THE PROFILE CARRIES A LITERAL `step`** — `stepFor(field, unit)` derives it from the registry and the record: a length one decade coarser than its display precision (`0.001` in / `0.01` mm), an angle half a degree, a count 1. `0.001` is a thou in inches and a **micron** in mm, so every arrow-key nudge on a metric tool was a thousandth of nothing — in the segment table AND in every dimension box on the drawing.
+
+⚠️ **A BLANK CELL IS MID-EDIT, NOT A ZERO.** The cell being typed into holds its raw text; the stored number moves only when that text parses. Leaving a cell blank snaps it back to its last good value — **removing a segment is what the `×` is for**, and a dimension that must have a value has no meaningful empty state. Deleting a row also clears the pending cell, whose index would otherwise point at a different segment.
+
+**NOT TO SCALE, and it says so.** X and Y are scaled independently — a real tool runs 20:1 to 60:1, so a true-proportion drawing is a hairline. Every CAM tool-library screen distorts this the same way; the drawing is marked `NTS` rather than pretending otherwise.
+
+⚠️ **THE LONG SHANK IS BROKEN, and both halves of that rule were learned the hard way.** On a Ø.039 × 2.5" micro end mill the flutes are 2% of the length: drawn linearly the one thing worth seeing got ten pixels and the rest of the canvas went to an empty cylinder. An **interrupted view** (`BREAK_KEEP`, zigzag symbol) is the standard print answer.
+- **The trigger is what the break is FOR** — the part *below* the shank being squeezed (`BREAK_BELOW = 0.30`), not the shank's own share. Testing the shank broke tools that needed no break (a 2"-flute ball mill on a 4" body is half shank and its flutes already have half the canvas). Set well clear of ordinary tools (a bull mill sits at 38%) so the break marks genuinely long-reach micro tools rather than flickering between two tools that look the same.
+- ⚠️ **The magnification is CAPPED (`MAX_MAG = 6`).** Filling the canvas with whatever sits below the shank works until that part is itself tiny: a 1/8" chamfer mill has a .058" cutting length on a 1.5" body, and blowing it up to fill the drawing made a chamfer tip look like a 1" flute.
+
+**Dimensions nest shortest-innermost**, the way a print stacks dimensions sharing a datum — laying them out in registry order put MIN OOH (2.5") outside Shoulder (4.0"), lines crossing for nothing. Lengths go left, diameters right (bumped to a second lane only when two would collide), and the **shank diameter is placed at 78% up the shank, never mid** — mid-shank is exactly where the break symbol goes. ⚠️ Labels use a **short name table (`SHORT`)**, not the registry label: `fieldLabel` carries "(in)", which is both redundant beside the unit in the box and wider than a lane, so neighbouring labels overlapped. This is the one place the registry label is deliberately not used, display-only.
+
+**Which dimensions appear is gated by the SAME `appliesToTypes` the form uses**, so a tap is never asked for a corner radius and a drill never for a taper. Tip shapes are modelled only where the shop actually runs them (ball / drill point / corner radius / chamfer-tapered-to-`tip_diameter`); anything else draws **flat**, and a chamfer mill with no stored tip diameter draws flat rather than being given an invented cone.
+
+**Colour is muted by design** — three greys for the structural parts so the one warm colour, the flutes, is what the eye lands on. The amber matches the colour Fusion gives the cutting portion, so the drawing reads as familiar rather than as a second convention.
+
+**The modal resolves its own draft** through `resolveReachFields` on open, so reach and undercut agree with the drawing even for a tool that has not been through the load-time pass — and they keep agreeing as segments are edited.
+
+⚠️ **Editing follows `commitPurchasing`'s rule**: the modal stays open and keeps the draft until the save resolves, and a failed save says so instead of closing. Locked by `toolProfileUi.test.jsx`, which renders every tool in the real library and asserts **no `NaN`/`Infinity` reaches an SVG path** (a tool with no flute length or a zero diameter divides by zero on the way to a scale, and an SVG with NaN in a path silently draws nothing).
+
+⚠️ **The demo library carries two tools with shaft segments** — `A-265` (the inch long-reach micro end mill, mirroring the real one) and `B-301` (a **metric** 6mm long-reach ball mill). Without them, reach, undercut and this whole drawing are invisible in `?demo=true` — which is where they get looked at, and the metric one is the only metric tool in the demo at all. `demo.test.js` asserts both.
+
 ### Three length concepts (MIN OOH vs. shoulder length vs. per-assembly OOH)
 
 These are easy to confuse — they are distinct and have a strict ordering:
@@ -1193,6 +1357,13 @@ src/
     labelPrint.js                 # The DK-11201 tool tag: tagCSS / tagMarkup /
                                   # inchesAutoFit / printToolTags. COPIED from the
                                   # shop's Chrome extension — do not redesign
+    toolProfile.js                # The tool's silhouette as a region stack
+                                  # (flutes → shaft segments → shank), tip-first,
+                                  # plus which dimensions each tool type offers.
+                                  # See "Tool Profile"
+    toolReach.js                  # Reach + undercut from the shaft segments.
+                                  # Reach is seeded; the undercut is a person's
+                                  # answer — see "Reach & undercut"
     presetNaming.js               # composePresetName, parsePresetName, presetMatchesAssembly,
                                   # OP_TYPES / opTypeWord / matchOpType
     holderNaming.js               # holderNameToken (a holder's name IS its
@@ -1258,6 +1429,11 @@ src/
                                   # PairingSetupPanel. See Insert-Style Tools section
     ComponentPicker.jsx           # Searchable holder-body/insert picker modal with
                                   # inline create — the only way components are browsed
+    ToolProfileModal.jsx          # The whole tool as one dimensioned drawing —
+                                  # vertical silhouette, print-style dimensions
+                                  # whose value boxes are the editable fields,
+                                  # interrupted view for a long shank. Opened by
+                                  # the Profile sidebar button. See "Tool Profile"
     PhotoSlot.jsx                 # Primary-photo slot (display + add/change/remove),
                                   # shared by ToolDetail and the component groups
     ToolCard.jsx                  # Grid and list card variants with hover actions
@@ -3042,6 +3218,13 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 - **Suggest adding a manufacturer/vendor to the registry (NOT built — parked, nice-to-have).** A scanned sheet naming a maker the registry doesn't know currently just stores free text: it gets no `registry_id`, no URL pattern, and no alias resolution, so it can never be mass-updated. `buildPurchasingProposals` already returns **`newManufacturer`** (the unmatched name) and `ExtractUpdateModal` already passes it through — nothing consumes it. What's missing: a **fuzzy near-match** suggester ("did you mean *Helical Solutions*?" — `entityByName` matches canonical names and aliases exactly, nothing looser), and a small UI offering the two genuinely different answers — **add as an alias** of an existing entity (the `GARR` / `GARR Tool` case, which is most of them) vs. **create a new entity**. Both write `vendor_registry.json`, a path `ToolForm` now has (`savePatternRows`). ⚠️ The alias-vs-entity choice is the whole design question and must stay the user's: getting it wrong either merges two real manufacturers or splits one into two, and an entity created by mistake is then a permanent second spelling. Deliberately deferred with the URL-pattern learning shipped first — that half is deterministic and self-verifying, this half is a judgement call.
 
 - **Self-healing audit (not yet done).** The **Self-healing** philosophy section above was written *after* most of the mechanisms it describes, so it documents the pattern rather than verifying it holds everywhere. Worth one deliberate pass: (1) **coverage** — every derived/linked value that could go stale actually has a repair or a flag (candidates not yet reviewed: `material_suitability` free text, `tags`, `coating`/`pitch` fill-gap fields, holder library links, `speed_feed_refs.preset_id` dangling ids, `preset_meta.operation_ids` dangling after an operation delete); (2) **no nag loops** — for each existing flag, confirm the fix action clears the detector (walk `ConflictBanner`, `DriftBanner`, `MergeSiblingBanner`, the duplicate-preset banner, `MaterialLinkBanner`, `_productIdConflict`); (3) **load cost** — the silent repairs are all in-memory, but they're now a stack of full-library passes (`combineToolsByToolId` → `derivePairings` → 4 × backfill…), so confirm they're still cheap at real library size and consider folding them into one walk; (4) **noise calibration** — how many tools actually surface a flag against the real library, and whether any flag fires so broadly it becomes wallpaper (`MaterialLinkBanner` on legacy `"AL FIN"` strings is the likely candidate).
+
+- **Reach & undercut, Phase 2 — the segments themselves.** Phase 1 shipped the metadata fields + the load-time derivation (see **Reach & undercut**); `shaft.segments[]` already round-trips untouched, so everything below is additive. Open items, roughly in order of value:
+  - **Two tools whose instances DISAGREE on the shaft profile** — `.062 BULL .01R .093 LOC 3 FL` (one instance has the .657 neck, the other does not) and `A-37 7/64 Endmill .327LOC 4 Flute` (.1 vs .15). Instances differ only by holder and OOH, so these are Fusion-side drift. The app deliberately does NOT resolve them on its own (see the save rule above); opening either tool's profile and saving once picks the right answer deliberately.
+  - **Segment editing UI refinement** — the table works; inserting a segment at a chosen position (rather than appending), and the drag/hover polish the holder module's `SegmentTable` has, are still to come.
+  - **A tool that recorded its reach in `shoulder_length`** — the shop's pre-field convention, which this replaces. Only one is at risk: `1mm (.039") Ball 3FL EM .059LOC 7x Reach` (SL .2805, MIN OOH .41), since `normalizeLibrary` sets `shoulder_length = min_ooh` only where a MIN OOH exists. Type its reach in before the next normalize; no rescue code — the field is the replacement.
+  - **Extracting reach from a spec sheet.** Manufacturers publish it; the proposal machinery (`extractionDiff.js`) would carry it with no new plumbing beyond the prompt and `EXTRACTED_KEYS`.
+  - **"12x Reach" as a multiple of diameter.** Two real descriptions use it (`.02 BALL 3FL .03LOC 12x Reach` = 12.5×). Not built — the absolute value is what the field stores, and a multiple is a display choice, not a second number.
 
 - **Slot/key cutter (slitting saw) — verify corner-radius output to Fusion + terminology.** Two related open items from the key-cutter work: **(1)** `corner_radius` (`geometry.RE`) now *applies* to `slot/key cutter` (field registry `appliesToTypes`, extractor `FIELD_VISIBILITY` cornerRadius row, and the search facet), but we have **not confirmed how Fusion actually wants a slitting-saw/key-cutter corner radius written** — real Fusion exports for this type carry a distinct `tool_kerfWidth` field (see the FUSION_HDR reference list), and it's unclear whether the radius belongs in `RE`, in a kerf-specific field, or both. **The user will provide a real Fusion export example later** — audit `internalToFusionTool` for this type against it before trusting the `RE` write (mirror the chamfer-mill / tapered-mill per-type geometry-field audits). **(2)** "Slitting saw" is the shop's other word for this tool class — today it's folded into the single `slot/key cutter` type (UI labels flute length as "Flute Length (Kerf)" and shoulder length derives from flute length in `normalizeLibrary`). Revisit whether **slitting saw should be its own distinct `tool_type`** (own icon/filing/kerf semantics) rather than an alias — a bigger change to `TOOL_TYPES`, icons, `AUTO_GROUP`/ProShop mapping, and `FIELD_VISIBILITY`. Both deferred until the example arrives.
 

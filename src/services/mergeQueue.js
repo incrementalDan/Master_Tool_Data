@@ -1,4 +1,5 @@
 import { fusionToolToInternal, generateId, readOohFromFusion } from '../schema/toolSchema.js';
+import { parseFusionTsvSegments } from '../utils/fusionExport.js';
 import { parsePresetName } from '../utils/presetNaming.js';
 import { matchTool } from './duplicateDetector.js';
 
@@ -167,6 +168,10 @@ function parseFusionCsv(raw) {
       number_of_flutes: r.tool_numberOfFlutes !== '' ? parseInt(r.tool_numberOfFlutes) : null,
       corner_radius: csvNum(r.tool_cornerRadius),
       shank_diameter: csvNum(r.tool_shaftDiameter),
+      // The shaft PROFILE, not just the shank diameter. Defining geometry, the
+      // same as the diameter above — a tool proven in a job may have had its
+      // real shaft measured in there, and that has to reach the diff.
+      shaft_segments: parseFusionTsvSegments(r.shaft_segments),
       taper_angle: csvNum(r.tool_taperAngle),
       tip_angle: csvNum(r.tool_tipAngle),
       tip_diameter: csvNum(r.tool_tipDiameter),

@@ -2,6 +2,7 @@
 // source of the full metadata field set (add new metadata fields there first),
 // and mergeFusionAndMetadata reads them back onto the internal tool object.
 import { sameFusionMaterial, resolveMaterial } from './fieldRegistry.js';
+import { sameShaftSegments } from './fusionConvert.js';
 import { normalizeBin } from '../utils/locationSystem.js';
 import { normalizeLinkIds } from '../utils/toolLinks.js';
 import { generateId, generateAssemblyId } from './identity.js';
@@ -31,9 +32,22 @@ export const DRIFT_FIELDS = [
   'tool_type', 'description', 'unit', 'diameter', 'flute_length', 'overall_length',
   'number_of_flutes', 'shank_diameter', 'corner_radius', 'taper_angle',
   'material', 'tip_angle', 'tip_diameter', 'shoulder_length', 'cutting_direction',
+  // ⚠️ THE SHAFT PROFILE IS DRIFT-CHECKED, and it covers TWO cases at once,
+  // because detectFusionDrift compares the app's copy against EVERY instance:
+  //   • someone edited the shaft in Fusion → app's copy differs from Fusion's
+  //   • someone edited ONE instance and not the others → the app's copy matches
+  //     the canonical instance and differs from the one that moved
+  // Neither can be resolved automatically — the app cannot know which profile
+  // is the real tool — so both are flagged and asked, like every other shared
+  // field. Nothing here derives or corrects a segment.
+  'shaft_segments',
 ];
 
 function driftEqual(a, b, field) {
+  // The shaft profile is an ARRAY of segments — a string compare would call
+  // every one of them "[object Object]" and never see a difference. The
+  // tolerance matches the numeric one below: round-trip noise is not an edit.
+  if (field === 'shaft_segments') return sameShaftSegments(a, b, 5e-5);
   // ⚠️ `cobalt` and `hss` are ONE value to Fusion (see toFusionMaterial): Fusion
   // has no Cobalt option, so we write cobalt out as hss. A string compare would
   // call that a difference forever — the drift banner firing on every load and
@@ -199,6 +213,19 @@ export function mergeFusionAndMetadata(fusionInternal, meta) {
     legacy_locations: meta.legacy_locations || [],
     ooh: meta.ooh ?? null,
     min_ooh: meta.min_ooh ?? null,
+    // Reach / undercut — metadata-only, seeded at load from the tool's shaft
+    // Reach / undercut are DERIVED from the shaft segments on every load (see
+    // toolReach.js); these stored copies exist so the values are searchable and
+    // so a tool whose shaft Fusion never drew can carry a hand-typed number.
+    // The shaft profile. Fusion-native, so Fusion wins for a linked tool; the
+    // metadata copy is the only store for a no-Fusion tool (complete record).
+    shaft_segments: fusionInternal.shaft_segments ?? meta.shaft_segments ?? null,
+    reach: meta.reach ?? null,
+    has_undercut: meta.has_undercut ?? null,
+    undercut_diameter: meta.undercut_diameter ?? null,
+    // ⚠️ The shop's manual answer, kept SEPARATE from the derived one — a
+    // stored boolean cannot say whether it was chosen or went stale.
+    undercut_override: meta.undercut_override ?? null,
     // Holder selection + proven assemblies live only in metadata.
     selected_holder_guid: meta.selected_holder_guid || null,
     assemblies: meta.assemblies || [],
@@ -364,6 +391,11 @@ export function buildMetadataTool(tool) {
     shoulder_length: tool.shoulder_length ?? null,
     ooh: tool.ooh ?? null,
     min_ooh: tool.min_ooh ?? null,
+    shaft_segments: tool.shaft_segments ?? null,
+    reach: tool.reach ?? null,
+    has_undercut: tool.has_undercut ?? null,
+    undercut_diameter: tool.undercut_diameter ?? null,
+    undercut_override: tool.undercut_override ?? null,
     pitch: tool.pitch || '',
     tap_class: tool.tap_class || '',
     tap_sub_type: tool.tap_sub_type || '',

@@ -3,7 +3,7 @@
 // Workflows → Load-time auto-combine.
 import { readTrackingId, round4 } from './identity.js';
 import { isMetadataOnly } from './fieldRegistry.js';
-import { mergePresetLists } from '../utils/presetMerge.js';
+import { mergePresetLists, valuesEqual } from '../utils/presetMerge.js';
 
 // Flat speed/feed fields are a DERIVED cache of preset 0 — the presets carry the
 // real values, so a difference here is not an independent conflict (the preset
@@ -145,7 +145,19 @@ function mergeLogicalTools(group) {
   // record that DOES hold the value always wins, and so a placeholder can never be
   // flagged as a disagreement. See buildLogicalTool's `_noMetadata`.
   const opinionOf = (t, key) => (t._noMetadata && isMetadataOnly(key)) ? undefined : t[key];
+  // ⚠️ A SEGMENT LIST IS COMPARABLE GEOMETRY. `isPrim` excluded every array from
+  // conflict flagging, which was right for tags and material_suitability (order
+  // and duplicates carry no meaning there) and wrong for the shaft profile —
+  // two records that disagree about it disagree about the tool's geometry, the
+  // same as two that disagree about the diameter.
   const isPrim = (v) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
+  const comparable = (k, v) => isPrim(v) || (k === 'shaft_segments' && Array.isArray(v));
+  // Primitives keep `scalarConflict` byte-for-byte; a segment list needs
+  // `valuesEqual`, which compares object arrays in order, field by field
+  // (`a !== b` would compare two equal arrays by reference and always conflict).
+  const differs = (a, b) => (Array.isArray(a) || Array.isArray(b))
+    ? !valuesEqual(a, b)
+    : scalarConflict(a, b);
 
   for (const key of allKeys) {
     if (SKIP_KEYS.has(key) || key.startsWith('_')) continue;
@@ -166,8 +178,8 @@ function mergeLogicalTools(group) {
       } else if (
         conflictable &&
         !isEmpty(curVal) && !isEmpty(otherVal) &&
-        isPrim(curVal) && isPrim(otherVal) &&
-        scalarConflict(curVal, otherVal) &&
+        comparable(key, curVal) && comparable(key, otherVal) &&
+        differs(curVal, otherVal) &&
         !combineConflicts.some(c => c.field === key)            // one entry per field
       ) {
         combineConflicts.push({

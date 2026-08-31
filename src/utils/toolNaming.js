@@ -82,6 +82,11 @@ export const descDec = x => { const s = String(r4(x)); return s.startsWith("0.")
 // 3-decimal version for LOC/REACH/KERF in descriptions
 export const descDec3 = x => { const s = String(parseFloat(parseFloat(x).toFixed(3))); return s.startsWith("0.") ? s.slice(1) : s; };
 
+// The REACH token. One spelling, used by both the generic suffix below and the
+// thread mill's legacy shoulder-length fallback, so a tool can't read
+// ".4REACH" on one screen and ".4 REACH" on another.
+const reachToken = v => ` ${descDec3(v)} REACH`;
+
 // Detects whether an inch value is really a "nice" metric size (e.g. 8mm tool
 // stored as 0.3150"), so it can be displayed as "8mm" instead of ".315".
 // Numbers that already match a fraction or a standard drill size are excluded.
@@ -129,7 +134,21 @@ export function smartDiam(inches, inputWasMm, isDrillType = false, tol = SNAP_TO
 // Wrapped rather than folded into the switch below — that switch has 36 return
 // sites and the suffix rule belongs in exactly one of them.
 export function buildDesc(f, inputWasMm = !!(f && f.inputWasMm)) {
-  return applyStatusSuffix(buildBaseDesc(f, inputWasMm), f?.status);
+  return applyStatusSuffix(applyReachSuffix(buildBaseDesc(f, inputWasMm), f), f?.status);
+}
+
+// ⚠️ REACH IS NAMED ONLY WHEN IT EXCEEDS THE FLUTE LENGTH. Every tool reaches
+// as far as its flutes, so a reach equal to the flute length is not a fact
+// about the tool — printing it would put a redundant number on the majority of
+// the library. The name earns its place only where the cutting diameter carries
+// on ABOVE the flutes, which is exactly the tool a programmer needs warning
+// about. Wrapped rather than folded into the switch above for the same reason
+// the status suffix is: 36 return sites, one rule.
+function applyReachSuffix(desc, f) {
+  const reach = parseFloat(f?.reach) || 0;
+  const flute = parseFloat(f?.loc) || 0;
+  if (!(reach > 0) || !(reach > flute)) return desc;
+  return `${desc}${reachToken(reach)}`;
 }
 
 function buildBaseDesc(f, inputWasMm = !!(f && f.inputWasMm)) {
@@ -194,8 +213,12 @@ function buildBaseDesc(f, inputWasMm = !!(f && f.inputWasMm)) {
         : f.tpiMax
         ? ` ${f.tpiMax}TPI`
         : "";
-      const reachVal = parseFloat(f.shoulderLen) || 0;
-      const reachStr = reachVal > 0 ? ` ${descDec3(reachVal)}REACH` : "";
+      // A thread mill's reach predates the `reach` field — the shop used to
+      // record it in the shoulder length. Keep reading that ONLY while the real
+      // field is blank, otherwise the generic suffix below emits it and this
+      // would print REACH twice.
+      const reachVal = (parseFloat(f.reach) || 0) > 0 ? 0 : (parseFloat(f.shoulderLen) || 0);
+      const reachStr = reachVal > 0 ? reachToken(reachVal) : "";
       return `${dStr}${tmAngStr}${tpiStr} THREAD MILL${reachStr}${tsc}`.trim();
     }
     case "slot/key cutter": {

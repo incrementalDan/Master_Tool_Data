@@ -116,6 +116,13 @@ const NO_TURNING      = ALL_TYPES.filter(t => t !== 'turning general');
 const NO_BORING_TURN  = ALL_TYPES.filter(t => t !== 'boring head' && t !== 'turning general');
 const NO_BORING       = ALL_TYPES.filter(t => t !== 'boring head');
 const NO_TAP          = ALL_TYPES.filter(t => t !== 'tap');
+// Reach is the cutting diameter carrying on ABOVE the flutes on a shanked tool.
+// ⚠️ A FACE MILL AND A BORING HEAD DO NOT REACH THAT WAY — their body steps down
+// from the cut because that is simply their shape, not because anything was
+// relieved to clear a pocket wall, so the number would describe something else
+// entirely. Boring head is already out via NO_BORING_TURN; face mill is named
+// here. Turning is out for the same reason it is out of every geometry field.
+const REACH_TYPES     = NO_BORING_TURN.filter(t => t !== 'face mill');
 
 // Tool types where the UI shows taper_angle as "Included/Inclusive Tip Angle (°)"
 // (= 2 × the stored geometry.TA, edited bidirectionally with a ÷2 on input).
@@ -575,6 +582,82 @@ export const FIELD_REGISTRY = {
     proShopColumn: 'lengthBelowShankDiameter', // ProShop's "Length Below Holder - MIN OOH"
     metadataOnly: true,
     appliesToTypes: 'all',
+    required: false,
+    precision: 4,
+  },
+
+  // ⚠️ THE SHAFT PROFILE IS DEFINING GEOMETRY, not an add-on. Fusion presents it
+  // as a separate tab and the app ignored it for years, but it is what makes the
+  // CAM model match the real tool — and what Fusion's collision detection runs
+  // on. Before it existed, the difference between the model and the real tool
+  // was tribal knowledge carried in a machinist's head, and getting it wrong
+  // crashed the machine. Catching that in CAM costs nothing. So it is synced,
+  // diffed and conflict-flagged exactly like the diameter or the overall length.
+  //
+  // It is registered for its LABEL and its type — it has no place in the scalar
+  // form grids (it is a list, edited in the Tool Profile), so it is deliberately
+  // absent from GEOMETRY_FIELDS.
+  shaft_segments: {
+    label: 'Shaft Profile',
+    type: 'segments',
+    unit: 'length',
+    canonicalUnit: 'native',
+    fusionPath: 'shaft.segments',
+    proShopColumn: null,
+    metadataOnly: false,
+    appliesToTypes: REACH_TYPES,
+    required: false,
+    precision: 4,
+  },
+
+  // ── Reach & undercut (the necked-down shank above the flutes) ─────────────
+  // A "reach" tool keeps its cutting diameter (or a hair under it) for some
+  // distance ABOVE the flutes, so it can drop into a deep pocket without the
+  // shank rubbing. In Fusion that is drawn as `shaft.segments[]`; the app
+  // stores the resulting number so it is searchable and can reach the
+  // description. See `src/utils/toolReach.js` for the derivation.
+  //
+  // ⚠️ METADATA-ONLY, AND THAT IS NOT A GAP. Fusion has no "reach" field — it
+  // has the segments the number is computed FROM, and those already round-trip
+  // untouched (`shaft` survives the `...existing` spread in
+  // `internalToFusionTool`). So the "if Fusion has a place for it" rule is
+  // satisfied by the segments, not by mirroring a derived scalar into a field
+  // Fusion would reject.
+  reach: {
+    label: 'Reach',
+    type: 'number',
+    unit: 'length',
+    canonicalUnit: 'native',      // stored in the tool's own unit
+    fusionPath: null,             // derived from geometry.LCF + shaft.segments
+    proShopColumn: null,
+    metadataOnly: true,
+    appliesToTypes: REACH_TYPES,
+    required: false,
+    precision: 4,
+  },
+
+  has_undercut: {
+    label: 'Undercut',
+    type: 'boolean',
+    unit: null,
+    fusionPath: null,
+    proShopColumn: null,
+    metadataOnly: true,
+    appliesToTypes: REACH_TYPES,
+    required: false,
+    precision: null,
+  },
+
+  // Optional — an undercut can be flagged without anyone measuring it.
+  undercut_diameter: {
+    label: 'Undercut Diameter',
+    type: 'number',
+    unit: 'length',
+    canonicalUnit: 'native',
+    fusionPath: null,
+    proShopColumn: null,
+    metadataOnly: true,
+    appliesToTypes: REACH_TYPES,
     required: false,
     precision: 4,
   },
