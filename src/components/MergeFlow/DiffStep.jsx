@@ -82,12 +82,12 @@ const EXCLUDED = new Set([
   'cutting_speed', 'depth_of_cut', 'width_of_cut',
 ]);
 
-export function formatValue(v) {
+export function formatValue(v, unit) {
   if (v === null || v === undefined || v === '') return '—';
   // ⚠️ A list of OBJECTS (the shaft profile) joins to "[object Object]", which
   // reads as corrupted data on the one screen where the user is deciding which
   // geometry is right. Same renderer the drift banner uses.
-  if (Array.isArray(v) && v.some(x => x && typeof x === 'object')) return formatShaftSegments(v);
+  if (Array.isArray(v) && v.some(x => x && typeof x === 'object')) return formatShaftSegments(v, unit);
   if (Array.isArray(v)) return v.length ? v.join(', ') : '—';
   if (typeof v === 'boolean') return v ? 'Yes' : 'No';
   const n = Number(v);
@@ -735,9 +735,9 @@ export default function DiffStep({
                     onChange={() => toggleFlat(field)}
                   />
                   <span className="diff-field-label">{fieldLabel(field, masterTool.unit) || field}</span>
-                  <span className="diff-val diff-val-master">{formatValue(masterTool[field])}</span>
+                  <span className="diff-val diff-val-master">{formatValue(masterTool[field], masterTool.unit)}</span>
                   <span className="diff-arrow">→</span>
-                  <span className="diff-val diff-val-job">{formatValue(importedTool[field])}</span>
+                  <span className="diff-val diff-val-job">{formatValue(importedTool[field], masterTool.unit)}</span>
                 </label>
               ))}
             </div>

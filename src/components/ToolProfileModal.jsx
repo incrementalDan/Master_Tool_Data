@@ -26,7 +26,7 @@ import { useState, useMemo, useRef } from 'react';
 import { X, Ruler, Info } from 'lucide-react';
 import { buildToolProfile, profileDimensions, shaftRows } from '../utils/toolProfile.js';
 import { FIELD_REGISTRY, fieldLabel, INCLUSIVE_ANGLE_TYPES } from '../schema/fieldRegistry.js';
-import { unitAbbr } from '../utils/units.js';
+import { unitAbbr, unitPrecision, convertLength } from '../utils/units.js';
 import { undercutDiameterHint, resolveReachFields, deriveReach } from '../utils/toolReach.js';
 import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 
@@ -76,10 +76,19 @@ const SHORT = {
 // stack, or the cutting diameter when there is nothing there yet. Seeding it
 // with an arbitrary size would jump the profile and rescale the whole drawing.
 // (Same reasoning as the holder module's `seedSegmentAt`.)
-function newSegment(segs, profile) {
+// ⚠️ THE FALLBACKS ARE UNIT-AWARE. Both were inch numbers, so on a metric tool
+// with no geometry yet the seed was a 0.1mm segment at 0.25mm — a hair, and the
+// drawing rescaled around it. Stated in mm and converted, the way the holder
+// module's `newSegmentHeight` does it.
+const SEED_HEIGHT_MM = 2.5;      // a visible starting height on either unit
+const SEED_DIAMETER_MM = 6;      // ~1/4", the commonest shank either way
+function newSegment(segs, profile, unit) {
+  const round = (v) => Number(Number(v).toFixed(unitPrecision(unit)));
+  const mm = (v) => round(convertLength(v, 'millimeters', unit));
   const top = segs.length ? segs[segs.length - 1] : null;
-  const dia = top ? top.upper : (profile.diameter || 0.25);
-  return { height: Math.max(0.05, (profile.total || 1) * 0.1), lower: dia, upper: dia };
+  const dia = top ? top.upper : (profile.diameter || mm(SEED_DIAMETER_MM));
+  // ⚠️ Rounded, or a tenth of a 63mm tool arrives as 6.300000000000001 in the box.
+  return { height: round(Math.max(mm(SEED_HEIGHT_MM), (profile.total || 0) * 0.1)), lower: dia, upper: dia };
 }
 
 // The undercut pill writes the OVERRIDE and lets the shared resolver work out
@@ -116,6 +125,10 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
   // input reports `''` for partial text (".", "-", "1e"), so the raw string has
   // to be held somewhere or the field fights every retype.
   const [cell, setCell] = useState(null);
+  // ⚠️ A 0.001 step is a thou in inches and a NANOMETRE-ish nothing in mm, so
+  // the arrows would be useless on a metric tool. One decade coarser than the
+  // record's display precision.
+  const segStep = String(10 ** -(unitPrecision(draft.unit) - 1));
 
   // Editing the shaft writes `shaft_segments` on the draft; the derived reach
   // and undercut follow from it through the shared resolver, so the drawing and
@@ -463,7 +476,7 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
               <h4 className="tp-panel-title">
                 Shaft segments
                 <button type="button" className="btn btn-ghost btn-sm tp-seg-add"
-                  onClick={() => setSegs([...segs, newSegment(segs, profile)], true)}>+ Add</button>
+                  onClick={() => setSegs([...segs, newSegment(segs, profile, draft.unit)], true)}>+ Add</button>
               </h4>
               {segs.length === 0 ? (
                 <p className="tp-empty">
@@ -498,7 +511,7 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
                                     Leaving a cell blank snaps it back to its
                                     last good value — removing a segment is what
                                     the × is for. */}
-                                <input type="number" step="0.001" className="tp-seg-input"
+                                <input type="number" step={segStep} className="tp-seg-input"
                                   value={cell?.id === id ? cell.text : (sg[k] ?? '')}
                                   onFocus={() => setCell({ id, text: String(sg[k] ?? '') })}
                                   onBlur={() => setCell(null)}

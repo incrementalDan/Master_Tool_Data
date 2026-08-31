@@ -13,7 +13,7 @@ describe('demo data', () => {
     const tools = combineToolsByToolId(built);
 
     expect(untracked.length).toBe(0);          // all demo tools are tracked
-    expect(tools.length).toBe(13);
+    expect(tools.length).toBe(14);
     expect(holders.length).toBeGreaterThan(0);
 
     for (const t of tools) {
@@ -33,6 +33,16 @@ describe('demo data', () => {
     // invisible in demo mode — which is where they get looked at.
     const segged = tools.filter(t => (t._instancesRaw || []).some(r => r?.shaft?.segments?.length));
     expect(segged.length).toBeGreaterThanOrEqual(1);
+    // ⚠️ And one of them is METRIC (B-301). The app must be right for an
+    // mm-default shop, and until this tool existed there was no metric tool in
+    // the demo AT ALL — so every unit-flavoured default, step and display
+    // precision in the profile was unreachable where things get looked at.
+    const metricSegged = segged.filter(t => t.unit === 'millimeters');
+    expect(metricSegged.length).toBeGreaterThanOrEqual(1);
+    for (const t of metricSegged) {
+      // Nothing converts: the segments stay in the tool's own unit.
+      expect(t.shaft_segments.every(s => s.height > 1)).toBe(true);   // mm-sized, not inch numbers
+    }
 
     // ⚠️ A preset guid may repeat across the INSTANCES of one logical tool —
     // presets are replicated onto every instance by design — but never across

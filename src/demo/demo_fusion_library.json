@@ -2375,11 +2375,11 @@
     {
       "BMC": "unspecified",
       "GRADE": "Mill Generic",
-      "description": "3/16\u00d8 High Feed mill .562LOC",
+      "description": "3/16Ø High Feed mill .562LOC",
       "expressions": {
         "holder_description": "'NBT30-SK13C-120'",
         "tool_bodyLength": ".86 in",
-        "tool_description": "'3/16\u00d8 High Feed mill .562LOC'",
+        "tool_description": "'3/16Ø High Feed mill .562LOC'",
         "tool_diameter": ".1875 in",
         "tool_fluteLength": ".5625 in",
         "tool_lengthOffset": "tool_number",
@@ -2808,6 +2808,172 @@
             "height": 0.07534,
             "lower-diameter": 0.038,
             "upper-diameter": 0.125
+          }
+        ]
+      }
+    },
+    {
+      "BMC": "carbide",
+      "GRADE": "Mill Generic",
+      "description": "6mm 4FL BALL EM 12LOC 32 REACH",
+      "expressions": {
+        "holder_description": "'NBT30-SK13C-90 (85mm)'",
+        "tool_bodyLength": "35 mm",
+        "tool_description": "'6mm 4FL BALL EM 12LOC 32 REACH'",
+        "tool_diameter": "6 mm",
+        "tool_fluteLength": "12 mm",
+        "tool_material": "'carbide'",
+        "tool_number": "78",
+        "tool_overallLength": "63 mm",
+        "tool_productId": "'B-301'",
+        "tool_shoulderLength": "12 mm",
+        "tool_vendor": "'LC-15'",
+        "tool_comment": "'FTL-00000E'",
+        "tool_shaftDiameter": "6 mm"
+      },
+      "geometry": {
+        "CSP": false,
+        "DC": 6,
+        "HAND": true,
+        "LB": 35,
+        "LCF": 12,
+        "NOF": 4,
+        "NT": 1,
+        "OAL": 63,
+        "RE": 3,
+        "SFDM": 6,
+        "TA": 0,
+        "TP": 0,
+        "assemblyGaugeLength": 120,
+        "shoulder-diameter": 6,
+        "shoulder-length": 12,
+        "thread-profile-angle": 60,
+        "tip-diameter": 6,
+        "tip-length": 0,
+        "tip-offset": 0
+      },
+      "guid": "e1c2f3a4-2222-4d3e-8b22-5f7ab0c91d55",
+      "holder": {
+        "description": "NBT30-SK13C-90 (85mm)",
+        "gaugeLength": 3.346417,
+        "guid": "82b79d9b-5c50-43f9-b35b-354ae2df7bbf",
+        "product-id": "",
+        "product-link": "",
+        "segments": [
+          {
+            "height": 2.5590551181102,
+            "lower-diameter": 1.2992125984252,
+            "upper-diameter": 1.2992125984252
+          },
+          {
+            "height": 0.039370078740157,
+            "lower-diameter": 1.7322834645669,
+            "upper-diameter": 1.8110236220472
+          },
+          {
+            "height": 0.13385826771654,
+            "lower-diameter": 1.8110236220472,
+            "upper-diameter": 1.8110236220472
+          },
+          {
+            "height": 0.090905511811024,
+            "lower-diameter": 1.8110236220472,
+            "upper-diameter": 1.496062992126
+          },
+          {
+            "height": 0.13311023622047,
+            "lower-diameter": 1.496062992126,
+            "upper-diameter": 1.496062992126
+          },
+          {
+            "height": 0.090905511811024,
+            "lower-diameter": 1.496062992126,
+            "upper-diameter": 1.8110236220472
+          },
+          {
+            "height": 0.25984251968504,
+            "lower-diameter": 1.8110236220472,
+            "upper-diameter": 1.8110236220472
+          },
+          {
+            "height": 0.039370078740157,
+            "lower-diameter": 1.8110236220472,
+            "upper-diameter": 1.7322834645669
+          },
+          {
+            "height": 0.078740157480315,
+            "lower-diameter": 1.25,
+            "upper-diameter": 1.25
+          }
+        ],
+        "type": "holder",
+        "unit": "inches",
+        "vendor": ""
+      },
+      "last_modified": 1780673247472,
+      "post-process": {
+        "break-control": false,
+        "comment": "FTL-00000E",
+        "diameter-offset": 78,
+        "length-offset": 78,
+        "live": true,
+        "manual-tool-change": false,
+        "number": 78,
+        "turret": 0
+      },
+      "product-id": "B-301",
+      "product-link": "https://americanprecisionworks.adionsystems.com/procnc/tools/A/A-25$",
+      "reference_guid": "86b21e97-a5e0-4bb2-bf18-06fd58e6576b",
+      "start-values": {
+        "presets": [
+          {
+            "description": "",
+            "expressions": {
+              "tool_feedPerTooth": ".002 in",
+              "tool_feedPlunge": "50 inpm",
+              "tool_feedRamp": "30 inpm",
+              "tool_surfaceSpeed": "525 fpm"
+            },
+            "f_n": 0.009349978135683903,
+            "f_z": 0.002,
+            "guid": "b3010000-0000-4000-8000-000000000000",
+            "material": {
+              "category": "all",
+              "query": "",
+              "use-hardness": false
+            },
+            "n": 5347.606087887685,
+            "n_ramp": 5347.606087887685,
+            "name": "AL 35 NBT30-SK13C-90 - Rough",
+            "ramp-angle": 2,
+            "tool-coolant": "flood",
+            "use-stepdown": false,
+            "use-stepover": false,
+            "v_c": 525,
+            "v_f": 42.78084870310147,
+            "v_f_leadIn": 42.78084870310147,
+            "v_f_leadOut": 42.78084870310147,
+            "v_f_plunge": 50,
+            "v_f_ramp": 30,
+            "v_f_transition": 42.78084870310147
+          }
+        ]
+      },
+      "type": "ball end mill",
+      "unit": "millimeters",
+      "vendor": "LC-14",
+      "shaft": {
+        "type": "shaft",
+        "segments": [
+          {
+            "height": 20,
+            "lower-diameter": 5.6,
+            "upper-diameter": 5.6
+          },
+          {
+            "height": 4,
+            "lower-diameter": 5.6,
+            "upper-diameter": 6
           }
         ]
       }

@@ -125,3 +125,66 @@ describe('the tool page shows that a tool has a shaft profile', () => {
     expect(html).not.toMatch(/<input[^>]*shaft/i);
   });
 });
+
+// ─── mm support. Every length here is in the record's OWN unit and nothing
+// converts, so the risk is not arithmetic — it is inch-flavoured constants
+// hiding in defaults, steps and display precision (CLAUDE.md checklist #7).
+describe('the shaft feature is right in a millimetres shop', () => {
+  // The same physical tool expressed both ways: Ø1mm, 1.5mm LOC, a 3.658mm
+  // neck ground to 0.965mm, blending up to a 3.175mm shank.
+  const inch = { tool_type: 'flat end mill', unit: 'inches', diameter: 0.0394,
+    flute_length: 0.059, overall_length: 2.5, shank_diameter: 0.125,
+    shaft_segments: [{ height: 0.144, lower: 0.038, upper: 0.038 },
+                     { height: 0.0753, lower: 0.038, upper: 0.125 }] };
+  const mm = { tool_type: 'flat end mill', unit: 'millimeters', diameter: 1,
+    flute_length: 1.5, overall_length: 63.5, shank_diameter: 3.175,
+    shaft_segments: [{ height: 3.658, lower: 0.965, upper: 0.965 },
+                     { height: 1.913, lower: 0.965, upper: 3.175 }] };
+
+  it('derives the same reach and undercut from either', async () => {
+    const { deriveReach } = await import('../utils/toolReach.js');
+    const i = deriveReach(inch); const m = deriveReach(mm);
+    expect(i.hasUndercut).toBe(true);
+    expect(m.hasUndercut).toBe(true);
+    expect(m.reach).toBeCloseTo(i.reach * 25.4, 1);       // same tool, same answer
+    expect(m.neckDiameter).toBeCloseTo(i.neckDiameter * 25.4, 2);
+  });
+
+  it('⚠️ writes to Fusion with NO conversion — the segments are already in the tool’s unit', async () => {
+    const { internalToFusionTool, readShaftSegments } = await import('../schema/fusionConvert.js');
+    const raw = { guid: 'g', type: 'flat end mill', unit: 'millimeters',
+      geometry: { DC: 1, LCF: 1.5, OAL: 63.5 }, 'start-values': { presets: [] } };
+    const out = internalToFusionTool(mm, raw);
+    expect(out.unit).toBe('millimeters');
+    expect(readShaftSegments(out.shaft)).toEqual(mm.shaft_segments);
+  });
+
+  it('labels and formats in the record’s own unit and precision', async () => {
+    const { fieldLabel } = await import('../schema/fieldRegistry.js');
+    expect(fieldLabel('shaft_segments', 'millimeters')).toBe('Shaft Profile (mm)');
+    // 3 decimals metric, 4 inch — the app's display convention.
+    const s = [{ height: 3.65858, lower: 0.96525, upper: 0.96525 }];
+    expect(formatShaftSegments(s, 'millimeters')).toContain('3.659');
+    expect(formatShaftSegments(s, 'millimeters')).not.toContain('3.6586');
+    expect(formatShaftSegments(s, 'inches')).toContain('3.6586');
+  });
+
+  it('draws without dividing by an inch assumption', async () => {
+    const { buildToolProfile } = await import('../utils/toolProfile.js');
+    const p = buildToolProfile(mm);
+    expect(p.total).toBe(63.5);
+    expect(p.maxDia).toBe(3.175);
+    expect(JSON.stringify(p)).not.toMatch(/NaN|Infinity/);   // null shoulderBand is fine — this tool has none
+  });
+
+  it('⚠️ the new-segment seed is a real size on either unit', async () => {
+    // Both fallbacks were inch numbers (0.05 and 0.25), so a metric tool with
+    // no geometry yet seeded a 0.1mm segment at 0.25mm — a hair, and the
+    // drawing rescaled around it.
+    const { convertLength, unitPrecision } = await import('../utils/units.js');
+    const seed = (u) => Number(convertLength(2.5, 'millimeters', u).toFixed(unitPrecision(u)));
+    expect(seed('millimeters')).toBe(2.5);
+    expect(seed('inches')).toBeCloseTo(0.0984, 4);
+    expect(seed('millimeters')).toBeGreaterThan(1);       // not a hair
+  });
+});

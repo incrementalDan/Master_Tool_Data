@@ -18,6 +18,7 @@
 // would silently assert one of the two is wrong. The app has no opinion on that
 // (see "Reach & undercut" in CLAUDE.md).
 import { fieldAppliesTo } from '../schema/fieldRegistry.js';
+import { unitPrecision } from './units.js';
 
 const num = (v) => {
   const n = Number(v);
@@ -173,10 +174,14 @@ export function profileDimensions(toolType) {
 // goes through this one function, so the two can never describe the same
 // geometry differently. The full numbers stay one click away in the Tool
 // Profile; this is the summary.
-export function formatShaftSegments(segs) {
+export function formatShaftSegments(segs, unit) {
   if (!Array.isArray(segs)) return '\u2014';
   if (!segs.length) return 'none';
-  const r = (n) => String(Math.round((Number(n) || 0) * 10000) / 10000);
+  // 4 decimals inch / 3 metric, the app's display convention. A caller that
+  // does not know the record's unit gets the inch precision, which only ever
+  // shows one more digit than a metric reader needs — never fewer.
+  const f = 10 ** unitPrecision(unit);
+  const r = (n) => String(Math.round((Number(n) || 0) * f) / f);
   const one = (s) => `${r(s?.height)}\u00d7\u2300${r(s?.lower)}`
     + (Math.abs(Number(s?.upper) - Number(s?.lower)) > 1e-9 ? `\u2192\u2300${r(s.upper)}` : '');
   return `${segs.length} seg: ${segs.map(one).join(', ')}`;

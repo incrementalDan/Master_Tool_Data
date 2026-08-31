@@ -1106,6 +1106,10 @@ Fusion splits a tool across four tabs (General / Cutter / Shaft / Holder), so no
 
 **The `!= null` gate** distinguishes "the app has no opinion" (`null` — write nothing) from "the user emptied it" (`[]` — remove the `shaft` object). Without it, ~250 tools that never had a shaft would gain an empty one.
 
+**mm is a first-class case, and the risk is NOT arithmetic.** Every segment is in its record's own unit and nothing converts — the Fusion write, the TSV export (factor 1, unlike the holder's, which crosses records) and the drift compare all pass the numbers through untouched, so a metric tool needs no conversion anywhere. What did hide were **inch-flavoured constants**: the new-segment seed fell back to `0.05` height and `0.25` diameter (a 0.1mm segment at 0.25mm on a bare metric tool), the input `step` was `0.001` (a thou in inches, sub-micron in mm), and `formatShaftSegments` rounded to 4 places regardless. All three are now derived from the record's unit via `unitPrecision` / `convertLength`, mirroring the holder module's `newSegmentHeight`. ⚠️ The drift tolerance stays a flat `5e-5` — that is what **every** numeric length in `driftEqual` uses, and it absorbs float round-trip noise (relative, ~1e-16) rather than expressing a machining significance, so it is right at mm magnitudes too; changing it here alone would make the shaft drift differently from the diameter.
+
+⚠️ **The demo library carries a METRIC segmented tool** (`B-301`, a 6mm long-reach ball mill) alongside the inch one. Until it existed there was no metric tool in the demo **at all**, so every unit-flavoured default, step and label in this feature was unreachable in the one place things get looked at. `demo.test.js` asserts at least one segmented demo tool is metric.
+
 **No expression pairing to keep in step** — verified across the real library, `shaft.segments` has no `expressions.*` counterpart (only `tool_shaftDiameter`/`tool_shaftAxisAngle` exist, and neither is the profile). A plain array write, which is why this is small.
 
 ⚠️ **The table is listed TOP-DOWN, the way Fusion's own Shaft tab numbers them — the stored array is the reverse (tip-first).** Every edit maps back through the reversed index; getting that wrong silently puts the segment on the opposite end of the tool (the same trap `insertSegmentAt` documents for holders). A new segment continues from the face it attaches to rather than jumping the profile.
@@ -1132,7 +1136,7 @@ Fusion splits a tool across four tabs (General / Cutter / Shaft / Holder), so no
 
 ⚠️ **Editing follows `commitPurchasing`'s rule**: the modal stays open and keeps the draft until the save resolves, and a failed save says so instead of closing. Locked by `toolProfileUi.test.jsx`, which renders every tool in the real library and asserts **no `NaN`/`Infinity` reaches an SVG path** (a tool with no flute length or a zero diameter divides by zero on the way to a scale, and an SVG with NaN in a path silently draws nothing).
 
-⚠️ **The demo library carries one tool with shaft segments** (`A-265`, the long-reach micro end mill, mirroring the real one). Without it, reach, undercut and this whole drawing are invisible in `?demo=true` — which is where they get looked at. `demo.test.js` asserts at least one segmented demo tool exists.
+⚠️ **The demo library carries two tools with shaft segments** — `A-265` (the inch long-reach micro end mill, mirroring the real one) and `B-301` (a **metric** 6mm long-reach ball mill). Without them, reach, undercut and this whole drawing are invisible in `?demo=true` — which is where they get looked at, and the metric one is the only metric tool in the demo at all. `demo.test.js` asserts both.
 
 ### Three length concepts (MIN OOH vs. shoulder length vs. per-assembly OOH)
 

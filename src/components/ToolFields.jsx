@@ -282,7 +282,7 @@ export default function ToolFields({
     if (field === 'shaft_segments') {
       const rows = shaftRows(tool);
       if (!rows.length) return null;
-      const summary = formatShaftSegments(rows);
+      const summary = formatShaftSegments(rows, tool.unit);
       const hint = <div className="field-hint">edited in the Tool Profile</div>;
       return edit ? (
         <div className="field-group" key={field}>
