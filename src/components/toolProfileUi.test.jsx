@@ -96,3 +96,40 @@ describe('the profile modal renders', () => {
     expect(html).toContain('value="0.038"');   // undercut diameter
   });
 });
+
+// ─── The modal's own controls. The undercut pill here is a SECOND copy of the
+// tool page's — it had the same three-state bug and was fixed separately, so it
+// needs its own guard. Steps are unit-derived for the same reason.
+describe('the modal states what it knows, in the record’s unit', () => {
+  const seg = (unit, s) => ({ tool_type: 'flat end mill', unit, diameter: unit === 'inches' ? 0.5 : 12,
+    flute_length: unit === 'inches' ? 1 : 25, overall_length: unit === 'inches' ? 3 : 76,
+    shaft_segments: s });
+
+  it('⚠️ neither Yes nor No is lit when Fusion drew no shaft', () => {
+    const html = render(seg('inches', null));
+    // the pill renders, and no button inside it carries `active`
+    expect(html).toContain('tp-uc-toggle');
+    const pill = html.split('tp-uc-toggle')[1].split('</div>')[0];
+    expect(pill).not.toContain('class="active"');
+  });
+
+  it('Yes is lit when the segments show a narrowed neck', () => {
+    const html = render(seg('inches', [{ height: 0.4, lower: 0.3, upper: 0.3 }]));
+    const pill = html.split('tp-uc-toggle')[1].split('</div>')[0];
+    expect(pill).toContain('class="active"');
+  });
+
+  it('⚠️ steps come from the unit — 0.001 is a thou in inches and a micron in mm', () => {
+    const inch = render(seg('inches', [{ height: 0.4, lower: 0.3, upper: 0.3 }]));
+    const mm = render(seg('millimeters', [{ height: 10, lower: 8, upper: 8 }]));
+    expect(inch).toContain('step="0.001"');
+    expect(mm).toContain('step="0.01"');
+    expect(mm).not.toContain('step="0.001"');     // no inch literal survives
+  });
+
+  it('an angle steps half a degree on either unit, a count steps 1', () => {
+    const html = render({ ...seg('millimeters', null), tool_type: 'drill', tip_angle: 135 });
+    expect(html).toContain('step="0.5"');
+    expect(html).toContain('step="1"');
+  });
+});

@@ -80,6 +80,18 @@ const SHORT = {
 // with no geometry yet the seed was a 0.1mm segment at 0.25mm — a hair, and the
 // drawing rescaled around it. Stated in mm and converted, the way the holder
 // module's `newSegmentHeight` does it.
+// ⚠️ THE STEP COMES FROM THE FIELD AND THE RECORD'S UNIT, never a literal.
+// `0.001` is a thou in inches and a MICRON in mm, so every arrow-key nudge on a
+// metric tool was a thousandth of nothing. A length steps one decade coarser
+// than its display precision (0.001 in / 0.01 mm), an angle a half degree
+// (matching ToolFields' STEP table), a count 1.
+const stepFor = (field, unit) => {
+  const def = FIELD_REGISTRY[field] || {};
+  if (def.precision === 0) return '1';
+  if (def.unit === 'angle') return '0.5';
+  return String(10 ** -(unitPrecision(unit) - 1));
+};
+
 const SEED_HEIGHT_MM = 2.5;      // a visible starting height on either unit
 const SEED_DIAMETER_MM = 6;      // ~1/4", the commonest shank either way
 function newSegment(segs, profile, unit) {
@@ -128,7 +140,7 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
   // ⚠️ A 0.001 step is a thou in inches and a NANOMETRE-ish nothing in mm, so
   // the arrows would be useless on a metric tool. One decade coarser than the
   // record's display precision.
-  const segStep = String(10 ** -(unitPrecision(draft.unit) - 1));
+  const segStep = stepFor('flute_length', draft.unit);   // a plain length step
 
   // Editing the shaft writes `shaft_segments` on the draft; the derived reach
   // and undercut follow from it through the shared resolver, so the drawing and
@@ -146,7 +158,12 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
       .some(f => (draft[f] ?? null) !== (baseRef.current[f] ?? null)) ||
       (draft.has_undercut ?? null) !== (baseRef.current.has_undercut ?? null) ||
       (draft.undercut_override ?? null) !== (baseRef.current.undercut_override ?? null) ||
-      JSON.stringify(draft.shaft_segments ?? null) !== JSON.stringify(baseRef.current.shaft_segments ?? null),
+      // ⚠️ "no profile" has two spellings — `null` (never had one) and `[]`
+      // (added a segment then removed it). Comparing them raw marked the tool
+      // dirty for a round trip that changed nothing, and saving then wrote an
+      // empty array over a null for no reason.
+      JSON.stringify(draft.shaft_segments?.length ? draft.shaft_segments : null)
+        !== JSON.stringify(baseRef.current.shaft_segments?.length ? baseRef.current.shaft_segments : null),
     [draft, dims],
   );
 
@@ -426,12 +443,14 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
               return (
                 <DimBox key={field} x={x} y={yMid} align="center"
                   label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
+                  step={stepFor(field, draft.unit)}
                   value={shown(field)} onChange={v => set(field, v)} readOnly={isDerived(field)} />
               );
             })}
             {diaTargets.map(({ field, y, lane }) => (
               <DimBox key={field} x={cx + BODY_W / 2 + GAP + lane * LANE + 34} y={y} align="left"
                 label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
+                step={stepFor(field, draft.unit)}
                 value={shown(field)} onChange={v => set(field, v)} dia readOnly={isDerived(field)} />
             ))}
 
@@ -448,7 +467,7 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
                     <label key={f} className="tp-extra">
                       <span>{labelOf(f)}</span>
                       <input type="number" className="field-input" value={shown(f) ?? ''}
-                        step={fieldOf(f).precision === 0 ? '1' : '0.001'}
+                        step={stepFor(f, draft.unit)}
                         onChange={e => set(f, e.target.value)} placeholder="—" />
                     </label>
                   ))}
@@ -462,8 +481,11 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
                       )}
                     </span>
                     <div className="btn-toggle tp-uc-toggle">
+                      {/* ⚠️ THREE STATES. `null` is "Fusion drew no shaft, so the
+                          app cannot say" — `!!null === false` lit No, asserting an
+                          answer nobody had. Same rule as the tool page's pill. */}
                       {[[true, 'Yes'], [false, 'No']].map(([v, l]) => (
-                        <button key={l} type="button" className={!!draft.has_undercut === v ? 'active' : ''}
+                        <button key={l} type="button" className={draft.has_undercut === v ? 'active' : ''}
                           onClick={() => setDraft(d => applyUndercut(d, v))}>{l}</button>
                       ))}
                     </div>
@@ -562,7 +584,7 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
 }
 
 // One dimension's value box, sitting on its dimension line.
-function DimBox({ x, y, align, label, unit, value, precision, onChange, dia = false, readOnly = false }) {
+function DimBox({ x, y, align, label, unit, value, precision, step, onChange, dia = false, readOnly = false }) {
   const [focused, setFocused] = useState(false);
   const display = focused
     ? (value ?? '')
@@ -578,7 +600,7 @@ function DimBox({ x, y, align, label, unit, value, precision, onChange, dia = fa
       <span className="tp-dimbox-label">{label}</span>
       <span className="tp-dimbox-input">
         {dia && <span className="dia">⌀</span>}
-        <input type="number" step="0.001" value={display} readOnly={readOnly}
+        <input type="number" step={step} value={display} readOnly={readOnly}
           onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
           onChange={e => onChange(e.target.value)} placeholder="—" />
         <span className="tp-dimbox-unit">{unit}</span>
