@@ -92,6 +92,19 @@ const stepFor = (field, unit) => {
   return String(10 ** -(unitPrecision(unit) - 1));
 };
 
+// ⚠️ EACH VALUE BOX BORDERS IN THE COLOUR OF THE REGION IT NAMES, which is
+// what retired the swatch legend under the segment table: a key you have to
+// look away to read is worse than the boxes saying it themselves. Only fields
+// that name ONE region are coloured — OAL spans the whole tool and REACH spans
+// the flutes plus the neck, so both stay neutral rather than claiming a part.
+const REGION_OF = {
+  flute_length: 'flute',
+  diameter: 'flute',            // the cutting diameter IS the flute region's
+  shoulder_length: 'shoulder',
+  shank_diameter: 'shank',
+  undercut_diameter: 'segment', // the neck's diameter — a segment's, not the tool's
+};
+
 // The field that marks the holder face. Named so the drawing reads as what it
 // is rather than as one more length in the stack.
 const HOLDER_FACE = 'min_ooh';
@@ -478,7 +491,7 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
               return (
                 <DimBox key={field} x={x} y={yMid} align="center"
                   label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
-                  step={stepFor(field, draft.unit)}
+                  step={stepFor(field, draft.unit)} kind={REGION_OF[field]}
                   value={shown(field)} onChange={v => set(field, v)} readOnly={isDerived(field)} />
               );
             })}
@@ -494,7 +507,7 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
             {diaTargets.map(({ field, y, lane }) => (
               <DimBox key={field} x={cx + BODY_W / 2 + GAP + lane * LANE + 34} y={y} align="left"
                 label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
-                step={stepFor(field, draft.unit)}
+                step={stepFor(field, draft.unit)} kind={REGION_OF[field]}
                 value={shown(field)} onChange={v => set(field, v)} dia readOnly={isDerived(field)} />
             ))}
 
@@ -605,12 +618,6 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
               <p className="tp-seg-note">{unit} · measured from the flutes upward</p>
             </section>
 
-            <div className="tp-legend">
-              {[['flute', 'Flutes'], ['shoulder', 'Shoulder'], ['segment', 'Shaft segment'], ['shank', 'Shank']]
-                .map(([k, l]) => (
-                  <span key={k} className="tp-legend-item"><i className={`tp-sw tp-sw-${k}`} />{l}</span>
-                ))}
-            </div>
           </div>
         </div>
 

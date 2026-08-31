@@ -169,3 +169,34 @@ describe('the holder face is a datum, not a dimension', () => {
     }
   });
 });
+
+// ─── The value boxes ARE the key. A swatch legend you have to look away to
+// read is worse than the boxes saying it themselves.
+describe('each value box borders in the colour of the region it names', () => {
+  const t = { tool_type: 'flat end mill', unit: 'inches', diameter: 0.5,
+    flute_length: 1, shoulder_length: 1.2, overall_length: 3, shank_diameter: 0.5,
+    min_ooh: 1.5, has_undercut: true, undercut_diameter: 0.4,
+    shaft_segments: [{ height: 0.3, lower: 0.4, upper: 0.4 }] };
+
+  it('the swatch legend is gone', () => {
+    const html = render(t);
+    expect(html).not.toContain('tp-legend');
+    expect(html).not.toContain('tp-sw-');
+  });
+
+  it('names each region on the box that measures it', () => {
+    const html = render(t);
+    for (const k of ['flute', 'shoulder', 'shank', 'segment', 'holder']) {
+      expect(html, k).toContain(`tp-dimbox-${k}`);
+    }
+  });
+
+  it('⚠️ a box that names no single region stays neutral', () => {
+    // OAL spans the whole tool and REACH spans the flutes plus the neck —
+    // colouring either would claim a part of the tool it does not measure.
+    const html = render(t);
+    for (const m of html.matchAll(/tp-dimbox[^"]*"[\s\S]{0,400}?tp-dimbox-label">([^<]+)/g)) {
+      if (/^(OAL|REACH)$/.test(m[1].trim())) expect(m[0]).not.toMatch(/tp-dimbox-(flute|shoulder|shank|segment|holder)/);
+    }
+  });
+});

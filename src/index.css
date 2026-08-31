@@ -6850,16 +6850,32 @@ input.sf-ref-num { text-align: right; }
 .tp-seg-del:hover { color: var(--red, #dc5050); }
 .tp-seg-note { font-size: 10px; color: var(--text-sub); margin: 8px 0 0; opacity: 0.8; }
 
-.tp-legend { display: flex; flex-wrap: wrap; gap: 10px 14px; padding: 0 2px; }
-.tp-legend-item {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: 11px; color: var(--text-sub);
+/* ⚠️ THERE IS NO SWATCH LEGEND — each value box borders in the colour of the
+   region it names, so the drawing explains itself instead of sending you to a
+   key underneath it. A box that names no single region (OAL, REACH) keeps the
+   default border rather than claiming a part of the tool. */
+/* ⚠️ 1.5px, not 1 — at a hairline the colour barely carries on a box this
+   small and every border read as the default grey, which is the legend problem
+   again in a new place. Each takes the colour that OUTLINES its region in the
+   drawing, so the box and the shape it names match exactly. Shank and segment
+   stay close to each other on purpose: they are close in the drawing too (three
+   muted greys, so the amber flutes are the standout) and inventing a
+   distinction here would claim one the drawing does not have. */
+.tp-dimbox-flute    .tp-dimbox-input,
+.tp-dimbox-shoulder .tp-dimbox-input,
+.tp-dimbox-segment  .tp-dimbox-input,
+.tp-dimbox-shank    .tp-dimbox-input,
+.tp-dimbox-holder   .tp-dimbox-input { border-width: 1.5px; }
+.tp-dimbox-flute    .tp-dimbox-input { border-color: var(--tp-flute-edge); }
+.tp-dimbox-shoulder .tp-dimbox-input { border-color: var(--tp-shoulder); }
+.tp-dimbox-segment  .tp-dimbox-input { border-color: var(--tp-segment-edge); }
+.tp-dimbox-shank    .tp-dimbox-input { border-color: var(--tp-shank-edge); }
+/* The segment table edits the shaft segments, so its rows carry that colour
+   too — the same region, in its other representation. Held back from the boxes'
+   full strength because six of them sit in a row. */
+.tp-seg-table .tp-seg-input {
+  border-color: color-mix(in srgb, var(--tp-segment-edge) 70%, transparent);
 }
-.tp-sw { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
-.tp-sw-flute    { background: var(--tp-flute);    border: 1px solid var(--tp-flute-edge); }
-.tp-sw-shoulder { background: var(--tp-shoulder); opacity: 0.6; }
-.tp-sw-segment  { background: var(--tp-segment);  border: 1px solid var(--tp-segment-edge); }
-.tp-sw-shank    { background: var(--tp-shank);    border: 1px solid var(--tp-shank-edge); }
 
 .tp-error {
   margin: 0 20px; padding: 8px 12px;
