@@ -133,3 +133,39 @@ describe('the modal states what it knows, in the record’s unit', () => {
     expect(html).toContain('step="1"');
   });
 });
+
+// ─── MIN OOH is the holder face, not a length of the tool. It draws as one
+// dotted datum across the drawing rather than as another nested dimension.
+describe('the holder face is a datum, not a dimension', () => {
+  const tool = (extra = {}) => ({ tool_type: 'flat end mill', unit: 'inches',
+    diameter: 0.5, flute_length: 1, shoulder_length: 1.2, overall_length: 3, ...extra });
+
+  it('draws the line only when the tool carries a MIN OOH', () => {
+    expect(render(tool({ min_ooh: 1.5 }))).toContain('tp-holder-line');
+    expect(render(tool())).not.toContain('tp-holder-line');
+    expect(render(tool({ min_ooh: 0 }))).not.toContain('tp-holder-line');
+  });
+
+  it('⚠️ its value box is NOT one of the nested length lanes', () => {
+    // The box wears the holder treatment, and the field never appears in the
+    // left-hand stack — drawn there it read as "another length of the tool".
+    const html = render(tool({ min_ooh: 1.5 }));
+    expect(html).toContain('tp-dimbox-holder');
+    // one lane per remaining length (flute, shoulder, OAL) — MIN OOH freed one
+    expect(html.split('tp-dim ').length - 1).toBeLessThanOrEqual(3 + 3);
+  });
+
+  it('says what it is, so nobody reads it as a tool dimension', () => {
+    expect(render(tool({ min_ooh: 1.5 }))).toContain('Where the holder starts');
+  });
+
+  it('survives a MIN OOH past the overall length, and a metric one', () => {
+    for (const t of [tool({ min_ooh: 99 }),
+                     { ...tool({ min_ooh: 40 }), unit: 'millimeters', diameter: 12,
+                       flute_length: 25, shoulder_length: 30, overall_length: 76 }]) {
+      const html = render(t);
+      expect(html).toContain('tp-holder-line');
+      expect(html).not.toMatch(/NaN|Infinity/);
+    }
+  });
+});

@@ -92,6 +92,18 @@ const stepFor = (field, unit) => {
   return String(10 ** -(unitPrecision(unit) - 1));
 };
 
+// The field that marks the holder face. Named so the drawing reads as what it
+// is rather than as one more length in the stack.
+const HOLDER_FACE = 'min_ooh';
+// How far the datum runs past the tool. ⚠️ ASYMMETRIC ON PURPOSE: the value box
+// anchors the LEFT end (a print puts a datum's label at one end), and the right
+// side has to stop short of `GAP`, where the diameter leaders start — a tool
+// whose undercut sits near the holder face otherwise crossed a dashed datum and
+// a solid leader at the same height.
+const HOLDER_OVERHANG_L = 30;
+const HOLDER_OVERHANG_R = 10;
+const DIMBOX_H = 34;             // label + input, for flipping the value box
+
 const SEED_HEIGHT_MM = 2.5;      // a visible starting height on either unit
 const SEED_DIAMETER_MM = 6;      // ~1/4", the commonest shank either way
 function newSegment(segs, profile, unit) {
@@ -185,11 +197,19 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
   // outside Shoulder (4.0") — lines crossing for no reason — and bunched the
   // labels, since a label sits at its own midpoint and similar lengths have
   // similar midpoints.
+  // ⚠️ MIN OOH IS NOT A LENGTH DIMENSION — it is WHERE THE HOLDER STARTS, the
+  // face of the collet nut. Drawn as a nested dimension it read as "another
+  // length of the tool", stacked in among the flutes and the shoulder. It is a
+  // datum: one dotted line across the drawing, wider than the tool, with its
+  // value sitting on it. (Some tool types could be calculated from the holder;
+  // nothing here tries — the number is the shop's.)
   const lengthDims = dims.lengths
+    .filter(field => field !== HOLDER_FACE)
     .map(field => ({ field, value: Number(draft[field]) || 0 }))
     .filter(d => d.value > 0)
     .sort((a, b) => a.value - b.value)
     .map((d, i) => ({ ...d, lane: i }));
+  const holderFace = dims.lengths.includes(HOLDER_FACE) ? Number(draft[HOLDER_FACE]) || 0 : 0;
 
   const nLeft = Math.max(1, lengthDims.length);
   const svgH = BODY_H + TOP_PAD + BOT_PAD;
@@ -216,6 +236,12 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
     const past = total > brk ? (v - brk) / (total - brk) : 0;
     return yBase - brk * sy - past * shankDrawH;
   };
+
+  // The datum's y, and which side of it the value box fits on. Above by
+  // default (a print puts a section label above its line); below when the line
+  // runs too close to the top of the canvas for the box to clear it.
+  const yHolder = holderFace > 0 ? yAt(Math.min(holderFace, total)) : null;
+  const holderBoxAbove = yHolder == null ? true : (yHolder - TOP_PAD) > (DIMBOX_H + 6);
 
   // ── the silhouette ────────────────────────────────────────────────────────
   const fluteRegion = profile.regions.find(r => r.kind === 'flute');
@@ -402,6 +428,15 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
                 );
               })()}
 
+              {/* ── the holder face: a datum across the drawing, not a
+                     dimension. Wider than the tool so it reads as a plane the
+                     tool passes through rather than as part of its outline. ── */}
+              {yHolder != null && (
+                <line x1={cx - BODY_W / 2 - HOLDER_OVERHANG_L} y1={yHolder}
+                  x2={cx + BODY_W / 2 + HOLDER_OVERHANG_R} y2={yHolder}
+                  className="tp-holder-line" />
+              )}
+
               {/* ── length dimensions, nesting leftward from the tip ─────── */}
               {lengthDims.map(({ field, value, lane }) => {
                 const x = cx - BODY_W / 2 - GAP - lane * LANE;
@@ -447,6 +482,15 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
                   value={shown(field)} onChange={v => set(field, v)} readOnly={isDerived(field)} />
               );
             })}
+            {yHolder != null && (
+              <DimBox x={cx - BODY_W / 2 - HOLDER_OVERHANG_L - 4} align="right"
+                y={yHolder + (holderBoxAbove ? -(DIMBOX_H / 2 + 3) : (DIMBOX_H / 2 + 3))}
+                label={dimLabelOf(HOLDER_FACE)} unit={unit}
+                precision={fieldOf(HOLDER_FACE).precision ?? 4}
+                step={stepFor(HOLDER_FACE, draft.unit)}
+                value={shown(HOLDER_FACE)} onChange={v => set(HOLDER_FACE, v)} kind="holder"
+                title="Where the holder starts — usually the face of the collet nut" />
+            )}
             {diaTargets.map(({ field, y, lane }) => (
               <DimBox key={field} x={cx + BODY_W / 2 + GAP + lane * LANE + 34} y={y} align="left"
                 label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
@@ -584,18 +628,20 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
 }
 
 // One dimension's value box, sitting on its dimension line.
-function DimBox({ x, y, align, label, unit, value, precision, step, onChange, dia = false, readOnly = false }) {
+function DimBox({ x, y, align, label, unit, value, precision, step, onChange, dia = false, readOnly = false, title, kind }) {
   const [focused, setFocused] = useState(false);
   const display = focused
     ? (value ?? '')
     : (value === null || value === undefined || value === ''
       ? '' : Number(Number(value).toFixed(precision ?? 4)));
   return (
-    <div className={`tp-dimbox${readOnly ? ' tp-dimbox-derived' : ''}`}
-      title={readOnly ? 'From the shaft segments' : undefined}
+    <div className={`tp-dimbox${readOnly ? ' tp-dimbox-derived' : ''}${kind ? ` tp-dimbox-${kind}` : ''}`}
+      title={title || (readOnly ? 'From the shaft segments' : undefined)}
       style={{
       left: x, top: y,
-      transform: align === 'center' ? 'translate(-50%, -50%)' : 'translate(-34px, -50%)',
+      transform: align === 'center' ? 'translate(-50%, -50%)'
+        : align === 'right' ? 'translate(-100%, -50%)'    // right edge meets x
+        : 'translate(-34px, -50%)',
     }}>
       <span className="tp-dimbox-label">{label}</span>
       <span className="tp-dimbox-input">
