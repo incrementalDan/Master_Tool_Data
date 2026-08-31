@@ -56,6 +56,7 @@ export function groupedToolTypes(allTypes) {
 // has bespoke controls), so it is NOT listed in these generic grids.
 export const GEOMETRY_FIELDS = [
   'diameter', 'number_of_flutes', 'flute_length', 'overall_length', 'shank_diameter',
+  'shaft_segments',
   'corner_radius', 'shoulder_length', 'reach', 'has_undercut', 'undercut_diameter',
   'tip_angle', 'taper_angle', 'tip_diameter',
   'lower_radius', 'upper_radius', 'profile_radius', 'axial_distance',
@@ -108,6 +109,10 @@ export const VIEW_HIDE_WHEN_EMPTY = new Set([
   'reach',
   'has_undercut',
   'undercut_diameter',
+  // Most tools have a plain shank, so a "no profile" row on every one of them
+  // is wallpaper. It appears the moment a tool carries segments — which is the
+  // point: outside the Tool Profile there was nothing saying it had any.
+  'shaft_segments',
 ]);
 
 // Render-control kind for a generic field (the thread cluster is handled apart).

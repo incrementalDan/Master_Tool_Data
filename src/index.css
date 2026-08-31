@@ -888,6 +888,17 @@ textarea.field-input { resize: vertical; min-height: 70px; }
 .detail-field { display: flex; flex-direction: column; gap: 2px; }
 .detail-field-label { font-size: 11px; color: var(--text-sub); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
 .detail-field-value { font-size: 13px; color: var(--text); padding-left: 4px; }
+/* A read-out that opens something — the shaft profile summary opens the Tool
+   Profile. Styled as text, not a button: it sits in a column of plain values
+   and a button chrome there would read as an action on the record. */
+.detail-field-value .link-btn {
+  background: none; border: none; padding: 0; margin: 0; font: inherit;
+  color: inherit; text-align: left; cursor: pointer;
+  text-decoration: underline; text-decoration-style: dotted;
+  text-decoration-color: var(--border); text-underline-offset: 3px;
+}
+.detail-field-value .link-btn:hover { color: var(--blue); text-decoration-color: var(--blue); }
+.detail-field > .field-hint { padding-left: 4px; }
 .detail-field-empty { color: var(--border); font-style: italic; }
 
 .action-bar {

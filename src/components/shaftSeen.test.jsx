@@ -84,3 +84,44 @@ describe('a derived dimension is a read-out, not an input', () => {
       shaft_segments: [{ height: 0.3, lower: 0.25, upper: 0.25 }] }).has_undercut).toBe(false);
   });
 });
+
+// ─── The tool page itself. Outside the Tool Profile there was nothing saying a
+// tool HAD a profile at all — its neck is defining geometry and it was
+// invisible beside the diameter and the OAL it belongs with.
+describe('the tool page shows that a tool has a shaft profile', () => {
+  const seg = { id: 'FTL-1', tool_type: 'flat end mill', unit: 'inches',
+    diameter: 0.039, flute_length: 0.059, overall_length: 2.5,
+    shaft_segments: [{ height: 0.144, lower: 0.038, upper: 0.038 },
+                     { height: 0.0753, lower: 0.038, upper: 0.125 }] };
+  const bare = { ...seg, shaft_segments: null };
+  const view = async (tool, props = {}) => {
+    const { default: ToolFields } = await import('./ToolFields.jsx');
+    return renderToString(<ToolFields tool={tool} mode="view" {...props} />);
+  };
+
+  it('names the profile in the Geometry grid, readably', async () => {
+    const html = await view(seg);
+    expect(html).toContain('Shaft Profile');
+    expect(html).toContain('2 seg');
+    expect(html).not.toMatch(/object Object/);
+  });
+
+  it('⚠️ says nothing on a tool with a plain shank — most of the library', async () => {
+    expect(await view(bare)).not.toContain('Shaft Profile');
+    expect(await view({ ...seg, shaft_segments: [] })).not.toContain('Shaft Profile');
+  });
+
+  it('opens the Tool Profile when the page can, and is plain text when it cannot', async () => {
+    expect(await view(seg, { onOpenProfile: () => {} })).toContain('link-btn');
+    expect(await view(seg)).not.toContain('link-btn');
+  });
+
+  it('is a read-out in the EDIT form too — it is edited in the Tool Profile', async () => {
+    const { default: ToolFields } = await import('./ToolFields.jsx');
+    const html = renderToString(
+      <ToolFields tool={seg} mode="edit" setField={() => {}} />);
+    expect(html).toContain('Shaft Profile');
+    expect(html).toContain('edited in the Tool Profile');
+    expect(html).not.toMatch(/<input[^>]*shaft/i);
+  });
+});

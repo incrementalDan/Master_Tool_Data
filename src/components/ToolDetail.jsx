@@ -721,7 +721,7 @@ export default function ToolDetail() {
                   Holder Body / Insert sections above.
                 </div>
               )}
-              <ToolFields tool={tool} mode="view" />
+              <ToolFields tool={tool} mode="view" onOpenProfile={() => setShowProfile(true)} />
               {geoIssues.length > 0 && (
                 <div className="warn-banner" style={{ marginTop: 8 }}>
                   {geoIssues.map((issue, i) => (

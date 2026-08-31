@@ -21,6 +21,7 @@ import {
 } from '../schema/toolSchema.js';
 import { unitAbbr } from '../utils/units.js';
 import { undercutDiameterHint, reachIsDerived } from '../utils/toolReach.js';
+import { shaftRows, formatShaftSegments } from '../utils/toolProfile.js';
 import InfoTip from './InfoTip.jsx';
 
 const STEP = {
@@ -160,6 +161,7 @@ const DATALIST_FALLBACK = {
 export default function ToolFields({
   tool, mode, setField, geoIssueFields,
   proposals = null, onResolveProposal = null, listOptions = null,
+  onOpenProfile = null,
 }) {
   const sections = getToolFieldSections(tool.tool_type);
   const edit = mode === 'edit';
@@ -267,6 +269,37 @@ export default function ToolFields({
             </span>
           )}
           {strip(field)}
+        </div>
+      );
+    }
+
+    // ⚠️ THE SHAFT PROFILE IS A LIST, EDITED IN THE TOOL PROFILE — so it is a
+    // read-out here in BOTH modes, never a field. It is on this page at all
+    // because outside that modal there was nothing saying a tool had a profile:
+    // its neck is defining geometry, and it was invisible beside the diameter
+    // and the OAL it belongs with. Hidden when there is none (most tools) —
+    // a "no profile" row on the whole library is wallpaper.
+    if (field === 'shaft_segments') {
+      const rows = shaftRows(tool);
+      if (!rows.length) return null;
+      const summary = formatShaftSegments(rows);
+      const hint = <div className="field-hint">edited in the Tool Profile</div>;
+      return edit ? (
+        <div className="field-group" key={field}>
+          <label className="field-label">{label}</label>
+          <div className="field-readout">{summary}</div>
+          {hint}
+        </div>
+      ) : (
+        <div className="detail-field" key={field}>
+          <div className="detail-field-label">{label}</div>
+          <div className="detail-field-value">
+            {onOpenProfile
+              ? <button type="button" className="link-btn" onClick={onOpenProfile}
+                  title="Open the Tool Profile">{summary}</button>
+              : summary}
+          </div>
+          {hint}
         </div>
       );
     }
