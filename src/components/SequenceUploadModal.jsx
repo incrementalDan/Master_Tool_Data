@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, UploadCloud, AlertTriangle, CheckCircle2, ListOrdered, HelpCircle } from 'lucide-react';
 import { useApp } from '../context/AppContext.jsx';
+import { BlockerList } from './SequenceBlockers.jsx';
 import { buildSequenceImport, detailsOf } from '../utils/sequenceImport.js';
 import { formatProgramNumber, formatOperation, routingLabel } from '../utils/parts.js';
 
@@ -106,25 +107,8 @@ export default function SequenceUploadModal({ onClose, onImported, presetFile = 
 
           {result && (
             <div className="pn-modal-stack" style={{ marginTop: 14 }}>
-              {result.blockers.map((b, i) => (
-                <div key={i} className="sd-blocker">
-                  <AlertTriangle size={15} style={{ color: 'var(--red)', flexShrink: 0 }} />
-                  <div>
-                    <div>{b.message}</div>
-                    {b.rows && (
-                      <ul className="sd-blocker-list">
-                        {b.rows.map(r => (
-                          <li key={r.t}>
-                            <span className="machine-num-badge">{r.t}</span>
-                            <span className="tool-id-pill">{r.tool_id || '(blank)'}</span>
-                            <span className="text-sub">{r.description}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              ))}
+              {/* Shared with the automatic pull — see SequenceBlockers. */}
+              <BlockerList blockers={result.blockers} />
 
               {!blocked && (
                 <>
