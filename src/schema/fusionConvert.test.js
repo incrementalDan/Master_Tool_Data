@@ -316,3 +316,112 @@ describe('probe (CMM stylus) round-trip', () => {
     expect(out.expressions.tool_productId).toBe("'S-42'");
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A LITERAL preset expression that disagrees with its paired numeric is STALE,
+// and Fusion re-derives the numeric from it on load — so the stored value
+// silently reverts. Before this rule, the sync only rewrote an expression when
+// THIS write changed the value, which made the bad state self-perpetuating: a
+// re-save saw an unchanged number and preserved the stale string forever.
+//
+// The numbers below are from a real drill (D-43, "7.3mm (.2874) 135DEG DRILL")
+// whose Fusion entry carried f_n 0.0056 next to ".002 in" and, on a copied
+// preset, v_c 200 next to "250 fpm" — the app showed the right values, Fusion
+// would have run the wrong ones.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('stale literal preset expressions self-heal', () => {
+  const drillPreset = (o = {}) => ({
+    guid: 'p1',
+    name: 'AL',
+    material: { category: 'metal', query: 'Al Wrought - 6061+', 'use-hardness': false },
+    n: 3322.6501689330976, v_c: 250,
+    v_f_plunge: 18.61, v_f_retract: 40, f_n: 0.0056,
+    'tool-coolant': 'flood', 'use-feed-per-revolution': false,
+    expressions: { tool_feedPerRevolution: '.002 in', tool_surfaceSpeed: '250 fpm' },
+    ...o,
+  });
+  const drillTool = (preset, rawPreset) => ({
+    id: 'g1', tool_type: 'drill', unit: 'inches',
+    description: '7.3mm (.2874) 135DEG DRILL',
+    diameter: 0.2874, flute_length: 2.3, overall_length: 4.1, number_of_flutes: 2,
+    material: 'cobalt', tool_id: 'D-43', location: 'LC-36',
+    presets: [preset],
+    _fusionRaw: {
+      guid: 'g1', type: 'drill', unit: 'inches',
+      description: '7.3mm (.2874) 135DEG DRILL',
+      geometry: { DC: 0.2874, LCF: 2.3, OAL: 4.1, NOF: 2, SIG: 135 },
+      'start-values': { presets: [rawPreset] },
+    },
+  });
+
+  it('rewrites a stale literal even when this write changed nothing', () => {
+    // Value unchanged vs. the stored entry — the old rule would keep ".002 in".
+    const p = drillPreset();
+    const out = outPreset(internalToFusionTool(drillTool(p, drillPreset())));
+    expect(out.f_n).toBe(0.0056);
+    expect(out.expressions.tool_feedPerRevolution).toBe('0.0056 in');
+  });
+
+  it('heals a copied preset that inherited the source preset speed', () => {
+    // v_c 200 next to the source's "250 fpm": on load Fusion would run 250.
+    const p = drillPreset({ guid: 'p2', name: 'AL (copy) test', n: 2658, v_c: 200, v_f_plunge: 25, f_n: 0.00941 });
+    const out = outPreset(internalToFusionTool(drillTool(p, { ...p })));
+    expect(out.expressions.tool_surfaceSpeed).toBe('200 fpm');
+    expect(out.expressions.tool_feedPerRevolution).toBe('0.00941 in');
+  });
+
+  it('is idempotent — a healed preset is not rewritten again', () => {
+    const healed = drillPreset({ expressions: { tool_feedPerRevolution: '0.0056 in', tool_surfaceSpeed: '250 fpm' } });
+    const out = outPreset(internalToFusionTool(drillTool(healed, { ...healed })));
+    expect(out.expressions).toEqual({ tool_feedPerRevolution: '0.0056 in', tool_surfaceSpeed: '250 fpm' });
+  });
+
+  it('leaves an agreeing literal byte-for-byte (float noise is not a change)', () => {
+    // Fusion stores v_c = 250.0000208 alongside the expression "250 fpm".
+    const p = drillPreset({ v_c: 250.0000208, expressions: { tool_surfaceSpeed: '250 fpm' } });
+    const out = outPreset(internalToFusionTool(drillTool(p, { ...p })));
+    expect(out.expressions.tool_surfaceSpeed).toBe('250 fpm');
+  });
+
+  it('never ADDS an expression key to an existing preset', () => {
+    // A native preset carrying no expressions at all stays that way — the
+    // healing rule only ever corrects a key that is already there.
+    const { expressions, ...noExprs } = drillPreset();
+    const out = outPreset(internalToFusionTool(drillTool(noExprs, { ...noExprs })));
+    expect(out.expressions).toBeUndefined();
+  });
+
+  it('keeps an expression-ONLY native preset (no numeric to compare against)', () => {
+    // Native drill presets often carry tool_feedPerRevolution with no f_n at
+    // all — Fusion derives the number from it. Rewriting would zero a real value.
+    const { f_n, ...noFn } = drillPreset();
+    const out = outPreset(internalToFusionTool(drillTool(noFn, { ...noFn })));
+    expect(out.f_n).toBeUndefined();
+    expect(out.expressions.tool_feedPerRevolution).toBe('.002 in');
+  });
+
+  it('never rewrites a FORMULA whose value did not change', () => {
+    const formula = "tool_type=='drill' ? 40inpm : tool_feedCutting/3";
+    const p = drillPreset({ expressions: { tool_feedPlunge: formula } });
+    const out = outPreset(internalToFusionTool(drillTool(p, { ...p })));
+    expect(out.expressions.tool_feedPlunge).toBe(formula);
+  });
+
+  it('rewrites a formula only when the value actually changed', () => {
+    const formula = "tool_type=='drill' ? 40inpm : tool_feedCutting/3";
+    const raw = drillPreset({ expressions: { tool_feedPlunge: formula } });
+    const p = drillPreset({ v_f_plunge: 18.61, expressions: { tool_feedPlunge: formula } });
+    const out = outPreset(internalToFusionTool(drillTool(p, { ...raw, v_f_plunge: 40 })));
+    expect(out.expressions.tool_feedPlunge).toBe('18.61 inpm');
+  });
+
+  it('heals a METRIC surface speed, whose unit suffix carries a slash', () => {
+    const p = {
+      ...drillPreset({ v_c: 200, expressions: { tool_surfaceSpeed: '250 m/min' } }),
+    };
+    const tool = { ...drillTool(p, { ...p }), unit: 'millimeters' };
+    tool._fusionRaw = { ...tool._fusionRaw, unit: 'millimeters' };
+    const out = outPreset(internalToFusionTool(tool));
+    expect(out.expressions.tool_surfaceSpeed).toBe('200 m/min');
+  });
+});

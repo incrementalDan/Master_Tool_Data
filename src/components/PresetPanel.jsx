@@ -61,6 +61,22 @@ function blankPreset() {
   };
 }
 
+// A COPY of an existing preset. Exported purely so the two things it drops can
+// be test-locked — both are invisible in a rendered snapshot:
+//   • operation_ids — proven provenance belongs to the original, not to a fresh
+//     unproven copy of it. (machine_id IS carried, by design.)
+//   • ⚠️ expressions — Fusion's derivation of the SOURCE preset's numbers (a
+//     literal like ".002 in", or a formula). Fusion re-derives every numeric
+//     from its expression on load, so carrying it over leaves the copy silently
+//     governed by the original's values for any field the copy doesn't happen to
+//     change. A copy is a NEW preset with a new guid and its own numerics; like
+//     blankPreset() it starts with none, and Fusion derives them from the numbers.
+export function copyOfPreset(src, newGuid) {
+  const np = { ...src, guid: newGuid, name: `${src.name || 'Preset'} (copy)`, operation_ids: [] };
+  delete np.expressions;
+  return np;
+}
+
 // ── Programs dropdown (collapsed + edit modes) ───────────────────────────────
 // The programs a preset was proven on. Reference data, deliberately low-key: a
 // one-line toggle showing the linked COUNT without opening (so an empty list is
@@ -325,9 +341,8 @@ export default function PresetPanel({ tool, onSave, isSaving, onDirtyChange }) {
     let np;
     if (copySrc.type === 'preset') {
       const src = presets.find(p => p.guid === copySrc.id);
-      // Clear the program link on the copy — proven provenance is the original's
-      // preset, not a fresh unproven copy of it (machine_id IS carried, by design).
-      if (src) np = { ...src, guid: generateId(), name: `${src.name || 'Preset'} (copy)`, operation_ids: [] };
+      // Drops the program links AND the source's expressions — see copyOfPreset.
+      if (src) np = copyOfPreset(src, generateId());
     }
     if (!np && copySrc.type === 'ref') {
       const ref = sfRefs.find(r => r.preset_id === copySrc.id);
