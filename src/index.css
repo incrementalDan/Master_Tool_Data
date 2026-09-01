@@ -356,6 +356,12 @@ input[type='checkbox'], input[type='radio'] { accent-color: var(--blue); }
    (unit pickers, mode switches). Mark the active option with .active. */
 .btn-toggle {
   display: inline-flex;
+  /* ⚠️ SIZE TO CONTENT, NEVER STRETCH. `inline-flex` says that, but as a flex or
+     grid ITEM the control is stretched by its parent — and because its buttons
+     are the same colour as the panel behind them, the empty space read as one
+     enormous button (a "No" the width of the card). */
+  align-self: start;
+  justify-self: start;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -6800,7 +6806,14 @@ input.sf-ref-num { text-align: right; }
 .tp-dimbox-unit { font-size: 10px; color: var(--text-sub); font-family: var(--font-mono); }
 
 /* ── side panel ── */
-.tp-side { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: 14px; }
+/* ⚠️ The drawing is a fixed width and the modal is up to 1180px, so `flex: 1`
+   handed the side column every remaining pixel — ~440px of panels holding a
+   flute count and three narrow number cells. It is a column, so it gets a
+   column's width and the modal narrows to fit. */
+.tp-side {
+  flex: 0 1 auto; width: 316px; min-width: 268px; max-width: 316px;
+  display: flex; flex-direction: column; gap: 14px;
+}
 .tp-panel {
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -6822,7 +6835,7 @@ input.sf-ref-num { text-align: right; }
 .tp-extras { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 10px; }
 .tp-extra { display: flex; flex-direction: column; gap: 3px; }
 .tp-extra > span { font-size: 10px; color: var(--text-sub); }
-.tp-extra .field-input { font-size: 12px; padding: 4px 7px; }
+.tp-extra .field-input { font-size: 12px; padding: 4px 7px; max-width: 96px; }
 .tp-uc-toggle button { padding: 3px 10px; font-size: 11px; }
 
 .tp-seg-table { width: 100%; border-collapse: collapse; font-family: var(--font-mono); font-size: 11px; }
