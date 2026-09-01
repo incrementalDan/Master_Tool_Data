@@ -277,14 +277,31 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
     + purchRows.filter(r => r.status === 'accepted').length;
   const hasProposals = specProposals.length > 0 || purchRows.length > 0;
 
+  // What "Suggest" would put in the box, recomputed live as the geometry is
+  // edited.
+  //
+  // ⚠️ SHOWN, not just offered. The generated name is composed from a dozen
+  // fields, so "Suggest" was a button you had to press to find out what it
+  // even was — and pressing it overwrites the description you already have.
+  // Reading it first is the whole decision, so the value is on screen and the
+  // click is only the commitment.
+  //
+  // Deliberately EDIT-ONLY (`!isNew`): the add flow already opens with a
+  // generated description in the box (extractorToTool pre-fills it), so a line
+  // underneath repeating it word for word would say nothing.
+  const suggestedDesc = useMemo(
+    () => (isNew ? '' : (buildDesc(toolToExtractor(data)) || '').trim()),
+    [isNew, data],
+  );
+  // Nothing to show when it agrees with what is already there — the box IS the
+  // preview in that case, and a line restating it is noise on every tool.
+  const descSuggestion = suggestedDesc && suggestedDesc !== (data.description || '').trim()
+    ? suggestedDesc : '';
+
   // The description is composed from geometry, so accepting a geometry change
   // can leave it stale. Surfaced as a hint next to the field — never applied on
   // the user's behalf.
-  const descStale = useMemo(() => {
-    if (!hasProposals || !data.description) return false;
-    const suggested = buildDesc(toolToExtractor(data));
-    return !!suggested && suggested !== data.description;
-  }, [hasProposals, data]);
+  const descStale = !!(hasProposals && data.description && descSuggestion);
 
   // Coating suggestions grow with the library — a manufacturer's own name for a
   // coating must always be storable, so this is a hint list, not a gate.
@@ -617,7 +634,10 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
-                  title="Suggest description from geometry"
+                  title={!isNew && !descSuggestion
+                    ? 'The description already matches what the geometry generates'
+                    : 'Suggest description from geometry'}
+                  disabled={!isNew && !descSuggestion}
                   onClick={() => {
                     const suggested = buildDesc(toolToExtractor(data));
                     if (suggested) setField('description', suggested);
@@ -627,6 +647,18 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
                   <Wand2 size={14} /> Suggest
                 </button>
               </div>
+              {/* The suggestion itself, readable before it is taken. Clicking
+                  either it or the button applies it — one action, two targets,
+                  because the value is the thing the eye lands on. */}
+              {descSuggestion && (
+                <div className="desc-suggest">
+                  <span className="desc-suggest-label"><Wand2 size={11} /> Suggested</span>
+                  <button type="button" className="desc-suggest-value" onClick={() => setField('description', descSuggestion)}
+                    title="Use this description">
+                    {descSuggestion}
+                  </button>
+                </div>
+              )}
               {descStale && (
                 <p className="spec-desc-hint">
                   <AlertTriangle size={11} /> The description no longer matches the geometry — “Suggest” rebuilds it.
