@@ -38,6 +38,15 @@ const GAP = 14;       // part edge → first extension line
 const TOP_PAD = 26;
 const BOT_PAD = 26;
 const LABEL_H = 26;
+// ⚠️ A LENGTH BOX IS PLACED BY ITS EDGE, NOT BY ITS CENTRE. Centring it on its
+// own dimension line put half the box — ~40px — inside the tool, because the
+// line sits only GAP away from the body. The diameter boxes on the right never
+// had this: they were always placed by their left edge. Fixing the width is
+// what makes the left stack predictable: the first box sits exactly GAP from
+// the outer diameter and each one after it steps left by a whole LANE, so the
+// gutters between them are equal and none of them can reach the part.
+const LEN_BOX_W = 82;
+const EDGE_PAD = 4;   // keep the outermost box off the canvas edge
 // ⚠️ THE SHANK IS BROKEN WHEN IT WOULD SWALLOW THE DRAWING. A shanked tool runs
 // 20:1 to 60:1, and nearly all of that is plain shank carrying no information:
 // on a Ø.039 × 2.5" micro end mill the flutes are 2% of the length, so a
@@ -91,6 +100,31 @@ const stepFor = (field, unit) => {
   if (def.unit === 'angle') return '0.5';
   return String(10 ** -(unitPrecision(unit) - 1));
 };
+
+// ⚠️ EACH VALUE BOX BORDERS IN THE COLOUR OF THE REGION IT NAMES, which is
+// what retired the swatch legend under the segment table: a key you have to
+// look away to read is worse than the boxes saying it themselves. Only fields
+// that name ONE region are coloured — OAL spans the whole tool and REACH spans
+// the flutes plus the neck, so both stay neutral rather than claiming a part.
+const REGION_OF = {
+  flute_length: 'flute',
+  diameter: 'flute',            // the cutting diameter IS the flute region's
+  shoulder_length: 'shoulder',
+  shank_diameter: 'shank',
+  undercut_diameter: 'segment', // the neck's diameter — a segment's, not the tool's
+};
+
+// The field that marks the holder face. Named so the drawing reads as what it
+// is rather than as one more length in the stack.
+const HOLDER_FACE = 'min_ooh';
+// How far the datum runs past the tool. ⚠️ ASYMMETRIC ON PURPOSE: the value box
+// anchors the LEFT end (a print puts a datum's label at one end), and the right
+// side has to stop short of `GAP`, where the diameter leaders start — a tool
+// whose undercut sits near the holder face otherwise crossed a dashed datum and
+// a solid leader at the same height.
+const HOLDER_OVERHANG_L = 30;
+const HOLDER_OVERHANG_R = 10;
+const DIMBOX_H = 34;             // label + input, for flipping the value box
 
 const SEED_HEIGHT_MM = 2.5;      // a visible starting height on either unit
 const SEED_DIAMETER_MM = 6;      // ~1/4", the commonest shank either way
@@ -185,17 +219,30 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
   // outside Shoulder (4.0") — lines crossing for no reason — and bunched the
   // labels, since a label sits at its own midpoint and similar lengths have
   // similar midpoints.
+  // ⚠️ MIN OOH IS NOT A LENGTH DIMENSION — it is WHERE THE HOLDER STARTS, the
+  // face of the collet nut. Drawn as a nested dimension it read as "another
+  // length of the tool", stacked in among the flutes and the shoulder. It is a
+  // datum: one dotted line across the drawing, wider than the tool, with its
+  // value sitting on it. (Some tool types could be calculated from the holder;
+  // nothing here tries — the number is the shop's.)
   const lengthDims = dims.lengths
+    .filter(field => field !== HOLDER_FACE)
     .map(field => ({ field, value: Number(draft[field]) || 0 }))
     .filter(d => d.value > 0)
     .sort((a, b) => a.value - b.value)
     .map((d, i) => ({ ...d, lane: i }));
+  const holderFace = dims.lengths.includes(HOLDER_FACE) ? Number(draft[HOLDER_FACE]) || 0 : 0;
 
   const nLeft = Math.max(1, lengthDims.length);
   const svgH = BODY_H + TOP_PAD + BOT_PAD;
-  const cx = nLeft * LANE + BODY_W / 2;
+  // Work back from the outermost box: it must clear the canvas edge, and every
+  // box inboard of it is one LANE to the right, with lane 0's RIGHT edge GAP
+  // from the part.
+  const cx = BODY_W / 2 + GAP + LEN_BOX_W + (nLeft - 1) * LANE + EDGE_PAD;
   const sx = maxDia > 0 ? BODY_W / maxDia : 0;
   const halfAt = (d) => (d * sx) / 2;
+  // The centre of the length box (and so of its dimension line) in lane n.
+  const lenBoxCx = (lane) => cx - BODY_W / 2 - GAP - LEN_BOX_W / 2 - lane * LANE;
 
   // The plain shank is compressed to a fixed height and marked with a break, so
   // the flutes, the neck and the segments get the canvas instead.
@@ -216,6 +263,30 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
     const past = total > brk ? (v - brk) / (total - brk) : 0;
     return yBase - brk * sy - past * shankDrawH;
   };
+
+  // The datum's y, and which side of it the value box fits on. Above by
+  // default (a print puts a section label above its line); below when the line
+  // runs too close to the top of the canvas for the box to clear it.
+  const yHolder = holderFace > 0 ? yAt(Math.min(holderFace, total)) : null;
+  const holderBoxAbove = yHolder == null ? true : (yHolder - TOP_PAD) > (DIMBOX_H + 6);
+  // ⚠️ The datum's label is anchored to its LINE, not to the lane stack, so it
+  // can land in a lane that already has a box at the same height. Step it out a
+  // lane at a time until it is clear, and run the line left to meet it — the
+  // label stays attached to the thing it names either way.
+  const holderBoxRight = (() => {
+    if (yHolder == null) return null;
+    const yBox = yHolder + (holderBoxAbove ? -(DIMBOX_H / 2 + 3) : (DIMBOX_H / 2 + 3));
+    const clashes = (right) => lengthDims.some(({ field, value, lane }) => {
+      void field;
+      const c = lenBoxCx(lane);
+      const yMid = (yAt(0) + yAt(Math.min(value, total))) / 2;
+      const xOverlap = (right - LEN_BOX_W) < (c + LEN_BOX_W / 2) && right > (c - LEN_BOX_W / 2);
+      return xOverlap && Math.abs(yMid - yBox) < DIMBOX_H + 2;
+    });
+    let right = cx - BODY_W / 2 - HOLDER_OVERHANG_L - 4;
+    for (let i = 0; i <= nLeft && clashes(right); i++) right -= LANE;
+    return right;
+  })();
 
   // ── the silhouette ────────────────────────────────────────────────────────
   const fluteRegion = profile.regions.find(r => r.kind === 'flute');
@@ -292,7 +363,7 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
   // right gutter left a lane of dead space on every tool that only dimensions
   // a cut diameter and a shank.
   const nRight = diaTargets.reduce((m, d) => Math.max(m, d.lane + 1), 1);
-  const svgW = nLeft * LANE + BODY_W + nRight * LANE + RIGHT_PAD;
+  const svgW = cx + BODY_W / 2 + nRight * LANE + RIGHT_PAD;
 
   const handleSave = async () => {
     setError('');
@@ -402,9 +473,18 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
                 );
               })()}
 
+              {/* ── the holder face: a datum across the drawing, not a
+                     dimension. Wider than the tool so it reads as a plane the
+                     tool passes through rather than as part of its outline. ── */}
+              {yHolder != null && (
+                <line x1={Math.min(cx - BODY_W / 2 - HOLDER_OVERHANG_L, holderBoxRight + 4)} y1={yHolder}
+                  x2={cx + BODY_W / 2 + HOLDER_OVERHANG_R} y2={yHolder}
+                  className="tp-holder-line" />
+              )}
+
               {/* ── length dimensions, nesting leftward from the tip ─────── */}
               {lengthDims.map(({ field, value, lane }) => {
-                const x = cx - BODY_W / 2 - GAP - lane * LANE;
+                const x = lenBoxCx(lane);
                 const yTip = yAt(0), yEnd = yAt(Math.min(value, total));
                 const yMid = (yTip + yEnd) / 2;
                 const active = hoverSeg == null;
@@ -437,20 +517,29 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
             {/* Editable value boxes, overlaid on the dimension lines. HTML, not
                 foreignObject — real inputs that focus, tab and style normally. */}
             {lengthDims.map(({ field, lane }) => {
-              const x = cx - BODY_W / 2 - GAP - lane * LANE;
+              const x = lenBoxCx(lane);
               const value = Number(draft[field]) || 0;
               const yMid = (yAt(0) + yAt(Math.min(value, total))) / 2;
               return (
                 <DimBox key={field} x={x} y={yMid} align="center"
                   label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
-                  step={stepFor(field, draft.unit)}
+                  step={stepFor(field, draft.unit)} kind={REGION_OF[field]} width={LEN_BOX_W}
                   value={shown(field)} onChange={v => set(field, v)} readOnly={isDerived(field)} />
               );
             })}
+            {yHolder != null && (
+              <DimBox x={holderBoxRight} align="right"
+                y={yHolder + (holderBoxAbove ? -(DIMBOX_H / 2 + 3) : (DIMBOX_H / 2 + 3))}
+                label={dimLabelOf(HOLDER_FACE)} unit={unit}
+                precision={fieldOf(HOLDER_FACE).precision ?? 4}
+                step={stepFor(HOLDER_FACE, draft.unit)}
+                value={shown(HOLDER_FACE)} onChange={v => set(HOLDER_FACE, v)} kind="holder" width={LEN_BOX_W}
+                title="Where the holder starts — usually the face of the collet nut" />
+            )}
             {diaTargets.map(({ field, y, lane }) => (
               <DimBox key={field} x={cx + BODY_W / 2 + GAP + lane * LANE + 34} y={y} align="left"
                 label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
-                step={stepFor(field, draft.unit)}
+                step={stepFor(field, draft.unit)} kind={REGION_OF[field]}
                 value={shown(field)} onChange={v => set(field, v)} dia readOnly={isDerived(field)} />
             ))}
 
@@ -561,12 +650,6 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
               <p className="tp-seg-note">{unit} · measured from the flutes upward</p>
             </section>
 
-            <div className="tp-legend">
-              {[['flute', 'Flutes'], ['shoulder', 'Shoulder'], ['segment', 'Shaft segment'], ['shank', 'Shank']]
-                .map(([k, l]) => (
-                  <span key={k} className="tp-legend-item"><i className={`tp-sw tp-sw-${k}`} />{l}</span>
-                ))}
-            </div>
           </div>
         </div>
 
@@ -584,18 +667,20 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
 }
 
 // One dimension's value box, sitting on its dimension line.
-function DimBox({ x, y, align, label, unit, value, precision, step, onChange, dia = false, readOnly = false }) {
+function DimBox({ x, y, align, label, unit, value, precision, step, onChange, dia = false, readOnly = false, title, kind, width }) {
   const [focused, setFocused] = useState(false);
   const display = focused
     ? (value ?? '')
     : (value === null || value === undefined || value === ''
       ? '' : Number(Number(value).toFixed(precision ?? 4)));
   return (
-    <div className={`tp-dimbox${readOnly ? ' tp-dimbox-derived' : ''}`}
-      title={readOnly ? 'From the shaft segments' : undefined}
+    <div className={`tp-dimbox${readOnly ? ' tp-dimbox-derived' : ''}${kind ? ` tp-dimbox-${kind}` : ''}${width ? ' tp-dimbox-fixed' : ''}`}
+      title={title || (readOnly ? 'From the shaft segments' : undefined)}
       style={{
-      left: x, top: y,
-      transform: align === 'center' ? 'translate(-50%, -50%)' : 'translate(-34px, -50%)',
+      left: x, top: y, width: width || undefined,
+      transform: align === 'center' ? 'translate(-50%, -50%)'
+        : align === 'right' ? 'translate(-100%, -50%)'    // right edge meets x
+        : 'translate(-34px, -50%)',
     }}>
       <span className="tp-dimbox-label">{label}</span>
       <span className="tp-dimbox-input">
