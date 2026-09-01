@@ -57,6 +57,21 @@ function approxEqual(a, b) {
   return Math.abs(a - b) <= Math.max(1e-9, 1e-6 * Math.max(Math.abs(a), Math.abs(b)));
 }
 
+// The number inside a PURE LITERAL expression (".002 in", "250 fpm",
+// "200 m/min"), or null when the string is a formula. Fusion re-derives every
+// numeric from its expression on load, so a literal that disagrees with its
+// paired numeric silently reverts the value — this is what lets the sync below
+// detect that, rather than only noticing when THIS write changes the number.
+// Deliberately strict: the string must be a number followed by nothing but unit
+// letters (and the '/' of "m/min"), so every formula — which starts with an
+// identifier or a paren — is rejected and left byte-for-byte alone.
+const LITERAL_EXPR_RE = /^\s*-?\d*\.?\d+\s*[a-zA-Z/]*\s*$/;
+function literalExprNum(s) {
+  if (s == null || !LITERAL_EXPR_RE.test(String(s))) return null;
+  const m = String(s).match(/-?\d*\.?\d+/);
+  return m ? Number(m[0]) : null;
+}
+
 // Fusion's shaft segment shape ↔ the app's. Kept in one place so the hyphenated
 // key names stay at the boundary.
 export function readShaftSegments(shaft) {
@@ -619,12 +634,25 @@ export function internalToFusionTool(tool) {
         if (!(key in ex)) continue;                 // never add keys to an existing preset
         const oldVal = rawP ? rawP[field] : undefined;
         const newVal = np[field];
-        // Unchanged → keep the original string. "Both absent" is also unchanged:
-        // some native presets carry ONLY the expression (Fusion derives the
-        // numeric from it) — e.g. drill feed-per-rev — and rewriting it from a
-        // missing numeric would zero out the real value.
+        // "Both absent" → keep the original string: some native presets carry
+        // ONLY the expression (Fusion derives the numeric from it) — e.g. drill
+        // feed-per-rev — and rewriting it from a missing numeric would zero out
+        // the real value.
         if (oldVal == null && newVal == null) continue;
-        if (oldVal != null && newVal != null && approxEqual(newVal, oldVal)) continue;
+        const unchanged = oldVal != null && newVal != null && approxEqual(newVal, oldVal);
+        // ⚠️ "Did THIS write change the value" is not enough on its own. A
+        // literal that already disagrees with its numeric is STALE, and Fusion
+        // re-derives the numeric from it on load — so the stored value silently
+        // reverts. Worse, that state is self-perpetuating: every later save sees
+        // an unchanged value and preserves the stale string, so the app can
+        // never heal it (measured on a real drill: f_n 0.0056 alongside
+        // ".002 in", and v_c 200 alongside "250 fpm", frozen across re-saves).
+        // A literal is therefore rewritten whenever it disagrees, changed or
+        // not; a FORMULA is only rewritten when the value changed (never guess
+        // at rewriting a formula, and its value can't be evaluated here).
+        const cur = newVal != null ? literalExprNum(ex[key]) : null;
+        const stale = cur != null && !approxEqual(cur, Number(newVal));
+        if (unchanged && !stale) continue;
         ex[key] = `${newVal ?? 0} ${unit}`;
       }
       np.expressions = ex;
