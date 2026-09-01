@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { smartDiam, buildDesc, snapTol, SNAP_TOL_IN } from './toolNaming.js';
+import { smartDiam, buildDesc, SNAP_TOL_IN } from './toolNaming.js';
 
 describe('smartDiam — drill numbers only for drill-type tools', () => {
   // .0938" is a 3/32" tool that also sits within tolerance of a #42 drill (.0935").
@@ -33,12 +33,15 @@ describe('smartDiam — drill numbers only for drill-type tools', () => {
   });
 });
 
-describe('snap tolerance — ±0.0003", metric-scaled', () => {
-  it('is 0.0003" for inch, and the mm equivalent for metric', () => {
+describe('snap tolerance — ±0.0003", always inches', () => {
+  it('has no metric variant, because a metric record never reaches the charts', () => {
+    // ⚠️ ONE tolerance, and it is in inches — the thing it compares against
+    // (FRACS / NUM_DRILLS / LETTER_DRILLS) is an inch chart. The retired
+    // snapTol('millimeters') scaled it up, which kept a MILLIMETRE value
+    // pointed at those inch numbers and merely widened the window.
     expect(SNAP_TOL_IN).toBe(0.0003);
-    expect(snapTol('inches')).toBe(0.0003);
-    expect(snapTol(undefined)).toBe(0.0003);
-    expect(snapTol('millimeters')).toBeCloseTo(0.0003 * 25.4, 10);
+    expect(smartDiam(0.0938, false, true, 'inches')).toBe('#42 (.0938)');
+    expect(smartDiam(0.0938, false, true, 'millimeters')).toBe('0.094mm');
   });
 
   it('snaps a drill within 0.0003" but not one just outside it', () => {
@@ -79,5 +82,49 @@ describe('buildDesc — tool-type drives drill-number naming', () => {
     const f = { toolType: 'flat end mill', diameter: '0.25', flutes: '4', loc: '0.75' };
     expect(buildDesc(f)).toBe('1/4 (.25) 4FL EM .75LOC');
     expect(buildDesc({ ...f, inputWasMm: true })).toBe('6.35mm (.25) 4FL EM .75LOC');
+  });
+});
+
+// ⚠️ A MILLIMETRES RECORD'S DIAMETER IS ALREADY IN MILLIMETRES. Every length in
+// this app is stored in its own record's unit — there is no hidden inches
+// canonical — so smartDiam receives 6 for a 6mm tool. Treating that as inches
+// is not a rounding error, it is a different tool, and it named the demo
+// library's 6mm ball mill "152.4mm (6) BALL 4FL 12LOC" (6 × 25.4). It stayed
+// invisible because you had to press Suggest to see the generated name at all.
+describe('buildDesc on a MILLIMETRES tool', () => {
+  const mm = { unit: 'millimeters' };
+
+  it('says the size the shop says — never the inch conversion', () => {
+    const desc = buildDesc({ ...mm, toolType: 'ball end mill', diameter: '6', flutes: '4', loc: '12' });
+    expect(desc).toBe('6mm BALL 4FL 12LOC');
+    expect(desc).not.toContain('152.4');
+  });
+
+  it('never snaps to an inch fraction', () => {
+    // The retired snapTol('millimeters') WIDENED the inch tolerance for a
+    // metric tool, so these matched FRACS outright: 1 → "1", 2.5 → "2-1/2".
+    expect(smartDiam(1, false, false, 'millimeters')).toBe('1mm');
+    expect(smartDiam(2.5, false, false, 'millimeters')).toBe('2.5mm');
+    expect(smartDiam(12.7, false, false, 'millimeters')).toBe('12.7mm');
+  });
+
+  it('never snaps to a drill number or letter', () => {
+    // .0935" is a #42 and .234" is an "A" — inch charts, so a 0.0935mm or
+    // 0.234mm value must not borrow their names.
+    expect(smartDiam(0.0935, false, true, 'millimeters')).toBe('0.093mm');
+    expect(smartDiam(0.234, false, true, 'millimeters')).toBe('0.234mm');
+  });
+
+  it('ignores inputWasMm, which is only meaningful on an INCH record', () => {
+    // "stored in inches, named in mm" says nothing about a record already in
+    // mm — and doubling the conversion is exactly the bug being fixed.
+    expect(smartDiam(6, true, false, 'millimeters')).toBe('6mm');
+  });
+
+  it('leaves an INCH tool exactly as it was', () => {
+    expect(buildDesc({ toolType: 'flat end mill', diameter: '0.5', flutes: '4', loc: '1' }))
+      .toBe('1/2 (.5) 4FL EM 1LOC');
+    expect(buildDesc({ unit: 'inches', toolType: 'drill', diameter: '0.0938', material: 'carbide' }))
+      .toBe('#42 (.0938) CARB DRILL');
   });
 });

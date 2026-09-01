@@ -40,10 +40,17 @@ const r4 = x => parseFloat(parseFloat(x).toFixed(4));
 // from the #42 chart's .0935" and 0.00005" from 3/32 — it must read "3/32 (.0938)",
 // not "#42". Snapping with no tolerance also once called .0571" (a 1.45mm tool,
 // 0.0054" from 1/16") "1/16" and suppressed metric detection.
-// Unit-aware: a metric tool / metric shop uses the mm equivalent (snapTol).
+//
+// ⚠️ THE TOLERANCE IS ALWAYS IN INCHES, because the thing it compares against
+// is always in inches — FRACS, NUM_DRILLS and LETTER_DRILLS are inch charts.
+// The retired `snapTol(unit)` returned the mm equivalent for a metric tool,
+// which read as unit-awareness and was the opposite: it kept comparing a
+// MILLIMETRE value against those inch numbers and merely widened the window, so
+// a 1mm tool matched the "1" fraction and a 2.5mm tool matched "2-1/2". A metric
+// tool doesn't need a looser inch tolerance — it must not touch the inch charts
+// at all, which is what isMetricUnit + smartDiam's metric branch now enforce.
 export const SNAP_TOL_IN = 0.0003;
-export const snapTol = unit =>
-  (unit === "millimeters" || unit === "mm") ? SNAP_TOL_IN * 25.4 : SNAP_TOL_IN;
+export const isMetricUnit = unit => unit === "millimeters" || unit === "mm";
 
 export const toFrac = (d, tol = SNAP_TOL_IN) => {
   const snapped = Math.round(d * 64) / 64;
@@ -104,8 +111,31 @@ export function metricDiamStr(inches) {
   return `${parseFloat(mm.toFixed(2))}mm`;
 }
 
-export function smartDiam(inches, inputWasMm, isDrillType = false, tol = SNAP_TOL_IN) {
-  if (!inches) return "";
+// The diameter as it is SPOKEN — a fraction, a drill number, a metric size.
+//
+// ⚠️ `value` IS IN THE RECORD'S OWN UNIT, and `unit` says which. Every length in
+// this app is stored in its own record's unit and there is no hidden inches
+// canonical, so a millimetres tool arrives here as 6, not 0.2362 — and treating
+// that 6 as inches is not a rounding error, it is a different tool. It read
+// isLikelyMetric(6) → 6 × 25.4 → and named a 6mm ball mill "152.4mm (6)". The
+// three reference tables below are INCH charts, so a metric tool skips them
+// entirely and simply says its own size.
+//
+// ⚠️ `inputWasMm` is a different question and only applies to an INCH record:
+// "stored in inches, but the shop calls it by its metric size" (an 8mm tool
+// stored as .3150"). It is meaningless on a record whose unit is already mm, so
+// the metric branch wins first — and nothing here infers one from the other.
+export function smartDiam(value, inputWasMm, isDrillType = false, unit = "inches") {
+  if (!value) return "";
+  // A metric record's number is already the size the shop says. No inch
+  // fraction, no drill chart, no conversion, and no parenthetical — the
+  // parenthetical exists to give the actual stored value alongside a nominal
+  // label, and here the label IS the stored value.
+  if (isMetricUnit(unit)) {
+    return `${parseFloat(parseFloat(value).toFixed(3))}mm`;
+  }
+  const inches = value;
+  const tol = SNAP_TOL_IN;
   // Drill-chart naming (#42 / letter) only for actual drill-type tools, and the
   // parenthetical always shows the tool's ACTUAL diameter — never the chart's
   // rounded value. A real .0938" tool must read ".0938", not the #42 chart's
@@ -160,9 +190,9 @@ function buildBaseDesc(f, inputWasMm = !!(f && f.inputWasMm)) {
     // Never assume a material when it's missing — an unset material must not
     // print "CARB" on the description (see Code Standards in CLAUDE.md).
     mat = f.material || "",
-    // Snap tolerance for drill/fraction matching is unit-aware: a metric tool
-    // (f.unit === "millimeters") uses the mm equivalent of ±0.0003".
-    dStr = smartDiam(d, inputWasMm, DRILL_NUMBER_TYPES.has(f.toolType), snapTol(f.unit)),
+    // ⚠️ The record's UNIT, not a tolerance — the diameter is in that unit, and
+    // the inch fraction / drill charts only apply to an inch one.
+    dStr = smartDiam(d, inputWasMm, DRILL_NUMBER_TYPES.has(f.toolType), f.unit),
     loc3 = descDec3(loc),
     tsc = THROUGH_COOLANT_VALUES.has(f.coolant || "") ? " TSC" : "";
   // Tip/point angle suffix shared by drill, spot drill, chamfer mill, dovetail, center drill, counter sink
