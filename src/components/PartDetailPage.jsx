@@ -27,6 +27,7 @@ import SequenceUploadModal from './SequenceUploadModal.jsx';
 import useProgramFileSync from './useProgramFileSync.js';
 import ProgramFileStatus, { AutoImportedMark, BulkImportMark } from './ProgramFileStatus.jsx';
 import SequenceCompareModal from './SequenceCompareModal.jsx';
+import SequenceBlockedModal from './SequenceBlockers.jsx';
 import { canOfferCompare } from '../utils/programVersions.js';
 import { labelRows } from '../utils/toolLabels.js';
 import { printToolTags, openTagWindow } from '../utils/labelPrint.js';
@@ -331,6 +332,9 @@ export default function PartDetailPage() {
   const [comparing, setComparing] = useState(null);
   // True while a print is updating stale programs before it prints.
   const [printUpdating, setPrintUpdating] = useState(false);
+  // Programs whose posted file was read and REFUSED, with why — raised as the
+  // same list the manual upload shows. `{ context, items[] }`, or null.
+  const [blockedReport, setBlockedReport] = useState(null);
 
   // ONE listing per posted-files folder, shared by every operation on this page
   // — see useProgramFileSync. Polls only while the tab is visible.
@@ -339,14 +343,32 @@ export default function PartDetailPage() {
   // Pull the posted file in. It runs the SAME buildSequenceImport the manual
   // upload runs and honours the SAME blockers, so a file with a tool the library
   // doesn't have is reported and skipped rather than half-stored.
-  const syncProgram = async (operation, status) => {
-    if (!status?.file) return null;
+  //
+  // ⚠️ A BLOCKED PULL IS REPORTED AS THE SAME LIST THE MANUAL UPLOAD SHOWS —
+  // returned here, raised as a dialog by the callers below. It used to be a
+  // toast carrying `blockers[0].message`, which threw away the rows naming each
+  // ProShop number the library doesn't have (the actual worklist) and any
+  // second blocker with them. "O1218 not pulled in" with nothing to act on is
+  // not a report.
+  //
+  // Returns { stored, blocked } rather than just the record: the print path
+  // needs both — which programs it may print fresh, and which it must own up to
+  // having printed from the stored version.
+  const pullProgram = async (operation, status) => {
+    if (!status?.file) return { stored: null, blocked: null };
     setSyncingOp(operation.id);
     try {
       const res = await importProgramFileFromDrive(status.file);
       if (!res.ok) {
-        notify(`${formatProgramNumber(operation.program_number)} not pulled in — ${res.blockers[0].message}`, 'error', 9000);
-        return null;
+        return {
+          stored: null,
+          blocked: {
+            key: operation.id,
+            programNumber: operation.program_number,
+            fileName: status.file.name || '',
+            blockers: res.blockers,
+          },
+        };
       }
       notify(
         res.unchanged
@@ -357,13 +379,22 @@ export default function PartDetailPage() {
           : `${formatProgramNumber(operation.program_number)} updated from Drive — ${res.stored.tools.length} tools`,
         'success',
       );
-      return res.stored;
+      return { stored: res.stored, blocked: null };
     } catch (err) {
+      // An exception is a failure to LOOK, not a file we read and refused —
+      // there is no list to show, so it stays a toast.
       notify(`Couldn't pull in the posted file: ${err.message}`, 'error', 8000);
-      return null;
+      return { stored: null, blocked: null };
     } finally {
       setSyncingOp(null);
     }
+  };
+
+  // The cloud icon: one program, so at most one blocked entry to raise.
+  const syncProgram = async (operation, status) => {
+    const { stored, blocked } = await pullProgram(operation, status);
+    if (blocked) setBlockedReport({ context: 'sync', items: [blocked] });
+    return stored;
   };
 
   // The same shared mutations the Parts page uses — see parts.js.
@@ -486,16 +517,23 @@ export default function PartDetailPage() {
         notify(`Couldn't check for newer posted files (${err.message}) — printing what's stored`, 'error', 8000);
       }
       const fresh = new Map(detailByOperation);
+      const blocked = [];
       if (check) {
         for (const op of ops) {
           const st = check.statusFor(op);
           if (st.state !== 'stale') continue;
-          const stored = await syncProgram(op, st);
-          // A program that could not be pulled in (a blocker) keeps its stored
-          // version; it was reported, and printing the rest is still useful.
-          if (stored) fresh.set(op.id, stored);
+          const res = await pullProgram(op, st);
+          // A program that could not be pulled in keeps its stored version, and
+          // printing the rest is still useful — but every one of them is
+          // collected, not just the first, and raised together AFTER the print.
+          if (res.stored) fresh.set(op.id, res.stored);
+          if (res.blocked) blocked.push(res.blocked);
         }
       }
+      // ⚠️ Raised in the PRINT context, which says plainly that these programs
+      // printed from the version already stored. That is the whole point of the
+      // guard: labels came out, and they are not the newest posted file.
+      if (blocked.length > 0) setBlockedReport({ context: 'print', items: blocked });
       // A selected print keeps its key filter: the selection is what was asked
       // for. A pocket that vanished in the new version simply won't print, and a
       // pocket that appeared isn't selected — printing either would be inventing
@@ -755,6 +793,14 @@ export default function PartDetailPage() {
           />
         );
       })()}
+
+      {blockedReport && (
+        <SequenceBlockedModal
+          items={blockedReport.items}
+          context={blockedReport.context}
+          onClose={() => setBlockedReport(null)}
+        />
+      )}
 
       {uploading && (
         <SequenceUploadModal
