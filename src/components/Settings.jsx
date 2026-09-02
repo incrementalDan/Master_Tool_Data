@@ -2196,12 +2196,16 @@ function LibraryHealthCard({ dirty }) {
         <h3 style={{ margin: 0 }}>Library Health</h3>
         <InfoTip
           alignRight
-          text="Two problems the app can end up with but has no other way to show you. Both are checked on demand and nothing is changed until you apply it."
+          text="States the app can end up in but has no other way to show you. Each is checked on demand and nothing is changed until you apply it."
         />
       </div>
+      {/* ⚠️ Says what the card IS, not a list of its checks — the list was
+          already two behind (geometry review, duplicate assemblies) and would go
+          stale again the next time one is added. */}
       <p className="text-sub text-sm mb-16">
-        Leftover records from tools deleted in Fusion, and assemblies sticking out
-        less than their tool&apos;s own minimum.
+        States the app can reach but has nowhere to show, so nobody can fix them.
+        Each check is read-only until you commit it, and every row disappears by
+        itself once the thing behind it is dealt with.
       </p>
 
       {/* ── Orphaned metadata ─────────────────────────────────────────────── */}
@@ -2410,8 +2414,20 @@ function LibraryHealthCard({ dirty }) {
                   background: 'var(--surface-2)', cursor: i.blocked ? 'not-allowed' : 'pointer',
                   opacity: i.blocked ? 0.75 : 1,
                 }}>
-                  <input type="checkbox" checked={dupPick.has(i.toolKey)} disabled={i.blocked}
-                    onChange={() => toggle(dupPick, i.toolKey, setDupPick)} style={{ marginTop: 3 }} />
+                  {/* ⚠️ NO CHECKBOX ON A BLOCKED ROW, rather than a disabled one.
+                      Selection is per TOOL (the write is per tool), so a tool with
+                      one mergeable group and one blocked group would show the
+                      blocked row TICKED — it inherits the other group's state —
+                      next to text saying it was left alone. The merge itself is
+                      right (dedupeAssemblies skips a blocked group), but a ticked
+                      box that means nothing is the UI lying about what will
+                      happen. A spacer keeps the rows aligned. */}
+                  {i.blocked
+                    ? <span style={{ width: 13, flex: '0 0 13px' }} aria-hidden="true" />
+                    : (
+                      <input type="checkbox" checked={dupPick.has(i.toolKey)}
+                        onChange={() => toggle(dupPick, i.toolKey, setDupPick)} style={{ marginTop: 3 }} />
+                    )}
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div className="text-sm" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
                       <span className="font-mono" style={{ color: 'var(--orange)' }}>{i.tool_id || i.toolKey}</span>

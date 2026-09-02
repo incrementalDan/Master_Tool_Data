@@ -721,6 +721,15 @@ export function AppProvider({ children }) {
         // isn't "refreshed", it's untouched.
         updates: plan.updates.filter(u => u.kind === 'update' && u.stale).length,
         adopts: plan.updates.filter(u => u.kind === 'adopt').length,
+        // A copy that has been given its own record: its Fusion product-id is
+        // re-stamped from the borrowed ref to that record's own.
+        reclaims: plan.updates.filter(u => u.kind === 'reclaim').length,
+        // ⚠️ ONE number for "what this library's write touches", derived the same
+        // way `rows` and the top-level `updated` are. Summing the per-KIND counts
+        // instead meant every new kind silently went missing from the header: a
+        // library whose only change was a reclaim read "0 to write" while the
+        // total said 1 and the row was listed right underneath it.
+        toWrite: plan.updates.filter(u => u.stale).length + plan.creates.length,
         creates: plan.creates.length,
         // ⚠️ NAMED, not counted. A create appends a NEW holder to Fusion, and
         // the one way to get an accidental duplicate is a record whose geometry

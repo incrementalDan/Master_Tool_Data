@@ -1689,16 +1689,19 @@ export function createLibraryOps(ctx) {
     const candidates = (toolsRef.current || []).filter(t => !wanted || wanted.has(t.tracking_id || t.id));
 
     const fixed = [];
+    // Counted HERE, with both versions of the tool in hand. Looking the original
+    // back up by tracking id afterwards would quietly depend on those being
+    // unique across the candidate list, which is a contract this function has no
+    // business relying on.
+    let removed = 0;
     for (const t of candidates) {
       const next = dedupeAssemblies(t, records);
-      if (next !== t) fixed.push(next);          // identity = nothing merged
+      if (next === t) continue;                  // identity = nothing merged
+      removed += (t.assemblies || []).length - (next.assemblies || []).length;
+      fixed.push(next);
     }
     const linked = fixed.filter(t => t.no_fusion_link !== true);
     const unlinked = fixed.filter(t => t.no_fusion_link === true);
-    const removed = fixed.reduce((n, t) => {
-      const before = (candidates.find(c => (c.tracking_id || c.id) === (t.tracking_id || t.id))?.assemblies || []).length;
-      return n + (before - (t.assemblies || []).length);
-    }, 0);
 
     const summary = {
       toolCount: fixed.length, removed,

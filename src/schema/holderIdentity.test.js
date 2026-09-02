@@ -1017,3 +1017,35 @@ describe('conflictResolvableToShape refuses everything it cannot prove', () => {
     expect(conflictResolvableToShape(entry, list, [a, b]).id).toBe(b.id);
   });
 });
+
+// ⚠️ A RECLAIM MUST BE `stale`. Two things count what a push will touch —
+// `holdersOutOfSync` (the badge) and the per-library "N to write" — and both
+// derive from `updates.filter(u => u.stale)`. The header used to sum the
+// per-KIND counts instead, so a library whose only change was a reclaim read
+// "0 to write" while the total said 1 and the row was listed underneath it. Any
+// new update kind has to satisfy this or it goes missing from the preview.
+describe('every update a push will write is marked stale', () => {
+  it('including a reclaim', () => {
+    const rec = fusionHolderToRecord(F);
+    const e = holderRecordToFusion(rec);
+    const copyEntry = {
+      ...e, guid: 'copy-guid', description: `${e.description} LONGER`,
+      segments: e.segments.map((sg, i) => (i === 0 ? { ...sg, height: sg.height + 5 } : sg)),
+    };
+    const copyRec = fusionHolderToRecord(copyEntry);
+    const plan = holderPushPlan([e, copyEntry], [rec, copyRec], undefined, holderRecordToFusion);
+    const reclaim = plan.updates.find(u => u.kind === 'reclaim');
+    expect(reclaim.stale).toBe(true);
+    // and the badge sees it
+    expect(holdersOutOfSync([e, copyEntry], [rec, copyRec], holderRecordToFusion)).toBeGreaterThan(0);
+  });
+
+  it('no update escapes the stale filter that the plan intends to write', () => {
+    const rec = fusionHolderToRecord(F);
+    const entry = { ...holderRecordToFusion(rec), 'product-id': '' };   // adopt path
+    const plan = holderPushPlan([entry], [rec], undefined, holderRecordToFusion);
+    for (const u of plan.updates) {
+      if (u.kind !== 'update') expect(u.stale).toBe(true);   // adopt / reclaim always write
+    }
+  });
+});
