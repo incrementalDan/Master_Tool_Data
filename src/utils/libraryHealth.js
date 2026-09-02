@@ -32,6 +32,7 @@
 // thing behind it is fixed.
 import { lengthEps, unitAbbr, convertLength } from './units.js';
 import { TOOL_TYPES } from '../schema/toolSchema.js';
+import { assemblyUsesHolder } from '../schema/holderResolve.js';
 
 const VALID_TOOL_TYPES = new Set(TOOL_TYPES);
 
@@ -259,4 +260,166 @@ export function describeOohIssue(i) {
   const u = unitAbbr(i.unit);
   const f = (n) => Number(n).toFixed(u === 'in' ? 4 : 3).replace(/\.?0+$/, '');
   return `${f(i.ooh)} → ${f(i.min_ooh)} ${u} (+${f(i.delta)})`;
+}
+
+// ─── 4. Two assemblies that are the SAME assembly ───────────────────────────
+//
+// A logical tool's instances differ ONLY by holder and OOH — that is the whole
+// multi-instance model. So two assemblies with the same holder AND the same
+// stickout are not two setups, they are one setup recorded twice, and the tool
+// sits in Fusion two or three times identically.
+//
+// ⚠️ NOTHING IN THE APP COULD SEE THIS. `classifyStrays` (reconcile.js) does
+// classify a duplicate — but only among STRAYS, entries the app finds in Fusion
+// that its metadata does not know about. These are all properly REGISTERED:
+// each has its own `instance_guid`, each guid is live in Fusion, each carries a
+// holder FK. Registered means reconcile never looks at them, so the state was
+// unreportable and unfixable. Same shape of gap as 1–3: the app declines to
+// create it (a second identical assembly is not something any form offers) while
+// having no way to report one that is already there.
+//
+// How they get there: EDITING an OOH onto a value another assembly already has.
+// On the real library two of them still carry the stale Auto asm_numbers from
+// before that edit — `…-A-139-1.7` and `…-A-139-1.85` sitting on two assemblies
+// whose stickout is now 1.88 on both, in metadata AND in Fusion's own
+// `geometry.LB`. Nothing said the edit had collapsed them together.
+//
+// ⚠️ THE HOLDER IS COMPARED BY RESOLVED RECORD, NEVER BY RAW GUID. Fusion
+// re-issues holder guids, so the same physical holder legitimately appears under
+// two guids on one tool — exactly the A-253 case, where one assembly carries a
+// live FK and the other a guid that resolves to nothing. Grouping on the guid
+// misses it, which is the "every link is an ID" rule applied to a comparison.
+// When neither signal resolves, the DESCRIPTION is the fallback: a holder's name
+// IS its description in this app, so two unresolvable assemblies naming the same
+// holder are the same holder.
+function holderIdentityOf(assembly, holderRecords) {
+  const rec = (holderRecords || []).find(r => r && r.archived !== true && assemblyUsesHolder(assembly, r));
+  const desc = String((rec ? rec.description : assembly?.holder_description) ?? '').trim().toLowerCase();
+  return { recId: rec ? rec.id : null, desc, guid: assembly?.holder_guid || null };
+}
+
+// ⚠️ RESOLVED-vs-UNRESOLVED IS THE CASE THAT MATTERS, so the comparison is not a
+// single key. On A-253 one assembly carries a live FK and the other a guid that
+// resolves to nothing — two records' worth of key, one physical holder. Keying
+// on either alone misses it.
+//   · both resolve → the RECORD decides, even if the descriptions agree: two
+//     distinct records are two distinct holders, and saying otherwise here would
+//     merge across a holder-library duplicate rather than reporting one.
+//   · otherwise → the DESCRIPTION decides, because a holder's name IS its
+//     description in this app, and it is the only signal an unresolvable
+//     assembly still has.
+function sameHolder(a, b) {
+  if (a.recId && b.recId) return a.recId === b.recId;
+  if (a.desc || b.desc) return a.desc === b.desc;
+  return !!a.guid && a.guid === b.guid;
+}
+
+// ⚠️ MERGING MUST NOT LOSE ANYTHING, so two fields veto it rather than being
+// quietly dropped. `measured_gauge_length` is the IMMUTABLE presetter reading —
+// the physical record of a real assembly — and two different readings on one
+// stickout is a genuine disagreement nobody but the shop can settle. Different
+// NOTES are the same: prose the app cannot merge without inventing an order.
+// Both are vetoes, not merges; the row is still reported so it is visible.
+// Bucket a tool's assemblies by holder, then by stickout within the shared
+// unit-aware tolerance — the same epsilon presets and OOH already use, so float
+// noise never splits a pair and a real 0.001" difference never joins one. (A
+// null stickout only ever groups with another null.) ONE grouper, so the
+// detector and the healer cannot disagree about what a duplicate is.
+function groupAssemblies(assemblies, holderRecords, eps) {
+  const groups = [];
+  for (const a of (assemblies || [])) {
+    const h = holderIdentityOf(a, holderRecords);
+    const ooh = a?.ooh == null ? null : Number(a.ooh);
+    const hit = groups.find(g => sameHolder(g.h, h)
+      && (g.ooh == null || ooh == null ? g.ooh === ooh : Math.abs(g.ooh - ooh) <= eps));
+    if (hit) hit.items.push(a);
+    else groups.push({ h, ooh, items: [a] });
+  }
+  return groups;
+}
+
+function mergeBlocker(group) {
+  const measured = group.map(a => a?.measured_gauge_length).filter(v => v != null);
+  if (new Set(measured.map(Number)).size > 1) return 'two different presetter measurements';
+  const notes = [...new Set(group.map(a => String(a?.notes ?? '').trim()).filter(Boolean))];
+  if (notes.length > 1) return 'different notes on each';
+  return null;
+}
+
+// One row per duplicate GROUP (not per assembly) — the group is the decision.
+export function duplicateAssemblyIssues(tools, holderRecords = []) {
+  const out = [];
+  for (const t of (tools || [])) {
+    const eps = lengthEps(t.unit);
+    const groups = groupAssemblies(t.assemblies, holderRecords, eps);
+    for (const g of groups) {
+      if (g.items.length < 2) continue;
+      const blocked = mergeBlocker(g.items);
+      out.push({
+        toolKey: t.tracking_id || t.id,
+        tool_id: t.tool_id || '',
+        description: t.description || '',
+        unit: t.unit,
+        holder_description: g.items.find(a => a.holder_description)?.holder_description || '',
+        ooh: g.ooh,
+        count: g.items.length,
+        asm_numbers: g.items.map(a => a.asm_number || null),
+        // What merging would carry over — the honest headline for the preview.
+        presetsMoved: new Set(g.items.slice(1).flatMap(a => a.linked_preset_guids || [])).size,
+        blocked: !!blocked,
+        blockedWhy: blocked,
+      });
+    }
+  }
+  return out.sort((a, b) => b.count - a.count);
+}
+
+export function duplicateAssemblyIssuesByTool(issues) {
+  const m = new Map();
+  for (const i of (issues || [])) {
+    if (!m.has(i.toolKey)) m.set(i.toolKey, []);
+    m.get(i.toolKey).push(i);
+  }
+  return m;
+}
+
+// Collapse each duplicate group to one assembly. Returns the SAME tool
+// reference when nothing merges — the identity contract every other healer in
+// this codebase follows, so a caller can tell there is nothing to write.
+//
+// ⚠️ THE SURVIVOR IS THE ONE CARRYING A PRESETTER MEASUREMENT, else the first.
+// Keeping the first blindly would drop an immutable physical record in favour of
+// a copy that has none. Preset links and retired assembly numbers are UNIONED
+// across the group: a preset pointing at a dropped assembly would be orphaned,
+// and a retired number is searchable history.
+//
+// The dropped assemblies' Fusion entries need no separate delete —
+// writeLogicalTool rebuilds a tool's entry set from its assemblies, so the extra
+// instances simply stop being written.
+export function dedupeAssemblies(tool, holderRecords = []) {
+  const groups = groupAssemblies(tool?.assemblies, holderRecords, lengthEps(tool?.unit));
+  let changed = false;
+  const assemblies = [];
+  for (const g of groups) {
+    if (g.items.length < 2 || mergeBlocker(g.items)) { assemblies.push(...g.items); continue; }
+    changed = true;
+    const keep = g.items.find(a => a?.measured_gauge_length != null) || g.items[0];
+    const presets = [...new Set(g.items.flatMap(a => a.linked_preset_guids || []))];
+    const legacy = [...new Set(g.items.flatMap(a => a.legacy_asm_numbers || []))];
+    const notes = g.items.map(a => String(a?.notes ?? '').trim()).find(Boolean) || '';
+    assemblies.push({
+      ...keep,
+      linked_preset_guids: presets,
+      ...(legacy.length ? { legacy_asm_numbers: legacy } : {}),
+      ...(notes ? { notes } : {}),
+    });
+  }
+  return changed ? { ...tool, assemblies } : tool;
+}
+
+// One-line summary for the preview, in the tool's own unit.
+export function describeDuplicateAssembly(i) {
+  const u = unitAbbr(i.unit);
+  const ooh = i.ooh == null ? 'no stickout' : `${Number(i.ooh).toFixed(u === 'in' ? 4 : 3).replace(/\.?0+$/, '')} ${u}`;
+  return `${i.count}× ${i.holder_description || 'unknown holder'} @ ${ooh}`;
 }

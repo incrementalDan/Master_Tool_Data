@@ -6,7 +6,7 @@ import { generateMachineNumbers, generateId, duplicateIdClusters, findMachineNum
 import { isExcludedFrom, MACHINE_NUMBER_LOCKED_TYPES } from '../utils/idSystems.js';
 import { composeToolId, nextSequential, isCounterMode, previewToolId } from '../utils/toolIdSystem.js';
 import { resolveLocationString } from '../utils/locationSystem.js';
-import { isNotableOohDelta, geometryChainIssues, descriptionLocMismatches } from '../utils/libraryHealth.js';
+import { isNotableOohDelta, geometryChainIssues, descriptionLocMismatches, describeDuplicateAssembly } from '../utils/libraryHealth.js';
 import { ASM_MODES, previewAsmNumber } from '../utils/assemblyIdSystem.js';
 import { useDragReorder } from './useDragReorder.js';
 import { MACHINE_COLOR_PALETTE, machineColor, nextMachineColor } from '../utils/machineColors.js';
@@ -2083,6 +2083,7 @@ export default function Settings() {
 function LibraryHealthCard({ dirty }) {
   const {
     findOrphanMetadata, deleteOrphanMetadata, findOohFloorIssues, fixOohFloors,
+    findDuplicateAssemblies, fixDuplicateAssemblies,
     googleAuthenticated, demoMode, notify, tools,
   } = useApp();
 
@@ -2143,6 +2144,28 @@ function LibraryHealthCard({ dirty }) {
       setOohDone(res); setOoh(null); setOohPick(new Set());
     } catch { /* notified in the action */ }
     finally { setOohBusy(false); }
+  };
+
+  const [dup, setDup] = useState(null);
+  const [dupPick, setDupPick] = useState(() => new Set());
+  const [dupBusy, setDupBusy] = useState(false);
+  const [dupDone, setDupDone] = useState(null);
+
+  const checkDup = () => {
+    setDupDone(null);
+    const res = findDuplicateAssemblies();
+    setDup(res);
+    // A blocked group cannot be merged, so it is never pre-ticked.
+    setDupPick(new Set(res.issues.filter(i => !i.blocked).map(i => i.toolKey)));
+  };
+
+  const applyDup = async () => {
+    setDupBusy(true);
+    try {
+      const res = await fixDuplicateAssemblies({ toolKeys: [...dupPick] });
+      setDupDone(res); setDup(null); setDupPick(new Set());
+    } catch { /* notified in the action */ }
+    finally { setDupBusy(false); }
   };
 
   const [geom, setGeom] = useState(null);
@@ -2336,6 +2359,88 @@ function LibraryHealthCard({ dirty }) {
             ✓ Raised {oohDone.assemblyCount} assembl{oohDone.assemblyCount === 1 ? 'y' : 'ies'} across {oohDone.toolCount} tool
             {oohDone.toolCount === 1 ? '' : 's'}
             {oohDone.metadataOnlyCount > 0 && <> ({oohDone.metadataOnlyCount} metadata-only)</>}.
+          </div>
+        )}
+      </div>
+
+      {/* ── Assemblies recorded twice ─────────────────────────────────────────
+          Instances of one logical tool differ ONLY by holder and OOH, so two
+          assemblies agreeing on both are one setup recorded twice — and the tool
+          sits in Fusion two or three times identically. Registered assemblies,
+          so reconcile (which only classifies strays) never saw them. */}
+      <div style={{ borderTop: '1px solid var(--border)', marginTop: 16, paddingTop: 14 }}>
+        <div className="text-sm" style={{ fontWeight: 600, marginBottom: 4 }}>Assemblies recorded twice</div>
+        <p className="text-sub text-sm mb-16">
+          Two assemblies with the same holder <em>and</em> the same stickout are one
+          setup stored twice, so the tool appears in Fusion more than once. Merging keeps
+          one, carries over every linked preset, and{' '}
+          <strong>removes the extra entries from Fusion</strong>. Usually caused by editing
+          a stickout onto a value another assembly already had.
+        </p>
+
+        <div className="flex gap-8">
+          <button className="btn btn-secondary btn-sm" onClick={checkDup} disabled={dirty || tools.length === 0} title={dirty ? 'Save or cancel your changes first' : undefined}>
+            Check for duplicate assemblies
+          </button>
+          {dup && dupPick.size > 0 && (
+            <button className="btn btn-primary btn-sm" onClick={applyDup} disabled={dupBusy || blocked} title={blockedWhy}>
+              {dupBusy ? 'Merging…' : `Merge on ${dupPick.size} tool${dupPick.size === 1 ? '' : 's'}`}
+            </button>
+          )}
+        </div>
+
+        {dup && dup.issues.length === 0 && (
+          <div className="text-sm mt-12" style={{ color: 'var(--green, #4ade80)' }}>
+            ✓ No tool has the same holder and stickout recorded twice.
+          </div>
+        )}
+
+        {dup && dup.issues.length > 0 && (
+          <div className="mt-12">
+            <div className="text-sm mb-8">
+              <strong>{dup.issues.length}</strong> duplicate{dup.issues.length === 1 ? '' : 's'} on{' '}
+              <strong>{dup.toolCount}</strong> tool{dup.toolCount === 1 ? '' : 's'}.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflowY: 'auto' }}>
+              {dup.issues.map(i => (
+                <label key={`${i.toolKey}-${i.holder_description}-${i.ooh}`} style={{
+                  display: 'flex', gap: 10, alignItems: 'flex-start', padding: '8px 10px',
+                  border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)',
+                  borderLeft: `3px solid ${i.blocked ? 'var(--orange)' : 'var(--border)'}`,
+                  background: 'var(--surface-2)', cursor: i.blocked ? 'not-allowed' : 'pointer',
+                  opacity: i.blocked ? 0.75 : 1,
+                }}>
+                  <input type="checkbox" checked={dupPick.has(i.toolKey)} disabled={i.blocked}
+                    onChange={() => toggle(dupPick, i.toolKey, setDupPick)} style={{ marginTop: 3 }} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div className="text-sm" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                      <span className="font-mono" style={{ color: 'var(--orange)' }}>{i.tool_id || i.toolKey}</span>
+                      <span>{i.description}</span>
+                    </div>
+                    <div className="text-xs text-sub mt-4 font-mono">
+                      {describeDuplicateAssembly(i)}
+                      {i.presetsMoved > 0 && (
+                        <span style={{ color: 'var(--text)' }}> · {i.presetsMoved} preset link{i.presetsMoved === 1 ? '' : 's'} carried over</span>
+                      )}
+                    </div>
+                    {/* Reported, never merged — the app cannot settle either of these. */}
+                    {i.blocked && (
+                      <div className="text-xs mt-4" style={{ color: 'var(--orange)' }}>
+                        Left alone — {i.blockedWhy}. Sort it out on the tool page.
+                      </div>
+                    )}
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {dupDone && (
+          <div className="text-sm mt-12" style={{ color: 'var(--green, #4ade80)' }}>
+            ✓ Merged {dupDone.removed} duplicate assembl{dupDone.removed === 1 ? 'y' : 'ies'} across {dupDone.toolCount} tool
+            {dupDone.toolCount === 1 ? '' : 's'}
+            {dupDone.metadataOnlyCount > 0 && <> ({dupDone.metadataOnlyCount} metadata-only)</>}.
           </div>
         )}
       </div>
