@@ -263,6 +263,15 @@ export function duplicateHolderRecord(record) {
 export function triageProductId(value) {
   const raw = String(value ?? '').trim();
   if (!raw) return { kind: 'empty', value: '' };
+  // ⚠️ AN APP-MINTED REF IS OURS, NOT THE HOLDER'S — never migrate it. Nothing
+  // but this app writes the HLD- shape, so it is never a vendor SKU or a note,
+  // and adopting one onto a record whose ref it is NOT makes that value resolve
+  // to two holders at once (recordForRef searches legacy_ids). The case that
+  // forces it: a holder duplicated inside Fusion arrives wearing the ORIGINAL's
+  // ref, so importing the copy would file a live holder's ref as this one's
+  // legacy id. Treated as empty — the value is not lost, it is still on the
+  // original record where it belongs.
+  if (HOLDER_REF_RE.test(raw)) return { kind: 'empty', value: '' };
   // A SKU is a single dash/dot-joined token with no spaces (vendors don't put
   // spaces in part numbers); anything with spaces reads as prose.
   const isSku = !/\s/.test(raw) && /[A-Za-z]/.test(raw) && /[-.\d]/.test(raw);

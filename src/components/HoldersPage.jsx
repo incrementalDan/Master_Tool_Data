@@ -1066,6 +1066,14 @@ export default function HoldersPage() {
       setImportFlags(res.flagged || []);
       const parts = [];
       if (res.added) parts.push(`Imported ${res.added} holder${res.added === 1 ? '' : 's'}`);
+      // ⚠️ SAID OUT LOUD, NEVER SLIPPED IN. A holder duplicated inside Fusion
+      // arrives wearing the ORIGINAL's ID, so importing it is provable but not
+      // obvious — the user sees a holder they did not know they were adding, and the
+      // push below rewrites that entry's ID in Fusion. Both are correct; both
+      // are news.
+      if (res.copies?.length) {
+        parts.push(`${res.copies.length} ${res.copies.length === 1 ? 'was a copy' : 'were copies'} made in Fusion — imported as ${res.copies.length === 1 ? 'its own holder' : 'their own holders'}`);
+      }
       // ─── The first push runs itself ──────────────────────────────────────
       // Importing left every record one signal short of linked: the app knew
       // the holder, Fusion didn't carry its ID, so the whole library sat in a
@@ -1074,8 +1082,10 @@ export default function HoldersPage() {
       // ⚠️ SAFE ONLY BECAUSE IT IS SCOPED to the records this import just
       // created. Each of those came FROM a Fusion entry a moment ago, so the
       // plan can only ADOPT — stamp our ID onto an entry whose exact shape we
-      // just read. Records already in the library are outside the scope and
-      // untouched, so an unrelated edit is never pushed on the user's behalf.
+      // just read — or RECLAIM one, which is the same act on an entry that was
+      // wearing another holder's ID (see holderPushPlan). Records already in the
+      // library are outside the scope and untouched, so an unrelated edit is
+      // never pushed on the user's behalf.
       // Belt and braces: the dry run below must show nothing being created or
       // removed, or this isn't the additive first push and it hands back to
       // the button.

@@ -20,7 +20,7 @@ import { backfillPreferredMachineIds } from '../utils/machines.js';
 import { resolveReachForTools } from '../utils/toolReach.js';
 import { symmetrizeToolLinks } from '../utils/toolLinks.js';
 import { backfillHolderIds } from '../schema/holderResolve.js';
-import { matchFusionHolder, holderPushPlan, applyHolderPushPlan, pushChangeGroup, lastPushedFrom, retiredHolderFor } from '../schema/holderIdentity.js';
+import { matchFusionHolder, holderPushPlan, applyHolderPushPlan, pushChangeGroup, lastPushedFrom, retiredHolderFor, isFusionSideCopy } from '../schema/holderIdentity.js';
 import { derivePairings } from '../schema/insertFamilies.js';
 import { resolveLocationString, findSystem, proShopLocationValue } from '../utils/locationSystem.js';
 import { DEFAULT_MATERIALS, DEFAULT_SHOP_SETTINGS, DEFAULT_PARTS, DEFAULT_COMPONENTS, DEFAULT_PROGRAM_DETAILS, DEFAULT_HOLDER_LIBRARY } from '../schema/sharedDefaults.js';
@@ -627,6 +627,7 @@ export function AppProvider({ children }) {
     const existing = file.holders || [];
     const added = [];
     const flagged = [];
+    const copies = [];   // imported holders that were duplicated inside Fusion
     let known = 0;
     let retired = 0;
     const pool = [...existing];
@@ -641,15 +642,28 @@ export function AppProvider({ children }) {
       if (retiredHolderFor(f, pool)) { retired++; continue; }
       const m = matchFusionHolder(f, pool);
       if (m.status === 'exact') { known++; continue; }
-      if (m.status !== 'none') { flagged.push({ entry: f, ...m }); continue; }
+      // ⚠️ A HOLDER DUPLICATED INSIDE FUSION IS A NEW HOLDER, AND IMPORTABLE.
+      // Fusion's duplicate copies the product-id too, so the copy arrives
+      // wearing the ORIGINAL's ref and reads as `ref-only` — which is why every
+      // half-match was skipped and this holder could never get into the app at
+      // all. `isFusionSideCopy` settles it by proof, not by guess: some OTHER
+      // entry matches that ref's record on BOTH signals, so that holder is
+      // accounted for and this one cannot be it. It is real, the shop owns it,
+      // and it gets its own record — the borrowed ref is dropped rather than
+      // migrated (see triageProductId), and the next push re-stamps Fusion's
+      // copy with the new record's own id (holderPushPlan's `reclaim`).
+      // Counted separately so the import reports it instead of slipping it in.
+      const isCopy = m.status === 'ref-only' && isFusionSideCopy(f, source, pool);
+      if (m.status !== 'none' && !isCopy) { flagged.push({ entry: f, ...m }); continue; }
       const rec = fusionHolderToRecord(f, { library_id: f._libraryId, library_name: f._libraryName });
       added.push(rec);
+      if (isCopy) copies.push({ record: rec, ofRecord: m.refRecord });
       pool.push(rec);   // so two identical entries in one import don't both land
     }
     // addedIds lets the caller push EXACTLY what was just imported (see the
     // auto-push in HoldersPage) — scoping it to these records is what makes
     // that push provably additive.
-    const result = { added: added.length, addedIds: added.map(r => r.id), skipped: known, retired, flagged };
+    const result = { added: added.length, addedIds: added.map(r => r.id), skipped: known, retired, flagged, copies };
     if (!added.length) return Promise.resolve(result);
     return saveHolderLibrary({ ...file, holders: [...existing, ...added] }).then(() => result);
   }, [saveHolderLibrary]);
