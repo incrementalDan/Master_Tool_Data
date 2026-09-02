@@ -27,6 +27,7 @@ import { segmentsMatch } from '../schema/holderIdentity.js';
 import { defaultToolLibraryId, machineNumberArgs } from './appState.js';
 import {
   orphanMetadataRecords, orphanImpact, assemblyOohIssues, oohIssuesByTool, floorAssemblyOoh,
+  duplicateAssemblyIssues, duplicateAssemblyIssuesByTool, dedupeAssemblies,
 } from '../utils/libraryHealth.js';
 
 // ─── Fusion field patchers ───────────────────────────────────────────────────
@@ -1667,5 +1668,64 @@ export function createLibraryOps(ctx) {
     }
   };
 
-  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary, restampHolderTools, linkToolsToHolders, pushFieldToFusion, relinkPresetMaterials, pushPresetFieldToFusion, findOrphanMetadata, deleteOrphanMetadata, findOohFloorIssues, fixOohFloors };
+  // ─── Assemblies recorded twice ────────────────────────────────────────────
+  // A logical tool's instances differ ONLY by holder and OOH, so two assemblies
+  // agreeing on both are one setup recorded twice — and the tool sits in Fusion
+  // two or three times identically. Registered assemblies, so reconcile (which
+  // only classifies strays) never saw them: read-only detector, preview, commit.
+  const findDuplicateAssemblies = () => {
+    const issues = duplicateAssemblyIssues(toolsRef.current, holderLibraryRef?.current?.holders || []);
+    return { issues, toolCount: duplicateAssemblyIssuesByTool(issues).size };
+  };
+
+  // `toolKeys` restricts the write to the user's selection; omit for all.
+  // ⚠️ The dropped assemblies need no Fusion delete of their own: writeToolsToFusion
+  // rebuilds each tool's entry set from its assemblies (splitToFusionInstances),
+  // so the redundant instances simply stop being written. That is also why this
+  // is TOOL-scoped rather than a field push — the entry set itself is what changes.
+  const fixDuplicateAssemblies = async ({ dryRun = false, toolKeys = null } = {}) => {
+    const wanted = toolKeys ? new Set(toolKeys) : null;
+    const records = holderLibraryRef?.current?.holders || [];
+    const candidates = (toolsRef.current || []).filter(t => !wanted || wanted.has(t.tracking_id || t.id));
+
+    const fixed = [];
+    // Counted HERE, with both versions of the tool in hand. Looking the original
+    // back up by tracking id afterwards would quietly depend on those being
+    // unique across the candidate list, which is a contract this function has no
+    // business relying on.
+    let removed = 0;
+    for (const t of candidates) {
+      const next = dedupeAssemblies(t, records);
+      if (next === t) continue;                  // identity = nothing merged
+      removed += (t.assemblies || []).length - (next.assemblies || []).length;
+      fixed.push(next);
+    }
+    const linked = fixed.filter(t => t.no_fusion_link !== true);
+    const unlinked = fixed.filter(t => t.no_fusion_link === true);
+
+    const summary = {
+      toolCount: fixed.length, removed,
+      fusionCount: linked.length, metadataOnlyCount: unlinked.length,
+    };
+    if (dryRun || !fixed.length) return { ...summary, wrote: false };
+
+    dispatch({ type: 'SAVE_START' });
+    try {
+      if (linked.length) await writeToolsToFusion(linked);
+      if (unlinked.length) {
+        if (!googleRef.current) throw new Error('Connect Google Drive to save metadata-only tools');
+        await toolStore.upsertMany(unlinked.map(t => buildMetadataTool(t)));
+        for (const t of unlinked) dispatch({ type: 'UPDATE_TOOL', tool: t });
+      }
+      dispatch({ type: 'SAVE_SUCCESS' });
+      notify(`Merged ${removed} duplicate assembl${removed === 1 ? 'y' : 'ies'} on ${fixed.length} tool${fixed.length === 1 ? '' : 's'}`, 'success');
+      return { ...summary, wrote: true };
+    } catch (err) {
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Could not merge the duplicates: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+  };
+
+  return { saveFullLibrary, renumberLibrary, fixDuplicateMachineNumbers, assignToolIds, renumberAllToolIds, normalizeLibrary, restampHolderTools, linkToolsToHolders, pushFieldToFusion, relinkPresetMaterials, pushPresetFieldToFusion, findOrphanMetadata, deleteOrphanMetadata, findOohFloorIssues, fixOohFloors, findDuplicateAssemblies, fixDuplicateAssemblies };
 }

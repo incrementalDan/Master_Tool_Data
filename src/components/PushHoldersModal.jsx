@@ -119,7 +119,7 @@ export default function PushHoldersModal({ preview, onCommit, onClose }) {
                 <div className="holder-push-lib-head">
                   <b>{l.libName}</b>
                   <span className="holder-conf high">
-                    {l.updates + l.adopts + l.creates} to write
+                    {l.toWrite} to write
                   </span>
                   {l.flagged.length > 0 && (
                     <span className="holder-conf medium">{l.flagged.length} left alone</span>

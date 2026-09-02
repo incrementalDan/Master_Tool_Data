@@ -3,6 +3,7 @@ import {
   orphanMetadataRecords, orphanImpact,
   assemblyOohIssues, floorAssemblyOoh, oohIssuesByTool, isNotableOohDelta,
   descriptionLocMismatches, geometryChainIssues,
+  duplicateAssemblyIssues, duplicateAssemblyIssuesByTool, dedupeAssemblies, describeDuplicateAssembly,
 } from './libraryHealth.js';
 
 const rec = (id, over = {}) => ({
@@ -237,5 +238,154 @@ describe('oohIssuesByTool', () => {
     const grouped = oohIssuesByTool(issues);
     expect(grouped.get('FTL-A')).toHaveLength(2);
     expect(grouped.get('FTL-B')).toHaveLength(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TWO ASSEMBLIES THAT ARE THE SAME ASSEMBLY.
+//
+// A logical tool's instances differ ONLY by holder and OOH, so two agreeing on
+// both are one setup recorded twice — and the tool sits in Fusion two or three
+// times identically. `classifyStrays` classifies a duplicate only among STRAYS;
+// these are properly registered, so nothing in the app could see them.
+//
+// Measured on the shop's real library: 10 groups on 10 tools, 11 redundant
+// assemblies, 0 preset links lost, second run a no-op.
+// ─────────────────────────────────────────────────────────────────────────────
+const asm = (over = {}) => ({
+  assembly_id: `a-${Math.random().toString(16).slice(2, 8)}`,
+  instance_guid: `g-${Math.random().toString(16).slice(2, 8)}`,
+  holder_id: 'h1', holder_guid: 'hg1', holder_description: 'NBT30-SK13C-90',
+  ooh: 1.5, linked_preset_guids: [], notes: '', ...over,
+});
+const HOLDERS = [
+  { id: 'h1', description: 'NBT30-SK13C-90', fusion_guid: 'hg1' },
+  { id: 'h2', description: 'NBT30-SK13C-60', fusion_guid: 'hg2' },
+];
+
+describe('duplicateAssemblyIssues', () => {
+  it('finds a same-holder same-stickout pair', () => {
+    const t = tool('T1', { tool_id: 'A-50', assemblies: [asm(), asm()] });
+    const [i] = duplicateAssemblyIssues([t], HOLDERS);
+    expect(i.count).toBe(2);
+    expect(i.tool_id).toBe('A-50');
+  });
+
+  it('leaves a different stickout alone — that is a real second setup', () => {
+    const t = tool('T1', { assemblies: [asm({ ooh: 1.5 }), asm({ ooh: 2.0 })] });
+    expect(duplicateAssemblyIssues([t], HOLDERS)).toHaveLength(0);
+  });
+
+  it('leaves a different holder alone', () => {
+    const t = tool('T1', {
+      assemblies: [asm(), asm({ holder_id: 'h2', holder_guid: 'hg2', holder_description: 'NBT30-SK13C-60' })],
+    });
+    expect(duplicateAssemblyIssues([t], HOLDERS)).toHaveLength(0);
+  });
+
+  // ⚠️ THE CASE A RAW-GUID COMPARE MISSES. Fusion re-issues holder guids, so the
+  // same physical holder appears under two guids on one tool — one assembly with
+  // a live FK, the other with a guid that resolves to nothing. This is A-253.
+  it('groups a live FK with an assembly whose guid resolves to nothing', () => {
+    const t = tool('T1', {
+      assemblies: [
+        asm({ holder_id: 'h1', holder_guid: 'hg1' }),
+        asm({ holder_id: null, holder_guid: 'dead-guid', holder_description: 'NBT30-SK13C-90' }),
+      ],
+    });
+    expect(duplicateAssemblyIssues([t], HOLDERS)[0].count).toBe(2);
+  });
+
+  // Two DISTINCT records are two distinct holders even when their descriptions
+  // agree — merging there would paper over a holder-library duplicate.
+  it('does NOT group two different records that share a description', () => {
+    const holders = [
+      { id: 'h1', description: 'NBT30-SK13C-90', fusion_guid: 'hg1' },
+      { id: 'hDUP', description: 'NBT30-SK13C-90', fusion_guid: 'hgDUP' },
+    ];
+    const t = tool('T1', {
+      assemblies: [asm({ holder_id: 'h1' }), asm({ holder_id: 'hDUP', holder_guid: 'hgDUP' })],
+    });
+    expect(duplicateAssemblyIssues([t], holders)).toHaveLength(0);
+  });
+
+  it('float noise does not split a pair', () => {
+    const t = tool('T1', { assemblies: [asm({ ooh: 1.5 }), asm({ ooh: 1.5000001 })] });
+    expect(duplicateAssemblyIssues([t], HOLDERS)[0].count).toBe(2);
+  });
+
+  it('groups three, and counts the preset links a merge would carry over', () => {
+    const t = tool('T1', {
+      assemblies: [asm(), asm({ linked_preset_guids: ['p1'] }), asm({ linked_preset_guids: ['p2'] })],
+    });
+    const [i] = duplicateAssemblyIssues([t], HOLDERS);
+    expect(i.count).toBe(3);
+    expect(i.presetsMoved).toBe(2);
+    expect(duplicateAssemblyIssuesByTool([i]).size).toBe(1);
+  });
+
+  it('reports in the tool\'s own unit', () => {
+    const t = tool('T1', { unit: 'millimeters', assemblies: [asm({ ooh: 38.1 }), asm({ ooh: 38.1 })] });
+    expect(describeDuplicateAssembly(duplicateAssemblyIssues([t], HOLDERS)[0])).toContain('mm');
+  });
+});
+
+describe('dedupeAssemblies', () => {
+  it('collapses the group and keeps every preset link', () => {
+    const t = tool('T1', {
+      assemblies: [asm({ linked_preset_guids: ['p1'] }), asm({ linked_preset_guids: ['p2'] })],
+    });
+    const next = dedupeAssemblies(t, HOLDERS);
+    expect(next.assemblies).toHaveLength(1);
+    expect(next.assemblies[0].linked_preset_guids.sort()).toEqual(['p1', 'p2']);
+  });
+
+  it('returns the SAME reference when nothing merges', () => {
+    const t = tool('T1', { assemblies: [asm({ ooh: 1.5 }), asm({ ooh: 2.0 })] });
+    expect(dedupeAssemblies(t, HOLDERS)).toBe(t);
+  });
+
+  it('is idempotent', () => {
+    const t = tool('T1', { assemblies: [asm(), asm(), asm()] });
+    const once = dedupeAssemblies(t, HOLDERS);
+    expect(once.assemblies).toHaveLength(1);
+    expect(dedupeAssemblies(once, HOLDERS)).toBe(once);
+  });
+
+  // ⚠️ The presetter reading is the IMMUTABLE physical record of a real
+  // assembly. Keeping the first blindly would drop it for a copy that has none.
+  it('keeps the assembly carrying a presetter measurement, not merely the first', () => {
+    const measured = asm({ measured_gauge_length: 6.2, measured_by: 'dan' });
+    const t = tool('T1', { assemblies: [asm(), measured] });
+    const next = dedupeAssemblies(t, HOLDERS);
+    expect(next.assemblies[0].measured_gauge_length).toBe(6.2);
+  });
+
+  it('REFUSES to merge two different presetter measurements', () => {
+    const t = tool('T1', {
+      assemblies: [asm({ measured_gauge_length: 6.2 }), asm({ measured_gauge_length: 6.4 })],
+    });
+    expect(dedupeAssemblies(t, HOLDERS)).toBe(t);
+    const [i] = duplicateAssemblyIssues([t], HOLDERS);
+    expect(i.blocked).toBe(true);            // still REPORTED, just not merged
+    expect(i.blockedWhy).toMatch(/presetter/);
+  });
+
+  it('REFUSES to merge conflicting notes rather than picking one', () => {
+    const t = tool('T1', { assemblies: [asm({ notes: 'runs hot' }), asm({ notes: 'use tap collet' })] });
+    expect(dedupeAssemblies(t, HOLDERS)).toBe(t);
+    expect(duplicateAssemblyIssues([t], HOLDERS)[0].blocked).toBe(true);
+  });
+
+  it('carries notes over when only one side has them', () => {
+    const t = tool('T1', { assemblies: [asm(), asm({ notes: 'runs hot' })] });
+    expect(dedupeAssemblies(t, HOLDERS).assemblies[0].notes).toBe('runs hot');
+  });
+
+  it('unions retired assembly numbers — they stay searchable', () => {
+    const t = tool('T1', {
+      assemblies: [asm({ legacy_asm_numbers: ['RTA-1'] }), asm({ legacy_asm_numbers: ['RTA-2'] })],
+    });
+    expect(dedupeAssemblies(t, HOLDERS).assemblies[0].legacy_asm_numbers.sort()).toEqual(['RTA-1', 'RTA-2']);
   });
 });

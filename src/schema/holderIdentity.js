@@ -392,6 +392,20 @@ function deletionReason(entry, records) {
   const ref = String(entry?.['product-id'] ?? '').trim();
   if (!HOLDER_REF_RE.test(ref)) return null;
 
+  // ⚠️ A REF A LIVE RECORD STILL OWNS WAS NEVER RETIRED, whatever else happens
+  // to carry it in legacy_ids. The HLD- shape below separates an app-minted ref
+  // from a vendor SKU, but it CANNOT separate "a ref I retired in a merge" from
+  // "a ref I copied off a Fusion entry at import" — and `fusionHolderToRecord`
+  // seeds legacy_ids from the incoming product-id, so importing a holder that
+  // was duplicated inside Fusion (the copy arrives wearing the original's ID)
+  // put a LIVE record's ref into another record's legacy_ids. The push then read
+  // both entries as merged away and planned to DELETE the original holder and
+  // the copy from Fusion, then re-add them with fresh guids — severing the baked
+  // holder link on every tool using them. A merge archives the loser, so a
+  // genuinely retired ref is nobody's live holder_ref; this costs that case
+  // nothing. Locked by holderIdentity.test.js.
+  const ownedLive = (records || []).some(r => r && r.archived !== true && r.holder_ref === ref);
+
   for (const r of records || []) {
     if (!r) continue;
     // Its own ref, and the record has been archived → the holder is retired.
@@ -401,7 +415,7 @@ function deletionReason(entry, records) {
         : { record: r, why: 'removed from the holder library here' };
     }
     // A ref an ACTIVE record retired by absorbing it in a merge.
-    if (r.archived !== true && (r.legacy_ids || []).includes(ref)) {
+    if (!ownedLive && r.archived !== true && (r.legacy_ids || []).includes(ref)) {
       return { record: r, why: `merged into "${r.description || r.holder_ref}"` };
     }
   }
@@ -468,9 +482,38 @@ function archivedByShape(entry, records, tolIn) {
 export function isFusionSideCopy(entry, allEntries, records, tolIn = SEGMENT_MATCH_TOL_IN) {
   const m = matchFusionHolder(entry, records, tolIn);
   if (m.status !== 'ref-only' || !m.refRecord) return false;
+  return refClaimedElsewhere(entry, m.refRecord, allEntries, records, tolIn);
+}
+
+// Is the record this entry's ref NAMES already accounted for by a DIFFERENT
+// entry, on both signals? If so the ref on this entry is borrowed — the holder
+// it names is over there — and this entry has to be something else.
+// The shared proof behind both copy cases: `fusion-copy` (the copy has no
+// record yet) and the conflict resolution below (it has one now).
+function refClaimedElsewhere(entry, refRecord, allEntries, records, tolIn) {
+  if (!refRecord) return false;
   return (allEntries || []).some(e => e !== entry
     && e?.type === 'holder'
-    && matchFusionHolder(e, records, tolIn).record?.id === m.refRecord.id);
+    && matchFusionHolder(e, records, tolIn).record?.id === refRecord.id);
+}
+
+// ⚠️ THE ONE CASE WHERE THE APP MAY OVERWRITE A FUSION HOLDER'S ID.
+// Normally a `conflict` — our ref says one holder, the shape says another — is
+// unanswerable and stays flagged: either signal could be the wrong one. It
+// becomes provable in exactly one shape, which is what a holder duplicated
+// inside Fusion turns into once its copy has been given a record of its own:
+//   · the shape matches EXACTLY ONE record (nothing to choose between), and
+//   · the record the ref names is matched on BOTH signals by a DIFFERENT entry,
+//     so that holder is accounted for and this ref is provably borrowed.
+// Then the only reading left is "this entry is the shape's holder, wearing the
+// other one's id", and re-stamping product-id is a correction rather than a
+// guess. Anything less and it stays flagged — a wrong answer here renames a
+// real holder in Fusion.
+export function conflictResolvableToShape(entry, allEntries, records, tolIn = SEGMENT_MATCH_TOL_IN) {
+  const m = matchFusionHolder(entry, records, tolIn);
+  if (m.status !== 'conflict' || m.geoRecords.length !== 1) return null;
+  if (!refClaimedElsewhere(entry, m.refRecord, allEntries, records, tolIn)) return null;
+  return m.geoRecords[0];
 }
 
 export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL_IN, toFusion = null) {
@@ -550,6 +593,21 @@ export function holderPushPlan(fusionEntries, records, tolIn = SEGMENT_MATCH_TOL
       spokenFor.add(rec.id);
       written.add(rec.id);
       continue;
+    }
+    // A conflict the app can PROVE — the copy that has since been given its own
+    // record. Re-stamps product-id from the shape's record, which is what makes
+    // a Fusion-side duplicate finally resolvable instead of flagged forever.
+    if (m.status === 'conflict') {
+      const rec = conflictResolvableToShape(entry, list, records, tolIn);
+      if (rec && !written.has(rec.id)) {
+        updates.push({
+          index, entry, record: rec, kind: 'reclaim', stale: true,
+          diff: toFusion ? holderPushDiff(entry, toFusion(rec, entry)) : [],
+        });
+        spokenFor.add(rec.id);
+        written.add(rec.id);
+        continue;
+      }
     }
     // Not a holder we know at all — nothing to write, nothing to flag. (A
     // retired one was already caught above.)

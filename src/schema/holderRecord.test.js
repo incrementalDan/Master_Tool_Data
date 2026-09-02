@@ -388,3 +388,36 @@ describe('nominal-length check (family-scoped best guess + one-time confirmation
     expect(holderRecordToFusion(r)).not.toHaveProperty('nominal_check');
   });
 });
+
+// ⚠️ AN APP-MINTED REF IS NEVER MIGRATED. `product-id` is the app's own field
+// on a holder, so its value is only ever migrated when it came from somewhere
+// else (a vendor SKU, or prose). Adopting an HLD- ref onto a record whose ref it
+// is NOT makes that value resolve to two holders at once — and, because a ref in
+// legacy_ids reads as "retired in a merge", made the push plan a DELETE of the
+// live holder it actually belongs to. Forced by the Fusion-duplicate case: the
+// copy arrives wearing the original's ref.
+describe('triageProductId never migrates an app-minted holder ref', () => {
+  it('treats an HLD- ref as nothing to migrate', () => {
+    expect(triageProductId('HLD-604953')).toEqual({ kind: 'empty', value: '' });
+  });
+
+  it('still migrates a genuine vendor SKU', () => {
+    expect(triageProductId('BT30-APU13D')).toEqual({ kind: 'sku', value: 'BT30-APU13D' });
+  });
+
+  it('still migrates prose to a note', () => {
+    expect(triageProductId('min OOH')).toEqual({ kind: 'note', value: 'min OOH' });
+  });
+
+  it('a record imported from a copy carries no borrowed identity', () => {
+    const rec = fusionHolderToRecord({
+      guid: 'g', description: 'NBT30-SK13-90 EX 2.8OOH', unit: 'millimeters',
+      'product-id': 'HLD-604953',
+      segments: [{ height: 10, 'upper-diameter': 20, 'lower-diameter': 20 }],
+    });
+    expect(rec.legacy_ids).toEqual([]);
+    expect(rec.part_number).toBe('');
+    expect(rec.notes).toBe('');
+    expect(rec.holder_ref).not.toBe('HLD-604953');
+  });
+});

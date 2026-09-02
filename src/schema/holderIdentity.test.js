@@ -9,6 +9,7 @@ import {
   holderPushPlan, applyHolderPushPlan, holdersOutOfSync,
   holderPushDiff, fusionEntryIsStale, pushChangeGroup, PUSH_GROUPS,
   lastPushedFrom, matchesLastPush, retiredHolderFor, isFusionSideCopy,
+  conflictResolvableToShape,
 } from './holderIdentity.js';
 import { fusionHolderToRecord, holderRecordToFusion } from './holderRecord.js';
 import { convertHolderUnits } from '../utils/holderGeometry.js';
@@ -886,5 +887,165 @@ describe('creating a holder whose remembered guid was taken over', () => {
     expect(next).toHaveLength(1);
     expect(next[0]['product-id']).toBe('HLD-MISSING');
     expect(next[0].guid).toBe(SHARED);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A HOLDER DUPLICATED INSIDE FUSION — the full resolution.
+//
+// Fusion's duplicate copies the product-id, so the copy arrives wearing the
+// ORIGINAL's ref. Detection already worked (`fusion-copy`); nothing could act
+// on it, so the holder could never enter the app. These lock the three rules
+// that let it finish, each of which a looser version gets destructively wrong.
+//
+// Measured against the shop's real holder library: 26 Fusion entries, 27 app
+// records, ONE such copy (`HLD-604953` on both a 2.35OOH and a 2.8OOH holder).
+// ─────────────────────────────────────────────────────────────────────────────
+describe('a holder duplicated inside Fusion', () => {
+  // The original: settled, pushed, matching on both signals.
+  const original = () => settled();
+  // The copy: same ref, different shape (its extension was lengthened).
+  const copyEntry = (rec) => {
+    const e = pushed(rec);
+    return {
+      ...e,
+      guid: 'copy-guid',
+      description: `${e.description} LONGER`,
+      segments: e.segments.map((sg, i) => (i === 0 ? { ...sg, height: sg.height + 5 } : sg)),
+    };
+  };
+
+  it('is detected as a copy, not as "edited in Fusion"', () => {
+    const rec = original();
+    const list = [pushed(rec), copyEntry(rec)];
+    expect(matchFusionHolder(list[1], [rec]).status).toBe('ref-only');
+    expect(isFusionSideCopy(list[1], list, [rec])).toBe(true);
+    const plan = holderPushPlan(list, [rec], undefined, holderRecordToFusion);
+    expect(plan.flagged.map(f => f.status)).toEqual(['fusion-copy']);
+    expect(plan.deletes).toHaveLength(0);
+    expect(plan.creates).toHaveLength(0);
+  });
+
+  // ⚠️ THE DESTRUCTIVE ONE. `fusionHolderToRecord` migrates whatever was in
+  // product-id into legacy_ids — right for a vendor SKU, catastrophic for a ref
+  // that a LIVE record still owns: the push read BOTH entries as merged away
+  // and planned to delete the original holder AND the copy from Fusion, then
+  // re-add them with fresh guids, severing the baked holder link on every tool
+  // using them. Guarded twice over — the ref is never migrated, and a live
+  // record's own ref is never a deletion reason.
+  it('never plans to DELETE the original when the copy is imported', () => {
+    const rec = original();
+    const list = [pushed(rec), copyEntry(rec)];
+    const copyRec = fusionHolderToRecord(list[1]);
+    expect(copyRec.legacy_ids).toEqual([]);        // the borrowed ref is not migrated
+    expect(copyRec.part_number).toBe('');
+    // and even if a record DID carry it, it is not a deletion reason
+    const withBorrowed = { ...copyRec, legacy_ids: [rec.holder_ref] };
+    expect(retiredHolderFor(list[0], [rec, withBorrowed])).toBeNull();
+    const plan = holderPushPlan(list, [rec, withBorrowed], undefined, holderRecordToFusion);
+    expect(plan.deletes).toHaveLength(0);
+  });
+
+  it('a genuine merge still deletes the retired holder', () => {
+    // The loser is ARCHIVED, so its ref is nobody's live holder_ref — the guard
+    // above costs this case nothing.
+    const survivor = original();
+    const loser = { ...fusionHolderToRecord(OTHER), holder_ref: 'HLD-AAAAAA', archived: true, merged_into: survivor.id };
+    const winner = { ...survivor, legacy_ids: ['HLD-AAAAAA'] };
+    const entry = { ...pushed(survivor), 'product-id': 'HLD-AAAAAA' };
+    expect(retiredHolderFor(entry, [winner, loser])).toBeTruthy();
+  });
+
+  it('once the copy has its own record, the push RECLAIMS its Fusion id', () => {
+    const rec = original();
+    const list = [pushed(rec), copyEntry(rec)];
+    const copyRec = fusionHolderToRecord(list[1]);
+    const plan = holderPushPlan(list, [rec, copyRec], undefined, holderRecordToFusion);
+    expect(plan.flagged).toHaveLength(0);
+    expect(plan.deletes).toHaveLength(0);
+    expect(plan.creates).toHaveLength(0);
+    const reclaim = plan.updates.find(u => u.kind === 'reclaim');
+    expect(reclaim.record.id).toBe(copyRec.id);
+    // and the write actually re-stamps the borrowed ref
+    const applied = applyHolderPushPlan(list, plan, holderRecordToFusion);
+    expect(applied[1]['product-id']).toBe(copyRec.holder_ref);
+    expect(applied[0]['product-id']).toBe(rec.holder_ref);
+  });
+
+  it('is idempotent — a second push has nothing to reclaim', () => {
+    const rec = original();
+    const list = [pushed(rec), copyEntry(rec)];
+    const copyRec = fusionHolderToRecord(list[1]);
+    const p1 = holderPushPlan(list, [rec, copyRec], undefined, holderRecordToFusion);
+    const applied = applyHolderPushPlan(list, p1, holderRecordToFusion);
+    const p2 = holderPushPlan(applied, [rec, copyRec], undefined, holderRecordToFusion);
+    expect(p2.updates.filter(u => u.kind === 'reclaim')).toHaveLength(0);
+    expect(p2.updates.filter(u => u.stale)).toHaveLength(0);
+    expect(p2.flagged).toHaveLength(0);
+  });
+});
+
+// ⚠️ A conflict is normally UNANSWERABLE and must stay flagged — either signal
+// could be the wrong one, and a wrong answer renames a real holder in Fusion.
+describe('conflictResolvableToShape refuses everything it cannot prove', () => {
+  const rec = () => settled();
+
+  it('needs the ref to be claimed by another entry', () => {
+    // A lone entry whose ref and shape disagree: nothing says which is right.
+    const a = fusionHolderToRecord(F);
+    const b = fusionHolderToRecord(OTHER);
+    const entry = { ...holderRecordToFusion(b), 'product-id': a.holder_ref };
+    expect(matchFusionHolder(entry, [a, b]).status).toBe('conflict');
+    expect(conflictResolvableToShape(entry, [entry], [a, b])).toBeNull();
+  });
+
+  it('needs the shape to match exactly one record', () => {
+    const a = rec();
+    const twin1 = { ...fusionHolderToRecord(OTHER), id: 't1', holder_ref: 'HLD-000001' };
+    const twin2 = { ...fusionHolderToRecord(OTHER), id: 't2', holder_ref: 'HLD-000002' };
+    const entry = { ...holderRecordToFusion(twin1), 'product-id': a.holder_ref };
+    const list = [holderRecordToFusion(a), entry];
+    // two records share the shape → ambiguous, never guessed
+    expect(conflictResolvableToShape(entry, list, [a, twin1, twin2])).toBeNull();
+  });
+
+  it('resolves only when BOTH hold', () => {
+    const a = rec();
+    const b = fusionHolderToRecord(OTHER);
+    const entry = { ...holderRecordToFusion(b), 'product-id': a.holder_ref };
+    const list = [holderRecordToFusion(a), entry];
+    expect(conflictResolvableToShape(entry, list, [a, b]).id).toBe(b.id);
+  });
+});
+
+// ⚠️ A RECLAIM MUST BE `stale`. Two things count what a push will touch —
+// `holdersOutOfSync` (the badge) and the per-library "N to write" — and both
+// derive from `updates.filter(u => u.stale)`. The header used to sum the
+// per-KIND counts instead, so a library whose only change was a reclaim read
+// "0 to write" while the total said 1 and the row was listed underneath it. Any
+// new update kind has to satisfy this or it goes missing from the preview.
+describe('every update a push will write is marked stale', () => {
+  it('including a reclaim', () => {
+    const rec = fusionHolderToRecord(F);
+    const e = holderRecordToFusion(rec);
+    const copyEntry = {
+      ...e, guid: 'copy-guid', description: `${e.description} LONGER`,
+      segments: e.segments.map((sg, i) => (i === 0 ? { ...sg, height: sg.height + 5 } : sg)),
+    };
+    const copyRec = fusionHolderToRecord(copyEntry);
+    const plan = holderPushPlan([e, copyEntry], [rec, copyRec], undefined, holderRecordToFusion);
+    const reclaim = plan.updates.find(u => u.kind === 'reclaim');
+    expect(reclaim.stale).toBe(true);
+    // and the badge sees it
+    expect(holdersOutOfSync([e, copyEntry], [rec, copyRec], holderRecordToFusion)).toBeGreaterThan(0);
+  });
+
+  it('no update escapes the stale filter that the plan intends to write', () => {
+    const rec = fusionHolderToRecord(F);
+    const entry = { ...holderRecordToFusion(rec), 'product-id': '' };   // adopt path
+    const plan = holderPushPlan([entry], [rec], undefined, holderRecordToFusion);
+    for (const u of plan.updates) {
+      if (u.kind !== 'update') expect(u.stale).toBe(true);   // adopt / reclaim always write
+    }
   });
 });
