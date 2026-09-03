@@ -175,7 +175,7 @@ Merge history is appended to each tool's record so you can see what changed, whe
 ## Key Constraints
 
 - **Tokens in memory only** — held in a module-scoped variable inside `apsService.js`, never on `window` and never written to `localStorage`.
-- **Always re-download before write** — the app fetches the live Fusion library from APS immediately before every save, preventing overwrites from concurrent edits.
+- **Always re-download before write** — single-tool saves fetch the live Fusion library from APS immediately before writing. That narrows the window for a concurrent edit but does not close it, and the bulk paths (`saveFullLibrary`) do not re-download at all — so a save also **refuses to overwrite a version it did not read**, reporting the conflict instead of clobbering a teammate.
 - **No extra fields in the Fusion JSON** — Fusion validates strictly. All extra fields (metadata, assemblies, purchasing, tags) live in `tool_metadata.json` on Drive only.
 - **HashRouter** — required for GitHub Pages; do not switch to BrowserRouter.
 - **ProShop export is permanent** — the ProShop CSV export must never be removed. ProShop remains the inventory and purchasing system of record.

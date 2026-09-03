@@ -180,16 +180,25 @@ async function revokeToken(token, hint) {
 }
 
 export async function signOut() {
-  const accessToken = _token?.access_token;
-  const refreshToken = sessionStorage.getItem('aps_refresh_token') || _token?.refresh_token;
-
-  // ⚠️ FORGET LOCALLY FIRST, and never let a revoke failure reach the caller.
+  // ⚠️ FORGET LOCALLY FIRST, and never let anything reach the caller.
   // Signing out is the one operation in this module that has to work every
-  // single time — offline, rate-limited, or with Autodesk down. Telling
-  // Autodesk is the bonus on top; it must not be able to hold the user in a
-  // session they asked to leave.
+  // single time — offline, rate-limited, with Autodesk down, or with browser
+  // storage blocked entirely. So the in-memory token is dropped BEFORE any
+  // sessionStorage access: reading storage first would mean a storage error
+  // left the user still signed in, which is the one outcome this must never
+  // produce. Telling Autodesk is the bonus on top.
+  const accessToken = _token?.access_token;
+  const tokenRefresh = _token?.refresh_token;
   _token = null;
-  sessionStorage.removeItem('aps_refresh_token');
+
+  let storedRefresh = null;
+  try {
+    storedRefresh = sessionStorage.getItem('aps_refresh_token');
+    sessionStorage.removeItem('aps_refresh_token');
+  } catch {
+    // Storage unavailable. Nothing to clear, and nothing worth failing over.
+  }
+  const refreshToken = storedRefresh || tokenRefresh;
 
   // The refresh token is the one that matters: it is what outlives the page.
   // Neither call can reject — revokeToken catches its own failures.
@@ -380,10 +389,13 @@ export function tipVersionFromItem(itemPayload) {
 export function latestFromVersionList(versionsPayload) {
   const list = Array.isArray(versionsPayload?.data) ? versionsPayload.data : [];
   if (list.length === 0) return null;
-  const numbered = list.filter(v => Number.isFinite(Number(v?.attributes?.versionNumber)));
+  // strictNumber, not Number(): `Number(null)` is 0, which would make a version
+  // carrying no number look like "version 0" and count as numbered. Same trap
+  // guarded in versionMovedSince — the two must not drift.
+  const numbered = list.filter(v => Number.isFinite(strictNumber(v?.attributes?.versionNumber)));
   if (numbered.length === 0) return list[0];
   return numbered.reduce((a, b) =>
-    Number(b.attributes.versionNumber) > Number(a.attributes.versionNumber) ? b : a
+    strictNumber(b.attributes.versionNumber) > strictNumber(a.attributes.versionNumber) ? b : a
   );
 }
 

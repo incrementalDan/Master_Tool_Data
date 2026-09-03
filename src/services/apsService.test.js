@@ -108,6 +108,19 @@ describe('latestFromVersionList — the fallback, and correct on its own', () =>
     expect(latestFromVersionList(payload).id).toBe('urn:a');
   });
 
+  // Number(null) is 0, which would make a null-numbered version count as
+  // "version 0" — the same trap guarded in versionMovedSince.
+  it('treats a null or blank version number as unnumbered, not as zero', () => {
+    const payload = { data: [{ id: 'urn:a', attributes: { versionNumber: null } },
+                             { id: 'urn:b', attributes: { versionNumber: '' } }] };
+    expect(latestFromVersionList(payload).id).toBe('urn:a');
+  });
+
+  it('a real version number beats a null one', () => {
+    const payload = { data: [{ id: 'urn:null', attributes: { versionNumber: null } }, version('urn:v3', 3)] };
+    expect(latestFromVersionList(payload).id).toBe('urn:v3');
+  });
+
   it('a numbered version always outranks an unnumbered one', () => {
     const payload = { data: [{ id: 'urn:unnumbered' }, version('urn:v2', 2)] };
     expect(latestFromVersionList(payload).id).toBe('urn:v2');

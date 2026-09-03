@@ -19,10 +19,19 @@ and is capped.
 
 ### Fusion tool library + holder library (Autodesk / ACC) — well protected
 
-`saveToolLibrary` (`src/services/apsService.js:220`) does not overwrite the file. It uploads
+`saveToolLibrary` (`src/services/apsService.js`) does not overwrite the file. It uploads
 new bytes to a fresh storage object and then **creates a new item version** pointing at it
 (step 5). ACC keeps the full version chain and any prior version is restorable from the web
-UI. This half is genuinely fine — leave it alone.
+UI. Nothing is destroyed on disk.
+
+⚠️ **That is protection against a bad WRITE, not against a lost UPDATE — and the second one
+was real.** A new version supersedes whatever came before, so if a teammate saved between
+our download and our upload, our version silently became the truth and theirs stopped being
+current, with a success message on both screens. "Always re-download before write" narrowed
+that window for single-tool saves and `saveFullLibrary` did not re-download at all. Now
+`loadToolLibraryWithVersion` records which version was read and `saveToolLibrary` refuses to
+write over a different one (`versionMovedSince`, `LIBRARY_VERSION_CONFLICT`) — see the APS
+rules under **Token & Storage Security Rules** in CLAUDE.md. Keep that guard.
 
 ### The 7 Google Drive JSON files — this is where the risk is
 
