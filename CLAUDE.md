@@ -809,11 +809,13 @@ Deployment is **fully automated via GitHub Actions** — see `.github/workflows/
 
 **These are non-negotiable — do not change without understanding the implications:**
 
-- APS token lives in `window._apsToken` (memory only). Never write it to localStorage, sessionStorage, or cookies.
-- The `aps_code_verifier` and `aps_nonce` use sessionStorage only during the OAuth redirect — they are deleted immediately after the callback is processed.
+- The APS **access token** lives in a **module-scoped variable inside `apsService.js`** (memory only) — deliberately NOT on `window`, where any script on the page could read it. Never write the access token to localStorage, sessionStorage, or cookies.
+- ⚠️ **The REFRESH token is the one deliberate exception, and it lives in `sessionStorage` (`aps_refresh_token`).** This is a considered trade, not an oversight: without it every page refresh throws the user back to an Autodesk sign-in redirect, which in a shop where the app is open all day is worse than the risk being avoided. `sessionStorage` is scoped to the one tab and is cleared when that tab closes — it is **not** localStorage and **not** a cookie, so it never outlives the session or reaches another origin. `signOut()` removes it. Autodesk's own published 3LO sample stores the refresh token the same way, and `refreshAccessToken` re-stores the rotated value each time, so a leaked copy goes stale on the next refresh. **Never move it to localStorage or a cookie** — those persist past the tab and are what this rule actually exists to prevent.
+- The `aps_code_verifier` (PKCE) and `aps_state` (CSRF) use sessionStorage only during the OAuth redirect — both are deleted the moment the callback is processed.
 - The library location (`{ hubId, projectId, folderId, itemId, fileName }`) is safe to store in localStorage (`aps_library_location`) — it is not sensitive.
 - The holder library location is stored in localStorage (`aps_holder_library_location`) — also not sensitive.
 - **Always re-download the Fusion library from APS immediately before uploading a new version.** Never write from the in-memory copy alone — a teammate may have saved changes since your last load.
+- ⚠️ **Read the library from the item's TIP version — never `versions.data[0]`.** The Get Item Versions endpoint has **no sort or order parameter** (three `filter[…]` options plus paging, and nothing else) and its reference never states the array's ordering, so taking the first entry is an assumption. Reading an old version is the worst failure this app has: the app would load it, treat it as current, and write it back as the newest version — **reverting the whole shop's library, with a success message**. `loadToolLibrary` asks Get Item for the `tip` (Autodesk's word for the current version), matched out of `included` **by id, never by array position**, and falls back to `latestFromVersionList` — which sorts on `attributes.versionNumber` and is correct on its own. Both are pure and test-locked in `apsService.test.js`. Do not "simplify" either one back to an array index.
 - Never add extra fields to the Fusion JSON. Fusion 360 validates its JSON strictly and will flag tools as errors if unrecognized fields are present. All extra fields go in `tool_metadata.json` on Google Drive only.
 
 -----
@@ -3202,7 +3204,7 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 ## Key Constraints
 
 - **Tool IDs are permanent** — they are the Fusion `guid`, link the two JSON files, and are referenced in merge history. Never reassign them.
-- **APS token in memory only** — `window._apsToken`, never localStorage. The refresh token is stored in `sessionStorage` (`aps_refresh_token`) so the session survives page refreshes within the same browser tab.
+- **APS token in memory only** — a module-scoped variable in `apsService.js` (never `window`, never localStorage). The refresh token is stored in `sessionStorage` (`aps_refresh_token`) so the session survives page refreshes within the same browser tab.
 - **Always re-download before write** — call `downloadFusionList()` immediately before any `uploadFusionList()`.
 - **If Fusion has a place for it, Fusion must have it** — every value with a Fusion-native field is mirrored there, always. Metadata may own it and win on read, but the app must never be the only place a Fusion-storable value lives. See the section of that name.
 - **No extra fields in Fusion JSON** — Fusion validates strictly. Only Fusion-native fields go in the library file; everything else goes in `tool_metadata.json`. Exception: `geometry.assemblyGaugeLength` is a Fusion-native field (nested in `geometry`; = holder gauge length + OOH, not OOH alone), safe to write.
