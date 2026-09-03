@@ -131,6 +131,7 @@ export function AppProvider({ children }) {
     if (isDemoRequested()) return; // demo mode skips Autodesk entirely
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
+    const returnedState = params.get('state');
     const authErr = params.get('error');
 
     if (authErr) {
@@ -142,7 +143,7 @@ export function AppProvider({ children }) {
       dispatch({ type: 'AUTH_START' });
       // Strip the code from the URL immediately, keep the hash route
       window.history.replaceState({}, '', window.location.pathname + window.location.hash);
-      aps.handleCallback(code)
+      aps.handleCallback(code, returnedState)
         .then(() => dispatch({ type: 'APS_AUTHED' }))
         .catch(err => dispatch({ type: 'AUTH_ERROR', error: err.message }));
       return;

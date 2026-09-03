@@ -39,9 +39,16 @@ const CALLBACK_URL = () => import.meta.env.VITE_APS_CALLBACK_URL;
 export async function signIn() {
   const verifier = generateCodeVerifier();
   const challenge = await generateCodeChallenge(verifier);
-  const nonce = generateCodeVerifier();
+  // `state` ties the callback to the sign-in THIS tab started. PKCE does not
+  // cover this: it stops a stolen code being redeemed, not an attacker's code
+  // being PLANTED — which would silently sign the user into the attacker's
+  // Autodesk account and send this shop's library writes into their hub.
+  // (This replaces a `nonce` that was generated, stored and deleted but never
+  // sent or compared. `nonce` is an OpenID Connect field bound to an id_token;
+  // we request no `openid` scope and parse no id_token, so it did nothing.)
+  const state = generateCodeVerifier();
   sessionStorage.setItem('aps_code_verifier', verifier);
-  sessionStorage.setItem('aps_nonce', nonce);
+  sessionStorage.setItem('aps_state', state);
 
   const url = new URL(`${AUTH_BASE}/authorize`);
   url.searchParams.set('response_type', 'code');
@@ -52,17 +59,26 @@ export async function signIn() {
   // reference, which lists data:create as its only required scope. Read paths
   // only need data:read; without data:create a save can fail outright.
   url.searchParams.set('scope', 'data:read data:write data:create');
-  url.searchParams.set('nonce', nonce);
+  url.searchParams.set('state', state);
   url.searchParams.set('code_challenge', challenge);
   url.searchParams.set('code_challenge_method', 'S256');
   window.location.href = url.toString();
 }
 
-export async function handleCallback(code) {
+export async function handleCallback(code, returnedState) {
   const verifier = sessionStorage.getItem('aps_code_verifier');
+  const expectedState = sessionStorage.getItem('aps_state');
+  // Clear BOTH before any early return — a verifier or state left behind is a
+  // one-shot value sitting around for a later, unrelated callback to reuse.
   sessionStorage.removeItem('aps_code_verifier');
-  sessionStorage.removeItem('aps_nonce');
+  sessionStorage.removeItem('aps_state');
   if (!verifier) throw new Error('Missing PKCE verifier — please sign in again');
+  // Reject anything this tab did not start. Both halves matter: a missing
+  // expectedState means no sign-in was begun here, and a mismatch means the
+  // callback belongs to someone else's.
+  if (!expectedState || returnedState !== expectedState) {
+    throw new Error('Sign-in could not be verified — please sign in again');
+  }
 
   const res = await fetch(`${AUTH_BASE}/token`, {
     method: 'POST',

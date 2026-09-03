@@ -809,8 +809,9 @@ Deployment is **fully automated via GitHub Actions** — see `.github/workflows/
 
 **These are non-negotiable — do not change without understanding the implications:**
 
-- APS token lives in a **module-scoped variable inside `apsService.js`** (memory only) — deliberately NOT on `window`, where any script on the page could read it. Never write it to localStorage, sessionStorage, or cookies.
-- The `aps_code_verifier` and `aps_nonce` use sessionStorage only during the OAuth redirect — they are deleted immediately after the callback is processed.
+- The APS **access token** lives in a **module-scoped variable inside `apsService.js`** (memory only) — deliberately NOT on `window`, where any script on the page could read it. Never write the access token to localStorage, sessionStorage, or cookies.
+- ⚠️ **The REFRESH token is the one deliberate exception, and it lives in `sessionStorage` (`aps_refresh_token`).** This is a considered trade, not an oversight: without it every page refresh throws the user back to an Autodesk sign-in redirect, which in a shop where the app is open all day is worse than the risk being avoided. `sessionStorage` is scoped to the one tab and is cleared when that tab closes — it is **not** localStorage and **not** a cookie, so it never outlives the session or reaches another origin. `signOut()` removes it. Autodesk's own published 3LO sample stores the refresh token the same way, and `refreshAccessToken` re-stores the rotated value each time, so a leaked copy goes stale on the next refresh. **Never move it to localStorage or a cookie** — those persist past the tab and are what this rule actually exists to prevent.
+- The `aps_code_verifier` (PKCE) and `aps_state` (CSRF) use sessionStorage only during the OAuth redirect — both are deleted the moment the callback is processed.
 - The library location (`{ hubId, projectId, folderId, itemId, fileName }`) is safe to store in localStorage (`aps_library_location`) — it is not sensitive.
 - The holder library location is stored in localStorage (`aps_holder_library_location`) — also not sensitive.
 - **Always re-download the Fusion library from APS immediately before uploading a new version.** Never write from the in-memory copy alone — a teammate may have saved changes since your last load.
