@@ -613,6 +613,19 @@ export async function saveToolLibrary(projectId, folderId, itemId, fileName, too
         type: 'versions',
         attributes: {
           name: fileName,
+          // ⚠️ THE ONLY LINE IN THIS APP THAT DEPENDS ON HUB STYLE. Nothing else
+          // reads hub or project type — every other call just walks
+          // hub → project → folder → item, which is the same shape everywhere.
+          //
+          // `autodesk.core` is the Fusion Team / A360 lineage. BIM 360 and Forma
+          // projects have their own variant, and the docs identify those by a
+          // `b.` prefix on the project id; ours carries `a.`, and saves work, so
+          // this is correct today. The Create Version reference does NOT list the
+          // valid values, so that is evidence rather than proof.
+          //
+          // ⚠️ WHEN THE TOOL LIBRARY IS MIGRATED to the new collaborative hub,
+          // CHECK THIS LINE FIRST. Expect a failed save rather than silent
+          // damage — but expect it on day one.
           extension: { type: 'versions:autodesk.core:File', version: '1.0' },
         },
         relationships: {
