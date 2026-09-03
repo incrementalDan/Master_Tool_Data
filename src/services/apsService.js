@@ -410,10 +410,23 @@ async function fetchCurrentVersion(projectId, itemId) {
   return latest;
 }
 
-// ─── Load tool library JSON (current version) ───────────────────────────────
-export async function loadToolLibrary(projectId, itemId) {
-  const version = await fetchCurrentVersion(projectId, itemId);
+/**
+ * A version's identity, kept so a later save can tell whether the file moved
+ * underneath us. Both halves are recorded: the version URN is exact, the
+ * number is what a person can be told.
+ */
+export function versionIdentity(version) {
+  if (!version) return null;
+  return {
+    id: version.id || null,
+    versionNumber: version.attributes?.versionNumber ?? null,
+  };
+}
 
+// ─── Load tool library JSON (current version) ───────────────────────────────
+
+/** Download and parse the bytes a given version points at. */
+async function downloadVersionJson(version) {
   const storageId = storageIdOfVersion(version);
   if (!storageId) throw new Error('Tool library version has no storage reference');
 
@@ -439,6 +452,23 @@ export async function loadToolLibrary(projectId, itemId) {
   return res.json();
 }
 
+/**
+ * The library file plus the identity of the version it came from.
+ * The caller keeps that identity and hands it back at save time so a save can
+ * refuse to overwrite a teammate — see saveToolLibrary.
+ */
+export async function loadToolLibraryWithVersion(projectId, itemId) {
+  const version = await fetchCurrentVersion(projectId, itemId);
+  const json = await downloadVersionJson(version);
+  return { json, version: versionIdentity(version) };
+}
+
+/** The library file alone, for callers that do not write it back. */
+export async function loadToolLibrary(projectId, itemId) {
+  const { json } = await loadToolLibraryWithVersion(projectId, itemId);
+  return json;
+}
+
 // ─── The global write lock ───────────────────────────────────────────────────
 //
 // The Autodesk-side twin of driveService's lock. Set from outside (App decides);
@@ -453,9 +483,74 @@ function assertWritable() {
   if (_writeLock) throw Object.assign(new Error(_writeLock), { code: 'WRITES_LOCKED' });
 }
 
+// ─── The lost-update guard ───────────────────────────────────────────────────
+//
+// A save REPLACES THE WHOLE FILE FOR THE WHOLE SHOP. So if a teammate saved
+// between our download and our upload, writing ours silently discards theirs —
+// with a success message on both screens and nothing to say a thing was lost.
+//
+// "Always re-download before write" narrows that window to seconds; it does not
+// close it. This closes it: remember which version we read, and refuse to write
+// over a different one. Same policy the repo already chose for the Drive side —
+// block the write and tell the user why, rather than clobber.
+
+/**
+ * Did the file move underneath us?
+ *
+ * ⚠️ ONLY A CLEAR, POSITIVE MISMATCH BLOCKS. If either side is unknown, or the
+ * identities cannot be compared, this returns false and the save proceeds.
+ * Refusing on a question we could not answer would invent a blocker out of
+ * not-knowing — and a save that wrongly refuses is its own kind of data loss,
+ * because the user's edits are still only on their screen.
+ */
+export function versionMovedSince(expected, current) {
+  if (!expected || !current) return false;
+  if (expected.id && current.id) return expected.id !== current.id;
+  // ⚠️ NOT plain Number(). `Number(null)` and `Number('')` are both 0, so a
+  // missing version number would compare as "version 0" and block a perfectly
+  // good save — the false-refusal this guard must never produce. Absent has to
+  // read as unknown, not as zero.
+  const before = strictNumber(expected.versionNumber);
+  const after = strictNumber(current.versionNumber);
+  if (Number.isFinite(before) && Number.isFinite(after)) return before !== after;
+  return false;
+}
+
+/** Number(), except that absent/blank is NaN rather than 0. */
+function strictNumber(value) {
+  if (value === null || value === undefined || value === '') return NaN;
+  return Number(value);
+}
+
 // ─── Save tool library JSON as a new version ─────────────────────────────────
-export async function saveToolLibrary(projectId, folderId, itemId, fileName, toolsJson) {
+//
+// `expectedVersion` is the identity returned by loadToolLibraryWithVersion.
+// Omit it and the save behaves exactly as it always has — which is why the
+// holder path, which does not track a version, is unaffected.
+export async function saveToolLibrary(projectId, folderId, itemId, fileName, toolsJson, expectedVersion) {
   assertWritable();
+
+  // Checked BEFORE step 1 so a conflict costs nothing: no storage is created,
+  // no bytes are uploaded, and the shop's library is untouched. The remaining
+  // exposure is the few seconds of the upload itself, against the minutes
+  // between load and save that this removes.
+  if (expectedVersion) {
+    let current = null;
+    try {
+      current = versionIdentity(await fetchCurrentVersion(projectId, itemId));
+    } catch {
+      // Could not look. Proceed — see versionMovedSince.
+    }
+    if (versionMovedSince(expectedVersion, current)) {
+      throw Object.assign(
+        new Error(
+          'Someone else saved this library since you loaded it. Nothing has been written — reload the page and make your change again.'
+        ),
+        { code: 'LIBRARY_VERSION_CONFLICT' }
+      );
+    }
+  }
+
   const jsonString = JSON.stringify(toolsJson, null, 2);
 
   // Step 1: request a storage location for the new file content

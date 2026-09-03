@@ -6,6 +6,8 @@ import {
   shouldRetryRequest,
   retryDelayMs,
   nextLink,
+  versionMovedSince,
+  versionIdentity,
 } from './apsService.js';
 
 // The bug these lock down: loading an OLD version of the tool library, treating
@@ -214,5 +216,75 @@ describe('nextLink — paging, without which a long list is silently truncated',
     expect(nextLink({ links: { next: { href: '' } } })).toBeNull();
     expect(nextLink({ links: { next: {} } })).toBeNull();
     expect(nextLink({ links: { next: 42 } })).toBeNull();
+  });
+});
+
+describe('versionIdentity', () => {
+  it('records both the exact urn and the human-readable number', () => {
+    expect(versionIdentity(version('urn:v4', 4))).toEqual({ id: 'urn:v4', versionNumber: 4 });
+  });
+
+  it('returns null for nothing', () => {
+    expect(versionIdentity(null)).toBeNull();
+    expect(versionIdentity(undefined)).toBeNull();
+  });
+
+  it('tolerates a version missing either half', () => {
+    expect(versionIdentity({ id: 'urn:v4' })).toEqual({ id: 'urn:v4', versionNumber: null });
+    expect(versionIdentity({ attributes: { versionNumber: 4 } })).toEqual({ id: null, versionNumber: 4 });
+  });
+});
+
+describe('versionMovedSince — refuse to overwrite a teammate', () => {
+  // A library save REPLACES THE WHOLE FILE FOR THE WHOLE SHOP, so the loser of
+  // a save race loses everything they changed, with a success message.
+  it('blocks when the version urn changed', () => {
+    expect(versionMovedSince({ id: 'urn:v4' }, { id: 'urn:v5' })).toBe(true);
+  });
+
+  it('allows when the version is untouched', () => {
+    expect(versionMovedSince({ id: 'urn:v4' }, { id: 'urn:v4' })).toBe(false);
+  });
+
+  // ⚠️ THE OTHER HALF OF THE RULE, and the one that matters just as much: a save
+  // that wrongly refuses is its own kind of loss, because the user's edits exist
+  // only on their screen. Anything short of a clear mismatch lets the save run.
+  it('allows when we never recorded a version', () => {
+    expect(versionMovedSince(null, { id: 'urn:v5' })).toBe(false);
+    expect(versionMovedSince(undefined, { id: 'urn:v5' })).toBe(false);
+  });
+
+  it('allows when the check itself could not answer', () => {
+    expect(versionMovedSince({ id: 'urn:v4' }, null)).toBe(false);
+    expect(versionMovedSince({ id: 'urn:v4' }, undefined)).toBe(false);
+  });
+
+  it('allows when neither side carries anything comparable', () => {
+    expect(versionMovedSince({}, {})).toBe(false);
+    expect(versionMovedSince({ id: null, versionNumber: null }, { id: null, versionNumber: null })).toBe(false);
+  });
+
+  it('falls back to the version number when a urn is missing', () => {
+    expect(versionMovedSince({ versionNumber: 4 }, { versionNumber: 5 })).toBe(true);
+    expect(versionMovedSince({ versionNumber: 4 }, { versionNumber: 4 })).toBe(false);
+  });
+
+  it('compares numbers numerically, not as text', () => {
+    expect(versionMovedSince({ versionNumber: '9' }, { versionNumber: 9 })).toBe(false);
+    expect(versionMovedSince({ versionNumber: 9 }, { versionNumber: 10 })).toBe(true);
+  });
+
+  // The urn is exact; a number can repeat across items. When both are present
+  // the urn decides.
+  it('prefers the urn over the number when both are present', () => {
+    expect(versionMovedSince(
+      { id: 'urn:v4', versionNumber: 4 },
+      { id: 'urn:v4', versionNumber: 99 },
+    )).toBe(false);
+  });
+
+  it('allows when only one side has a comparable number', () => {
+    expect(versionMovedSince({ versionNumber: 4 }, { versionNumber: null })).toBe(false);
+    expect(versionMovedSince({ versionNumber: 'x' }, { versionNumber: 5 })).toBe(false);
   });
 });
