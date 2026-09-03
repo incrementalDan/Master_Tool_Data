@@ -3,6 +3,9 @@ import {
   tipVersionFromItem,
   latestFromVersionList,
   storageIdOfVersion,
+  shouldRetryRequest,
+  retryDelayMs,
+  nextLink,
 } from './apsService.js';
 
 // The bug these lock down: loading an OLD version of the tool library, treating
@@ -120,5 +123,96 @@ describe('storageIdOfVersion', () => {
     expect(storageIdOfVersion(version('urn:v1', 1, { storage: null }))).toBeNull();
     expect(storageIdOfVersion(undefined)).toBeNull();
     expect(storageIdOfVersion({})).toBeNull();
+  });
+});
+
+describe('shouldRetryRequest — a write is NEVER repeated', () => {
+  // ⚠️ The rule this whole retry policy is built around. Every POST in this
+  // module creates something: a storage location, or a new version of the
+  // shop's library. If the request succeeded and only the response was lost,
+  // retrying makes a SECOND one.
+  it('refuses to retry a POST, even on a rate limit', () => {
+    expect(shouldRetryRequest({ method: 'POST', status: 429, attempt: 0 })).toBe(false);
+    expect(shouldRetryRequest({ method: 'POST', status: 503, attempt: 0 })).toBe(false);
+  });
+
+  it('refuses to retry any non-GET method', () => {
+    for (const method of ['PUT', 'PATCH', 'DELETE', 'post']) {
+      expect(shouldRetryRequest({ method, status: 429, attempt: 0 })).toBe(false);
+    }
+  });
+
+  it('retries a GET on a rate limit and on server errors', () => {
+    for (const status of [429, 500, 502, 503, 504]) {
+      expect(shouldRetryRequest({ method: 'GET', status, attempt: 0 })).toBe(true);
+    }
+  });
+
+  it('treats a missing method as GET', () => {
+    expect(shouldRetryRequest({ status: 429, attempt: 0 })).toBe(true);
+  });
+
+  // A 4xx other than 429 means the request itself is wrong — repeating it just
+  // asks the same wrong question again.
+  it('does not retry client errors that will not change', () => {
+    for (const status of [400, 401, 403, 404, 409]) {
+      expect(shouldRetryRequest({ method: 'GET', status, attempt: 0 })).toBe(false);
+    }
+  });
+
+  it('gives up after the attempt cap', () => {
+    expect(shouldRetryRequest({ method: 'GET', status: 429, attempt: 2 })).toBe(true);
+    expect(shouldRetryRequest({ method: 'GET', status: 429, attempt: 3 })).toBe(false);
+    expect(shouldRetryRequest({ method: 'GET', status: 429, attempt: 99 })).toBe(false);
+  });
+});
+
+describe('retryDelayMs', () => {
+  it('backs off exponentially when APS sends no hint', () => {
+    expect(retryDelayMs(null, 0)).toBe(800);
+    expect(retryDelayMs(null, 1)).toBe(1600);
+    expect(retryDelayMs(null, 2)).toBe(3200);
+  });
+
+  it('honours Retry-After, in seconds', () => {
+    expect(retryDelayMs('2', 0)).toBe(2000);
+    expect(retryDelayMs(5, 0)).toBe(5000);
+  });
+
+  // Never let a header stall the app for minutes.
+  it('caps the wait however large the hint', () => {
+    expect(retryDelayMs('600', 0)).toBe(8000);
+    expect(retryDelayMs(null, 20)).toBe(8000);
+  });
+
+  it('ignores a junk or non-positive Retry-After', () => {
+    expect(retryDelayMs('soon', 0)).toBe(800);
+    expect(retryDelayMs('0', 0)).toBe(800);
+    expect(retryDelayMs('-5', 0)).toBe(800);
+    expect(retryDelayMs(undefined, 0)).toBe(800);
+  });
+});
+
+describe('nextLink — paging, without which a long list is silently truncated', () => {
+  it('reads the JSON:API object shape', () => {
+    expect(nextLink({ links: { next: { href: 'https://x/page2' } } })).toBe('https://x/page2');
+  });
+
+  it('reads a plain string link too', () => {
+    expect(nextLink({ links: { next: 'https://x/page2' } })).toBe('https://x/page2');
+  });
+
+  // The common case by far: one page, no next link, behave exactly as before.
+  it('returns null on the last page', () => {
+    expect(nextLink({ links: { self: { href: 'https://x/page1' } } })).toBeNull();
+    expect(nextLink({ links: {} })).toBeNull();
+    expect(nextLink({})).toBeNull();
+    expect(nextLink(undefined)).toBeNull();
+  });
+
+  it('returns null for an empty or malformed link', () => {
+    expect(nextLink({ links: { next: { href: '' } } })).toBeNull();
+    expect(nextLink({ links: { next: {} } })).toBeNull();
+    expect(nextLink({ links: { next: 42 } })).toBeNull();
   });
 });

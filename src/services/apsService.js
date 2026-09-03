@@ -159,18 +159,62 @@ export function isAuthenticated() {
   return !!_token;
 }
 
+// ─── Retry policy ────────────────────────────────────────────────────────────
+//
+// ⚠️ ONLY A GET IS EVER RETRIED, and that restriction is the whole design.
+// Every POST in this module CREATES something — a storage location, or a new
+// version of the shop's tool library. If such a request actually succeeded and
+// only its response was lost, a retry makes a SECOND one. A rate limit that
+// surfaces as an error is a nuisance; a duplicate library version is real
+// damage. So a failed write is reported, never repeated.
+//
+// This matters most in the bulk operations (renumberLibrary, assignToolIds,
+// renumberAllToolIds), which download EVERY linked library — exactly the burst
+// of reads that trips a rate limit, and all of them GETs.
+const RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_BASE_MS = 800;
+const RETRY_CAP_MS = 8000;
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/** Whether a failed request may be sent again. Pure, so it can be test-locked. */
+export function shouldRetryRequest({ method, status, attempt }) {
+  if ((method || 'GET').toUpperCase() !== 'GET') return false;
+  if (!RETRY_STATUSES.has(status)) return false;
+  return attempt < MAX_RETRY_ATTEMPTS;
+}
+
+/** How long to wait before the next attempt. Honours Retry-After when APS sends one. */
+export function retryDelayMs(retryAfterHeader, attempt) {
+  const seconds = Number(retryAfterHeader);
+  if (Number.isFinite(seconds) && seconds > 0) {
+    return Math.min(seconds * 1000, RETRY_CAP_MS);
+  }
+  return Math.min(RETRY_BASE_MS * 2 ** attempt, RETRY_CAP_MS);
+}
+
 // ─── Data Management fetch helper ────────────────────────────────────────────
 async function apiFetch(url, options = {}) {
   const token = await getValidToken();
   if (!token) throw new Error('Not authenticated with Autodesk');
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token.access_token}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
+  const method = (options.method || 'GET').toUpperCase();
+
+  let res;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token.access_token}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+    if (res.ok) break;
+    if (!shouldRetryRequest({ method, status: res.status, attempt })) break;
+    await sleep(retryDelayMs(res.headers?.get?.('Retry-After'), attempt));
+  }
+
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     throw new Error(`APS API error ${res.status} (${url.split('?')[0]}): ${txt.slice(0, 200)}`);
@@ -179,25 +223,58 @@ async function apiFetch(url, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+// ─── Paging ──────────────────────────────────────────────────────────────────
+//
+// ⚠️ These collections are PAGED. `page[limit]` defaults to 200 and cannot
+// exceed it (confirmed on the Get Item Versions reference), so reading only
+// `data.data` returns a TRUNCATED list with no error of any kind — in the
+// library picker the file you want simply isn't listed, which reads as "the app
+// can't see my file" rather than as a bug.
+//
+// Following `links.next` is safe whether or not a given endpoint sends one: no
+// next link means one pass, which is exactly the old behaviour.
+const MAX_PAGES = 100; // 100 × 200 = 20k items; a stop, not an expected limit.
+
+/** The next page's URL from a JSON:API payload, or null. Tolerates both shapes. */
+export function nextLink(payload) {
+  const next = payload?.links?.next;
+  if (!next) return null;
+  const href = typeof next === 'string' ? next : next?.href;
+  return typeof href === 'string' && href ? href : null;
+}
+
+/** GET every page of a collection and concatenate the `data` arrays. */
+async function apiFetchAll(url) {
+  const out = [];
+  let nextUrl = url;
+  let previousUrl = null;
+  for (let page = 0; nextUrl && page < MAX_PAGES; page++) {
+    const body = await apiFetch(nextUrl);
+    if (Array.isArray(body?.data)) out.push(...body.data);
+    const following = nextLink(body);
+    // A next link pointing at the page we just read would spin forever.
+    if (following === nextUrl || following === previousUrl) break;
+    previousUrl = nextUrl;
+    nextUrl = following;
+  }
+  return out;
+}
+
 // ─── Hub / project / folder navigation ───────────────────────────────────────
 export async function getHubs() {
-  const data = await apiFetch(`${DM_BASE}/project/v1/hubs`);
-  return data.data;
+  return apiFetchAll(`${DM_BASE}/project/v1/hubs`);
 }
 
 export async function getProjects(hubId) {
-  const data = await apiFetch(`${DM_BASE}/project/v1/hubs/${hubId}/projects`);
-  return data.data;
+  return apiFetchAll(`${DM_BASE}/project/v1/hubs/${hubId}/projects`);
 }
 
 export async function getTopFolders(hubId, projectId) {
-  const data = await apiFetch(`${DM_BASE}/project/v1/hubs/${hubId}/projects/${projectId}/topFolders`);
-  return data.data;
+  return apiFetchAll(`${DM_BASE}/project/v1/hubs/${hubId}/projects/${projectId}/topFolders`);
 }
 
 export async function getFolderContents(projectId, folderId) {
-  const data = await apiFetch(`${DM_BASE}/data/v1/projects/${projectId}/folders/${folderId}/contents`);
-  return data.data;
+  return apiFetchAll(`${DM_BASE}/data/v1/projects/${projectId}/folders/${folderId}/contents`);
 }
 
 // ─── Storage URN helper ──────────────────────────────────────────────────────
