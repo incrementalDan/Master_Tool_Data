@@ -150,9 +150,53 @@ export async function getValidToken() {
   return token;
 }
 
-export function signOut() {
+// ─── Revoking on sign-out ────────────────────────────────────────────────────
+//
+// Dropping our own copy of a token does not make it stop working — the refresh
+// token stays valid on Autodesk's side until it expires. On a shared shop
+// machine that is the whole difference between "signed out" and "looks signed
+// out". So sign-out tells Autodesk as well as forgetting locally.
+//
+// POST /authentication/v2/revoke, form-encoded. A PUBLIC client (PKCE, no
+// secret — that is us) sends `client_id` alongside `token` and
+// `token_type_hint`. Both hint values are documented, each with its own
+// section: `refresh_token` and `access_token`. Confirmed against the revoke
+// reference, Section 1 (For Public clients). The response carries no body.
+async function revokeToken(token, hint) {
+  if (!token) return;
+  try {
+    await fetch(`${AUTH_BASE}/revoke`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        token,
+        token_type_hint: hint,
+        client_id: CLIENT_ID(),
+      }),
+    });
+  } catch {
+    // Swallowed on purpose — see signOut. Best effort, never a blocker.
+  }
+}
+
+export async function signOut() {
+  const accessToken = _token?.access_token;
+  const refreshToken = sessionStorage.getItem('aps_refresh_token') || _token?.refresh_token;
+
+  // ⚠️ FORGET LOCALLY FIRST, and never let a revoke failure reach the caller.
+  // Signing out is the one operation in this module that has to work every
+  // single time — offline, rate-limited, or with Autodesk down. Telling
+  // Autodesk is the bonus on top; it must not be able to hold the user in a
+  // session they asked to leave.
   _token = null;
   sessionStorage.removeItem('aps_refresh_token');
+
+  // The refresh token is the one that matters: it is what outlives the page.
+  // Neither call can reject — revokeToken catches its own failures.
+  await Promise.all([
+    revokeToken(refreshToken, 'refresh_token'),
+    revokeToken(accessToken, 'access_token'),
+  ]);
 }
 
 export function isAuthenticated() {
