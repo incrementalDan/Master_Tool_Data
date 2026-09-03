@@ -3,6 +3,11 @@ import {
   tipVersionFromItem,
   latestFromVersionList,
   storageIdOfVersion,
+  shouldRetryRequest,
+  retryDelayMs,
+  nextLink,
+  versionMovedSince,
+  versionIdentity,
 } from './apsService.js';
 
 // The bug these lock down: loading an OLD version of the tool library, treating
@@ -103,6 +108,19 @@ describe('latestFromVersionList — the fallback, and correct on its own', () =>
     expect(latestFromVersionList(payload).id).toBe('urn:a');
   });
 
+  // Number(null) is 0, which would make a null-numbered version count as
+  // "version 0" — the same trap guarded in versionMovedSince.
+  it('treats a null or blank version number as unnumbered, not as zero', () => {
+    const payload = { data: [{ id: 'urn:a', attributes: { versionNumber: null } },
+                             { id: 'urn:b', attributes: { versionNumber: '' } }] };
+    expect(latestFromVersionList(payload).id).toBe('urn:a');
+  });
+
+  it('a real version number beats a null one', () => {
+    const payload = { data: [{ id: 'urn:null', attributes: { versionNumber: null } }, version('urn:v3', 3)] };
+    expect(latestFromVersionList(payload).id).toBe('urn:v3');
+  });
+
   it('a numbered version always outranks an unnumbered one', () => {
     const payload = { data: [{ id: 'urn:unnumbered' }, version('urn:v2', 2)] };
     expect(latestFromVersionList(payload).id).toBe('urn:v2');
@@ -120,5 +138,166 @@ describe('storageIdOfVersion', () => {
     expect(storageIdOfVersion(version('urn:v1', 1, { storage: null }))).toBeNull();
     expect(storageIdOfVersion(undefined)).toBeNull();
     expect(storageIdOfVersion({})).toBeNull();
+  });
+});
+
+describe('shouldRetryRequest — a write is NEVER repeated', () => {
+  // ⚠️ The rule this whole retry policy is built around. Every POST in this
+  // module creates something: a storage location, or a new version of the
+  // shop's library. If the request succeeded and only the response was lost,
+  // retrying makes a SECOND one.
+  it('refuses to retry a POST, even on a rate limit', () => {
+    expect(shouldRetryRequest({ method: 'POST', status: 429, attempt: 0 })).toBe(false);
+    expect(shouldRetryRequest({ method: 'POST', status: 503, attempt: 0 })).toBe(false);
+  });
+
+  it('refuses to retry any non-GET method', () => {
+    for (const method of ['PUT', 'PATCH', 'DELETE', 'post']) {
+      expect(shouldRetryRequest({ method, status: 429, attempt: 0 })).toBe(false);
+    }
+  });
+
+  it('retries a GET on a rate limit and on server errors', () => {
+    for (const status of [429, 500, 502, 503, 504]) {
+      expect(shouldRetryRequest({ method: 'GET', status, attempt: 0 })).toBe(true);
+    }
+  });
+
+  it('treats a missing method as GET', () => {
+    expect(shouldRetryRequest({ status: 429, attempt: 0 })).toBe(true);
+  });
+
+  // A 4xx other than 429 means the request itself is wrong — repeating it just
+  // asks the same wrong question again.
+  it('does not retry client errors that will not change', () => {
+    for (const status of [400, 401, 403, 404, 409]) {
+      expect(shouldRetryRequest({ method: 'GET', status, attempt: 0 })).toBe(false);
+    }
+  });
+
+  it('gives up after the attempt cap', () => {
+    expect(shouldRetryRequest({ method: 'GET', status: 429, attempt: 2 })).toBe(true);
+    expect(shouldRetryRequest({ method: 'GET', status: 429, attempt: 3 })).toBe(false);
+    expect(shouldRetryRequest({ method: 'GET', status: 429, attempt: 99 })).toBe(false);
+  });
+});
+
+describe('retryDelayMs', () => {
+  it('backs off exponentially when APS sends no hint', () => {
+    expect(retryDelayMs(null, 0)).toBe(800);
+    expect(retryDelayMs(null, 1)).toBe(1600);
+    expect(retryDelayMs(null, 2)).toBe(3200);
+  });
+
+  it('honours Retry-After, in seconds', () => {
+    expect(retryDelayMs('2', 0)).toBe(2000);
+    expect(retryDelayMs(5, 0)).toBe(5000);
+  });
+
+  // Never let a header stall the app for minutes.
+  it('caps the wait however large the hint', () => {
+    expect(retryDelayMs('600', 0)).toBe(8000);
+    expect(retryDelayMs(null, 20)).toBe(8000);
+  });
+
+  it('ignores a junk or non-positive Retry-After', () => {
+    expect(retryDelayMs('soon', 0)).toBe(800);
+    expect(retryDelayMs('0', 0)).toBe(800);
+    expect(retryDelayMs('-5', 0)).toBe(800);
+    expect(retryDelayMs(undefined, 0)).toBe(800);
+  });
+});
+
+describe('nextLink — paging, without which a long list is silently truncated', () => {
+  it('reads the JSON:API object shape', () => {
+    expect(nextLink({ links: { next: { href: 'https://x/page2' } } })).toBe('https://x/page2');
+  });
+
+  it('reads a plain string link too', () => {
+    expect(nextLink({ links: { next: 'https://x/page2' } })).toBe('https://x/page2');
+  });
+
+  // The common case by far: one page, no next link, behave exactly as before.
+  it('returns null on the last page', () => {
+    expect(nextLink({ links: { self: { href: 'https://x/page1' } } })).toBeNull();
+    expect(nextLink({ links: {} })).toBeNull();
+    expect(nextLink({})).toBeNull();
+    expect(nextLink(undefined)).toBeNull();
+  });
+
+  it('returns null for an empty or malformed link', () => {
+    expect(nextLink({ links: { next: { href: '' } } })).toBeNull();
+    expect(nextLink({ links: { next: {} } })).toBeNull();
+    expect(nextLink({ links: { next: 42 } })).toBeNull();
+  });
+});
+
+describe('versionIdentity', () => {
+  it('records both the exact urn and the human-readable number', () => {
+    expect(versionIdentity(version('urn:v4', 4))).toEqual({ id: 'urn:v4', versionNumber: 4 });
+  });
+
+  it('returns null for nothing', () => {
+    expect(versionIdentity(null)).toBeNull();
+    expect(versionIdentity(undefined)).toBeNull();
+  });
+
+  it('tolerates a version missing either half', () => {
+    expect(versionIdentity({ id: 'urn:v4' })).toEqual({ id: 'urn:v4', versionNumber: null });
+    expect(versionIdentity({ attributes: { versionNumber: 4 } })).toEqual({ id: null, versionNumber: 4 });
+  });
+});
+
+describe('versionMovedSince — refuse to overwrite a teammate', () => {
+  // A library save REPLACES THE WHOLE FILE FOR THE WHOLE SHOP, so the loser of
+  // a save race loses everything they changed, with a success message.
+  it('blocks when the version urn changed', () => {
+    expect(versionMovedSince({ id: 'urn:v4' }, { id: 'urn:v5' })).toBe(true);
+  });
+
+  it('allows when the version is untouched', () => {
+    expect(versionMovedSince({ id: 'urn:v4' }, { id: 'urn:v4' })).toBe(false);
+  });
+
+  // ⚠️ THE OTHER HALF OF THE RULE, and the one that matters just as much: a save
+  // that wrongly refuses is its own kind of loss, because the user's edits exist
+  // only on their screen. Anything short of a clear mismatch lets the save run.
+  it('allows when we never recorded a version', () => {
+    expect(versionMovedSince(null, { id: 'urn:v5' })).toBe(false);
+    expect(versionMovedSince(undefined, { id: 'urn:v5' })).toBe(false);
+  });
+
+  it('allows when the check itself could not answer', () => {
+    expect(versionMovedSince({ id: 'urn:v4' }, null)).toBe(false);
+    expect(versionMovedSince({ id: 'urn:v4' }, undefined)).toBe(false);
+  });
+
+  it('allows when neither side carries anything comparable', () => {
+    expect(versionMovedSince({}, {})).toBe(false);
+    expect(versionMovedSince({ id: null, versionNumber: null }, { id: null, versionNumber: null })).toBe(false);
+  });
+
+  it('falls back to the version number when a urn is missing', () => {
+    expect(versionMovedSince({ versionNumber: 4 }, { versionNumber: 5 })).toBe(true);
+    expect(versionMovedSince({ versionNumber: 4 }, { versionNumber: 4 })).toBe(false);
+  });
+
+  it('compares numbers numerically, not as text', () => {
+    expect(versionMovedSince({ versionNumber: '9' }, { versionNumber: 9 })).toBe(false);
+    expect(versionMovedSince({ versionNumber: 9 }, { versionNumber: 10 })).toBe(true);
+  });
+
+  // The urn is exact; a number can repeat across items. When both are present
+  // the urn decides.
+  it('prefers the urn over the number when both are present', () => {
+    expect(versionMovedSince(
+      { id: 'urn:v4', versionNumber: 4 },
+      { id: 'urn:v4', versionNumber: 99 },
+    )).toBe(false);
+  });
+
+  it('allows when only one side has a comparable number', () => {
+    expect(versionMovedSince({ versionNumber: 4 }, { versionNumber: null })).toBe(false);
+    expect(versionMovedSince({ versionNumber: 'x' }, { versionNumber: 5 })).toBe(false);
   });
 });

@@ -150,27 +150,124 @@ export async function getValidToken() {
   return token;
 }
 
-export function signOut() {
+// ─── Revoking on sign-out ────────────────────────────────────────────────────
+//
+// Dropping our own copy of a token does not make it stop working — the refresh
+// token stays valid on Autodesk's side until it expires. On a shared shop
+// machine that is the whole difference between "signed out" and "looks signed
+// out". So sign-out tells Autodesk as well as forgetting locally.
+//
+// POST /authentication/v2/revoke, form-encoded. A PUBLIC client (PKCE, no
+// secret — that is us) sends `client_id` alongside `token` and
+// `token_type_hint`. Both hint values are documented, each with its own
+// section: `refresh_token` and `access_token`. Confirmed against the revoke
+// reference, Section 1 (For Public clients). The response carries no body.
+async function revokeToken(token, hint) {
+  if (!token) return;
+  try {
+    await fetch(`${AUTH_BASE}/revoke`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        token,
+        token_type_hint: hint,
+        client_id: CLIENT_ID(),
+      }),
+    });
+  } catch {
+    // Swallowed on purpose — see signOut. Best effort, never a blocker.
+  }
+}
+
+export async function signOut() {
+  // ⚠️ FORGET LOCALLY FIRST, and never let anything reach the caller.
+  // Signing out is the one operation in this module that has to work every
+  // single time — offline, rate-limited, with Autodesk down, or with browser
+  // storage blocked entirely. So the in-memory token is dropped BEFORE any
+  // sessionStorage access: reading storage first would mean a storage error
+  // left the user still signed in, which is the one outcome this must never
+  // produce. Telling Autodesk is the bonus on top.
+  const accessToken = _token?.access_token;
+  const tokenRefresh = _token?.refresh_token;
   _token = null;
-  sessionStorage.removeItem('aps_refresh_token');
+
+  let storedRefresh = null;
+  try {
+    storedRefresh = sessionStorage.getItem('aps_refresh_token');
+    sessionStorage.removeItem('aps_refresh_token');
+  } catch {
+    // Storage unavailable. Nothing to clear, and nothing worth failing over.
+  }
+  const refreshToken = storedRefresh || tokenRefresh;
+
+  // The refresh token is the one that matters: it is what outlives the page.
+  // Neither call can reject — revokeToken catches its own failures.
+  await Promise.all([
+    revokeToken(refreshToken, 'refresh_token'),
+    revokeToken(accessToken, 'access_token'),
+  ]);
 }
 
 export function isAuthenticated() {
   return !!_token;
 }
 
+// ─── Retry policy ────────────────────────────────────────────────────────────
+//
+// ⚠️ ONLY A GET IS EVER RETRIED, and that restriction is the whole design.
+// Every POST in this module CREATES something — a storage location, or a new
+// version of the shop's tool library. If such a request actually succeeded and
+// only its response was lost, a retry makes a SECOND one. A rate limit that
+// surfaces as an error is a nuisance; a duplicate library version is real
+// damage. So a failed write is reported, never repeated.
+//
+// This matters most in the bulk operations (renumberLibrary, assignToolIds,
+// renumberAllToolIds), which download EVERY linked library — exactly the burst
+// of reads that trips a rate limit, and all of them GETs.
+const RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
+const MAX_RETRY_ATTEMPTS = 3;
+const RETRY_BASE_MS = 800;
+const RETRY_CAP_MS = 8000;
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+/** Whether a failed request may be sent again. Pure, so it can be test-locked. */
+export function shouldRetryRequest({ method, status, attempt }) {
+  if ((method || 'GET').toUpperCase() !== 'GET') return false;
+  if (!RETRY_STATUSES.has(status)) return false;
+  return attempt < MAX_RETRY_ATTEMPTS;
+}
+
+/** How long to wait before the next attempt. Honours Retry-After when APS sends one. */
+export function retryDelayMs(retryAfterHeader, attempt) {
+  const seconds = Number(retryAfterHeader);
+  if (Number.isFinite(seconds) && seconds > 0) {
+    return Math.min(seconds * 1000, RETRY_CAP_MS);
+  }
+  return Math.min(RETRY_BASE_MS * 2 ** attempt, RETRY_CAP_MS);
+}
+
 // ─── Data Management fetch helper ────────────────────────────────────────────
 async function apiFetch(url, options = {}) {
   const token = await getValidToken();
   if (!token) throw new Error('Not authenticated with Autodesk');
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token.access_token}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
+  const method = (options.method || 'GET').toUpperCase();
+
+  let res;
+  for (let attempt = 0; ; attempt++) {
+    res = await fetch(url, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${token.access_token}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
+    if (res.ok) break;
+    if (!shouldRetryRequest({ method, status: res.status, attempt })) break;
+    await sleep(retryDelayMs(res.headers?.get?.('Retry-After'), attempt));
+  }
+
   if (!res.ok) {
     const txt = await res.text().catch(() => '');
     throw new Error(`APS API error ${res.status} (${url.split('?')[0]}): ${txt.slice(0, 200)}`);
@@ -179,25 +276,58 @@ async function apiFetch(url, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+// ─── Paging ──────────────────────────────────────────────────────────────────
+//
+// ⚠️ These collections are PAGED. `page[limit]` defaults to 200 and cannot
+// exceed it (confirmed on the Get Item Versions reference), so reading only
+// `data.data` returns a TRUNCATED list with no error of any kind — in the
+// library picker the file you want simply isn't listed, which reads as "the app
+// can't see my file" rather than as a bug.
+//
+// Following `links.next` is safe whether or not a given endpoint sends one: no
+// next link means one pass, which is exactly the old behaviour.
+const MAX_PAGES = 100; // 100 × 200 = 20k items; a stop, not an expected limit.
+
+/** The next page's URL from a JSON:API payload, or null. Tolerates both shapes. */
+export function nextLink(payload) {
+  const next = payload?.links?.next;
+  if (!next) return null;
+  const href = typeof next === 'string' ? next : next?.href;
+  return typeof href === 'string' && href ? href : null;
+}
+
+/** GET every page of a collection and concatenate the `data` arrays. */
+async function apiFetchAll(url) {
+  const out = [];
+  let nextUrl = url;
+  let previousUrl = null;
+  for (let page = 0; nextUrl && page < MAX_PAGES; page++) {
+    const body = await apiFetch(nextUrl);
+    if (Array.isArray(body?.data)) out.push(...body.data);
+    const following = nextLink(body);
+    // A next link pointing at the page we just read would spin forever.
+    if (following === nextUrl || following === previousUrl) break;
+    previousUrl = nextUrl;
+    nextUrl = following;
+  }
+  return out;
+}
+
 // ─── Hub / project / folder navigation ───────────────────────────────────────
 export async function getHubs() {
-  const data = await apiFetch(`${DM_BASE}/project/v1/hubs`);
-  return data.data;
+  return apiFetchAll(`${DM_BASE}/project/v1/hubs`);
 }
 
 export async function getProjects(hubId) {
-  const data = await apiFetch(`${DM_BASE}/project/v1/hubs/${hubId}/projects`);
-  return data.data;
+  return apiFetchAll(`${DM_BASE}/project/v1/hubs/${hubId}/projects`);
 }
 
 export async function getTopFolders(hubId, projectId) {
-  const data = await apiFetch(`${DM_BASE}/project/v1/hubs/${hubId}/projects/${projectId}/topFolders`);
-  return data.data;
+  return apiFetchAll(`${DM_BASE}/project/v1/hubs/${hubId}/projects/${projectId}/topFolders`);
 }
 
 export async function getFolderContents(projectId, folderId) {
-  const data = await apiFetch(`${DM_BASE}/data/v1/projects/${projectId}/folders/${folderId}/contents`);
-  return data.data;
+  return apiFetchAll(`${DM_BASE}/data/v1/projects/${projectId}/folders/${folderId}/contents`);
 }
 
 // ─── Storage URN helper ──────────────────────────────────────────────────────
@@ -259,10 +389,13 @@ export function tipVersionFromItem(itemPayload) {
 export function latestFromVersionList(versionsPayload) {
   const list = Array.isArray(versionsPayload?.data) ? versionsPayload.data : [];
   if (list.length === 0) return null;
-  const numbered = list.filter(v => Number.isFinite(Number(v?.attributes?.versionNumber)));
+  // strictNumber, not Number(): `Number(null)` is 0, which would make a version
+  // carrying no number look like "version 0" and count as numbered. Same trap
+  // guarded in versionMovedSince — the two must not drift.
+  const numbered = list.filter(v => Number.isFinite(strictNumber(v?.attributes?.versionNumber)));
   if (numbered.length === 0) return list[0];
   return numbered.reduce((a, b) =>
-    Number(b.attributes.versionNumber) > Number(a.attributes.versionNumber) ? b : a
+    strictNumber(b.attributes.versionNumber) > strictNumber(a.attributes.versionNumber) ? b : a
   );
 }
 
@@ -289,10 +422,23 @@ async function fetchCurrentVersion(projectId, itemId) {
   return latest;
 }
 
-// ─── Load tool library JSON (current version) ───────────────────────────────
-export async function loadToolLibrary(projectId, itemId) {
-  const version = await fetchCurrentVersion(projectId, itemId);
+/**
+ * A version's identity, kept so a later save can tell whether the file moved
+ * underneath us. Both halves are recorded: the version URN is exact, the
+ * number is what a person can be told.
+ */
+export function versionIdentity(version) {
+  if (!version) return null;
+  return {
+    id: version.id || null,
+    versionNumber: version.attributes?.versionNumber ?? null,
+  };
+}
 
+// ─── Load tool library JSON (current version) ───────────────────────────────
+
+/** Download and parse the bytes a given version points at. */
+async function downloadVersionJson(version) {
   const storageId = storageIdOfVersion(version);
   if (!storageId) throw new Error('Tool library version has no storage reference');
 
@@ -318,6 +464,23 @@ export async function loadToolLibrary(projectId, itemId) {
   return res.json();
 }
 
+/**
+ * The library file plus the identity of the version it came from.
+ * The caller keeps that identity and hands it back at save time so a save can
+ * refuse to overwrite a teammate — see saveToolLibrary.
+ */
+export async function loadToolLibraryWithVersion(projectId, itemId) {
+  const version = await fetchCurrentVersion(projectId, itemId);
+  const json = await downloadVersionJson(version);
+  return { json, version: versionIdentity(version) };
+}
+
+/** The library file alone, for callers that do not write it back. */
+export async function loadToolLibrary(projectId, itemId) {
+  const { json } = await loadToolLibraryWithVersion(projectId, itemId);
+  return json;
+}
+
 // ─── The global write lock ───────────────────────────────────────────────────
 //
 // The Autodesk-side twin of driveService's lock. Set from outside (App decides);
@@ -332,9 +495,74 @@ function assertWritable() {
   if (_writeLock) throw Object.assign(new Error(_writeLock), { code: 'WRITES_LOCKED' });
 }
 
+// ─── The lost-update guard ───────────────────────────────────────────────────
+//
+// A save REPLACES THE WHOLE FILE FOR THE WHOLE SHOP. So if a teammate saved
+// between our download and our upload, writing ours silently discards theirs —
+// with a success message on both screens and nothing to say a thing was lost.
+//
+// "Always re-download before write" narrows that window to seconds; it does not
+// close it. This closes it: remember which version we read, and refuse to write
+// over a different one. Same policy the repo already chose for the Drive side —
+// block the write and tell the user why, rather than clobber.
+
+/**
+ * Did the file move underneath us?
+ *
+ * ⚠️ ONLY A CLEAR, POSITIVE MISMATCH BLOCKS. If either side is unknown, or the
+ * identities cannot be compared, this returns false and the save proceeds.
+ * Refusing on a question we could not answer would invent a blocker out of
+ * not-knowing — and a save that wrongly refuses is its own kind of data loss,
+ * because the user's edits are still only on their screen.
+ */
+export function versionMovedSince(expected, current) {
+  if (!expected || !current) return false;
+  if (expected.id && current.id) return expected.id !== current.id;
+  // ⚠️ NOT plain Number(). `Number(null)` and `Number('')` are both 0, so a
+  // missing version number would compare as "version 0" and block a perfectly
+  // good save — the false-refusal this guard must never produce. Absent has to
+  // read as unknown, not as zero.
+  const before = strictNumber(expected.versionNumber);
+  const after = strictNumber(current.versionNumber);
+  if (Number.isFinite(before) && Number.isFinite(after)) return before !== after;
+  return false;
+}
+
+/** Number(), except that absent/blank is NaN rather than 0. */
+function strictNumber(value) {
+  if (value === null || value === undefined || value === '') return NaN;
+  return Number(value);
+}
+
 // ─── Save tool library JSON as a new version ─────────────────────────────────
-export async function saveToolLibrary(projectId, folderId, itemId, fileName, toolsJson) {
+//
+// `expectedVersion` is the identity returned by loadToolLibraryWithVersion.
+// Omit it and the save behaves exactly as it always has — which is why the
+// holder path, which does not track a version, is unaffected.
+export async function saveToolLibrary(projectId, folderId, itemId, fileName, toolsJson, expectedVersion) {
   assertWritable();
+
+  // Checked BEFORE step 1 so a conflict costs nothing: no storage is created,
+  // no bytes are uploaded, and the shop's library is untouched. The remaining
+  // exposure is the few seconds of the upload itself, against the minutes
+  // between load and save that this removes.
+  if (expectedVersion) {
+    let current = null;
+    try {
+      current = versionIdentity(await fetchCurrentVersion(projectId, itemId));
+    } catch {
+      // Could not look. Proceed — see versionMovedSince.
+    }
+    if (versionMovedSince(expectedVersion, current)) {
+      throw Object.assign(
+        new Error(
+          'Someone else saved this library since you loaded it. Nothing has been written — reload the page and make your change again.'
+        ),
+        { code: 'LIBRARY_VERSION_CONFLICT' }
+      );
+    }
+  }
+
   const jsonString = JSON.stringify(toolsJson, null, 2);
 
   // Step 1: request a storage location for the new file content
@@ -385,6 +613,19 @@ export async function saveToolLibrary(projectId, folderId, itemId, fileName, too
         type: 'versions',
         attributes: {
           name: fileName,
+          // ⚠️ THE ONLY LINE IN THIS APP THAT DEPENDS ON HUB STYLE. Nothing else
+          // reads hub or project type — every other call just walks
+          // hub → project → folder → item, which is the same shape everywhere.
+          //
+          // `autodesk.core` is the Fusion Team / A360 lineage. BIM 360 and Forma
+          // projects have their own variant, and the docs identify those by a
+          // `b.` prefix on the project id; ours carries `a.`, and saves work, so
+          // this is correct today. The Create Version reference does NOT list the
+          // valid values, so that is evidence rather than proof.
+          //
+          // ⚠️ WHEN THE TOOL LIBRARY IS MIGRATED to the new collaborative hub,
+          // CHECK THIS LINE FIRST. Expect a failed save rather than silent
+          // damage — but expect it on day one.
           extension: { type: 'versions:autodesk.core:File', version: '1.0' },
         },
         relationships: {

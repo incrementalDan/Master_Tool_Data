@@ -99,6 +99,11 @@ export function AppProvider({ children }) {
   // writes the file back with the same wrapper shape. One entry per linked
   // library. See downloadFusionList/uploadFusionList.
   const libraryWrappersRef = useRef(new Map());
+  // Which version of each library the last download actually read, keyed the
+  // same way. Handed back to saveToolLibrary so a save refuses to overwrite a
+  // teammate who saved in between — a library write replaces the WHOLE file for
+  // the whole shop, so the loser of that race loses everything they changed.
+  const libraryVersionsRef = useRef(new Map());
   const fusionReadyRef = useRef(state.fusionReady);
   locationRef.current = state.libraryLocation;
   holderLocationRef.current = state.holderLibraryLocation;
@@ -201,7 +206,8 @@ export function AppProvider({ children }) {
     if (localModeRef.current) throw new Error('Local mode is read-only — connect to Autodesk to load or save the live library');
     const loc = toolLibById(libraryId);
     if (!loc) throw new Error('No tool library location selected');
-    const json = await aps.loadToolLibrary(loc.projectId, loc.itemId);
+    const { json, version } = await aps.loadToolLibraryWithVersion(loc.projectId, loc.itemId);
+    libraryVersionsRef.current.set(loc.id, version);
     // Remember every wrapper-level field besides `data` (e.g. `version: 36`),
     // keyed per library, so uploadFusionList writes the file back with the same
     // wrapper shape — Fusion's library file is `{ data: [...], version: 36 }`,
@@ -220,7 +226,16 @@ export function AppProvider({ children }) {
     const loc = toolLibById(libraryId);
     if (!loc) throw new Error('No tool library location selected');
     const wrapper = libraryWrappersRef.current.get(loc.id) || {};
-    await aps.saveToolLibrary(loc.projectId, loc.folderId, loc.itemId, loc.fileName, { ...wrapper, data: list });
+    const expectedVersion = libraryVersionsRef.current.get(loc.id) || null;
+    await aps.saveToolLibrary(
+      loc.projectId, loc.folderId, loc.itemId, loc.fileName,
+      { ...wrapper, data: list },
+      expectedVersion,
+    );
+    // The save minted a new version, so what we hold is now stale. Drop it
+    // rather than leave a value that would make the NEXT save of this session
+    // report a conflict against our own write.
+    libraryVersionsRef.current.delete(loc.id);
   }, []);
 
   // Download every linked tool library: returns [{ libraryId, library, list }].
