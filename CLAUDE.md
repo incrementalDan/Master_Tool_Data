@@ -809,7 +809,7 @@ Deployment is **fully automated via GitHub Actions** — see `.github/workflows/
 
 **These are non-negotiable — do not change without understanding the implications:**
 
-- APS token lives in `window._apsToken` (memory only). Never write it to localStorage, sessionStorage, or cookies.
+- APS token lives in a **module-scoped variable inside `apsService.js`** (memory only) — deliberately NOT on `window`, where any script on the page could read it. Never write it to localStorage, sessionStorage, or cookies.
 - The `aps_code_verifier` and `aps_nonce` use sessionStorage only during the OAuth redirect — they are deleted immediately after the callback is processed.
 - The library location (`{ hubId, projectId, folderId, itemId, fileName }`) is safe to store in localStorage (`aps_library_location`) — it is not sensitive.
 - The holder library location is stored in localStorage (`aps_holder_library_location`) — also not sensitive.
@@ -3202,7 +3202,7 @@ ProShop exports thread designations without UN-series suffixes and encodes STI/H
 ## Key Constraints
 
 - **Tool IDs are permanent** — they are the Fusion `guid`, link the two JSON files, and are referenced in merge history. Never reassign them.
-- **APS token in memory only** — `window._apsToken`, never localStorage. The refresh token is stored in `sessionStorage` (`aps_refresh_token`) so the session survives page refreshes within the same browser tab.
+- **APS token in memory only** — a module-scoped variable in `apsService.js` (never `window`, never localStorage). The refresh token is stored in `sessionStorage` (`aps_refresh_token`) so the session survives page refreshes within the same browser tab.
 - **Always re-download before write** — call `downloadFusionList()` immediately before any `uploadFusionList()`.
 - **If Fusion has a place for it, Fusion must have it** — every value with a Fusion-native field is mirrored there, always. Metadata may own it and win on read, but the app must never be the only place a Fusion-storable value lives. See the section of that name.
 - **No extra fields in Fusion JSON** — Fusion validates strictly. Only Fusion-native fields go in the library file; everything else goes in `tool_metadata.json`. Exception: `geometry.assemblyGaugeLength` is a Fusion-native field (nested in `geometry`; = holder gauge length + OOH, not OOH alone), safe to write.

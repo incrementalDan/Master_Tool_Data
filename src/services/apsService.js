@@ -1,6 +1,6 @@
 // ─── Autodesk Platform Services (APS) ────────────────────────────────────────
 // Handles PKCE OAuth + Data Management read/write of the Fusion tool library.
-// Tokens are held in memory only (window._apsToken) — never persisted.
+// Tokens are held in memory only (a module-scoped variable) — never persisted.
 
 const AUTH_BASE = 'https://developer.api.autodesk.com/authentication/v2';
 const DM_BASE = 'https://developer.api.autodesk.com';
@@ -24,6 +24,14 @@ function base64Url(bytes) {
     .replace(/=/g, '');
 }
 
+// ─── The in-memory token ─────────────────────────────────────────────────────
+// Module scope, deliberately NOT `window`. A global is readable by anything
+// running on the page — a compromised dependency, an injected script, or anyone
+// with the console open. Nothing outside this module ever read it, so scoping it
+// costs nothing and makes the "memory only" rule literally true.
+// ⚠️ Never reintroduce a window/global mirror of this for debugging convenience.
+let _token = null;
+
 const CLIENT_ID = () => import.meta.env.VITE_APS_CLIENT_ID;
 const CALLBACK_URL = () => import.meta.env.VITE_APS_CALLBACK_URL;
 
@@ -39,7 +47,11 @@ export async function signIn() {
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('client_id', CLIENT_ID());
   url.searchParams.set('redirect_uri', CALLBACK_URL());
-  url.searchParams.set('scope', 'data:read data:write');
+  // data:create is REQUIRED by POST .../versions and POST .../storage — the two
+  // creation steps of saveToolLibrary. Confirmed against the Create Version
+  // reference, which lists data:create as its only required scope. Read paths
+  // only need data:read; without data:create a save can fail outright.
+  url.searchParams.set('scope', 'data:read data:write data:create');
   url.searchParams.set('nonce', nonce);
   url.searchParams.set('code_challenge', challenge);
   url.searchParams.set('code_challenge_method', 'S256');
@@ -69,13 +81,13 @@ export async function handleCallback(code) {
   }
   const token = await res.json();
   token.expires_at = Date.now() + token.expires_in * 1000;
-  window._apsToken = token;
+  _token = token;
   if (token.refresh_token) sessionStorage.setItem('aps_refresh_token', token.refresh_token);
   return token;
 }
 
 export async function refreshAccessToken() {
-  const token = window._apsToken;
+  const token = _token;
   if (!token?.refresh_token) throw new Error('No refresh token — please sign in again');
   const res = await fetch(`${AUTH_BASE}/token`, {
     method: 'POST',
@@ -89,7 +101,7 @@ export async function refreshAccessToken() {
   if (!res.ok) throw new Error('Token refresh failed — please sign in again');
   const newToken = await res.json();
   newToken.expires_at = Date.now() + newToken.expires_in * 1000;
-  window._apsToken = newToken;
+  _token = newToken;
   if (newToken.refresh_token) {
     sessionStorage.setItem('aps_refresh_token', newToken.refresh_token);
   }
@@ -99,22 +111,22 @@ export async function refreshAccessToken() {
 // Silently restore a session after a page refresh using the stored refresh token.
 // Returns true if the session was restored, false if a full sign-in is needed.
 export async function tryRestoreSession() {
-  if (window._apsToken) return true;
+  if (_token) return true;
   const storedRefresh = sessionStorage.getItem('aps_refresh_token');
   if (!storedRefresh) return false;
-  window._apsToken = { refresh_token: storedRefresh, expires_at: 0 };
+  _token = { refresh_token: storedRefresh, expires_at: 0 };
   try {
     await refreshAccessToken();
     return true;
   } catch {
-    window._apsToken = null;
+    _token = null;
     sessionStorage.removeItem('aps_refresh_token');
     return false;
   }
 }
 
 export async function getValidToken() {
-  let token = window._apsToken;
+  let token = _token;
   if (!token) return null;
   if (Date.now() > token.expires_at - 60000) {
     token = await refreshAccessToken();
@@ -123,12 +135,12 @@ export async function getValidToken() {
 }
 
 export function signOut() {
-  window._apsToken = null;
+  _token = null;
   sessionStorage.removeItem('aps_refresh_token');
 }
 
 export function isAuthenticated() {
-  return !!window._apsToken;
+  return !!_token;
 }
 
 // ─── Data Management fetch helper ────────────────────────────────────────────
@@ -193,12 +205,20 @@ export async function loadToolLibrary(projectId, itemId) {
 
   const { bucketKey, objectKey } = parseObjectUrn(storageId);
 
-  // Current Autodesk method: request a signed S3 download URL
+  // Current Autodesk method: request a signed S3 download URL.
+  // ⚠️ public-resource-fallback=true is what keeps this to ONE url. Without it, an
+  // object still assembling from chunks comes back as `status: 'chunked'` with
+  // `urls` — a MAP keyed by byte range, NOT an array — so `urls[0]` is undefined
+  // and there is nothing single to download. With the flag, OSS returns one signed
+  // URL (`status: 'fallback'`) while assembly is still in progress. Confirmed
+  // against the Generate Signed S3 Download URL reference.
   const signed = await apiFetch(
-    `${DM_BASE}/oss/v2/buckets/${bucketKey}/objects/${encodeURIComponent(objectKey)}/signeds3download`
+    `${DM_BASE}/oss/v2/buckets/${bucketKey}/objects/${encodeURIComponent(objectKey)}/signeds3download?public-resource-fallback=true`
   );
-  const downloadUrl = signed.url || signed.urls?.[0];
-  if (!downloadUrl) throw new Error('Could not obtain signed download URL');
+  const downloadUrl = signed.url;
+  if (!downloadUrl) {
+    throw new Error(`Could not obtain signed download URL (status: ${signed.status || 'unknown'})`);
+  }
 
   const res = await fetch(downloadUrl);
   if (!res.ok) throw new Error(`Failed to download tool library (${res.status})`);

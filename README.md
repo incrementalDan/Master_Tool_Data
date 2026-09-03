@@ -174,7 +174,7 @@ Merge history is appended to each tool's record so you can see what changed, whe
 
 ## Key Constraints
 
-- **Tokens in memory only** — `window._apsToken` never written to `localStorage`. A page reload requires re-authentication.
+- **Tokens in memory only** — held in a module-scoped variable inside `apsService.js`, never on `window` and never written to `localStorage`.
 - **Always re-download before write** — the app fetches the live Fusion library from APS immediately before every save, preventing overwrites from concurrent edits.
 - **No extra fields in the Fusion JSON** — Fusion validates strictly. All extra fields (metadata, assemblies, purchasing, tags) live in `tool_metadata.json` on Drive only.
 - **HashRouter** — required for GitHub Pages; do not switch to BrowserRouter.
