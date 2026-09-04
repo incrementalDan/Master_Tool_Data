@@ -50,7 +50,7 @@ export default function ToolDetail() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
-    tools, saveTool, deleteTool, cloneTool, isSaving, notify, holders, holderLibraryLocation,
+    tools, saveTool, saveToolMetadata, deleteTool, cloneTool, isSaving, notify, holders, holderLibraryLocation,
     reconcileTool, googleAuthenticated, uploadToolPhoto, uploadToolAttachment, deleteToolAttachment,
     shopSettings, promoteToolToFusion, detachToolFromFusion, fusionEnabled, fusionAuthority,
     isLoading, fusionSyncing,
@@ -312,6 +312,13 @@ export default function ToolDetail() {
   // silently threw the edit away. The context already toasts the reason; this
   // just lets the caller keep the user's data on screen.
   const sectionSave = async (updatedTool) => saveTool(updatedTool);
+
+  // For panels holding nothing Fusion has a place for. Skips the Fusion library
+  // round-trip entirely — a purchasing edit used to download and re-upload the
+  // whole library to store a field Fusion never sees. The patch is filtered in
+  // saveToolMetadata, so a Fusion-backed field can never reach metadata alone
+  // (see metadataScope.js for why that matters).
+  const metaSave = async (updatedTool) => saveToolMetadata(updatedTool);
 
   // Delete confirmation modal — shared by the edit-mode Delete button ('normal')
   // and the reverse-sync banner ('missing'). Rendered in both the edit and view
@@ -749,7 +756,7 @@ export default function ToolDetail() {
               tool={tool}
               onSave={async (updatedTool) => {
                 try {
-                  await saveTool(updatedTool);
+                  await metaSave(updatedTool);
                 } catch { /* toast handled in context */ }
               }}
             />
@@ -834,7 +841,7 @@ export default function ToolDetail() {
                 <PurchasingSection
                   tool={tool}
                   isSaving={isSaving}
-                  onSave={sectionSave}
+                  onSave={metaSave}
                 />
               </>
             )}

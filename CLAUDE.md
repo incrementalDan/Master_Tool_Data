@@ -2791,6 +2791,29 @@ This is not about Fusion being important. It's about not building a trap: the sh
 
 -----
 
+### Saving to metadata alone (`saveToolMetadata`)
+
+`saveTool` writes metadata **and** Fusion together. **`saveToolMetadata`** (`toolActions.js`) writes metadata only, skipping the Fusion library round-trip entirely — for panels holding nothing Fusion has a place for (notes, tags, purchasing, speed/feed refs). Same reasoning as `setToolLink` / `normalizeLocationSystem`: no reason to download and re-upload the whole library to store a field Fusion never sees.
+
+⚠️ **THE POINT OF IT IS WHAT IT REFUSES TO WRITE.** Because the two stores are always written together, a disagreement between them means exactly one thing:
+
+> **metadata ≠ Fusion means FUSION moved.**
+
+`detectFusionDrift` is built on that reading and `DriftBanner` acts on it — *"Fusion has X, the app has Y, keep which?"*. Write a **Fusion-backed** field to metadata alone and the sentence stops being true: the same difference would ALSO mean *"the user typed something and hasn't pushed it"*, and **"Keep Fusion" would silently discard their own unsaved edit.** That is the holder `ref-only` bug in a new place — holders needed a whole `last_pushed` snapshot to escape it, and keeping these two writes atomic is what makes one unnecessary here.
+
+⚠️ **Enforced structurally, in `src/schema/metadataScope.js` — never remembered per call site.** `metadataOnlyPatch(saved, updated)` keeps only what may be written alone and **reports** the rest.
+- **It DIFFS against the saved tool rather than trusting a hand-built patch.** That is what catches a panel inside a buffered form handing over the whole DRAFT: its uncommitted geometry surfaces as changed keys and is dropped and logged, instead of quietly reaching metadata and inventing a false drift.
+- **A metadata-only field whose CONTENT still reaches Fusion is on `NOT_AUTOSAVABLE`, with a reason** — `assemblies` (holder + OOH are baked into `geometry.LB`, the holder object and `assemblyGaugeLength`), `selected_holder_guid`, `tool_status` (`withRetiredMarker` rewrites the description), `tsc_capable`, `pitch` / `tap_thread_unit` (they derive `thread_pitch`), `preset_name`. The registry's `metadataOnly` flag alone is **not** the answer — those seven all carry it.
+- **A dropped key is logged, not thrown.** A caller slipping a Fusion field in is a bug in our code; crashing a shop machine over it is worse than dropping it and leaving the saved value standing.
+- ⚠️ **It carries its own demo/local read-only guard.** Those modes are enforced *inside* `downloadFusionList` / `uploadFusionList` — the single central guard the local-mode design rests on — and this path calls neither, so without it a sandbox edit would look saved, reach nothing, and vanish on reload.
+- **Write first, then memory**, so a failed write can never leave the app showing a value that isn't stored. Returns the **same reference** when nothing changed, so a caller can tell there was nothing to persist.
+
+`metadataScope.test.js` locks it: no `DRIFT_FIELDS` entry and no Fusion-backed registry field may pass, and **every metadata-only field must be classified** — so a field that doesn't exist yet fails the suite until someone answers "is this safe to write on its own?".
+
+**The UI's "which section autosaves" rule is separate and coarser** — a whole section waits for the Save button if it holds ANY Fusion-backed field, so the user never has to know which store a field lives in. A field can be autosavable here and still sit in a buffered section (`min_ooh`, `reach`). See `docs/TOOL_PAGE_UNIFICATION_PLAN.md`.
+
+-----
+
 ## Relational integrity — every link is an ID (CRITICAL)
 
 This app is a **relational database wearing JSON files**, and it is meant to migrate to SQLite with a schema translation, not a rewrite. So every relationship between two records must be a **stored, stable ID** — the thing a SQL foreign key would be.

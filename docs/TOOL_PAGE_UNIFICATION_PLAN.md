@@ -1,6 +1,6 @@
 # TOOL_PAGE_UNIFICATION_PLAN.md — one tool page, one draft, two save destinations
 
-> **STATUS: planned, not started.** Supersedes and absorbs
+> **STATUS: Phase 1 shipped ✅; Phases 2-5 planned.** Supersedes and absorbs
 > `UI_CONSISTENCY_AUDIT.md` §12 ("View/edit unification, part 2"), whose owner
 > decisions A/B/C still stand except where noted below — **decision B is
 > retired**, see "What this changes about §12".
@@ -198,16 +198,31 @@ narrow screen.
 
 Each ships on its own. None requires the next.
 
-### Phase 1 — split the save path *(data layer, no UI change)*
-- `saveToolMetadata(tool, patch)` in `toolActions.js` — registry-filtered,
-  metadata-only, one `toolStore.upsertOne` + `UPDATE_TOOL`. The shape already
-  exists in `writeLogicalTool`'s unlinked branch (`toolActions.js:204`).
-- The allowlist + its test (above).
-- Point the already-metadata-only panels at it: Notes & Tags, Linked Tools,
-  Speeds & Feeds refs, Purchasing.
-- **Immediate payoff on the current page**: those saves stop being a full Fusion
-  library download + upload.
+### Phase 1 — split the save path ✅ SHIPPED
+- **`src/schema/metadataScope.js`** — the classification and the filter.
+  `metadataOnlyPatch(saved, updated)` **diffs** rather than trusting a patch, so
+  a caller handing over a buffered draft has its geometry dropped and reported.
+  `NOT_AUTOSAVABLE` carries a reason per field; seven metadata-only fields are on
+  it because their content still reaches Fusion (`assemblies`,
+  `selected_holder_guid`, `tool_status`, `tsc_capable`, `pitch`,
+  `tap_thread_unit`, `preset_name`) — the registry flag alone is **not** enough.
+- **`saveToolMetadata`** in `toolActions.js` — write first then memory; its own
+  demo/local read-only guard (those modes are enforced inside the Fusion IO
+  functions, which this path deliberately never calls); returns the same
+  reference when nothing changed.
+- **`metadataScope.test.js`** (12) + **`toolActions.test.js`** (+7): no
+  `DRIFT_FIELDS` entry and no Fusion-backed field may pass, and every
+  metadata-only field must be classified — a new field fails the suite until it
+  is.
+- **Repointed**: Purchasing and Speeds & Feeds refs on the tool page. Those saves
+  no longer download and re-upload the whole Fusion library.
+- **Not repointed, deliberately**: **Location**. `assignToolLocation` is a full
+  `writeLogicalTool` today, and moving it metadata-only leaves Fusion's vendor
+  string stale — which needs the page to *say so*. That belongs with Phase 3,
+  where there is somewhere to say it.
 - Additive, no stored-shape change — **backwards-compatible**.
+- Notes & Tags is still view-only on the tool page; making it inline-editable is
+  Phase 3's first step (§12's "smallest rehearsal").
 
 ### Phase 2 — decompose *(zero behaviour change)*
 - Extract from `ToolDetail`: the sticky header, the action sidebar, the banner

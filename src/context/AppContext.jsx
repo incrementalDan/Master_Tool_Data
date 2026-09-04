@@ -1535,7 +1535,7 @@ export function AppProvider({ children }) {
     downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary,
     saveLocationConfig, saveComponents,
     toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef, fusionReadyRef, materialsRef,
-    holderLibraryRef,
+    holderLibraryRef, demoModeRef, localModeRef,
   }), [notify, downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary, saveLocationConfig, saveComponents]);
 
   const libraryOps = useMemo(() => createLibraryOps({
