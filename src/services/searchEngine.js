@@ -1,6 +1,7 @@
 // Pure search/filter functions — no React imports
 import { toolNeedsAttention } from '../utils/toolConflicts.js';
 import { statusOf } from '../utils/toolStatus.js';
+import { convertLength, normalizeUnit } from '../utils/units.js';
 
 const TEXT_FIELDS = ['description', 'vendor', 'material', 'coating', 'notes', 'location', 'tool_id', 'preferred_machine'];
 
@@ -166,6 +167,52 @@ export function matchedComponent(tool, query, components) {
   return null;
 }
 
+// ─── A typed DIAMETER matches the NUMBER, not the description text ──────────
+// Searching by size is the most natural thing to type, and it used to work only
+// by accident — `TEXT_FIELDS` is a substring scan, so a diameter was found only
+// when the description happened to spell it that way. Measured on the real
+// 302-tool library: 86% of tools could not be found by their exact stored
+// diameter, and 55% by ANY plausible decimal spelling, because their
+// description says "1/2" or "5/16" rather than a decimal. Typing ".2362"
+// returned nothing at all.
+//
+// ⚠️ This is ADDITIVE — a numeric hit is one more way to match, never a filter
+// on top of the text scan. Typing "3" still finds everything it always did.
+//
+// The tolerance mirrors the landing page's own diameter facet (0.002in), which
+// is what makes a typed value forgive the last digit: the spot drill stored at
+// .2362 is described as ".236", and both now find it.
+const DIA_TOL = { inches: 0.002, millimeters: 0.05 };
+
+// Only a query that is ENTIRELY a number is read as a diameter. A parseFloat of
+// the whole query would read "3fl" as 3 and "1218" as a size, quietly widening
+// every word search into a numeric one.
+const NUMERIC_QUERY = /^\d*\.?\d+$/;
+
+// A number the user typed carries no unit, so it is tried BOTH ways against the
+// tool's own unit — the app has no hidden inches canonical, every length is in
+// its record's unit, and conversion happens only here at the boundary (see
+// "Units"). So ".2362" and "6" both find a 6mm tool, whichever unit it is
+// stored in, which is the case that raised this: a metric-sized tool stored in
+// inches could be found by its mm name and not by its inch diameter.
+export function diameterMatches(tool, query) {
+  const q = String(query ?? '').trim();
+  if (!NUMERIC_QUERY.test(q)) return false;
+  const typed = parseFloat(q);
+  if (!Number.isFinite(typed) || typed <= 0) return false;
+
+  const dia = tool?.diameter;
+  if (typeof dia !== 'number' || !Number.isFinite(dia)) return false;
+
+  // normalizeUnit always answers 'inches' or 'millimeters', so a tool with no
+  // unit of its own reads as inches — the same fallback every length uses.
+  const unit = normalizeUnit(tool?.unit);
+  const tol = DIA_TOL[unit];
+  // As inches, and as millimetres — each converted into the tool's own unit.
+  return ['inches', 'millimeters'].some(from =>
+    Math.abs(dia - convertLength(typed, from, unit)) <= tol);
+}
+
 export function textSearch(tools, query, componentText = null) {
   if (!query?.trim()) return tools;
   const q = query.toLowerCase().trim();
@@ -199,6 +246,8 @@ export function textSearch(tools, query, componentText = null) {
     if (purchasingMatches(tool, q)) return true;
     // Tool ID with punctuation normalized away, so "a1" finds "A-1".
     if (tool.tool_id && normId(tool.tool_id).includes(normId(q))) return true;
+    // A bare number is also tried as a diameter, in inches and in mm.
+    if (diameterMatches(tool, q)) return true;
     return false;
   });
 }
