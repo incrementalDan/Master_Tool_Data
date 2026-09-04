@@ -293,7 +293,7 @@ function FacetControl({ field, label, tools, activeFilters, value, onChange, tol
       )}
       {open && filtered.length > 0 && (
         <div className="autocomplete-list">
-          {filtered.slice(0, 30).map(opt => (
+          {filtered.map(opt => (
             <div
               key={opt}
               className="autocomplete-item"
