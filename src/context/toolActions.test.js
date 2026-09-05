@@ -750,17 +750,18 @@ describe('saveToolMetadata — the metadata-only write path', () => {
     expect(ctx.notify).toHaveBeenCalled();
   });
 
-  it('lands in memory only when Drive is not connected', async () => {
+  // ⚠️ Metadata is the ONLY store these fields have, so with no Drive there is
+  // nowhere to write and an accepted edit is an edit lost on the next reload.
+  // Refusing keeps the editor open with the data intact (the panels all catch).
+  it('refuses rather than accepting an edit it cannot store', async () => {
     const tool = linked();
     const ctx = makeCtx({ toolsRef: { current: [tool] }, googleRef: { current: false } });
     const { saveToolMetadata } = createToolActions(ctx);
 
-    const out = await saveToolMetadata({ ...tool, notes: 'new note' });
-
+    await expect(saveToolMetadata({ ...tool, notes: 'new note' })).rejects.toThrow(/Google Drive/i);
     expect(upsertMetadata).not.toHaveBeenCalled();
-    expect(out.notes).toBe('new note');
     const updates = ctx.dispatch.mock.calls.filter(([a]) => a.type === 'UPDATE_TOOL');
-    expect(updates).toHaveLength(1);
+    expect(updates).toHaveLength(0);
   });
 });
 

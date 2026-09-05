@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { FIELD_REGISTRY } from './fieldRegistry.js';
+import { buildLogicalTool, buildUnlinkedTool } from './logicalTools.js';
+import { buildMetadataTool } from './metadataModel.js';
 import { DRIFT_FIELDS } from './metadataModel.js';
 import {
   AUTOSAVE_FIELDS, AUTOSAVE_EXTRA_KEYS, NOT_AUTOSAVABLE,
@@ -122,5 +124,59 @@ describe('metadataOnlyPatch', () => {
     const { patch, dropped } = metadataOnlyPatch(saved, { ...saved, some_future_key: 1 });
     expect(patch).toEqual({});
     expect(dropped).toEqual(['some_future_key']);
+  });
+});
+
+// ⚠️ WHY THIS IS HERE. saveToolMetadata has no assertFusionReady guard, unlike
+// the linked write. The question that raises is whether a metadata-only save
+// made during the two-stage load window — when the tool on screen was painted
+// from its own record rather than built from Fusion — writes back something
+// LESS than a normal save would. It does not, and this is the proof; without it
+// the missing guard reads like an oversight rather than a decision.
+describe('a save during the two-stage load window', () => {
+  const preset = {
+    guid: 'p1', name: 'AL 2.125 30-SK13-60 - Rough',
+    n: 9200, v_c: 1204, v_f: 55, f_z: 0.0015, v_f_plunge: 12, v_f_retract: 12,
+    'tool-coolant': 'flood', 'use-stepdown': true, stepdown: 0.018,
+    'use-stepover': true, stepover: 0.045,
+    expressions: { tool_stepdown: '.018 in' },
+    material: { query: 'Al Wrought', category: 'metal' },
+  };
+  const raw = {
+    guid: 'g1', type: 'flat end mill', unit: 'inches', description: '1/2 4FL EM',
+    'product-id': 'A-42', 'post-process': { comment: 'FTL-ABC123', number: 55 },
+    BMC: 'carbide', vendor: 'LC-8',
+    geometry: { DC: 0.5, LCF: 1.25, OAL: 3, NOF: 4, LB: 2.125, SFDM: 0.5 },
+    holder: { guid: 'H1', description: 'BT30 SK13 60' },
+    'start-values': { presets: [preset] },
+  };
+  const meta = {
+    id: 'FTL-ABC123', tool_id: 'A-42', notes: 'proven on 316L', tags: ['roughing'],
+    min_ooh: 1.5, machine_tool_number: 55,
+    preset_meta: { p1: { operation_type: 'rough', machine_id: 'M300', operation_ids: ['job-1'] } },
+    assemblies: [{
+      assembly_id: 'asm-1', instance_guid: 'g1', holder_guid: 'H1',
+      holder_description: 'BT30 SK13 60', ooh: 2.125, linked_preset_guids: ['p1'],
+      source: 'manual', asm_number: '30-SK13-60-A-42-2.125',
+    }],
+    purchasing: {
+      manufacturers: [{ id: 'm1', name: 'Helical', edp: '12334', edp_url: '', mfg_num: '', mfg_num_url: '', order: 0 }],
+      vendors: [{ id: 'v1', manufacturer_id: 'm1', name: 'MSC', vendor_num: '99', vendor_num_url: '', price: 34.76, order: 0 }],
+    },
+  };
+
+  it('stores exactly what a normal save would', () => {
+    const fromFusion = buildMetadataTool(buildLogicalTool([raw], new Map([[meta.id, meta]])));
+    // Stage 1 paints from the record itself; a metadata save then writes THAT back.
+    const provisional = buildUnlinkedTool(fromFusion);
+    const midSync = buildMetadataTool({ ...provisional, notes: 'edited during sync' });
+
+    const skip = new Set(['notes', 'updated_at', 'created_at']);
+    const keys = [...new Set([...Object.keys(fromFusion), ...Object.keys(midSync)])].filter(k => !skip.has(k));
+    for (const k of keys) {
+      expect(JSON.stringify(midSync[k] ?? null), `${k} differs mid-sync`)
+        .toBe(JSON.stringify(fromFusion[k] ?? null));
+    }
+    expect(midSync.notes).toBe('edited during sync');
   });
 });

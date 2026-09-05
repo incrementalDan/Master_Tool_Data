@@ -472,14 +472,7 @@ export default function ToolDetail() {
             <PresetPanel tool={tool} onSave={handlePresetsChange} isSaving={isSaving}
               onDirtyChange={(d) => { presetDirtyRef.current = d; }} />
 
-            <SpeedFeedSection
-              tool={tool}
-              onSave={async (updatedTool) => {
-                try {
-                  await metaSave(updatedTool);
-                } catch { /* toast handled in context */ }
-              }}
-            />
+            <SpeedFeedSection tool={tool} onSave={metaSave} />
 
             <Section title="History" icon={Clock} defaultOpen={false}>
               <div className="detail-fields" style={{ marginBottom: (tool.merge_history || []).length > 0 ? 12 : 0 }}>

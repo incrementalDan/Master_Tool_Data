@@ -5,7 +5,7 @@
 // ⚠️ `onSave` must PROPAGATE its failure (ToolDetail's sectionSave does): the
 // handlers below keep the optimistic card on screen only while the save is in
 // flight, and a swallowed error would leave a pending row that never resolves.
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Wrench } from 'lucide-react';
 import AssemblyCard from '../AssemblyCard.jsx';
 import AssemblyForm from '../AssemblyForm.jsx';
@@ -39,12 +39,10 @@ export default function AssembliesSection({ tool, holders, onSave }) {
   };
 
   // Clear pendingAssembly once the real data lands in the tool prop
-  const prevAssemblyIds = useRef(new Set(assemblies.map(a => a.assembly_id)));
   useEffect(() => {
     if (!pendingAssembly) return;
     const ids = new Set(assemblies.map(a => a.assembly_id));
     if (ids.has(pendingAssembly.assembly_id)) setPendingAssembly(null);
-    prevAssemblyIds.current = ids;
   }, [assemblies, pendingAssembly]);
 
   return (

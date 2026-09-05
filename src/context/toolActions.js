@@ -433,6 +433,13 @@ export function createToolActions(ctx) {
     if (demoModeRef?.current) throw new Error('Demo mode is read-only — changes are not saved');
     if (localModeRef?.current) throw new Error('Local mode is read-only — connect to Autodesk to save changes');
 
+    // ⚠️ No assertFusionReady here, deliberately. The linked write needs a real
+    // _instancesRaw base for its 3-way merges; this one has no Fusion side at
+    // all, and a tool painted provisionally from its own complete record
+    // round-trips back to a byte-identical record — verified in
+    // metadataScope.test.js ('a save during the two-stage load window'). Adding
+    // the guard would block a notes edit for the first seconds of every session
+    // for no gain.
     const saved = (toolsRef.current || []).find(t => t.id === updatedTool?.id);
     if (!saved) throw new Error('Tool not found');
 
@@ -452,24 +459,28 @@ export function createToolActions(ctx) {
 
     const merged = { ...saved, ...patch, updated_at: new Date().toISOString() };
 
-    // Drive-gated, like every other metadata-only writer. Demo mode never sets
-    // googleAuthenticated, so a demo edit lands in memory and nowhere else.
-    // ⚠️ Pre-existing gap, deliberately unchanged here: a LIVE session with no
-    // Drive connected also lands in memory only, exactly as saveTool does today
-    // for these same fields. Surfacing that is a UI change, not this one.
-    if (googleRef.current) {
-      dispatch({ type: 'SAVE_START' });
-      try {
-        await toolStore.upsertOne(
-          buildMetadataTool({ ...merged, tracking_id: merged.tracking_id || merged.id }),
-        );
-        dispatch({ type: 'SAVE_SUCCESS' });
-      } catch (err) {
-        if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
-        dispatch({ type: 'SAVE_ERROR', error: err.message });
-        notify(`Save failed: ${err.message}`, 'error', 7000);
-        throw err;
-      }
+    // ⚠️ REFUSES rather than pretending. Metadata is the ONLY store these fields
+    // have — Fusion has nowhere to put notes, tags or purchasing — so with no
+    // Drive there is nothing to write to and an edit accepted here is an edit
+    // lost on the next reload. (saveTool has the same hole today: it writes
+    // Fusion, skips the Drive write behind this same guard, and still toasts
+    // "Saved to Fusion library" — so a purchasing edit made without Drive is
+    // silently dropped. Fixing that one belongs with the panel gating.)
+    // Same contract as writeLogicalTool's unlinked branch, which already throws.
+    if (!googleRef.current) {
+      throw new Error('Connect Google Drive to save — notes, tags and purchasing live in the metadata file');
+    }
+    dispatch({ type: 'SAVE_START' });
+    try {
+      await toolStore.upsertOne(
+        buildMetadataTool({ ...merged, tracking_id: merged.tracking_id || merged.id }),
+      );
+      dispatch({ type: 'SAVE_SUCCESS' });
+    } catch (err) {
+      if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Save failed: ${err.message}`, 'error', 7000);
+      throw err;
     }
     dispatch({ type: 'UPDATE_TOOL', tool: merged });
     return merged;
