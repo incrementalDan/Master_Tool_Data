@@ -34,8 +34,13 @@ export default function useToolEditor({ tool, isNew, onSave, onCancel, isSaving,
   // them wrote — and the next page Save would push those stale values back over
   // the top. `frozen` is the page's edit mode: false = follow the record, true =
   // hold what the user is typing. (ToolForm is always frozen — it IS the edit.)
+  // ⚠️ AND IT REMEMBERS WHAT THE RECORD LOOKED LIKE when the freeze began. That
+  // snapshot is what "dirty" and the save's patch are both measured against —
+  // see the dirty comment below for the bug that comes of measuring against the
+  // live record instead.
+  const baseRef = useRef(tool);
   useEffect(() => {
-    if (!frozen) setData({ ...tool });
+    if (!frozen) { setData({ ...tool }); baseRef.current = tool; }
   }, [tool, frozen]);
   // The location field is only an INPUT when there is no better place to set
   // it: no location system configured at all, or an existing free-text value
@@ -278,7 +283,15 @@ export default function useToolEditor({ tool, isNew, onSave, onCancel, isSaving,
   // coating must always be storable, so this is a hint list, not a gate.
   const datalistOptions = useMemo(() => ({ coating: coatingOptions(tools) }), [tools]);
 
-  const dirty = useMemo(() => JSON.stringify(data) !== JSON.stringify(tool), [data, tool]);
+  // ⚠️ MEASURED AGAINST THE SNAPSHOT, NOT THE LIVE RECORD. The other panels on
+  // the tool page save while edit mode is open, so comparing the draft to the
+  // current record made the page report "Unsaved changes" — and prompt on the
+  // way out, and warn on tab close — because somebody saved a PRESET. Changes
+  // the user never made, on a Save that would then write nothing.
+  const dirty = useMemo(
+    () => JSON.stringify(data) !== JSON.stringify(frozen ? baseRef.current : tool),
+    [data, tool, frozen],
+  );
 
   // New taps default to HSS — taps are rarely carbide.
   useEffect(() => {
@@ -308,9 +321,14 @@ export default function useToolEditor({ tool, isNew, onSave, onCancel, isSaving,
     }
   };
 
+  // ⚠️ RETURNS WHETHER THE SAVE LANDED. It swallows the error on purpose (the
+  // message goes to the error banner and the draft stays on screen), so a caller
+  // awaiting it cannot tell success from failure — and the tool page's "Save &
+  // leave" did exactly that, navigating away on a failed write and taking the
+  // draft with it. Anything that acts AFTER a save has to read this.
   const handleSave = async () => {
     const { valid, errors: errs } = validateTool(data);
-    if (!valid) { setErrors(errs); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (!valid) { setErrors(errs); window.scrollTo({ top: 0, behavior: 'smooth' }); return false; }
     setErrors([]);
     await savePatternRows();
     // Purchasing is edited in place in the draft, so the re-sequencing and
@@ -322,8 +340,10 @@ export default function useToolEditor({ tool, isNew, onSave, onCancel, isSaving,
       : data;
     try {
       await onSave(payload, (sourceFile && keepSourceFile) ? sourceFile : null);
+      return true;
     } catch (err) {
       setErrors([err.message]);
+      return false;
     }
   };
 
@@ -375,6 +395,7 @@ export default function useToolEditor({ tool, isNew, onSave, onCancel, isSaving,
 
   return {
     data, setData, setField, setStatus, errors, setErrors,
+    base: baseRef,
     dirty, geoIssues, geoIssueFields,
     machineNum, hasMachineNum, locEditable, hasComponents, togglePairing,
     tagInput, setTagInput,

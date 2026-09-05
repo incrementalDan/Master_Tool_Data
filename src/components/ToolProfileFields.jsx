@@ -180,6 +180,13 @@ export default function ToolProfileFields({ draft, setDraft, readOnly = false })
     });
     if (append) setHoverSeg(next.length - 1);
   };
+  // ⚠️ THE BOX BEING TYPED IN STAYS ON THE DRAWING. A dimension is drawn only
+  // where it has a value, and a number input reports '' the instant its text is
+  // cleared — so clearing a box to retype it made the box UNMOUNT under the
+  // cursor. Exactly the "a blank cell is mid-edit, not a zero" rule the segment
+  // table already carries, in the one place it had not been applied.
+  const [activeDim, setActiveDim] = useState(null);
+
   const set = (field, raw) => {
     const v = raw === '' || raw === null ? null : Number(raw);
     const stored = v == null || Number.isNaN(v) ? null : (doubles(field, draft.tool_type) ? v / 2 : v);
@@ -239,7 +246,7 @@ export default function ToolProfileFields({ draft, setDraft, readOnly = false })
     const rows = dims.lengths
       .filter(field => field !== HOLDER_FACE)
       .map(field => ({ field, value: Number(draft[field]) || 0 }))
-      .filter(d => d.value > 0)
+      .filter(d => d.value > 0 || d.field === activeDim)
       .sort((a, b) => a.value - b.value);
     const placed = [];
     return rows.map((d) => {
@@ -258,7 +265,9 @@ export default function ToolProfileFields({ draft, setDraft, readOnly = false })
   // The datum's y, and which side of it the value box fits on. Above by
   // default (a print puts a section label above its line); below when the line
   // runs too close to the top of the canvas for the box to clear it.
-  const yHolder = holderFace > 0 ? yAt(Math.min(holderFace, total)) : null;
+  const yHolder = (holderFace > 0 || HOLDER_FACE === activeDim)
+    ? yAt(Math.min(Math.max(holderFace, 0), total))
+    : null;
   const holderBoxAbove = yHolder == null ? true : (yHolder - TOP_PAD) > (DIMBOX_H + 6);
   // ⚠️ The datum's label is anchored to its LINE, not to the lane stack, so it
   // can land in a lane that already has a box at the same height. Step it out a
@@ -347,7 +356,7 @@ export default function ToolProfileFields({ draft, setDraft, readOnly = false })
   // lane when two would overlap.
   const diaTargets = [];
   const pushDia = (field, value, yVal, halfPx) => {
-    if (!(Number(value) > 0)) return;
+    if (!(Number(value) > 0) && field !== activeDim) return;
     const y = yAt(yVal);
     const lane = diaTargets.some(d => Math.abs(d.y - y) < LABEL_H + 6 && d.lane === 0) ? 1 : 0;
     diaTargets.push({ field, value, y, halfPx, lane });
@@ -392,6 +401,29 @@ export default function ToolProfileFields({ draft, setDraft, readOnly = false })
     : (fieldLabel(f, draft.unit) || f));
   // On the drawing only — see SHORT.
   const dimLabelOf = (f) => SHORT[f] || labelOf(f);
+
+  // ⚠️ A DIMENSION THE TOOL HAS NEVER HAD STILL NEEDS SOMEWHERE TO BE TYPED.
+  // The drawing can only place a box where there is a value to place it at, and
+  // the grid below hides everything the drawing owns — so a blank MIN OOH (or
+  // shoulder, or shank Ø) had NO input anywhere on the page and could never be
+  // filled in. "Every field in exactly one place" has to mean at least one.
+  //
+  // They are listed rather than drawn on purpose: a leader pointing at nothing
+  // is the drawing asserting a number the record does not hold, which is the
+  // same rule that keeps the undercut hint off the drawing.
+  const drawnDims = new Set([
+    ...lengthDims.map(d => d.field),
+    ...diaTargets.map(d => d.field),
+    ...(yHolder != null ? [HOLDER_FACE] : []),
+  ]);
+  const unsetDims = readOnly ? [] : [...dims.lengths, ...dims.diameters]
+    .filter(f => !drawnDims.has(f) && !isDerived(f))
+    // ⚠️ NOT the undercut diameter while the pill says otherwise. An empty box
+    // next to a "No" asks for the diameter of something that is not there —
+    // the same rule that keeps it off the tool page's field grid. It appears
+    // here the moment the undercut is turned on.
+    .filter(f => f !== 'undercut_diameter' || draft.has_undercut === true);
+
   return (
         <div className="tp-body">
           {/* ── drawing ─────────────────────────────────────────────────── */}
@@ -509,7 +541,8 @@ export default function ToolProfileFields({ draft, setDraft, readOnly = false })
                   label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
                   step={stepFor(field, draft.unit)} kind={REGION_OF[field]} width={LEN_BOX_W}
                   value={shown(field)} onChange={v => set(field, v)}
-                  readOnly={readOnly} derived={isDerived(field)} />
+                  readOnly={readOnly} derived={isDerived(field)}
+                  onFocus={() => setActiveDim(field)} onBlur={() => setActiveDim(null)} />
               );
             })}
             {yHolder != null && (
@@ -520,6 +553,7 @@ export default function ToolProfileFields({ draft, setDraft, readOnly = false })
                 step={stepFor(HOLDER_FACE, draft.unit)}
                 value={shown(HOLDER_FACE)} onChange={v => set(HOLDER_FACE, v)} kind="holder" width={LEN_BOX_W}
                 readOnly={readOnly}
+                onFocus={() => setActiveDim(HOLDER_FACE)} onBlur={() => setActiveDim(null)}
                 title="Where the holder starts — usually the face of the collet nut" />
             )}
             {diaTargets.map(({ field, y, lane }) => (
@@ -527,7 +561,8 @@ export default function ToolProfileFields({ draft, setDraft, readOnly = false })
                 label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
                 step={stepFor(field, draft.unit)} kind={REGION_OF[field]}
                 value={shown(field)} onChange={v => set(field, v)} dia
-                readOnly={readOnly} derived={isDerived(field)} />
+                readOnly={readOnly} derived={isDerived(field)}
+                onFocus={() => setActiveDim(field)} onBlur={() => setActiveDim(null)} />
             ))}
 
             <div className="tp-nts" title="X and Y are scaled independently so the tool is legible — a real tool is far longer than it is wide.">NTS</div>
@@ -572,6 +607,24 @@ export default function ToolProfileFields({ draft, setDraft, readOnly = false })
                     </div>
                   </label>
                 </div>
+              </section>
+            )}
+
+            {unsetDims.length > 0 && (
+              <section className="tp-panel">
+                <h4 className="tp-panel-title">Not set</h4>
+                <div className="tp-extras">
+                  {unsetDims.map(f => (
+                    <label key={f} className="tp-extra">
+                      <span>{labelOf(f)}</span>
+                      <input type="number" className="field-input" value={shown(f) ?? ''}
+                        step={stepFor(f, draft.unit)}
+                        onFocus={() => setActiveDim(f)} onBlur={() => setActiveDim(null)}
+                        onChange={e => set(f, e.target.value)} placeholder="—" />
+                    </label>
+                  ))}
+                </div>
+                <p className="tp-unset-note">these move onto the drawing once they have a value</p>
               </section>
             )}
 
@@ -663,7 +716,8 @@ export default function ToolProfileFields({ draft, setDraft, readOnly = false })
 // right now. Styling every box as derived while merely viewing would claim the
 // whole drawing is computed, and hand every box a tooltip saying so.
 function DimBox({ x, y, align, label, unit, value, precision, step, onChange,
-  dia = false, readOnly = false, derived = false, title, kind, width }) {
+  dia = false, readOnly = false, derived = false, title, kind, width,
+  onFocus, onBlur }) {
   const [focused, setFocused] = useState(false);
   const display = focused
     ? (value ?? '')
@@ -682,7 +736,8 @@ function DimBox({ x, y, align, label, unit, value, precision, step, onChange,
       <span className="tp-dimbox-input">
         {dia && <span className="dia">⌀</span>}
         <input type="number" step={step} value={display} readOnly={readOnly || derived}
-          onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+          onFocus={() => { setFocused(true); onFocus?.(); }}
+          onBlur={() => { setFocused(false); onBlur?.(); }}
           onChange={e => onChange(e.target.value)} placeholder="—" />
         <span className="tp-dimbox-unit">{unit}</span>
       </span>

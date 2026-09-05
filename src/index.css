@@ -6871,6 +6871,12 @@ input.sf-ref-num { text-align: right; }
 /* Read-outs — the same numbers when the page is not in edit mode. Mono so a
    value does not jump when it becomes an input, and right-aligned like the
    input it replaces. */
+/* The "Not set" list's footnote. ⚠️ Its own class, not tp-seg-note: that one
+   belongs to the shaft-segment table, and sharing it put a second element with
+   that class ABOVE the table — which is how a test that slices the markup
+   between the table and its note started reading an empty range. */
+.tp-unset-note { font-size: 11px; color: var(--text-sub); margin-top: 8px; }
+
 .tp-readout, .tp-seg-readout {
   font-family: var(--font-mono);
   font-size: 12px;

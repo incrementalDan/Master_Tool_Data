@@ -6,6 +6,7 @@
 import { describe, it, expect } from 'vitest';
 import { editedPatch } from './editPatch.js';
 import { metadataOnlyPatch } from '../../schema/metadataScope.js';
+import { readFile } from 'node:fs/promises';
 
 const tool = {
   id: 'FTL-000001',
@@ -78,5 +79,27 @@ describe('which store the page save goes to', () => {
 
   it('⚠️ status takes the full write — it rewrites the Fusion description', () => {
     expect(routeOf({ tool_status: 'retired' })).toBe('fusion');
+  });
+});
+
+
+// ⚠️ A SAVE THAT DID NOT LAND MUST SAY SO. useToolEditor.handleSave swallows the
+// error on purpose — the message belongs in the banner and the draft has to stay
+// on screen — so its RETURN VALUE is the only signal a caller has. The tool
+// page's "Save & leave" reads it; awaiting it in a try/catch instead navigated
+// away on a failed write and took the edit with it.
+//
+// Tested against the real module rather than a copy of the shape, so a future
+// `return;` in that function fails here rather than silently re-breaking it.
+describe('handleSave reports whether it worked', () => {
+  it('is not a fire-and-forget — the source returns a boolean on every path', async () => {
+    const src = await readFile(
+      new URL('./useToolEditor.js', import.meta.url), 'utf8',
+    );
+    const body = src.slice(src.indexOf('const handleSave = async () => {'));
+    const fn = body.slice(0, body.indexOf('\n  };'));
+    // Validation failure, save failure, and success each have to answer.
+    expect(fn).toMatch(/return false;[\s\S]*return true;[\s\S]*return false;/);
+    expect(fn, 'a bare return would read as "it worked"').not.toMatch(/\n\s*return;\s*\n/);
   });
 });

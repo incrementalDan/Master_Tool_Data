@@ -394,7 +394,21 @@ export function createToolActions(ctx) {
       // saved to metadata only — say so rather than implying it reached Fusion.
       const fusionDisabled = shopSettingsRef.current?.integrations?.fusion?.enabled === false;
       const appOnly = updated.no_fusion_link === true || fusionDisabled;
-      notify(appOnly ? 'Saved (app only — not in Fusion)' : 'Saved to Fusion library', 'success');
+      // ⚠️ WITHOUT DRIVE, HALF THE SAVE DID NOT HAPPEN — say so. writeLogicalTool
+      // writes the Fusion entry and then skips the metadata record when Google
+      // is not connected, so notes, tags, purchasing, the structured location,
+      // preset_meta and the assemblies are all quietly gone. It reported plain
+      // success, which is the worst version of that: the tool page still shows
+      // them (they are in memory) and the next reload does not.
+      //
+      // It warns rather than throws because the Fusion half genuinely DID save —
+      // the no-Fusion path throws instead, because there metadata is the only
+      // store and nothing at all would have been written.
+      if (!appOnly && !googleRef.current) {
+        notify('Saved to Fusion — but notes, tags, purchasing and location need Google Drive, and were not saved.', 'error');
+      } else {
+        notify(appOnly ? 'Saved (app only — not in Fusion)' : 'Saved to Fusion library', 'success');
+      }
       return updated;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });

@@ -75,7 +75,6 @@ export default function ToolDetail() {
   // True while the inline preset editor has unsaved changes — used to warn
   // before navigating away or switching into the tool edit form.
   const presetDirtyRef = useRef(false);
-  const editBaseRef = useRef(null);
   // ⚠️ Covers BOTH drafts. It used to ask about presets only, because the tool's
   // own edits lived on a separate screen with its own guard. Now that editing
   // happens in place, leaving the page with the edit bar open would throw the
@@ -191,10 +190,7 @@ export default function ToolDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing]);
 
-  const startEdit = () => {
-    editBaseRef.current = { ...tool };
-    setEditing(true);
-  };
+  const startEdit = () => setEditing(true);
 
 
   if (!tool) {
@@ -286,7 +282,9 @@ export default function ToolDetail() {
   // given, so either of those would undo the save. A failed attach must not fail
   // the save: the tool data is already committed, and the action has toasted.
   const handleSave = async (updated, sourceFile = null) => {
-    const patch = editedPatch(editBaseRef.current || tool, updated);
+    // ⚠️ The SAME snapshot the dirty flag uses (the hook's), so the bar and the
+    // save can never disagree about what changed.
+    const patch = editedPatch(editor.base.current || tool, updated);
     const next = { ...tool, ...patch };
     let saved = tool;
     if (Object.keys(patch).length > 0) {
@@ -861,10 +859,12 @@ export default function ToolDetail() {
                 <button className="btn btn-primary" disabled={isSaving} onClick={async () => {
                   const go = leaveTo;
                   setLeaveTo(null);
-                  // ⚠️ Only leave if the save actually landed — a failed write
-                  // that navigated away would take the edit with it.
-                  try { await editor.handleSave(); go(); }
-                  catch { /* the context toasts; the draft stays on screen */ }
+                  // ⚠️ Only leave if the save actually LANDED. handleSave
+                  // swallows the error (it belongs in the banner, and the draft
+                  // has to stay on screen), so its RETURN is the only signal —
+                  // awaiting it in a try/catch navigates away on failure and
+                  // takes the edit with it.
+                  if (await editor.handleSave()) go();
                 }}>Save &amp; leave</button>
               </div>
             </div>

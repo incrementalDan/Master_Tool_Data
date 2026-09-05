@@ -72,9 +72,16 @@ describe('the profile drawing renders', () => {
   it('never draws a dimension leader pointing at an empty box', () => {
     // An undercut can be flagged without anyone measuring it. Falling back to
     // the derived hint drew a dimension for a value the record does not hold.
+    //
+    // ⚠️ Scoped to the DRAWING's boxes. An empty input is only a lie when a
+    // leader points at it; the "Not set" list beside the drawing is nothing but
+    // empty inputs — that is the whole job of it, and a page-wide match here
+    // would forbid the one place a never-set dimension can be typed in.
     const html = render({ ...toolFor(byDesc('1mm (.039) 3FL EM .059LOC .203 REACH')),
       has_undercut: true, undercut_diameter: null });
-    expect(html.match(/value=""/g)).toBeNull();
+    const canvas = html.slice(0, html.indexOf('tp-side'));
+    expect(canvas, 'the drawing half was found').toContain('tp-dimbox');
+    expect(canvas.match(/value=""/g)).toBeNull();
   });
 
   it('renders a millimetres tool in millimetres', () => {
@@ -99,6 +106,64 @@ describe('the profile drawing renders', () => {
     const html = render(toolFor(byDesc('1mm (.039) 3FL EM .059LOC .203 REACH')));
     expect(html).toContain('value="0.203"');   // reach
     expect(html).toContain('value="0.038"');   // undercut diameter
+  });
+});
+
+// ─── ⚠️ EVERY APPLICABLE DIMENSION HAS SOMEWHERE TO BE TYPED. The drawing can
+// only place a box where there is a value to place it at, and the grid below it
+// hides everything the drawing owns — so a dimension the tool has never had had
+// NO input anywhere on the page, and could never be filled in. Worse, clearing
+// a box to retype it made the box unmount under the cursor. Both were silent.
+describe('a dimension with no value can still be entered', () => {
+  const bare = { tool_type: 'flat end mill', unit: 'inches',
+    diameter: 0.5, flute_length: 1, overall_length: 3 };
+
+  it('lists what the drawing cannot draw', () => {
+    // No shoulder, no MIN OOH, no shank Ø on this tool — all applicable, none
+    // drawable, so all three have to appear beside the drawing.
+    const html = render(bare);
+    const side = html.slice(html.indexOf('tp-side'));
+    expect(side).toContain('Not set');
+    // The panel uses the full field label (as the Cutter panel does); the
+    // drawing uses the short one, because a lane is narrower than a list.
+    for (const label of ['Shoulder', 'Min OOH', 'Shank']) {
+      expect(side, `${label} has nowhere to be typed`).toContain(label);
+    }
+  });
+
+  it('⚠️ says nothing when every applicable dimension is already on the drawing', () => {
+    const full = { ...bare, shoulder_length: 1.2, min_ooh: 1.5, shank_diameter: 0.5, reach: 1.4 };
+    const html = render(full);
+    expect(html.slice(html.indexOf('tp-side'))).not.toContain('Not set');
+  });
+
+  // ⚠️ An empty box next to a "No" asks for the diameter of something that is
+  // not there — the same rule that keeps it off the tool page's field grid.
+  it('⚠️ does not ask for an undercut diameter on a tool with no undercut', () => {
+    const html = render(bare);
+    const side = html.slice(html.indexOf('tp-side'));
+    const notSet = side.slice(side.indexOf('Not set'), side.indexOf('tp-unset-note'));
+    expect(notSet).not.toContain('Undercut Diameter');
+  });
+
+  it('asks for it as soon as the undercut is turned on', () => {
+    const html = render({ ...bare, has_undercut: true });
+    const side = html.slice(html.indexOf('tp-side'));
+    const notSet = side.slice(side.indexOf('Not set'), side.indexOf('tp-unset-note'));
+    expect(notSet).toContain('Undercut Diameter');
+  });
+
+  it('⚠️ offers nothing while merely viewing — there is nothing to type into', () => {
+    expect(render(bare, { readOnly: true })).not.toContain('Not set');
+  });
+
+  it('⚠️ a DERIVED dimension is never offered', () => {
+    // Reach comes from the shaft segments. Offering an input for it would ask
+    // for a number the next load recomputes away.
+    const html = render({ ...bare, shaft_segments: [{ height: 0.3, lower: 0.4, upper: 0.4 }] });
+    const side = html.slice(html.indexOf('tp-side'));
+    const notSet = side.slice(side.indexOf('Not set'), side.indexOf('tp-unset-note'));
+    expect(notSet).not.toContain('Reach');
   });
 });
 
