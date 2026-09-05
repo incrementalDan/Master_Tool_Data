@@ -11,3 +11,6 @@ dist/
 !.claude/hooks/
 .claude/settings.local.json
 ToolDex Design System/
+
+# Design-canvas working files (mockups published as Artifacts, not app code)
+.design/
