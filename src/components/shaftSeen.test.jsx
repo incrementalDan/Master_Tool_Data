@@ -111,17 +111,16 @@ describe('the tool page shows that a tool has a shaft profile', () => {
     expect(await view({ ...seg, shaft_segments: [] })).not.toContain('Shaft Profile');
   });
 
-  it('opens the Tool Profile when the page can, and is plain text when it cannot', async () => {
-    expect(await view(seg, { onOpenProfile: () => {} })).toContain('link-btn');
-    expect(await view(seg)).not.toContain('link-btn');
-  });
-
-  it('is a read-out in the EDIT form too — it is edited in the Tool Profile', async () => {
+  // ⚠️ Only reachable on the two types the drawing cannot handle. Everywhere
+  // else GeometrySection hides this row, because the drawing IS the editor —
+  // showing the profile as a summary beside the drawing that draws it would be
+  // the same field in two places.
+  it('is a read-out in the EDIT form too — the drawing is where it is edited', async () => {
     const { default: ToolFields } = await import('./ToolFields.jsx');
     const html = renderToString(
       <ToolFields tool={seg} mode="edit" setField={() => {}} />);
     expect(html).toContain('Shaft Profile');
-    expect(html).toContain('edited in the Tool Profile');
+    expect(html).toContain('edited on the tool drawing');
     expect(html).not.toMatch(/<input[^>]*shaft/i);
   });
 });

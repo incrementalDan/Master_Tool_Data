@@ -8,7 +8,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
-import ToolProfileModal from './ToolProfileModal.jsx';
 import ToolProfileFields from './ToolProfileFields.jsx';
 import { resolveReachFields } from '../utils/toolReach.js';
 import { fusionToolToInternal } from '../schema/fusionConvert.js';
@@ -19,14 +18,18 @@ const LIB = JSON.parse(readFileSync(
 const toolFor = (e) => ({ ...fusionToolToInternal(e), _instancesRaw: [e] });
 const byDesc = (d) => LIB.find(t => t.description === d);
 
-const render = (tool) => renderToString(
-  <ToolProfileModal tool={tool} onSave={async () => {}} onClose={() => {}} />,
+// ⚠️ Renders the drawing the way THE PAGE does — seeded through the reach
+// resolver, in edit mode. It used to go through ToolProfileModal, which is
+// retired: the page is the only editor of this geometry now, and a test that
+// exercised a second one would be testing something nobody can reach.
+const render = (tool, props) => renderToString(
+  <ToolProfileFields draft={{ ...tool, ...resolveReachFields(tool) }} setDraft={() => {}} {...props} />,
 );
 
-describe('the profile modal renders', () => {
+describe('the profile drawing renders', () => {
   it('draws the tool the request was raised about', () => {
     const html = render(toolFor(byDesc('1mm (.039) 3FL EM .059LOC .203 REACH')));
-    expect(html).toContain('tool-profile-modal');
+    expect(html).toContain('tp-body');
     expect(html).toContain('tp-flute');       // the flutes, the standout region
     expect(html).toContain('tp-segment');     // its two shaft segments
     expect(html).toContain('tp-shank');
@@ -45,7 +48,7 @@ describe('the profile modal renders', () => {
 
   it('survives a tool with no geometry at all', () => {
     const html = render({ tool_type: 'flat end mill', unit: 'inches', description: 'blank' });
-    expect(html).toContain('tool-profile-modal');
+    expect(html).toContain('tp-body');
     expect(html).not.toMatch(/NaN|Infinity/);
   });
 
@@ -222,12 +225,8 @@ describe('the boxes say whether the page is editable', () => {
     flute_length: 1, shoulder_length: 1.2, overall_length: 3, shank_diameter: 0.5,
     shaft_segments: [{ height: 0.3, lower: 0.4, upper: 0.4 }] };
 
-  const modal = (props) => renderToString(
-    <ToolProfileModal tool={tool} onSave={async () => {}} onClose={() => {}} {...props} />,
-  );
-
-  it('the modal is editable — no box is locked', () => {
-    expect(modal()).not.toContain('tp-dimbox-locked');
+  it('an unlocked drawing locks nothing', () => {
+    expect(render(tool)).not.toContain('tp-dimbox-locked');
   });
 
   it('⚠️ locked is not the same as derived', () => {
@@ -238,9 +237,7 @@ describe('the boxes say whether the page is editable', () => {
     // Seeded through the resolver, exactly as the page and the modal seed it —
     // reach is DERIVED from the segments, so a raw draft has no reach box at all
     // and the derived half of this assertion would fail for the wrong reason.
-    const html = renderToString(
-      <ToolProfileFields draft={{ ...tool, ...resolveReachFields(tool) }} setDraft={() => {}} readOnly />,
-    );
+    const html = render(tool, { readOnly: true });
     // ⚠️ The OUTER box only. `tp-dimbox` is also the prefix of the spans inside
     // it (tp-dimbox-label, -input, -unit), so a bare prefix match sweeps those
     // up and "every box is locked" is false for a reason that is not the code.
@@ -253,9 +250,7 @@ describe('the boxes say whether the page is editable', () => {
   });
 
   it('a locked drawing offers nothing to type in or delete', () => {
-    const html = renderToString(
-      <ToolProfileFields draft={tool} setDraft={() => {}} readOnly />,
-    );
+    const html = render(tool, { readOnly: true });
     expect(html, 'no segment row can be removed').not.toContain('tp-seg-del');
     expect(html, 'no segment can be added').not.toContain('tp-seg-add');
     expect(html, 'segment cells are read-outs').toContain('tp-seg-readout');

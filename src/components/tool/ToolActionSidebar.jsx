@@ -7,14 +7,14 @@
 // this file is only the layout. Delete is deliberately absent: it lives on the
 // page's edit bar, so it can't be hit by accident while merely viewing.
 import {
-  ArrowLeft, Pencil, Copy, Shapes, GitMerge, Link2, Unlink,
+  ArrowLeft, Pencil, Copy, GitMerge, Link2, Unlink,
   Download, FileDown, FileUp,
 } from 'lucide-react';
 import SidebarBtn from './SidebarBtn.jsx';
 
 export default function ToolActionSidebar({
-  noFusion, toolIsNoFusion, fusionEnabled, canDrawProfile, copied,
-  onBack, onEdit, onDuplicate, onOpenProfile, onSyncJob,
+  noFusion, toolIsNoFusion, fusionEnabled, copied,
+  onBack, onEdit, onDuplicate, onSyncJob,
   onPromote, onDetach, onCopyToFusion, onDownload, onExportProShop, onImportProShop,
 }) {
   return (
@@ -25,10 +25,6 @@ export default function ToolActionSidebar({
     <SidebarBtn icon={Copy} label="Duplicate" tip="Duplicate tool" onClick={onDuplicate} />
     {/* The whole tool on one drawing. Additive — the Geometry section is
         untouched. Hidden for the types whose shape this cannot draw. */}
-    {canDrawProfile && (
-      <SidebarBtn icon={Shapes} label="Profile" tip="See and edit the whole tool as a dimensioned drawing"
-        onClick={onOpenProfile} />
-    )}
     {/* Sync Job is a Fusion-library workflow — hidden for a no-Fusion tool. */}
     {!noFusion && (
       <SidebarBtn icon={GitMerge} label="Sync Job" tip="Sync proven values from a job file" onClick={onSyncJob} />

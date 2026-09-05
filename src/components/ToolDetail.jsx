@@ -5,8 +5,6 @@ import {
   FileJson, MapPin, CloudOff, ScanLine, Save, Trash2,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
-import ToolProfileModal from './ToolProfileModal.jsx';
-import { canDrawProfile } from '../utils/toolProfile.js';
 import LocationPicker from './LocationPicker.jsx';
 import ReconcileModal from './ReconcileModal.jsx';
 import FilesSection from './FilesSection.jsx';
@@ -54,7 +52,7 @@ export default function ToolDetail() {
     tools, saveTool, saveToolMetadata, deleteTool, cloneTool, isSaving, notify, holders, holderLibraryLocation,
     reconcileTool, googleAuthenticated, uploadToolPhoto, uploadToolAttachment, deleteToolAttachment,
     shopSettings, promoteToolToFusion, detachToolFromFusion, fusionEnabled, fusionAuthority,
-    isLoading, fusionSyncing,
+    isLoading, fusionSyncing, registerNavGuard,
   } = useApp();
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
   const [editing, setEditing] = useState(searchParams.get('edit') === '1');
@@ -72,7 +70,6 @@ export default function ToolDetail() {
   const [reconcileResults, setReconcileResults] = useState(null);
   const [showPhotoUpload, setShowPhotoUpload] = useState(false);
   const [showProShopImport, setShowProShopImport] = useState(false);
-  const [showProfile, setShowProfile] = useState(false);
   const [promoteLibId, setPromoteLibId] = useState(null); // non-null = target-library picker open
 
   // True while the inline preset editor has unsaved changes — used to warn
@@ -172,6 +169,18 @@ export default function ToolDetail() {
   });
   const { data: draft, scan } = editor;
   editDirtyRef.current = editing && editor.dirty;
+
+  // ⚠️ IN-APP NAVIGATION IS NOT COVERED BY beforeunload. A top-bar tab
+  // (Materials, Parts, Settings) is a hash change, not a page load, so leaving
+  // mid-edit threw the whole draft away without a word — the one exit that had
+  // no guard on it. `<HashRouter>` is not a data router, so there is no
+  // useBlocker; the app's own seam is this. Settings does the same thing.
+  const [leaveTo, setLeaveTo] = useState(null);
+  useEffect(() => {
+    const dirtyNow = editing && editor.dirty;
+    registerNavGuard?.({ shouldBlock: () => dirtyNow, onBlocked: (proceed) => setLeaveTo(() => proceed) });
+    return () => registerNavGuard?.(null);
+  }, [registerNavGuard, editing, editor.dirty]);
 
   // ⚠️ Leaving edit mode ends the scan session. The draft is re-seeded from the
   // record on the way out, so proposals left behind would reappear on the next
@@ -420,12 +429,10 @@ export default function ToolDetail() {
         noFusion={noFusion}
         toolIsNoFusion={toolIsNoFusion}
         fusionEnabled={fusionEnabled}
-        canDrawProfile={canDrawProfile(tool.tool_type)}
         copied={copied}
         onBack={guardLeave(() => navigate(-1))}
         onEdit={guardLeave(startEdit)}
         onDuplicate={handleClone}
-        onOpenProfile={guardLeave(() => setShowProfile(true))}
         onSyncJob={() => navigate(`/merge/${tool.id}`)}
         onPromote={handlePromote}
         onDetach={handleDetach}
@@ -788,17 +795,6 @@ export default function ToolDetail() {
           />
         )}
 
-        {showProfile && (
-          <ToolProfileModal
-            tool={tool}
-            onClose={() => setShowProfile(false)}
-            onSave={async (updated) => {
-              await saveTool(updated);
-              notify('Geometry saved', 'success');
-            }}
-          />
-        )}
-
         {showProShopImport && (
           <ProShopImportModal
             tool={tool}
@@ -845,6 +841,34 @@ export default function ToolDetail() {
             onPick={(t) => { editor.setField('replaced_by', t.id); editor.setPickReplacement(false); }}
             onClose={() => editor.setPickReplacement(false)}
           />
+        )}
+
+        {/* Save / Discard / Stay — the same three answers Settings gives, because
+            it is the same question. Discard leaves edit mode, which re-seeds the
+            draft from the record. */}
+        {leaveTo && (
+          <div className="modal-backdrop">
+            <div className="modal">
+              <h3 className="modal-title">Unsaved changes</h3>
+              <p className="modal-body">
+                You have unsaved changes to this tool. Save them before leaving?
+              </p>
+              <div className="modal-actions">
+                <button className="btn btn-ghost" onClick={() => setLeaveTo(null)}>Stay</button>
+                <button className="btn btn-secondary" onClick={() => { const go = leaveTo; setLeaveTo(null); exitEdit(); go(); }}>
+                  Discard
+                </button>
+                <button className="btn btn-primary" disabled={isSaving} onClick={async () => {
+                  const go = leaveTo;
+                  setLeaveTo(null);
+                  // ⚠️ Only leave if the save actually landed — a failed write
+                  // that navigated away would take the edit with it.
+                  try { await editor.handleSave(); go(); }
+                  catch { /* the context toasts; the draft stays on screen */ }
+                }}>Save &amp; leave</button>
+              </div>
+            </div>
+          </div>
         )}
 
         {deleteModalEl}

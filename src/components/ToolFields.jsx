@@ -161,7 +161,6 @@ const DATALIST_FALLBACK = {
 export default function ToolFields({
   tool, mode, setField, geoIssueFields,
   proposals = null, onResolveProposal = null, listOptions = null,
-  onOpenProfile = null,
   // ⚠️ EVERY FIELD APPEARS EXACTLY ONCE. When the tool page renders the profile
   // drawing, the drawing IS the editor for the dimensions it carries — so those
   // fields must not also appear in this grid. The caller passes the set the
@@ -292,7 +291,11 @@ export default function ToolFields({
       const rows = shaftRows(tool);
       if (!rows.length) return null;
       const summary = formatShaftSegments(rows, tool.unit);
-      const hint = <div className="field-hint">edited in the Tool Profile</div>;
+      // ⚠️ On a tool the drawing CAN draw this row never renders — GeometrySection
+      // hides it, because the drawing itself is the editor. It survives for the
+      // two types with no drawing (boring head, turning general), where the
+      // profile has nowhere else to be shown at all.
+      const hint = <div className="field-hint">edited on the tool drawing</div>;
       return edit ? (
         <div className="field-group" key={field}>
           <label className="field-label">{label}</label>
@@ -303,10 +306,7 @@ export default function ToolFields({
         <div className="detail-field" key={field}>
           <div className="detail-field-label">{label}</div>
           <div className="detail-field-value">
-            {onOpenProfile
-              ? <button type="button" className="link-btn" onClick={onOpenProfile}
-                  title="Open the Tool Profile">{summary}</button>
-              : summary}
+            {summary}
           </div>
           {hint}
         </div>
