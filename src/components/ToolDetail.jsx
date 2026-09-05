@@ -93,6 +93,17 @@ export default function ToolDetail() {
   // Store the id, render the name — see "Relational integrity".
   const replacement = tool?.replaced_by ? tools.find(t => t.id === tool.replaced_by) : null;
 
+  // ⚠️ EDIT MODE BELONGS TO ONE TOOL. The route is /tool/:id, so moving between
+  // tools does NOT unmount this page — `editing` stayed true, and because the
+  // draft is frozen while editing it kept holding the PREVIOUS tool. The header
+  // then named one tool while every field showed another's values, and saving
+  // would have written the first tool's geometry onto the second. Reachable by
+  // browser Back/Forward and by the retired-tool replacement link.
+  useEffect(() => {
+    setEditing(searchParams.get('edit') === '1');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
   // Land at the top of the page when opening a tool (navigating in keeps the
   // window's previous scroll position otherwise).
   useEffect(() => { window.scrollTo(0, 0); }, [id]);

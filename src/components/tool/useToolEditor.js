@@ -39,8 +39,20 @@ export default function useToolEditor({ tool, isNew, onSave, onCancel, isSaving,
   // see the dirty comment below for the bug that comes of measuring against the
   // live record instead.
   const baseRef = useRef(tool);
+  // ⚠️ AND IT SEEDS ONCE PER RECORD, EVEN WHILE FROZEN. The page can mount
+  // already in edit mode (Duplicate lands on ?edit=1) before the library has
+  // finished loading, so the first `tool` is an empty stand-in — and a
+  // freeze-only rule would hold that empty draft for good, leaving every field
+  // on the page blank with no way to fill them. Seeding on a CHANGE OF RECORD
+  // cannot clobber a live edit: mid-edit the id is the same one.
+  const seededIdRef = useRef(tool?.id);
   useEffect(() => {
-    if (!frozen) { setData({ ...tool }); baseRef.current = tool; }
+    const newRecord = seededIdRef.current !== tool?.id;
+    if (!frozen || newRecord) {
+      seededIdRef.current = tool?.id;
+      setData({ ...tool });
+      baseRef.current = tool;
+    }
   }, [tool, frozen]);
   // The location field is only an INPUT when there is no better place to set
   // it: no location system configured at all, or an existing free-text value

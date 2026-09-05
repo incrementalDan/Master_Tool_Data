@@ -103,3 +103,23 @@ describe('handleSave reports whether it worked', () => {
     expect(fn, 'a bare return would read as "it worked"').not.toMatch(/\n\s*return;\s*\n/);
   });
 });
+
+
+// ⚠️ EDIT MODE BELONGS TO ONE TOOL. /tool/:id does not unmount the page when the
+// id changes, and the draft is deliberately FROZEN while editing — so without an
+// explicit reset the page kept the previous tool's draft while the header named
+// the new one, and a save would have written the first tool's geometry onto the
+// second. Reachable by browser Back/Forward and by the replacement link.
+//
+// Asserted against the source: the reset has to be keyed on the id, and it has
+// to honour ?edit=1 (Duplicate lands there deliberately).
+describe('the page drops edit mode when the tool changes', () => {
+  it('resets on the id, honouring ?edit=1', async () => {
+    const src = await readFile(new URL('../ToolDetail.jsx', import.meta.url), 'utf8');
+    const i = src.indexOf('EDIT MODE BELONGS TO ONE TOOL');
+    expect(i, 'the guard is gone').toBeGreaterThan(-1);
+    const block = src.slice(i, i + 900);
+    expect(block).toContain("setEditing(searchParams.get('edit') === '1')");
+    expect(block, 'must be keyed on the tool id').toMatch(/\}, \[id\]\)/);
+  });
+});
