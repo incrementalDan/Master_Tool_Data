@@ -58,7 +58,13 @@ export const NOT_AUTOSAVABLE = {
 // an allowlist is a permission nobody reviewed. Anything not listed is dropped
 // (and reported), so adding one is a one-line change plus a test line.
 export const AUTOSAVE_EXTRA_KEYS = new Set([
-  'speed_feed_refs',   // SpeedFeedSection — per-CAM-preset SFM + chip load
+  'speed_feed_refs',        // SpeedFeedSection — per-CAM-preset SFM + chip load
+  // ⚠️ The FK half of the preferred machine. `preferred_machine` is a registry
+  // field and autosavable; its id is not a registry field, so without this line
+  // the Notes autosave would store the display NAME and silently drop the LINK —
+  // "store the id, render the name" broken in the one direction that looks fine
+  // on screen until the machine is renamed.
+  'preferred_machine_id',
 ]);
 
 /** Every metadata-only registry field that may be written on its own. */

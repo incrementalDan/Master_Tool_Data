@@ -55,6 +55,16 @@ describe('the metadata-only write scope', () => {
       expect(FIELD_REGISTRY[key], `${key} is a registry field — it belongs in the derived list`).toBeFalsy();
     }
   });
+
+  // ⚠️ A LINK AND ITS LABEL TRAVEL TOGETHER. `preferred_machine` is the derived
+  // display name and `preferred_machine_id` is the FK; autosaving one without
+  // the other stores a name whose link is stale, which reads as correct right up
+  // until someone renames the machine. Same pair rule as a Fusion native+
+  // expression — send both or neither.
+  it('carries the preferred-machine FK alongside its name', () => {
+    expect(isAutosavableKey('preferred_machine')).toBe(true);
+    expect(isAutosavableKey('preferred_machine_id')).toBe(true);
+  });
 });
 
 describe('metadataOnlyPatch', () => {
