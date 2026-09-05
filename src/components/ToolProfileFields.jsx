@@ -670,7 +670,7 @@ function DimBox({ x, y, align, label, unit, value, precision, step, onChange,
     : (value === null || value === undefined || value === ''
       ? '' : Number(Number(value).toFixed(precision ?? 4)));
   return (
-    <div className={`tp-dimbox${derived ? ' tp-dimbox-derived' : ''}${kind ? ` tp-dimbox-${kind}` : ''}${width ? ' tp-dimbox-fixed' : ''}`}
+    <div className={`tp-dimbox${derived ? ' tp-dimbox-derived' : ''}${readOnly ? ' tp-dimbox-locked' : ''}${kind ? ` tp-dimbox-${kind}` : ''}${width ? ' tp-dimbox-fixed' : ''}`}
       title={title || (derived ? 'From the shaft segments' : undefined)}
       style={{
       left: x, top: y, width: width || undefined,

@@ -9,6 +9,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { renderToString } from 'react-dom/server';
 import ToolProfileModal from './ToolProfileModal.jsx';
+import ToolProfileFields from './ToolProfileFields.jsx';
+import { resolveReachFields } from '../utils/toolReach.js';
 import { fusionToolToInternal } from '../schema/fusionConvert.js';
 
 const LIB = JSON.parse(readFileSync(
@@ -211,6 +213,55 @@ describe('each value box borders in the colour of the region it names', () => {
 // is what took the drawing from 634px to ~350 and made room for the Cutter and
 // Shaft Segments panels beside it instead of below. A regression here is not
 // cosmetic: it puts the drawing back over the width its container has.
+// ⚠️ THE PAGE OPENS READ-ONLY, so a box that still looks like a field is a lie
+// about what a click will do. Locked boxes lose their fill and dim their border
+// — but KEEP the region colour, which is what ties each box to the part of the
+// tool it measures and is doing that job in both modes.
+describe('the boxes say whether the page is editable', () => {
+  const tool = { tool_type: 'flat end mill', unit: 'inches', diameter: 0.5,
+    flute_length: 1, shoulder_length: 1.2, overall_length: 3, shank_diameter: 0.5,
+    shaft_segments: [{ height: 0.3, lower: 0.4, upper: 0.4 }] };
+
+  const modal = (props) => renderToString(
+    <ToolProfileModal tool={tool} onSave={async () => {}} onClose={() => {}} {...props} />,
+  );
+
+  it('the modal is editable — no box is locked', () => {
+    expect(modal()).not.toContain('tp-dimbox-locked');
+  });
+
+  it('⚠️ locked is not the same as derived', () => {
+    // Two different claims. `derived` says the app COMPUTES this value (dashed,
+    // with a tooltip saying where from) and is true in both modes; `locked` only
+    // says the page is not in edit mode. Styling every box as derived while
+    // viewing would assert the whole drawing is computed.
+    // Seeded through the resolver, exactly as the page and the modal seed it —
+    // reach is DERIVED from the segments, so a raw draft has no reach box at all
+    // and the derived half of this assertion would fail for the wrong reason.
+    const html = renderToString(
+      <ToolProfileFields draft={{ ...tool, ...resolveReachFields(tool) }} setDraft={() => {}} readOnly />,
+    );
+    // ⚠️ The OUTER box only. `tp-dimbox` is also the prefix of the spans inside
+    // it (tp-dimbox-label, -input, -unit), so a bare prefix match sweeps those
+    // up and "every box is locked" is false for a reason that is not the code.
+    const boxes = [...html.matchAll(/class="(tp-dimbox(?: [^"]*)?)"/g)].map(m => m[1]);
+    expect(boxes.length).toBeGreaterThan(2);
+    expect(boxes.every(c => /tp-dimbox-locked/.test(c)), 'every box locks').toBe(true);
+    // Reach is derived from the segments; the flute length never is.
+    expect(boxes.some(c => /tp-dimbox-derived/.test(c))).toBe(true);
+    expect(boxes.some(c => !/tp-dimbox-derived/.test(c))).toBe(true);
+  });
+
+  it('a locked drawing offers nothing to type in or delete', () => {
+    const html = renderToString(
+      <ToolProfileFields draft={tool} setDraft={() => {}} readOnly />,
+    );
+    expect(html, 'no segment row can be removed').not.toContain('tp-seg-del');
+    expect(html, 'no segment can be added').not.toContain('tp-seg-add');
+    expect(html, 'segment cells are read-outs').toContain('tp-seg-readout');
+  });
+});
+
 describe('length dimensions are ordinate', () => {
   // ⚠️ A kind modifier (tp-dimbox-flute) sits BETWEEN the base class and
   // tp-dimbox-fixed, so the class list has to be matched permissively and

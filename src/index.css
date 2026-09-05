@@ -6797,7 +6797,7 @@ input.sf-ref-num { text-align: right; }
 }
 .tp-dimbox-holder .tp-dimbox-label { color: var(--tp-holder-line); }
 .tp-dimbox-holder .tp-dimbox-input {
-  border-color: color-mix(in srgb, var(--tp-holder-line) 50%, transparent);
+  --dimbox-edge: color-mix(in srgb, var(--tp-holder-line) 50%, transparent);
 }
 .tp-dim[data-muted='y'] { opacity: 0.55; transition: opacity 0.12s ease; }
 
@@ -6830,12 +6830,24 @@ input.sf-ref-num { text-align: right; }
 .tp-dimbox-input {
   display: flex; align-items: center; gap: 2px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--dimbox-edge, var(--border));
   border-radius: var(--radius-sm);
   padding: 2px 5px;
 }
 .tp-dimbox-input:focus-within { border-color: var(--blue); }
 /* Derived from the shaft segments — Fusion's number, not an input. */
+/* ⚠️ LOCKED = THE PAGE IS NOT IN EDIT MODE. A filled box with a full-strength
+   border reads as a field you can type in, so on a page that opens read-only
+   every dimension looked editable and none of them were. The fill goes (the
+   value sits on the page, not in a well) and the border dims — but it KEEPS its
+   region colour, because that colour is what ties the box to the part of the
+   tool it measures, and it is doing that job in both modes. Distinct from
+   `derived`, which is dashed in both modes and means "the app computes this". */
+.tp-dimbox-locked .tp-dimbox-input {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--dimbox-edge, var(--border)) 45%, transparent);
+}
+.tp-dimbox-locked .tp-dimbox-input input { cursor: default; }
 .tp-dimbox-derived .tp-dimbox-input { border-style: dashed; opacity: 0.85; }
 .tp-dimbox-derived .tp-dimbox-input input { cursor: default; }
 .tp-dimbox-input input {
@@ -6954,10 +6966,14 @@ input.sf-ref-num { text-align: right; }
 .tp-dimbox-segment  .tp-dimbox-input,
 .tp-dimbox-shank    .tp-dimbox-input,
 .tp-dimbox-holder   .tp-dimbox-input { border-width: 1.5px; }
-.tp-dimbox-flute    .tp-dimbox-input { border-color: var(--tp-flute-edge); }
-.tp-dimbox-shoulder .tp-dimbox-input { border-color: var(--tp-shoulder); }
-.tp-dimbox-segment  .tp-dimbox-input { border-color: var(--tp-segment-edge); }
-.tp-dimbox-shank    .tp-dimbox-input { border-color: var(--tp-shank-edge); }
+/* ⚠️ Each region sets a TOKEN, not the border directly. The locked (view-mode)
+   variant has to dim whatever colour this box happens to wear, and re-listing
+   the palette there is how the two lists drift — a new region would keep its
+   full-strength border while viewing and nobody would know why. */
+.tp-dimbox-flute    .tp-dimbox-input { --dimbox-edge: var(--tp-flute-edge); }
+.tp-dimbox-shoulder .tp-dimbox-input { --dimbox-edge: var(--tp-shoulder); }
+.tp-dimbox-segment  .tp-dimbox-input { --dimbox-edge: var(--tp-segment-edge); }
+.tp-dimbox-shank    .tp-dimbox-input { --dimbox-edge: var(--tp-shank-edge); }
 /* The segment table edits the shaft segments, so its rows carry that colour
    too — the same region, in its other representation. Held back from the boxes'
    full strength because six of them sit in a row. */
