@@ -6780,6 +6780,11 @@ input.sf-ref-num { text-align: right; }
 .tp-ext     { stroke: var(--tp-dim-line); stroke-width: 0.75; opacity: 0.55; }
 .tp-leader  { stroke: var(--tp-dim-line); stroke-width: 0.75; opacity: 0.75; }
 .tp-dimline { stroke: var(--tp-dim-line); stroke-width: 1; }
+/* An ORDINATE leader: one horizontal line from the part out to its value, with
+   the tip as the assumed origin. Same weight as a dimension line — it IS the
+   dimension — but it carries no arrows and spans nothing, so it is its own
+   class rather than a dimline without markers. */
+.tp-ord     { stroke: var(--tp-dim-line); stroke-width: 1; }
 /* ⚠️ THE HOLDER FACE IS A DATUM, NOT A DIMENSION — so it must not read as one.
    In the dimension grey it disappeared over the tool body and its overhang was
    indistinguishable from a diameter leader crossing at the same height. Its own

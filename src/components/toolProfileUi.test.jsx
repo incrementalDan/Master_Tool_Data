@@ -206,6 +206,58 @@ describe('each value box borders in the colour of the region it names', () => {
 // from the part — so half of every box, ~40px, lay across the silhouette. The
 // right-hand boxes were always placed by their edge, which is why only one side
 // was wrong.
+// ─── ⚠️ ORDINATE LENGTHS. Every length is measured from the tip, so each one
+// is a single horizontal leader at its own height and they SHARE a lane. That
+// is what took the drawing from 634px to ~350 and made room for the Cutter and
+// Shaft Segments panels beside it instead of below. A regression here is not
+// cosmetic: it puts the drawing back over the width its container has.
+describe('length dimensions are ordinate', () => {
+  // ⚠️ A kind modifier (tp-dimbox-flute) sits BETWEEN the base class and
+  // tp-dimbox-fixed, so the class list has to be matched permissively and
+  // filtered — anchoring on "tp-dimbox tp-dimbox-fixed" silently matches only
+  // the one box that happens to carry no kind modifier, and every lane
+  // assertion below then passes or fails for the wrong reason.
+  const boxLefts = (html) => [...html.matchAll(/class="(tp-dimbox[^"]*)"[^>]*?style="([^"]*)"/g)]
+    .filter(m => /tp-dimbox-fixed/.test(m[1]))
+    .map(m => { const v = /left:(-?[\d.]+)px/.exec(m[2]); return v ? Number(v[1]) : null; })
+    .filter(v => v != null);
+  const svgWidth = (html) => Number(/<svg width="([\d.]+)"/.exec(html)?.[1]);
+
+  const base = { tool_type: 'flat end mill', unit: 'inches', diameter: 0.5,
+    shank_diameter: 0.5, shaft_segments: [{ height: 0.3, lower: 0.4, upper: 0.4 }] };
+
+  // ⚠️ The MIN OOH datum is anchored to its own LINE, not to the lane stack, so
+  // it is excluded here — it legitimately sits at an x no length box uses.
+  const stackLefts = (html) => [...html.matchAll(/class="(tp-dimbox[^"]*)"[^>]*?style="([^"]*)"/g)]
+    .filter(m => /tp-dimbox-fixed/.test(m[1]) && !/tp-dimbox-holder/.test(m[1]))
+    .map(m => Number(/left:(-?[\d.]+)px/.exec(m[2])?.[1]))
+    .filter(v => Number.isFinite(v));
+
+  it('lengths that do not collide all share ONE lane', () => {
+    // ⚠️ No shaft segment here on purpose: a segment gives the tool a REACH,
+    // which is a fourth length and lands close enough to the flutes to collide.
+    // That collision is correct behaviour — it just isn't what this asserts.
+    const html = render({ ...base, shaft_segments: [],
+      flute_length: 1, shoulder_length: 1.8, min_ooh: 2.4, overall_length: 3 });
+    const lanes = new Set(stackLefts(html).map(x => Math.round(x)));
+    expect(lanes.size, `expected one lane, got ${[...lanes]}`).toBe(1);
+  });
+
+  it('⚠️ two EQUAL lengths step out, rather than stacking on each other', () => {
+    // A tool whose flute length IS its shoulder length is ordinary, not an edge
+    // case — both land at the same height and one has to move sideways.
+    const html = render({ ...base, flute_length: 1.2, shoulder_length: 1.2, overall_length: 3 });
+    const lanes = new Set(stackLefts(html).map(x => Math.round(x)));
+    expect(lanes.size, 'equal lengths must not share a lane').toBeGreaterThan(1);
+  });
+
+  it('is narrower than the nested stack it replaced', () => {
+    // The nested version spent a 94px lane per dimension: 4 lengths -> 634px.
+    const html = render({ ...base, flute_length: 1, shoulder_length: 1.2, min_ooh: 1.5, overall_length: 3 });
+    expect(svgWidth(html)).toBeLessThan(560);
+  });
+});
+
 describe('the dimension boxes clear the tool and each other', () => {
   // ⚠️ a `title` attribute sits between class and style on the boxes that have
   // one (derived values, the holder datum), so the two are not adjacent.
@@ -220,9 +272,11 @@ describe('the dimension boxes clear the tool and each other', () => {
       return { left: anchor == null ? null : anchor + shift, width: w, top: px('top'),
         fixed: /tp-dimbox-fixed/.test(m[1]), holder: /tp-dimbox-holder/.test(m[1]) };
     });
-  // Each length dimension draws an extension line from its lane across to the
+  // Each length is an ORDINATE leader running from its value box across to the
   // part: its x2 IS the part's left edge (less the 2px it stops short by).
-  const partLeft = (html) => Math.min(...[...html.matchAll(/x2="([\d.]+)"[^>]*class="tp-ext"/g)]
+  // (It read the nested stack's extension lines before the dimensions went
+  // ordinate — those spanned two heights each and no longer exist.)
+  const partLeft = (html) => Math.min(...[...html.matchAll(/x2="([\d.]+)"[^>]*class="tp-ord"/g)]
     .map(m => Number(m[1]))) + 2;
 
   const tool = { tool_type: 'flat end mill', unit: 'inches', diameter: 0.5,
@@ -247,19 +301,54 @@ describe('the dimension boxes clear the tool and each other', () => {
     expect(new Set(gaps).size, `uneven lane spacing: ${gaps}`).toBeLessThanOrEqual(1);
   });
 
-  it('⚠️ and the holder datum steps out of a lane it would clash with', () => {
-    // A MIN OOH landing at a length box's midpoint used to sit straight on top
-    // of it; the datum's label is anchored to its line, not to the stack.
+  it('⚠️ no two value boxes occupy the same space', () => {
+    // A MIN OOH landing at a length box used to sit straight on top of it; the
+    // datum's label is anchored to its line, not to the stack.
+    // ⚠️ Sharing a COLUMN is normal now — the ordinate lengths all sit in one
+    // lane, at different heights — so this checks the thing that actually
+    // matters (overlap on BOTH axes) rather than horizontal offset alone.
+    const BOX_H = 34;   // DIMBOX_H — label + input
     const low = render({ ...tool, min_ooh: 0.5, flute_length: 1 });
     const boxes = boxesOf(low);
     for (let i = 0; i < boxes.length; i++) {
       for (let j = i + 1; j < boxes.length; j++) {
         const a = boxes[i], b = boxes[j];
-        if (a.width == null || b.width == null) continue;
-        const sameColumn = a.left < b.left + b.width && a.left + a.width > b.left;
-        if (sameColumn) expect(Math.abs(a.left - b.left), 'two boxes share a column').toBeGreaterThan(0);
+        if (a.width == null || b.width == null || a.top == null || b.top == null) continue;
+        const xOverlap = a.left < b.left + b.width && a.left + a.width > b.left;
+        const yOverlap = Math.abs(a.top - b.top) < BOX_H;
+        expect(xOverlap && yOverlap, `two boxes overlap: ${JSON.stringify([a, b])}`).toBe(false);
       }
     }
     expect(low).toContain('tp-holder-line');
   });
+
+  // ⚠️ The canvas is sized around the OUTERMOST box, and that is not always a
+  // lane box: the MIN OOH datum reaches HOLDER_OVERHANG_L further left than
+  // lane 0 and steps out again when it collides with one. With ordinate lengths
+  // sharing a single lane there is no longer a wide stack incidentally covering
+  // it, so sizing the canvas from the lane count alone put the datum's label
+  // off the left edge entirely.
+  it('every box stays ON the canvas, the MIN OOH datum included', () => {
+    // ⚠️ The page has other SVGs (icons) whose width is smaller — take the
+    // widest, or the bound is read off an icon and every box "overflows".
+    const width = (html) => Math.max(...[...html.matchAll(/<svg width="([\d.]+)"/g)]
+      .map(m => Number(m[1])));
+    for (const t of [
+      { flute_length: 0.4, shoulder_length: 1.2, min_ooh: 1.8, overall_length: 3 },
+      { flute_length: 1, shoulder_length: 1.2, min_ooh: 1.5, overall_length: 3 },
+      { flute_length: 1, min_ooh: 1.5, overall_length: 3 },
+      { flute_length: 1, overall_length: 3 },
+    ]) {
+      const html = render({ ...tool, ...t });
+      for (const b of boxesOf(html)) {
+        const where = `${JSON.stringify(t)} box at left ${b.left}`;
+        expect(b.left, `${where} starts off the left edge`).toBeGreaterThanOrEqual(0);
+        if (b.width != null) {
+          expect(b.left + b.width, `${where} runs off the right edge`)
+            .toBeLessThanOrEqual(width(html) + 0.5);
+        }
+      }
+    }
+  });
+
 });

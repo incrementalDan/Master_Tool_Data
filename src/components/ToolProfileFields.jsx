@@ -194,25 +194,6 @@ export default function ToolProfileFields({ draft, setDraft }) {
   // datum: one dotted line across the drawing, wider than the tool, with its
   // value sitting on it. (Some tool types could be calculated from the holder;
   // nothing here tries — the number is the shop's.)
-  const lengthDims = dims.lengths
-    .filter(field => field !== HOLDER_FACE)
-    .map(field => ({ field, value: Number(draft[field]) || 0 }))
-    .filter(d => d.value > 0)
-    .sort((a, b) => a.value - b.value)
-    .map((d, i) => ({ ...d, lane: i }));
-  const holderFace = dims.lengths.includes(HOLDER_FACE) ? Number(draft[HOLDER_FACE]) || 0 : 0;
-
-  const nLeft = Math.max(1, lengthDims.length);
-  const svgH = BODY_H + TOP_PAD + BOT_PAD;
-  // Work back from the outermost box: it must clear the canvas edge, and every
-  // box inboard of it is one LANE to the right, with lane 0's RIGHT edge GAP
-  // from the part.
-  const cx = BODY_W / 2 + GAP + LEN_BOX_W + (nLeft - 1) * LANE + EDGE_PAD;
-  const sx = maxDia > 0 ? BODY_W / maxDia : 0;
-  const halfAt = (d) => (d * sx) / 2;
-  // The centre of the length box (and so of its dimension line) in lane n.
-  const lenBoxCx = (lane) => cx - BODY_W / 2 - GAP - LEN_BOX_W / 2 - lane * LANE;
-
   // The plain shank is compressed to a fixed height and marked with a break, so
   // the flutes, the neck and the segments get the canvas instead.
   const shankReg = profile.regions.find(r => r.kind === 'shank');
@@ -233,6 +214,37 @@ export default function ToolProfileFields({ draft, setDraft }) {
     return yBase - brk * sy - past * shankDrawH;
   };
 
+  // ⚠️ ORDINATE, not nested. Every length is measured from the TIP, so each one
+  // is a single horizontal leader out to its value at its own height, with the
+  // zero datum assumed — the way a CNC print dimensions from one origin. It
+  // replaced a nested stack where each dimension owned a lane 94px wide, which
+  // made the drawing 634px and left no room beside it for anything else.
+  //
+  // ⚠️ A LANE IS SPENT ONLY ON A COLLISION. Two lengths that happen to be
+  // EQUAL land at the same height (a tool whose flute length IS its shoulder
+  // length is ordinary, not a corner case), so the second steps out — the same
+  // rule the MIN OOH datum box already follows. Most tools use one lane; the
+  // worst case is two.
+  const lengthDims = (() => {
+    const rows = dims.lengths
+      .filter(field => field !== HOLDER_FACE)
+      .map(field => ({ field, value: Number(draft[field]) || 0 }))
+      .filter(d => d.value > 0)
+      .sort((a, b) => a.value - b.value);
+    const placed = [];
+    return rows.map((d) => {
+      const y = yAt(Math.min(d.value, total));
+      let lane = 0;
+      while (placed.some(pl => pl.lane === lane && Math.abs(pl.y - y) < DIMBOX_H + 2)) lane += 1;
+      placed.push({ lane, y });
+      return { ...d, lane, y };
+    });
+  })();
+  const holderFace = dims.lengths.includes(HOLDER_FACE) ? Number(draft[HOLDER_FACE]) || 0 : 0;
+
+  const nLeft = Math.max(1, lengthDims.reduce((m, d) => Math.max(m, d.lane + 1), 1));
+  const svgH = BODY_H + TOP_PAD + BOT_PAD;
+
   // The datum's y, and which side of it the value box fits on. Above by
   // default (a print puts a section label above its line); below when the line
   // runs too close to the top of the canvas for the box to clear it.
@@ -242,20 +254,43 @@ export default function ToolProfileFields({ draft, setDraft }) {
   // can land in a lane that already has a box at the same height. Step it out a
   // lane at a time until it is clear, and run the line left to meet it — the
   // label stays attached to the thing it names either way.
-  const holderBoxRight = (() => {
-    if (yHolder == null) return null;
+  //
+  // ⚠️ Measured LEFT OF THE BODY, before cx exists — the canvas has to be
+  // sized around this box, not the other way round. Ordinate lengths share one
+  // lane, so nLeft is usually 1 and the lane stack no longer happens to leave
+  // room: the datum box reaches HOLDER_OVERHANG_L past lane 0 even before it
+  // steps out, and deriving cx from nLeft alone put it off the left edge.
+  const holderStep = (() => {
+    if (yHolder == null) return 0;
     const yBox = yHolder + (holderBoxAbove ? -(DIMBOX_H / 2 + 3) : (DIMBOX_H / 2 + 3));
-    const clashes = (right) => lengthDims.some(({ field, value, lane }) => {
-      void field;
-      const c = lenBoxCx(lane);
-      const yMid = (yAt(0) + yAt(Math.min(value, total))) / 2;
-      const xOverlap = (right - LEN_BOX_W) < (c + LEN_BOX_W / 2) && right > (c - LEN_BOX_W / 2);
-      return xOverlap && Math.abs(yMid - yBox) < DIMBOX_H + 2;
-    });
-    let right = cx - BODY_W / 2 - HOLDER_OVERHANG_L - 4;
-    for (let i = 0; i <= nLeft && clashes(right); i++) right -= LANE;
-    return right;
+    const clashes = (k) => {
+      const right = -(HOLDER_OVERHANG_L + 4 + k * LANE);
+      return lengthDims.some(({ lane, y }) => {
+        const c = -(GAP + LEN_BOX_W / 2 + lane * LANE);
+        const xOverlap = (right - LEN_BOX_W) < (c + LEN_BOX_W / 2) && right > (c - LEN_BOX_W / 2);
+        return xOverlap && Math.abs(y - yBox) < DIMBOX_H + 2;
+      });
+    };
+    let k = 0;
+    while (k <= nLeft && clashes(k)) k += 1;
+    return k;
   })();
+
+  // Work back from the outermost box — whichever it is — so it clears the
+  // canvas edge; every box inboard of it is one LANE to the right, with lane
+  // 0's RIGHT edge GAP from the part.
+  const laneReach = GAP + LEN_BOX_W + (nLeft - 1) * LANE;
+  const holderReach = yHolder == null
+    ? 0
+    : HOLDER_OVERHANG_L + 4 + holderStep * LANE + LEN_BOX_W;
+  const cx = BODY_W / 2 + Math.max(laneReach, holderReach) + EDGE_PAD;
+  const sx = maxDia > 0 ? BODY_W / maxDia : 0;
+  const halfAt = (d) => (d * sx) / 2;
+  // The centre of the length box (and so of its dimension line) in lane n.
+  const lenBoxCx = (lane) => cx - BODY_W / 2 - GAP - LEN_BOX_W / 2 - lane * LANE;
+  const holderBoxRight = yHolder == null
+    ? null
+    : cx - BODY_W / 2 - HOLDER_OVERHANG_L - 4 - holderStep * LANE;
 
   // ── the silhouette ────────────────────────────────────────────────────────
   const fluteRegion = profile.regions.find(r => r.kind === 'flute');
@@ -423,21 +458,17 @@ export default function ToolProfileFields({ draft, setDraft }) {
                   className="tp-holder-line" />
               )}
 
-              {/* ── length dimensions, nesting leftward from the tip ─────── */}
-              {lengthDims.map(({ field, value, lane }) => {
+              {/* ── length dimensions: ordinate from the tip ─────────────
+                  One horizontal leader per length, at its own height, running
+                  from the part out to its value. No arrows and no vertical run:
+                  the origin is the tip and is assumed, which is what lets every
+                  length share a single lane. */}
+              {lengthDims.map(({ field, lane, y }) => {
                 const x = lenBoxCx(lane);
-                const yTip = yAt(0), yEnd = yAt(Math.min(value, total));
-                const yMid = (yTip + yEnd) / 2;
                 const active = hoverSeg == null;
                 return (
                   <g key={field} className="tp-dim" data-muted={active ? undefined : 'y'}>
-                    <line x1={x - 6} y1={yTip} x2={cx - BODY_W / 2 - 2} y2={yTip} className="tp-ext" />
-                    <line x1={x - 6} y1={yEnd} x2={cx - BODY_W / 2 - 2} y2={yEnd} className="tp-ext" />
-                    {/* broken dimension line — the label sits in the gap */}
-                    <line x1={x} y1={yEnd} x2={x} y2={yMid - LABEL_H / 2 - 2}
-                      className="tp-dimline" markerStart="url(#tp-arrow)" />
-                    <line x1={x} y1={yMid + LABEL_H / 2 + 2} x2={x} y2={yTip}
-                      className="tp-dimline" markerEnd="url(#tp-arrow)" />
+                    <line x1={x} y1={y} x2={cx - BODY_W / 2 - 2} y2={y} className="tp-ord" />
                   </g>
                 );
               })}
@@ -457,12 +488,14 @@ export default function ToolProfileFields({ draft, setDraft }) {
 
             {/* Editable value boxes, overlaid on the dimension lines. HTML, not
                 foreignObject — real inputs that focus, tab and style normally. */}
-            {lengthDims.map(({ field, lane }) => {
+            {lengthDims.map(({ field, lane, y }) => {
               const x = lenBoxCx(lane);
-              const value = Number(draft[field]) || 0;
-              const yMid = (yAt(0) + yAt(Math.min(value, total))) / 2;
+              // ⚠️ Clamped, because the longest length ends AT the top of the
+              // canvas (OAL runs the whole tool) and a box centred there loses
+              // its label off the edge. The leader still draws at the true y.
+              const yBox = Math.max(y, TOP_PAD + DIMBOX_H / 2);
               return (
-                <DimBox key={field} x={x} y={yMid} align="center"
+                <DimBox key={field} x={x} y={yBox} align="center"
                   label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
                   step={stepFor(field, draft.unit)} kind={REGION_OF[field]} width={LEN_BOX_W}
                   value={shown(field)} onChange={v => set(field, v)} readOnly={isDerived(field)} />
