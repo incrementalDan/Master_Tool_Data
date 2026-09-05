@@ -1,6 +1,6 @@
 # TOOL_PAGE_UNIFICATION_PLAN.md — one tool page, one draft, two save destinations
 
-> **STATUS: Phase 1 shipped ✅; Phases 2-5 planned.** Supersedes and absorbs
+> **STATUS: Phases 1-2 shipped ✅; Phases 3-5 planned.** Supersedes and absorbs
 > `UI_CONSISTENCY_AUDIT.md` §12 ("View/edit unification, part 2"), whose owner
 > decisions A/B/C still stand except where noted below — **decision B is
 > retired**, see "What this changes about §12".
@@ -224,11 +224,28 @@ Each ships on its own. None requires the next.
 - Notes & Tags is still view-only on the tool page; making it inline-editable is
   Phase 3's first step (§12's "smallest rehearsal").
 
-### Phase 2 — decompose *(zero behaviour change)*
-- Extract from `ToolDetail`: the sticky header, the action sidebar, the banner
-  stack, and each right-column panel.
-- Extract from `ToolForm`: the Identity block, the insert-style block.
-- ⚠️ Do this **before** merging, or the result is one ~2000-line component.
+### Phase 2 — decompose ✅ SHIPPED
+`ToolDetail` **1330 → 735**, `ToolForm` **1059 → 701**. Pure moves: no behaviour
+change, no test rewritten. Everything lives in **`src/components/tool/`**.
+
+| File | From | Note |
+|---|---|---|
+| `ToolSection.jsx` | both | ⚠️ **was defined twice** — `defaultOpen` in the view, `forceOpen` + `mb-16` in the form. Now one superset; the form passes `className="mb-16"` so its 16px spacing survives (`.panel` is 8px). |
+| `ToolStickyHeader.jsx` | both | ⚠️ **also duplicated** — the identity rail (location + T/H/D) was verbatim in both. `mode` picks the body; shell, status wash and rail are shared. |
+| `ToolBanners.jsx` | ToolDetail | the whole "informed, not blocked" stack |
+| `ToolActionSidebar.jsx` + `SidebarBtn.jsx` | ToolDetail | every button is a prop — the decisions stay on the page |
+| `AssembliesSection.jsx`, `AssemblyExportPicker.jsx`, `DetailField.jsx` | ToolDetail | |
+| `ToolIdentitySection.jsx` | ToolForm | becomes a panel on the unified page in Phase 3 |
+| `SpecScanPanels.jsx`, `FieldInput.jsx` | ToolForm | |
+
+⚠️ **`toolComponents.test.js` asserts each module's export SHAPE**, and it earned
+its place immediately: `SpecSummary` came out as a *named* export while ToolForm
+imported it as the *default*, leaving `undefined` at the call site. Lint cannot
+see it (the symbol is defined) and nothing renders these — several only appear
+behind a condition (a scan in progress, a stray found on open) — so it would
+have shipped and surfaced as a blank page the first time someone scanned a spec
+sheet. `npm run lint` caught two other slips (a handler and a prop whose meaning
+changed on the way out), which is the whole reason that config exists.
 
 ### Phase 3 — one page, view and edit unified
 - Lift `editing` into the page; `ToolFields` already switches on it.

@@ -1,19 +1,13 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft, Pencil, Download, FileDown, FileUp, Copy, Trash2, GitMerge,
-  Ruler, StickyNote, Clock, Wrench, AlertTriangle, Camera,
-  ChevronDown, ChevronRight, FileJson, MapPin, Link2, Unlink, CloudOff, Shapes,
+  GitMerge, Ruler, StickyNote, Clock, AlertTriangle, Camera,
+  FileJson, MapPin, CloudOff,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
 import ToolProfileModal from './ToolProfileModal.jsx';
 import { canDrawProfile } from '../utils/toolProfile.js';
 import LocationPicker from './LocationPicker.jsx';
-import StatusBadge from './StatusBadge.jsx';
-import AssemblyCard from './AssemblyCard.jsx';
-import { HolderTag, holderForDisplay } from './HolderPill.jsx';
-import { holderDisplayColor } from '../utils/holderColors.js';
-import AssemblyForm from './AssemblyForm.jsx';
 import ReconcileModal from './ReconcileModal.jsx';
 import FilesSection from './FilesSection.jsx';
 import PurchasingSection from './PurchasingSection.jsx';
@@ -24,23 +18,22 @@ import AttachmentUploadModal from './AttachmentUploadModal.jsx';
 import PhotoSlot from './PhotoSlot.jsx';
 import PairingSections from './PairingSections.jsx';
 import ProShopImportModal from './ProShopImportModal.jsx';
-import DriftBanner from './DriftBanner.jsx';
-import ConflictBanner from './ConflictBanner.jsx';
-import MaterialLinkBanner from './MaterialLinkBanner.jsx';
-import MergeSiblingBanner from './MergeSiblingBanner.jsx';
 import {
   INSERT_FAMILY_BY_ID, ALWAYS_INSERT_TYPES, autoInsertFamily, newPairing,
 } from '../schema/insertFamilies.js';
 import InfoTip from './InfoTip.jsx';
 import { useApp } from '../context/AppContext.jsx';
 import { TOOL_TYPE_LABELS, validateGeometry, fusionToolToInternal, readOohFromFusion } from '../schema/toolSchema.js';
-import { convertLength, unitAbbr } from '../utils/units.js';
-import { showsProShopUrl, toolIdLabel } from '../utils/toolIdSystem.js';
-import { proShopToolUrl as proshotUrl } from '../utils/proShopUrl.js';
-import { statusOf, statusMeta } from '../utils/toolStatus.js';
 import ToolFields from './ToolFields.jsx';
+import ToolStickyHeader from './tool/ToolStickyHeader.jsx';
+import ToolBanners from './tool/ToolBanners.jsx';
+import ToolActionSidebar from './tool/ToolActionSidebar.jsx';
+import Section from './tool/ToolSection.jsx';
+import Field from './tool/DetailField.jsx';
+import SidebarBtn from './tool/SidebarBtn.jsx';
+import AssembliesSection from './tool/AssembliesSection.jsx';
+import AssemblyExportPicker from './tool/AssemblyExportPicker.jsx';
 import { hasReconcileWork } from '../services/reconcile.js';
-import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 import ToolForm from './ToolForm.jsx';
 import { exportSingleTool as exportFusion, copyToolToClipboard } from '../utils/fusionExport.js';
 import { exportSingleTool as exportProShop } from '../utils/proShopExport.js';
@@ -363,43 +356,10 @@ export default function ToolDetail() {
       <div>
         {/* Same sticky identity header as view mode, so the tool you're editing
             stays visible while scrolling a long form. */}
-        <div className="tool-sticky-header"
-          data-status={statusOf(tool)}
-          style={{ '--status-wash': statusMeta(statusOf(tool)).color }}>
-          <span className="tool-sticky-header-icon">
-            <ToolTypeIcon type={tool.tool_type} size={30} />
-          </span>
-          <div className="tool-sticky-header-body">
-            <div className="flex items-center gap-10" style={{ minWidth: 0 }}>
-              <div className="detail-header-type" style={{ fontSize: 12, flexShrink: 0 }}>Editing · {typeLabel}</div>
-              <span
-                className="description-badge"
-                style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}
-              >
-                {tool.description || '—'}
-              </span>
-              {tool.tool_id && <span className="tool-id-pill">{tool.tool_id}</span>}
-            </div>
-          </div>
-          {(tool.location || hasMachineNum) && (
-            <div className="tool-sticky-identity">
-              {tool.location && (
-                <div className="sticky-identity-group">
-                  <span className="sticky-identity-label">Location</span>
-                  <span className="location-tag">{tool.location}</span>
-                </div>
-              )}
-              {hasMachineNum && (
-                <div className="sticky-identity-group">
-                  <span className="sticky-identity-label">Machine&nbsp;#</span>
-                  <span className="machine-num-badge">T{tool.machine_tool_number}</span>
-                  <span className="machine-num-badge">H{tool.machine_tool_number}</span>
-                  <span className="machine-num-badge">D{tool.machine_tool_number}</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <ToolStickyHeader
+          tool={tool} typeLabel={typeLabel} hasMachineNum={hasMachineNum}
+          idMode={idMode} replacement={replacement} mode="edit"
+        />
         <ToolForm
           tool={tool}
           onSave={handleSave}
@@ -416,291 +376,51 @@ export default function ToolDetail() {
   return (
     <div className="tool-detail-wrap">
       {/* Frozen left action sidebar */}
-      <aside className="tool-action-sidebar">
-        <SidebarBtn icon={ArrowLeft} label="Back" tip="Go back" onClick={guardLeave(() => navigate(-1))} />
-        <div className="tool-sidebar-divider" />
-        <SidebarBtn icon={Pencil} label="Edit" tip="Edit this tool" onClick={guardLeave(() => setEditing(true))} />
-        <SidebarBtn icon={Copy} label="Duplicate" tip="Duplicate tool" onClick={handleClone} />
-        {/* The whole tool on one drawing. Additive — the Geometry section is
-            untouched. Hidden for the types whose shape this cannot draw. */}
-        {canDrawProfile(tool.tool_type) && (
-          <SidebarBtn icon={Shapes} label="Profile" tip="See and edit the whole tool as a dimensioned drawing"
-            onClick={guardLeave(() => setShowProfile(true))} />
-        )}
-        {/* Sync Job is a Fusion-library workflow — hidden for a no-Fusion tool. */}
-        {!noFusion && (
-          <SidebarBtn icon={GitMerge} label="Sync Job" tip="Sync proven values from a job file" onClick={() => navigate(`/merge/${tool.id}`)} />
-        )}
-        <div className="tool-sidebar-divider" />
-        {/* Promote a no-Fusion tool into the Fusion library, or detach a linked one.
-            Only when the Fusion integration is on (both are no-ops when it's off). */}
-        {fusionEnabled && (
-          toolIsNoFusion ? (
-            <SidebarBtn icon={Link2} label="Create in Fusion" tip="Create this tool in the Fusion library (promote from no-Fusion)" onClick={handlePromote} />
-          ) : (
-            <SidebarBtn icon={Unlink} label="Detach" tip="Remove from the Fusion library (keeps all app data)" onClick={handleDetach} />
-          )
-        )}
-        {!noFusion && (
-          <SidebarBtn
-            icon={Copy}
-            label={copied ? 'Copied!' : 'Copy to Fusion'}
-            tip="Copy Fusion JSON to clipboard (Ctrl+V into Fusion library)"
-            className={copied ? 'copied' : ''}
-            onClick={() => setShowExportPicker('copy')}
-          />
-        )}
-        <SidebarBtn
-          icon={Download}
-          label="Download"
-          tip="Download Fusion JSON file"
-          onClick={() => setShowExportPicker('download')}
-        />
-        <SidebarBtn
-          icon={FileDown}
-          label="ProShop"
-          tip="Export ProShop CSV"
-          style={{ color: 'var(--orange)' }}
-          onClick={() => {
-            // A beta tool is deliberately kept out of ProShop — say so rather
-            // than reporting an export that didn't happen.
-            const ok = exportProShop(tool);
-            notify(ok ? 'Exported ProShop CSV'
-              : 'Beta tool — deliberately not exported to ProShop.', ok ? 'success' : 'info');
-          }}
-        />
-        <SidebarBtn
-          icon={FileUp}
-          label="Import PS"
-          tip="Import ProShop data for this tool from a CSV export"
-          style={{ color: 'var(--orange)' }}
-          onClick={() => setShowProShopImport(true)}
-        />
-        {/* Delete lives in Edit mode now (ToolForm's action bar), so it can't be
-            hit by accident from the view. */}
-      </aside>
+      <ToolActionSidebar
+        noFusion={noFusion}
+        toolIsNoFusion={toolIsNoFusion}
+        fusionEnabled={fusionEnabled}
+        canDrawProfile={canDrawProfile(tool.tool_type)}
+        copied={copied}
+        onBack={guardLeave(() => navigate(-1))}
+        onEdit={guardLeave(() => setEditing(true))}
+        onDuplicate={handleClone}
+        onOpenProfile={guardLeave(() => setShowProfile(true))}
+        onSyncJob={() => navigate(`/merge/${tool.id}`)}
+        onPromote={handlePromote}
+        onDetach={handleDetach}
+        onCopyToFusion={() => setShowExportPicker('copy')}
+        onDownload={() => setShowExportPicker('download')}
+        onImportProShop={() => setShowProShopImport(true)}
+        onExportProShop={() => {
+          // A beta tool is deliberately kept out of ProShop — say so rather
+          // than reporting an export that didn't happen.
+          const ok = exportProShop(tool);
+          notify(ok ? 'Exported ProShop CSV'
+            : 'Beta tool — deliberately not exported to ProShop.', ok ? 'success' : 'info');
+        }}
+      />
 
       {/* Main content */}
       <div className="tool-detail-main">
         {/* Sticky header — type icon + description left, identity (cabinet/machine#) right */}
-        <div className="tool-sticky-header"
-          data-status={statusOf(tool)}
-          style={{ '--status-wash': statusMeta(statusOf(tool)).color }}>
-          <span className="tool-sticky-header-icon">
-            <ToolTypeIcon type={tool.tool_type} size={30} />
-          </span>
-          <div className="tool-sticky-header-body">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-              <div className="detail-header-type" style={{ fontSize: 12, flexShrink: 0 }}>{typeLabel}</div>
-              <h1
-                className="detail-header-title description-badge"
-                style={{
-                  fontSize: 'clamp(15px, 2vw, 20px)',
-                  padding: '4px 12px 5px',
-                  maxWidth: '60ch',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 1,
-                  minWidth: 0,
-                }}
-              >
-                {tool.description || '—'}
-              </h1>
-              {tool.tool_type === 'tap' && tool.is_sti && (
-                <span className="sti-pill" title="STI / Helicoil — thread insert tap">STI / Helicoil</span>
-              )}
-              <StatusBadge tool={tool} />
-              {/* The replacement, resolved LIVE from the stored tracking id —
-                  never a stored name, so renaming or re-numbering the new tool
-                  can't leave a stale label behind. A dangling id is SHOWN as
-                  such rather than hidden: silently dropping it would erase the
-                  fact that this tool was replaced at all. */}
-              {statusOf(tool) === 'retired' && tool.replaced_by && (
-                replacement
-                  ? (
-                    <a className="status-replaced" href={`#/tool/${replacement.id}`}
-                      title={`Replaced by ${replacement.description || replacement.tool_id}`}>
-                      → {replacement.tool_id || replacement.description}
-                    </a>
-                  )
-                  : <span className="status-replaced is-missing" title="The replacement tool is no longer in the library">→ (replacement removed)</span>
-              )}
-              {tool.no_fusion_link && (
-                <span className="no-fusion-pill">
-                  <AlertTriangle size={12} /> No Fusion Link
-                </span>
-              )}
-            </div>
-            {tool.tool_id && (
-              showsProShopUrl(idMode) ? (
-                <a
-                  className="tool-id-pill"
-                  href={proshotUrl(tool.tool_id)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title="Open in ProShop"
-                  onClick={e => e.stopPropagation()}
-                  style={{ fontSize: 15, padding: '4px 16px', alignSelf: 'flex-start' }}
-                >{tool.tool_id}</a>
-              ) : (
-                <span
-                  className="tool-id-pill"
-                  title={toolIdLabel(idMode)}
-                  style={{ fontSize: 15, padding: '4px 16px', alignSelf: 'flex-start' }}
-                >{tool.tool_id}</span>
-              )
-            )}
-          </div>
-          {(tool.location || hasMachineNum) && (
-            <div className="tool-sticky-identity">
-              {tool.location && (
-                <div className="sticky-identity-group">
-                  <span className="sticky-identity-label">Location</span>
-                  <span className="location-tag">{tool.location}</span>
-                </div>
-              )}
-              {hasMachineNum && (
-                <div className="sticky-identity-group">
-                  <span className="sticky-identity-label">Machine&nbsp;#</span>
-                  <span className="machine-num-badge">T{tool.machine_tool_number}</span>
-                  <span className="machine-num-badge">H{tool.machine_tool_number}</span>
-                  <span className="machine-num-badge">D{tool.machine_tool_number}</span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* D3 — field-level Fusion drift review. Only for linked tools (a no-Fusion
-            tool has no Fusion side to differ from). Keyed by tool.id so the
-            per-field choices reset when navigating between tools. */}
-        {!noFusion && (
-          <DriftBanner
-            key={`drift-${tool.id}`}
-            tool={tool}
-            authority={fusionAuthority}
-            isSaving={isSaving}
-            onApply={handleApplyDrift}
-          />
-        )}
-
-        {/* "Informed, not blocked" conflict review — shared-value disagreements
-            flagged during Fusion import / normalize, resolved here on demand. */}
-        <ConflictBanner key={`conflicts-${tool.id}`} tool={tool} />
-
-        {/* Another record already exists for this physical tool (same ProShop
-            number) — offer to fold them into one. Handles duplicates created
-            before the normalize-time merge existed. */}
-        <MergeSiblingBanner key={`merge-${tool.id}`} tool={tool} />
-
-        {/* Assembly numbers corrected on load. In Auto mode asm_number is a pure
-            product of holder + tool_id + OOH with no edit UI, so a mismatch is
-            always stale (OOH edited in Fusion, a Tool ID renumber, …) — it's
-            fixed silently and merely reported here. Saving persists it and
-            clears the flag. Only ever set in Auto mode (see backfillAsmNumbers). */}
-        {tool._asmNumbersFixed?.length > 0 && (
-          <div style={{
-            border: '1px solid var(--blue)', borderRadius: 'var(--radius)',
-            background: 'color-mix(in srgb, var(--blue) 8%, transparent)',
-            padding: 14, marginBottom: 16,
-            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-          }}>
-            <Wrench size={16} style={{ color: 'var(--blue)', flexShrink: 0 }} />
-            <span style={{ flex: 1, minWidth: 220, lineHeight: 1.5 }}>
-              <strong>
-                {tool._asmNumbersFixed.length} assembly number{tool._asmNumbersFixed.length > 1 ? 's were' : ' was'} out
-                of date and {tool._asmNumbersFixed.length > 1 ? 'have' : 'has'} been corrected.
-              </strong>{' '}
-              Assembly numbers are built from the holder, tool ID and OOH, so they update automatically when
-              those change. Save to store {tool._asmNumbersFixed.length > 1 ? 'them' : 'it'}.
-              <span style={{ display: 'block', marginTop: 6 }}>
-                {tool._asmNumbersFixed.map((c, i) => (
-                  <span key={i} style={{ display: 'block', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-                    <span className="text-sub" style={{ textDecoration: 'line-through' }}>{c.from}</span>
-                    {' → '}{c.to}
-                  </span>
-                ))}
-              </span>
-            </span>
-            <button
-              className="btn btn-primary"
-              disabled={isSaving}
-              onClick={async () => {
-                try {
-                  await saveTool(tool);
-                  notify('Assembly numbers updated', 'success');
-                } catch { /* saveTool surfaces its own error toast */ }
-              }}
-            >
-              {isSaving ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-        )}
-
-        {/* Presets whose material link can't self-heal (CAM preset renamed
-            before its id was captured, or a legacy imported string) — offers a
-            one-click re-link to a suggested CAM preset. Never auto-fixes. */}
-        <MaterialLinkBanner
-          key={`matlink-${tool.id}`}
-          tool={tool}
-          isSaving={isSaving}
-          onSave={async (updated) => { await saveTool(updated); }}
+        <ToolStickyHeader
+          tool={tool} typeLabel={typeLabel} hasMachineNum={hasMachineNum}
+          idMode={idMode} replacement={replacement} mode="view"
         />
 
-        {/* Duplicate presets folded on load (identical presets that were repeated
-            per assembly). Already shown merged; this persists the cleanup to the
-            Fusion library on save. Non-blocking — clears once saved. */}
-        {!noFusion && tool._duplicatePresets > 0 && (
-          <div style={{
-            border: '1px solid var(--blue)', borderRadius: 'var(--radius)',
-            background: 'color-mix(in srgb, var(--blue) 8%, transparent)',
-            padding: 14, marginBottom: 16,
-            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-          }}>
-            <Copy size={16} style={{ color: 'var(--blue)', flexShrink: 0 }} />
-            <span style={{ flex: 1, minWidth: 220, lineHeight: 1.5 }}>
-              <strong>{tool._duplicatePresets} duplicate preset{tool._duplicatePresets > 1 ? 's' : ''} merged.</strong>{' '}
-              This tool had identical presets repeated across assemblies — they&apos;re already shown merged here.
-              Clean up the Fusion library to make it permanent.
-            </span>
-            <button
-              className="btn btn-primary"
-              disabled={isSaving}
-              onClick={async () => {
-                try {
-                  await saveTool(tool);
-                  notify('Duplicate presets cleaned up', 'success');
-                } catch { /* saveTool surfaces its own error toast */ }
-              }}
-            >
-              {isSaving ? 'Cleaning up…' : 'Clean up library'}
-            </button>
-          </div>
-        )}
-
-        {/* Reverse sync — the tool was deleted directly in Fusion 360, so it's
-            gone from the live library. Offer to remove it from the app too, or
-            keep it (informed, not blocked — never auto-deleted). */}
-        {fusionMissing && (
-          <div style={{
-            border: '1px solid var(--red, #ef4444)', borderRadius: 'var(--radius)',
-            background: 'color-mix(in srgb, var(--red, #ef4444) 8%, transparent)',
-            padding: 14, marginBottom: 16,
-            display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-          }}>
-            <AlertTriangle size={16} style={{ color: 'var(--red, #ef4444)', flexShrink: 0 }} />
-            <span style={{ flex: 1, minWidth: 220, lineHeight: 1.5 }}>
-              <strong>Deleted from Fusion.</strong>{' '}
-              This tool no longer exists in the Fusion library — it looks like it was deleted in Fusion 360.
-              Remove it from ToolDex too?
-            </span>
-            <button className="btn btn-secondary" onClick={() => setFusionMissing(false)}>Keep</button>
-            <button className="btn btn-danger" onClick={() => { setDeleteError(''); setDeleteMode('missing'); }}>
-              <Trash2 size={15} /> Remove from ToolDex
-            </button>
-          </div>
-        )}
+        <ToolBanners
+          tool={tool}
+          noFusion={noFusion}
+          fusionAuthority={fusionAuthority}
+          isSaving={isSaving}
+          notify={notify}
+          onApplyDrift={handleApplyDrift}
+          onSave={saveTool}
+          fusionMissing={fusionMissing}
+          onKeepMissing={() => setFusionMissing(false)}
+          onRemoveMissing={() => { setDeleteError(''); setDeleteMode('missing'); }}
+        />
 
         {/* Insert-style tool: pairing bar + the Holder Body / Insert component
             groups (each with its own Geometry & setup, Photo, Location and
@@ -1013,318 +733,3 @@ export default function ToolDetail() {
     </div>
   );
 }
-
-function SidebarBtn({ icon: Icon, label, tip, onClick, style, className = '' }) {
-  return (
-    <button
-      className={`tool-sidebar-btn ${className}`}
-      title={tip}
-      onClick={onClick}
-      style={style}
-    >
-      <Icon size={22} />
-      <span>{label}</span>
-    </button>
-  );
-}
-
-
-function AssembliesSection({ tool, holders, onSave }) {
-  const [showForm, setShowForm] = useState(false);
-  const [editingAssembly, setEditingAssembly] = useState(null);
-  const [pendingAssembly, setPendingAssembly] = useState(null);
-  const assemblies = tool.assemblies || [];
-
-  // Group by holder description, sort each group short → long OOH
-  const groups = useMemo(() => {
-    const map = new Map();
-    for (const a of assemblies) {
-      const key = a.holder_description || '—';
-      if (!map.has(key)) map.set(key, []);
-      map.get(key).push(a);
-    }
-    for (const [, g] of map) g.sort((a, b) => (a.ooh ?? 0) - (b.ooh ?? 0));
-    return [...map.entries()];
-  }, [assemblies]);
-
-  const handleEdit = (assembly) => { setEditingAssembly(assembly); setShowForm(true); };
-  const handleDelete = async (assemblyId) => {
-    // sectionSave propagates now — the context has already toasted the reason.
-    try { await onSave({ ...tool, assemblies: assemblies.filter(a => a.assembly_id !== assemblyId) }); }
-    catch { /* toast handled in context */ }
-  };
-
-  // Clear pendingAssembly once the real data lands in the tool prop
-  const prevAssemblyIds = useRef(new Set(assemblies.map(a => a.assembly_id)));
-  useEffect(() => {
-    if (!pendingAssembly) return;
-    const ids = new Set(assemblies.map(a => a.assembly_id));
-    if (ids.has(pendingAssembly.assembly_id)) setPendingAssembly(null);
-    prevAssemblyIds.current = ids;
-  }, [assemblies, pendingAssembly]);
-
-  return (
-    <Section title="Assemblies" icon={Wrench}>
-      {assemblies.length === 0 && !pendingAssembly && (
-        <div className="detail-field-empty text-sm" style={{ marginBottom: 10 }}>
-          No assemblies recorded yet.
-        </div>
-      )}
-      {groups.map(([holderDesc, group]) => {
-        // The group key is the description; every assembly in it shares the
-        // holder, so the first one carries the link to resolve the record.
-        const first = group[0] || {};
-        return (
-          <div key={holderDesc} style={{ marginBottom: 10 }}>
-            <div style={{ marginBottom: 4 }}>
-              <HolderTag
-                holderId={first.holder_id} holderGuid={first.holder_guid}
-                description={holderDesc}
-              />
-            </div>
-            <div className="assemblies-grid">
-              {group.map(a => (
-                <AssemblyCard
-                  key={a.assembly_id}
-                  assembly={a}
-                  tool={tool}
-                  holders={holders}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                />
-              ))}
-            </div>
-          </div>
-        );
-      })}
-
-      {/* Optimistic placeholder card while save is in flight */}
-      {pendingAssembly && (() => {
-        return (
-          <div style={{ marginBottom: 10 }}>
-            <div style={{ marginBottom: 4 }}>
-              <HolderTag
-                holderId={pendingAssembly.holder_id} holderGuid={pendingAssembly.holder_guid}
-                description={pendingAssembly.holder_description}
-              />
-            </div>
-            <div className="assemblies-grid">
-              <div style={{
-                border: '1px solid rgba(100, 116, 139, 0.30)',
-                borderRadius: 'var(--radius-sm)',
-                background: 'var(--surface-2)',
-                padding: '6px 8px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                opacity: 0.7,
-              }}>
-                <div className="spinner" style={{ width: 16, height: 16, borderWidth: 2, flexShrink: 0 }} />
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>
-                    OOH: {pendingAssembly.ooh?.toFixed(3)} {unitAbbr(tool.unit)}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-sub)', marginTop: 2 }}>Saving…</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      <button
-        className="btn btn-secondary btn-sm"
-        style={{ marginTop: (assemblies.length > 0 || pendingAssembly) ? 4 : 0 }}
-        onClick={() => { setEditingAssembly(null); setShowForm(true); }}
-      >
-        + Add Assembly
-      </button>
-      {showForm && (
-        <AssemblyForm
-          tool={tool}
-          holders={holders}
-          assembly={editingAssembly}
-          onSave={async (updatedTool) => {
-            const isNew = !editingAssembly;
-            setShowForm(false);
-            setEditingAssembly(null);
-            if (isNew) {
-              // Show the last assembly in the updated list as pending immediately
-              const added = updatedTool.assemblies?.at(-1) ?? null;
-              setPendingAssembly(added);
-            }
-            try { await onSave(updatedTool); }
-            catch { setPendingAssembly(null); /* toast handled in context */ }
-          }}
-          onClose={() => { setShowForm(false); setEditingAssembly(null); }}
-        />
-      )}
-    </Section>
-  );
-}
-
-function Section({ title, icon: Icon, children, defaultOpen = true }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className={`panel ${open ? 'open' : ''}`}>
-      <button className="panel-header" onClick={() => setOpen(o => !o)}>
-        {Icon && <Icon size={15} className="panel-header-icon" />}
-        <span className="panel-header-title">{title}</span>
-        <span className="panel-chevron">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
-      </button>
-      {open && <div className="panel-body">{children}</div>}
-    </div>
-  );
-}
-
-function AssemblyExportPicker({ tool, holders, onConfirm, onCancel }) {
-  // The selected row's tint must be the SAME color the pill shows, so resolve
-  // it the same way rather than always falling back to the legacy list.
-  const { holderLibrary } = useApp();
-  // ⚠️ Resolve the record and colour it the SAME way the pill does. Reading
-  // `?.color` and falling back to a bare description hash re-derived the chain
-  // here, so once the pill keyed its hash on the record id the two disagreed —
-  // the same holder in two colours on one screen.
-  const rowColor = (a) => {
-    const rec = holderForDisplay({
-      records: holderLibrary?.holders, holderId: a.holder_id,
-      holderGuid: a.holder_guid, description: a.holder_description,
-    });
-    return holderDisplayColor(rec || { description: a.holder_description || null });
-  };
-  const assemblies = tool.assemblies || [];
-  const [selected, setSelected] = useState('none'); // 'none' | assembly_id | 'new'
-  const [newHolderGuid, setNewHolderGuid] = useState('');
-  const [newOoh, setNewOoh] = useState('');
-
-  const canConfirm = selected !== 'new' || (newHolderGuid && newOoh && parseFloat(newOoh) > 0);
-
-  const handleConfirm = () => {
-    if (selected === 'none') { onConfirm(null); return; }
-    if (selected === 'new') {
-      const holder = holders.find(h => h.guid === newHolderGuid);
-      onConfirm({
-        assembly_id: 'temp',
-        holder_guid: newHolderGuid,
-        holder_description: holder?.description || '',
-        ooh: parseFloat(newOoh),
-        linked_preset_guids: [],
-        notes: '',
-      });
-      return;
-    }
-    onConfirm(assemblies.find(a => a.assembly_id === selected) || null);
-  };
-
-  return (
-    <div className="modal-backdrop" onClick={onCancel}>
-      <div className="modal" style={{ maxWidth: 460 }} onClick={e => e.stopPropagation()}>
-        <h3 className="modal-title">Select Assembly for Export</h3>
-        <p style={{ fontSize: 13, color: 'var(--text-sub)', marginBottom: 14 }}>
-          Embed a holder and OOH (out-of-holder length) in the Fusion JSON. One-time assemblies are not saved.
-        </p>
-
-        <div
-          className={`assembly-picker-option${selected === 'none' ? ' selected' : ''}`}
-          onClick={() => setSelected('none')}
-        >
-          <span style={{ fontWeight: 600 }}>No assembly</span>
-          <span className="text-sub" style={{ fontSize: 12 }}> — geometry only</span>
-        </div>
-
-        {assemblies.length > 0 && (
-          <>
-            <div className="text-sub" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '12px 0 6px' }}>Saved assemblies</div>
-            {assemblies.map(a => {
-              const c = rowColor(a);
-              const isSel = selected === a.assembly_id;
-              return (
-                <div
-                  key={a.assembly_id}
-                  className={`assembly-picker-option${isSel ? ' selected' : ''}`}
-                  style={isSel ? { borderColor: c, background: `color-mix(in srgb, ${c} 12%, var(--input-bg))` } : {}}
-                  onClick={() => setSelected(a.assembly_id)}
-                >
-                  <HolderTag
-                    holderId={a.holder_id} holderGuid={a.holder_guid}
-                    description={a.holder_description}
-                  />
-                  <span style={{ fontSize: 13 }}>OOH: {a.ooh?.toFixed(3)} {unitAbbr(tool.unit)}</span>
-                  {(a.linked_preset_guids?.length > 0) && (
-                    <span className="text-sub" style={{ fontSize: 11, marginLeft: 'auto' }}>
-                      {a.linked_preset_guids.length} preset{a.linked_preset_guids.length !== 1 ? 's' : ''}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </>
-        )}
-
-        <div className="text-sub" style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '12px 0 6px' }}>One-time (not saved)</div>
-        <div
-          className={`assembly-picker-option${selected === 'new' ? ' selected' : ''}`}
-          onClick={() => setSelected('new')}
-        >
-          <span style={{ fontWeight: 600 }}>Custom assembly</span>
-          <span className="text-sub" style={{ fontSize: 12 }}> — specify holder + OOH</span>
-        </div>
-
-        {selected === 'new' && (
-          <div style={{ padding: '12px', background: 'var(--surface-2)', borderRadius: 'var(--radius-sm)', marginBottom: 6 }}>
-            <div style={{ marginBottom: 10 }}>
-              <label className="field-label">Holder</label>
-              <select className="field-input" value={newHolderGuid} onChange={e => setNewHolderGuid(e.target.value)}>
-                <option value="">— select holder —</option>
-                {holders.map(h => <option key={h.guid} value={h.guid}>{h.description}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="field-label">OOH ({unitAbbr(tool.unit)})</label>
-              <input
-                className="field-input"
-                type="number"
-                step="0.001"
-                min="0"
-                placeholder="e.g. 2.300"
-                value={newOoh}
-                onChange={e => setNewOoh(e.target.value)}
-                style={{ maxWidth: 130 }}
-              />
-            </div>
-          </div>
-        )}
-
-        <div className="modal-actions" style={{ marginTop: 16 }}>
-          <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-          <button className={`btn ${canConfirm ? 'btn-primary' : 'btn-secondary'}`} disabled={!canConfirm} onClick={handleConfirm}>
-            Confirm &amp; Export
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, value, unit, mono, href }) {
-  const isEmpty = value === null || value === undefined || value === '';
-  const display = isEmpty ? '—' : (unit ? `${value} ${unit}` : String(value));
-  return (
-    <div className="detail-field">
-      <div className="detail-field-label">{label}</div>
-      {href && !isEmpty ? (
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`detail-field-value inline-link ${mono ? 'font-mono' : ''}`}
-        >{display}</a>
-      ) : (
-        <div className={`detail-field-value ${isEmpty ? 'detail-field-empty' : ''} ${mono ? 'font-mono' : ''}`}>
-          {display}
-        </div>
-      )}
-    </div>
-  );
-}
-

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  Tag, Ruler, Layers, Save, X, AlertTriangle, Wand2, ChevronDown, ChevronRight,
-  StickyNote, Link2, Trash2, ScanLine, Check, Undo2, ShoppingCart,
+  Ruler, Layers, Save, X, AlertTriangle,
+  StickyNote, Link2, Trash2, ScanLine,
 } from 'lucide-react';
 import {
   validateTool, validateGeometry, getNextMachineNumber, toolToExtractor,
@@ -10,14 +10,10 @@ import {
   TAP_LIMIT_TOLERANCE_DEFAULT_INCH, TAP_LIMIT_TOLERANCE_DEFAULT_METRIC,
 } from '../schema/toolSchema.js';
 import { threadPitchValue } from '../schema/threads.js';
-import { fieldLabel } from '../schema/fieldRegistry.js';
-import { unitAbbr } from '../utils/units.js';
-import { toolIdLabel } from '../utils/toolIdSystem.js';
 import InfoTip from './InfoTip.jsx';
-import StatusBadge from './StatusBadge.jsx';
 import ToolLinkPicker from './ToolLinkPicker.jsx';
 import {
-  TOOL_STATUSES, statusOf, betaSuffixStale, stripBetaSuffix, withBetaSuffix, hasBetaSuffix,
+  withBetaSuffix, hasBetaSuffix,
   withRetiredSuffix, stripRetiredSuffix, stripStatusSuffixes,
 } from '../utils/toolStatus.js';
 import { buildDesc } from '../utils/toolNaming.js';
@@ -26,6 +22,10 @@ import ToolTypeDropdown from './ToolTypeDropdown.jsx';
 import ToolFields from './ToolFields.jsx';
 import ExtractUpdateModal from './ExtractUpdateModal.jsx';
 import PurchasingSection, { normalizePurchasing, backfillUrls } from './PurchasingSection.jsx';
+import Section from './tool/ToolSection.jsx';
+import FieldInput from './tool/FieldInput.jsx';
+import SpecSummary, { SpecPurchasingPanel } from './tool/SpecScanPanels.jsx';
+import ToolIdentitySection from './tool/ToolIdentitySection.jsx';
 import { applyPurchasingRows } from '../schema/extractionDiff.js';
 import { getToolFieldSections, coatingOptions } from '../schema/toolFieldLayout.js';
 import {
@@ -449,7 +449,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
           "view, unlocked": geometry/material on the left, identity/notes on the right. */}
       <div className="detail-layout">
         <div className="detail-layout-left">
-          <Section title="Geometry & Setup" icon={Ruler} forceOpen={inlineProposalMap.size > 0}>
+          <Section className="mb-16" title="Geometry & Setup" icon={Ruler} forceOpen={inlineProposalMap.size > 0}>
             <ToolFields
               tool={data}
               mode="edit"
@@ -483,7 +483,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
               intrinsically — the toggle can't turn that off (it would just
               re-derive on the next load), so we show a read-only note instead. */}
           {!ALWAYS_INSERT_TYPES.has(data.tool_type) && (
-            <Section title="Insert-Style Tool" icon={Link2}>
+            <Section className="mb-16" title="Insert-Style Tool" icon={Link2}>
               {isCombinedProShopId(data.tool_id) ? (
                 <p className="text-sub text-sm" style={{ lineHeight: 1.5 }}>
                   Insert-style — detected from the Fusion product-id
@@ -536,173 +536,13 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
             />
           )}
 
-          <Section title="Identity" icon={Tag}>
-            {/* ── Lifecycle ─────────────────────────────────────────────────
-                Active is the default and the normal state; the other two are
-                what the badge and the header wash exist to make obvious. */}
-            <div className="flex items-center gap-8 mb-12 flex-wrap">
-              <span className="text-xs text-sub">Status</span>
-              <div className="btn-toggle">
-                {TOOL_STATUSES.map(st => (
-                  <button key={st.id} type="button" title={st.tip}
-                    className={statusOf(data) === st.id ? 'active' : ''}
-                    onClick={() => setStatus(st.id)}>{st.label}</button>
-                ))}
-              </div>
-              <StatusBadge status={statusOf(data)} showActive />
-              <InfoTip alignRight text={'Active is the normal state. Beta = being trialled in CAM, not bought — a beta tool is deliberately NOT exported to ProShop, and its generated description carries a BETA marker. Retired = out of service; name the tool that replaced it and the tool page links straight to it.'} />
-            </div>
-
-            {/* Retired → which tool took over. Stored as the replacement's
-                tracking id; the name shown is resolved live from it. */}
-            {statusOf(data) === 'retired' && (
-              <div className="flex items-center gap-8 mb-12 flex-wrap">
-                <span className="text-xs text-sub">Replaced by</span>
-                {replacementTool ? (
-                  <>
-                    <span className="tool-id-pill">{replacementTool.tool_id || '—'}</span>
-                    <span className="text-sm truncate" style={{ maxWidth: '32ch' }}>{replacementTool.description}</span>
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setField('replaced_by', null)}>Clear</button>
-                  </>
-                ) : data.replaced_by ? (
-                  // A stored id whose tool is gone. Shown, never silently
-                  // dropped — it is the only remaining record that this tool
-                  // was replaced by something.
-                  <>
-                    <span className="text-sm text-sub" style={{ fontStyle: 'italic' }}>replacement no longer in the library</span>
-                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setField('replaced_by', null)}>Clear</button>
-                  </>
-                ) : (
-                  <span className="text-sm text-sub">Not set</span>
-                )}
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPickReplacement(true)}>
-                  {data.replaced_by ? 'Change…' : 'Pick a tool…'}
-                </button>
-              </div>
-            )}
-
-            {/* ⚠️ OFFERED, NEVER APPLIED. The BETA marker rides along with the
-                GENERATED description (a tool's first name is generated here), but
-                a stored description is never rewritten on the app's say-so — so
-                switching to Active surfaces this and waits. */}
-            {betaSuffixStale(data) && (
-              <p className="spec-desc-hint" style={{ marginBottom: 12 }}>
-                <AlertTriangle size={11} /> The description still ends with “BETA”, but this tool is no longer a beta tool.
-                <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }}
-                  onClick={() => setField('description', stripBetaSuffix(data.description))}>Remove it</button>
-              </p>
-            )}
-
-            {/* Machine tool number — read-only, managed by the app */}
-            {hasMachineNum && (
-              <div className="flex items-center gap-8 mb-12 flex-wrap">
-                <span className="text-xs text-sub">{isNew ? 'Will be assigned:' : 'Machine #'}</span>
-                <span className="machine-num-badge">T{machineNum}</span>
-                <span className="machine-num-badge">H{machineNum}</span>
-                <span className="machine-num-badge">D{machineNum}</span>
-                {!isNew && <span className="text-xs text-sub">— read-only</span>}
-              </div>
-            )}
-            {/* Unit — selectable when creating; pulled from Fusion (read-only) when editing. */}
-            <div className="flex items-center gap-8 mb-12 flex-wrap">
-              <span className="text-xs text-sub">Unit</span>
-              {isNew ? (
-                <div className="btn-toggle">
-                  {[['inches', 'Inches (in)'], ['millimeters', 'Millimeters (mm)']].map(([val, label]) => (
-                    <button key={val} type="button" className={data.unit === val ? 'active' : ''} onClick={() => setField('unit', val)}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <>
-                  <span className="machine-num-badge">{unitAbbr(data.unit)}</span>
-                  <span className="text-xs text-sub">— from Fusion (read-only)</span>
-                </>
-              )}
-            </div>
-            <div className="field-group mb-12">
-              <label className="field-label">Description <span className="required">*</span></label>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <input
-                  className="field-input"
-                  style={{ flex: 1 }}
-                  value={data.description || ''}
-                  onChange={e => setField('description', e.target.value)}
-                  placeholder="e.g. 0.500 4FL EM 1.000LOC"
-                />
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  title={!isNew && !descSuggestion
-                    ? 'The description already matches what the geometry generates'
-                    : 'Suggest description from geometry'}
-                  disabled={!isNew && !descSuggestion}
-                  onClick={() => {
-                    const suggested = buildDesc(toolToExtractor(data));
-                    if (suggested) setField('description', suggested);
-                  }}
-                  style={{ flexShrink: 0 }}
-                >
-                  <Wand2 size={14} /> Suggest
-                </button>
-              </div>
-              {/* The suggestion itself, readable before it is taken. Clicking
-                  either it or the button applies it — one action, two targets,
-                  because the value is the thing the eye lands on. */}
-              {descSuggestion && (
-                <div className="desc-suggest">
-                  <span className="desc-suggest-label"><Wand2 size={11} /> Suggested</span>
-                  <button type="button" className="desc-suggest-value" onClick={() => setField('description', descSuggestion)}
-                    title="Use this description">
-                    {descSuggestion}
-                  </button>
-                </div>
-              )}
-              {descStale && (
-                <p className="spec-desc-hint">
-                  <AlertTriangle size={11} /> The description no longer matches the geometry — “Suggest” rebuilds it.
-                </p>
-              )}
-            </div>
-            <div className="form-grid">
-              <FieldInput field="tool_id" label={toolIdLabel(idMode)} data={data} setField={setField} placeholder="e.g. A-3" />
-              {/* Location is owned by the Location System, not this form — a
-                  blank editable box here read as "you need to type something"
-                  and there is nothing useful to type. So the only case that
-                  still gets an input is a shop with no location system at all
-                  (free text is then the only route) or a legacy free-text
-                  value that would otherwise become uneditable. Everything else
-                  is told where the location actually gets set. */}
-              <div className="field-group">
-                <label className="field-label">
-                  Location
-                  <InfoTip text={locEditable
-                    ? 'Free-text location (Fusion’s "Vendor" field). Once a Location System is configured, locations are assigned with Assign Location on the tool page instead, and a structured location overrides this text on save.'
-                    : 'Locations are assigned with Assign Location on the tool page — that’s where you pick the system and get an auto-suggested bin number. It is not edited here.'} />
-                </label>
-                {locEditable ? (
-                  <input
-                    className="field-input"
-                    value={data.location || ''}
-                    placeholder="LC-140"
-                    onChange={e => setField('location', e.target.value)}
-                  />
-                ) : (
-                  <div className="flex items-center gap-8 flex-wrap" style={{ minHeight: 34 }}>
-                    {data.location
-                      ? <span className="location-tag">{data.location}</span>
-                      : <span className="text-sm text-sub">Not set</span>}
-                    <span className="text-xs text-sub">
-                      — {isNew
-                        ? 'assign it with Assign Location on the tool page after saving'
-                        : 'use Assign Location on the tool page'}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </Section>
+          <ToolIdentitySection
+            data={data} isNew={isNew} setField={setField} setStatus={setStatus}
+            idMode={idMode} hasMachineNum={hasMachineNum} machineNum={machineNum}
+            locEditable={locEditable} descSuggestion={descSuggestion} descStale={descStale}
+            replacementTool={replacementTool}
+            onPickReplacement={() => setPickReplacement(true)}
+          />
 
           {/* Purchasing — edited in place in the draft (controlled mode), so it
               is committed by this form's Save like every other field. Mirrors
@@ -723,7 +563,7 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
             />
           )}
 
-          <Section title="Notes & Tags" icon={StickyNote}>
+          <Section className="mb-16" title="Notes & Tags" icon={StickyNote}>
             <div className="form-grid">
               {/* No "Last Used Job" free-text field: which programs a tool runs
                   in is DERIVED (ToolDetail's Where Used panel), and a preset's
@@ -854,204 +694,6 @@ export default function ToolForm({ tool, onSave, onCancel, isSaving, isNew, onDe
           tool={{ id: data.id }}
           onPick={(t) => { setField('replaced_by', t.id); setPickReplacement(false); }}
           onClose={() => setPickReplacement(false)}
-        />
-      )}
-    </div>
-  );
-}
-
-function Section({ title, icon: Icon, children, forceOpen = false }) {
-  const [open, setOpen] = useState(true);
-  // A collapsed section must not be able to hide a pending decision.
-  useEffect(() => { if (forceOpen) setOpen(true); }, [forceOpen]);
-  return (
-    <div className={`panel ${open ? 'open' : ''} mb-16`}>
-      <button className="panel-header" onClick={() => setOpen(o => !o)}>
-        {Icon && <Icon size={15} className="panel-header-icon" />}
-        <span className="panel-header-title">{title}</span>
-        <span className="panel-chevron">{open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
-      </button>
-      {open && <div className="panel-body">{children}</div>}
-    </div>
-  );
-}
-
-// ── Spec-sheet summary bar ───────────────────────────────────────────────────
-// The count is the whole point: it says how many decisions are outstanding, so
-// a pending row can never be lost simply by not scrolling to it.
-function SpecSummary({
-  pending, accepted, typeNotice, onAcceptAll, onDiscard,
-  sourceFile, keepSourceFile, onKeepSourceFile, canAttach,
-}) {
-  return (
-    <div className={`spec-summary ${pending > 0 ? 'has-pending' : ''} mb-16`}>
-      <div className="spec-summary-row">
-        <ScanLine size={15} style={{ color: 'var(--blue)', flexShrink: 0 }} />
-        <span className="spec-summary-counts">
-          {pending > 0
-            ? <><strong>{pending}</strong> difference{pending !== 1 ? 's' : ''} to review</>
-            : <>All spec-sheet differences reviewed</>}
-          {accepted > 0 && <span className="text-sub"> · {accepted} applied</span>}
-        </span>
-        <span style={{ flex: 1 }} />
-        {pending > 0 && (
-          <button type="button" className="btn btn-ghost btn-sm" onClick={onAcceptAll}>
-            <Check size={13} /> Update all
-          </button>
-        )}
-        <button type="button" className="btn btn-ghost btn-sm" onClick={onDiscard} title="Put every value back and drop the scan">
-          <Undo2 size={13} /> Discard scan
-        </button>
-      </div>
-      <p className="spec-summary-note">
-        Nothing is saved until you press Save. Presets, assemblies, Tool ID, location
-        and machine number are not touched by a scan.
-      </p>
-      {/* The sheet is kept as evidence for the values it produced. The choice
-          lives here rather than in the upload modal so it is next to Save —
-          the point at which it actually happens. */}
-      {sourceFile && canAttach && (
-        <label className="checkbox-row spec-summary-keep">
-          <input type="checkbox" checked={keepSourceFile} onChange={e => onKeepSourceFile(e.target.checked)} />
-          <span className="text-xs text-sub">
-            Save <strong>{sourceFile.name}</strong> to this tool's Files, under
-            {' '}<strong>Data Extraction</strong>
-          </span>
-        </label>
-      )}
-      {sourceFile && !canAttach && (
-        <p className="spec-summary-note">
-          Connect Google Drive to keep the spec sheet with this tool.
-        </p>
-      )}
-      {typeNotice && (
-        <p className="spec-summary-type">
-          <AlertTriangle size={12} />
-          The sheet looks like a <strong>{typeNotice.extractedType}</strong>, but this tool is a{' '}
-          <strong>{typeNotice.currentType}</strong>. The type is not changed by a scan — use the Tool
-          Type picker above if it is genuinely wrong.
-        </p>
-      )}
-    </div>
-  );
-}
-
-// ── Purchasing + homeless-field proposals ────────────────────────────────────
-// Purchasing is {manufacturers[], vendors[]} with FK links, so it has no single
-// input to sit under; the same is true of any proposal whose field this tool
-// type doesn't render. Both land here so every difference has a visible home.
-function SpecPurchasingPanel({ rows, homeless, unit, newMfgAck, onAck, onResolveRow, onResolveField }) {
-  const ackRow = rows.find(r => r.requiresAck);
-  const fmt = (v) => (v === null || v === undefined || v === '' ? 'empty' : String(v));
-
-  const Row = ({ label, current, proposed, status, note, disabled, onAccept, onReject }) => (
-    <div className={`spec-row spec-proposal-${status}`}>
-      <div className="spec-row-label">{label}</div>
-      <div className="spec-row-values">
-        {status === 'rejected'
-          ? <><s>{fmt(proposed)}</s> <span className="text-sub">— ignored</span></>
-          : <><s>{fmt(current)}</s> → <strong>{fmt(proposed)}</strong></>}
-        {note && <span className="spec-proposal-note"> · {note}</span>}
-      </div>
-      <div className="spec-row-actions">
-        {status === 'pending' ? (
-          <>
-            <button type="button" className="spec-proposal-btn accept" onClick={onAccept} disabled={disabled}>
-              <Check size={11} /> Update
-            </button>
-            <button type="button" className="spec-proposal-btn" onClick={onReject}>
-              <X size={11} /> Keep
-            </button>
-          </>
-        ) : (
-          <button type="button" className="spec-proposal-btn"
-            onClick={status === 'accepted' ? onReject : onAccept} disabled={status !== 'accepted' && disabled}>
-            <Undo2 size={11} /> {status === 'accepted' ? 'Undo' : 'Update'}
-          </button>
-        )}
-      </div>
-    </div>
-  );
-
-  return (
-    <div className="panel open mb-16 spec-panel">
-      <div className="panel-header static">
-        <ShoppingCart size={15} className="panel-header-icon" />
-        <span className="panel-header-title">From the spec sheet</span>
-      </div>
-      <div className="panel-body">
-        {ackRow && (
-          <div className="warn-banner spec-ack">
-            <label className="checkbox-row">
-              <input type="checkbox" checked={newMfgAck} onChange={e => onAck(e.target.checked)} />
-              <span className="text-sm">
-                This sheet is for <strong>{ackRow.proposed}</strong>, not{' '}
-                <strong>{ackRow.current}</strong>. I know the manufacturer is different —
-                add it as an additional maker.
-              </span>
-            </label>
-            <p className="text-xs text-sub" style={{ margin: '6px 0 0 24px' }}>
-              The existing manufacturer is kept either way; nothing is replaced.
-            </p>
-          </div>
-        )}
-
-        {homeless.map(p => (
-          <Row
-            key={p.field}
-            label={p.label}
-            current={p.current}
-            proposed={p.proposed}
-            status={p.status}
-            note={p.converted ? `converted from in to ${unitAbbr(unit)}` : null}
-            onAccept={() => onResolveField(p.field, 'accept')}
-            onReject={() => onResolveField(p.field, 'reject')}
-          />
-        ))}
-
-        {rows.map(r => (
-          <Row
-            key={r.key}
-            label={r.label}
-            current={r.current}
-            proposed={r.proposed}
-            status={r.status}
-            note={r.note || (r.generated ? 'auto-generated link' : null)}
-            disabled={r.requiresAck && !newMfgAck}
-            onAccept={() => onResolveRow(r.key, 'accept')}
-            onReject={() => onResolveRow(r.key, 'reject')}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function FieldInput({ field, label, data, setField, type = 'text', step, list, placeholder }) {
-  return (
-    <div className="field-group">
-      <label className="field-label">{label || fieldLabel(field, data?.unit) || field}</label>
-      {list ? (
-        <>
-          <input
-            className="field-input"
-            list={`list-${field}`}
-            value={data[field] || ''}
-            onChange={e => setField(field, e.target.value)}
-            placeholder={placeholder}
-          />
-          <datalist id={`list-${field}`}>
-            {list.map(v => <option key={v} value={v} />)}
-          </datalist>
-        </>
-      ) : (
-        <input
-          className="field-input"
-          type={type}
-          step={step}
-          value={data[field] || ''}
-          onChange={e => setField(field, e.target.value)}
-          placeholder={placeholder}
         />
       )}
     </div>
