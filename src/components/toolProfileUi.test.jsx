@@ -307,7 +307,12 @@ describe('the dimension boxes clear the tool and each other', () => {
     // ⚠️ Sharing a COLUMN is normal now — the ordinate lengths all sit in one
     // lane, at different heights — so this checks the thing that actually
     // matters (overlap on BOTH axes) rather than horizontal offset alone.
-    const BOX_H = 34;   // DIMBOX_H — label + input
+    // ⚠️ The MEASURED height of a rendered box (label + input), not a number
+    // picked to make this pass — a value under the real one lets two boxes
+    // overlap and still be called clear, which is the failure this test names.
+    // It tracks DIMBOX_H in ToolProfileFields; re-measure both if the box is
+    // restyled.
+    const BOX_H = 40;
     const low = render({ ...tool, min_ooh: 0.5, flute_length: 1 });
     const boxes = boxesOf(low);
     for (let i = 0; i < boxes.length; i++) {

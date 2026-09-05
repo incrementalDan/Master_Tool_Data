@@ -117,7 +117,12 @@ const HOLDER_FACE = 'min_ooh';
 // a solid leader at the same height.
 const HOLDER_OVERHANG_L = 30;
 const HOLDER_OVERHANG_R = 10;
-const DIMBOX_H = 34;             // label + input, for flipping the value box
+// ⚠️ MEASURED, not guessed — the boxes are HTML overlaid on the SVG, so every
+// collision test here is running against a height CSS decides. At 34 it was
+// already under the real 36; the bigger field-name text took the real box to
+// 39.5, which is a box-and-a-bit of clearance the lane logic thought it had.
+// If .tp-dimbox-label / -input / .dia are restyled, re-measure this.
+const DIMBOX_H = 40;             // label + input, for flipping the value box
 
 const SEED_HEIGHT_MM = 2.5;      // a visible starting height on either unit
 const SEED_DIAMETER_MM = 6;      // ~1/4", the commonest shank either way

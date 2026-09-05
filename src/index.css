@@ -6816,7 +6816,11 @@ input.sf-ref-num { text-align: right; }
 .tp-dimbox-fixed .tp-dimbox-input input { flex: 1; width: auto; min-width: 0; }
 .tp-dimbox-fixed .tp-dimbox-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tp-dimbox-label {
-  font-size: 9.5px;
+  /* ⚠️ 9.5px was set for a modal read at arm's length; on the page these are
+     the field names for the whole Geometry section and have to be readable as
+     labels, not as annotations. The fixed boxes are LEN_BOX_W (82px) wide and
+     the longest label is SHOULDER/UNDERCUT — both still clear it at 11px. */
+  font-size: 11px;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--text-sub);
@@ -6847,6 +6851,11 @@ input.sf-ref-num { text-align: right; }
 .tp-dimbox-input input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .tp-dimbox-input input[type=number] { -moz-appearance: textfield; appearance: textfield; }
 .tp-dimbox-unit { font-size: 10px; color: var(--text-sub); font-family: var(--font-mono); }
+/* ⚠️ SCOPED to the drawing on purpose. `.dia` is the shared app-wide diameter
+   glyph (tool cards, the sync-job queue, match step) and is sized by whatever
+   it sits in; here it sits beside a 12px mono number and read smaller than the
+   value it qualifies. Bumping the token itself would resize it everywhere. */
+.tp-dimbox-input .dia { font-size: 15px; line-height: 1; }
 
 /* ── side panel ── */
 /* ⚠️ The drawing is a fixed width and the modal is up to 1180px, so `flex: 1`
