@@ -34,6 +34,23 @@ export default function GeometrySection({
     return new Set([...d.lengths, ...d.diameters, ...d.extras, 'shaft_segments', 'has_undercut']);
   }, [drawable, data.tool_type]);
 
+  // ⚠️ A FIELD WITH A PENDING SPEC-SHEET PROPOSAL IS NOT HIDDEN. The accept /
+  // reject strip lives on the grid row, and the drawing has no such control —
+  // so hiding a drawing-owned field took its proposal with it. Geometry is most
+  // of what a spec sheet proposes, so the summary bar would read "3 pending"
+  // with nowhere on the page to decide them. Same rule as a collapsed section
+  // being forced open by a proposal: a pending decision is never out of sight.
+  //
+  // It does mean the value shows twice for the length of the scan — on the
+  // drawing and in the grid — which is the lesser problem, and it is temporary:
+  // resolving the row hides the field again.
+  const hidden = useMemo(() => {
+    if (!owned || !proposals?.size) return owned;
+    const s = new Set(owned);
+    for (const f of proposals.keys()) s.delete(f);
+    return s;
+  }, [owned, proposals]);
+
   // Only worth showing while editing — a warning about a tool nobody is
   // changing is a standing complaint, not an action.
   const geoIssues = useMemo(
@@ -56,7 +73,7 @@ export default function GeometrySection({
         listOptions={listOptions}
         proposals={proposals}
         onResolveProposal={onResolveProposal}
-        hideFields={owned}
+        hideFields={hidden}
       />
 
       {geoIssues.length > 0 && (
