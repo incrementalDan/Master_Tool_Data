@@ -4,8 +4,8 @@
 // ⚠️ Every button is a PROP, not a handler of its own. Several of them are
 // guarded (guardLeave — leaving with unsaved preset edits prompts first) and
 // several open a modal the page owns, so the decisions stay on the page and
-// this file is only the layout. Delete is deliberately absent: it lives in edit
-// mode so it can't be hit by accident from the view.
+// this file is only the layout. Delete is deliberately absent: it lives on the
+// page's edit bar, so it can't be hit by accident while merely viewing.
 import {
   ArrowLeft, Pencil, Copy, Shapes, GitMerge, Link2, Unlink,
   Download, FileDown, FileUp,
@@ -72,8 +72,8 @@ export default function ToolActionSidebar({
       style={{ color: 'var(--orange)' }}
       onClick={onImportProShop}
     />
-    {/* Delete lives in Edit mode now (ToolForm's action bar), so it can't be
-        hit by accident from the view. */}
+    {/* Delete lives on the page's edit bar, so it can't be hit by accident
+        while merely viewing. */}
   </aside>
   );
 }

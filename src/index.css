@@ -6850,6 +6850,24 @@ input.sf-ref-num { text-align: right; }
 .tp-dimbox-input input::-webkit-outer-spin-button,
 .tp-dimbox-input input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .tp-dimbox-input input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+/* ⚠️ The edit bar is FIXED, so without this it lies across whatever happens to
+   be at the bottom of the page — on a long tool that is the History panel, and
+   on a short one the "in library" line. Only while editing; the view page has
+   no bar and should not carry a gap. */
+.tool-detail-editing .tool-detail-main { padding-bottom: 72px; }
+
+/* Read-outs — the same numbers when the page is not in edit mode. Mono so a
+   value does not jump when it becomes an input, and right-aligned like the
+   input it replaces. */
+.tp-readout, .tp-seg-readout {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  display: inline-block;
+  text-align: right;
+}
+.tp-readout { min-width: 60px; padding: 2px 5px; }
+.tp-seg-readout { width: 100%; padding: 3px 5px; }
 .tp-dimbox-unit { font-size: 10px; color: var(--text-sub); font-family: var(--font-mono); }
 /* ⚠️ SCOPED to the drawing on purpose. `.dia` is the shared app-wide diameter
    glyph (tool cards, the sync-job queue, match step) and is sized by whatever

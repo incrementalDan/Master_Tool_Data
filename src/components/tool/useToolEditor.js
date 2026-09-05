@@ -23,10 +23,20 @@ import { defaultActivationFamily, newPairing } from '../../schema/insertFamilies
 import { statusPatch } from './statusEdit.js';
 import { pairingHasComponents } from './InsertStyleBlock.jsx';
 
-export default function useToolEditor({ tool, isNew, onSave, onCancel, isSaving }) {
+export default function useToolEditor({ tool, isNew, onSave, onCancel, isSaving, frozen = true }) {
   const { tools, shopSettings, googleAuthenticated, vendorRegistry, saveVendorRegistry } = useApp();
   const idMode = shopSettings?.tool_id_system?.mode || 'proshop';
   const [data, setData] = useState({ ...tool });
+
+  // ⚠️ WHILE THE PAGE IS NOT IN EDIT MODE THE DRAFT TRACKS THE RECORD. Other
+  // panels on the tool page (presets, assemblies, purchasing, location) save on
+  // their own, so a draft seeded once at mount would go stale the moment one of
+  // them wrote — and the next page Save would push those stale values back over
+  // the top. `frozen` is the page's edit mode: false = follow the record, true =
+  // hold what the user is typing. (ToolForm is always frozen — it IS the edit.)
+  useEffect(() => {
+    if (!frozen) setData({ ...tool });
+  }, [tool, frozen]);
   // The location field is only an INPUT when there is no better place to set
   // it: no location system configured at all, or an existing free-text value
   // that the picker can't currently edit. A structured location, or a blank
@@ -328,8 +338,13 @@ export default function useToolEditor({ tool, isNew, onSave, onCancel, isSaving 
     onCancel();
   };
 
-  // Keyboard: Ctrl/Cmd+S saves, Esc cancels
+  // Keyboard: Ctrl/Cmd+S saves, Esc cancels.
+  // ⚠️ ONLY WHILE THE EDITOR IS ACTUALLY OPEN. On the unified page this hook is
+  // mounted the whole time the tool is on screen, so an ungated handler would
+  // swallow Ctrl+S (and answer Escape) while merely VIEWING a tool — hijacking
+  // a browser shortcut for a save nobody asked for.
   useEffect(() => {
+    if (!frozen) return undefined;
     const onKey = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();

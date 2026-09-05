@@ -147,7 +147,12 @@ const applyUndercut = (d, v) => {
 // angle) — the same transform ToolFields applies.
 const doubles = (field, toolType) => field === 'taper_angle' && INCLUSIVE_ANGLE_TYPES.has(toolType);
 
-export default function ToolProfileFields({ draft, setDraft }) {
+// ⚠️ `readOnly` is the PAGE'S edit mode, not a property of any field. The tool
+// page shows this drawing all the time and unlocks it only when the user asks
+// to edit (see ToolDetail) — a page whose numbers are typeable the moment it
+// opens invites an edit nobody meant to make. It is distinct from a field being
+// DERIVED (reach, undercut Ø), which is read-only in both modes.
+export default function ToolProfileFields({ draft, setDraft, readOnly = false }) {
   const [hoverSeg, setHoverSeg] = useState(null);
   const unit = unitAbbr(draft.unit);
   const profile = useMemo(() => buildToolProfile(draft), [draft]);
@@ -503,7 +508,8 @@ export default function ToolProfileFields({ draft, setDraft }) {
                 <DimBox key={field} x={x} y={yBox} align="center"
                   label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
                   step={stepFor(field, draft.unit)} kind={REGION_OF[field]} width={LEN_BOX_W}
-                  value={shown(field)} onChange={v => set(field, v)} readOnly={isDerived(field)} />
+                  value={shown(field)} onChange={v => set(field, v)}
+                  readOnly={readOnly} derived={isDerived(field)} />
               );
             })}
             {yHolder != null && (
@@ -513,13 +519,15 @@ export default function ToolProfileFields({ draft, setDraft }) {
                 precision={fieldOf(HOLDER_FACE).precision ?? 4}
                 step={stepFor(HOLDER_FACE, draft.unit)}
                 value={shown(HOLDER_FACE)} onChange={v => set(HOLDER_FACE, v)} kind="holder" width={LEN_BOX_W}
+                readOnly={readOnly}
                 title="Where the holder starts — usually the face of the collet nut" />
             )}
             {diaTargets.map(({ field, y, lane }) => (
               <DimBox key={field} x={cx + BODY_W / 2 + GAP + lane * LANE + 34} y={y} align="left"
                 label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
                 step={stepFor(field, draft.unit)} kind={REGION_OF[field]}
-                value={shown(field)} onChange={v => set(field, v)} dia readOnly={isDerived(field)} />
+                value={shown(field)} onChange={v => set(field, v)} dia
+                readOnly={readOnly} derived={isDerived(field)} />
             ))}
 
             <div className="tp-nts" title="X and Y are scaled independently so the tool is legible — a real tool is far longer than it is wide.">NTS</div>
@@ -534,15 +542,19 @@ export default function ToolProfileFields({ draft, setDraft }) {
                   {dims.extras.map(f => (
                     <label key={f} className="tp-extra">
                       <span>{labelOf(f)}</span>
-                      <input type="number" className="field-input" value={shown(f) ?? ''}
-                        step={stepFor(f, draft.unit)}
-                        onChange={e => set(f, e.target.value)} placeholder="—" />
+                      {readOnly
+                        ? <span className="tp-readout">{shown(f) ?? '—'}</span>
+                        : (
+                          <input type="number" className="field-input" value={shown(f) ?? ''}
+                            step={stepFor(f, draft.unit)}
+                            onChange={e => set(f, e.target.value)} placeholder="—" />
+                        )}
                     </label>
                   ))}
                   <label className="tp-extra">
                     <span>
                       Undercut
-                      {draft.undercut_override != null && (
+                      {!readOnly && draft.undercut_override != null && (
                         <button type="button" className="btn btn-ghost btn-sm undercut-auto"
                           title="Clear the override and take the answer from the shaft segments again"
                           onClick={() => setDraft(d => applyUndercut(d, null))}>↺ Auto</button>
@@ -553,7 +565,8 @@ export default function ToolProfileFields({ draft, setDraft }) {
                           app cannot say" — `!!null === false` lit No, asserting an
                           answer nobody had. Same rule as the tool page's pill. */}
                       {[[true, 'Yes'], [false, 'No']].map(([v, l]) => (
-                        <button key={l} type="button" className={draft.has_undercut === v ? 'active' : ''}
+                        <button key={l} type="button" disabled={readOnly}
+                          className={draft.has_undercut === v ? 'active' : ''}
                           onClick={() => setDraft(d => applyUndercut(d, v))}>{l}</button>
                       ))}
                     </div>
@@ -565,13 +578,15 @@ export default function ToolProfileFields({ draft, setDraft }) {
             <section className="tp-panel">
               <h4 className="tp-panel-title">
                 Shaft segments
-                <button type="button" className="btn btn-ghost btn-sm tp-seg-add"
-                  onClick={() => setSegs([...segs, newSegment(segs, profile, draft.unit)], true)}>+ Add</button>
+                {!readOnly && (
+                  <button type="button" className="btn btn-ghost btn-sm tp-seg-add"
+                    onClick={() => setSegs([...segs, newSegment(segs, profile, draft.unit)], true)}>+ Add</button>
+                )}
               </h4>
               {segs.length === 0 ? (
                 <p className="tp-empty">
                   No shaft segments — the shank runs straight from the flutes.
-                  Add one when the tool arrives and gets measured.
+                  {!readOnly && ' Add one when the tool arrives and gets measured.'}
                 </p>
               ) : (
                 <table className="tp-seg-table">
@@ -601,6 +616,9 @@ export default function ToolProfileFields({ draft, setDraft }) {
                                     Leaving a cell blank snaps it back to its
                                     last good value — removing a segment is what
                                     the × is for. */}
+                                {readOnly ? (
+                                  <span className="tp-seg-readout">{sg[k] ?? '—'}</span>
+                                ) : (
                                 <input type="number" step={segStep} className="tp-seg-input"
                                   value={cell?.id === id ? cell.text : (sg[k] ?? '')}
                                   onFocus={() => setCell({ id, text: String(sg[k] ?? '') })}
@@ -613,12 +631,15 @@ export default function ToolProfileFields({ draft, setDraft }) {
                                       setSegs(segs.map((x, j) => (j === idx ? { ...x, [k]: n } : x)));
                                     }
                                   }} />
+                                )}
                               </td>
                             );
                           })}
                           <td>
+                            {!readOnly && (
                             <button type="button" className="tp-seg-del" title="Remove this segment"
                               onClick={() => { setCell(null); setHoverSeg(null); setSegs(segs.filter((_, j) => j !== idx)); }}>×</button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -635,15 +656,22 @@ export default function ToolProfileFields({ draft, setDraft }) {
 }
 
 // One dimension's value box, sitting on its dimension line.
-function DimBox({ x, y, align, label, unit, value, precision, step, onChange, dia = false, readOnly = false, title, kind, width }) {
+// ⚠️ `derived` AND `readOnly` ARE DIFFERENT THINGS, and collapsing them says
+// something untrue. `derived` means the app computes this from the shaft
+// segments — a permanent fact about the field, worth the dashed border and the
+// tooltip that explains it. `readOnly` only means the page is not in edit mode
+// right now. Styling every box as derived while merely viewing would claim the
+// whole drawing is computed, and hand every box a tooltip saying so.
+function DimBox({ x, y, align, label, unit, value, precision, step, onChange,
+  dia = false, readOnly = false, derived = false, title, kind, width }) {
   const [focused, setFocused] = useState(false);
   const display = focused
     ? (value ?? '')
     : (value === null || value === undefined || value === ''
       ? '' : Number(Number(value).toFixed(precision ?? 4)));
   return (
-    <div className={`tp-dimbox${readOnly ? ' tp-dimbox-derived' : ''}${kind ? ` tp-dimbox-${kind}` : ''}${width ? ' tp-dimbox-fixed' : ''}`}
-      title={title || (readOnly ? 'From the shaft segments' : undefined)}
+    <div className={`tp-dimbox${derived ? ' tp-dimbox-derived' : ''}${kind ? ` tp-dimbox-${kind}` : ''}${width ? ' tp-dimbox-fixed' : ''}`}
+      title={title || (derived ? 'From the shaft segments' : undefined)}
       style={{
       left: x, top: y, width: width || undefined,
       transform: align === 'center' ? 'translate(-50%, -50%)'
@@ -653,7 +681,7 @@ function DimBox({ x, y, align, label, unit, value, precision, step, onChange, di
       <span className="tp-dimbox-label">{label}</span>
       <span className="tp-dimbox-input">
         {dia && <span className="dia">⌀</span>}
-        <input type="number" step={step} value={display} readOnly={readOnly}
+        <input type="number" step={step} value={display} readOnly={readOnly || derived}
           onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
           onChange={e => onChange(e.target.value)} placeholder="—" />
         <span className="tp-dimbox-unit">{unit}</span>

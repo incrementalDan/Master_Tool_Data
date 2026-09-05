@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  GitMerge, StickyNote, Clock, Camera,
-  FileJson, MapPin, CloudOff,
+  GitMerge, Clock, Camera,
+  FileJson, MapPin, CloudOff, ScanLine, Save, Trash2,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
 import ToolProfileModal from './ToolProfileModal.jsx';
@@ -34,7 +34,15 @@ import SidebarBtn from './tool/SidebarBtn.jsx';
 import AssembliesSection from './tool/AssembliesSection.jsx';
 import AssemblyExportPicker from './tool/AssemblyExportPicker.jsx';
 import { hasReconcileWork } from '../services/reconcile.js';
-import ToolForm from './ToolForm.jsx';
+import useToolEditor from './tool/useToolEditor.js';
+import IdentityPanel from './tool/IdentityPanel.jsx';
+import NotesPanel from './tool/NotesPanel.jsx';
+import InsertStyleBlock from './tool/InsertStyleBlock.jsx';
+import SpecSummary, { SpecPurchasingPanel } from './tool/SpecScanPanels.jsx';
+import ExtractUpdateModal from './ExtractUpdateModal.jsx';
+import ToolLinkPicker from './ToolLinkPicker.jsx';
+import { metadataOnlyPatch } from '../schema/metadataScope.js';
+import { editedPatch } from './tool/editPatch.js';
 import { exportSingleTool as exportFusion, copyToolToClipboard } from '../utils/fusionExport.js';
 import { exportSingleTool as exportProShop } from '../utils/proShopExport.js';
 
@@ -70,7 +78,15 @@ export default function ToolDetail() {
   // True while the inline preset editor has unsaved changes — used to warn
   // before navigating away or switching into the tool edit form.
   const presetDirtyRef = useRef(false);
+  const editBaseRef = useRef(null);
+  // ⚠️ Covers BOTH drafts. It used to ask about presets only, because the tool's
+  // own edits lived on a separate screen with its own guard. Now that editing
+  // happens in place, leaving the page with the edit bar open would throw the
+  // whole draft away without a word.
+  const editDirtyRef = useRef(false);
   const guardLeave = (fn) => () => {
+    if (editDirtyRef.current &&
+        !window.confirm('You have unsaved changes to this tool. Leave without saving them?')) return;
     if (presetDirtyRef.current &&
         !window.confirm('You have unsaved changes to a preset. Leave without saving them?')) return;
     presetDirtyRef.current = false;
@@ -87,7 +103,8 @@ export default function ToolDetail() {
 
   // Reconcile against the Fusion library on open: detect entries dumped straight
   // from Fusion (sharing this tool's tracking ID or ProShop #) and prompt. Runs
-  // once per opened tool; skip while editing.
+  // once per opened tool; skipped while editing — a modal proposing to rewrite
+  // the record on top of a live draft is a fight nobody wins.
   const reconciledRef = useRef(null);
   useEffect(() => {
     if (!tool || editing) return;
@@ -136,6 +153,40 @@ export default function ToolDetail() {
     document.title = parts.length ? `${parts.join(' · ')} · ToolDex` : 'ToolDex';
     return () => { document.title = 'ToolDex'; };
   }, [tool?.tool_id, tool?.description]);
+
+  // ⚠️ ABOVE THE EARLY RETURN. Hooks run in the same order on every render, so
+  // the editor cannot sit after the "tool not found" branch — a full refresh
+  // straight onto this URL renders that branch first, and mounting the hook
+  // only on the second render is the classic hook-order crash.
+  // ⚠️ THE SAME EDITOR THE NEW-TOOL FORM USES. Editing an existing tool used to
+  // navigate to ToolForm; now the page unlocks in place. The draft, the
+  // spec-sheet scan, the description suggestion and the validation are all in
+  // the shared hook, so the two screens cannot drift apart again.
+  const editor = useToolEditor({
+    tool: tool || {}, isNew: false, isSaving, frozen: editing,
+    // ⚠️ Wrapped, not passed directly: both are defined further down, and the
+    // hook sits above the "tool not found" early return (hook order). A bare
+    // reference here would read them in the temporal dead zone and throw.
+    onSave: (...a) => handleSave(...a),
+    onCancel: () => exitEdit(),
+  });
+  const { data: draft, scan } = editor;
+  editDirtyRef.current = editing && editor.dirty;
+
+  // ⚠️ Leaving edit mode ends the scan session. The draft is re-seeded from the
+  // record on the way out, so proposals left behind would reappear on the next
+  // Edit — pointing at values that are no longer there, with an Undo that
+  // restores a "current" nobody is looking at any more.
+  useEffect(() => {
+    if (!editing && scan.hasProposals) scan.discardProposals();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing]);
+
+  const startEdit = () => {
+    editBaseRef.current = { ...tool };
+    setEditing(true);
+  };
+
 
   if (!tool) {
     // The library may still be loading — on a full refresh straight onto this
@@ -211,22 +262,39 @@ export default function ToolDetail() {
       setSearchParams(searchParams, { replace: true });
     }
   };
+  const exitEdit = () => { setEditing(false); clearEditParam(); };
 
+  // ⚠️ SAVES THE EDIT, NOT THE DRAFT. The draft is a snapshot of the tool taken
+  // when Edit was pressed; every other panel on this page (presets, assemblies,
+  // purchasing, location, photos) still saves on its own while it is open. So
+  // writing the whole draft would push a stale copy of THOSE over whatever they
+  // wrote in the meantime. Instead: diff the draft against the snapshot to get
+  // what the user actually changed, and apply that patch to the CURRENT record.
+  // A three-way merge, the same shape the Fusion merge uses.
   // `sourceFile` is the screenshot/PDF a "Scan spec sheet" run read its values
-  // from, handed up by ToolForm. ⚠️ It is attached to the tool the save RETURNED,
-  // never to the draft or to the pre-edit `tool` — uploadToolAttachment writes
-  // the whole record it is given, so either of those would undo the save.
-  // A failed attach must not fail the save: the tool data is already committed
-  // and correct, and uploadToolAttachment has toasted the reason.
+  // from. ⚠️ It is attached to the tool the save RETURNED, never to the draft or
+  // to the pre-edit record — uploadToolAttachment writes the whole record it is
+  // given, so either of those would undo the save. A failed attach must not fail
+  // the save: the tool data is already committed, and the action has toasted.
   const handleSave = async (updated, sourceFile = null) => {
-    const saved = await saveTool(updated);
+    const patch = editedPatch(editBaseRef.current || tool, updated);
+    const next = { ...tool, ...patch };
+    let saved = tool;
+    if (Object.keys(patch).length > 0) {
+      // ⚠️ ROUTED, never asked. Everything Fusion also holds goes through the
+      // full write so the two stores stay in step (metadata ≠ Fusion has to keep
+      // meaning "Fusion moved" — see metadataScope.js). A change that touches
+      // only app-owned fields skips the library round-trip entirely. The user is
+      // never told which kind their edit was; that is the whole point.
+      const { dropped } = metadataOnlyPatch(tool, next);
+      saved = dropped.length > 0 ? await saveTool(next) : await saveToolMetadata(next);
+    }
     if (sourceFile && saved) {
       try {
         await uploadToolAttachment(saved, sourceFile.blob, sourceFile.name, 'data_extraction');
       } catch { /* already surfaced by the action */ }
     }
-    setEditing(false);
-    clearEditParam();
+    exitEdit();
   };
 
   const handleDelete = async () => {
@@ -308,9 +376,8 @@ export default function ToolDetail() {
   // (see metadataScope.js for why that matters).
   const metaSave = async (updatedTool) => saveToolMetadata(updatedTool);
 
-  // Delete confirmation modal — shared by the edit-mode Delete button ('normal')
-  // and the reverse-sync banner ('missing'). Rendered in both the edit and view
-  // returns so it works from wherever it was opened.
+  // Delete confirmation modal — shared by the edit bar's Delete button
+  // ('normal') and the reverse-sync banner ('missing').
   const deleteModalEl = deleteMode && (
     <div className="modal-backdrop">
       <div className="modal">
@@ -346,30 +413,8 @@ export default function ToolDetail() {
     </div>
   );
 
-  if (editing) {
-    return (
-      <div>
-        {/* Same sticky identity header as view mode, so the tool you're editing
-            stays visible while scrolling a long form. */}
-        <ToolStickyHeader
-          tool={tool} typeLabel={typeLabel} hasMachineNum={hasMachineNum}
-          idMode={idMode} replacement={replacement} mode="edit"
-        />
-        <ToolForm
-          tool={tool}
-          onSave={handleSave}
-          onCancel={() => { setEditing(false); clearEditParam(); }}
-          isSaving={isSaving}
-          isNew={false}
-          onDelete={() => { setDeleteError(''); setDeleteMode('normal'); }}
-        />
-        {deleteModalEl}
-      </div>
-    );
-  }
-
   return (
-    <div className="tool-detail-wrap">
+    <div className={`tool-detail-wrap${editing ? ' tool-detail-editing' : ''}`}>
       {/* Frozen left action sidebar */}
       <ToolActionSidebar
         noFusion={noFusion}
@@ -378,7 +423,7 @@ export default function ToolDetail() {
         canDrawProfile={canDrawProfile(tool.tool_type)}
         copied={copied}
         onBack={guardLeave(() => navigate(-1))}
-        onEdit={guardLeave(() => setEditing(true))}
+        onEdit={guardLeave(startEdit)}
         onDuplicate={handleClone}
         onOpenProfile={guardLeave(() => setShowProfile(true))}
         onSyncJob={() => navigate(`/merge/${tool.id}`)}
@@ -401,7 +446,7 @@ export default function ToolDetail() {
         {/* Sticky header — type icon + description left, identity (cabinet/machine#) right */}
         <ToolStickyHeader
           tool={tool} typeLabel={typeLabel} hasMachineNum={hasMachineNum}
-          idMode={idMode} replacement={replacement} mode="view"
+          idMode={idMode} replacement={replacement} mode={editing ? 'edit' : 'view'}
         />
 
         <ToolBanners
@@ -416,6 +461,41 @@ export default function ToolDetail() {
           onKeepMissing={() => setFusionMissing(false)}
           onRemoveMissing={() => { setDeleteError(''); setDeleteMode('missing'); }}
         />
+
+        {editor.errors.length > 0 && (
+          <div className="error-banner mb-16">
+            {editor.errors.map((e, i) => <div key={i}>{e}</div>)}
+          </div>
+        )}
+
+        {/* Update this tool from a manufacturer spec sheet. Edit-mode only —
+            every proposal it makes lands in the draft, so there has to be a
+            draft to land in and a Save to commit it. */}
+        {editing && !scan.hasProposals && (
+          <div className="spec-scan-bar mb-16">
+            <ScanLine size={15} style={{ color: 'var(--blue)', flexShrink: 0 }} />
+            <span className="text-sm text-sub" style={{ flex: 1 }}>
+              Update this tool from a manufacturer spec sheet or product page.
+            </span>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => scan.setOpen(true)}>
+              <ScanLine size={14} /> Scan spec sheet
+            </button>
+          </div>
+        )}
+
+        {editing && scan.hasProposals && (
+          <SpecSummary
+            pending={scan.pendingCount}
+            accepted={scan.acceptedCount}
+            typeNotice={scan.typeNotice}
+            sourceFile={scan.sourceFile}
+            keepSourceFile={scan.keepSourceFile}
+            onKeepSourceFile={scan.setKeepSourceFile}
+            canAttach={googleAuthenticated}
+            onAcceptAll={scan.acceptAllPending}
+            onDiscard={scan.discardProposals}
+          />
+        )}
 
         {/* Insert-style tool: pairing bar + the Holder Body / Insert component
             groups (each with its own Geometry & setup, Photo, Location and
@@ -436,13 +516,18 @@ export default function ToolDetail() {
                 separate read-out grid it replaced showed the same dimensions a
                 second time, which is what Phase 4 exists to remove. */}
             <GeometrySection
-              key={`geo-${tool.id}`}
-              tool={tool}
-              tools={tools}
-              isSaving={isSaving}
-              onSave={sectionSave}
+              data={draft}
+              setData={editor.setData}
+              setField={editor.setField}
+              editing={editing}
+              geoIssueFields={editor.geoIssueFields}
+              listOptions={editor.datalistOptions}
+              proposals={scan.inlineProposalMap}
+              onResolveProposal={scan.resolveProposal}
               title={pairing ? 'Combined Geometry (Fusion)' : 'Geometry'}
             />
+
+            {editing && <InsertStyleBlock data={draft} setField={editor.setField} afterSaveHint={false} />}
 
             {showAssemblies && (
               <AssembliesSection
@@ -495,6 +580,34 @@ export default function ToolDetail() {
           </div>
 
           <div className="detail-layout-right">
+            {/* Identity — the editable home of status, type, unit, description
+                and Tool ID. In view mode it shows only what the sticky header
+                does not, so nothing is displayed twice. */}
+            <IdentityPanel
+              data={draft} setField={editor.setField} setStatus={editor.setStatus}
+              editing={editing} idMode={idMode}
+              hasMachineNum={editor.hasMachineNum} machineNum={editor.machineNum}
+              locEditable={editor.locEditable}
+              descSuggestion={editor.descSuggestion} descStale={editor.descStale}
+              replacementTool={replacement}
+              onPickReplacement={() => editor.setPickReplacement(true)}
+            />
+
+            {/* A scan's purchasing rows replay against a FROZEN base, so the
+                ordinary panel is stood down for that session — it would be a
+                second, competing editor of the same object. */}
+            {editing && (scan.purchRows.length > 0 || scan.homelessProposals.length > 0) && (
+              <SpecPurchasingPanel
+                rows={scan.purchRows}
+                homeless={scan.homelessProposals}
+                unit={draft.unit}
+                newMfgAck={scan.newMfgAck}
+                onAck={scan.setNewMfgAck}
+                onResolveRow={scan.resolvePurchRow}
+                onResolveField={scan.resolveProposal}
+              />
+            )}
+
             {/* Once a component is linked, the Photo / Location / Purchasing
                 panels live per-component in the groups above — the pairing is a
                 relationship, not a physical object with its own drawer. Until
@@ -534,11 +647,27 @@ export default function ToolDetail() {
                   <LocationPicker tool={tool} />
                 </Section>
 
-                <PurchasingSection
-                  tool={tool}
-                  isSaving={isSaving}
-                  onSave={metaSave}
-                />
+                {/* ⚠️ Controlled while the page is in edit mode — the
+                    uncontrolled panel writes `{...tool, purchasing}` from the
+                    SAVED record, which would revert every unsaved edit beside
+                    it. Outside edit mode it keeps its own pencil and quick
+                    save: purchasing is metadata-only, so that costs no Fusion
+                    round-trip and is the fastest way to fix a price. */}
+                {editing ? (
+                  scan.purchRows.length === 0 && (
+                    <PurchasingSection
+                      tool={draft}
+                      value={draft.purchasing}
+                      onChange={p => editor.setField('purchasing', p)}
+                    />
+                  )
+                ) : (
+                  <PurchasingSection
+                    tool={tool}
+                    isSaving={isSaving}
+                    onSave={metaSave}
+                  />
+                )}
               </>
             )}
 
@@ -552,20 +681,10 @@ export default function ToolDetail() {
                 Sequence Details, so there is nothing to link by hand. */}
             <ProgramUsageSection tool={tool} />
 
-            <Section title="Notes & Tags" icon={StickyNote}>
-              {tool.notes && (
-                <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.6, marginBottom: 10 }}>{tool.notes}</p>
-              )}
-              {(tool.tags || []).length > 0 && (
-                <div className="tag-list mb-12">
-                  {tool.tags.map(t => <span key={t} className="tag">{t}</span>)}
-                </div>
-              )}
-              {tool.revision_notes && <Field label="Revision Notes" value={tool.revision_notes} />}
-              {!tool.notes && !(tool.tags || []).length && !tool.revision_notes && (
-                <span className="detail-field-empty text-sm">No notes yet.</span>
-              )}
-            </Section>
+            <NotesPanel
+              data={draft} setField={editor.setField} editing={editing}
+              tagInput={editor.tagInput} setTagInput={editor.setTagInput}
+            />
 
             <FilesSection
               tool={tool}
@@ -581,6 +700,37 @@ export default function ToolDetail() {
             />
           </div>
         </div>
+
+        {/* ⚠️ ONE SAVE, ONE PLACE. The page has a single Edit button and this
+            single bar — the owner's call: "a mode that lets you edit
+            intentionally, not a separate page". Nothing here says whether the
+            edit is going to Fusion or only to the metadata file; that is routed
+            in handleSave and is deliberately not the user's problem. */}
+        {editing && (
+          <div className="form-actions-bar">
+            {/* Delete stays edit-only, and pushed away from Save/Cancel so it
+                is not fat-fingered. The heavy confirmation is the page's. */}
+            <button
+              className="btn btn-danger"
+              onClick={() => { setDeleteError(''); setDeleteMode('normal'); }}
+              disabled={isSaving}
+              title="Delete this tool permanently"
+              style={{ marginRight: 'auto' }}
+            >
+              <Trash2 size={15} /> Delete
+            </button>
+            <span className={`form-dirty ${editor.dirty ? 'show' : ''}`}>
+              {editor.dirty ? 'Unsaved changes' : 'No changes'}
+            </span>
+            <span className="form-hint text-xs text-sub">⌘/Ctrl+S to save · Esc to cancel</span>
+            <button className="btn btn-secondary" onClick={editor.handleCancel} disabled={isSaving}>Cancel</button>
+            <button className="btn btn-primary" onClick={editor.handleSave} disabled={isSaving}>
+              {isSaving
+                ? <><span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} /> Saving…</>
+                : <><Save size={15} /> Save Changes</>}
+            </button>
+          </div>
+        )}
 
         {/* Which library this tool lives in (multi-library). Reads and writes go
             back to this library. Muted one-liner at the bottom of the page. */}
@@ -679,6 +829,24 @@ export default function ToolDetail() {
         )}
 
         {/* Delete confirmation modal (shared with edit mode) */}
+        <ExtractUpdateModal
+          open={scan.open}
+          tool={draft}
+          onClose={() => scan.setOpen(false)}
+          onProposals={scan.receiveProposals}
+        />
+
+        {/* Reuses the linked-tools picker — the same search the landing page
+            runs, so a ProShop #, EDP# or retired ID finds the replacement
+            exactly as it would anywhere else. Stores the tracking id. */}
+        {editor.pickReplacement && (
+          <ToolLinkPicker
+            tool={{ id: draft.id }}
+            onPick={(t) => { editor.setField('replaced_by', t.id); editor.setPickReplacement(false); }}
+            onClose={() => editor.setPickReplacement(false)}
+          />
+        )}
+
         {deleteModalEl}
 
         {promoteLibId !== null && (

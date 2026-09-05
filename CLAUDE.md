@@ -1433,11 +1433,22 @@ src/
                                   # + .landing-main (flex:1, all search/results content)
                                   # Machine filter chips appear only when machines are configured;
                                   # default machine pre-selected on load via machineInitialised ref
-    ToolDetail.jsx                # Detail view with frozen left action sidebar + sticky header
+    ToolDetail.jsx                # THE tool page — view and edit, one screen. The
+                                  # sidebar Edit button unlocks every field in
+                                  # place and raises ONE Save bar; there is no
+                                  # separate edit route. The save is a three-way
+                                  # merge (tool/editPatch.js) so the panels that
+                                  # save on their own stay live during an edit,
+                                  # and it routes itself between the metadata-only
+                                  # write and the full Fusion write.
+                                  # Frozen left action sidebar + sticky header
                                   # Sections: Identity (incl. machine tool#), Geometry,
                                   #           Assemblies, Presets, Setup, History, Merge History
                                   # Right sidebar: Identity, Photo, Purchasing, Notes & Tags, Files
-    ToolForm.jsx                  # Edit form with sticky action bar + dirty guard
+    ToolForm.jsx                  # The NEW-tool form only — an existing tool is
+                                  # edited IN PLACE on its own page (ToolDetail).
+                                  # The editing brain is shared: tool/useToolEditor.js.
+                                  # Callers: AddToolFlow, MergeFlow/NewToolStep
     LocationSystemSettings.jsx    # Settings section: configure Location Systems
                                   # (levels/delimiters/ProShop export + the collapsible
                                   # per-system ProShop IMPORT rule), normalize

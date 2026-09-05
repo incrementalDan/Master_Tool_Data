@@ -1,6 +1,6 @@
 # TOOL_PAGE_UNIFICATION_PLAN.md — one tool page, one draft, two save destinations
 
-> **STATUS: Phases 1-2 and 4 shipped ✅; Phases 3 and 5 planned.** Supersedes and absorbs
+> **STATUS: Phases 1-4 shipped ✅; Phase 5 (owner-led UI refinement) planned.** Supersedes and absorbs
 > `UI_CONSISTENCY_AUDIT.md` §12 ("View/edit unification, part 2"), whose owner
 > decisions A/B/C still stand except where noted below — **decision B is
 > retired**, see "What this changes about §12".
@@ -247,14 +247,65 @@ have shipped and surfaced as a blank page the first time someone scanned a spec
 sheet. `npm run lint` caught two other slips (a handler and a prop whose meaning
 changed on the way out), which is the whole reason that config exists.
 
-### Phase 3 — one page, view and edit unified
-- Lift `editing` into the page; `ToolFields` already switches on it.
-- Autosave sections edit in place, always — no mode.
-- Buffered sections switch to inputs and raise one **Save** bar.
-- Fold the form-only fields (description + Suggest, `tool_id`, tool type, unit,
-  insert toggle) into Identity as controlled inputs.
-- Retire the `ToolForm` route. `AddToolFlow` is the last caller — decide then
-  whether it keeps using it or renders the unified page in new-tool mode.
+### Phase 3 — one page, view and edit unified ✅ SHIPPED
+
+⚠️ **THE OWNER CHANGED THE SHAPE OF THIS PHASE, and the change is the point.**
+The draft above had autosave sections editable *always* and buffered sections
+raising their own Save. The owner's correction: *"when you go to an existing
+tool's page, the fields shouldn't just be editable without clicking something to
+be in an edit mode… It's just a mode that lets you edit intentionally, not a
+separate page like it was."* So:
+
+> **One page, one Edit button, one Save bar.** The mode stays; the *navigation*
+> is what was wrong.
+
+That decision made the phase SMALLER, not bigger — and it collapsed the hard
+part. With one page draft the spec-sheet scan works exactly as it always did
+(it proposes across geometry, identity and purchasing at once, which no
+per-section draft could carry), so it needed no redesign at all.
+
+What shipped:
+- **`useToolEditor`** — the draft, the scan, the description suggestion, the
+  validation and the save, extracted from `ToolForm`. ⚠️ **One implementation,
+  two callers**: the page in edit mode, and `ToolForm` for a tool that does not
+  exist yet. They were one file only because the page used to navigate to it.
+- **`ToolForm` is now the NEW-tool form** and nothing else — the one job the
+  page cannot do (type picker, unit choice, a validation gate before the first
+  write). Callers: `AddToolFlow`, `MergeFlow/NewToolStep`.
+- **`ToolProfileFields` takes `readOnly`** — the drawing is on the page all the
+  time and unlocks with everything else. ⚠️ `readOnly` (the page's mode) is kept
+  **separate from `derived`** (reach, undercut Ø): styling every box as derived
+  while merely viewing would claim the whole drawing is computed.
+- **`IdentityPanel` / `NotesPanel`** — view/edit in place. ⚠️ The sticky header
+  is the page TITLE, not a field display, so in view mode Identity shows only
+  what the header does not (status, replacement, type, unit) — "every field in
+  exactly one place" survives.
+- **`editPatch.js` — the save is a THREE-WAY MERGE**, and this is the rule that
+  keeps the other panels alive during an edit. Presets, assemblies, purchasing,
+  location and photos still save on their own while edit mode is open, so
+  writing the whole draft would push a stale copy of *those* over whatever they
+  wrote in the meantime. Instead: diff the draft against the snapshot taken when
+  Edit was pressed, and apply that patch to the **current** record.
+- **The save routes itself** — `metadataOnlyPatch` decides: anything Fusion also
+  holds takes the full write, an app-only edit skips the library round-trip. The
+  user is never told which, which is the whole point ("the user should not know
+  or care about any of this").
+
+Four things the adversarial pass caught, each silent:
+- **The keyboard handler was ungated** — the hook is mounted the whole time the
+  tool is on screen, so Ctrl+S was being swallowed (and Escape answered) while
+  merely *viewing*.
+- **The leave guard only knew about presets** — leaving the page with the edit
+  bar open threw the draft away without a word.
+- **The scan session outlived edit mode** — proposals reappeared on the next
+  Edit, pointing at values that were no longer there.
+- **The fixed edit bar lay across the last panel** — no bottom clearance.
+
+Still deliberately their own editors, unchanged: Presets, Assemblies, Location,
+Photo, Files, Speeds & Feeds refs, Linked Tools. Purchasing switches to
+controlled while the page is in edit mode (the uncontrolled panel writes from
+the SAVED record and would revert every unsaved edit beside it) and keeps its
+own pencil outside it.
 
 ### Phase 4 — the drawing becomes the geometry layout ✅ SHIPPED
 The drawing itself moved out of the modal into **`ToolProfileFields.jsx`**, a
