@@ -1,6 +1,6 @@
 # TOOL_PAGE_UNIFICATION_PLAN.md — one tool page, one draft, two save destinations
 
-> **STATUS: Phases 1-2 shipped ✅; Phases 3-5 planned.** Supersedes and absorbs
+> **STATUS: Phases 1-2 and 4 shipped ✅; Phases 3 and 5 planned.** Supersedes and absorbs
 > `UI_CONSISTENCY_AUDIT.md` §12 ("View/edit unification, part 2"), whose owner
 > decisions A/B/C still stand except where noted below — **decision B is
 > retired**, see "What this changes about §12".
@@ -256,10 +256,32 @@ changed on the way out), which is the whole reason that config exists.
 - Retire the `ToolForm` route. `AddToolFlow` is the last caller — decide then
   whether it keeps using it or renders the unified page in new-tool mode.
 
-### Phase 4 — the drawing becomes the geometry layout
-- Merge `ToolProfileModal` into the page; drop its private draft.
-- Partition the fields; add the exactly-once test.
-- Fallback grid for the two undrawable types.
+### Phase 4 — the drawing becomes the geometry layout ✅ SHIPPED
+The drawing itself moved out of the modal into **`ToolProfileFields.jsx`**, a
+controlled `({ draft, setDraft })` component. `ToolProfileModal` is now a thin
+wrapper that owns the draft, the dirty check and the modal chrome and renders
+it; **`tool/GeometrySection.jsx`** renders the same component on the page, above
+a `ToolFields` told (via a new `hideFields` prop) to skip everything the drawing
+already owns. One component, so the page and the modal can never draw the tool
+two different ways — which is what the earlier mockup attempts kept doing.
+
+Two things had to change for it to fit the page rather than a modal:
+- **`.tp-body` wraps and `.tp-side` flexes** — it was sized for a modal, so it
+  clipped inside the Geometry panel.
+- **⚠️ The length dimensions went ORDINATE.** The nested arrowed stack spent a
+  94px lane per dimension, and every length shares one origin anyway (the tip),
+  so it drew four spans of the same datum. One horizontal leader per length at
+  its own height took the canvas from **634px to 446px**, which is what lets the
+  Cutter and Shaft Segments panels sit beside the drawing instead of below it
+  (446 + a 20px gap + 291 = the 757px the panel has). A lane is now spent only
+  on a genuine collision — a flute length that IS the shoulder length is
+  ordinary, not an edge case. ⚠️ The MIN OOH datum then had to size the canvas
+  too: it reaches further left than lane 0 and steps out again when it collides,
+  and with no wide lane stack incidentally covering it, sizing from the lane
+  count alone put its label off the left edge.
+
+Fallback: `boring head` and `turning general` are undrawable, so
+`GeometrySection` renders the full `ToolFields` grid for them — verified.
 
 ### Phase 5 — UI refinement pass
 Owner-led. Grouping, spacing, and the long-tail inline-style cleanup
@@ -278,7 +300,10 @@ Owner-led. Grouping, spacing, and the long-tail inline-style cleanup
    autosave section. Proposed rule: **metadata is a working record, Fusion is
    the published one** — autosave anything, block the Fusion save on invalid.
 3. **`toolProfileUi.test.jsx` and `shaftSeen.test.jsx`** exercise the modal.
-   Phase 4 must keep them green against the page, not rewrite them to match it.
+   Phase 4 kept them green against the page rather than rewriting them to match
+   it — the modal still renders, it just delegates the drawing. The ordinate
+   change touched exactly the two assertions that named the old extension lines,
+   and added lane-sharing, width and on-canvas-bounds tests beside them.
 4. **Autosave cadence.** Copy `HolderDetail` exactly — 900ms debounce,
    `Unsaved… → Saving… → Saved` in the header, undo stack, leave guard
    (`HolderDetail.jsx:397`). One pattern in the app, not two.
