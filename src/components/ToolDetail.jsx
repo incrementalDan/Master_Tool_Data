@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  GitMerge, Ruler, StickyNote, Clock, AlertTriangle, Camera,
+  GitMerge, StickyNote, Clock, Camera,
   FileJson, MapPin, CloudOff,
 } from 'lucide-react';
 import PresetPanel from './PresetPanel.jsx';
@@ -23,9 +23,9 @@ import {
 } from '../schema/insertFamilies.js';
 import InfoTip from './InfoTip.jsx';
 import { useApp } from '../context/AppContext.jsx';
-import { TOOL_TYPE_LABELS, validateGeometry, fusionToolToInternal, readOohFromFusion } from '../schema/toolSchema.js';
-import ToolFields from './ToolFields.jsx';
+import { TOOL_TYPE_LABELS, fusionToolToInternal, readOohFromFusion } from '../schema/toolSchema.js';
 import ToolStickyHeader from './tool/ToolStickyHeader.jsx';
+import GeometrySection from './tool/GeometrySection.jsx';
 import ToolBanners from './tool/ToolBanners.jsx';
 import ToolActionSidebar from './tool/ToolActionSidebar.jsx';
 import Section from './tool/ToolSection.jsx';
@@ -129,11 +129,6 @@ export default function ToolDetail() {
     setReconcileResults(null);
     navigate(`/merge/${tool.id}`, { state: { reconcileIncoming: incoming } });
   };
-  const geoIssues = useMemo(
-    () => tool ? validateGeometry(tool) : [],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [tool?.tool_type, tool?.diameter, tool?.flute_length, tool?.shoulder_length, tool?.min_ooh, tool?.overall_length, tool?.corner_radius]
-  );
 
   useEffect(() => {
     if (!tool) return;
@@ -437,29 +432,17 @@ export default function ToolDetail() {
 
         <div className="detail-layout">
           <div className="detail-layout-left">
-            <Section
-              title={pairing ? 'Combined Geometry (Fusion)' : 'Geometry & Setup'}
-              icon={Ruler}
-            >
-              {pairing && (
-                <div className="text-sub text-xs" style={{ marginBottom: 10, lineHeight: 1.5 }}>
-                  The Fusion entry's cutting geometry for the combined holder&nbsp;body&nbsp;+&nbsp;insert
-                  unit — what CAM programs against. Component-specific specs live in the
-                  Holder Body / Insert sections above.
-                </div>
-              )}
-              <ToolFields tool={tool} mode="view" onOpenProfile={() => setShowProfile(true)} />
-              {geoIssues.length > 0 && (
-                <div className="warn-banner" style={{ marginTop: 8 }}>
-                  {geoIssues.map((issue, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <AlertTriangle size={12} style={{ flexShrink: 0 }} />
-                      {issue.message}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Section>
+            {/* The drawing IS the geometry editor — see GeometrySection. The
+                separate read-out grid it replaced showed the same dimensions a
+                second time, which is what Phase 4 exists to remove. */}
+            <GeometrySection
+              key={`geo-${tool.id}`}
+              tool={tool}
+              tools={tools}
+              isSaving={isSaving}
+              onSave={sectionSave}
+              title={pairing ? 'Combined Geometry (Fusion)' : 'Geometry'}
+            />
 
             {showAssemblies && (
               <AssembliesSection

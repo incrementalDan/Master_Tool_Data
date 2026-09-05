@@ -6739,6 +6739,11 @@ input.sf-ref-num { text-align: right; }
 
 .tp-body {
   display: flex;
+  /* ⚠️ WRAPS, because this is rendered in two places now: the pop-up, which is
+     wide enough for the drawing and the side panel abreast, and the tool page's
+     Geometry section, whose column is not — there the side panel dropped off
+     the right edge. In the modal there is room, so it never wraps. */
+  flex-wrap: wrap;
   gap: 20px;
   padding: 18px 20px;
   overflow: auto;
@@ -6844,7 +6849,7 @@ input.sf-ref-num { text-align: right; }
    flute count and three narrow number cells. It is a column, so it gets a
    column's width and the modal narrows to fit. */
 .tp-side {
-  flex: 0 1 auto; width: 316px; min-width: 268px; max-width: 316px;
+  flex: 1 1 268px; width: 316px; min-width: 268px; max-width: 316px;
   display: flex; flex-direction: column; gap: 14px;
 }
 .tp-panel {

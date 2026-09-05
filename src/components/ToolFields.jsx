@@ -162,8 +162,17 @@ export default function ToolFields({
   tool, mode, setField, geoIssueFields,
   proposals = null, onResolveProposal = null, listOptions = null,
   onOpenProfile = null,
+  // ⚠️ EVERY FIELD APPEARS EXACTLY ONCE. When the tool page renders the profile
+  // drawing, the drawing IS the editor for the dimensions it carries — so those
+  // fields must not also appear in this grid. The caller passes the set the
+  // drawing owns (profileDimensions), and geometryFieldsShown() below is the
+  // one place that subtraction happens.
+  hideFields = null,
 }) {
   const sections = getToolFieldSections(tool.tool_type);
+  const geometryFields = hideFields
+    ? sections.geometry.filter(f => !hideFields.has(f))
+    : sections.geometry;
   const edit = mode === 'edit';
   const warn = geoIssueFields || new Set();
   const propFor = (field) => (edit && proposals ? proposals.get(field) : null) || null;
@@ -425,12 +434,14 @@ export default function ToolFields({
 
   return (
     <>
+      {geometryFields.length > 0 && (
       <div className="tool-fields-section">
         <div className="tool-fields-grid-title">Geometry</div>
         <div className={gridClass}>
-          {sections.geometry.map(renderField)}
+          {geometryFields.map(renderField)}
         </div>
       </div>
+      )}
 
       {sections.showThreadBlock && (
         <ThreadBlock tool={tool} mode={mode} setField={setField} fields={sections.thread} strip={strip} />
