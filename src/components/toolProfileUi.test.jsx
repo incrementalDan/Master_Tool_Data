@@ -355,12 +355,52 @@ describe('length dimensions are ordinate', () => {
     expect(lanes.size, `expected one lane, got ${[...lanes]}`).toBe(1);
   });
 
-  it('⚠️ two EQUAL lengths step out, rather than stacking on each other', () => {
-    // A tool whose flute length IS its shoulder length is ordinary, not an edge
-    // case — both land at the same height and one has to move sideways.
+  // ⚠️ EQUAL LENGTHS MOVE APART VERTICALLY, NOT SIDEWAYS. A drill whose shoulder
+  // IS its MIN OOH is ordinary, not an edge case. They used to fan out into
+  // extra lanes at 94px each, which is not what an ordinate dimension does and
+  // took the drawing past the width its container has — the Cutter and Shaft
+  // Segments panels then wrapped underneath it. A print keeps one column and
+  // jogs the leader instead.
+  it('⚠️ two EQUAL lengths stay in ONE column and separate vertically', () => {
     const html = render({ ...base, flute_length: 1.2, shoulder_length: 1.2, overall_length: 3 });
-    const lanes = new Set(stackLefts(html).map(x => Math.round(x)));
-    expect(lanes.size, 'equal lengths must not share a lane').toBeGreaterThan(1);
+    const boxes = [...html.matchAll(/class="(tp-dimbox[^"]*)"[^>]*?style="([^"]*)"/g)]
+      .filter(m => /tp-dimbox-fixed/.test(m[1]))
+      .map(m => ({
+        left: Number(/left:(-?[\d.]+)px/.exec(m[2])?.[1]),
+        top: Number(/top:(-?[\d.]+)px/.exec(m[2])?.[1]),
+      }));
+    expect(boxes.length).toBeGreaterThan(2);
+    expect(new Set(boxes.map(b => Math.round(b.left))).size, 'one column').toBe(1);
+    const tops = boxes.map(b => b.top).sort((a, b) => a - b);
+    for (let i = 1; i < tops.length; i++) {
+      expect(tops[i] - tops[i - 1], 'two boxes overlap vertically').toBeGreaterThanOrEqual(40);
+    }
+  });
+
+  it('⚠️ and the leader DOG-LEGS to reach a box that moved', () => {
+    // A straight leader to a displaced box would point at the wrong height —
+    // the number would name a dimension the drawing does not show.
+    const html = render({ ...base, flute_length: 1.2, shoulder_length: 1.2, overall_length: 3 });
+    const paths = [...html.matchAll(/<path d="([^"]*)"[^>]*class="tp-ord"/g)].map(m => m[1]);
+    expect(paths.length).toBeGreaterThan(2);
+    // At least one has the three segments of a jog; the undisplaced one is straight.
+    expect(paths.some(d => (d.match(/L/g) || []).length === 3), 'no dogleg drawn').toBe(true);
+    expect(paths.some(d => (d.match(/L/g) || []).length === 1), 'nothing left straight').toBe(true);
+  });
+
+  // ⚠️ THE BUG THIS COLUMN WAS BUILT FOR. A drill whose shoulder equals its MIN
+  // OOH — ordinary — put three values at nearly one height. Each stepped out a
+  // 94px lane, the canvas grew past the width its container has, and the Cutter
+  // and Shaft Segments panels wrapped underneath the drawing. The width IS the
+  // symptom, so it is what this asserts.
+  it('⚠️ stays narrow enough for the side panels when three values crowd', () => {
+    const html = render({
+      ...base, shaft_segments: [],
+      tool_type: 'drill', diameter: 0.1719, shank_diameter: 0.1969,
+      flute_length: 1.531, shoulder_length: 1.64, min_ooh: 1.64, overall_length: 3.7812,
+    });
+    // .tp-side is 268px min + a 20px gap inside a 757px panel.
+    expect(svgWidth(html), 'the panels would wrap below the drawing').toBeLessThanOrEqual(469);
   });
 
   it('is narrower than the nested stack it replaced', () => {
@@ -385,11 +425,12 @@ describe('the dimension boxes clear the tool and each other', () => {
         fixed: /tp-dimbox-fixed/.test(m[1]), holder: /tp-dimbox-holder/.test(m[1]) };
     });
   // Each length is an ORDINATE leader running from its value box across to the
-  // part: its x2 IS the part's left edge (less the 2px it stops short by).
-  // (It read the nested stack's extension lines before the dimensions went
-  // ordinate — those spanned two heights each and no longer exist.)
-  const partLeft = (html) => Math.min(...[...html.matchAll(/x2="([\d.]+)"[^>]*class="tp-ord"/g)]
-    .map(m => Number(m[1]))) + 2;
+  // part, and it DOG-LEGS when the box had to move to clear a neighbour — so it
+  // is a path, not a line, and the part's edge is where the path ENDS (less the
+  // 2px it stops short by).
+  const partLeft = (html) => Math.min(...[...html.matchAll(/<path d="([^"]*)"[^>]*class="tp-ord"/g)]
+    .map(m => Number(/L\s+([\d.]+)\s+[\d.]+$/.exec(m[1].trim())?.[1]))
+    .filter(Number.isFinite)) + 2;
 
   const tool = { tool_type: 'flat end mill', unit: 'inches', diameter: 0.5,
     flute_length: 1, shoulder_length: 1.2, overall_length: 3, shank_diameter: 0.5,
