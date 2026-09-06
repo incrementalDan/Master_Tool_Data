@@ -143,10 +143,21 @@ export function previewAsmNumber(asmConfig, toolIdConfig) {
   });
 }
 
-// Backfill auto-mode asm_number in-memory for assemblies missing one. Auto is
-// deterministic (composed from holder/tool_id/ooh) so it's stable across loads;
-// sequential/RTA are NOT backfilled here (they need stored state / user input —
-// they get their number at assembly creation / entry). Returns a new tools array.
+// Backfill auto-mode asm_number in-memory: fill a missing one, and RE-DERIVE a
+// stale one. Auto is deterministic (composed from holder/tool_id/ooh) so it's
+// stable across loads; sequential/RTA are NOT backfilled here (they need stored
+// state / user input — they get their number at assembly creation / entry).
+// Returns a new tools array (the same reference when nothing changed).
+//
+// ⚠️ The correction is SILENT — nothing is reported to the user. An Auto number
+// is a pure product of its fields with no edit UI, so a stored value that
+// differs is always stale, never custom: there is no decision to put to anyone.
+// It is also only a REFERENCE, not a link (the real links are
+// preset_meta.assembly_id and assembly.holder_id), so a stale one costs nothing
+// while it waits for the tool's next write to persist it. This page used to
+// raise an "N assembly numbers corrected — Save" banner; it was removed because
+// the only action it offered was a save the app performs anyway, and the flag
+// backing it survived that save in memory, so it read as un-clearable.
 export function backfillAsmNumbers(tools, shopSettings, components = null, holders = null) {
   const asmConfig = shopSettings?.assembly_id_system;
   if (!asmConfig || asmConfig.mode !== 'auto') return tools;
@@ -167,47 +178,35 @@ export function backfillAsmNumbers(tools, shopSettings, components = null, holde
     if (t.pairing && !pairedIdPart) return t;
     const idToken = t.pairing ? pairedIdPart : t.tool_id;
     let touched = false;
-    const corrected = [];
     const assemblies = (t.assemblies || []).map(a => {
       const asm_number = composeAsmNumber(asmConfig, toolIdConfig, {
         // Resolve the holder EXACTLY as writeLogicalTool's stamper does — cached
         // description first, then the holder library by guid. If this differs
-        // from the stamper the two compose different numbers and the "out of
-        // date" flag fires on every load and can never be saved away.
+        // from the stamper the two compose different numbers, so every load
+        // rewrites what the last save stored and the record never settles.
         holderDescription: a.holder_description
           || (holders || []).find(h => h.guid === a.holder_guid)?.description || '',
         tool_id: idToken, ooh: a.ooh, assembly_id: a.assembly_id,
       });
-      // ⚠️ The COMPARE is strict; only the BANNER is tolerant. A number spelling
-      // the holder the retired short way ("30-SK13-60-1001-2.125") IS stale —
-      // the holder has one name, its description — so it is corrected like any
-      // other stale value and persists on the tool's next write (an ordinary
-      // save, or the holder re-stamp pass, which writes metadata too). What the
-      // tolerance still does is keep that correction QUIET: every stored number
-      // spells the holder the old way, so counting them all would raise the
-      // "assembly numbers corrected" banner on the whole library at once — a
-      // flag nobody can act on, over a value that is a reference, not a link.
-      // Silent when unambiguous, surfaced when it's news: the same rule the rest
-      // of the self-healing passes follow.
-      if (!asm_number || asm_number === a.asm_number) return a;
-      touched = true;
-      const spellingOnly = holderTokensMatch(asm_number, a.asm_number);
+      // The COMPARE is strict. A number spelling the holder the retired short
+      // way ("30-SK13-60-1001-2.125") IS stale — the holder has one name, its
+      // description — so it is corrected like any other stale value and
+      // persists on the tool's next write (an ordinary save, or the holder
+      // re-stamp pass, which writes metadata too).
+      //
       // An Auto number is a PURE product of holder + tool_id + OOH and has no
       // edit UI in this mode (AssemblyForm only exposes it for proshop_rta), so
       // there is no custom value to protect: a stored value that differs is
-      // simply STALE and is corrected. Count only corrections — a first-time
-      // fill is normal stamping, not something to tell the user about. Sources
-      // of staleness the edit path can't catch: OOH edited in Fusion, a Tool ID
-      // renumber, a holder description change, or assemblies created before
-      // Auto mode was configured.
-      if (a.asm_number && !spellingOnly) corrected.push({ from: a.asm_number, to: asm_number });
+      // simply STALE and is corrected. Sources of staleness the edit path can't
+      // catch: OOH edited in Fusion, a Tool ID renumber, a holder description
+      // change, or assemblies created before Auto mode was configured.
+      if (!asm_number || asm_number === a.asm_number) return a;
+      touched = true;
       return { ...a, asm_number };
     });
     if (!touched) return t;
     changed = true;
-    // Runtime-only flag (like _duplicatePresets / _drift) — surfaced on the tool
-    // page and cleared by the next save, which persists the corrected numbers.
-    return { ...t, assemblies, ...(corrected.length > 0 ? { _asmNumbersFixed: corrected } : {}) };
+    return { ...t, assemblies };
   });
   return changed ? next : tools;
 }

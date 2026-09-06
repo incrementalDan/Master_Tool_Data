@@ -93,16 +93,14 @@ describe('backfillAsmNumbers', () => {
     const out = backfillAsmNumbers(tools, shop);
     expect(out[0].assemblies[0].asm_number).toBe('NBT30-SK13C-60-1001-2.125'); // filled
     expect(out[0].assemblies[1].asm_number).toBe('NBT30-SK13C-90-1001-3');     // corrected
-    expect(out[0]._asmNumbersFixed).toEqual([          // reports old → new, not just a count
-      { from: 'NBT30-SK13C-90-1001-2.5', to: 'NBT30-SK13C-90-1001-3' },
-    ]);
+    // Idempotent — the correction settles in one pass.
+    expect(backfillAsmNumbers(out, shop)).toBe(out);
   });
 
   // The retired short holder spelling ("30-SK13-60" for "NBT30-SK13C-60") IS
-  // stale — a holder has one name, its description. It is corrected like any
-  // other stale value, but SILENTLY: every stored number spells it the old way,
-  // so flagging them would raise the banner on the whole library at once.
-  it('corrects the retired holder spelling, without flagging it', () => {
+  // stale — a holder has one name, its description — so it is corrected like
+  // any other stale value.
+  it('corrects the retired holder spelling', () => {
     const tools = [{
       tool_id: '1001',
       assemblies: [{
@@ -112,14 +110,13 @@ describe('backfillAsmNumbers', () => {
     }];
     const out = backfillAsmNumbers(tools, shop);
     expect(out[0].assemblies[0].asm_number).toBe('NBT30-SK13C-60-1001-2.125');
-    expect(out[0]._asmNumbersFixed).toBeUndefined();   // corrected, not announced
     // Idempotent — a second pass has nothing to do.
     expect(backfillAsmNumbers(out, shop)).toBe(out);
   });
 
-  // A number that is stale for a REAL reason still flags, even when the holder
-  // spelling is also being corrected in the same step.
-  it('still flags when more than the spelling changed', () => {
+  // A number stale for a REAL reason (the OOH moved) is corrected in the same
+  // step as the holder spelling.
+  it('corrects a real staleness alongside the spelling', () => {
     const tools = [{
       tool_id: '1001',
       assemblies: [{
@@ -128,19 +125,15 @@ describe('backfillAsmNumbers', () => {
       }],
     }];
     const out = backfillAsmNumbers(tools, shop);
-    expect(out[0]._asmNumbersFixed).toEqual([
-      { from: '30-SK13-60-1001-2.125', to: 'NBT30-SK13C-60-1001-3' },
-    ]);
+    expect(out[0].assemblies[0].asm_number).toBe('NBT30-SK13C-60-1001-3');
   });
 
-  it('is idempotent and raises no flag when every number is already correct', () => {
+  it('is idempotent when every number is already correct', () => {
     const tools = [{
       tool_id: '1001',
       assemblies: [{ assembly_id: 'a', holder_description: 'NBT30-SK13C-60', ooh: 2.125, asm_number: 'NBT30-SK13C-60-1001-2.125' }],
     }];
-    const out = backfillAsmNumbers(tools, shop);
-    expect(out).toBe(tools);                        // untouched reference
-    expect(out[0]._asmNumbersFixed).toBeUndefined();
+    expect(backfillAsmNumbers(tools, shop)).toBe(tools);   // untouched reference
   });
 
   it('never touches numbers in a non-derived mode (ProShop RTA)', () => {
@@ -186,13 +179,16 @@ describe('backfillAsmNumbers', () => {
   });
 });
 
-describe('backfillAsmNumbers — no FALSE "out of date" flags', () => {
+// The checker MUST compose exactly like writeLogicalTool's stamper. If the two
+// ever disagree, every load rewrites what the last save stored and the record
+// never settles — the tool looks permanently dirty for no reason.
+describe('backfillAsmNumbers — the checker composes like the stamper', () => {
   const shopAuto = { assembly_id_system: { mode: 'auto' }, tool_id_system: { separator: '-' } };
 
   it('resolves the holder from the LIBRARY when the cached description is blank', () => {
     // The stamper (writeLogicalTool) falls back to the holder library by guid.
-    // If this checker didn't, the two would compose different numbers and the
-    // flag would fire on every load and could never be saved away.
+    // If this checker didn't, the two would compose different numbers and each
+    // load would undo the last save.
     const tools = [{
       tool_id: '1001',
       assemblies: [{
@@ -201,9 +197,7 @@ describe('backfillAsmNumbers — no FALSE "out of date" flags', () => {
       }],
     }];
     const holders = [{ guid: 'H1', description: 'NBT30-SK13C-150' }];
-    const out = backfillAsmNumbers(tools, shopAuto, null, holders);
-    expect(out).toBe(tools);                        // nothing to correct
-    expect(out[0]._asmNumbersFixed).toBeUndefined();
+    expect(backfillAsmNumbers(tools, shopAuto, null, holders)).toBe(tools);  // nothing to correct
   });
 
   it('float noise in the OOH does not produce a spurious mismatch', () => {
@@ -216,8 +210,6 @@ describe('backfillAsmNumbers — no FALSE "out of date" flags', () => {
         ooh: 1.4000000000000001, asm_number: 'NBT30-SK13C-150-M-132-1.4',
       }],
     }];
-    const out = backfillAsmNumbers(tools, shopAuto, null, []);
-    expect(out).toBe(tools);
-    expect(out[0]._asmNumbersFixed).toBeUndefined();
+    expect(backfillAsmNumbers(tools, shopAuto, null, [])).toBe(tools);
   });
 });
