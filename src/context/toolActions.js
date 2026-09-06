@@ -11,6 +11,7 @@ import {
   readTrackingId, readOohFromFusion, presetZeroMirror,
   getNextMachineNumber, combineToolsByToolId, mergeNoFusionIntoFusion,
 } from '../schema/toolSchema.js';
+import { metadataOnlyPatch } from '../schema/metadataScope.js';
 import { normProShopId } from '../schema/insertFamilies.js';
 import { linkPatch } from '../utils/toolLinks.js';
 import { withRetiredMarker } from '../utils/toolStatus.js';
@@ -41,7 +42,7 @@ export function createToolActions(ctx) {
     downloadFusionList, uploadFusionList, downloadAllLibraries, fetchRawLibrary,
     saveLocationConfig, saveComponents,
     toolsRef, holdersRef, shopSettingsRef, googleRef, componentsRef, fusionReadyRef, materialsRef,
-    holderLibraryRef,
+    holderLibraryRef, demoModeRef, localModeRef,
   } = ctx;
 
   // Mode-2 two-stage load: until the full Fusion build has completed this session
@@ -393,13 +394,110 @@ export function createToolActions(ctx) {
       // saved to metadata only — say so rather than implying it reached Fusion.
       const fusionDisabled = shopSettingsRef.current?.integrations?.fusion?.enabled === false;
       const appOnly = updated.no_fusion_link === true || fusionDisabled;
-      notify(appOnly ? 'Saved (app only — not in Fusion)' : 'Saved to Fusion library', 'success');
+      // ⚠️ WITHOUT DRIVE, HALF THE SAVE DID NOT HAPPEN — say so. writeLogicalTool
+      // writes the Fusion entry and then skips the metadata record when Google
+      // is not connected, so notes, tags, purchasing, the structured location,
+      // preset_meta and the assemblies are all quietly gone. It reported plain
+      // success, which is the worst version of that: the tool page still shows
+      // them (they are in memory) and the next reload does not.
+      //
+      // It warns rather than throws because the Fusion half genuinely DID save —
+      // the no-Fusion path throws instead, because there metadata is the only
+      // store and nothing at all would have been written.
+      if (!appOnly && !googleRef.current) {
+        notify('Saved to Fusion — but notes, tags, purchasing and location need Google Drive, and were not saved.', 'error');
+      } else {
+        notify(appOnly ? 'Saved (app only — not in Fusion)' : 'Saved to Fusion library', 'success');
+      }
       return updated;
     } catch (err) {
       dispatch({ type: 'SAVE_ERROR', error: err.message });
       notify(`Save failed: ${err.message}`, 'error', 7000);
       throw err;
     }
+  };
+
+  // ─── Metadata-only save ───────────────────────────────────────────────────
+  // ⚠️ THE POINT OF THIS FUNCTION IS WHAT IT REFUSES TO WRITE. saveTool writes
+  // metadata AND Fusion together, which is what makes "metadata ≠ Fusion" mean
+  // FUSION moved — the reading detectFusionDrift and DriftBanner are built on.
+  // A Fusion-backed field written to metadata alone would make that difference
+  // ambiguous, and "Keep Fusion" would then offer to discard the user's own
+  // unsaved edit. So the patch is filtered through metadataScope.js, which
+  // cannot pass one; see that module and its test for the whole rule.
+  //
+  // For panels holding nothing Fusion has a place for (notes, tags, purchasing,
+  // speed/feed refs, links). Same reasoning as setToolLink / normalizeLocation-
+  // System: no reason to re-download and re-upload the entire Fusion library to
+  // store a field Fusion never sees.
+  //
+  // ⚠️ It takes a whole updated tool and DIFFS it against the saved one, rather
+  // than trusting a hand-built patch. That is what catches a caller that hands
+  // over a buffered form's draft: the uncommitted geometry shows up as changed
+  // keys and is dropped and reported, instead of quietly reaching metadata.
+  //
+  // Write first, then update memory (never the reverse) so a failed write can't
+  // leave the app showing a value that isn't stored.
+  const saveToolMetadata = async (updatedTool) => {
+    // ⚠️ Demo and local mode are read-only, and that is enforced ONLY inside
+    // downloadFusionList / uploadFusionList — the "single central guard" the
+    // local-mode design rests on. This path deliberately calls neither, so it
+    // has to carry the guard itself or a sandbox edit would look saved, land
+    // nowhere (no Drive in either mode) and vanish on the next reload.
+    if (demoModeRef?.current) throw new Error('Demo mode is read-only — changes are not saved');
+    if (localModeRef?.current) throw new Error('Local mode is read-only — connect to Autodesk to save changes');
+
+    // ⚠️ No assertFusionReady here, deliberately. The linked write needs a real
+    // _instancesRaw base for its 3-way merges; this one has no Fusion side at
+    // all, and a tool painted provisionally from its own complete record
+    // round-trips back to a byte-identical record — verified in
+    // metadataScope.test.js ('a save during the two-stage load window'). Adding
+    // the guard would block a notes edit for the first seconds of every session
+    // for no gain.
+    const saved = (toolsRef.current || []).find(t => t.id === updatedTool?.id);
+    if (!saved) throw new Error('Tool not found');
+
+    const { patch, dropped } = metadataOnlyPatch(saved, updatedTool);
+    if (dropped.length) {
+      // Not thrown: a caller slipping a Fusion field in is a bug in our code, and
+      // crashing a shop machine over it is worse than dropping it. Loud in dev,
+      // and the field simply keeps its saved value — nothing is corrupted.
+      console.warn(
+        `[saveToolMetadata] dropped ${dropped.length} field(s) Fusion also holds — `
+        + `save them with saveTool instead: ${dropped.join(', ')}`,
+      );
+    }
+    // Nothing to do — the second-run rule. Returning the saved reference lets a
+    // caller tell there was nothing to persist.
+    if (Object.keys(patch).length === 0) return saved;
+
+    const merged = { ...saved, ...patch, updated_at: new Date().toISOString() };
+
+    // ⚠️ REFUSES rather than pretending. Metadata is the ONLY store these fields
+    // have — Fusion has nowhere to put notes, tags or purchasing — so with no
+    // Drive there is nothing to write to and an edit accepted here is an edit
+    // lost on the next reload. (saveTool has the same hole today: it writes
+    // Fusion, skips the Drive write behind this same guard, and still toasts
+    // "Saved to Fusion library" — so a purchasing edit made without Drive is
+    // silently dropped. Fixing that one belongs with the panel gating.)
+    // Same contract as writeLogicalTool's unlinked branch, which already throws.
+    if (!googleRef.current) {
+      throw new Error('Connect Google Drive to save — notes, tags and purchasing live in the metadata file');
+    }
+    dispatch({ type: 'SAVE_START' });
+    try {
+      await toolStore.upsertOne(
+        buildMetadataTool({ ...merged, tracking_id: merged.tracking_id || merged.id }),
+      );
+      dispatch({ type: 'SAVE_SUCCESS' });
+    } catch (err) {
+      if (err.code === 'TOKEN_EXPIRED') dispatch({ type: 'GOOGLE_EXPIRED' });
+      dispatch({ type: 'SAVE_ERROR', error: err.message });
+      notify(`Save failed: ${err.message}`, 'error', 7000);
+      throw err;
+    }
+    dispatch({ type: 'UPDATE_TOOL', tool: merged });
+    return merged;
   };
 
   // Assign (or clear) a single tool's structured location. Routes through
@@ -1417,7 +1515,7 @@ export function createToolActions(ctx) {
 
   return {
     writeLogicalTool,
-    saveTool, assignToolLocation, normalizeLocationSystem, importLocationsFromProShop,
+    saveTool, saveToolMetadata, assignToolLocation, normalizeLocationSystem, importLocationsFromProShop,
     setToolLink,
     addTool, cloneTool, mergeTool, deleteTool, mergeTools,
     addAssembly, updateAssembly, deleteAssembly,

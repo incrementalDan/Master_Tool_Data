@@ -124,8 +124,9 @@ export function holderForDisplay({ records, holderId, holderGuid, description })
   if (rec) return rec;
   const desc = (description || '').trim();
   if (!desc || desc === '—') return null;
-  // No color: HolderPill derives it from the description, same as for a record
-  // that hasn't been given one.
+  // No id and no colour, so holderDisplayColor returns HOLDER_DEFAULT — the
+  // stand-in for a holder the app has no record of. (It does NOT derive a
+  // colour from the description; that was retired — see Holder colour.)
   return { description: desc, collet_size_id: null, _synthetic: true };
 }
 

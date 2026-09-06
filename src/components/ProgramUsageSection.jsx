@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Briefcase, ChevronDown, ChevronRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext.jsx';
 import { detailsOf } from '../utils/sequenceImport.js';
 import {
@@ -41,7 +41,8 @@ export function toolProgramUsage(toolId, programDetails, partsFile) {
 }
 
 export default function ProgramUsageSection({ tool }) {
-  const { programDetails, parts: partsFile } = useApp();
+  const { programDetails, parts: partsFile, maybeBlockNav } = useApp();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
   const rows = useMemo(
@@ -69,7 +70,20 @@ export default function ProgramUsageSection({ tool }) {
                 <div key={detail.id} className="where-used-row">
                   <ProgramNumBadge n={detail.program_number} />
                   {part
-                    ? <Link to={`/parts/${part.id}`} className="pn-part-number">{part.part_number}</Link>
+                    ? (
+                      // ⚠️ GUARDED. This panel sits on the tool page, which now
+                      // edits in place — so a bare Link here walks away from an
+                      // open draft and takes it with it. The top-bar tabs go
+                      // through the same seam; a router Link does not unless it
+                      // is asked to.
+                      <Link
+                        to={`/parts/${part.id}`}
+                        className="pn-part-number"
+                        onClick={(e) => {
+                          if (maybeBlockNav?.(() => navigate(`/parts/${part.id}`))) e.preventDefault();
+                        }}
+                      >{part.part_number}</Link>
+                    )
                     : <span className="text-sub">(program removed)</span>}
                   {routing && <span className="text-xs text-sub">{routingLabel(routing)}</span>}
                   <OpPill op={operation?.op_number} />

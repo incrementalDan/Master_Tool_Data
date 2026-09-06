@@ -6739,6 +6739,11 @@ input.sf-ref-num { text-align: right; }
 
 .tp-body {
   display: flex;
+  /* ⚠️ WRAPS, because this is rendered in two places now: the pop-up, which is
+     wide enough for the drawing and the side panel abreast, and the tool page's
+     Geometry section, whose column is not — there the side panel dropped off
+     the right edge. In the modal there is room, so it never wraps. */
+  flex-wrap: wrap;
   gap: 20px;
   padding: 18px 20px;
   overflow: auto;
@@ -6775,6 +6780,11 @@ input.sf-ref-num { text-align: right; }
 .tp-ext     { stroke: var(--tp-dim-line); stroke-width: 0.75; opacity: 0.55; }
 .tp-leader  { stroke: var(--tp-dim-line); stroke-width: 0.75; opacity: 0.75; }
 .tp-dimline { stroke: var(--tp-dim-line); stroke-width: 1; }
+/* An ORDINATE leader: one horizontal line from the part out to its value, with
+   the tip as the assumed origin. Same weight as a dimension line — it IS the
+   dimension — but it carries no arrows and spans nothing, so it is its own
+   class rather than a dimline without markers. */
+.tp-ord     { stroke: var(--tp-dim-line); stroke-width: 1; }
 /* ⚠️ THE HOLDER FACE IS A DATUM, NOT A DIMENSION — so it must not read as one.
    In the dimension grey it disappeared over the tool body and its overhang was
    indistinguishable from a diameter leader crossing at the same height. Its own
@@ -6787,7 +6797,7 @@ input.sf-ref-num { text-align: right; }
 }
 .tp-dimbox-holder .tp-dimbox-label { color: var(--tp-holder-line); }
 .tp-dimbox-holder .tp-dimbox-input {
-  border-color: color-mix(in srgb, var(--tp-holder-line) 50%, transparent);
+  --dimbox-edge: color-mix(in srgb, var(--tp-holder-line) 50%, transparent);
 }
 .tp-dim[data-muted='y'] { opacity: 0.55; transition: opacity 0.12s ease; }
 
@@ -6806,7 +6816,11 @@ input.sf-ref-num { text-align: right; }
 .tp-dimbox-fixed .tp-dimbox-input input { flex: 1; width: auto; min-width: 0; }
 .tp-dimbox-fixed .tp-dimbox-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tp-dimbox-label {
-  font-size: 9.5px;
+  /* ⚠️ 9.5px was set for a modal read at arm's length; on the page these are
+     the field names for the whole Geometry section and have to be readable as
+     labels, not as annotations. The fixed boxes are LEN_BOX_W (82px) wide and
+     the longest label is SHOULDER/UNDERCUT — both still clear it at 11px. */
+  font-size: 11px;
   letter-spacing: 0.03em;
   text-transform: uppercase;
   color: var(--text-sub);
@@ -6816,12 +6830,24 @@ input.sf-ref-num { text-align: right; }
 .tp-dimbox-input {
   display: flex; align-items: center; gap: 2px;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid var(--dimbox-edge, var(--border));
   border-radius: var(--radius-sm);
   padding: 2px 5px;
 }
 .tp-dimbox-input:focus-within { border-color: var(--blue); }
 /* Derived from the shaft segments — Fusion's number, not an input. */
+/* ⚠️ LOCKED = THE PAGE IS NOT IN EDIT MODE. A filled box with a full-strength
+   border reads as a field you can type in, so on a page that opens read-only
+   every dimension looked editable and none of them were. The fill goes (the
+   value sits on the page, not in a well) and the border dims — but it KEEPS its
+   region colour, because that colour is what ties the box to the part of the
+   tool it measures, and it is doing that job in both modes. Distinct from
+   `derived`, which is dashed in both modes and means "the app computes this". */
+.tp-dimbox-locked .tp-dimbox-input {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--dimbox-edge, var(--border)) 45%, transparent);
+}
+.tp-dimbox-locked .tp-dimbox-input input { cursor: default; }
 .tp-dimbox-derived .tp-dimbox-input { border-style: dashed; opacity: 0.85; }
 .tp-dimbox-derived .tp-dimbox-input input { cursor: default; }
 .tp-dimbox-input input {
@@ -6836,7 +6862,36 @@ input.sf-ref-num { text-align: right; }
 .tp-dimbox-input input::-webkit-outer-spin-button,
 .tp-dimbox-input input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .tp-dimbox-input input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+/* ⚠️ The edit bar is FIXED, so without this it lies across whatever happens to
+   be at the bottom of the page — on a long tool that is the History panel, and
+   on a short one the "in library" line. Only while editing; the view page has
+   no bar and should not carry a gap. */
+.tool-detail-editing .tool-detail-main { padding-bottom: 72px; }
+
+/* Read-outs — the same numbers when the page is not in edit mode. Mono so a
+   value does not jump when it becomes an input, and right-aligned like the
+   input it replaces. */
+/* The "Not set" list's footnote. ⚠️ Its own class, not tp-seg-note: that one
+   belongs to the shaft-segment table, and sharing it put a second element with
+   that class ABOVE the table — which is how a test that slices the markup
+   between the table and its note started reading an empty range. */
+.tp-unset-note { font-size: 11px; color: var(--text-sub); margin-top: 8px; }
+
+.tp-readout, .tp-seg-readout {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text);
+  display: inline-block;
+  text-align: right;
+}
+.tp-readout { min-width: 60px; padding: 2px 5px; }
+.tp-seg-readout { width: 100%; padding: 3px 5px; }
 .tp-dimbox-unit { font-size: 10px; color: var(--text-sub); font-family: var(--font-mono); }
+/* ⚠️ SCOPED to the drawing on purpose. `.dia` is the shared app-wide diameter
+   glyph (tool cards, the sync-job queue, match step) and is sized by whatever
+   it sits in; here it sits beside a 12px mono number and read smaller than the
+   value it qualifies. Bumping the token itself would resize it everywhere. */
+.tp-dimbox-input .dia { font-size: 15px; line-height: 1; }
 
 /* ── side panel ── */
 /* ⚠️ The drawing is a fixed width and the modal is up to 1180px, so `flex: 1`
@@ -6844,7 +6899,7 @@ input.sf-ref-num { text-align: right; }
    flute count and three narrow number cells. It is a column, so it gets a
    column's width and the modal narrows to fit. */
 .tp-side {
-  flex: 0 1 auto; width: 316px; min-width: 268px; max-width: 316px;
+  flex: 1 1 268px; width: 316px; min-width: 268px; max-width: 316px;
   display: flex; flex-direction: column; gap: 14px;
 }
 .tp-panel {
@@ -6917,10 +6972,14 @@ input.sf-ref-num { text-align: right; }
 .tp-dimbox-segment  .tp-dimbox-input,
 .tp-dimbox-shank    .tp-dimbox-input,
 .tp-dimbox-holder   .tp-dimbox-input { border-width: 1.5px; }
-.tp-dimbox-flute    .tp-dimbox-input { border-color: var(--tp-flute-edge); }
-.tp-dimbox-shoulder .tp-dimbox-input { border-color: var(--tp-shoulder); }
-.tp-dimbox-segment  .tp-dimbox-input { border-color: var(--tp-segment-edge); }
-.tp-dimbox-shank    .tp-dimbox-input { border-color: var(--tp-shank-edge); }
+/* ⚠️ Each region sets a TOKEN, not the border directly. The locked (view-mode)
+   variant has to dim whatever colour this box happens to wear, and re-listing
+   the palette there is how the two lists drift — a new region would keep its
+   full-strength border while viewing and nobody would know why. */
+.tp-dimbox-flute    .tp-dimbox-input { --dimbox-edge: var(--tp-flute-edge); }
+.tp-dimbox-shoulder .tp-dimbox-input { --dimbox-edge: var(--tp-shoulder); }
+.tp-dimbox-segment  .tp-dimbox-input { --dimbox-edge: var(--tp-segment-edge); }
+.tp-dimbox-shank    .tp-dimbox-input { --dimbox-edge: var(--tp-shank-edge); }
 /* The segment table edits the shaft segments, so its rows carry that colour
    too — the same region, in its other representation. Held back from the boxes'
    full strength because six of them sit in a row. */

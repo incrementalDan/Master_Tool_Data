@@ -18,6 +18,11 @@ import demoShopSettings from './demo_shop_settings.json';
 import demoParts from './demo_parts.json';
 import demoComponents from './demo_components.json';
 import { fusionHolderToRecord } from '../schema/holderRecord.js';
+
+// A stable HLD-XXXXXX for a demo holder: the first six hex digits of its guid,
+// which is fixed in the JSON. Shape-checked by HOLDER_REF_RE.
+const demoHolderRef = (guid) =>
+  `HLD-${String(guid || '').replace(/[^0-9a-f]/gi, '').slice(0, 6).toUpperCase().padEnd(6, '0')}`;
 import { healHolderDescription, applyHealToRecord, suggestExtensionSegments } from '../utils/holderDescription.js';
 import { DEFAULT_HOLDER_CONFIG } from '../schema/holderOptions.js';
 
@@ -47,7 +52,16 @@ export function getDemoData() {
   const holderRecords = holders.map(h => {
     const heal = healHolderDescription(h.description, DEFAULT_HOLDER_CONFIG);
     const rec = applyHealToRecord(
-      fusionHolderToRecord(h, { library_id: 'demo', library_name: 'Demo holders' }),
+      // ⚠️ STABLE ids, derived from the holder's own guid. newHolderRecord mints
+      // a RANDOM id and holder_ref, and demo rebuilds the holder library from
+      // this Fusion-shaped JSON on every load — so every holder got a fresh id
+      // each time, and with it a fresh auto colour. holderDisplayColor keys the
+      // auto colour on the record id precisely so it never moves; in demo it
+      // moved on every page load, which is exactly where colours get looked at.
+      fusionHolderToRecord(h, {
+        library_id: 'demo', library_name: 'Demo holders',
+        overrides: { id: `demo-holder-${h.guid}`, holder_ref: demoHolderRef(h.guid) },
+      }),
       heal,
     );
     // …and accepts the extension-segment suggestion too, so the derived

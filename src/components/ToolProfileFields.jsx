@@ -5,31 +5,24 @@
 // as it hangs in the spindle, with the geometry as engineering-print dimensions
 // whose value boxes ARE the editable fields.
 //
-// ⚠️ DELIBERATELY A SEPARATE POP-UP. It does not replace the Geometry section —
-// that keeps working exactly as it did, and this is additive until the two are
-// merged on purpose.
-//
-// ⚠️ SHAFT SEGMENTS ARE READ-ONLY HERE. They are Fusion's drawing of the tool
-// and the app has no business rewriting them from a screen that cannot yet
-// express what they mean (see "Reach & undercut" in CLAUDE.md — the app must
-// not change what is in Fusion). They ARE rendered and dimensioned, because
-// seeing them is the whole point; editing them is the next step, and now a
-// small one — `shaft.segments` has NO paired `expressions.*` entry (verified
-// across the real library), so there is no native+expression pair to keep in
-// step when it comes.
+// ⚠️ THIS IS THE DRAWING ITSELF, CONTROLLED — it owns no draft and no Save.
+// It was the inside of ToolProfileModal; the tool page renders the SAME
+// component in its Geometry section, so there is exactly one drawing in the app
+// and the page and the modal can never disagree about it. The caller owns the
+// draft and decides when it is written.
 //
 // NOT TO SCALE, on purpose: X and Y are scaled independently. A real tool runs
 // 20:1 to 60:1 long-to-wide, so a true-proportion drawing is a hairline that
 // shows nothing. Every CAM tool-library screen distorts this the same way; the
 // drawing is labelled NTS rather than pretending otherwise.
-import { useState, useMemo, useRef } from 'react';
-import { X, Ruler, Info } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Info } from 'lucide-react';
 import { buildToolProfile, profileDimensions, shaftRows } from '../utils/toolProfile.js';
 import { FIELD_REGISTRY, fieldLabel, INCLUSIVE_ANGLE_TYPES } from '../schema/fieldRegistry.js';
 import { unitAbbr, unitPrecision, convertLength } from '../utils/units.js';
 import { undercutDiameterHint, resolveReachFields, deriveReach } from '../utils/toolReach.js';
-import ToolTypeIcon from './icons/ToolTypeIcon.jsx';
 
+// ── drawing constants (px) ──────────────────────────────────────────────────
 // ── drawing constants (px) ──────────────────────────────────────────────────
 const BODY_W = 132;   // widest the part itself may draw
 const BODY_H = 430;   // tallest the part itself may draw
@@ -124,7 +117,12 @@ const HOLDER_FACE = 'min_ooh';
 // a solid leader at the same height.
 const HOLDER_OVERHANG_L = 30;
 const HOLDER_OVERHANG_R = 10;
-const DIMBOX_H = 34;             // label + input, for flipping the value box
+// ⚠️ MEASURED, not guessed — the boxes are HTML overlaid on the SVG, so every
+// collision test here is running against a height CSS decides. At 34 it was
+// already under the real 36; the bigger field-name text took the real box to
+// 39.5, which is a box-and-a-bit of clearance the lane logic thought it had.
+// If .tp-dimbox-label / -input / .dia are restyled, re-measure this.
+const DIMBOX_H = 40;             // label + input, for flipping the value box
 
 const SEED_HEIGHT_MM = 2.5;      // a visible starting height on either unit
 const SEED_DIAMETER_MM = 6;      // ~1/4", the commonest shank either way
@@ -149,17 +147,13 @@ const applyUndercut = (d, v) => {
 // angle) — the same transform ToolFields applies.
 const doubles = (field, toolType) => field === 'taper_angle' && INCLUSIVE_ANGLE_TYPES.has(toolType);
 
-export default function ToolProfileModal({ tool, onSave, onClose }) {
-  // ⚠️ Seed through the resolver, not from the tool as handed in. Reach and
-  // undercut are derived from the segments; a tool that has not been through
-  // the load-time pass would otherwise open with them blank — and, once the
-  // segments are editable here, the modal has to agree with what it is drawing.
-  const [draft, setDraft] = useState(() => ({ ...tool, ...resolveReachFields(tool) }));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
+// ⚠️ `readOnly` is the PAGE'S edit mode, not a property of any field. The tool
+// page shows this drawing all the time and unlocks it only when the user asks
+// to edit (see ToolDetail) — a page whose numbers are typeable the moment it
+// opens invites an edit nobody meant to make. It is distinct from a field being
+// DERIVED (reach, undercut Ø), which is read-only in both modes.
+export default function ToolProfileFields({ draft, setDraft, readOnly = false }) {
   const [hoverSeg, setHoverSeg] = useState(null);
-  const baseRef = useRef(tool);
-
   const unit = unitAbbr(draft.unit);
   const profile = useMemo(() => buildToolProfile(draft), [draft]);
   const dims = useMemo(() => profileDimensions(draft.tool_type), [draft.tool_type]);
@@ -186,20 +180,12 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
     });
     if (append) setHoverSeg(next.length - 1);
   };
-
-  const dirty = useMemo(
-    () => [...dims.lengths, ...dims.diameters, ...dims.extras]
-      .some(f => (draft[f] ?? null) !== (baseRef.current[f] ?? null)) ||
-      (draft.has_undercut ?? null) !== (baseRef.current.has_undercut ?? null) ||
-      (draft.undercut_override ?? null) !== (baseRef.current.undercut_override ?? null) ||
-      // ⚠️ "no profile" has two spellings — `null` (never had one) and `[]`
-      // (added a segment then removed it). Comparing them raw marked the tool
-      // dirty for a round trip that changed nothing, and saving then wrote an
-      // empty array over a null for no reason.
-      JSON.stringify(draft.shaft_segments?.length ? draft.shaft_segments : null)
-        !== JSON.stringify(baseRef.current.shaft_segments?.length ? baseRef.current.shaft_segments : null),
-    [draft, dims],
-  );
+  // ⚠️ THE BOX BEING TYPED IN STAYS ON THE DRAWING. A dimension is drawn only
+  // where it has a value, and a number input reports '' the instant its text is
+  // cleared — so clearing a box to retype it made the box UNMOUNT under the
+  // cursor. Exactly the "a blank cell is mid-edit, not a zero" rule the segment
+  // table already carries, in the one place it had not been applied.
+  const [activeDim, setActiveDim] = useState(null);
 
   const set = (field, raw) => {
     const v = raw === '' || raw === null ? null : Number(raw);
@@ -225,25 +211,6 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
   // datum: one dotted line across the drawing, wider than the tool, with its
   // value sitting on it. (Some tool types could be calculated from the holder;
   // nothing here tries — the number is the shop's.)
-  const lengthDims = dims.lengths
-    .filter(field => field !== HOLDER_FACE)
-    .map(field => ({ field, value: Number(draft[field]) || 0 }))
-    .filter(d => d.value > 0)
-    .sort((a, b) => a.value - b.value)
-    .map((d, i) => ({ ...d, lane: i }));
-  const holderFace = dims.lengths.includes(HOLDER_FACE) ? Number(draft[HOLDER_FACE]) || 0 : 0;
-
-  const nLeft = Math.max(1, lengthDims.length);
-  const svgH = BODY_H + TOP_PAD + BOT_PAD;
-  // Work back from the outermost box: it must clear the canvas edge, and every
-  // box inboard of it is one LANE to the right, with lane 0's RIGHT edge GAP
-  // from the part.
-  const cx = BODY_W / 2 + GAP + LEN_BOX_W + (nLeft - 1) * LANE + EDGE_PAD;
-  const sx = maxDia > 0 ? BODY_W / maxDia : 0;
-  const halfAt = (d) => (d * sx) / 2;
-  // The centre of the length box (and so of its dimension line) in lane n.
-  const lenBoxCx = (lane) => cx - BODY_W / 2 - GAP - LEN_BOX_W / 2 - lane * LANE;
-
   // The plain shank is compressed to a fixed height and marked with a break, so
   // the flutes, the neck and the segments get the canvas instead.
   const shankReg = profile.regions.find(r => r.kind === 'shank');
@@ -264,29 +231,85 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
     return yBase - brk * sy - past * shankDrawH;
   };
 
+  // ⚠️ ORDINATE, not nested. Every length is measured from the TIP, so each one
+  // is a single horizontal leader out to its value at its own height, with the
+  // zero datum assumed — the way a CNC print dimensions from one origin. It
+  // replaced a nested stack where each dimension owned a lane 94px wide, which
+  // made the drawing 634px and left no room beside it for anything else.
+  //
+  // ⚠️ A LANE IS SPENT ONLY ON A COLLISION. Two lengths that happen to be
+  // EQUAL land at the same height (a tool whose flute length IS its shoulder
+  // length is ordinary, not a corner case), so the second steps out — the same
+  // rule the MIN OOH datum box already follows. Most tools use one lane; the
+  // worst case is two.
+  const lengthDims = (() => {
+    const rows = dims.lengths
+      .filter(field => field !== HOLDER_FACE)
+      .map(field => ({ field, value: Number(draft[field]) || 0 }))
+      .filter(d => d.value > 0 || d.field === activeDim)
+      .sort((a, b) => a.value - b.value);
+    const placed = [];
+    return rows.map((d) => {
+      const y = yAt(Math.min(d.value, total));
+      let lane = 0;
+      while (placed.some(pl => pl.lane === lane && Math.abs(pl.y - y) < DIMBOX_H + 2)) lane += 1;
+      placed.push({ lane, y });
+      return { ...d, lane, y };
+    });
+  })();
+  const holderFace = dims.lengths.includes(HOLDER_FACE) ? Number(draft[HOLDER_FACE]) || 0 : 0;
+
+  const nLeft = Math.max(1, lengthDims.reduce((m, d) => Math.max(m, d.lane + 1), 1));
+  const svgH = BODY_H + TOP_PAD + BOT_PAD;
+
   // The datum's y, and which side of it the value box fits on. Above by
   // default (a print puts a section label above its line); below when the line
   // runs too close to the top of the canvas for the box to clear it.
-  const yHolder = holderFace > 0 ? yAt(Math.min(holderFace, total)) : null;
+  const yHolder = (holderFace > 0 || HOLDER_FACE === activeDim)
+    ? yAt(Math.min(Math.max(holderFace, 0), total))
+    : null;
   const holderBoxAbove = yHolder == null ? true : (yHolder - TOP_PAD) > (DIMBOX_H + 6);
   // ⚠️ The datum's label is anchored to its LINE, not to the lane stack, so it
   // can land in a lane that already has a box at the same height. Step it out a
   // lane at a time until it is clear, and run the line left to meet it — the
   // label stays attached to the thing it names either way.
-  const holderBoxRight = (() => {
-    if (yHolder == null) return null;
+  //
+  // ⚠️ Measured LEFT OF THE BODY, before cx exists — the canvas has to be
+  // sized around this box, not the other way round. Ordinate lengths share one
+  // lane, so nLeft is usually 1 and the lane stack no longer happens to leave
+  // room: the datum box reaches HOLDER_OVERHANG_L past lane 0 even before it
+  // steps out, and deriving cx from nLeft alone put it off the left edge.
+  const holderStep = (() => {
+    if (yHolder == null) return 0;
     const yBox = yHolder + (holderBoxAbove ? -(DIMBOX_H / 2 + 3) : (DIMBOX_H / 2 + 3));
-    const clashes = (right) => lengthDims.some(({ field, value, lane }) => {
-      void field;
-      const c = lenBoxCx(lane);
-      const yMid = (yAt(0) + yAt(Math.min(value, total))) / 2;
-      const xOverlap = (right - LEN_BOX_W) < (c + LEN_BOX_W / 2) && right > (c - LEN_BOX_W / 2);
-      return xOverlap && Math.abs(yMid - yBox) < DIMBOX_H + 2;
-    });
-    let right = cx - BODY_W / 2 - HOLDER_OVERHANG_L - 4;
-    for (let i = 0; i <= nLeft && clashes(right); i++) right -= LANE;
-    return right;
+    const clashes = (k) => {
+      const right = -(HOLDER_OVERHANG_L + 4 + k * LANE);
+      return lengthDims.some(({ lane, y }) => {
+        const c = -(GAP + LEN_BOX_W / 2 + lane * LANE);
+        const xOverlap = (right - LEN_BOX_W) < (c + LEN_BOX_W / 2) && right > (c - LEN_BOX_W / 2);
+        return xOverlap && Math.abs(y - yBox) < DIMBOX_H + 2;
+      });
+    };
+    let k = 0;
+    while (k <= nLeft && clashes(k)) k += 1;
+    return k;
   })();
+
+  // Work back from the outermost box — whichever it is — so it clears the
+  // canvas edge; every box inboard of it is one LANE to the right, with lane
+  // 0's RIGHT edge GAP from the part.
+  const laneReach = GAP + LEN_BOX_W + (nLeft - 1) * LANE;
+  const holderReach = yHolder == null
+    ? 0
+    : HOLDER_OVERHANG_L + 4 + holderStep * LANE + LEN_BOX_W;
+  const cx = BODY_W / 2 + Math.max(laneReach, holderReach) + EDGE_PAD;
+  const sx = maxDia > 0 ? BODY_W / maxDia : 0;
+  const halfAt = (d) => (d * sx) / 2;
+  // The centre of the length box (and so of its dimension line) in lane n.
+  const lenBoxCx = (lane) => cx - BODY_W / 2 - GAP - LEN_BOX_W / 2 - lane * LANE;
+  const holderBoxRight = yHolder == null
+    ? null
+    : cx - BODY_W / 2 - HOLDER_OVERHANG_L - 4 - holderStep * LANE;
 
   // ── the silhouette ────────────────────────────────────────────────────────
   const fluteRegion = profile.regions.find(r => r.kind === 'flute');
@@ -333,7 +356,7 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
   // lane when two would overlap.
   const diaTargets = [];
   const pushDia = (field, value, yVal, halfPx) => {
-    if (!(Number(value) > 0)) return;
+    if (!(Number(value) > 0) && field !== activeDim) return;
     const y = yAt(yVal);
     const lane = diaTargets.some(d => Math.abs(d.y - y) < LABEL_H + 6 && d.lane === 0) ? 1 : 0;
     diaTargets.push({ field, value, y, halfPx, lane });
@@ -364,22 +387,6 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
   // a cut diameter and a shank.
   const nRight = diaTargets.reduce((m, d) => Math.max(m, d.lane + 1), 1);
   const svgW = cx + BODY_W / 2 + nRight * LANE + RIGHT_PAD;
-
-  const handleSave = async () => {
-    setError('');
-    setSaving(true);
-    try {
-      await onSave(draft);
-      onClose();
-    } catch (err) {
-      // ⚠️ Stay open and keep the draft — a failed save must never look like a
-      // successful one, and must never silently discard the user's edit.
-      setError(err?.message || 'Could not save — your changes are still here.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const fieldOf = (f) => FIELD_REGISTRY[f] || {};
   // ⚠️ A dimension the SEGMENTS answer is read-only, for the same reason the
   // segment table is: it is Fusion's number. Rendering it as an input invites
@@ -395,18 +402,29 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
   // On the drawing only — see SHORT.
   const dimLabelOf = (f) => SHORT[f] || labelOf(f);
 
-  return (
-    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !saving) onClose(); }}>
-      <div className="modal tool-profile-modal">
-        <div className="tp-head">
-          <ToolTypeIcon type={draft.tool_type} size={22} />
-          <div className="tp-head-text">
-            <div className="tp-title">Tool Profile</div>
-            <div className="tp-sub">{draft.description || '—'}</div>
-          </div>
-          <button className="tp-close" onClick={onClose} aria-label="Close"><X size={18} /></button>
-        </div>
+  // ⚠️ A DIMENSION THE TOOL HAS NEVER HAD STILL NEEDS SOMEWHERE TO BE TYPED.
+  // The drawing can only place a box where there is a value to place it at, and
+  // the grid below hides everything the drawing owns — so a blank MIN OOH (or
+  // shoulder, or shank Ø) had NO input anywhere on the page and could never be
+  // filled in. "Every field in exactly one place" has to mean at least one.
+  //
+  // They are listed rather than drawn on purpose: a leader pointing at nothing
+  // is the drawing asserting a number the record does not hold, which is the
+  // same rule that keeps the undercut hint off the drawing.
+  const drawnDims = new Set([
+    ...lengthDims.map(d => d.field),
+    ...diaTargets.map(d => d.field),
+    ...(yHolder != null ? [HOLDER_FACE] : []),
+  ]);
+  const unsetDims = readOnly ? [] : [...dims.lengths, ...dims.diameters]
+    .filter(f => !drawnDims.has(f) && !isDerived(f))
+    // ⚠️ NOT the undercut diameter while the pill says otherwise. An empty box
+    // next to a "No" asks for the diameter of something that is not there —
+    // the same rule that keeps it off the tool page's field grid. It appears
+    // here the moment the undercut is turned on.
+    .filter(f => f !== 'undercut_diameter' || draft.has_undercut === true);
 
+  return (
         <div className="tp-body">
           {/* ── drawing ─────────────────────────────────────────────────── */}
           <div className="tp-canvas" style={{ width: svgW, height: svgH }}>
@@ -482,21 +500,17 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
                   className="tp-holder-line" />
               )}
 
-              {/* ── length dimensions, nesting leftward from the tip ─────── */}
-              {lengthDims.map(({ field, value, lane }) => {
+              {/* ── length dimensions: ordinate from the tip ─────────────
+                  One horizontal leader per length, at its own height, running
+                  from the part out to its value. No arrows and no vertical run:
+                  the origin is the tip and is assumed, which is what lets every
+                  length share a single lane. */}
+              {lengthDims.map(({ field, lane, y }) => {
                 const x = lenBoxCx(lane);
-                const yTip = yAt(0), yEnd = yAt(Math.min(value, total));
-                const yMid = (yTip + yEnd) / 2;
                 const active = hoverSeg == null;
                 return (
                   <g key={field} className="tp-dim" data-muted={active ? undefined : 'y'}>
-                    <line x1={x - 6} y1={yTip} x2={cx - BODY_W / 2 - 2} y2={yTip} className="tp-ext" />
-                    <line x1={x - 6} y1={yEnd} x2={cx - BODY_W / 2 - 2} y2={yEnd} className="tp-ext" />
-                    {/* broken dimension line — the label sits in the gap */}
-                    <line x1={x} y1={yEnd} x2={x} y2={yMid - LABEL_H / 2 - 2}
-                      className="tp-dimline" markerStart="url(#tp-arrow)" />
-                    <line x1={x} y1={yMid + LABEL_H / 2 + 2} x2={x} y2={yTip}
-                      className="tp-dimline" markerEnd="url(#tp-arrow)" />
+                    <line x1={x} y1={y} x2={cx - BODY_W / 2 - 2} y2={y} className="tp-ord" />
                   </g>
                 );
               })}
@@ -516,15 +530,19 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
 
             {/* Editable value boxes, overlaid on the dimension lines. HTML, not
                 foreignObject — real inputs that focus, tab and style normally. */}
-            {lengthDims.map(({ field, lane }) => {
+            {lengthDims.map(({ field, lane, y }) => {
               const x = lenBoxCx(lane);
-              const value = Number(draft[field]) || 0;
-              const yMid = (yAt(0) + yAt(Math.min(value, total))) / 2;
+              // ⚠️ Clamped, because the longest length ends AT the top of the
+              // canvas (OAL runs the whole tool) and a box centred there loses
+              // its label off the edge. The leader still draws at the true y.
+              const yBox = Math.max(y, TOP_PAD + DIMBOX_H / 2);
               return (
-                <DimBox key={field} x={x} y={yMid} align="center"
+                <DimBox key={field} x={x} y={yBox} align="center"
                   label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
                   step={stepFor(field, draft.unit)} kind={REGION_OF[field]} width={LEN_BOX_W}
-                  value={shown(field)} onChange={v => set(field, v)} readOnly={isDerived(field)} />
+                  value={shown(field)} onChange={v => set(field, v)}
+                  readOnly={readOnly} derived={isDerived(field)}
+                  onFocus={() => setActiveDim(field)} onBlur={() => setActiveDim(null)} />
               );
             })}
             {yHolder != null && (
@@ -534,13 +552,17 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
                 precision={fieldOf(HOLDER_FACE).precision ?? 4}
                 step={stepFor(HOLDER_FACE, draft.unit)}
                 value={shown(HOLDER_FACE)} onChange={v => set(HOLDER_FACE, v)} kind="holder" width={LEN_BOX_W}
+                readOnly={readOnly}
+                onFocus={() => setActiveDim(HOLDER_FACE)} onBlur={() => setActiveDim(null)}
                 title="Where the holder starts — usually the face of the collet nut" />
             )}
             {diaTargets.map(({ field, y, lane }) => (
               <DimBox key={field} x={cx + BODY_W / 2 + GAP + lane * LANE + 34} y={y} align="left"
                 label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
                 step={stepFor(field, draft.unit)} kind={REGION_OF[field]}
-                value={shown(field)} onChange={v => set(field, v)} dia readOnly={isDerived(field)} />
+                value={shown(field)} onChange={v => set(field, v)} dia
+                readOnly={readOnly} derived={isDerived(field)}
+                onFocus={() => setActiveDim(field)} onBlur={() => setActiveDim(null)} />
             ))}
 
             <div className="tp-nts" title="X and Y are scaled independently so the tool is legible — a real tool is far longer than it is wide.">NTS</div>
@@ -555,15 +577,19 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
                   {dims.extras.map(f => (
                     <label key={f} className="tp-extra">
                       <span>{labelOf(f)}</span>
-                      <input type="number" className="field-input" value={shown(f) ?? ''}
-                        step={stepFor(f, draft.unit)}
-                        onChange={e => set(f, e.target.value)} placeholder="—" />
+                      {readOnly
+                        ? <span className="tp-readout">{shown(f) ?? '—'}</span>
+                        : (
+                          <input type="number" className="field-input" value={shown(f) ?? ''}
+                            step={stepFor(f, draft.unit)}
+                            onChange={e => set(f, e.target.value)} placeholder="—" />
+                        )}
                     </label>
                   ))}
                   <label className="tp-extra">
                     <span>
                       Undercut
-                      {draft.undercut_override != null && (
+                      {!readOnly && draft.undercut_override != null && (
                         <button type="button" className="btn btn-ghost btn-sm undercut-auto"
                           title="Clear the override and take the answer from the shaft segments again"
                           onClick={() => setDraft(d => applyUndercut(d, null))}>↺ Auto</button>
@@ -574,7 +600,8 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
                           app cannot say" — `!!null === false` lit No, asserting an
                           answer nobody had. Same rule as the tool page's pill. */}
                       {[[true, 'Yes'], [false, 'No']].map(([v, l]) => (
-                        <button key={l} type="button" className={draft.has_undercut === v ? 'active' : ''}
+                        <button key={l} type="button" disabled={readOnly}
+                          className={draft.has_undercut === v ? 'active' : ''}
                           onClick={() => setDraft(d => applyUndercut(d, v))}>{l}</button>
                       ))}
                     </div>
@@ -583,16 +610,36 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
               </section>
             )}
 
+            {unsetDims.length > 0 && (
+              <section className="tp-panel">
+                <h4 className="tp-panel-title">Not set</h4>
+                <div className="tp-extras">
+                  {unsetDims.map(f => (
+                    <label key={f} className="tp-extra">
+                      <span>{labelOf(f)}</span>
+                      <input type="number" className="field-input" value={shown(f) ?? ''}
+                        step={stepFor(f, draft.unit)}
+                        onFocus={() => setActiveDim(f)} onBlur={() => setActiveDim(null)}
+                        onChange={e => set(f, e.target.value)} placeholder="—" />
+                    </label>
+                  ))}
+                </div>
+                <p className="tp-unset-note">these move onto the drawing once they have a value</p>
+              </section>
+            )}
+
             <section className="tp-panel">
               <h4 className="tp-panel-title">
                 Shaft segments
-                <button type="button" className="btn btn-ghost btn-sm tp-seg-add"
-                  onClick={() => setSegs([...segs, newSegment(segs, profile, draft.unit)], true)}>+ Add</button>
+                {!readOnly && (
+                  <button type="button" className="btn btn-ghost btn-sm tp-seg-add"
+                    onClick={() => setSegs([...segs, newSegment(segs, profile, draft.unit)], true)}>+ Add</button>
+                )}
               </h4>
               {segs.length === 0 ? (
                 <p className="tp-empty">
                   No shaft segments — the shank runs straight from the flutes.
-                  Add one when the tool arrives and gets measured.
+                  {!readOnly && ' Add one when the tool arrives and gets measured.'}
                 </p>
               ) : (
                 <table className="tp-seg-table">
@@ -622,6 +669,9 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
                                     Leaving a cell blank snaps it back to its
                                     last good value — removing a segment is what
                                     the × is for. */}
+                                {readOnly ? (
+                                  <span className="tp-seg-readout">{sg[k] ?? '—'}</span>
+                                ) : (
                                 <input type="number" step={segStep} className="tp-seg-input"
                                   value={cell?.id === id ? cell.text : (sg[k] ?? '')}
                                   onFocus={() => setCell({ id, text: String(sg[k] ?? '') })}
@@ -634,12 +684,15 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
                                       setSegs(segs.map((x, j) => (j === idx ? { ...x, [k]: n } : x)));
                                     }
                                   }} />
+                                )}
                               </td>
                             );
                           })}
                           <td>
+                            {!readOnly && (
                             <button type="button" className="tp-seg-del" title="Remove this segment"
                               onClick={() => { setCell(null); setHoverSeg(null); setSegs(segs.filter((_, j) => j !== idx)); }}>×</button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -652,30 +705,27 @@ export default function ToolProfileModal({ tool, onSave, onClose }) {
 
           </div>
         </div>
-
-        {error && <div className="tp-error">{error}</div>}
-        <div className="modal-actions tp-actions">
-          <span className="tp-hint"><Ruler size={12} /> Values are editable — the drawing follows as you type.</span>
-          <button className="btn btn-ghost" onClick={onClose} disabled={saving}>Cancel</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={!dirty || saving}>
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
 // One dimension's value box, sitting on its dimension line.
-function DimBox({ x, y, align, label, unit, value, precision, step, onChange, dia = false, readOnly = false, title, kind, width }) {
+// ⚠️ `derived` AND `readOnly` ARE DIFFERENT THINGS, and collapsing them says
+// something untrue. `derived` means the app computes this from the shaft
+// segments — a permanent fact about the field, worth the dashed border and the
+// tooltip that explains it. `readOnly` only means the page is not in edit mode
+// right now. Styling every box as derived while merely viewing would claim the
+// whole drawing is computed, and hand every box a tooltip saying so.
+function DimBox({ x, y, align, label, unit, value, precision, step, onChange,
+  dia = false, readOnly = false, derived = false, title, kind, width,
+  onFocus, onBlur }) {
   const [focused, setFocused] = useState(false);
   const display = focused
     ? (value ?? '')
     : (value === null || value === undefined || value === ''
       ? '' : Number(Number(value).toFixed(precision ?? 4)));
   return (
-    <div className={`tp-dimbox${readOnly ? ' tp-dimbox-derived' : ''}${kind ? ` tp-dimbox-${kind}` : ''}${width ? ' tp-dimbox-fixed' : ''}`}
-      title={title || (readOnly ? 'From the shaft segments' : undefined)}
+    <div className={`tp-dimbox${derived ? ' tp-dimbox-derived' : ''}${readOnly ? ' tp-dimbox-locked' : ''}${kind ? ` tp-dimbox-${kind}` : ''}${width ? ' tp-dimbox-fixed' : ''}`}
+      title={title || (derived ? 'From the shaft segments' : undefined)}
       style={{
       left: x, top: y, width: width || undefined,
       transform: align === 'center' ? 'translate(-50%, -50%)'
@@ -685,8 +735,9 @@ function DimBox({ x, y, align, label, unit, value, precision, step, onChange, di
       <span className="tp-dimbox-label">{label}</span>
       <span className="tp-dimbox-input">
         {dia && <span className="dia">⌀</span>}
-        <input type="number" step={step} value={display} readOnly={readOnly}
-          onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+        <input type="number" step={step} value={display} readOnly={readOnly || derived}
+          onFocus={() => { setFocused(true); onFocus?.(); }}
+          onBlur={() => { setFocused(false); onBlur?.(); }}
           onChange={e => onChange(e.target.value)} placeholder="—" />
         <span className="tp-dimbox-unit">{unit}</span>
       </span>

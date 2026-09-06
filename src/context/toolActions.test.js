@@ -663,3 +663,124 @@ describe('updateAssembly — swapping the holder re-points the FK', () => {
     expect(out.assemblies[0].holder_id).toBe('rec-90');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('saveToolMetadata — the metadata-only write path', () => {
+  // A LINKED tool. makeCtx's Fusion IO throws, so any Fusion round-trip here
+  // fails the test — which is the whole point: this path must never make one.
+  const linked = () => ({
+    id: 'FTL-META01',
+    tracking_id: 'FTL-META01',
+    tool_type: 'flat end mill',
+    description: '1/2 4FL EM',
+    diameter: 0.5,
+    unit: 'inches',
+    no_fusion_link: false,
+    library_id: 'lib-1',
+    notes: 'old note',
+    tags: ['a'],
+    purchasing: { manufacturers: [], vendors: [] },
+    assemblies: [{ assembly_id: 'a1', instance_guid: 'g1', ooh: 2.0 }],
+    _instancesRaw: [{ guid: 'g1' }],
+  });
+
+  it('writes metadata and never touches the Fusion library', async () => {
+    const tool = linked();
+    const ctx = makeCtx({ toolsRef: { current: [tool] } });
+    const { saveToolMetadata } = createToolActions(ctx);
+
+    const out = await saveToolMetadata({ ...tool, notes: 'new note' });
+
+    expect(ctx.downloadFusionList).not.toHaveBeenCalled();
+    expect(ctx.uploadFusionList).not.toHaveBeenCalled();
+    expect(upsertMetadata).toHaveBeenCalledOnce();
+    expect(upsertMetadata.mock.calls[0][0].notes).toBe('new note');
+    expect(out.notes).toBe('new note');
+  });
+
+  // ⚠️ The invariant the whole split rests on: a Fusion-backed field written to
+  // metadata alone would make "metadata ≠ Fusion" ambiguous, and DriftBanner
+  // would then offer to discard the user's own unsaved edit.
+  it('refuses to carry a Fusion-backed field', async () => {
+    const tool = linked();
+    const ctx = makeCtx({ toolsRef: { current: [tool] } });
+    const { saveToolMetadata } = createToolActions(ctx);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const out = await saveToolMetadata({
+      ...tool, notes: 'new note', diameter: 0.75, description: 'renamed',
+    });
+
+    expect(out.diameter).toBe(0.5);            // the saved value stands
+    expect(out.description).toBe('1/2 4FL EM');
+    expect(out.notes).toBe('new note');        // the metadata edit lands
+    const saved = upsertMetadata.mock.calls[0][0];
+    expect(saved.diameter).toBe(0.5);
+    expect(saved.description).toBe('1/2 4FL EM');
+    // Dropped LOUDLY — a silent drop is how an edit disappears.
+    expect(warn).toHaveBeenCalled();
+    expect(warn.mock.calls[0][0]).toMatch(/diameter/);
+    warn.mockRestore();
+  });
+
+  // Second-run rule: the same input twice must report nothing to do.
+  it('writes nothing when nothing changed', async () => {
+    const tool = linked();
+    const ctx = makeCtx({ toolsRef: { current: [tool] } });
+    const { saveToolMetadata } = createToolActions(ctx);
+
+    const out = await saveToolMetadata({ ...tool, tags: ['a'] });   // new array, same values
+
+    expect(upsertMetadata).not.toHaveBeenCalled();
+    expect(out).toBe(tool);                                          // same reference
+  });
+
+  // Write first, then memory — a failed write must not leave the app showing a
+  // value that is not stored.
+  it('leaves memory untouched when the write fails', async () => {
+    const tool = linked();
+    const ctx = makeCtx({ toolsRef: { current: [tool] } });
+    upsertMetadata.mockRejectedValueOnce(new Error('Drive offline'));
+    const { saveToolMetadata } = createToolActions(ctx);
+
+    await expect(saveToolMetadata({ ...tool, notes: 'new note' })).rejects.toThrow('Drive offline');
+
+    const updates = ctx.dispatch.mock.calls.filter(([a]) => a.type === 'UPDATE_TOOL');
+    expect(updates).toHaveLength(0);
+    expect(ctx.notify).toHaveBeenCalled();
+  });
+
+  // ⚠️ Metadata is the ONLY store these fields have, so with no Drive there is
+  // nowhere to write and an accepted edit is an edit lost on the next reload.
+  // Refusing keeps the editor open with the data intact (the panels all catch).
+  it('refuses rather than accepting an edit it cannot store', async () => {
+    const tool = linked();
+    const ctx = makeCtx({ toolsRef: { current: [tool] }, googleRef: { current: false } });
+    const { saveToolMetadata } = createToolActions(ctx);
+
+    await expect(saveToolMetadata({ ...tool, notes: 'new note' })).rejects.toThrow(/Google Drive/i);
+    expect(upsertMetadata).not.toHaveBeenCalled();
+    const updates = ctx.dispatch.mock.calls.filter(([a]) => a.type === 'UPDATE_TOOL');
+    expect(updates).toHaveLength(0);
+  });
+});
+
+describe('saveToolMetadata respects the sandbox read-only modes', () => {
+  const tool = {
+    id: 'FTL-RO01', tracking_id: 'FTL-RO01', tool_type: 'drill',
+    description: 'ro drill', notes: 'old', assemblies: [{ assembly_id: 'a1' }],
+  };
+
+  // ⚠️ Demo/local read-only is enforced INSIDE downloadFusionList /
+  // uploadFusionList. This path calls neither, so without its own guard a
+  // sandbox edit would look saved, reach nothing, and vanish on reload.
+  for (const mode of ['demoModeRef', 'localModeRef']) {
+    it(`refuses in ${mode.replace('ModeRef', '')} mode`, async () => {
+      const ctx = makeCtx({ toolsRef: { current: [tool] }, [mode]: { current: true } });
+      const { saveToolMetadata } = createToolActions(ctx);
+      await expect(saveToolMetadata({ ...tool, notes: 'new' })).rejects.toThrow(/read-only/i);
+      expect(upsertMetadata).not.toHaveBeenCalled();
+      expect(ctx.dispatch).not.toHaveBeenCalled();
+    });
+  }
+});

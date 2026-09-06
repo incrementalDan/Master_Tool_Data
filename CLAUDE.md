@@ -580,7 +580,7 @@ A tool's lifecycle, in `tool_status` (metadata-only, `'active' | 'retired' | 'be
 ### `replaced_by` — its own field, not a typed link
 
 **`replaced_by`** holds the replacement tool's **tracking id** (metadata-only; ProShop has no equivalent attribute — its only Tools foreign keys are Made Of, Recommended Pre-drill Size and Insert). It is deliberately **NOT** part of `linked_tools`: that relationship is **symmetric and role-free** by design ("these go together", stored on both sides), and "A was replaced by B" is **directional**. Folding a direction into it would break the invariant that panel is built on. A future "categorize the type of connection" can absorb this as one type; until then it stays a plain FK.
-- ⚠️ **A dangling `replaced_by` is SHOWN, never silently dropped** — it is the only remaining record that this tool was replaced at all. The header reads "(replacement removed)"; the edit form offers Clear.
+- ⚠️ **A dangling `replaced_by` is SHOWN, never silently dropped** — it is the only remaining record that this tool was replaced at all. The header reads "(replacement removed)"; the Identity panel offers Clear in edit mode.
 - Leaving `retired` **clears** it (`setStatus`): "replaced by X" on a tool nobody retired is a stale claim.
 - The picker is **`ToolLinkPicker`** — the same search the landing page runs, so a ProShop #, EDP# or retired ID finds the replacement exactly as it would anywhere else.
 
@@ -1074,7 +1074,9 @@ A **reach** tool keeps its cutting diameter (or a hair under it) for some distan
 
 ### Tool Profile — the whole tool on one dimensioned drawing
 
-Fusion splits a tool across four tabs (General / Cutter / Shaft / Holder), so no screen ever shows the tool. **`ToolProfileModal.jsx`** does: one vertical silhouette, tip down as it hangs in the spindle, with the geometry as engineering-print dimensions whose **value boxes ARE the editable fields**. Opened by the **Profile** button in `ToolDetail`'s action sidebar. Pure geometry: `src/utils/toolProfile.js`.
+Fusion splits a tool across four tabs (General / Cutter / Shaft / Holder), so no screen ever shows the tool. **`ToolProfileFields.jsx`** does: one vertical silhouette, tip down as it hangs in the spindle, with the geometry as engineering-print dimensions whose **value boxes ARE the fields**. Pure geometry: `src/utils/toolProfile.js`.
+
+⚠️ **IT IS THE GEOMETRY SECTION OF THE TOOL PAGE, NOT A POP-UP.** It began as `ToolProfileModal`, which was **retired**: the page draws the same component, so the modal was a SECOND editor of one record with its own draft and its own save — the "three drafts of one record" problem the whole unification exists to remove, and the two could only ever disagree. It takes **`readOnly`**, which is the page's edit mode; ⚠️ that is kept distinct from a field being **`derived`** (reach, undercut Ø, dashed with a tooltip saying where the number comes from), because marking every box derived while merely viewing would claim the whole drawing is computed.
 
 ⚠️ **DELIBERATELY A SEPARATE POP-UP.** It does not replace the Geometry section — that keeps working exactly as it did. Additive until the two are merged on purpose.
 
@@ -1135,7 +1137,7 @@ Fusion splits a tool across four tabs (General / Cutter / Shaft / Holder), so no
 
 ⚠️ **The table is listed TOP-DOWN, the way Fusion's own Shaft tab numbers them — the stored array is the reverse (tip-first).** Every edit maps back through the reversed index; getting that wrong silently puts the segment on the opposite end of the tool (the same trap `insertSegmentAt` documents for holders). A new segment continues from the face it attaches to rather than jumping the profile.
 
-**The tool page names it** — a **Shaft Profile** row in the Geometry grid, beside the diameter and the OAL it belongs with, summarised by `formatShaftSegments` and opening the Tool Profile on click. A read-out in both modes (it is edited in the modal), and **hidden when there is none** — most tools have a plain shank, so a "no profile" row on the whole library is wallpaper. Outside the modal there was previously nothing saying a tool had a profile at all.
+**The Geometry grid names it** — a **Shaft Profile** row summarised by `formatShaftSegments`, a read-out in both modes and **hidden when there is none** (most tools have a plain shank, so a "no profile" row on the whole library is wallpaper). ⚠️ On a tool the drawing can draw, that row **never renders**: `GeometrySection` hides everything the drawing owns, because the drawing IS the editor and a summary beside it would be the same field in two places. It survives for the two types with no drawing (`boring head`, `turning general`), where the profile has nowhere else to be shown.
 
 ⚠️ **THE EDITOR READS EVERY STORED ROW; THE DRAWING READS ONLY THE DRAWABLE ONES.** Two functions, and mixing them up deleted data. **`shaftRows`** returns the list as stored — that is what the table edits and writes back. **`shaftSegments`** is `shaftRows` minus anything with no height (a zero-height region cannot be drawn) and is the drawing's read only. Editing off the *filtered* list meant a segment vanished the instant its height went momentarily blank — which is **every retype**, because a `type="number"` input reports `''` for partial text like `.` on the way to `.2`. The height field was, in practice, uneditable: clearing it removed the row. Each drawable segment carries **`index`**, its position in the stored array, so the drawing and the table hover the same segment across a zero-height row.
 
@@ -1153,7 +1155,7 @@ Fusion splits a tool across four tabs (General / Cutter / Shaft / Holder), so no
 
 ⚠️ **`.btn-toggle` IS `inline-flex` — IT MUST NEVER BE STRETCHED.** As a flex or grid ITEM it is stretched by its parent, and because its buttons are the same colour as the panel behind them, the empty space reads as one enormous button (a "No" the width of the card). `align-self: start` + `justify-self: start` on the shared token fixes it **everywhere it is used** — the tool page's undercut pill and the Tool Profile's had the same symptom for the same reason.
 
-⚠️ **The Tool Profile's side column is a COLUMN, not "whatever is left".** The drawing is a fixed width and the modal is up to 1180px, so `flex: 1` handed the side every remaining pixel — ~440px of panels holding a flute count and three narrow number cells. It is capped, and the modal narrows to fit.
+⚠️ **The Tool Profile's side column is a COLUMN, not "whatever is left".** The drawing is a fixed width, so `flex: 1` handed the side every remaining pixel — ~440px of panels holding a flute count and three narrow number cells. It is capped, and `.tp-body` wraps so the panels drop below the drawing rather than squeezing it when the page is narrow.
 
 ⚠️ **A VALUE BOX IS PLACED BY ITS EDGE, NOT BY ITS CENTRE.** The left-hand stack was centred on each box's own dimension line — and that line sits only `GAP` from the part, so **half of every box lay across the tool**. (The diameter boxes on the right never had it: they were always placed by their left edge, which is why only one side was wrong.) Fixing the box width (`LEN_BOX_W`) is what makes the stack predictable: lane 0's right edge is exactly `GAP` from the outer diameter, each lane steps left by a whole `LANE`, so the gutters are equal and nothing can reach the part. `cx` is derived by working **back** from the outermost box needing to clear the canvas edge, rather than forward from a lane count. Locked by `toolProfileUi.test.jsx`, which parses the rendered boxes — ⚠️ applying each one's `transform`, since `left` is the anchor and not the edge — and asserts none overlaps the silhouette or another box.
 
@@ -1433,11 +1435,22 @@ src/
                                   # + .landing-main (flex:1, all search/results content)
                                   # Machine filter chips appear only when machines are configured;
                                   # default machine pre-selected on load via machineInitialised ref
-    ToolDetail.jsx                # Detail view with frozen left action sidebar + sticky header
+    ToolDetail.jsx                # THE tool page — view and edit, one screen. The
+                                  # sidebar Edit button unlocks every field in
+                                  # place and raises ONE Save bar; there is no
+                                  # separate edit route. The save is a three-way
+                                  # merge (tool/editPatch.js) so the panels that
+                                  # save on their own stay live during an edit,
+                                  # and it routes itself between the metadata-only
+                                  # write and the full Fusion write.
+                                  # Frozen left action sidebar + sticky header
                                   # Sections: Identity (incl. machine tool#), Geometry,
                                   #           Assemblies, Presets, Setup, History, Merge History
                                   # Right sidebar: Identity, Photo, Purchasing, Notes & Tags, Files
-    ToolForm.jsx                  # Edit form with sticky action bar + dirty guard
+    ToolForm.jsx                  # The NEW-tool form only — an existing tool is
+                                  # edited IN PLACE on its own page (ToolDetail).
+                                  # The editing brain is shared: tool/useToolEditor.js.
+                                  # Callers: AddToolFlow, MergeFlow/NewToolStep
     LocationSystemSettings.jsx    # Settings section: configure Location Systems
                                   # (levels/delimiters/ProShop export + the collapsible
                                   # per-system ProShop IMPORT rule), normalize
@@ -1460,11 +1473,12 @@ src/
                                   # PairingSetupPanel. See Insert-Style Tools section
     ComponentPicker.jsx           # Searchable holder-body/insert picker modal with
                                   # inline create — the only way components are browsed
-    ToolProfileModal.jsx          # The whole tool as one dimensioned drawing —
-                                  # vertical silhouette, print-style dimensions
-                                  # whose value boxes are the editable fields,
-                                  # interrupted view for a long shank. Opened by
-                                  # the Profile sidebar button. See "Tool Profile"
+    ToolProfileFields.jsx         # The whole tool as one dimensioned drawing —
+                                  # vertical silhouette, ordinate dimensions whose
+                                  # value boxes ARE the fields, interrupted view
+                                  # for a long shank. Rendered by the page's
+                                  # Geometry section; `readOnly` locks it when the
+                                  # page is not in edit mode. See "Tool Profile"
     PhotoSlot.jsx                 # Primary-photo slot (display + add/change/remove),
                                   # shared by ToolDetail and the component groups
     ToolCard.jsx                  # Grid and list card variants with hover actions
@@ -1611,6 +1625,51 @@ src/
                                   # not separate cards), Shop (+ Save button), Machine Numbers,
                                   # ProShop Export, Rename, Advanced
     Toast.jsx                     # Fixed bottom-right toast stack
+
+    tool/                         # The tool page, decomposed. ToolDetail was one
+                                  # 1300-line file rendering two screens; these
+                                  # are the pieces, each with the rules that made
+                                  # it worth extracting. See
+                                  # docs/TOOL_PAGE_UNIFICATION_PLAN.md
+      useToolEditor.js            # THE editing brain — one draft, the spec-sheet
+                                  # scan, the description suggestion, validation
+                                  # and the save. ⚠️ ONE implementation, TWO
+                                  # callers: the page in edit mode and ToolForm
+                                  # (a tool that does not exist yet). `frozen` is
+                                  # the page's edit mode — false = the draft
+                                  # tracks the record, true = it holds what is
+                                  # being typed. handleSave RETURNS whether the
+                                  # save landed; it swallows the error on purpose
+                                  # so callers cannot tell otherwise
+      editPatch.js                # ⚠️ The page saves the EDIT, not the draft —
+                                  # a three-way merge, see "The tool page"
+      GeometrySection.jsx         # The drawing IS the geometry. Subtracts what
+                                  # the drawing owns from the grid below it, so
+                                  # every field appears exactly once — except a
+                                  # field with a live scan proposal, which stays
+                                  # in the grid because that is where its
+                                  # accept/reject strip lives
+      IdentityPanel.jsx           # Status, type, unit, description, Tool ID.
+                                  # In VIEW mode shows only what the sticky
+                                  # header does not — the header is the page
+                                  # title, not a field display
+      NotesPanel.jsx              # Notes, tags, revision note, preferred machine
+                                  # — all metadata-only, so the page's save skips
+                                  # the Fusion round-trip for a notes-only edit
+      statusEdit.js               # What changes when the lifecycle status does
+                                  # (retired clears the replacement; RETIRED is
+                                  # applied outright; BETA is offered, never
+                                  # enforced). In the component layer because
+                                  # toolNaming already imports toolStatus
+      InsertStyleBlock.jsx        # The insert-style toggle, shared with ToolForm
+      ToolStickyHeader.jsx        # The page title — read-only in both modes
+      ToolActionSidebar.jsx       # The frozen left rail. Every button is a PROP
+      ToolBanners.jsx             # Drift / conflict / missing-in-Fusion
+      AssembliesSection.jsx       # Assemblies + AssemblyForm hosting
+      AssemblyExportPicker.jsx    # Which assembly an export uses
+      SpecScanPanels.jsx          # The scan summary bar + purchasing sub-diff
+      ToolSection.jsx             # THE collapsible panel (was two)
+      DetailField.jsx / FieldInput.jsx / SidebarBtn.jsx
 
     icons/
       ToolTypeIcon.jsx            # 26 hand-crafted SVG tool silhouettes
@@ -2788,6 +2847,112 @@ This is not about Fusion being important. It's about not building a trap: the sh
 | `pushFieldToFusion` | **FIELD** — patches one native+expression pair in place, every other byte untouched | "Fusion's copy of this one value is stale" |
 
 ⚠️ Reaching for the tool-scoped writer to correct a single field rewrites geometry, presets and every expression across every tool it touches, silently applying any other app↔Fusion drift on the way. When a bulk metadata write leaves one Fusion field behind, the fix is a **`FUSION_FIELD_PATCHERS` entry + a preview→commit action**, not a bespoke push and not a full rebuild. See **Pushing ONE field to Fusion** under the Location System for the contract.
+
+-----
+
+## The tool page — one page, one Edit, one Save
+
+The tool page was three screens showing one record: a read-only view, a separate
+`ToolForm` route, and the drawing in a modal. **Three drafts of one record was
+the actual problem** — the fields had already been unified (`ToolFields`), what
+had not was the page around them and *when an edit becomes real*. Full history
+and reasoning: **`docs/TOOL_PAGE_UNIFICATION_PLAN.md`**.
+
+Now: the sidebar's **Edit** unlocks every field **in place**, and one Save bar
+commits them.
+
+⚠️ **THE MODE STAYS; THE NAVIGATION IS WHAT WAS WRONG.** Owner's correction, and
+it is the point: *"the fields shouldn't just be editable without clicking
+something… it's just a mode that lets you edit intentionally, not a separate page
+like it was."* A page whose numbers are typeable the moment it opens invites an
+edit nobody meant to make. So the drawing's boxes, and every field, are read-outs
+until Edit is pressed.
+
+**`ToolForm` is the NEW-tool form and nothing else** — the one job the page
+cannot do, because the record does not exist yet (type picker, unit choice, a
+validation gate before the first write). Callers: `AddToolFlow`,
+`MergeFlow/NewToolStep`. ⚠️ The editing **brain** is shared (`useToolEditor`);
+that file is layout. They were one file only because the page used to navigate to
+it, and they had already drifted once.
+
+### ⚠️ The save is a THREE-WAY MERGE (`tool/editPatch.js`)
+
+Presets, assemblies, purchasing, location and photos **still save on their own
+while edit mode is open** — that is what lets them stay live rather than being
+disabled for the duration. So writing the whole draft would push a stale copy of
+*those* over whatever they wrote in the meantime: a preset saved at 10:01
+silently reverted by a geometry save at 10:02.
+
+> Diff the draft against the **snapshot taken when Edit was pressed**, and apply
+> that patch to the **current** record.
+
+The same snapshot backs the **dirty** flag. ⚠️ Measuring dirty against the live
+record instead made the page report "unsaved changes" — and prompt on the way
+out, and warn on tab close — because somebody had saved a *preset*; changes the
+user never made, on a Save that would then write nothing.
+
+### ⚠️ The save ROUTES ITSELF, and the user is never asked
+
+`metadataOnlyPatch` (below) decides: a change touching anything Fusion also holds
+takes the **full write** so the two stores stay in step; a change touching only
+app-owned fields skips the library round-trip entirely. Both are one button.
+*"The user should not know or care about any of this."*
+
+### Rules that are easy to undo by accident
+
+- **Edit mode belongs to ONE tool.** The route is `/tool/:id`, so changing the id
+  does **not** unmount the page — without an explicit reset the draft went on
+  holding the tool you had left while the header named the new one, and a Save
+  would have written the first tool's geometry onto the second.
+- **The draft seeds once per record, even while frozen.** The page can mount
+  already in edit mode (Duplicate lands on `?edit=1`) before the library has
+  loaded, so the first `tool` is an empty stand-in; a freeze-only rule held that
+  empty draft for good and left every field blank.
+- **A pending scan proposal is never out of sight.** The accept/reject strip
+  lives on the grid row and the drawing has no such control, so a field with a
+  live proposal is **not** hidden from the grid — geometry is most of what a
+  spec sheet proposes, and the summary bar counting "3 pending" with no decision
+  on screen is the worst version of that.
+- **Every applicable dimension has somewhere to be typed.** The drawing can only
+  place a box where there IS a value, and the grid hides what the drawing owns —
+  so anything applicable but undrawable is listed beside the drawing ("Not set"),
+  and the box being typed in stays mounted while its text is momentarily blank.
+- **In-app navigation is guarded.** A top-bar tab is a hash change, not a page
+  load, so `beforeunload` never fires. It goes through `registerNavGuard`, the
+  same seam Settings uses. ⚠️ **Save & leave only navigates if the write
+  landed** — `handleSave` swallows the error by design, so its RETURN is the only
+  signal.
+- **Purchasing is CONTROLLED while the page is in edit mode.** The uncontrolled
+  panel writes `{...tool, purchasing}` from the SAVED record and would revert
+  every unsaved edit beside it. Outside edit mode it keeps its own pencil.
+
+Locked by `tool/editPatch.test.js`, `tool/fieldCoverage.test.js` (every field
+exactly once, every tool type), `tool/geometryProposals.test.jsx` and
+`tool/geometrySectionLibrary.test.jsx` (the whole real library through the
+section, both modes).
+
+-----
+
+### Saving to metadata alone (`saveToolMetadata`)
+
+`saveTool` writes metadata **and** Fusion together. **`saveToolMetadata`** (`toolActions.js`) writes metadata only, skipping the Fusion library round-trip entirely — for panels holding nothing Fusion has a place for (notes, tags, purchasing, speed/feed refs). Same reasoning as `setToolLink` / `normalizeLocationSystem`: no reason to download and re-upload the whole library to store a field Fusion never sees.
+
+⚠️ **THE POINT OF IT IS WHAT IT REFUSES TO WRITE.** Because the two stores are always written together, a disagreement between them means exactly one thing:
+
+> **metadata ≠ Fusion means FUSION moved.**
+
+`detectFusionDrift` is built on that reading and `DriftBanner` acts on it — *"Fusion has X, the app has Y, keep which?"*. Write a **Fusion-backed** field to metadata alone and the sentence stops being true: the same difference would ALSO mean *"the user typed something and hasn't pushed it"*, and **"Keep Fusion" would silently discard their own unsaved edit.** That is the holder `ref-only` bug in a new place — holders needed a whole `last_pushed` snapshot to escape it, and keeping these two writes atomic is what makes one unnecessary here.
+
+⚠️ **Enforced structurally, in `src/schema/metadataScope.js` — never remembered per call site.** `metadataOnlyPatch(saved, updated)` keeps only what may be written alone and **reports** the rest.
+- **It DIFFS against the saved tool rather than trusting a hand-built patch.** That is what catches a panel inside a buffered form handing over the whole DRAFT: its uncommitted geometry surfaces as changed keys and is dropped and logged, instead of quietly reaching metadata and inventing a false drift.
+- **A metadata-only field whose CONTENT still reaches Fusion is on `NOT_AUTOSAVABLE`, with a reason** — `assemblies` (holder + OOH are baked into `geometry.LB`, the holder object and `assemblyGaugeLength`), `selected_holder_guid`, `tool_status` (`withRetiredMarker` rewrites the description), `tsc_capable`, `pitch` / `tap_thread_unit` (they derive `thread_pitch`), `preset_name`. The registry's `metadataOnly` flag alone is **not** the answer — those seven all carry it.
+- **A dropped key is logged, not thrown.** A caller slipping a Fusion field in is a bug in our code; crashing a shop machine over it is worse than dropping it and leaving the saved value standing.
+- ⚠️ **It carries its own demo/local read-only guard.** Those modes are enforced *inside* `downloadFusionList` / `uploadFusionList` — the single central guard the local-mode design rests on — and this path calls neither, so without it a sandbox edit would look saved, reach nothing, and vanish on reload.
+- **Write first, then memory**, so a failed write can never leave the app showing a value that isn't stored. Returns the **same reference** when nothing changed, so a caller can tell there was nothing to persist.
+
+`metadataScope.test.js` locks it: no `DRIFT_FIELDS` entry and no Fusion-backed registry field may pass, and **every metadata-only field must be classified** — so a field that doesn't exist yet fails the suite until someone answers "is this safe to write on its own?".
+
+**The UI's "which section autosaves" rule is separate and coarser** — a whole section waits for the Save button if it holds ANY Fusion-backed field, so the user never has to know which store a field lives in. A field can be autosavable here and still sit in a buffered section (`min_ooh`, `reach`). See `docs/TOOL_PAGE_UNIFICATION_PLAN.md`.
 
 -----
 
