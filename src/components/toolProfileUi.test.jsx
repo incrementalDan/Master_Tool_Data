@@ -1,4 +1,4 @@
-// Rendering the profile modal for real tools.
+// Rendering the tool profile drawing for real tools.
 //
 // Executing the component body (which renderToString does) catches what lint
 // and the build both miss: a symbol referenced but not imported, a field read
@@ -101,8 +101,9 @@ describe('the profile drawing renders', () => {
   });
 
   it('opens showing the DERIVED reach and undercut, not a blank', () => {
-    // The modal resolves its own draft, so it agrees with the drawing even for
-    // a tool that has not been through the load-time pass.
+    // The page resolves the draft through resolveReachFields, so the numbers
+    // agree with the drawing even for a tool that has not been through the
+    // load-time pass.
     const html = render(toolFor(byDesc('1mm (.039) 3FL EM .059LOC .203 REACH')));
     expect(html).toContain('value="0.203"');   // reach
     expect(html).toContain('value="0.038"');   // undercut diameter
@@ -167,10 +168,10 @@ describe('a dimension with no value can still be entered', () => {
   });
 });
 
-// ─── The modal's own controls. The undercut pill here is a SECOND copy of the
+// ─── The drawing's own controls. The undercut pill here is a SECOND copy of the
 // tool page's — it had the same three-state bug and was fixed separately, so it
 // needs its own guard. Steps are unit-derived for the same reason.
-describe('the modal states what it knows, in the record’s unit', () => {
+describe('the drawing states what it knows, in the record’s unit', () => {
   const seg = (unit, s) => ({ tool_type: 'flat end mill', unit, diameter: unit === 'inches' ? 0.5 : 12,
     flute_length: unit === 'inches' ? 1 : 25, overall_length: unit === 'inches' ? 3 : 76,
     shaft_segments: s });
@@ -299,7 +300,7 @@ describe('the boxes say whether the page is editable', () => {
     // with a tooltip saying where from) and is true in both modes; `locked` only
     // says the page is not in edit mode. Styling every box as derived while
     // viewing would assert the whole drawing is computed.
-    // Seeded through the resolver, exactly as the page and the modal seed it —
+    // Seeded through the resolver, exactly as the page seeds it —
     // reach is DERIVED from the segments, so a raw draft has no reach box at all
     // and the derived half of this assertion would fail for the wrong reason.
     const html = render(tool, { readOnly: true });
