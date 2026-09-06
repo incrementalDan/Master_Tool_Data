@@ -105,17 +105,23 @@ const REGION_OF = {
   shoulder_length: 'shoulder',
   shank_diameter: 'shank',
   undercut_diameter: 'segment', // the neck's diameter — a segment's, not the tool's
+  // ⚠️ The holder face is not a REGION of the tool — it is where the holder
+  // starts. It carries its own colour so that, sharing the ordinate column with
+  // the tool's own lengths, it still reads as a different KIND of thing.
+  min_ooh: 'holder',
 };
 
 // The field that marks the holder face. Named so the drawing reads as what it
 // is rather than as one more length in the stack.
 const HOLDER_FACE = 'min_ooh';
-// How far the datum runs past the tool. ⚠️ ASYMMETRIC ON PURPOSE: the value box
-// anchors the LEFT end (a print puts a datum's label at one end), and the right
+// How far the datum runs past the tool. ⚠️ ASYMMETRIC ON PURPOSE: it reaches
+// left towards the ordinate column its value sits in, and the right
 // side has to stop short of `GAP`, where the diameter leaders start — a tool
 // whose undercut sits near the holder face otherwise crossed a dashed datum and
 // a solid leader at the same height.
 const HOLDER_OVERHANG_L = 30;
+// The horizontal run of a dog-legged leader on each side of its diagonal.
+const JOG = 12;
 const HOLDER_OVERHANG_R = 10;
 // ⚠️ MEASURED, not guessed — the boxes are HTML overlaid on the SVG, so every
 // collision test here is running against a height CSS decides. At 34 it was
@@ -236,80 +242,65 @@ export default function ToolProfileFields({ draft, setDraft, readOnly = false })
   // zero datum assumed — the way a CNC print dimensions from one origin. It
   // replaced a nested stack where each dimension owned a lane 94px wide, which
   // made the drawing 634px and left no room beside it for anything else.
-  //
-  // ⚠️ A LANE IS SPENT ONLY ON A COLLISION. Two lengths that happen to be
-  // EQUAL land at the same height (a tool whose flute length IS its shoulder
-  // length is ordinary, not a corner case), so the second steps out — the same
-  // rule the MIN OOH datum box already follows. Most tools use one lane; the
-  // worst case is two.
-  const lengthDims = (() => {
-    const rows = dims.lengths
-      .filter(field => field !== HOLDER_FACE)
-      .map(field => ({ field, value: Number(draft[field]) || 0 }))
-      .filter(d => d.value > 0 || d.field === activeDim)
-      .sort((a, b) => a.value - b.value);
-    const placed = [];
-    return rows.map((d) => {
-      const y = yAt(Math.min(d.value, total));
-      let lane = 0;
-      while (placed.some(pl => pl.lane === lane && Math.abs(pl.y - y) < DIMBOX_H + 2)) lane += 1;
-      placed.push({ lane, y });
-      return { ...d, lane, y };
-    });
-  })();
-  const holderFace = dims.lengths.includes(HOLDER_FACE) ? Number(draft[HOLDER_FACE]) || 0 : 0;
-
-  const nLeft = Math.max(1, lengthDims.reduce((m, d) => Math.max(m, d.lane + 1), 1));
   const svgH = BODY_H + TOP_PAD + BOT_PAD;
 
-  // The datum's y, and which side of it the value box fits on. Above by
-  // default (a print puts a section label above its line); below when the line
-  // runs too close to the top of the canvas for the box to clear it.
-  const yHolder = (holderFace > 0 || HOLDER_FACE === activeDim)
-    ? yAt(Math.min(Math.max(holderFace, 0), total))
-    : null;
-  const holderBoxAbove = yHolder == null ? true : (yHolder - TOP_PAD) > (DIMBOX_H + 6);
-  // ⚠️ The datum's label is anchored to its LINE, not to the lane stack, so it
-  // can land in a lane that already has a box at the same height. Step it out a
-  // lane at a time until it is clear, and run the line left to meet it — the
-  // label stays attached to the thing it names either way.
+  // ⚠️ ONE COLUMN, AND A LEADER THAT DOG-LEGS TO REACH IT. Two lengths that are
+  // EQUAL — a drill whose shoulder IS its MIN OOH is ordinary, not a corner
+  // case — land at the same height. They used to fan sideways into extra lanes,
+  // which is not what an ordinate dimension does and cost 94px of canvas each:
+  // three of them took the drawing past the width its container has, and the
+  // Cutter and Shaft Segments panels wrapped underneath.
   //
-  // ⚠️ Measured LEFT OF THE BODY, before cx exists — the canvas has to be
-  // sized around this box, not the other way round. Ordinate lengths share one
-  // lane, so nLeft is usually 1 and the lane stack no longer happens to leave
-  // room: the datum box reaches HOLDER_OVERHANG_L past lane 0 even before it
-  // steps out, and deriving cx from nLeft alone put it off the left edge.
-  const holderStep = (() => {
-    if (yHolder == null) return 0;
-    const yBox = yHolder + (holderBoxAbove ? -(DIMBOX_H / 2 + 3) : (DIMBOX_H / 2 + 3));
-    const clashes = (k) => {
-      const right = -(HOLDER_OVERHANG_L + 4 + k * LANE);
-      return lengthDims.some(({ lane, y }) => {
-        const c = -(GAP + LEN_BOX_W / 2 + lane * LANE);
-        const xOverlap = (right - LEN_BOX_W) < (c + LEN_BOX_W / 2) && right > (c - LEN_BOX_W / 2);
-        return xOverlap && Math.abs(y - yBox) < DIMBOX_H + 2;
-      });
-    };
-    let k = 0;
-    while (k <= nLeft && clashes(k)) k += 1;
-    return k;
+  // A print instead keeps every value in ONE column and jogs the leader. So the
+  // box moves UP or DOWN until it clears its neighbour, and the leader runs out
+  // from the part at the TRUE height, doglegs across, and comes into the box at
+  // its displaced height. The number stays readable, the drawing stays narrow,
+  // and nothing about which height a dimension actually names is lost.
+  //
+  // ⚠️ MIN OOH IS IN THIS COLUMN TOO. It is measured from the same assumed
+  // datum as the rest, so a print puts it in the same run of values — and
+  // leaving it outside was what forced a second lane here. What makes it a
+  // DATUM rather than another tool length is its dotted line across the whole
+  // tool and its own colour, both of which it keeps.
+  const MIN_GAP = DIMBOX_H + 4;
+  const lengthDims = (() => {
+    const rows = dims.lengths
+      .map(field => ({ field, value: Number(draft[field]) || 0 }))
+      .filter(d => d.value > 0 || d.field === activeDim)
+      .sort((a, b) => a.value - b.value)
+      .map(d => ({ ...d, y: yAt(Math.min(Math.max(d.value, 0), total)) }));
+
+    // Bottom-up: the smallest value sits lowest, and each one above it has to
+    // clear the last by a whole box.
+    const topLimit = TOP_PAD + DIMBOX_H / 2;
+    const bottomLimit = svgH - BOT_PAD - DIMBOX_H / 2;
+    let prev = null;
+    for (const r of rows) {
+      let by = Math.min(r.y, bottomLimit);
+      if (prev != null) by = Math.min(by, prev - MIN_GAP);
+      r.boxY = by;
+      prev = by;
+    }
+    // ⚠️ Then clamp the TOP box into the canvas and push only what it collides
+    // with. Shifting the whole run instead moved every box on the drawing —
+    // OAL's box always clamps (its true height IS the top edge, and a centred
+    // box needs half its height above that), so every leader on every tool
+    // doglegged for a reason that had nothing to do with crowding.
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (i === rows.length - 1) rows[i].boxY = Math.max(rows[i].boxY, topLimit);
+      else rows[i].boxY = Math.max(rows[i].boxY, rows[i + 1].boxY + MIN_GAP);
+    }
+    return rows;
   })();
 
-  // Work back from the outermost box — whichever it is — so it clears the
-  // canvas edge; every box inboard of it is one LANE to the right, with lane
-  // 0's RIGHT edge GAP from the part.
-  const laneReach = GAP + LEN_BOX_W + (nLeft - 1) * LANE;
-  const holderReach = yHolder == null
-    ? 0
-    : HOLDER_OVERHANG_L + 4 + holderStep * LANE + LEN_BOX_W;
-  const cx = BODY_W / 2 + Math.max(laneReach, holderReach) + EDGE_PAD;
+  // The datum still draws its line at its own height, whatever its box does.
+  const yHolder = lengthDims.find(d => d.field === HOLDER_FACE)?.y ?? null;
+
+  // One lane, always — which is the whole point of the dogleg above.
+  const cx = BODY_W / 2 + GAP + LEN_BOX_W + EDGE_PAD;
   const sx = maxDia > 0 ? BODY_W / maxDia : 0;
   const halfAt = (d) => (d * sx) / 2;
-  // The centre of the length box (and so of its dimension line) in lane n.
-  const lenBoxCx = (lane) => cx - BODY_W / 2 - GAP - LEN_BOX_W / 2 - lane * LANE;
-  const holderBoxRight = yHolder == null
-    ? null
-    : cx - BODY_W / 2 - HOLDER_OVERHANG_L - 4 - holderStep * LANE;
+  const lenBoxCx = cx - BODY_W / 2 - GAP - LEN_BOX_W / 2;
 
   // ── the silhouette ────────────────────────────────────────────────────────
   const fluteRegion = profile.regions.find(r => r.kind === 'flute');
@@ -495,7 +486,7 @@ export default function ToolProfileFields({ draft, setDraft, readOnly = false })
                      dimension. Wider than the tool so it reads as a plane the
                      tool passes through rather than as part of its outline. ── */}
               {yHolder != null && (
-                <line x1={Math.min(cx - BODY_W / 2 - HOLDER_OVERHANG_L, holderBoxRight + 4)} y1={yHolder}
+                <line x1={cx - BODY_W / 2 - HOLDER_OVERHANG_L} y1={yHolder}
                   x2={cx + BODY_W / 2 + HOLDER_OVERHANG_R} y2={yHolder}
                   className="tp-holder-line" />
               )}
@@ -505,12 +496,22 @@ export default function ToolProfileFields({ draft, setDraft, readOnly = false })
                   from the part out to its value. No arrows and no vertical run:
                   the origin is the tip and is assumed, which is what lets every
                   length share a single lane. */}
-              {lengthDims.map(({ field, lane, y }) => {
-                const x = lenBoxCx(lane);
+              {lengthDims.map(({ field, y, boxY }) => {
+                const partX = cx - BODY_W / 2 - 2;
                 const active = hoverSeg == null;
+                // Straight while the box sits at its own height; a dogleg when
+                // it had to move to clear a neighbour. The jog is kept close to
+                // the PART so the run beside the boxes stays a clean column.
+                // ⚠️ Straight while the true height still falls INSIDE the box.
+                // OAL always clamps down by half a box, so a hair-trigger here
+                // put a jog on the one dimension that never needed one.
+                const d = Math.abs(boxY - y) <= DIMBOX_H / 2
+                  ? `M ${lenBoxCx} ${y} L ${partX} ${y}`
+                  : `M ${lenBoxCx} ${boxY} L ${partX - 2 * JOG} ${boxY}`
+                    + ` L ${partX - JOG} ${y} L ${partX} ${y}`;
                 return (
                   <g key={field} className="tp-dim" data-muted={active ? undefined : 'y'}>
-                    <line x1={x} y1={y} x2={cx - BODY_W / 2 - 2} y2={y} className="tp-ord" />
+                    <path d={d} className="tp-ord" fill="none" />
                   </g>
                 );
               })}
@@ -530,32 +531,17 @@ export default function ToolProfileFields({ draft, setDraft, readOnly = false })
 
             {/* Editable value boxes, overlaid on the dimension lines. HTML, not
                 foreignObject — real inputs that focus, tab and style normally. */}
-            {lengthDims.map(({ field, lane, y }) => {
-              const x = lenBoxCx(lane);
-              // ⚠️ Clamped, because the longest length ends AT the top of the
-              // canvas (OAL runs the whole tool) and a box centred there loses
-              // its label off the edge. The leader still draws at the true y.
-              const yBox = Math.max(y, TOP_PAD + DIMBOX_H / 2);
-              return (
-                <DimBox key={field} x={x} y={yBox} align="center"
-                  label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
-                  step={stepFor(field, draft.unit)} kind={REGION_OF[field]} width={LEN_BOX_W}
-                  value={shown(field)} onChange={v => set(field, v)}
-                  readOnly={readOnly} derived={isDerived(field)}
-                  onFocus={() => setActiveDim(field)} onBlur={() => setActiveDim(null)} />
-              );
-            })}
-            {yHolder != null && (
-              <DimBox x={holderBoxRight} align="right"
-                y={yHolder + (holderBoxAbove ? -(DIMBOX_H / 2 + 3) : (DIMBOX_H / 2 + 3))}
-                label={dimLabelOf(HOLDER_FACE)} unit={unit}
-                precision={fieldOf(HOLDER_FACE).precision ?? 4}
-                step={stepFor(HOLDER_FACE, draft.unit)}
-                value={shown(HOLDER_FACE)} onChange={v => set(HOLDER_FACE, v)} kind="holder" width={LEN_BOX_W}
-                readOnly={readOnly}
-                onFocus={() => setActiveDim(HOLDER_FACE)} onBlur={() => setActiveDim(null)}
-                title="Where the holder starts — usually the face of the collet nut" />
-            )}
+            {lengthDims.map(({ field, boxY }) => (
+              <DimBox key={field} x={lenBoxCx} y={boxY} align="center"
+                label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
+                step={stepFor(field, draft.unit)} kind={REGION_OF[field]} width={LEN_BOX_W}
+                value={shown(field)} onChange={v => set(field, v)}
+                readOnly={readOnly} derived={isDerived(field)}
+                onFocus={() => setActiveDim(field)} onBlur={() => setActiveDim(null)}
+                title={field === HOLDER_FACE
+                  ? 'Where the holder starts — usually the face of the collet nut'
+                  : undefined} />
+            ))}
             {diaTargets.map(({ field, y, lane }) => (
               <DimBox key={field} x={cx + BODY_W / 2 + GAP + lane * LANE + 34} y={y} align="left"
                 label={dimLabelOf(field)} unit={unit} precision={fieldOf(field).precision ?? 4}
